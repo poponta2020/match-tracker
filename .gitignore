@@ -1,0 +1,28 @@
+﻿# 萓晏ｭ倬未菫Ａnnode_modules/
+venv/
+env/
+.venv/
+
+# 繝薙Ν繝画・譫懃黄
+dist/
+build/
+*.pyc
+__pycache__/
+
+# 迺ｰ蠅・､画焚
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 繝ｭ繧ｰ
+*.log
+npm-debug.log*
