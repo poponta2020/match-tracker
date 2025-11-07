@@ -1,16 +1,22 @@
 package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
+import lombok.*;
 import java.time.LocalDateTime;
 
+/**
+ * 選手マスタエンティティ
+ *
+ * 選手の基本情報とアカウント情報を管理します。
+ * 認証情報（名前、パスワード）、ロール、論理削除フラグを含みます。
+ */
 @Entity
-@Table(name = "players")
-@Data
+@Table(name = "players", indexes = {
+    @Index(name = "idx_name_active", columnList = "name, deleted_at"),
+    @Index(name = "idx_deleted_at", columnList = "deleted_at")
+})
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -20,30 +26,102 @@ public class Player {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    /**
+     * 選手名（ログインに使用）
+     */
+    @Column(name = "name", nullable = false, unique = true, length = 100)
     private String name;
 
-    @Column(length = 100)
-    private String email;
+    /**
+     * パスワード（BCryptでハッシュ化）
+     */
+    @Column(name = "password", nullable = false, length = 255)
+    private String password;
 
-    @Column(name = "phone_number", length = 20)
-    private String phoneNumber;
+    /**
+     * 性別
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = false)
+    private Gender gender;
 
-    @Column(columnDefinition = "TEXT")
-    private String notes;
+    /**
+     * 利き手
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dominant_hand", nullable = false)
+    private DominantHand dominantHand;
 
+    /**
+     * ロール（権限管理）
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false)
+    @Builder.Default
+    private Role role = Role.PLAYER;
+
+    /**
+     * 削除日時（論理削除）
+     * NULLの場合はアクティブな選手
+     */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    /**
+     * 作成日時
+     */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    /**
+     * 更新日時
+     */
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * 性別の列挙型
+     */
+    public enum Gender {
+        男性, 女性, その他
+    }
+
+    /**
+     * 利き手の列挙型
+     */
+    public enum DominantHand {
+        右, 左, 両
+    }
+
+    /**
+     * ロールの列挙型
+     */
+    public enum Role {
+        SUPER_ADMIN,  // 最上位管理者：全機能
+        ADMIN,        // 管理者：練習日管理、組み合わせ作成、基本機能
+        PLAYER        // 一般選手：基本機能のみ
+    }
+
+    /**
+     * 論理削除されているかを判定
+     * @return 削除済みの場合true
+     */
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /**
+     * エンティティ保存前の処理
+     */
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
 
+    /**
+     * エンティティ更新前の処理
+     */
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
