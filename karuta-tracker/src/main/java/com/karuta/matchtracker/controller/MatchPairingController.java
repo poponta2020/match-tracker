@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.MatchPairingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +61,7 @@ public class MatchPairingController {
      * 対戦組み合わせを作成
      */
     @PostMapping
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<MatchPairingDto> create(
             @RequestBody MatchPairingCreateRequest request) {
         log.info("対戦組み合わせ作成: {}", request);
@@ -74,6 +77,7 @@ public class MatchPairingController {
      * 対戦組み合わせを一括作成
      */
     @PostMapping("/batch")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<List<MatchPairingDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
@@ -92,6 +96,7 @@ public class MatchPairingController {
      * 対戦組み合わせを削除
      */
     @DeleteMapping("/{id}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         log.info("対戦組み合わせ削除: ID={}", id);
         matchPairingService.delete(id);
@@ -102,6 +107,7 @@ public class MatchPairingController {
      * 指定日・試合番号の対戦組み合わせを削除
      */
     @DeleteMapping("/date-and-match")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> deleteByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber) {
@@ -114,6 +120,7 @@ public class MatchPairingController {
      * 自動マッチングを実行
      */
     @PostMapping("/auto-match")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<AutoMatchingResult> autoMatch(@RequestBody AutoMatchingRequest request) {
         log.info("自動マッチング実行: {}", request);
         AutoMatchingResult result = matchPairingService.autoMatch(request);

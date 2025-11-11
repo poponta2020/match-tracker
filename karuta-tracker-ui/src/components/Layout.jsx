@@ -11,8 +11,10 @@ import {
   Menu,
   X,
   Calendar,
+  Shield,
 } from 'lucide-react';
 import { useState } from 'react';
+import { isSuperAdmin, isAdmin } from '../utils/auth';
 
 const Layout = ({ children }) => {
   const { currentPlayer, logout } = useAuth();
@@ -25,14 +27,30 @@ const Layout = ({ children }) => {
     navigate('/login');
   };
 
-  const navigation = [
+  // 基本ナビゲーション（全ユーザー共通）
+  const baseNavigation = [
     { name: 'ホーム', href: '/', icon: Home },
     { name: '試合記録', href: '/matches', icon: Trophy },
     { name: '練習記録', href: '/practice', icon: BookOpen },
     { name: '練習参加登録', href: '/practice/participation', icon: Calendar },
     { name: '統計', href: '/statistics', icon: BarChart3 },
+  ];
+
+  // 管理者メニュー（ADMIN + SUPER_ADMIN）
+  const adminNavigation = [
     { name: '対戦組み合わせ', href: '/pairings', icon: Shuffle },
-    { name: '選手一覧', href: '/players', icon: Users },
+  ];
+
+  // スーパー管理者メニュー（SUPER_ADMINのみ）
+  const superAdminNavigation = [
+    { name: '選手管理', href: '/players', icon: Users },
+  ];
+
+  // ロールに応じてナビゲーションを組み立て
+  const navigation = [
+    ...baseNavigation,
+    ...(isAdmin() ? adminNavigation : []),
+    ...(isSuperAdmin() ? superAdminNavigation : []),
   ];
 
   const isActive = (path) => {
@@ -76,8 +94,18 @@ const Layout = ({ children }) => {
             </nav>
 
             <div className="flex items-center gap-4">
-              <div className="hidden md:block text-sm text-gray-700">
-                <span className="font-medium">{currentPlayer?.name}</span>
+              <div className="hidden md:flex items-center gap-2 text-sm">
+                <span className="font-medium text-gray-700">{currentPlayer?.name}</span>
+                {currentPlayer?.role === 'SUPER_ADMIN' && (
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                    スーパー管理者
+                  </span>
+                )}
+                {currentPlayer?.role === 'ADMIN' && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                    管理者
+                  </span>
+                )}
               </div>
               <button
                 onClick={handleLogout}
@@ -106,8 +134,18 @@ const Layout = ({ children }) => {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200">
             <div className="px-2 pt-2 pb-3 space-y-1">
-              <div className="px-3 py-2 text-sm font-medium text-gray-900">
-                {currentPlayer?.name}
+              <div className="px-3 py-2 flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-900">{currentPlayer?.name}</span>
+                {currentPlayer?.role === 'SUPER_ADMIN' && (
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                    スーパー管理者
+                  </span>
+                )}
+                {currentPlayer?.role === 'ADMIN' && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                    管理者
+                  </span>
+                )}
               </div>
               {navigation.map((item) => {
                 const Icon = item.icon;

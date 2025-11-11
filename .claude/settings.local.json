@@ -1,25 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nComplete application design phase\n\n- Add comprehensive design documentation (DESIGN_DOCUMENT.md)\n  - 7 database tables with detailed specifications\n  - 17 screen designs with navigation flow\n  - Automatic match pairing algorithm with performance optimization\n  \n- Update CHANGELOG.md with today''s progress\n  - Requirements definition and design\n  - Database design (7 tables including match_pairings)\n  - Screen design (17 screens)\n  - Individual statistics feature with AI analysis\n  - Automatic match pairing generation feature\n  \n- Fix .gitignore encoding issues\n\n- Add paper.txt for requirement notes\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git push:*)",
-      "Bash(git pull:*)",
-      "Bash(./gradlew compileJava:*)",
-      "Bash(java -version:*)",
-      "Bash(choco:*)",
-      "Bash(winget:*)",
-      "Bash(\"C:\\Program Files\\Microsoft\\jdk-21.0.8.9-hotspot\\bin\\java.exe\" -version)",
-      "Bash(./gradlew test:*)",
-      "Bash(set JAVA_HOME=C:Program FilesMicrosoftjdk-21.0.8.9-hotspot)",
-      "Bash(set PATH=%JAVA_HOME%bin)",
-      "Bash(%PATH%)",
-      "Bash(export JAVA_HOME=\"/c/Program Files/Microsoft/jdk-21.0.8.9-hotspot\":*)",
-      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
-      "Bash(./gradlew clean test:*)",
-      "Bash(docker:*)",
-      "Bash(wsl.exe -l -v)",
-      "Bash(start karuta-tracker/build/reports/tests/test/index.html)"
+      "Bash(powershell -Command \"Stop-Process -Id 20492 -Force\")",
+      "Bash(del nul 2)",
+      "Bash(git commit:*)",
+      "Bash(docker exec:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(java:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 27276 -Force\")",
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

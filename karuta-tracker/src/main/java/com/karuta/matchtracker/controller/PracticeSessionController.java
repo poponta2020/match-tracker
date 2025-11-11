@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -145,6 +147,7 @@ public class PracticeSessionController {
      * @return 登録された練習日情報
      */
     @PostMapping
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PracticeSessionDto> createSession(
             @Valid @RequestBody PracticeSessionCreateRequest request) {
         log.info("POST /api/practice-sessions - Creating new practice session on {}", request.getSessionDate());
@@ -162,6 +165,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PutMapping("/{id}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PracticeSessionDto> updateSession(
             @PathVariable Long id,
             @Valid @RequestBody PracticeSessionUpdateRequest request) {
@@ -180,6 +184,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PutMapping("/{id}/total-matches")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PracticeSessionDto> updateTotalMatches(
             @PathVariable Long id,
             @RequestParam Integer totalMatches) {
@@ -195,6 +200,7 @@ public class PracticeSessionController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{id}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
         log.info("DELETE /api/practice-sessions/{} - Deleting practice session", id);
         practiceSessionService.deleteSession(id);

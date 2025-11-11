@@ -2,6 +2,7 @@ package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.dto.ErrorResponse;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,28 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    /**
+     * ForbiddenExceptionのハンドリング
+     * HTTPステータス: 403 Forbidden
+     */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbiddenException(
+            ForbiddenException ex,
+            HttpServletRequest request) {
+
+        log.warn("Forbidden access: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                ex.getMessage(),
+                HttpStatus.FORBIDDEN.value(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
                 .body(errorResponse);
     }
 

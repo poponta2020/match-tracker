@@ -2,6 +2,211 @@
 
 このファイルには、プロジェクトの作業履歴を時系列で記録します。
 
+## 2025-11-12 - ロールベース権限管理システムの実装
+
+### 実装完了機能
+
+1. **ロールベース権限管理システム（簡易実装）**
+   - 3段階のロール管理: SUPER_ADMIN, ADMIN, PLAYER
+   - カスタムアノテーション`@RequireRole`による宣言的権限制御
+   - インターセプター方式によるリクエストレベル権限チェック
+   - ヘッダーベース認証（X-User-Role）
+   - 403 Forbidden エラーハンドリング
+
+2. **練習日管理権限の制限**
+   - 練習日の作成・編集・削除をSUPER_ADMINのみに制限
+   - ユーザーの明示的な要求に基づく権限設計（設計書の仕様を上書き）
+
+3. **選手管理権限の制限**
+   - 選手の登録・削除をSUPER_ADMINのみに制限
+   - ロール変更機能をSUPER_ADMINのみに制限
+
+4. **対戦組み合わせ管理権限**
+   - 組み合わせ作成・削除をADMIN + SUPER_ADMINに制限
+   - 自動マッチング機能をADMIN + SUPER_ADMINに制限
+
+5. **フロントエンド権限管理**
+   - ロールに応じた動的メニュー表示
+   - ロールバッジ表示（紫:SUPER_ADMIN、青:ADMIN）
+   - 権限別UI要素の条件付きレンダリング
+   - 練習管理画面のアクセス制御とリダイレクト
+
+### 技術的詳細
+
+**バックエンド実装**
+
+1. **RequireRole.java（新規作成）**
+   - パッケージ: `com.karuta.matchtracker.annotation`
+   - メソッドレベルで必要なロールを宣言する@Targetアノテーション
+   - 複数ロールの指定に対応（`Role[]`配列）
+
+2. **RoleCheckInterceptor.java（新規作成）**
+   - パッケージ: `com.karuta.matchtracker.interceptor`
+   - HandlerInterceptorを実装
+   - preHandle()でX-User-Roleヘッダーをチェック
+   - @RequireRoleアノテーションの有無と権限を検証
+   - 認証なし: "認証が必要です"
+   - 権限不足: "この操作を実行する権限がありません"
+
+3. **ForbiddenException.java（新規作成）**
+   - パッケージ: `com.karuta.matchtracker.exception`
+   - 権限エラー専用のカスタム例外クラス
+
+4. **GlobalExceptionHandler.java（修正）**
+   - ForbiddenExceptionハンドラー追加
+   - HTTP 403 Forbiddenレスポンス返却
+   - エラーメッセージとリクエストパスを含むErrorResponseを生成
+
+5. **WebConfig.java（修正）**
+   - RoleCheckInterceptorを/api/**パスに登録
+   - 全APIリクエストで権限チェックを実行
+
+6. **PracticeSessionController.java（修正）**
+   - POST /api/practice-sessions: @RequireRole(Role.SUPER_ADMIN)
+   - PUT /api/practice-sessions/{id}: @RequireRole(Role.SUPER_ADMIN)
+   - DELETE /api/practice-sessions/{id}: @RequireRole(Role.SUPER_ADMIN)
+
+7. **PlayerController.java（修正）**
+   - POST /api/players: @RequireRole(Role.SUPER_ADMIN)
+   - DELETE /api/players/{id}: @RequireRole(Role.SUPER_ADMIN)
+   - PUT /api/players/{id}/role: @RequireRole(Role.SUPER_ADMIN)
+
+8. **MatchPairingController.java（修正）**
+   - POST /api/pairings: @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+   - POST /api/pairings/auto-match: @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+   - DELETE /api/pairings/{id}: @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+
+**フロントエンド実装**
+
+1. **src/api/client.js（修正）**
+   - リクエストインターセプター追加
+   - localStorageからcurrentPlayerを取得
+   - X-User-Roleヘッダーを自動付与
+   - 全APIリクエストに権限情報を含める
+
+2. **src/utils/auth.js（新規作成）**
+   - getCurrentPlayer(): ローカルストレージから現在のユーザー取得
+   - getCurrentRole(): 現在のユーザーのロール取得
+   - hasRole(roles): 指定ロールのチェック（配列対応）
+   - isSuperAdmin(): SUPER_ADMINかチェック
+   - isAdmin(): SUPER_ADMIN or ADMINかチェック
+   - isPlayer(): PLAYERかチェック
+   - logout(): 認証情報のクリア
+
+3. **src/components/Layout.jsx（修正）**
+   - ナビゲーションをロール別に分割:
+     - baseNavigation: ホーム、試合記録、練習記録、練習参加登録、統計（全ユーザー）
+     - adminNavigation: 対戦組み合わせ（ADMIN + SUPER_ADMIN）
+     - superAdminNavigation: 選手管理（SUPER_ADMINのみ）
+   - ロールバッジ表示:
+     - SUPER_ADMIN: 紫色（bg-purple-100 text-purple-800）
+     - ADMIN: 青色（bg-blue-100 text-blue-800）
+   - デスクトップ・モバイル両対応
+
+4. **src/pages/practice/PracticeForm.jsx（修正）**
+   - useEffect()で権限チェック追加
+   - isSuperAdmin()がfalseの場合にアラート表示
+   - /practiceへ自動リダイレクト
+
+5. **src/pages/practice/PracticeList.jsx（修正）**
+   - 「新規登録」ボタンの条件付きレンダリング
+   - 編集・削除ボタンの条件付きレンダリング
+   - isSuperAdmin()がtrueの場合のみ表示
+
+**データベース変更**
+
+- 選手ID=1（土居悠太）のロールをSUPER_ADMINに設定
+  ```sql
+  UPDATE players SET role = 'SUPER_ADMIN' WHERE id = 1;
+  ```
+
+### データフロー
+
+**権限チェックフロー（バックエンド）**
+1. APIリクエスト受信
+2. RoleCheckInterceptor.preHandle()実行
+3. HandlerMethodから@RequireRoleアノテーションを取得
+4. アノテーションがない場合は通過（公開API）
+5. X-User-Roleヘッダーを取得
+6. ヘッダーがない場合: ForbiddenException("認証が必要です")
+7. ロールをEnum変換
+8. 必要なロールに含まれているかチェック
+9. 権限がない場合: ForbiddenException("この操作を実行する権限がありません")
+10. 権限がある場合: コントローラーメソッド実行
+
+**権限チェックフロー（フロントエンド）**
+1. ページ読み込み時にuseEffect()実行
+2. getCurrentRole()でローカルストレージからロール取得
+3. hasRole()、isSuperAdmin()、isAdmin()で権限チェック
+4. 権限がない場合: アラート表示 + リダイレクト
+5. 権限がある場合: 画面表示継続
+
+**APIリクエストフロー**
+1. Axiosでリクエスト作成
+2. リクエストインターセプター実行
+3. localStorageからcurrentPlayerを取得
+4. player.roleをX-User-Roleヘッダーに設定
+5. リクエスト送信
+6. バックエンドで権限チェック
+
+### 権限マトリックス
+
+| 機能 | SUPER_ADMIN | ADMIN | PLAYER |
+|------|-------------|-------|--------|
+| 練習日の作成・編集・削除 | ✓ | ✗ | ✗ |
+| 選手の登録・削除 | ✓ | ✗ | ✗ |
+| ロール変更 | ✓ | ✗ | ✗ |
+| 対戦組み合わせ作成 | ✓ | ✓ | ✗ |
+| 自動マッチング | ✓ | ✓ | ✗ |
+| 試合記録入力 | ✓ | ✓ | ✓ |
+| 統計閲覧 | ✓ | ✓ | ✓ |
+| 練習参加登録 | ✓ | ✓ | ✓ |
+
+### テスト結果
+
+**APIテスト（curl）**
+- ✅ GET /api/practice-sessions（ヘッダーなし）: 200 OK（公開エンドポイント）
+- ✅ POST /api/practice-sessions（ヘッダーなし）: 403 "認証が必要です"
+- ✅ POST /api/practice-sessions（PLAYER）: 403 "この操作を実行する権限がありません"
+- ✅ POST /api/practice-sessions（SUPER_ADMIN）: 201 Created（練習日作成成功）
+- ✅ POST /api/pairings/auto-match（ADMIN）: 200 OK（自動マッチング成功）
+
+**フロントエンドテスト**
+- ✅ メニュー表示: ロール別に正しく表示
+- ✅ ロールバッジ: SUPER_ADMINは紫、ADMINは青で表示
+- ✅ 練習管理画面: SUPER_ADMINのみアクセス可能
+- ✅ 編集・削除ボタン: SUPER_ADMINのみ表示
+- ✅ リダイレクト: 権限なしでアクセス時に正常にリダイレクト
+
+### 改善効果
+
+- **セキュリティ向上**: APIレベルでの権限制御により、不正な操作を防止
+- **明確な役割分担**: SUPER_ADMIN、ADMIN、PLAYERの3段階で権限を管理
+- **ユーザビリティ向上**: ロールに応じたメニュー表示で混乱を防止
+- **保守性向上**: アノテーションベースの権限制御で可読性が高い
+- **拡張性**: 新しいエンドポイントに簡単に権限制御を追加可能
+
+### 既知の制限事項
+
+- **簡易認証**: ヘッダーベースの認証のため、JWTトークンなどの本格的な認証機能は未実装
+- **クライアント側検証のみ**: フロントエンドの権限チェックはUI表示制御のみ（バックエンドで再検証）
+- **ロール変更の即時反映**: ロール変更後は再ログインが必要
+
+### 動作確認済み
+
+- バックエンド: http://localhost:8080 ✓
+- フロントエンド: http://localhost:5175 ✓
+- 権限チェック: 全エンドポイントで正常動作 ✓
+- メニュー表示: ロール別表示が正常 ✓
+- ロールバッジ: 正常表示 ✓
+- リダイレクト: 正常動作 ✓
+- 現在のSUPER_ADMIN: 土居悠太（ID=1） ✓
+
+### 設計上の注意事項
+
+- **練習日管理権限**: ユーザーの明示的な要求により、設計書の仕様（ADMIN + SUPER_ADMIN）を上書きしてSUPER_ADMINのみに制限
+- **簡易実装**: ユーザーの要求により、Spring Securityを使用せず、シンプルなインターセプター方式を採用
+
 ## 2025-11-11 - 練習参加登録機能の実装と試合ごと参加人数表示機能
 
 ### 実装完了機能

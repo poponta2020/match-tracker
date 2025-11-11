@@ -1,9 +1,11 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.PlayerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -95,6 +97,7 @@ public class PlayerController {
      * @return 登録された選手情報
      */
     @PostMapping
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PlayerDto> createPlayer(@Valid @RequestBody PlayerCreateRequest request) {
         log.info("POST /api/players - Creating new player: {}", request.getName());
         PlayerDto createdPlayer = playerService.createPlayer(request);
@@ -124,6 +127,7 @@ public class PlayerController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{id}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<Void> deletePlayer(@PathVariable Long id) {
         log.info("DELETE /api/players/{} - Deleting player", id);
         playerService.deletePlayer(id);
@@ -138,6 +142,7 @@ public class PlayerController {
      * @return 更新された選手情報
      */
     @PutMapping("/{id}/role")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PlayerDto> updatePlayerRole(
             @PathVariable Long id,
             @RequestParam Player.Role role) {

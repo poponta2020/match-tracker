@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
+import { isSuperAdmin } from '../../utils/auth';
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -61,12 +62,14 @@ const PracticeList = () => {
     <div className="max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">練習記録</h1>
-        <button
-          onClick={() => navigate('/practice/new')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + 新規登録
-        </button>
+        {isSuperAdmin() && (
+          <button
+            onClick={() => navigate('/practice/new')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + 新規登録
+          </button>
+        )}
       </div>
 
       {error && (
@@ -131,24 +134,28 @@ const PracticeList = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/practice/${session.id}/edit`);
-                      }}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      編集
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(session.id);
-                      }}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      削除
-                    </button>
+                    {isSuperAdmin() && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/practice/${session.id}/edit`);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                        >
+                          編集
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(session.id);
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          削除
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))
