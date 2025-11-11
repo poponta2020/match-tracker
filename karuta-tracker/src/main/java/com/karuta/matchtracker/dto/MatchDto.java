@@ -28,10 +28,15 @@ public class MatchDto {
     private Long winnerId;
     private String winnerName;
     private Integer scoreDifference;
+    private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long createdBy;
     private Long updatedBy;
+
+    // フロントエンド用の追加フィールド
+    private String opponentName;  // 対戦相手名（簡易表示用）
+    private String result;         // 結果（勝ち/負け/引き分け）
 
     /**
      * エンティティからDTOへ変換
@@ -49,6 +54,8 @@ public class MatchDto {
                 .player2Id(match.getPlayer2Id())
                 .winnerId(match.getWinnerId())
                 .scoreDifference(match.getScoreDifference())
+                .opponentName(match.getOpponentName())
+                .notes(match.getNotes())
                 .createdAt(match.getCreatedAt())
                 .updatedAt(match.getUpdatedAt())
                 .createdBy(match.getCreatedBy())

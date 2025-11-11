@@ -32,6 +32,14 @@ public class PlayerCreateRequest {
     @NotNull(message = "利き手は必須です")
     private Player.DominantHand dominantHand;
 
+    private Player.DanRank danRank;
+    private Player.KyuRank kyuRank;
+
+    @Size(max = 200, message = "所属かるた会は200文字以内で入力してください")
+    private String karutaClub;
+
+    private String remarks;
+
     /**
      * リクエストからエンティティへ変換（デフォルトロール: PLAYER）
      */
@@ -41,6 +49,10 @@ public class PlayerCreateRequest {
                 .password(password)  // 実際はハッシュ化が必要
                 .gender(gender)
                 .dominantHand(dominantHand)
+                .danRank(danRank)
+                .kyuRank(kyuRank)
+                .karutaClub(karutaClub)
+                .remarks(remarks)
                 .role(Player.Role.PLAYER)
                 .build();
     }

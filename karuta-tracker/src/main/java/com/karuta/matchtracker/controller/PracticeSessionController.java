@@ -1,7 +1,6 @@
 package com.karuta.matchtracker.controller;
 
-import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
-import com.karuta.matchtracker.dto.PracticeSessionDto;
+import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 練習日管理のRESTコントローラ
@@ -21,6 +21,7 @@ import java.util.List;
 @RequestMapping("/api/practice-sessions")
 @RequiredArgsConstructor
 @Slf4j
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174", "http://localhost:3000"})
 public class PracticeSessionController {
 
     private final PracticeSessionService practiceSessionService;
@@ -125,16 +126,50 @@ public class PracticeSessionController {
     }
 
     /**
+     * 練習セッションの参加者一覧を取得
+     *
+     * @param id 練習セッションID
+     * @return 参加者リスト
+     */
+    @GetMapping("/{id}/participants")
+    public ResponseEntity<List<PlayerDto>> getParticipants(@PathVariable Long id) {
+        log.debug("GET /api/practice-sessions/{}/participants - Getting participants", id);
+        List<PlayerDto> participants = practiceSessionService.getParticipants(id);
+        return ResponseEntity.ok(participants);
+    }
+
+    /**
      * 練習日を新規登録
      *
      * @param request 登録リクエスト
      * @return 登録された練習日情報
      */
     @PostMapping
-    public ResponseEntity<PracticeSessionDto> createSession(@Valid @RequestBody PracticeSessionCreateRequest request) {
+    public ResponseEntity<PracticeSessionDto> createSession(
+            @Valid @RequestBody PracticeSessionCreateRequest request) {
         log.info("POST /api/practice-sessions - Creating new practice session on {}", request.getSessionDate());
-        PracticeSessionDto createdSession = practiceSessionService.createSession(request);
+        // TODO: 認証実装後は実際のユーザーIDを使用
+        Long currentUserId = 1L;  // 仮のユーザーID
+        PracticeSessionDto createdSession = practiceSessionService.createSession(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
+    }
+
+    /**
+     * 練習セッションを更新
+     *
+     * @param id 練習セッションID
+     * @param request 更新リクエスト
+     * @return 更新された練習日情報
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<PracticeSessionDto> updateSession(
+            @PathVariable Long id,
+            @Valid @RequestBody PracticeSessionUpdateRequest request) {
+        log.info("PUT /api/practice-sessions/{} - Updating practice session", id);
+        // TODO: 認証実装後は実際のユーザーIDを使用
+        Long currentUserId = 1L;  // 仮のユーザーID
+        PracticeSessionDto updatedSession = practiceSessionService.updateSession(id, request, currentUserId);
+        return ResponseEntity.ok(updatedSession);
     }
 
     /**
@@ -164,5 +199,38 @@ public class PracticeSessionController {
         log.info("DELETE /api/practice-sessions/{} - Deleting practice session", id);
         practiceSessionService.deleteSession(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 選手の練習参加を一括登録
+     *
+     * @param request 参加登録リクエスト
+     * @return レスポンスなし
+     */
+    @PostMapping("/participations")
+    public ResponseEntity<Void> registerParticipations(
+            @Valid @RequestBody PracticeParticipationRequest request) {
+        log.info("POST /api/practice-sessions/participations - Registering participations for player {}",
+                request.getPlayerId());
+        practiceSessionService.registerParticipations(request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /**
+     * 選手の特定月の参加状況を取得
+     *
+     * @param playerId 選手ID
+     * @param year 年
+     * @param month 月
+     * @return セッションIDをキーとした試合番号リストのマップ
+     */
+    @GetMapping("/participations/player/{playerId}")
+    public ResponseEntity<Map<Long, List<Integer>>> getPlayerParticipations(
+            @PathVariable Long playerId,
+            @RequestParam int year,
+            @RequestParam int month) {
+        log.debug("GET /api/practice-sessions/participations/player/{}?year={}&month={}", playerId, year, month);
+        Map<Long, List<Integer>> participations = practiceSessionService.getPlayerParticipationsByMonth(playerId, year, month);
+        return ResponseEntity.ok(participations);
     }
 }

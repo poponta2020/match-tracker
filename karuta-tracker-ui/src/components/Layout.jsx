@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   X,
+  Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -27,7 +28,8 @@ const Layout = ({ children }) => {
   const navigation = [
     { name: 'ホーム', href: '/', icon: Home },
     { name: '試合記録', href: '/matches', icon: Trophy },
-    { name: '練習記録', href: '/practices', icon: BookOpen },
+    { name: '練習記録', href: '/practice', icon: BookOpen },
+    { name: '練習参加登録', href: '/practice/participation', icon: Calendar },
     { name: '統計', href: '/statistics', icon: BarChart3 },
     { name: '対戦組み合わせ', href: '/pairings', icon: Shuffle },
     { name: '選手一覧', href: '/players', icon: Users },

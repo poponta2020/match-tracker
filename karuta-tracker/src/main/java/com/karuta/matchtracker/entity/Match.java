@@ -67,6 +67,12 @@ public class Match {
     private Integer scoreDifference;
 
     /**
+     * 対戦相手名（システム未登録の選手用）
+     */
+    @Column(name = "opponent_name", length = 100)
+    private String opponentName;
+
+    /**
      * コメント
      */
     @Column(name = "notes", columnDefinition = "TEXT")

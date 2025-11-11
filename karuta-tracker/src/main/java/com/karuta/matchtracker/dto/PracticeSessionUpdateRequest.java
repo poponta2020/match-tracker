@@ -11,13 +11,13 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * 練習日登録リクエスト
+ * 練習セッション更新リクエスト
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class PracticeSessionCreateRequest {
+public class PracticeSessionUpdateRequest {
 
     @NotNull(message = "練習日は必須です")
     private LocalDate sessionDate;

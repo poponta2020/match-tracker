@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * 練習日情報エンティティ
@@ -36,6 +37,48 @@ public class PracticeSession {
      */
     @Column(name = "total_matches", nullable = false)
     private Integer totalMatches;
+
+    /**
+     * 練習場所
+     */
+    @Column(name = "location", length = 200)
+    private String location;
+
+    /**
+     * メモ・備考
+     */
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
+
+    /**
+     * 練習開始時刻
+     */
+    @Column(name = "start_time")
+    private LocalTime startTime;
+
+    /**
+     * 練習終了時刻
+     */
+    @Column(name = "end_time")
+    private LocalTime endTime;
+
+    /**
+     * 定員
+     */
+    @Column(name = "capacity")
+    private Integer capacity;
+
+    /**
+     * 作成者のID
+     */
+    @Column(name = "created_by", nullable = false)
+    private Long createdBy;
+
+    /**
+     * 最終更新者のID
+     */
+    @Column(name = "updated_by", nullable = false)
+    private Long updatedBy;
 
     /**
      * 作成日時

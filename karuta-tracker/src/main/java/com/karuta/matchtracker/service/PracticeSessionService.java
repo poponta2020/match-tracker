@@ -1,11 +1,15 @@
 package com.karuta.matchtracker.service;
 
-import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
-import com.karuta.matchtracker.dto.PracticeSessionDto;
+import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -26,16 +31,20 @@ import java.util.stream.Collectors;
 public class PracticeSessionService {
 
     private final PracticeSessionRepository practiceSessionRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PlayerRepository playerRepository;
+    private final MatchRepository matchRepository;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     /**
      * 全ての練習日を取得（降順）
      */
     public List<PracticeSessionDto> findAllSessions() {
         log.debug("Finding all practice sessions");
-        return practiceSessionRepository.findAllOrderBySessionDateDesc()
-                .stream()
-                .map(PracticeSessionDto::fromEntity)
-                .collect(Collectors.toList());
+        List<PracticeSession> sessions = practiceSessionRepository.findAllOrderBySessionDateDesc();
+        return enrichSessionsWithParticipants(sessions);
     }
 
     /**
@@ -45,7 +54,7 @@ public class PracticeSessionService {
         log.debug("Finding practice session by id: {}", id);
         PracticeSession session = practiceSessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", id));
-        return PracticeSessionDto.fromEntity(session);
+        return enrichSessionWithParticipants(session);
     }
 
     /**
@@ -75,10 +84,8 @@ public class PracticeSessionService {
     public List<PracticeSessionDto> findSessionsByYearMonth(int year, int month) {
         log.debug("Finding practice sessions for {}-{}", year, month);
         YearMonth yearMonth = YearMonth.of(year, month);
-        return practiceSessionRepository.findByYearAndMonth(yearMonth.getYear(), yearMonth.getMonthValue())
-                .stream()
-                .map(PracticeSessionDto::fromEntity)
-                .collect(Collectors.toList());
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(yearMonth.getYear(), yearMonth.getMonthValue());
+        return enrichSessionsWithParticipants(sessions);
     }
 
     /**
@@ -104,19 +111,55 @@ public class PracticeSessionService {
      * 練習日を新規登録
      */
     @Transactional
-    public PracticeSessionDto createSession(PracticeSessionCreateRequest request) {
-        log.info("Creating new practice session on {}", request.getSessionDate());
+    public PracticeSessionDto createSession(PracticeSessionCreateRequest request, Long currentUserId) {
+        List<Long> participantIds = request.getParticipantIds() != null ? request.getParticipantIds() : List.of();
+        log.info("Creating new practice session on {} with {} participants",
+                request.getSessionDate(), participantIds.size());
 
         // 日付の重複チェック
         if (practiceSessionRepository.existsBySessionDate(request.getSessionDate())) {
             throw new DuplicateResourceException("PracticeSession", "sessionDate", request.getSessionDate());
         }
 
-        PracticeSession session = request.toEntity();
+        // 参加者が実在するか確認（参加者がいる場合のみ）
+        if (!participantIds.isEmpty()) {
+            List<Player> participants = playerRepository.findAllById(participantIds);
+            if (participants.size() != participantIds.size()) {
+                throw new ResourceNotFoundException("Some players not found");
+            }
+        }
+
+        // 練習セッションを保存
+        PracticeSession session = PracticeSession.builder()
+                .sessionDate(request.getSessionDate())
+                .totalMatches(request.getTotalMatches())
+                .location(request.getLocation())
+                .notes(request.getNotes())
+                .startTime(request.getStartTime())
+                .endTime(request.getEndTime())
+                .capacity(request.getCapacity())
+                .createdBy(currentUserId)
+                .updatedBy(currentUserId)
+                .build();
+
         PracticeSession saved = practiceSessionRepository.save(session);
 
-        log.info("Successfully created practice session with id: {}", saved.getId());
-        return PracticeSessionDto.fromEntity(saved);
+        // 参加者を保存（参加者がいる場合のみ）
+        if (!participantIds.isEmpty()) {
+            List<PracticeParticipant> practiceParticipants = participantIds.stream()
+                    .map(playerId -> PracticeParticipant.builder()
+                            .sessionId(saved.getId())
+                            .playerId(playerId)
+                            .build())
+                    .collect(Collectors.toList());
+
+            practiceParticipantRepository.saveAll(practiceParticipants);
+        }
+
+        log.info("Successfully created practice session with id: {} and {} participants",
+                saved.getId(), participantIds.size());
+
+        return enrichSessionWithParticipants(saved);
     }
 
     /**
@@ -141,6 +184,62 @@ public class PracticeSessionService {
     }
 
     /**
+     * 練習セッションを更新
+     */
+    @Transactional
+    public PracticeSessionDto updateSession(Long id, PracticeSessionUpdateRequest request, Long currentUserId) {
+        log.info("Updating practice session id: {}", id);
+
+        PracticeSession session = practiceSessionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", id));
+
+        // 日付変更時の重複チェック
+        if (!session.getSessionDate().equals(request.getSessionDate()) &&
+                practiceSessionRepository.existsBySessionDate(request.getSessionDate())) {
+            throw new DuplicateResourceException("PracticeSession", "sessionDate", request.getSessionDate());
+        }
+
+        List<Long> participantIds = request.getParticipantIds() != null ? request.getParticipantIds() : List.of();
+
+        // 参加者が実在するか確認（参加者がいる場合のみ）
+        if (!participantIds.isEmpty()) {
+            List<Player> participants = playerRepository.findAllById(participantIds);
+            if (participants.size() != participantIds.size()) {
+                throw new ResourceNotFoundException("Some players not found");
+            }
+        }
+
+        // セッション情報を更新
+        session.setSessionDate(request.getSessionDate());
+        session.setTotalMatches(request.getTotalMatches());
+        session.setLocation(request.getLocation());
+        session.setNotes(request.getNotes());
+        session.setStartTime(request.getStartTime());
+        session.setEndTime(request.getEndTime());
+        session.setCapacity(request.getCapacity());
+        session.setUpdatedBy(currentUserId);
+
+        PracticeSession updated = practiceSessionRepository.save(session);
+
+        // 既存の参加者を削除して新しい参加者を登録
+        practiceParticipantRepository.deleteBySessionId(id);
+
+        if (!participantIds.isEmpty()) {
+            List<PracticeParticipant> newParticipants = participantIds.stream()
+                    .map(playerId -> PracticeParticipant.builder()
+                            .sessionId(id)
+                            .playerId(playerId)
+                            .build())
+                    .collect(Collectors.toList());
+
+            practiceParticipantRepository.saveAll(newParticipants);
+        }
+
+        log.info("Successfully updated practice session id: {}", id);
+        return enrichSessionWithParticipants(updated);
+    }
+
+    /**
      * 練習日を削除
      */
     @Transactional
@@ -151,7 +250,231 @@ public class PracticeSessionService {
             throw new ResourceNotFoundException("PracticeSession", id);
         }
 
+        // 参加者も一緒に削除
+        practiceParticipantRepository.deleteBySessionId(id);
         practiceSessionRepository.deleteById(id);
+
         log.info("Successfully deleted practice session with id: {}", id);
+    }
+
+    /**
+     * 特定の練習セッションの参加者一覧を取得
+     */
+    public List<PlayerDto> getParticipants(Long sessionId) {
+        log.debug("Getting participants for session id: {}", sessionId);
+
+        if (!practiceSessionRepository.existsById(sessionId)) {
+            throw new ResourceNotFoundException("PracticeSession", sessionId);
+        }
+
+        List<Long> playerIds = practiceParticipantRepository.findPlayerIdsBySessionId(sessionId);
+        List<Player> players = playerRepository.findAllById(playerIds);
+
+        return players.stream()
+                .map(PlayerDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 練習セッションに参加者情報を付与（単一）
+     */
+    private PracticeSessionDto enrichSessionWithParticipants(PracticeSession session) {
+        PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
+
+        // 参加者リストを取得
+        List<Long> playerIds = practiceParticipantRepository.findPlayerIdsBySessionId(session.getId());
+        List<Player> players = playerRepository.findAllById(playerIds);
+        List<PlayerDto> playerDtos = players.stream()
+                .map(PlayerDto::fromEntity)
+                .collect(Collectors.toList());
+
+        dto.setParticipants(playerDtos);
+        dto.setParticipantCount(playerDtos.size());
+
+        // その日の実施済み試合数を取得
+        long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
+        dto.setCompletedMatches((int) completedMatches);
+
+        // 試合ごとの参加人数を集計
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionId(session.getId());
+        Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
+        for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
+            matchCounts.put(i, 0);
+        }
+        for (PracticeParticipant participant : allParticipants) {
+            if (participant.getMatchNumber() != null) {
+                matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+            }
+        }
+        dto.setMatchParticipantCounts(matchCounts);
+
+        return dto;
+    }
+
+    /**
+     * 練習セッションリストに参加者情報を付与
+     */
+    private List<PracticeSessionDto> enrichSessionsWithParticipants(List<PracticeSession> sessions) {
+        if (sessions.isEmpty()) {
+            return List.of();
+        }
+
+        // 全セッションIDを収集
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+
+        // 全参加者を一括取得
+        List<PracticeParticipant> allParticipants = sessionIds.stream()
+                .flatMap(sessionId -> practiceParticipantRepository.findBySessionId(sessionId).stream())
+                .collect(Collectors.toList());
+
+        // セッションIDごとの参加者IDマップを作成
+        Map<Long, List<Long>> sessionParticipantsMap = allParticipants.stream()
+                .collect(Collectors.groupingBy(
+                        PracticeParticipant::getSessionId,
+                        Collectors.mapping(PracticeParticipant::getPlayerId, Collectors.toList())
+                ));
+
+        // 全選手IDを収集して一括取得
+        List<Long> allPlayerIds = allParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, Player> playerMap = playerRepository.findAllById(allPlayerIds).stream()
+                .collect(Collectors.toMap(Player::getId, player -> player));
+
+        // 各セッションに参加者情報を付与
+        return sessions.stream()
+                .map(session -> {
+                    PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
+
+                    // 参加者リスト
+                    List<Long> playerIds = sessionParticipantsMap.getOrDefault(session.getId(), List.of());
+                    List<PlayerDto> playerDtos = playerIds.stream()
+                            .map(playerMap::get)
+                            .filter(player -> player != null)
+                            .map(PlayerDto::fromEntity)
+                            .collect(Collectors.toList());
+
+                    dto.setParticipants(playerDtos);
+                    dto.setParticipantCount(playerDtos.size());
+
+                    // その日の実施済み試合数
+                    long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
+                    dto.setCompletedMatches((int) completedMatches);
+
+                    // 試合ごとの参加人数を集計
+                    List<PracticeParticipant> sessionParticipants = allParticipants.stream()
+                            .filter(p -> p.getSessionId().equals(session.getId()))
+                            .collect(Collectors.toList());
+                    Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
+                    for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
+                        matchCounts.put(i, 0);
+                    }
+                    for (PracticeParticipant participant : sessionParticipants) {
+                        if (participant.getMatchNumber() != null) {
+                            matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                        }
+                    }
+                    dto.setMatchParticipantCounts(matchCounts);
+
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 選手の練習参加を一括登録（月単位）
+     */
+    @Transactional
+    public void registerParticipations(PracticeParticipationRequest request) {
+        log.info("Registering participations for player {} in {}-{} with {} participations",
+                request.getPlayerId(), request.getYear(), request.getMonth(),
+                request.getParticipations().size());
+
+        // 選手が存在するか確認
+        if (!playerRepository.existsById(request.getPlayerId())) {
+            throw new ResourceNotFoundException("Player", request.getPlayerId());
+        }
+
+        // その月の全セッションを取得
+        List<PracticeSessionDto> monthSessions = findSessionsByYearMonth(request.getYear(), request.getMonth());
+        List<Long> allMonthSessionIds = monthSessions.stream()
+                .map(PracticeSessionDto::getId)
+                .collect(Collectors.toList());
+
+        // リクエストに含まれる各セッションが存在するか確認
+        List<Long> requestSessionIds = request.getParticipations().stream()
+                .map(PracticeParticipationRequest.SessionMatchParticipation::getSessionId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (!requestSessionIds.isEmpty()) {
+            List<PracticeSession> sessions = practiceSessionRepository.findAllById(requestSessionIds);
+            if (sessions.size() != requestSessionIds.size()) {
+                throw new ResourceNotFoundException("Some practice sessions not found");
+            }
+        }
+
+        // その月の全セッションから該当選手の既存参加記録を削除
+        if (!allMonthSessionIds.isEmpty()) {
+            log.debug("Deleting existing participations for player {} in sessions: {}",
+                    request.getPlayerId(), allMonthSessionIds);
+
+            // カスタム削除クエリを使用して一括削除
+            practiceParticipantRepository.deleteByPlayerIdAndSessionIds(
+                    request.getPlayerId(), allMonthSessionIds);
+
+            // 削除を確実にコミットするためにflush
+            entityManager.flush();
+
+            log.debug("Successfully deleted existing participations for player {} in {}-{}",
+                    request.getPlayerId(), request.getYear(), request.getMonth());
+        }
+
+        // 新しい参加記録を登録
+        List<PracticeParticipant> participants = request.getParticipations().stream()
+                .map(participation -> PracticeParticipant.builder()
+                        .sessionId(participation.getSessionId())
+                        .playerId(request.getPlayerId())
+                        .matchNumber(participation.getMatchNumber())
+                        .build())
+                .collect(Collectors.toList());
+
+        practiceParticipantRepository.saveAll(participants);
+
+        log.info("Successfully registered {} participations for player {}",
+                participants.size(), request.getPlayerId());
+    }
+
+    /**
+     * 選手の特定月の参加状況を取得
+     */
+    public Map<Long, List<Integer>> getPlayerParticipationsByMonth(Long playerId, int year, int month) {
+        log.debug("Getting participations for player {} in {}-{}", playerId, year, month);
+
+        // その月のセッションを取得
+        List<PracticeSessionDto> sessions = findSessionsByYearMonth(year, month);
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSessionDto::getId)
+                .collect(Collectors.toList());
+
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        // 選手の参加記録を取得
+        List<PracticeParticipant> participations =
+                practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds);
+
+        // セッションIDごとに試合番号をグルーピング
+        return participations.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(
+                        PracticeParticipant::getSessionId,
+                        Collectors.mapping(PracticeParticipant::getMatchNumber, Collectors.toList())
+                ));
     }
 }

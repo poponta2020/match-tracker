@@ -5,6 +5,17 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
+import MatchList from './pages/matches/MatchList';
+import MatchForm from './pages/matches/MatchForm';
+import MatchDetail from './pages/matches/MatchDetail';
+import PracticeList from './pages/practice/PracticeList';
+import PracticeForm from './pages/practice/PracticeForm';
+import PracticeDetail from './pages/practice/PracticeDetail';
+import PracticeParticipation from './pages/practice/PracticeParticipation';
+import PairingGenerator from './pages/pairings/PairingGenerator';
+import PlayerList from './pages/players/PlayerList';
+import PlayerDetail from './pages/players/PlayerDetail';
+import PlayerEdit from './pages/players/PlayerEdit';
 
 function App() {
   return (
@@ -28,27 +39,87 @@ function App() {
             element={
               <PrivateRoute>
                 <Layout>
-                  <div className="text-center py-20">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      試合記録ページ
-                    </h2>
-                    <p className="text-gray-600">実装中...</p>
-                  </div>
+                  <MatchList />
                 </Layout>
               </PrivateRoute>
             }
           />
           <Route
-            path="/practices"
+            path="/matches/new"
             element={
               <PrivateRoute>
                 <Layout>
-                  <div className="text-center py-20">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      練習記録ページ
-                    </h2>
-                    <p className="text-gray-600">実装中...</p>
-                  </div>
+                  <MatchForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matches/:id"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <MatchDetail />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matches/:id/edit"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <MatchForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PracticeList />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice/new"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PracticeForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice/:id"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PracticeDetail />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice/:id/edit"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PracticeForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/practice/participation"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PracticeParticipation />
                 </Layout>
               </PrivateRoute>
             }
@@ -73,12 +144,7 @@ function App() {
             element={
               <PrivateRoute>
                 <Layout>
-                  <div className="text-center py-20">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      対戦組み合わせページ
-                    </h2>
-                    <p className="text-gray-600">実装中...</p>
-                  </div>
+                  <PairingGenerator />
                 </Layout>
               </PrivateRoute>
             }
@@ -88,12 +154,37 @@ function App() {
             element={
               <PrivateRoute>
                 <Layout>
-                  <div className="text-center py-20">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                      選手一覧ページ
-                    </h2>
-                    <p className="text-gray-600">実装中...</p>
-                  </div>
+                  <PlayerList />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/players/new"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PlayerEdit />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/players/:id"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PlayerDetail />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/players/:id/edit"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <PlayerEdit />
                 </Layout>
               </PrivateRoute>
             }

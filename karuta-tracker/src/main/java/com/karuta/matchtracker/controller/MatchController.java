@@ -2,6 +2,7 @@ package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.dto.MatchCreateRequest;
 import com.karuta.matchtracker.dto.MatchDto;
+import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.service.MatchService;
 import jakarta.validation.Valid;
@@ -52,6 +53,19 @@ public class MatchController {
         log.debug("GET /api/matches/exists?date={} - Checking if match exists", date);
         boolean exists = matchService.existsMatchOnDate(date);
         return ResponseEntity.ok(exists);
+    }
+
+    /**
+     * IDで試合結果を取得
+     *
+     * @param id 試合ID
+     * @return 試合結果
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<MatchDto> getMatchById(@PathVariable Long id) {
+        log.debug("GET /api/matches/{} - Getting match by id", id);
+        MatchDto match = matchService.findById(id);
+        return ResponseEntity.ok(match);
     }
 
     /**
@@ -115,14 +129,27 @@ public class MatchController {
     }
 
     /**
-     * 試合結果を新規登録
+     * 試合結果を新規登録（簡易版）
+     *
+     * @param request 簡易登録リクエスト
+     * @return 登録された試合結果
+     */
+    @PostMapping
+    public ResponseEntity<MatchDto> createMatch(@Valid @RequestBody MatchSimpleCreateRequest request) {
+        log.info("POST /api/matches - Creating new match (simple) on {}", request.getMatchDate());
+        MatchDto createdMatch = matchService.createMatchSimple(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
+    }
+
+    /**
+     * 試合結果を新規登録（詳細版）
      *
      * @param request 登録リクエスト
      * @return 登録された試合結果
      */
-    @PostMapping
-    public ResponseEntity<MatchDto> createMatch(@Valid @RequestBody MatchCreateRequest request) {
-        log.info("POST /api/matches - Creating new match on {}", request.getMatchDate());
+    @PostMapping("/detailed")
+    public ResponseEntity<MatchDto> createMatchDetailed(@Valid @RequestBody MatchCreateRequest request) {
+        log.info("POST /api/matches/detailed - Creating new match on {}", request.getMatchDate());
         MatchDto createdMatch = matchService.createMatch(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }

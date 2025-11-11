@@ -2,6 +2,7 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.MatchCreateRequest;
 import com.karuta.matchtracker.dto.MatchDto;
+import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.Player;
@@ -30,6 +31,16 @@ public class MatchService {
 
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
+
+    /**
+     * IDで試合結果を取得
+     */
+    public MatchDto findById(Long id) {
+        log.debug("Finding match by id: {}", id);
+        Match match = matchRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Match", id));
+        return enrichMatchWithPlayerNames(match);
+    }
 
     /**
      * 日付別の試合結果を取得（試合番号順）
@@ -95,6 +106,66 @@ public class MatchService {
         Long wins = matchRepository.countWinsByPlayerId(playerId);
 
         return MatchStatisticsDto.create(playerId, player.getName(), totalMatches, wins);
+    }
+
+    /**
+     * 試合結果を新規登録（簡易版：対戦相手名と結果から登録）
+     */
+    @Transactional
+    public MatchDto createMatchSimple(MatchSimpleCreateRequest request) {
+        log.info("Creating new match (simple) on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
+
+        // 選手の存在確認
+        Player player = playerRepository.findById(request.getPlayerId())
+                .orElseThrow(() -> new ResourceNotFoundException("Player", "id", request.getPlayerId()));
+
+        // 同日同試合番号の重複チェック
+        log.debug("Checking for duplicate: playerId={}, date={}, matchNumber={}",
+                  request.getPlayerId(), request.getMatchDate(), request.getMatchNumber());
+        boolean exists = matchRepository.existsByPlayerIdAndMatchDateAndMatchNumber(
+                request.getPlayerId(), request.getMatchDate(), request.getMatchNumber());
+        log.debug("Duplicate check result: {}", exists);
+
+        if (exists) {
+            String errorMessage = String.format("この日の第%d試合は既に登録されています", request.getMatchNumber());
+            log.warn("Duplicate match detected: {}", errorMessage);
+            throw new IllegalArgumentException(errorMessage);
+        }
+
+        // 対戦相手は名前のみで記録（将来的には選手IDと関連付けも可能）
+        Long winnerId;
+        Long loserId = null;
+
+        // 結果に基づいて勝者を決定
+        if ("勝ち".equals(request.getResult())) {
+            winnerId = request.getPlayerId();
+        } else if ("負け".equals(request.getResult())) {
+            winnerId = null; // 対戦相手が勝者だが、IDがないのでnull
+        } else {
+            winnerId = null; // 引き分け
+        }
+
+        // Matchエンティティを構築
+        Match match = Match.builder()
+                .matchDate(request.getMatchDate())
+                .matchNumber(request.getMatchNumber())
+                .player1Id(request.getPlayerId())
+                .player2Id(0L) // ダミーID（対戦相手がシステム未登録のため）
+                .winnerId(winnerId != null ? winnerId : 0L)
+                .scoreDifference(Math.abs(request.getScoreDifference()))
+                .opponentName(request.getOpponentName())
+                .notes(request.getNotes())
+                .createdBy(request.getPlayerId())
+                .updatedBy(request.getPlayerId())
+                .build();
+
+        Match saved = matchRepository.save(match);
+
+        // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
+        MatchDto dto = enrichMatchWithPlayerNames(saved);
+
+        log.info("Successfully created match with id: {}", saved.getId());
+        return dto;
     }
 
     /**
@@ -184,9 +255,10 @@ public class MatchService {
             return List.of();
         }
 
-        // 全選手IDを収集
+        // 全選手IDを収集（0は除外）
         List<Long> playerIds = matches.stream()
                 .flatMap(m -> List.of(m.getPlayer1Id(), m.getPlayer2Id()).stream())
+                .filter(id -> id != 0L)
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -198,9 +270,28 @@ public class MatchService {
         return matches.stream()
                 .map(match -> {
                     MatchDto dto = MatchDto.fromEntity(match);
+
+                    // 通常の試合（両選手がシステムに登録されている場合）
                     dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                     dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
                     dto.setWinnerName(playerNames.get(match.getWinnerId()));
+
+                    // 簡易試合（対戦相手が未登録の場合）の処理
+                    // player1Idとplayer2Idのどちらかが0の場合
+                    if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {
+                        // 登録選手のIDを特定
+                        Long registeredPlayerId = match.getPlayer1Id() == 0L ? match.getPlayer2Id() : match.getPlayer1Id();
+
+                        // 結果を計算
+                        if (match.getWinnerId() == 0L) {
+                            dto.setResult("引き分け");
+                        } else if (match.getWinnerId().equals(registeredPlayerId)) {
+                            dto.setResult("勝ち");
+                        } else {
+                            dto.setResult("負け");
+                        }
+                    }
+
                     return dto;
                 })
                 .collect(Collectors.toList());

@@ -23,24 +23,33 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [matchesRes, practicesRes, pairingsRes] = await Promise.all([
+        // 今日の日付を取得
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        today.setHours(0, 0, 0, 0);
+
+        const [matchesRes, practicesRes, todayPairingsRes] = await Promise.all([
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
-          practiceAPI
-            .getByPlayerId(currentPlayer.id)
-            .catch(() => ({ data: [] })),
-          pairingAPI
-            .getByDate(new Date().toISOString().split('T')[0])
-            .catch(() => ({ data: [] })),
+          // 練習記録APIは全件取得のみサポート
+          fetch('http://localhost:8080/api/practice-sessions')
+            .then(res => res.json())
+            .catch(() => []),
+          // 今日の対戦組み合わせを取得
+          pairingAPI.getByDate(todayStr).catch(() => ({ data: [] })),
         ]);
+
+        // 未来の練習のみをフィルタリングして日付順にソート
+        const upcomingPractices = Array.isArray(practicesRes)
+          ? practicesRes
+              .filter(p => new Date(p.sessionDate) >= today)
+              .sort((a, b) => new Date(a.sessionDate) - new Date(b.sessionDate))
+              .slice(0, 5)
+          : [];
 
         setStats({
           recentMatches: matchesRes.data.slice(0, 5),
-          recentPractices: practicesRes.data.slice(0, 5),
-          todayPairings: pairingsRes.data.filter(
-            (p) =>
-              p.player1Id === currentPlayer.id ||
-              p.player2Id === currentPlayer.id
-          ),
+          recentPractices: upcomingPractices,
+          todayPairings: todayPairingsRes.data || [],
           loading: false,
         });
       } catch (error) {
@@ -110,7 +119,7 @@ const Home = () => {
         </Link>
 
         <Link
-          to="/practices/new"
+          to="/practice/new"
           className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
@@ -156,7 +165,7 @@ const Home = () => {
           title="練習回数"
           value={stats.recentPractices.length}
           color="bg-green-500"
-          link="/practices"
+          link="/practice"
         />
         <StatCard
           icon={TrendingUp}
@@ -179,9 +188,55 @@ const Home = () => {
           title="今日の対戦"
           value={stats.todayPairings.length}
           color="bg-purple-500"
-          link="/pairings/today"
+          link="/pairings/generate"
         />
       </div>
+
+      {/* 今日の対戦 */}
+      {stats.todayPairings.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              今日の対戦
+            </h2>
+            <Link
+              to="/pairings/generate"
+              className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
+            >
+              詳細を見る
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {stats.todayPairings.map((pairing) => (
+              <div
+                key={pairing.id}
+                className="p-4 bg-purple-50 rounded-lg border border-purple-100"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="font-medium text-gray-900">
+                        {pairing.player1Name}
+                      </p>
+                    </div>
+                    <div className="text-gray-400 font-bold">VS</div>
+                    <div className="text-center">
+                      <p className="font-medium text-gray-900">
+                        {pairing.player2Name}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    試合 {pairing.matchNumber}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 最近の活動 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -239,15 +294,15 @@ const Home = () => {
           )}
         </div>
 
-        {/* 最近の練習 */}
+        {/* 次の練習 */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-green-600" />
-              最近の練習
+              次の練習
             </h2>
             <Link
-              to="/practices"
+              to="/practice"
               className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1"
             >
               すべて見る
@@ -259,22 +314,22 @@ const Home = () => {
               {stats.recentPractices.map((practice) => (
                 <Link
                   key={practice.id}
-                  to={`/practices/${practice.id}`}
+                  to={`/practice/${practice.id}`}
                   className="block p-3 hover:bg-gray-50 rounded-lg transition-colors"
                 >
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-medium text-gray-900">
-                        {practice.practiceType}
+                        {practice.location || '練習'}
                       </p>
                       <p className="text-sm text-gray-600">
-                        {new Date(practice.practiceDate).toLocaleDateString(
+                        {new Date(practice.sessionDate).toLocaleDateString(
                           'ja-JP'
                         )}
                       </p>
                     </div>
                     <p className="text-sm text-gray-600">
-                      {practice.durationMinutes}分
+                      {practice.participantCount || 0}名参加
                     </p>
                   </div>
                 </Link>
@@ -282,7 +337,7 @@ const Home = () => {
             </div>
           ) : (
             <p className="text-gray-500 text-center py-8">
-              まだ練習記録がありません
+              予定されている練習がありません
             </p>
           )}
         </div>

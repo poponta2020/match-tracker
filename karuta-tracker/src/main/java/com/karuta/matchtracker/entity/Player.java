@@ -53,6 +53,32 @@ public class Player {
     private DominantHand dominantHand;
 
     /**
+     * 段位
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dan_rank")
+    private DanRank danRank;
+
+    /**
+     * 級位
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kyu_rank")
+    private KyuRank kyuRank;
+
+    /**
+     * 所属かるた会
+     */
+    @Column(name = "karuta_club", length = 200)
+    private String karutaClub;
+
+    /**
+     * 備考
+     */
+    @Column(name = "remarks", columnDefinition = "TEXT")
+    private String remarks;
+
+    /**
      * ロール（権限管理）
      */
     @Enumerated(EnumType.STRING)
@@ -91,6 +117,20 @@ public class Player {
      */
     public enum DominantHand {
         右, 左, 両
+    }
+
+    /**
+     * 段位の列挙型
+     */
+    public enum DanRank {
+        無段, 初段, 弐段, 参段, 四段, 五段, 六段, 七段, 八段
+    }
+
+    /**
+     * 級位の列挙型
+     */
+    public enum KyuRank {
+        E級, D級, C級, B級, A級
     }
 
     /**

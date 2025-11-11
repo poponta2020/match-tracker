@@ -21,6 +21,10 @@ public class PlayerDto {
     private String name;
     private Player.Gender gender;
     private Player.DominantHand dominantHand;
+    private Player.DanRank danRank;
+    private Player.KyuRank kyuRank;
+    private String karutaClub;
+    private String remarks;
     private Player.Role role;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -38,6 +42,10 @@ public class PlayerDto {
                 .name(player.getName())
                 .gender(player.getGender())
                 .dominantHand(player.getDominantHand())
+                .danRank(player.getDanRank())
+                .kyuRank(player.getKyuRank())
+                .karutaClub(player.getKarutaClub())
+                .remarks(player.getRemarks())
                 .role(player.getRole())
                 .createdAt(player.getCreatedAt())
                 .updatedAt(player.getUpdatedAt())

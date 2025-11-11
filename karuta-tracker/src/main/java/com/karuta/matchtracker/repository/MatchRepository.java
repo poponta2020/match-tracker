@@ -101,6 +101,14 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     boolean existsByMatchDate(LocalDate matchDate);
 
     /**
+     * 特定の日付の対戦数を取得
+     *
+     * @param matchDate 対戦日
+     * @return 対戦数
+     */
+    long countByMatchDate(LocalDate matchDate);
+
+    /**
      * 選手が作成または更新した対戦結果を取得
      * 編集・削除権限の判定に使用
      *
@@ -109,4 +117,51 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
      */
     @Query("SELECT m FROM Match m WHERE m.createdBy = :playerId OR m.updatedBy = :playerId")
     List<Match> findByCreatedByOrUpdatedBy(@Param("playerId") Long playerId);
+
+    /**
+     * 特定の選手の同日同試合番号の試合が存在するか確認
+     *
+     * @param playerId 選手ID
+     * @param matchDate 対戦日
+     * @param matchNumber 試合番号
+     * @return 存在する場合true
+     */
+    @Query("SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END FROM Match m WHERE (m.player1Id = :playerId OR m.player2Id = :playerId) AND m.matchDate = :matchDate AND m.matchNumber = :matchNumber")
+    boolean existsByPlayerIdAndMatchDateAndMatchNumber(@Param("playerId") Long playerId,
+                                                        @Param("matchDate") LocalDate matchDate,
+                                                        @Param("matchNumber") Integer matchNumber);
+
+    /**
+     * 過去の対戦履歴を取得（自動マッチング用）
+     *
+     * @param participantIds 参加者IDリスト
+     * @param startDate 開始日
+     * @param endDate 終了日（この日は含まない）
+     * @return [matchDate, playerA, playerB]のリスト
+     */
+    @Query("SELECT m.matchDate, " +
+           "CASE WHEN m.player1Id < m.player2Id THEN m.player1Id ELSE m.player2Id END, " +
+           "CASE WHEN m.player1Id < m.player2Id THEN m.player2Id ELSE m.player1Id END " +
+           "FROM Match m " +
+           "WHERE m.matchDate >= :startDate AND m.matchDate < :endDate " +
+           "AND (m.player1Id IN :participantIds OR m.player2Id IN :participantIds) " +
+           "ORDER BY m.matchDate DESC")
+    List<Object[]> findRecentMatchHistory(@Param("participantIds") List<Long> participantIds,
+                                           @Param("startDate") LocalDate startDate,
+                                           @Param("endDate") LocalDate endDate);
+
+    /**
+     * 同日の既存対戦を取得（自動マッチング用）
+     *
+     * @param matchDate 対戦日
+     * @param currentMatchNumber 現在の試合番号より小さい試合のみ取得
+     * @return [playerA, playerB]のリスト
+     */
+    @Query("SELECT " +
+           "CASE WHEN m.player1Id < m.player2Id THEN m.player1Id ELSE m.player2Id END, " +
+           "CASE WHEN m.player1Id < m.player2Id THEN m.player2Id ELSE m.player1Id END " +
+           "FROM Match m " +
+           "WHERE m.matchDate = :matchDate AND m.matchNumber < :currentMatchNumber")
+    List<Object[]> findTodayMatches(@Param("matchDate") LocalDate matchDate,
+                                    @Param("currentMatchNumber") Integer currentMatchNumber);
 }
