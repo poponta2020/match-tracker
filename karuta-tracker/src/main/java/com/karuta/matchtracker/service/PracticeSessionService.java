@@ -145,13 +145,20 @@ public class PracticeSessionService {
         PracticeSession saved = practiceSessionRepository.save(session);
 
         // 参加者を保存（参加者がいる場合のみ）
+        // 管理者が登録した参加者は全試合に参加するものとして登録
         if (!participantIds.isEmpty()) {
-            List<PracticeParticipant> practiceParticipants = participantIds.stream()
-                    .map(playerId -> PracticeParticipant.builder()
+            int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
+            List<PracticeParticipant> practiceParticipants = new java.util.ArrayList<>();
+
+            for (Long playerId : participantIds) {
+                for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+                    practiceParticipants.add(PracticeParticipant.builder()
                             .sessionId(saved.getId())
                             .playerId(playerId)
-                            .build())
-                    .collect(Collectors.toList());
+                            .matchNumber(matchNumber)
+                            .build());
+                }
+            }
 
             practiceParticipantRepository.saveAll(practiceParticipants);
         }
@@ -224,13 +231,20 @@ public class PracticeSessionService {
         // 既存の参加者を削除して新しい参加者を登録
         practiceParticipantRepository.deleteBySessionId(id);
 
+        // 管理者が登録した参加者は全試合に参加するものとして登録
         if (!participantIds.isEmpty()) {
-            List<PracticeParticipant> newParticipants = participantIds.stream()
-                    .map(playerId -> PracticeParticipant.builder()
+            int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
+            List<PracticeParticipant> newParticipants = new java.util.ArrayList<>();
+
+            for (Long playerId : participantIds) {
+                for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+                    newParticipants.add(PracticeParticipant.builder()
                             .sessionId(id)
                             .playerId(playerId)
-                            .build())
-                    .collect(Collectors.toList());
+                            .matchNumber(matchNumber)
+                            .build());
+                }
+            }
 
             practiceParticipantRepository.saveAll(newParticipants);
         }
@@ -298,15 +312,31 @@ public class PracticeSessionService {
         // 試合ごとの参加人数を集計
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionId(session.getId());
         Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
+        Map<Integer, List<String>> matchParticipants = new java.util.HashMap<>();
+
         for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
             matchCounts.put(i, 0);
+            matchParticipants.put(i, new java.util.ArrayList<>());
         }
+
+        // プレイヤーIDと名前のマップを作成
+        Map<Long, String> playerNameMap = players.stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName, (existing, replacement) -> existing));
+
         for (PracticeParticipant participant : allParticipants) {
             if (participant.getMatchNumber() != null) {
                 matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                String playerName = playerNameMap.get(participant.getPlayerId());
+                if (playerName != null) {
+                    // 試合番号が範囲外の場合は新しくリストを作成
+                    matchParticipants.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                            .add(playerName);
+                }
             }
         }
+
         dto.setMatchParticipantCounts(matchCounts);
+        dto.setMatchParticipants(matchParticipants);
 
         return dto;
     }
@@ -365,20 +395,33 @@ public class PracticeSessionService {
                     long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
                     dto.setCompletedMatches((int) completedMatches);
 
-                    // 試合ごとの参加人数を集計
+                    // 試合ごとの参加人数と参加者名を集計
                     List<PracticeParticipant> sessionParticipants = allParticipants.stream()
                             .filter(p -> p.getSessionId().equals(session.getId()))
                             .collect(Collectors.toList());
                     Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
+                    Map<Integer, List<String>> matchParticipants = new java.util.HashMap<>();
+
                     for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
                         matchCounts.put(i, 0);
+                        matchParticipants.put(i, new java.util.ArrayList<>());
                     }
+
+                    // プレイヤーIDと名前のマップを作成（全プレイヤーマップから）
                     for (PracticeParticipant participant : sessionParticipants) {
                         if (participant.getMatchNumber() != null) {
                             matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                            Player player = playerMap.get(participant.getPlayerId());
+                            if (player != null) {
+                                // 試合番号が範囲外の場合は新しくリストを作成
+                                matchParticipants.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                                        .add(player.getName());
+                            }
                         }
                     }
+
                     dto.setMatchParticipantCounts(matchCounts);
+                    dto.setMatchParticipants(matchParticipants);
 
                     return dto;
                 })

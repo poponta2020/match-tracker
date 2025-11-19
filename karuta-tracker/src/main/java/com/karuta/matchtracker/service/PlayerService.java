@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.LoginRequest;
+import com.karuta.matchtracker.dto.LoginResponse;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -178,5 +180,25 @@ public class PlayerService {
 
         log.info("Successfully updated role for player id: {}", id);
         return PlayerDto.fromEntity(updated);
+    }
+
+    /**
+     * ログイン認証
+     */
+    @Transactional(readOnly = true)
+    public LoginResponse login(LoginRequest request) {
+        log.info("Login attempt for user: {}", request.getName());
+
+        Player player = playerRepository.findByNameAndActive(request.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("選手名またはパスワードが正しくありません"));
+
+        // 簡易実装: パスワードを平文で比較（本番環境ではBCryptを使用すべき）
+        if (!request.getPassword().equals(player.getPassword())) {
+            log.warn("Failed login attempt for user: {}", request.getName());
+            throw new ResourceNotFoundException("選手名またはパスワードが正しくありません");
+        }
+
+        log.info("Successful login for user: {}", request.getName());
+        return LoginResponse.fromEntity(player);
     }
 }

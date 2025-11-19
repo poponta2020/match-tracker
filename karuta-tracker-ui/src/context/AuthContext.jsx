@@ -26,22 +26,19 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (name, password) => {
     try {
-      // 仮実装: 選手一覧から名前で検索
-      const response = await playerAPI.search({ name });
-      const player = response.data.find(
-        (p) => p.name === name
-        // TODO: パスワード検証をバックエンドで実装
-      );
+      // ログインエンドポイントを使用
+      const response = await playerAPI.login(name, password);
+      const player = response.data;
 
-      if (player) {
-        setCurrentPlayer(player);
-        localStorage.setItem('currentPlayer', JSON.stringify(player));
-        localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
-        return player;
-      }
-      throw new Error('認証に失敗しました');
+      setCurrentPlayer(player);
+      localStorage.setItem('currentPlayer', JSON.stringify(player));
+      localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
+      return player;
     } catch (error) {
-      throw error;
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error('ログインに失敗しました');
     }
   };
 

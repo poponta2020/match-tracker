@@ -38,6 +38,7 @@ public class PracticeSessionDto {
     private Integer participantCount;      // 参加者数
     private Integer completedMatches;      // 実施済み試合数
     private java.util.Map<Integer, Integer> matchParticipantCounts;  // 試合番号ごとの参加人数
+    private java.util.Map<Integer, List<String>> matchParticipants;  // 試合番号ごとの参加者名リスト
 
     /**
      * エンティティからDTOへ変換

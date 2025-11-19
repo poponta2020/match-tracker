@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI } from '../../api';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle } from 'lucide-react';
 
 const PracticeParticipation = () => {
+  const navigate = useNavigate();
   const { currentPlayer } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sessions, setSessions] = useState([]);
@@ -110,7 +112,10 @@ const PracticeParticipation = () => {
       });
 
       setSuccess('参加登録を保存しました');
-      setTimeout(() => setSuccess(''), 3000);
+      // 保存成功後、1秒待ってから練習記録画面に遷移
+      setTimeout(() => {
+        navigate('/practice');
+      }, 1000);
     } catch (err) {
       console.error('保存エラー:', err);
       setError('保存に失敗しました');

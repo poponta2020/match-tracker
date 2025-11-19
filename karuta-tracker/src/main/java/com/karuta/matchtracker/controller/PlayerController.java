@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.annotation.RequireRole;
+import com.karuta.matchtracker.dto.LoginRequest;
+import com.karuta.matchtracker.dto.LoginResponse;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -26,6 +28,19 @@ import java.util.List;
 public class PlayerController {
 
     private final PlayerService playerService;
+
+    /**
+     * ログイン
+     *
+     * @param request ログインリクエスト
+     * @return ログインレスポンス
+     */
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        log.info("POST /api/players/login - Login attempt for: {}", request.getName());
+        LoginResponse response = playerService.login(request);
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * 全アクティブ選手を取得
