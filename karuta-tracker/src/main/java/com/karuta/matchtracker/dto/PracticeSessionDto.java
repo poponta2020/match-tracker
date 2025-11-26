@@ -23,7 +23,8 @@ public class PracticeSessionDto {
     private Long id;
     private LocalDate sessionDate;
     private Integer totalMatches;
-    private String location;
+    private Long venueId;
+    private String venueName;
     private String notes;
     private LocalTime startTime;
     private LocalTime endTime;
@@ -39,6 +40,7 @@ public class PracticeSessionDto {
     private Integer completedMatches;      // 実施済み試合数
     private java.util.Map<Integer, Integer> matchParticipantCounts;  // 試合番号ごとの参加人数
     private java.util.Map<Integer, List<String>> matchParticipants;  // 試合番号ごとの参加者名リスト
+    private List<VenueMatchScheduleDto> venueSchedules;  // 会場の試合時間割
 
     /**
      * エンティティからDTOへ変換
@@ -51,7 +53,7 @@ public class PracticeSessionDto {
                 .id(session.getId())
                 .sessionDate(session.getSessionDate())
                 .totalMatches(session.getTotalMatches())
-                .location(session.getLocation())
+                .venueId(session.getVenueId())
                 .notes(session.getNotes())
                 .startTime(session.getStartTime())
                 .endTime(session.getEndTime())

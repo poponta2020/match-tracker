@@ -16,6 +16,8 @@ import PairingGenerator from './pages/pairings/PairingGenerator';
 import PlayerList from './pages/players/PlayerList';
 import PlayerDetail from './pages/players/PlayerDetail';
 import PlayerEdit from './pages/players/PlayerEdit';
+import VenueList from './pages/venues/VenueList';
+import VenueForm from './pages/venues/VenueForm';
 
 function App() {
   return (
@@ -185,6 +187,36 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <PlayerEdit />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/venues"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <VenueList />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/venues/new"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <VenueForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/venues/edit/:id"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <VenueForm />
                 </Layout>
               </PrivateRoute>
             }

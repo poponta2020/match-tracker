@@ -12,6 +12,7 @@ import {
   X,
   Calendar,
   Shield,
+  MapPin,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -44,6 +45,7 @@ const Layout = ({ children }) => {
   // スーパー管理者メニュー（SUPER_ADMINのみ）
   const superAdminNavigation = [
     { name: '選手管理', href: '/players', icon: Users },
+    { name: '会場管理', href: '/venues', icon: MapPin },
   ];
 
   // ロールに応じてナビゲーションを組み立て

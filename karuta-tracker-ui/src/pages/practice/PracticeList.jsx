@@ -319,9 +319,9 @@ const PracticeList = () => {
                               <span className="text-yellow-500 text-sm">◐</span>
                             )}
                           </div>
-                          {session && (
+                          {session && session.venueName && (
                             <div className="mt-1 text-xs text-gray-700">
-                              🏛{abbreviateLocation(session.location)}
+                              🏛{abbreviateLocation(session.venueName)}
                             </div>
                           )}
                         </div>
@@ -357,8 +357,23 @@ const PracticeList = () => {
             <div className="space-y-4">
               <div>
                 <div className="text-sm font-medium text-gray-700">📍 場所:</div>
-                <div className="text-base text-gray-900">{selectedSession.location || '-'}</div>
+                <div className="text-base text-gray-900">{selectedSession.venueName || '-'}</div>
               </div>
+
+              {/* 試合時間割 */}
+              {selectedSession.venueSchedules && selectedSession.venueSchedules.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-2">⏰ 試合時間割:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedSession.venueSchedules.map((schedule) => (
+                      <div key={schedule.id} className="text-sm bg-gray-50 p-2 rounded">
+                        <span className="font-medium">第{schedule.matchNumber}試合:</span>{' '}
+                        {schedule.startTime?.substring(0, 5)} - {schedule.endTime?.substring(0, 5)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="text-sm font-medium text-gray-700 mb-2">🎯 試合別参加者:</div>
