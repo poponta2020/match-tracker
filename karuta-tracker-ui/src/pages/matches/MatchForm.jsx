@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI } from '../../api';
 import { Trophy, Save, X, AlertCircle, Users } from 'lucide-react';
@@ -7,15 +7,19 @@ import { Trophy, Save, X, AlertCircle, Users } from 'lucide-react';
 const MatchForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentPlayer } = useAuth();
   const isEdit = !!id;
 
+  // location.stateから初期値を取得
+  const initialData = location.state || {};
+
   const [formData, setFormData] = useState({
-    matchDate: new Date().toISOString().split('T')[0],
-    opponentName: '',
+    matchDate: initialData.matchDate || new Date().toISOString().split('T')[0],
+    opponentName: initialData.opponentName || '',
     result: '勝ち',
     scoreDifference: 0,
-    matchNumber: 1,
+    matchNumber: initialData.matchNumber || 1,
     notes: '',
   });
 
@@ -117,17 +121,44 @@ const MatchForm = () => {
 
       if (isEdit) {
         await matchAPI.update(id, submitData);
+        navigate('/matches');
       } else {
         await matchAPI.create(submitData);
+        // 新規登録の場合はホーム画面に遷移して今日の対戦カードを更新
+        navigate('/');
       }
-
-      navigate('/matches');
     } catch (err) {
       console.error('保存エラー:', err);
-      setError(
-        err.response?.data?.message ||
-          `試合記録の${isEdit ? '更新' : '登録'}に失敗しました`
-      );
+
+      // 重複エラー（409 Conflict）の場合
+      if (err.response?.status === 409 && err.response?.data?.existingMatchId) {
+        const existingMatchId = err.response.data.existingMatchId;
+        const confirmMessage = `${err.response.data.message}\n\n既存の記録を上書きしますか？`;
+
+        if (window.confirm(confirmMessage)) {
+          try {
+            const submitData = {
+              ...formData,
+              playerId: currentPlayer.id,
+              scoreDifference: parseInt(formData.scoreDifference),
+              matchNumber: parseInt(formData.matchNumber),
+            };
+
+            await matchAPI.update(existingMatchId, submitData);
+            navigate('/');
+          } catch (updateErr) {
+            console.error('更新エラー:', updateErr);
+            setError(
+              updateErr.response?.data?.message || '試合記録の更新に失敗しました'
+            );
+          }
+        }
+      } else {
+        setError(
+          err.response?.data?.message ||
+            `試合記録の${isEdit ? '更新' : '登録'}に失敗しました`
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -169,6 +200,26 @@ const MatchForm = () => {
                 今日
               </div>
             )}
+          </div>
+        </div>
+
+        {/* 試合番号 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            試合番号 <span className="text-red-500">*</span>
+          </label>
+          <div className="flex items-center gap-4">
+            <span className="text-gray-600">第</span>
+            <input
+              type="number"
+              name="matchNumber"
+              value={formData.matchNumber}
+              onChange={handleChange}
+              min="1"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              required
+            />
+            <span className="text-gray-600">試合</span>
           </div>
         </div>
 
@@ -248,8 +299,8 @@ const MatchForm = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             結果 <span className="text-red-500">*</span>
           </label>
-          <div className="grid grid-cols-3 gap-3">
-            {['勝ち', '負け', '引き分け'].map((result) => (
+          <div className="grid grid-cols-2 gap-3">
+            {['勝ち', '負け'].map((result) => (
               <button
                 key={result}
                 type="button"
@@ -260,9 +311,7 @@ const MatchForm = () => {
                   formData.result === result
                     ? result === '勝ち'
                       ? 'border-green-500 bg-green-50 text-green-700'
-                      : result === '負け'
-                      ? 'border-red-500 bg-red-50 text-red-700'
-                      : 'border-gray-500 bg-gray-50 text-gray-700'
+                      : 'border-red-500 bg-red-50 text-red-700'
                     : 'border-gray-200 text-gray-600 hover:border-gray-300'
                 }`}
               >
@@ -277,38 +326,68 @@ const MatchForm = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             枚数差 <span className="text-red-500">*</span>
           </label>
-          <div className="flex items-center gap-4">
-            <input
-              type="number"
-              name="scoreDifference"
-              value={formData.scoreDifference}
-              onChange={handleChange}
-              min="0"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              required
-            />
-            <span className="text-gray-600">枚</span>
-          </div>
-        </div>
+          <div className="relative flex items-center justify-center py-4">
+            {/* スクロール可能なピッカー */}
+            <div
+              className="relative overflow-y-scroll h-48 w-full max-w-xs hide-scrollbar snap-y snap-mandatory"
+              onScroll={(e) => {
+                const scrollTop = e.target.scrollTop;
+                const itemHeight = 48; // 各アイテムの高さ
+                const index = Math.round(scrollTop / itemHeight);
+                setFormData(prev => ({ ...prev, scoreDifference: index }));
+              }}
+              ref={(el) => {
+                if (el && !el.dataset.initialized) {
+                  el.dataset.initialized = 'true';
+                  // 初期位置にスクロール
+                  el.scrollTop = formData.scoreDifference * 48;
+                }
+              }}
+            >
+              {/* 上部パディング */}
+              <div className="h-24"></div>
 
-        {/* 試合番号 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            試合番号 <span className="text-red-500">*</span>
-          </label>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">第</span>
-            <input
-              type="number"
-              name="matchNumber"
-              value={formData.matchNumber}
-              onChange={handleChange}
-              min="1"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              required
-            />
-            <span className="text-gray-600">試合</span>
+              {/* 0-25枚の選択肢 */}
+              {Array.from({ length: 26 }, (_, i) => i).map((num) => (
+                <div
+                  key={num}
+                  className="h-12 flex items-center justify-center snap-center cursor-pointer transition-all"
+                  style={{
+                    fontSize: formData.scoreDifference === num ? '2rem' : '1.25rem',
+                    fontWeight: formData.scoreDifference === num ? '700' : '400',
+                    color: formData.scoreDifference === num ? '#2563eb' : '#9ca3af',
+                    opacity: Math.abs(formData.scoreDifference - num) > 2 ? 0.3 : 1,
+                  }}
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, scoreDifference: num }));
+                    // スムーズスクロール
+                    const container = document.querySelector('.hide-scrollbar');
+                    if (container) {
+                      container.scrollTo({
+                        top: num * 48,
+                        behavior: 'smooth'
+                      });
+                    }
+                  }}
+                >
+                  {num} 枚
+                </div>
+              ))}
+
+              {/* 下部パディング */}
+              <div className="h-24"></div>
+            </div>
           </div>
+
+          <style>{`
+            .hide-scrollbar::-webkit-scrollbar {
+              display: none;
+            }
+            .hide-scrollbar {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
+          `}</style>
         </div>
 
         {/* メモ */}

@@ -155,7 +155,23 @@ public class MatchController {
     }
 
     /**
-     * 試合結果を更新
+     * 試合結果を更新（簡易版）
+     *
+     * @param id 試合ID
+     * @param request 更新リクエスト
+     * @return 更新された試合結果
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<MatchDto> updateMatchSimple(
+            @PathVariable Long id,
+            @Valid @RequestBody MatchSimpleCreateRequest request) {
+        log.info("PUT /api/matches/{} - Updating match (simple)", id);
+        MatchDto updatedMatch = matchService.updateMatchSimple(id, request);
+        return ResponseEntity.ok(updatedMatch);
+    }
+
+    /**
+     * 試合結果を更新（詳細版）
      *
      * @param id 試合ID
      * @param winnerId 勝者ID
@@ -163,13 +179,13 @@ public class MatchController {
      * @param updatedBy 更新者ID
      * @return 更新された試合結果
      */
-    @PutMapping("/{id}")
-    public ResponseEntity<MatchDto> updateMatch(
+    @PutMapping("/{id}/detailed")
+    public ResponseEntity<MatchDto> updateMatchDetailed(
             @PathVariable Long id,
             @RequestParam Long winnerId,
             @RequestParam Integer scoreDifference,
             @RequestParam Long updatedBy) {
-        log.info("PUT /api/matches/{} - Updating match", id);
+        log.info("PUT /api/matches/{}/detailed - Updating match (detailed)", id);
         MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy);
         return ResponseEntity.ok(updatedMatch);
     }

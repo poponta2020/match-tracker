@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.dto.ErrorResponse;
+import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
@@ -44,6 +45,29 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
+                .body(errorResponse);
+    }
+
+    /**
+     * DuplicateMatchExceptionのハンドリング（既存IDを含む）
+     * HTTPステータス: 409 Conflict
+     */
+    @ExceptionHandler(DuplicateMatchException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateMatchException(
+            DuplicateMatchException ex,
+            HttpServletRequest request) {
+
+        log.warn("Duplicate match: {} (existing ID: {})", ex.getMessage(), ex.getExistingMatchId());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .message(ex.getMessage())
+                .status(HttpStatus.CONFLICT.value())
+                .path(request.getRequestURI())
+                .existingMatchId(ex.getExistingMatchId())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
                 .body(errorResponse);
     }
 

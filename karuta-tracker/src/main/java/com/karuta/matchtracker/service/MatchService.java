@@ -6,6 +6,7 @@ import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -122,14 +123,14 @@ public class MatchService {
         // 同日同試合番号の重複チェック
         log.debug("Checking for duplicate: playerId={}, date={}, matchNumber={}",
                   request.getPlayerId(), request.getMatchDate(), request.getMatchNumber());
-        boolean exists = matchRepository.existsByPlayerIdAndMatchDateAndMatchNumber(
+        Match existingMatch = matchRepository.findByPlayerIdAndMatchDateAndMatchNumber(
                 request.getPlayerId(), request.getMatchDate(), request.getMatchNumber());
-        log.debug("Duplicate check result: {}", exists);
+        log.debug("Duplicate check result: {}", existingMatch != null);
 
-        if (exists) {
+        if (existingMatch != null) {
             String errorMessage = String.format("この日の第%d試合は既に登録されています", request.getMatchNumber());
-            log.warn("Duplicate match detected: {}", errorMessage);
-            throw new IllegalArgumentException(errorMessage);
+            log.warn("Duplicate match detected: {} (existing ID: {})", errorMessage, existingMatch.getId());
+            throw new DuplicateMatchException(errorMessage, existingMatch.getId());
         }
 
         // 対戦相手は名前のみで記録（将来的には選手IDと関連付けも可能）
@@ -216,6 +217,46 @@ public class MatchService {
         match.setWinnerId(winnerId);
         match.setScoreDifference(scoreDifference);
         match.setUpdatedBy(updatedBy);
+
+        Match updated = matchRepository.save(match);
+
+        log.info("Successfully updated match with id: {}", id);
+        return enrichMatchWithPlayerNames(updated);
+    }
+
+    /**
+     * 試合結果を更新（簡易版）
+     */
+    @Transactional
+    public MatchDto updateMatchSimple(Long id, MatchSimpleCreateRequest request) {
+        log.info("Updating match (simple) with id: {}", id);
+
+        Match match = matchRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Match", id));
+
+        // 選手の存在確認
+        Player player = playerRepository.findById(request.getPlayerId())
+                .orElseThrow(() -> new ResourceNotFoundException("Player", "id", request.getPlayerId()));
+
+        // 結果に基づいて勝者を決定
+        Long winnerId;
+        if ("勝ち".equals(request.getResult())) {
+            winnerId = request.getPlayerId();
+        } else if ("負け".equals(request.getResult())) {
+            winnerId = 0L; // 対戦相手が勝者
+        } else {
+            winnerId = 0L; // 引き分け
+        }
+
+        // 試合情報を更新
+        match.setMatchDate(request.getMatchDate());
+        match.setMatchNumber(request.getMatchNumber());
+        match.setPlayer1Id(request.getPlayerId());
+        match.setWinnerId(winnerId);
+        match.setScoreDifference(Math.abs(request.getScoreDifference()));
+        match.setOpponentName(request.getOpponentName());
+        match.setNotes(request.getNotes());
+        match.setUpdatedBy(request.getPlayerId());
 
         Match updated = matchRepository.save(match);
 
