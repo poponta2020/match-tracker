@@ -360,21 +360,6 @@ const PracticeList = () => {
                 <div className="text-base text-gray-900">{selectedSession.venueName || '-'}</div>
               </div>
 
-              {/* 試合時間割 */}
-              {selectedSession.venueSchedules && selectedSession.venueSchedules.length > 0 && (
-                <div>
-                  <div className="text-sm font-medium text-gray-700 mb-2">⏰ 試合時間割:</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {selectedSession.venueSchedules.map((schedule) => (
-                      <div key={schedule.id} className="text-sm bg-gray-50 p-2 rounded">
-                        <span className="font-medium">第{schedule.matchNumber}試合:</span>{' '}
-                        {schedule.startTime?.substring(0, 5)} - {schedule.endTime?.substring(0, 5)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div>
                 <div className="text-sm font-medium text-gray-700 mb-2">🎯 試合別参加者:</div>
                 <div className="space-y-2">
@@ -388,6 +373,14 @@ const PracticeList = () => {
                         const myMatchNumbers = myParticipations[selectedSession.id] || [];
                         const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
 
+                        // 試合時間を取得
+                        const schedule = selectedSession.venueSchedules?.find(
+                          s => s.matchNumber === parseInt(matchNum)
+                        );
+                        const timeRange = schedule
+                          ? `${schedule.startTime?.substring(0, 5)}-${schedule.endTime?.substring(0, 5)}`
+                          : '';
+
                         return (
                           <div key={matchNum} className="border border-gray-200 rounded overflow-hidden">
                             <button
@@ -395,7 +388,7 @@ const PracticeList = () => {
                               className={`w-full px-3 py-2 ${isMyMatch ? 'bg-green-50 hover:bg-green-100' : 'bg-gray-50 hover:bg-gray-100'} transition-colors text-left flex items-center justify-between`}
                             >
                               <span className="text-sm font-medium text-gray-900">
-                                {isExpanded ? '▼' : '▶'} {matchNum}試合目 ({count}名)
+                                {isExpanded ? '▼' : '▶'} {matchNum}試合目{timeRange ? `: ${timeRange}` : ''} ({count}名)
                               </span>
                             </button>
                             {isExpanded && (
