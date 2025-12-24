@@ -11,7 +11,9 @@ import {
   ArrowRight,
   Clock,
   MapPin,
+  ClipboardList,
 } from 'lucide-react';
+import { isAdmin, isSuperAdmin } from '../utils/auth';
 
 const Home = () => {
   const { currentPlayer } = useAuth();
@@ -24,6 +26,7 @@ const Home = () => {
     loading: true,
   });
   const [todayMatch, setTodayMatch] = useState(null);
+  const [todaySessionId, setTodaySessionId] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,6 +60,16 @@ const Home = () => {
           todayPairings: todayPairingsRes.data || [],
           loading: false,
         });
+
+        // 今日の練習セッションIDを取得
+        if (Array.isArray(practicesRes)) {
+          const todaySession = practicesRes.find(
+            p => p.sessionDate === todayStr
+          );
+          if (todaySession) {
+            setTodaySessionId(todaySession.id);
+          }
+        }
 
         // 今日の対戦情報を取得
         await fetchTodayMatch(todayStr);
@@ -392,7 +405,7 @@ const Home = () => {
         </Link>
 
         <Link
-          to="/pairings/generate"
+          to={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
           className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
@@ -445,7 +458,7 @@ const Home = () => {
           title="今日の対戦"
           value={stats.todayPairings.length}
           color="bg-purple-500"
-          link="/pairings/generate"
+          link={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
         />
       </div>
 
@@ -458,7 +471,7 @@ const Home = () => {
               今日の対戦
             </h2>
             <Link
-              to="/pairings/generate"
+              to={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
               className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
             >
               詳細を見る
@@ -492,6 +505,19 @@ const Home = () => {
               </div>
             ))}
           </div>
+
+          {/* 管理者用：試合結果一括入力ボタン */}
+          {(isAdmin() || isSuperAdmin()) && todaySessionId && (
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => navigate(`/matches/bulk-input/${todaySessionId}`)}
+                className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
+              >
+                <ClipboardList className="w-5 h-5" />
+                📝 試合結果一括入力
+              </button>
+            </div>
+          )}
         </div>
       )}
 

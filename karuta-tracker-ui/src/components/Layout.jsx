@@ -13,6 +13,7 @@ import {
   Calendar,
   Shield,
   MapPin,
+  ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -40,6 +41,7 @@ const Layout = ({ children }) => {
   // 管理者メニュー（ADMIN + SUPER_ADMIN）
   const adminNavigation = [
     { name: '対戦組み合わせ', href: '/pairings', icon: Shuffle },
+    { name: '試合結果一括入力', href: '/matches/bulk-input', icon: ClipboardList },
   ];
 
   // スーパー管理者メニュー（SUPER_ADMINのみ）

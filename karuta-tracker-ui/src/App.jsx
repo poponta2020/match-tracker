@@ -8,6 +8,8 @@ import Home from './pages/Home';
 import MatchList from './pages/matches/MatchList';
 import MatchForm from './pages/matches/MatchForm';
 import MatchDetail from './pages/matches/MatchDetail';
+import BulkResultInput from './pages/matches/BulkResultInput';
+import MatchResultsView from './pages/matches/MatchResultsView';
 import PracticeList from './pages/practice/PracticeList';
 import PracticeForm from './pages/practice/PracticeForm';
 import PracticeDetail from './pages/practice/PracticeDetail';
@@ -72,6 +74,26 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <MatchForm />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matches/bulk-input/:sessionId"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <BulkResultInput />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matches/results/:sessionId"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <MatchResultsView />
                 </Layout>
               </PrivateRoute>
             }
