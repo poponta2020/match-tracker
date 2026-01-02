@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { matchAPI, pairingAPI } from '../../api';
+import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { X, AlertCircle, CheckCircle, Edit } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const MatchResultsView = () => {
   const { sessionId } = useParams();
@@ -15,25 +15,89 @@ const MatchResultsView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // データ取得
+  // 日付選択関連の状態
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [allSessions, setAllSessions] = useState([]);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // 全練習セッション取得（初回のみ）
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAllSessions = async () => {
+      try {
+        const response = await practiceAPI.getAll();
+        const sessions = response.data || [];
+        setAllSessions(sessions);
+
+        // 日付リストを抽出（降順ソート）
+        const dates = sessions
+          .map(s => s.sessionDate)
+          .sort((a, b) => new Date(b) - new Date(a));
+        setAvailableDates(dates);
+
+        // 初期日付の決定
+        if (sessionId) {
+          // sessionIdがある場合、そのセッションの日付を取得
+          const targetSession = sessions.find(s => s.id === parseInt(sessionId));
+          if (targetSession) {
+            setSelectedDate(targetSession.sessionDate);
+          } else {
+            // sessionIdが見つからない場合は最新日付
+            setSelectedDate(dates[0] || null);
+          }
+        } else {
+          // sessionIdがない場合は最新の練習日
+          setSelectedDate(dates[0] || null);
+        }
+      } catch (err) {
+        console.error('練習セッション一覧の取得に失敗:', err);
+        setError('練習セッション一覧の取得に失敗しました');
+      }
+    };
+
+    fetchAllSessions();
+  }, [sessionId]);
+
+  // 選択された日付のデータ取得
+  useEffect(() => {
+    const fetchDataByDate = async () => {
+      if (!selectedDate) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
-        // 練習セッション情報取得
-        const sessionResponse = await fetch(`http://localhost:8080/api/practice-sessions/${sessionId}`);
-        if (!sessionResponse.ok) throw new Error('練習セッション情報の取得に失敗しました');
-        const sessionData = await sessionResponse.json();
+        // 練習セッション情報取得（日付ベース）
+        const sessionResponse = await practiceAPI.getByDate(selectedDate);
+        const sessionData = sessionResponse.data;
+
+        if (!sessionData) {
+          // セッションが存在しない場合
+          setSession(null);
+          setPairings([]);
+          setMatches([]);
+          setLoading(false);
+          return;
+        }
+
         setSession(sessionData);
 
         // 対戦ペアリング取得（日付ベース）
-        const pairingsResponse = await pairingAPI.getByDate(sessionData.sessionDate);
+        const pairingsResponse = await pairingAPI.getByDate(selectedDate);
         setPairings(pairingsResponse.data || []);
 
         // 試合結果取得（日付ベース）
-        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${sessionData.sessionDate}`);
+        // キャッシュ無効化: 常に最新のデータを取得するため
+        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${selectedDate}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         if (!matchesResponse.ok) throw new Error('試合結果の取得に失敗しました');
         const sessionMatches = await matchesResponse.json();
         setMatches(sessionMatches);
@@ -46,10 +110,38 @@ const MatchResultsView = () => {
       }
     };
 
-    if (sessionId) {
-      fetchData();
+    fetchDataByDate();
+  }, [selectedDate]);
+
+  // 前後の練習日に移動
+  const goToPreviousDate = () => {
+    const currentIndex = availableDates.indexOf(selectedDate);
+    if (currentIndex < availableDates.length - 1) {
+      setSelectedDate(availableDates[currentIndex + 1]);
     }
-  }, [sessionId]);
+  };
+
+  const goToNextDate = () => {
+    const currentIndex = availableDates.indexOf(selectedDate);
+    if (currentIndex > 0) {
+      setSelectedDate(availableDates[currentIndex - 1]);
+    }
+  };
+
+  const hasPreviousDate = () => {
+    const currentIndex = availableDates.indexOf(selectedDate);
+    return currentIndex < availableDates.length - 1;
+  };
+
+  const hasNextDate = () => {
+    const currentIndex = availableDates.indexOf(selectedDate);
+    return currentIndex > 0;
+  };
+
+  // 選択可能な日付かチェック
+  const isDateAvailable = (dateStr) => {
+    return availableDates.includes(dateStr);
+  };
 
   // 試合番号ごとのペアリングを取得
   const getPairingsForMatch = (matchNumber) => {
@@ -141,24 +233,170 @@ const MatchResultsView = () => {
   const totalMatches = session?.totalMatches || 0;
   const stats = getMatchStats(currentMatchNumber);
 
+  // 今日の日付を取得（YYYY-MM-DD形式）
+  const getTodayDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  // 選択中の日付が今日かチェック
+  const isToday = () => {
+    return selectedDate === getTodayDate();
+  };
+
+  // データなし画面
+  if (!loading && !session && selectedDate) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white shadow-sm sticky top-0 z-10">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <div className="mb-4">
+              <h1 className="text-xl font-bold text-gray-900">試合結果詳細</h1>
+            </div>
+
+            {/* 日付選択UI */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <button
+                onClick={goToPreviousDate}
+                disabled={!hasPreviousDate()}
+                className={`p-2 rounded-full ${
+                  hasPreviousDate()
+                    ? 'hover:bg-gray-100 text-gray-700'
+                    : 'text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100"
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span className="font-semibold">{selectedDate}</span>
+                </button>
+
+                {/* 日付選択ドロップダウン */}
+                {showDatePicker && (
+                  <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                    {availableDates.map((date) => (
+                      <button
+                        key={date}
+                        onClick={() => {
+                          setSelectedDate(date);
+                          setShowDatePicker(false);
+                        }}
+                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${
+                          date === selectedDate ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-700'
+                        }`}
+                      >
+                        {date}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={goToNextDate}
+                disabled={!hasNextDate()}
+                className={`p-2 rounded-full ${
+                  hasNextDate()
+                    ? 'hover:bg-gray-100 text-gray-700'
+                    : 'text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* データなしメッセージ */}
+        <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
+            <Calendar className="h-16 w-16 text-blue-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-blue-900 mb-2">
+              この日は練習がありません
+            </h2>
+            <p className="text-blue-700">
+              {selectedDate} の練習セッションは登録されていません。
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* ヘッダー */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h1 className="text-xl font-bold text-gray-900">試合結果詳細</h1>
+          </div>
+
+          {/* 日付選択UI */}
+          <div className="flex items-center justify-center gap-2 mb-4">
             <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full"
+              onClick={goToPreviousDate}
+              disabled={!hasPreviousDate()}
+              className={`p-2 rounded-full ${
+                hasPreviousDate()
+                  ? 'hover:bg-gray-100 text-gray-700'
+                  : 'text-gray-300 cursor-not-allowed'
+              }`}
             >
-              <X className="h-6 w-6" />
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowDatePicker(!showDatePicker)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100"
+              >
+                <Calendar className="h-4 w-4" />
+                <span className="font-semibold">{selectedDate}</span>
+              </button>
+
+              {/* 日付選択ドロップダウン */}
+              {showDatePicker && (
+                <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                  {availableDates.map((date) => (
+                    <button
+                      key={date}
+                      onClick={() => {
+                        setSelectedDate(date);
+                        setShowDatePicker(false);
+                      }}
+                      className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${
+                        date === selectedDate ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-700'
+                      }`}
+                    >
+                      {date}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={goToNextDate}
+              disabled={!hasNextDate()}
+              className={`p-2 rounded-full ${
+                hasNextDate()
+                  ? 'hover:bg-gray-100 text-gray-700'
+                  : 'text-gray-300 cursor-not-allowed'
+              }`}
+            >
+              <ChevronRight className="h-5 w-5" />
             </button>
           </div>
 
           {session && (
             <div className="space-y-1 text-sm text-gray-600">
-              <p>📅 {session.sessionDate}</p>
               <p>🏛️ {session.venueName}</p>
               <p>👥 参加者: {pairings.length * 2}名</p>
             </div>
@@ -285,9 +523,9 @@ const MatchResultsView = () => {
         </div>
 
         {/* 管理者用：編集ボタン */}
-        {(isAdmin() || isSuperAdmin()) && (
+        {(isAdmin() || isSuperAdmin()) && (isSuperAdmin() || isToday()) && session && (
           <button
-            onClick={() => navigate(`/matches/bulk-input/${sessionId}`)}
+            onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
             className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
           >
             <Edit className="w-5 h-5" />

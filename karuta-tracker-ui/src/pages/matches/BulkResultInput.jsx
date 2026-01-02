@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { X, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle } from 'lucide-react';
 
 const BulkResultInput = () => {
   const { sessionId } = useParams();
@@ -48,7 +48,14 @@ const BulkResultInput = () => {
         setPairings(pairingsResponse.data || []);
 
         // 既存の試合結果取得（日付ベース）
-        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${sessionData.sessionDate}`);
+        // キャッシュ無効化: 常に最新のデータを取得するため
+        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${sessionData.sessionDate}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         if (!matchesResponse.ok) throw new Error('試合結果の取得に失敗しました');
         const sessionMatches = await matchesResponse.json();
         setMatches(sessionMatches);
@@ -84,8 +91,13 @@ const BulkResultInput = () => {
   };
 
   // 結果のキーを生成
+  // 注: バックエンドは保存時に player1Id < player2Id を強制するため、
+  //     フロントエンドでも同じ順序でキーを生成する必要がある
   const getResultKey = (matchNumber, player1Id, player2Id) => {
-    return `${matchNumber}-${player1Id}-${player2Id}`;
+    const [smallerId, largerId] = player1Id < player2Id
+      ? [player1Id, player2Id]
+      : [player2Id, player1Id];
+    return `${matchNumber}-${smallerId}-${largerId}`;
   };
 
   // 勝者を設定
@@ -180,38 +192,51 @@ const BulkResultInput = () => {
         const [matchNumber, player1Id, player2Id] = key.split('-').map(Number);
         const scoreDiff = result.scoreDifference ?? 0; // 未選択は0枚
 
+        // ペアリング情報から対戦相手名を取得
+        // 注: キーは player1Id < player2Id の順序だが、ペアリングは元の順序のため、
+        //     両方のパターンで検索する
+        const pairing = pairings.find(
+          p => p.matchNumber === matchNumber &&
+               ((p.player1Id === player1Id && p.player2Id === player2Id) ||
+                (p.player1Id === player2Id && p.player2Id === player1Id))
+        );
+
+        if (!pairing) {
+          console.error('ペアリング情報が見つかりません:', key);
+          continue;
+        }
+
+        // 詳細版APIのデータ構造で送信
         const matchData = {
-          playerId: currentPlayer.id,
           matchDate: session.sessionDate,
           matchNumber,
-          opponentName: '', // ペアリングから取得するため空
-          result: result.winnerId === player1Id ? '勝ち' : '負け',
+          player1Id,
+          player2Id,
+          winnerId: result.winnerId,
           scoreDifference: scoreDiff,
-          notes: '',
+          createdBy: currentPlayer.id,
         };
 
         if (result.matchId) {
-          // 更新
-          savePromises.push(matchAPI.update(result.matchId, matchData));
+          // 更新（詳細版）
+          savePromises.push(
+            matchAPI.updateDetailed(
+              result.matchId,
+              result.winnerId,
+              scoreDiff,
+              currentPlayer.id
+            )
+          );
         } else {
-          // 新規作成
-          savePromises.push(matchAPI.create(matchData));
+          // 新規作成（詳細版）
+          savePromises.push(matchAPI.createDetailed(matchData));
         }
       }
 
       await Promise.all(savePromises);
 
-      // 保存成功後、データ再取得（日付ベース）
-      const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${session.sessionDate}`);
-      if (matchesResponse.ok) {
-        const sessionMatches = await matchesResponse.json();
-        setMatches(sessionMatches);
-      }
-
-      // 変更フラグをクリア
-      setChangedMatches(new Set());
-
-      alert('保存しました');
+      // 保存成功後、試合結果詳細画面に遷移
+      navigate(`/matches/results/${sessionId}`);
 
     } catch (err) {
       console.error('保存エラー:', err);
@@ -261,14 +286,8 @@ const BulkResultInput = () => {
       {/* ヘッダー */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h1 className="text-xl font-bold text-gray-900">試合結果一括入力</h1>
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full"
-            >
-              <X className="h-6 w-6" />
-            </button>
           </div>
 
           {session && (

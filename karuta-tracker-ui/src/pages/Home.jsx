@@ -284,10 +284,12 @@ const Home = () => {
 
                     if (myMatchRecord) {
                       // 入力済み: 結果を表示（名前なし、記号と点差のみ）
+                      // winnerIdで勝敗を判定（詳細試合・簡易試合の両方に対応）
+                      const isWin = myMatchRecord.winnerId === currentPlayer.id;
                       return (
                         <div className="mt-4 p-4 bg-white rounded-lg border-2 border-gray-200">
                           <div className="text-center text-lg font-bold text-gray-900">
-                            {myMatchRecord.result === '勝ち' ? '〇' : '×'}{myMatchRecord.scoreDifference}
+                            {isWin ? '〇' : '×'}{myMatchRecord.scoreDifference}
                           </div>
                         </div>
                       );
@@ -296,6 +298,10 @@ const Home = () => {
                       return (
                         <button
                           onClick={() => {
+                            // 詳細試合作成用に対戦相手のIDと名前を取得
+                            const opponentId = todayMatch.myPairing.player1Id === currentPlayer.id
+                              ? todayMatch.myPairing.player2Id
+                              : todayMatch.myPairing.player1Id;
                             const opponentName = todayMatch.myPairing.player1Id === currentPlayer.id
                               ? todayMatch.myPairing.player2Name
                               : todayMatch.myPairing.player1Name;
@@ -303,7 +309,8 @@ const Home = () => {
                               state: {
                                 matchDate: todayMatch.session.sessionDate,
                                 matchNumber: todayMatch.defaultMatchNumber,
-                                opponentName: opponentName
+                                opponentId: opponentId,        // 詳細試合作成用（player ID）
+                                opponentName: opponentName     // 画面表示用
                               }
                             });
                           }}
@@ -367,6 +374,19 @@ const Home = () => {
               </div>
             )}
           </div>
+
+          {/* スーパー管理者用：試合結果一括入力ボタン */}
+          {isSuperAdmin() && todaySessionId && (
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => navigate(`/matches/bulk-input/${todaySessionId}`)}
+                className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
+              >
+                <ClipboardList className="w-5 h-5" />
+                📝 試合結果一括入力
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -462,8 +482,22 @@ const Home = () => {
         />
       </div>
 
-      {/* 今日の対戦 */}
-      {stats.todayPairings.length > 0 && (
+      {/*
+        今日の対戦（全体リスト表示版）
+
+        【コメントアウトの理由】
+        - 上部の「今日の対戦」カードで個人用の試合情報を表示しているため、
+          下部の全体リスト表示は冗長と判断
+        - ただし、将来的に全選手の対戦一覧を表示する機能が必要になる可能性があるため、
+          コードは削除せず保持
+        - 一括入力ボタンは上部の「今日の対戦」カード内に移動済み（スーパー管理者のみ）
+
+        【保持している機能】
+        - stats.todayPairings: 今日の全対戦組み合わせデータ（fetchData関数内で取得中）
+        - 全選手の対戦カード表示
+        - 試合詳細へのリンク
+      */}
+      {/* {stats.todayPairings.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -506,8 +540,8 @@ const Home = () => {
             ))}
           </div>
 
-          {/* 管理者用：試合結果一括入力ボタン */}
-          {(isAdmin() || isSuperAdmin()) && todaySessionId && (
+          {/* 管理者用：試合結果一括入力ボタン（上部カードに移動済み） *\/}
+          {/* {(isAdmin() || isSuperAdmin()) && todaySessionId && (
             <div className="mt-4 pt-4 border-t">
               <button
                 onClick={() => navigate(`/matches/bulk-input/${todaySessionId}`)}
@@ -517,9 +551,9 @@ const Home = () => {
                 📝 試合結果一括入力
               </button>
             </div>
-          )}
+          )} *\/}
         </div>
-      )}
+      )} */}
 
       {/* 最近の活動 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

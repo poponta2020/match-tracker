@@ -17,6 +17,7 @@ const MatchForm = () => {
   const [formData, setFormData] = useState({
     matchDate: initialData.matchDate || new Date().toISOString().split('T')[0],
     opponentName: initialData.opponentName || '',
+    opponentId: initialData.opponentId || null, // 詳細試合作成用の対戦相手ID
     result: '勝ち',
     scoreDifference: 0,
     matchNumber: initialData.matchNumber || 1,
@@ -112,18 +113,48 @@ const MatchForm = () => {
     setLoading(true);
 
     try {
-      const submitData = {
-        ...formData,
-        playerId: currentPlayer.id,
-        scoreDifference: parseInt(formData.scoreDifference),
-        matchNumber: parseInt(formData.matchNumber),
-      };
-
       if (isEdit) {
+        // 編集モードは簡易版APIを使用
+        const submitData = {
+          ...formData,
+          playerId: currentPlayer.id,
+          scoreDifference: parseInt(formData.scoreDifference),
+          matchNumber: parseInt(formData.matchNumber),
+        };
         await matchAPI.update(id, submitData);
         navigate('/matches');
       } else {
-        await matchAPI.create(submitData);
+        // 新規登録時：opponentIdがあれば詳細版API、なければ簡易版APIを使用
+        if (formData.opponentId) {
+          // 詳細試合作成API（両選手がシステムに登録されている場合）
+          const player1Id = currentPlayer.id;
+          const player2Id = formData.opponentId;
+          const winnerId = formData.result === '勝ち' ? currentPlayer.id : formData.opponentId;
+
+          const detailedData = {
+            matchDate: formData.matchDate,
+            matchNumber: parseInt(formData.matchNumber),
+            player1Id: player1Id,
+            player2Id: player2Id,
+            winnerId: winnerId,
+            scoreDifference: parseInt(formData.scoreDifference),
+            notes: formData.notes,
+            createdBy: currentPlayer.id,
+            updatedBy: currentPlayer.id
+          };
+
+          await matchAPI.createDetailed(detailedData);
+        } else {
+          // 簡易試合作成API（対戦相手が未登録の場合）
+          const submitData = {
+            ...formData,
+            playerId: currentPlayer.id,
+            scoreDifference: parseInt(formData.scoreDifference),
+            matchNumber: parseInt(formData.matchNumber),
+          };
+          await matchAPI.create(submitData);
+        }
+
         // 新規登録の場合はホーム画面に遷移して今日の対戦カードを更新
         navigate('/');
       }
@@ -263,7 +294,11 @@ const MatchForm = () => {
                   key={player.id}
                   type="button"
                   onClick={() => {
-                    setFormData(prev => ({ ...prev, opponentName: player.name }));
+                    setFormData(prev => ({
+                      ...prev,
+                      opponentName: player.name,
+                      opponentId: player.id  // 詳細試合作成用にIDも保存
+                    }));
                     setSearchTerm('');
                   }}
                   className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${

@@ -61,13 +61,13 @@ public class MatchService {
     }
 
     /**
-     * 選手の試合履歴を取得
+     * 選手の試合履歴を取得（選手視点版）
      */
     public List<MatchDto> findPlayerMatches(Long playerId) {
         log.debug("Finding matches for player: {}", playerId);
         validatePlayerExists(playerId);
         List<Match> matches = matchRepository.findByPlayerId(playerId);
-        return enrichMatchesWithPlayerNames(matches);
+        return enrichMatchesWithPlayerPerspective(matches, playerId);
     }
 
     /**
@@ -344,5 +344,79 @@ public class MatchService {
     private MatchDto enrichMatchWithPlayerNames(Match match) {
         List<MatchDto> enriched = enrichMatchesWithPlayerNames(List.of(match));
         return enriched.isEmpty() ? null : enriched.get(0);
+    }
+
+    /**
+     * 試合リストに選手名を設定（選手視点版）
+     * 指定された選手の視点で、opponentNameとresultフィールドを設定する
+     *
+     * @param matches 試合リスト
+     * @param viewingPlayerId 視点となる選手のID
+     * @return 選手視点情報を含むMatchDtoリスト
+     */
+    private List<MatchDto> enrichMatchesWithPlayerPerspective(List<Match> matches, Long viewingPlayerId) {
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+
+        // 全選手IDを収集（0は除外）
+        List<Long> playerIds = matches.stream()
+                .flatMap(m -> List.of(m.getPlayer1Id(), m.getPlayer2Id()).stream())
+                .filter(id -> id != 0L)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 選手名のマップを作成
+        Map<Long, String> playerNames = new HashMap<>();
+        playerRepository.findAllById(playerIds).forEach(p -> playerNames.put(p.getId(), p.getName()));
+
+        // DTOに変換して選手名を設定
+        return matches.stream()
+                .map(match -> {
+                    MatchDto dto = MatchDto.fromEntity(match);
+
+                    // 通常の試合（両選手がシステムに登録されている場合）
+                    dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
+                    dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
+                    dto.setWinnerName(playerNames.get(match.getWinnerId()));
+
+                    // 簡易試合（対戦相手が未登録の場合）
+                    if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {
+                        // 登録選手のIDを特定
+                        Long registeredPlayerId = match.getPlayer1Id() == 0L ? match.getPlayer2Id() : match.getPlayer1Id();
+
+                        // opponentNameは既にエンティティから設定されている
+
+                        // 結果を計算
+                        if (match.getWinnerId() == 0L) {
+                            dto.setResult("引き分け");
+                        } else if (match.getWinnerId().equals(registeredPlayerId)) {
+                            dto.setResult("勝ち");
+                        } else {
+                            dto.setResult("負け");
+                        }
+                    } else {
+                        // 通常試合の場合、viewingPlayerIdの視点で情報を設定
+
+                        // 対戦相手名を設定
+                        if (match.getPlayer1Id().equals(viewingPlayerId)) {
+                            dto.setOpponentName(playerNames.get(match.getPlayer2Id()));
+                        } else if (match.getPlayer2Id().equals(viewingPlayerId)) {
+                            dto.setOpponentName(playerNames.get(match.getPlayer1Id()));
+                        }
+
+                        // 結果を設定
+                        if (match.getWinnerId() == null || match.getWinnerId() == 0L) {
+                            dto.setResult("引き分け");
+                        } else if (match.getWinnerId().equals(viewingPlayerId)) {
+                            dto.setResult("勝ち");
+                        } else {
+                            dto.setResult("負け");
+                        }
+                    }
+
+                    return dto;
+                })
+                .collect(Collectors.toList());
     }
 }
