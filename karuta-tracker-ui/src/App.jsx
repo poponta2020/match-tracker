@@ -89,7 +89,7 @@ function App() {
             }
           />
           <Route
-            path="/matches/results/:sessionId"
+            path="/matches/results/:sessionId?"
             element={
               <PrivateRoute>
                 <Layout>

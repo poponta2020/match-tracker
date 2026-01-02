@@ -41,7 +41,7 @@ const Layout = ({ children }) => {
   // 管理者メニュー（ADMIN + SUPER_ADMIN）
   const adminNavigation = [
     { name: '対戦組み合わせ', href: '/pairings', icon: Shuffle },
-    { name: '試合結果一括入力', href: '/matches/bulk-input', icon: ClipboardList },
+    { name: '試合結果閲覧', href: '/matches/results', icon: ClipboardList },
   ];
 
   // スーパー管理者メニュー（SUPER_ADMINのみ）

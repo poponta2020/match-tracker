@@ -7,11 +7,20 @@ export const matchAPI = {
   // 試合記録詳細取得
   getById: (id) => apiClient.get(`/matches/${id}`),
 
-  // 試合記録登録
+  // 試合記録登録（簡易版）
   create: (data) => apiClient.post('/matches', data),
 
-  // 試合記録更新
+  // 試合記録登録（詳細版）
+  createDetailed: (data) => apiClient.post('/matches/detailed', data),
+
+  // 試合記録更新（簡易版）
   update: (id, data) => apiClient.put(`/matches/${id}`, data),
+
+  // 試合記録更新（詳細版）
+  updateDetailed: (id, winnerId, scoreDifference, updatedBy) =>
+    apiClient.put(`/matches/${id}/detailed`, null, {
+      params: { winnerId, scoreDifference, updatedBy },
+    }),
 
   // 試合記録削除
   delete: (id) => apiClient.delete(`/matches/${id}`),

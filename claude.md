@@ -2,7 +2,61 @@
 
 このファイルには、このプロジェクトでClaude Codeが守るべきルールを記載します。
 
-## 🔴 最重要ルール：変数・メソッド名管理
+## 🔴 最重要ルール1：実装前の認識合わせ必須
+
+**すべての実装タスクにおいて、実装を開始する前に必ずユーザーと認識合わせを行うこと！**
+
+### 認識合わせの手順
+
+1. **ユーザーからの指示を受け取る**
+   - 指示内容を理解する
+
+2. **不明点・曖昧な点を洗い出す**
+   - 仕様の詳細
+   - UI/UXの挙動
+   - データの扱い方
+   - エラーハンドリング
+   - エッジケース
+   - その他あらゆる不確定要素
+
+3. **AskUserQuestion ツールを使って質問する**
+   - 推測や仮定で実装を進めない
+   - 複数の選択肢がある場合は必ず確認する
+   - 技術的な実装方法についても、ユーザーの意図を確認する
+
+4. **認識合わせが完了したら実装開始**
+   - すべての不明点が解消されてから実装に移る
+   - 実装中に新たな不明点が出た場合は、再度質問する
+
+### 禁止事項
+
+- ❌ 不明点があるのに推測で実装を進める
+- ❌ 「おそらく〇〇だろう」という仮定で進める
+- ❌ 複数の実装方法がある場合に、勝手に1つを選ぶ
+- ❌ ユーザーの意図を確認せずに「改善」を加える
+
+### 良い例
+
+```
+ユーザー: 「ボタンを追加してください」
+Claude: 「以下の点を確認させてください：
+  1. ボタンの配置場所はどこですか？
+  2. ボタンのラベルは何ですか？
+  3. クリック時の動作は？
+  4. 表示条件はありますか？」
+```
+
+### 悪い例
+
+```
+ユーザー: 「ボタンを追加してください」
+Claude: 「了解しました。画面右下に『送信』ボタンを追加します」
+（推測で実装している）
+```
+
+---
+
+## 🔴 最重要ルール2：変数・メソッド名管理
 
 **新たな変数やメソッドを作成・変更したら、必ずこのファイルを更新すること！**
 
@@ -182,10 +236,12 @@
 | `createMatchSimple(request)` | 簡易試合作成 | MatchSimpleCreateRequest | MatchDto |
 | `updateMatchSimple(id, request)` | 簡易試合更新 | Long, MatchSimpleCreateRequest | MatchDto |
 | `updateMatch(id, winnerId, scoreDifference, updatedBy)` | 詳細試合更新 | Long, Long, Integer, Long | MatchDto |
-| `getMatchById(id)` | ID指定取得 | Long | MatchDto |
-| `getAllMatches()` | 全試合取得 | - | List\<MatchDto\> |
+| `findById(id)` | ID指定取得 | Long | MatchDto |
+| `findPlayerMatches(playerId)` | 選手の試合履歴取得（選手視点版） | Long | List\<MatchDto\> |
+| `findMatchesByDate(date)` | 日付別試合取得 | LocalDate | List\<MatchDto\> |
 | `deleteMatch(id)` | 試合削除 | Long | void |
-| `enrichMatchWithPlayerNames(match)` | 選手名を付加 | Match | MatchDto |
+| `enrichMatchWithPlayerNames(match)` | 選手名を付加（視点なし） | Match | MatchDto |
+| `enrichMatchesWithPlayerPerspective(matches, playerId)` | 選手名を付加（選手視点版）<br>opponentNameとresultを設定 | List\<Match\>, Long | List\<MatchDto\> |
 
 ---
 

@@ -30,7 +30,11 @@
       "Bash(node --version:*)",
       "Bash(docker --version:*)",
       "Bash(npm --version:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(timeout 10 bash -c 'while ! netstat -ano | findstr \"\":5173\"\" | findstr \"\"LISTENING\"\" > /dev/null 2>&1; do sleep 1; done && echo \"\"Frontend started successfully\"\"')",
+      "Bash(docker ps:*)",
+      "Bash(docker inspect:*)",
+      "Bash(timeout 3 bash:*)"
     ],
     "deny": [],
     "ask": []
