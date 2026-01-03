@@ -34,7 +34,8 @@
       "Bash(timeout 10 bash -c 'while ! netstat -ano | findstr \"\":5173\"\" | findstr \"\"LISTENING\"\" > /dev/null 2>&1; do sleep 1; done && echo \"\"Frontend started successfully\"\"')",
       "Bash(docker ps:*)",
       "Bash(docker inspect:*)",
-      "Bash(timeout 3 bash:*)"
+      "Bash(timeout 3 bash:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
