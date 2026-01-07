@@ -72,12 +72,20 @@ public class MatchController {
      * 選手の試合履歴を取得
      *
      * @param playerId 選手ID
+     * @param kyuRank 級位フィルタ（オプション）
+     * @param gender 性別フィルタ（オプション）
+     * @param dominantHand 利き手フィルタ（オプション）
      * @return 試合結果リスト
      */
     @GetMapping("/player/{playerId}")
-    public ResponseEntity<List<MatchDto>> getPlayerMatches(@PathVariable Long playerId) {
-        log.debug("GET /api/matches/player/{} - Getting player matches", playerId);
-        List<MatchDto> matches = matchService.findPlayerMatches(playerId);
+    public ResponseEntity<List<MatchDto>> getPlayerMatches(
+            @PathVariable Long playerId,
+            @RequestParam(required = false) String kyuRank,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String dominantHand) {
+        log.debug("GET /api/matches/player/{} - Getting player matches with filters: kyuRank={}, gender={}, dominantHand={}",
+                playerId, kyuRank, gender, dominantHand);
+        List<MatchDto> matches = matchService.findPlayerMatchesWithFilters(playerId, kyuRank, gender, dominantHand);
         return ResponseEntity.ok(matches);
     }
 
@@ -125,6 +133,30 @@ public class MatchController {
     public ResponseEntity<MatchStatisticsDto> getPlayerStatistics(@PathVariable Long playerId) {
         log.debug("GET /api/matches/player/{}/statistics - Getting player statistics", playerId);
         MatchStatisticsDto statistics = matchService.getPlayerStatistics(playerId);
+        return ResponseEntity.ok(statistics);
+    }
+
+    /**
+     * 選手の級別統計情報を取得
+     *
+     * @param playerId 選手ID
+     * @param gender 性別フィルタ（オプション）
+     * @param dominantHand 利き手フィルタ（オプション）
+     * @param startDate 開始日（オプション）
+     * @param endDate 終了日（オプション）
+     * @return 級別統計情報
+     */
+    @GetMapping("/player/{playerId}/statistics-by-rank")
+    public ResponseEntity<com.karuta.matchtracker.dto.StatisticsByRankDto> getPlayerStatisticsByRank(
+            @PathVariable Long playerId,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String dominantHand,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        log.debug("GET /api/matches/player/{}/statistics-by-rank - Getting player statistics by rank with filters: gender={}, dominantHand={}, startDate={}, endDate={}",
+                playerId, gender, dominantHand, startDate, endDate);
+        com.karuta.matchtracker.dto.StatisticsByRankDto statistics =
+                matchService.getPlayerStatisticsByRank(playerId, gender, dominantHand, startDate, endDate);
         return ResponseEntity.ok(statistics);
     }
 

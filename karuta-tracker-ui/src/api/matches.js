@@ -26,7 +26,8 @@ export const matchAPI = {
   delete: (id) => apiClient.delete(`/matches/${id}`),
 
   // 選手の試合記録取得
-  getByPlayerId: (playerId) => apiClient.get(`/matches/player/${playerId}`),
+  getByPlayerId: (playerId, params = {}) =>
+    apiClient.get(`/matches/player/${playerId}`, { params }),
 
   // 期間指定で試合記録取得
   getByDateRange: (startDate, endDate) =>
@@ -37,4 +38,8 @@ export const matchAPI = {
   // 試合統計取得
   getStatistics: (playerId) =>
     apiClient.get(`/matches/player/${playerId}/statistics`),
+
+  // 級別統計取得
+  getStatisticsByRank: (playerId, params = {}) =>
+    apiClient.get(`/matches/player/${playerId}/statistics-by-rank`, { params }),
 };

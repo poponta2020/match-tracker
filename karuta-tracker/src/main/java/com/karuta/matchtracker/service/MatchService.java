@@ -73,6 +73,75 @@ public class MatchService {
     }
 
     /**
+     * 選手の試合履歴を取得（フィルタ付き）
+     */
+    public List<MatchDto> findPlayerMatchesWithFilters(Long playerId, String kyuRank, String gender, String dominantHand) {
+        log.debug("Finding matches for player {} with filters: kyuRank={}, gender={}, dominantHand={}",
+                playerId, kyuRank, gender, dominantHand);
+        validatePlayerExists(playerId);
+        List<Match> matches = matchRepository.findByPlayerId(playerId);
+        List<MatchDto> enrichedMatches = enrichMatchesWithPlayerPerspective(matches, playerId);
+
+        // フィルタリング処理
+        return enrichedMatches.stream()
+                .filter(match -> {
+                    // 対戦相手の情報を取得してフィルタリング
+                    Player opponent = getOpponentPlayer(match, playerId);
+                    if (opponent == null) {
+                        // 対戦相手が未登録の場合はフィルタ対象外
+                        return false;
+                    }
+
+                    // 級位でフィルタ
+                    if (kyuRank != null && !kyuRank.isEmpty()) {
+                        if (opponent.getKyuRank() == null ||
+                            !opponent.getKyuRank().name().equals(kyuRank)) {
+                            return false;
+                        }
+                    }
+
+                    // 性別でフィルタ
+                    if (gender != null && !gender.isEmpty()) {
+                        if (opponent.getGender() == null ||
+                            !opponent.getGender().name().equals(gender)) {
+                            return false;
+                        }
+                    }
+
+                    // 利き手でフィルタ
+                    if (dominantHand != null && !dominantHand.isEmpty()) {
+                        if (opponent.getDominantHand() == null ||
+                            !opponent.getDominantHand().name().equals(dominantHand)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 試合から対戦相手のPlayerエンティティを取得
+     */
+    private Player getOpponentPlayer(MatchDto match, Long viewingPlayerId) {
+        Long opponentId = null;
+
+        if (match.getPlayer1Id() != null && match.getPlayer1Id().equals(viewingPlayerId)) {
+            opponentId = match.getPlayer2Id();
+        } else if (match.getPlayer2Id() != null && match.getPlayer2Id().equals(viewingPlayerId)) {
+            opponentId = match.getPlayer1Id();
+        }
+
+        // 対戦相手IDが0の場合は未登録選手
+        if (opponentId == null || opponentId == 0L) {
+            return null;
+        }
+
+        return playerRepository.findById(opponentId).orElse(null);
+    }
+
+    /**
      * 選手の期間内の試合履歴を取得
      */
     public List<MatchDto> findPlayerMatchesInPeriod(Long playerId, LocalDate startDate, LocalDate endDate) {
@@ -109,6 +178,93 @@ public class MatchService {
         Long wins = matchRepository.countWinsByPlayerId(playerId);
 
         return MatchStatisticsDto.create(playerId, player.getName(), totalMatches, wins);
+    }
+
+    /**
+     * 選手の級別統計情報を取得
+     */
+    public com.karuta.matchtracker.dto.StatisticsByRankDto getPlayerStatisticsByRank(
+            Long playerId, String gender, String dominantHand, LocalDate startDate, LocalDate endDate) {
+        log.debug("Getting statistics by rank for player {} with filters: gender={}, dominantHand={}, startDate={}, endDate={}",
+                playerId, gender, dominantHand, startDate, endDate);
+
+        validatePlayerExists(playerId);
+
+        // 全試合を取得（性別・利き手でフィルタ済み）
+        List<Match> allMatches = matchRepository.findByPlayerId(playerId);
+        List<MatchDto> enrichedMatches = enrichMatchesWithPlayerPerspective(allMatches, playerId);
+
+        // 性別・利き手・期間でフィルタ
+        List<MatchDto> filteredMatches = enrichedMatches.stream()
+                .filter(match -> {
+                    // 期間フィルタ
+                    if (startDate != null && match.getMatchDate().isBefore(startDate)) {
+                        return false;
+                    }
+                    if (endDate != null && match.getMatchDate().isAfter(endDate)) {
+                        return false;
+                    }
+
+                    // 対戦相手の情報を取得
+                    Player opponent = getOpponentPlayer(match, playerId);
+                    if (opponent == null) {
+                        return false;
+                    }
+
+                    // 性別でフィルタ
+                    if (gender != null && !gender.isEmpty()) {
+                        if (opponent.getGender() == null ||
+                            !opponent.getGender().name().equals(gender)) {
+                            return false;
+                        }
+                    }
+
+                    // 利き手でフィルタ
+                    if (dominantHand != null && !dominantHand.isEmpty()) {
+                        if (opponent.getDominantHand() == null ||
+                            !opponent.getDominantHand().name().equals(dominantHand)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                })
+                .collect(Collectors.toList());
+
+        // 総計を計算
+        long totalMatches = filteredMatches.size();
+        long totalWins = filteredMatches.stream()
+                .filter(m -> "勝ち".equals(m.getResult()))
+                .count();
+
+        com.karuta.matchtracker.dto.RankStatisticsDto totalStats =
+                com.karuta.matchtracker.dto.RankStatisticsDto.create("総計", totalMatches, totalWins);
+
+        // 級別統計を計算
+        Map<String, com.karuta.matchtracker.dto.RankStatisticsDto> byRankMap = new java.util.LinkedHashMap<>();
+
+        for (String rank : java.util.List.of("A級", "B級", "C級", "D級", "E級")) {
+            List<MatchDto> rankMatches = filteredMatches.stream()
+                    .filter(match -> {
+                        Player opponent = getOpponentPlayer(match, playerId);
+                        return opponent != null &&
+                               opponent.getKyuRank() != null &&
+                               opponent.getKyuRank().name().equals(rank);
+                    })
+                    .collect(Collectors.toList());
+
+            long rankTotal = rankMatches.size();
+            long rankWins = rankMatches.stream()
+                    .filter(m -> "勝ち".equals(m.getResult()))
+                    .count();
+
+            byRankMap.put(rank, com.karuta.matchtracker.dto.RankStatisticsDto.create(rank, rankTotal, rankWins));
+        }
+
+        return com.karuta.matchtracker.dto.StatisticsByRankDto.builder()
+                .total(totalStats)
+                .byRank(byRankMap)
+                .build();
     }
 
     /**
