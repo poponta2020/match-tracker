@@ -309,14 +309,6 @@ const PairingGenerator = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <Users className="w-8 h-8 text-primary-600" />
-          対戦組み合わせ生成
-        </h1>
-        <p className="text-gray-600 mt-1">参加者から自動的に対戦組み合わせを生成します</p>
-      </div>
-
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

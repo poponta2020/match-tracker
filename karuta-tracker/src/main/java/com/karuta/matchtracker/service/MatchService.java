@@ -10,6 +10,7 @@ import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class MatchService {
 
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
 
     /**
      * IDで試合結果を取得
@@ -116,6 +118,17 @@ public class MatchService {
     public MatchDto createMatchSimple(MatchSimpleCreateRequest request) {
         log.info("Creating new match (simple) on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
+        // 当日の日付かチェック
+        LocalDate today = LocalDate.now();
+        if (!request.getMatchDate().equals(today)) {
+            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
+        }
+
+        // 練習日として登録されているかチェック
+        if (!practiceSessionRepository.existsBySessionDate(request.getMatchDate())) {
+            throw new IllegalArgumentException("試合記録は練習日として登録されている日のみ登録可能です");
+        }
+
         // 選手の存在確認
         Player player = playerRepository.findById(request.getPlayerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Player", "id", request.getPlayerId()));
@@ -176,6 +189,17 @@ public class MatchService {
     public MatchDto createMatch(MatchCreateRequest request) {
         log.info("Creating new match on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
+        // 当日の日付かチェック
+        LocalDate today = LocalDate.now();
+        if (!request.getMatchDate().equals(today)) {
+            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
+        }
+
+        // 練習日として登録されているかチェック
+        if (!practiceSessionRepository.existsBySessionDate(request.getMatchDate())) {
+            throw new IllegalArgumentException("試合記録は練習日として登録されている日のみ登録可能です");
+        }
+
         // 選手の存在確認
         validatePlayerExists(request.getPlayer1Id());
         validatePlayerExists(request.getPlayer2Id());
@@ -209,6 +233,12 @@ public class MatchService {
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
 
+        // 当日の日付かチェック
+        LocalDate today = LocalDate.now();
+        if (!match.getMatchDate().equals(today)) {
+            throw new IllegalArgumentException("過去の試合記録は編集できません");
+        }
+
         // 勝者が対戦者のいずれかであることを確認
         if (!winnerId.equals(match.getPlayer1Id()) && !winnerId.equals(match.getPlayer2Id())) {
             throw new IllegalArgumentException("Winner must be one of the players");
@@ -233,6 +263,15 @@ public class MatchService {
 
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
+
+        // 当日の日付かチェック（既存の試合日も、リクエストの日付も当日でなければならない）
+        LocalDate today = LocalDate.now();
+        if (!match.getMatchDate().equals(today)) {
+            throw new IllegalArgumentException("過去の試合記録は編集できません");
+        }
+        if (!request.getMatchDate().equals(today)) {
+            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
+        }
 
         // 選手の存在確認
         Player player = playerRepository.findById(request.getPlayerId())
@@ -313,15 +352,36 @@ public class MatchService {
                     MatchDto dto = MatchDto.fromEntity(match);
 
                     // 通常の試合（両選手がシステムに登録されている場合）
-                    dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
-                    dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
-                    dto.setWinnerName(playerNames.get(match.getWinnerId()));
+                    if (match.getPlayer1Id() != 0L && match.getPlayer2Id() != 0L) {
+                        dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
+                        dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
+                        dto.setWinnerName(playerNames.get(match.getWinnerId()));
 
+                        // 詳細試合の結果を設定
+                        if (match.getWinnerId() == 0L) {
+                            dto.setResult("引き分け");
+                        } else if (match.getWinnerId().equals(match.getPlayer1Id())) {
+                            dto.setResult("勝ち");
+                        } else if (match.getWinnerId().equals(match.getPlayer2Id())) {
+                            dto.setResult("負け");
+                        }
+
+                        // opponentNameには相手選手の名前を設定（一貫性のため）
+                        dto.setOpponentName(dto.getPlayer2Name());
+                    }
                     // 簡易試合（対戦相手が未登録の場合）の処理
-                    // player1Idとplayer2Idのどちらかが0の場合
-                    if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {
+                    else if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {
                         // 登録選手のIDを特定
                         Long registeredPlayerId = match.getPlayer1Id() == 0L ? match.getPlayer2Id() : match.getPlayer1Id();
+
+                        // 選手名を設定
+                        if (match.getPlayer1Id() != 0L) {
+                            dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
+                        }
+                        if (match.getPlayer2Id() != 0L) {
+                            dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
+                        }
+                        dto.setWinnerName(playerNames.get(match.getWinnerId()));
 
                         // 結果を計算
                         if (match.getWinnerId() == 0L) {

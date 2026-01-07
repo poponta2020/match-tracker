@@ -150,10 +150,6 @@ const PracticeForm = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">
-        {isEdit ? '練習記録編集' : '練習記録登録'}
-      </h1>
-
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}

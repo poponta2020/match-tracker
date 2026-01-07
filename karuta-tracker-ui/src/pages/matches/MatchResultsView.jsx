@@ -248,12 +248,8 @@ const MatchResultsView = () => {
   if (!loading && !session && selectedDate) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="bg-white shadow-sm sticky top-0 z-30">
           <div className="max-w-4xl mx-auto px-4 py-4">
-            <div className="mb-4">
-              <h1 className="text-xl font-bold text-gray-900">試合結果詳細</h1>
-            </div>
-
             {/* 日付選択UI */}
             <div className="flex items-center justify-center gap-2 mb-4">
               <button
@@ -279,7 +275,7 @@ const MatchResultsView = () => {
 
                 {/* 日付選択ドロップダウン */}
                 {showDatePicker && (
-                  <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto">
                     {availableDates.map((date) => (
                       <button
                         key={date}
@@ -332,7 +328,7 @@ const MatchResultsView = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* ヘッダー */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
+      <div className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="mb-4">
             <h1 className="text-xl font-bold text-gray-900">試合結果詳細</h1>
@@ -363,7 +359,7 @@ const MatchResultsView = () => {
 
               {/* 日付選択ドロップダウン */}
               {showDatePicker && (
-                <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto">
                   {availableDates.map((date) => (
                     <button
                       key={date}
@@ -405,7 +401,7 @@ const MatchResultsView = () => {
       </div>
 
       {/* タブバー */}
-      <div className="bg-white border-b sticky top-[120px] z-10">
+      <div className="bg-white border-b sticky top-[120px] z-20">
         <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
           <div className="flex gap-2 py-2">
             {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (

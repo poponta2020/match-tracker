@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI, playerAPI, practiceAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users } from 'lucide-react';
+import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
+import { Trophy, Save, X, AlertCircle, Users, Lock } from 'lucide-react';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -27,6 +27,8 @@ const MatchForm = () => {
   const [players, setPlayers] = useState([]);
   const [availablePlayers, setAvailablePlayers] = useState([]);
   const [practiceSession, setPracticeSession] = useState(null);
+  const [practiceSessions, setPracticeSessions] = useState([]);
+  const [pairing, setPairing] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,10 +42,27 @@ const MatchForm = () => {
           playersRes.data.filter((p) => p.id !== currentPlayer.id)
         );
 
+        // 全練習セッションを取得（日付選択用）
+        const sessionsRes = await practiceAPI.getAll();
+        // 今日の日付のみフィルタリング
+        const today = new Date().toISOString().split('T')[0];
+        const todaySessions = sessionsRes.data.filter(
+          session => session.sessionDate === today
+        );
+        setPracticeSessions(todaySessions);
+
         // 編集モードの場合、既存データを取得
         if (isEdit) {
           const matchRes = await matchAPI.getById(id);
           const match = matchRes.data;
+
+          // 試合日が今日でない場合はエラー
+          if (match.matchDate !== today) {
+            setError('過去の試合記録は編集できません。試合記録の編集は当日のみ可能です。');
+            setLoading(false);
+            return;
+          }
+
           setFormData({
             matchDate: match.matchDate,
             opponentName: match.opponentName,
@@ -75,15 +94,16 @@ const MatchForm = () => {
           const participantsRes = await practiceAPI.getParticipants(response.data.id);
           const participants = participantsRes.data.filter(p => p.id !== currentPlayer.id);
           setAvailablePlayers(participants);
+
+          // 試合番号をリセット
+          setFormData(prev => ({ ...prev, matchNumber: 1 }));
         } else {
           setPracticeSession(null);
-          // 練習セッションがない場合、全選手を表示
-          setAvailablePlayers(players.filter(p => p.id !== currentPlayer.id));
+          setAvailablePlayers([]);
         }
       } catch (err) {
-        // 練習セッションがない場合は全選手を表示
         setPracticeSession(null);
-        setAvailablePlayers(players.filter(p => p.id !== currentPlayer.id));
+        setAvailablePlayers([]);
       }
     };
 
@@ -91,6 +111,70 @@ const MatchForm = () => {
       fetchPracticeSession();
     }
   }, [formData.matchDate, players, currentPlayer]);
+
+  // 試合番号が変更されたら、対戦組み合わせをチェック
+  useEffect(() => {
+    const checkPairing = async () => {
+      if (!formData.matchDate || !formData.matchNumber) return;
+
+      try {
+        const response = await pairingAPI.getByDateAndMatchNumber(
+          formData.matchDate,
+          formData.matchNumber
+        );
+
+        if (response.data && response.data.length > 0) {
+          // 自分が含まれる対戦組み合わせを探す
+          const myPairing = response.data.find(
+            p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
+          );
+
+          if (myPairing) {
+            setPairing(myPairing);
+            // 対戦相手を自動設定
+            const opponentId = myPairing.player1Id === currentPlayer.id
+              ? myPairing.player2Id
+              : myPairing.player1Id;
+            const opponentName = myPairing.player1Id === currentPlayer.id
+              ? myPairing.player2Name
+              : myPairing.player1Name;
+
+            setFormData(prev => ({
+              ...prev,
+              opponentId: opponentId,
+              opponentName: opponentName
+            }));
+          } else {
+            // 自分の組み合わせがない場合
+            setPairing(null);
+            setFormData(prev => ({
+              ...prev,
+              opponentId: null,
+              opponentName: ''
+            }));
+          }
+        } else {
+          // 組み合わせが存在しない場合
+          setPairing(null);
+          setFormData(prev => ({
+            ...prev,
+            opponentId: null,
+            opponentName: ''
+          }));
+        }
+      } catch (err) {
+        // 組み合わせが存在しない場合
+        setPairing(null);
+        setFormData(prev => ({
+          ...prev,
+          opponentId: null,
+          opponentName: ''
+        }));
+      }
+    };
+
+    checkPairing();
+  }, [formData.matchDate, formData.matchNumber, currentPlayer]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -195,139 +279,189 @@ const MatchForm = () => {
     }
   };
 
+  // 過去の試合記録編集エラーの場合
+  if (error && isEdit) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <div className="flex justify-center">
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors font-medium"
+            >
+              ホームに戻る
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <Trophy className="w-8 h-8 text-primary-600" />
-          {isEdit ? '試合記録編集' : '試合記録登録'}
-        </h1>
-        <p className="text-gray-600 mt-1">
-          {isEdit ? '試合記録を編集します' : '新しい試合記録を登録します'}
-        </p>
-      </div>
-
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+        {/* 今日が練習日でない場合の警告 */}
+        {!isEdit && practiceSessions.length === 0 && (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center gap-2 text-yellow-800 mb-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="font-semibold">今日は練習日として登録されていません</span>
+            </div>
+            <p className="text-sm text-yellow-700">
+              試合記録の登録は当日の練習日のみ可能です。練習日を登録してから試合記録を入力してください。
+            </p>
+          </div>
+        )}
+
         {/* 試合日 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            試合日 <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type="date"
+        {practiceSessions.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              練習日 <span className="text-red-500">*</span>
+            </label>
+            <select
               name="matchDate"
               value={formData.matchDate}
               onChange={handleChange}
-              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                formData.matchDate === new Date().toISOString().split('T')[0] ? 'text-transparent' : ''
-              }`}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               required
-            />
-            {formData.matchDate === new Date().toISOString().split('T')[0] && (
-              <div
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-900 pointer-events-none"
-              >
-                今日
-              </div>
-            )}
+              disabled={isEdit}
+            >
+              <option value="">練習日を選択してください</option>
+              {practiceSessions.map((session) => (
+                <option key={session.id} value={session.sessionDate}>
+                  今日 ({new Date(session.sessionDate).toLocaleDateString('ja-JP', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    weekday: 'short'
+                  })})
+                  {session.venueName ? ` - ${session.venueName}` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-gray-500">
+              試合記録は当日の練習日のみ登録可能です
+            </p>
           </div>
-        </div>
+        )}
 
         {/* 試合番号 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            試合番号 <span className="text-red-500">*</span>
-          </label>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">第</span>
-            <input
-              type="number"
+        {practiceSession && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              試合番号 <span className="text-red-500">*</span>
+            </label>
+            <select
               name="matchNumber"
               value={formData.matchNumber}
               onChange={handleChange}
-              min="1"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               required
-            />
-            <span className="text-gray-600">試合</span>
+            >
+              {Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1).map((num) => (
+                <option key={num} value={num}>
+                  第{num}試合
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-gray-500">
+              この練習日は全{practiceSession.totalMatches}試合です
+            </p>
           </div>
-        </div>
+        )}
 
         {/* 対戦相手 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            対戦相手 <span className="text-red-500">*</span>
-          </label>
+        {practiceSession && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              対戦相手 <span className="text-red-500">*</span>
+            </label>
 
-          {formData.matchDate && practiceSession && (
-            <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
-              <Users className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">
-                この日の練習参加者: {availablePlayers.length}名
-              </span>
-            </div>
-          )}
+            {/* 対戦組み合わせがある場合 */}
+            {pairing ? (
+              <div>
+                <div className="mb-2 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-center gap-2 text-purple-700">
+                  <Lock className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm">
+                    対戦組み合わせが設定されています
+                  </span>
+                </div>
+                <div className="p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 mb-1">対戦相手</p>
+                    <p className="text-xl font-bold text-gray-900">{formData.opponentName}</p>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-gray-500">
+                  対戦組み合わせにより自動設定されています
+                </p>
+              </div>
+            ) : (
+              /* 対戦組み合わせがない場合 */
+              <div>
+                <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
+                  <Users className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm">
+                    この日の練習参加者: {availablePlayers.length}名
+                  </span>
+                </div>
 
-          {formData.matchDate && !practiceSession && players.length > 0 && (
-            <div className="mb-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-yellow-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">
-                この日は練習日として登録されていません。全選手から選択できます。
-              </span>
-            </div>
-          )}
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="選手名を検索..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent mb-2"
+                />
 
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="選手名を検索..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent mb-2"
-          />
+                <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
+                  {availablePlayers
+                    .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .map((player) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            opponentName: player.name,
+                            opponentId: player.id
+                          }));
+                          setSearchTerm('');
+                        }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                          formData.opponentName === player.name ? 'bg-primary-50 text-primary-700 font-medium' : ''
+                        }`}
+                      >
+                        {player.name}
+                        {player.rank && <span className="text-sm text-gray-500 ml-2">({player.rank})</span>}
+                      </button>
+                    ))}
+                  {availablePlayers.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                    <div className="px-4 py-8 text-center text-gray-500">
+                      該当する参加者がいません
+                    </div>
+                  )}
+                </div>
 
-          <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
-            {availablePlayers
-              .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-              .map((player) => (
-                <button
-                  key={player.id}
-                  type="button"
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      opponentName: player.name,
-                      opponentId: player.id  // 詳細試合作成用にIDも保存
-                    }));
-                    setSearchTerm('');
-                  }}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
-                    formData.opponentName === player.name ? 'bg-primary-50 text-primary-700 font-medium' : ''
-                  }`}
-                >
-                  {player.name}
-                  {player.rank && <span className="text-sm text-gray-500 ml-2">({player.rank})</span>}
-                </button>
-              ))}
-            {availablePlayers.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-              <div className="px-4 py-8 text-center text-gray-500">
-                {practiceSession ? '該当する参加者がいません' : '選手が登録されていません'}
+                {formData.opponentName && (
+                  <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-sm">
+                    選択中: <span className="font-medium">{formData.opponentName}</span>
+                  </div>
+                )}
+
+                <p className="mt-2 text-sm text-gray-500">
+                  この日の練習参加者から選択してください
+                </p>
               </div>
             )}
           </div>
-
-          {formData.opponentName && (
-            <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-sm">
-              選択中: <span className="font-medium">{formData.opponentName}</span>
-            </div>
-          )}
-
-          <p className="mt-2 text-sm text-gray-500">
-            {practiceSession
-              ? 'この日の練習参加者から選択できます'
-              : '全ての登録済み選手から選択できます'}
-          </p>
-        </div>
+        )}
 
         {/* 結果 */}
         <div>
@@ -426,29 +560,24 @@ const MatchForm = () => {
         </div>
 
         {/* メモ */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            メモ
-          </label>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            rows="4"
-            placeholder="試合の感想、反省点など..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-          ></textarea>
-        </div>
-
-        {/* エラーメッセージ */}
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
+        {practiceSessions.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              メモ
+            </label>
+            <textarea
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows="4"
+              placeholder="試合の感想、反省点など..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            ></textarea>
           </div>
         )}
 
         {/* ボタン */}
+        {practiceSessions.length > 0 && (
         <div className="flex gap-3">
           <button
             type="submit"
@@ -471,6 +600,7 @@ const MatchForm = () => {
             キャンセル
           </button>
         </div>
+        )}
       </form>
     </div>
   );

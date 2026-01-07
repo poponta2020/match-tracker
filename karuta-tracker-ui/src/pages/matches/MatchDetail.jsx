@@ -94,10 +94,6 @@ const MatchDetail = () => {
         </Link>
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <Trophy className="w-8 h-8 text-primary-600" />
-              試合詳細
-            </h1>
             <p className="text-gray-600 mt-1">
               {new Date(match.matchDate).toLocaleDateString('ja-JP', {
                 year: 'numeric',

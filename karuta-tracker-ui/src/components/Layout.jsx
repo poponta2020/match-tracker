@@ -61,16 +61,49 @@ const Layout = ({ children }) => {
     return location.pathname === path;
   };
 
+  // パスに応じた画面タイトルを取得
+  const getPageTitle = () => {
+    const path = location.pathname;
+
+    // 完全一致
+    if (path === '/') return 'ホーム';
+    if (path === '/matches') return '試合記録';
+    if (path === '/matches/new') return '試合記録登録';
+    if (path === '/practice') return '練習記録';
+    if (path === '/practice/participation') return '練習参加登録';
+    if (path === '/statistics') return '統計';
+    if (path === '/pairings') return '対戦組み合わせ';
+    if (path === '/matches/results') return '試合結果閲覧';
+    if (path === '/players') return '選手管理';
+    if (path === '/venues') return '会場管理';
+
+    // パターンマッチ
+    if (path.startsWith('/matches/results/')) return '試合結果詳細';
+    if (path.startsWith('/matches/bulk-input/')) return '試合結果一括入力';
+    if (path.startsWith('/matches/') && path.includes('/edit')) return '試合記録編集';
+    if (path.startsWith('/matches/')) return '試合記録詳細';
+    if (path.startsWith('/practice/') && path.includes('/edit')) return '練習記録編集';
+    if (path.startsWith('/practice/') && path !== '/practice/participation') return '練習記録詳細';
+    if (path.startsWith('/players/') && path.includes('/edit')) return '選手編集';
+    if (path.startsWith('/players/')) return '選手詳細';
+    if (path.startsWith('/venues/') && path.includes('/edit')) return '会場編集';
+    if (path.startsWith('/venues/new')) return '会場登録';
+    if (path.startsWith('/venues/')) return '会場詳細';
+    if (path.startsWith('/pairings/')) return '組み合わせ作成';
+
+    return '競技かるた記録';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
-      <header className="bg-white shadow-sm sticky top-0 z-10">
+      <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <Link to="/" className="flex items-center">
                 <div className="text-2xl font-bold text-primary-600">
-                  競技かるた記録
+                  {getPageTitle()}
                 </div>
               </Link>
             </div>

@@ -23,6 +23,10 @@ const Home = () => {
     recentMatches: [],
     recentPractices: [],
     todayPairings: [],
+    totalMatches: 0,
+    totalWins: 0,
+    winRate: 0,
+    upcomingPracticesCount: 0,
     loading: true,
   });
   const [todayMatch, setTodayMatch] = useState(null);
@@ -36,8 +40,9 @@ const Home = () => {
         const todayStr = today.toISOString().split('T')[0];
         today.setHours(0, 0, 0, 0);
 
-        const [matchesRes, practicesRes, todayPairingsRes] = await Promise.all([
+        const [matchesRes, statisticsRes, practicesRes, todayPairingsRes] = await Promise.all([
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
+          matchAPI.getStatistics(currentPlayer.id).catch(() => ({ data: { totalMatches: 0, wins: 0, winRate: 0 } })),
           // 練習記録APIは全件取得のみサポート
           fetch('http://localhost:8080/api/practice-sessions')
             .then(res => res.json())
@@ -58,6 +63,10 @@ const Home = () => {
           recentMatches: matchesRes.data.slice(0, 5),
           recentPractices: upcomingPractices,
           todayPairings: todayPairingsRes.data || [],
+          totalMatches: statisticsRes.data.totalMatches || 0,
+          totalWins: statisticsRes.data.wins || 0,
+          winRate: statisticsRes.data.winRate || 0,
+          upcomingPracticesCount: upcomingPractices.length,
           loading: false,
         });
 
@@ -215,9 +224,9 @@ const Home = () => {
     <div className="space-y-8">
       {/* ウェルカムメッセージ */}
       <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold mb-2">
+        <p className="text-xl font-semibold mb-2">
           ようこそ、{currentPlayer?.name}さん
-        </h1>
+        </p>
         <p className="text-primary-100">
           今日も練習頑張りましょう！
         </p>
@@ -446,30 +455,21 @@ const Home = () => {
         <StatCard
           icon={Trophy}
           title="試合数"
-          value={stats.recentMatches.length}
+          value={stats.totalMatches}
           color="bg-primary-500"
           link="/matches"
         />
         <StatCard
           icon={BookOpen}
-          title="練習回数"
-          value={stats.recentPractices.length}
+          title="今後の練習予定"
+          value={stats.upcomingPracticesCount}
           color="bg-green-500"
           link="/practice"
         />
         <StatCard
           icon={TrendingUp}
           title="勝率"
-          value={
-            stats.recentMatches.length > 0
-              ? `${Math.round(
-                  (stats.recentMatches.filter((m) => m.result === '勝ち')
-                    .length /
-                    stats.recentMatches.length) *
-                    100
-                )}%`
-              : '0%'
-          }
+          value={`${Math.round(stats.winRate)}%`}
           color="bg-blue-500"
           link="/statistics"
         />

@@ -95,14 +95,7 @@ const PlayerList = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="w-8 h-8 text-primary-600" />
-            選手一覧
-          </h1>
-          <p className="text-gray-600 mt-1">登録されている選手の一覧</p>
-        </div>
+      <div className="flex items-center justify-end">
         <button
           onClick={() => navigate('/register')}
           className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors"

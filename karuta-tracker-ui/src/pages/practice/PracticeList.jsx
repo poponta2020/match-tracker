@@ -198,6 +198,15 @@ const PracticeList = () => {
     });
   };
 
+  // 過去の日付かどうか判定
+  const isPastDate = (dateString) => {
+    const sessionDate = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    sessionDate.setHours(0, 0, 0, 0);
+    return sessionDate < today;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -217,8 +226,7 @@ const PracticeList = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">練習記録</h1>
+      <div className="flex justify-end items-center mb-6">
         <div className="flex gap-3">
           {isSuperAdmin() && (
             <button
@@ -424,12 +432,21 @@ const PracticeList = () => {
             </div>
 
             <div className="flex justify-between items-center gap-3 mt-6">
-              <button
-                onClick={goToParticipation}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-              >
-                📝 参加登録
-              </button>
+              {isPastDate(selectedSession.sessionDate) ? (
+                <button
+                  onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
+                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                >
+                  📊 試合結果を見る
+                </button>
+              ) : (
+                <button
+                  onClick={goToParticipation}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                >
+                  📝 参加登録
+                </button>
+              )}
               <div className="flex gap-3">
                 {isSuperAdmin() && (
                   <>

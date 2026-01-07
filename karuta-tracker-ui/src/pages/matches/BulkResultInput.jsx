@@ -284,12 +284,8 @@ const BulkResultInput = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* ヘッダー */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
+      <div className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="mb-4">
-            <h1 className="text-xl font-bold text-gray-900">試合結果一括入力</h1>
-          </div>
-
           {session && (
             <div className="space-y-1 text-sm text-gray-600">
               <p>📅 {session.sessionDate}</p>
@@ -301,7 +297,7 @@ const BulkResultInput = () => {
       </div>
 
       {/* タブバー */}
-      <div className="bg-white border-b sticky top-[120px] z-10">
+      <div className="bg-white border-b sticky top-[120px] z-20">
         <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
           <div className="flex gap-2 py-2">
             {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
