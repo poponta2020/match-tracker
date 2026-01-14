@@ -14,6 +14,7 @@ import {
   Shield,
   MapPin,
   ClipboardList,
+  Settings,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -76,6 +77,7 @@ const Layout = ({ children }) => {
     if (path === '/matches/results') return '試合結果閲覧';
     if (path === '/players') return '選手管理';
     if (path === '/venues') return '会場管理';
+    if (path === '/profile') return 'マイページ';
 
     // パターンマッチ
     if (path.startsWith('/matches/results/')) return '試合結果詳細';
@@ -131,7 +133,11 @@ const Layout = ({ children }) => {
             </nav>
 
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2 text-sm">
+              <Link
+                to="/profile"
+                className="hidden md:flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Settings className="w-4 h-4 text-gray-600" />
                 <span className="font-medium text-gray-700">{currentPlayer?.name}</span>
                 {currentPlayer?.role === 'SUPER_ADMIN' && (
                   <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
@@ -143,7 +149,7 @@ const Layout = ({ children }) => {
                     管理者
                   </span>
                 )}
-              </div>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -171,7 +177,12 @@ const Layout = ({ children }) => {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200">
             <div className="px-2 pt-2 pb-3 space-y-1">
-              <div className="px-3 py-2 flex items-center gap-2">
+              <Link
+                to="/profile"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-3 py-2 flex items-center gap-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Settings className="w-4 h-4 text-gray-600" />
                 <span className="text-sm font-medium text-gray-900">{currentPlayer?.name}</span>
                 {currentPlayer?.role === 'SUPER_ADMIN' && (
                   <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
@@ -183,7 +194,7 @@ const Layout = ({ children }) => {
                     管理者
                   </span>
                 )}
-              </div>
+              </Link>
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);

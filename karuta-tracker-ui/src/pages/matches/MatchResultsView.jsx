@@ -452,18 +452,17 @@ const MatchResultsView = () => {
                   <div className="flex items-center justify-between gap-4">
                     {/* 選手1 */}
                     <div
-                      className={`flex-1 px-4 py-2 rounded-lg ${
+                      className={`flex-1 px-4 py-2 rounded-lg whitespace-nowrap overflow-hidden text-ellipsis ${
                         isPlayer1Winner
                           ? 'bg-green-100 border-2 border-green-500 font-semibold'
                           : 'bg-gray-50'
                       }`}
                     >
-                      {isPlayer1Winner && '🏆 '}
                       {pairing.player1Name}
                     </div>
 
                     {/* 枚数差 */}
-                    <div className="px-3 py-2 text-center min-w-[100px]">
+                    <div className="px-3 py-2 text-center min-w-[80px] flex-shrink-0">
                       {match ? (
                         <span className="font-semibold text-gray-900">
                           {match.scoreDifference}枚差
@@ -475,13 +474,12 @@ const MatchResultsView = () => {
 
                     {/* 選手2 */}
                     <div
-                      className={`flex-1 text-right px-4 py-2 rounded-lg ${
+                      className={`flex-1 text-right px-4 py-2 rounded-lg whitespace-nowrap overflow-hidden text-ellipsis ${
                         isPlayer2Winner
                           ? 'bg-green-100 border-2 border-green-500 font-semibold'
                           : 'bg-gray-50'
                       }`}
                     >
-                      {isPlayer2Winner && '🏆 '}
                       {pairing.player2Name}
                     </div>
                   </div>

@@ -18,6 +18,7 @@ import PairingGenerator from './pages/pairings/PairingGenerator';
 import PlayerList from './pages/players/PlayerList';
 import PlayerDetail from './pages/players/PlayerDetail';
 import PlayerEdit from './pages/players/PlayerEdit';
+import Profile from './pages/Profile';
 import VenueList from './pages/venues/VenueList';
 import VenueForm from './pages/venues/VenueForm';
 
@@ -210,6 +211,14 @@ function App() {
                 <Layout>
                   <PlayerEdit />
                 </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <PrivateRoute>
+                <Profile />
               </PrivateRoute>
             }
           />
