@@ -308,4 +308,97 @@ class PlayerServiceTest {
         verify(playerRepository).findById(1L);
         verify(playerRepository, never()).save(any(Player.class));
     }
+
+    @Test
+    @DisplayName("正しい選手名とパスワードでログインできる")
+    void testLoginSuccess() {
+        // Given
+        Player player = Player.builder()
+                .id(1L)
+                .name("山田太郎")
+                .password("password123")
+                .role(Player.Role.PLAYER)
+                .currentRank("A級")
+                .build();
+
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "password123");
+
+        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+
+        // When
+        com.karuta.matchtracker.dto.LoginResponse response = playerService.login(request);
+
+        // Then
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getName()).isEqualTo("山田太郎");
+        assertThat(response.getRole()).isEqualTo(Player.Role.PLAYER);
+        verify(playerRepository).findByNameAndActive("山田太郎");
+    }
+
+    @Test
+    @DisplayName("存在しない選手名でログインするとResourceNotFoundExceptionが発生")
+    void testLoginNonexistentUser() {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("存在しない選手", "password");
+
+        when(playerRepository.findByNameAndActive("存在しない選手")).thenReturn(Optional.empty());
+
+        // When & Then
+        assertThatThrownBy(() -> playerService.login(request))
+                .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("選手名またはパスワードが正しくありません");
+
+        verify(playerRepository).findByNameAndActive("存在しない選手");
+    }
+
+    @Test
+    @DisplayName("誤ったパスワードでログインするとResourceNotFoundExceptionが発生")
+    void testLoginWrongPassword() {
+        // Given
+        Player player = Player.builder()
+                .id(1L)
+                .name("山田太郎")
+                .password("correctPassword")
+                .role(Player.Role.PLAYER)
+                .build();
+
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "wrongPassword");
+
+        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+
+        // When & Then
+        assertThatThrownBy(() -> playerService.login(request))
+                .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("選手名またはパスワードが正しくありません");
+
+        verify(playerRepository).findByNameAndActive("山田太郎");
+    }
+
+    @Test
+    @DisplayName("空のパスワードでログインするとResourceNotFoundExceptionが発生")
+    void testLoginEmptyPassword() {
+        // Given
+        Player player = Player.builder()
+                .id(1L)
+                .name("山田太郎")
+                .password("password123")
+                .role(Player.Role.PLAYER)
+                .build();
+
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "");
+
+        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+
+        // When & Then
+        assertThatThrownBy(() -> playerService.login(request))
+                .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("選手名またはパスワードが正しくありません");
+
+        verify(playerRepository).findByNameAndActive("山田太郎");
+    }
 }

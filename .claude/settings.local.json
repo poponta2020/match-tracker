@@ -37,7 +37,18 @@
       "Bash(timeout 3 bash:*)",
       "Bash(git rm:*)",
       "Bash(timeout 10 bash -c 'while ! netstat -ano | findstr \"\":5173\"\" | findstr \"\"LISTENING\"\" > /dev/null 2>&1; do sleep 1; done && echo \"\"Frontend started\"\"')",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(npm start)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose:*)",
+      "Bash(tree:*)",
+      "Bash(git -C /home/poponta/match-tracker log --oneline -20)",
+      "Bash(mvn clean test:*)",
+      "Bash(./mvnw clean:*)",
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew clean test:*)"
     ],
     "deny": [],
     "ask": []

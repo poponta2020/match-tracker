@@ -241,3 +241,8 @@ mysql -u root -proot karuta_tracker -e SHOW TABLES;
 mysql [接続オプション] [データベース名] [実行オプション]
 ```
 
+
+
+
+
+

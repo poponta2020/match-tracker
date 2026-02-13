@@ -64,6 +64,9 @@ public abstract class BaseIntegrationTest {
         jdbcTemplate.execute("TRUNCATE TABLE matches");
         jdbcTemplate.execute("TRUNCATE TABLE player_profiles");
         jdbcTemplate.execute("TRUNCATE TABLE practice_sessions");
+        jdbcTemplate.execute("TRUNCATE TABLE match_pairings");
+        jdbcTemplate.execute("TRUNCATE TABLE venue_match_schedules");
+        jdbcTemplate.execute("TRUNCATE TABLE venues");
         jdbcTemplate.execute("TRUNCATE TABLE players");
 
         // 外部キー制約を再有効化

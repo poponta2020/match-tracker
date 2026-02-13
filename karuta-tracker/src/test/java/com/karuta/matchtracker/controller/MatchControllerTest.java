@@ -300,4 +300,181 @@ class MatchControllerTest {
 
         verify(matchService).deleteMatch(1L);
     }
+
+    @Test
+    @DisplayName("GET /api/matches/player/{playerId}?filters - フィルタ付きで試合履歴を取得できる")
+    void testFindPlayerMatchesWithFilters() throws Exception {
+        // Given
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("MALE"), eq("RIGHT")))
+                .thenReturn(matches);
+
+        // When & Then
+        mockMvc.perform(get("/api/matches/player/1")
+                        .param("kyuRank", "A級")
+                        .param("gender", "MALE")
+                        .param("dominantHand", "RIGHT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        verify(matchService).findPlayerMatchesWithFilters(1L, "A級", "MALE", "RIGHT");
+    }
+
+    @Test
+    @DisplayName("GET /api/matches/player/{playerId}/statistics-by-rank - 級別統計を取得できる")
+    void testGetPlayerStatisticsByRank() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.RankStatisticsDto totalStats =
+                com.karuta.matchtracker.dto.RankStatisticsDto.create("総計", 10L, 6L);
+        com.karuta.matchtracker.dto.RankStatisticsDto aRankStats =
+                com.karuta.matchtracker.dto.RankStatisticsDto.create("A級", 5L, 3L);
+
+        Map<String, com.karuta.matchtracker.dto.RankStatisticsDto> byRankMap = new java.util.HashMap<>();
+        byRankMap.put("A級", aRankStats);
+
+        com.karuta.matchtracker.dto.StatisticsByRankDto stats =
+                com.karuta.matchtracker.dto.StatisticsByRankDto.builder()
+                        .total(totalStats)
+                        .byRank(byRankMap)
+                        .build();
+
+        when(matchService.getPlayerStatisticsByRank(eq(1L), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(stats);
+
+        // When & Then
+        mockMvc.perform(get("/api/matches/player/1/statistics-by-rank"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total.matches").value(10))
+                .andExpect(jsonPath("$.total.wins").value(6))
+                .andExpect(jsonPath("$.byRank.A級.matches").value(5))
+                .andExpect(jsonPath("$.byRank.A級.wins").value(3));
+
+        verify(matchService).getPlayerStatisticsByRank(1L, null, null, null, null);
+    }
+
+    @Test
+    @DisplayName("GET /api/matches/player/{playerId}/statistics-by-rank?filters - フィルタ付き級別統計を取得できる")
+    void testGetPlayerStatisticsByRankWithFilters() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.RankStatisticsDto totalStats =
+                com.karuta.matchtracker.dto.RankStatisticsDto.create("総計", 5L, 3L);
+
+        com.karuta.matchtracker.dto.StatisticsByRankDto stats =
+                com.karuta.matchtracker.dto.StatisticsByRankDto.builder()
+                        .total(totalStats)
+                        .byRank(new java.util.HashMap<>())
+                        .build();
+
+        when(matchService.getPlayerStatisticsByRank(
+                eq(1L), eq("MALE"), eq("RIGHT"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(stats);
+
+        // When & Then
+        mockMvc.perform(get("/api/matches/player/1/statistics-by-rank")
+                        .param("gender", "MALE")
+                        .param("dominantHand", "RIGHT")
+                        .param("startDate", "2024-01-01")
+                        .param("endDate", "2024-12-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total.matches").value(5));
+
+        verify(matchService).getPlayerStatisticsByRank(
+                eq(1L), eq("MALE"), eq("RIGHT"), any(LocalDate.class), any(LocalDate.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/matches - 簡易版で試合結果を登録できる")
+    void testCreateMatchSimple() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest request =
+                com.karuta.matchtracker.dto.MatchSimpleCreateRequest.builder()
+                        .matchDate(today)
+                        .matchNumber(1)
+                        .playerId(1L)
+                        .opponentName("未登録選手")
+                        .result("勝ち")
+                        .scoreDifference(5)
+                        .build();
+
+        when(matchService.createMatchSimple(any())).thenReturn(matchDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/matches")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(matchService).createMatchSimple(any());
+    }
+
+    @Test
+    @DisplayName("POST /api/matches/detailed - 詳細版で試合結果を登録できる")
+    void testCreateMatchDetailed() throws Exception {
+        // Given
+        when(matchService.createMatch(any(MatchCreateRequest.class))).thenReturn(matchDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/matches/detailed")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(matchRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(matchService).createMatch(any(MatchCreateRequest.class));
+    }
+
+    @Test
+    @DisplayName("PUT /api/matches/{id}/detailed - 詳細版で試合結果を更新できる")
+    void testUpdateMatchDetailed() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest request =
+                com.karuta.matchtracker.dto.MatchSimpleCreateRequest.builder()
+                        .matchDate(today)
+                        .matchNumber(1)
+                        .playerId(1L)
+                        .opponentName("新しい対戦相手")
+                        .result("負け")
+                        .scoreDifference(3)
+                        .build();
+
+        when(matchService.updateMatchSimple(eq(1L), any())).thenReturn(matchDto);
+
+        // When & Then
+        mockMvc.perform(put("/api/matches/1/detailed")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(matchService).updateMatchSimple(eq(1L), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/matches/{id} - IDで試合結果を取得できる")
+    void testFindById() throws Exception {
+        // Given
+        when(matchService.findById(1L)).thenReturn(matchDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/matches/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.player1Name").value("山田太郎"));
+
+        verify(matchService).findById(1L);
+    }
+
+    @Test
+    @DisplayName("GET /api/matches/{id} - 存在しない試合は404を返す")
+    void testFindByIdNotFound() throws Exception {
+        // Given
+        when(matchService.findById(999L))
+                .thenThrow(new com.karuta.matchtracker.exception.ResourceNotFoundException("Match", 999L));
+
+        // When & Then
+        mockMvc.perform(get("/api/matches/999"))
+                .andExpect(status().isNotFound());
+
+        verify(matchService).findById(999L);
+    }
 }
