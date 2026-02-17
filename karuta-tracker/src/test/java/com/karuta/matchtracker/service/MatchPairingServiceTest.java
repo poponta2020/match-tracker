@@ -6,10 +6,10 @@ import com.karuta.matchtracker.dto.MatchPairingCreateRequest;
 import com.karuta.matchtracker.dto.MatchPairingDto;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
-import com.karuta.matchtracker.exception.DuplicateResourceException;
-import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
+import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +38,9 @@ class MatchPairingServiceTest {
     private MatchPairingRepository matchPairingRepository;
 
     @Mock
+    private MatchRepository matchRepository;
+
+    @Mock
     private PlayerRepository playerRepository;
 
     @InjectMocks
@@ -50,6 +52,19 @@ class MatchPairingServiceTest {
     @Captor
     private ArgumentCaptor<List<MatchPairing>> matchPairingListCaptor;
 
+    private Player player1;
+    private Player player2;
+    private Player player3;
+    private Player player4;
+
+    @BeforeEach
+    void setUp() {
+        player1 = createPlayer(1L, "選手A");
+        player2 = createPlayer(2L, "選手B");
+        player3 = createPlayer(3L, "選手C");
+        player4 = createPlayer(4L, "選手D");
+    }
+
     @Nested
     @DisplayName("getByDate メソッド")
     class GetByDateTests {
@@ -59,29 +74,28 @@ class MatchPairingServiceTest {
         void shouldGetAllPairingsByDate() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Player player1 = createPlayer(1L, "選手A");
-            Player player2 = createPlayer(2L, "選手B");
-            Player player3 = createPlayer(3L, "選手C");
-            Player player4 = createPlayer(4L, "選手D");
-
             List<MatchPairing> pairings = Arrays.asList(
-                    createMatchPairing(1L, sessionDate, 1, player1, player2),
-                    createMatchPairing(2L, sessionDate, 2, player3, player4)
+                    createMatchPairing(1L, sessionDate, 1, 1L, 2L),
+                    createMatchPairing(2L, sessionDate, 2, 3L, 4L)
             );
 
             when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
                     .thenReturn(pairings);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
+            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
 
             // When
             List<MatchPairingDto> result = matchPairingService.getByDate(sessionDate);
 
             // Then
             assertThat(result).hasSize(2);
-            assertThat(result.get(0).sessionDate()).isEqualTo(sessionDate);
-            assertThat(result.get(0).matchNumber()).isEqualTo(1);
-            assertThat(result.get(0).player1Id()).isEqualTo(1L);
-            assertThat(result.get(0).player2Id()).isEqualTo(2L);
-            assertThat(result.get(1).matchNumber()).isEqualTo(2);
+            assertThat(result.get(0).getSessionDate()).isEqualTo(sessionDate);
+            assertThat(result.get(0).getMatchNumber()).isEqualTo(1);
+            assertThat(result.get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.get(1).getMatchNumber()).isEqualTo(2);
 
             verify(matchPairingRepository).findBySessionDateOrderByMatchNumber(sessionDate);
         }
@@ -112,37 +126,38 @@ class MatchPairingServiceTest {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
-            Player player1 = createPlayer(1L, "選手A");
-            Player player2 = createPlayer(2L, "選手B");
-            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, player1, player2);
+            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
 
             when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
-                    .thenReturn(Optional.of(pairing));
+                    .thenReturn(Arrays.asList(pairing));
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
 
             // When
-            MatchPairingDto result = matchPairingService.getByDateAndMatchNumber(sessionDate, matchNumber);
+            List<MatchPairingDto> result = matchPairingService.getByDateAndMatchNumber(sessionDate, matchNumber);
 
             // Then
-            assertThat(result.sessionDate()).isEqualTo(sessionDate);
-            assertThat(result.matchNumber()).isEqualTo(matchNumber);
-            assertThat(result.player1Id()).isEqualTo(1L);
-            assertThat(result.player2Id()).isEqualTo(2L);
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getSessionDate()).isEqualTo(sessionDate);
+            assertThat(result.get(0).getMatchNumber()).isEqualTo(matchNumber);
+            assertThat(result.get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.get(0).getPlayer2Id()).isEqualTo(2L);
         }
 
         @Test
-        @DisplayName("対戦ペアリングが見つからない場合はResourceNotFoundExceptionをスローする")
-        void shouldThrowExceptionWhenPairingNotFound() {
+        @DisplayName("対戦ペアリングが見つからない場合は空のリストを返す")
+        void shouldReturnEmptyListWhenPairingNotFound() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 99;
             when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
-                    .thenReturn(Optional.empty());
+                    .thenReturn(Collections.emptyList());
 
-            // When & Then
-            assertThatThrownBy(() ->
-                    matchPairingService.getByDateAndMatchNumber(sessionDate, matchNumber))
-                    .isInstanceOf(ResourceNotFoundException.class)
-                    .hasMessageContaining("Match pairing not found");
+            // When
+            List<MatchPairingDto> result = matchPairingService.getByDateAndMatchNumber(sessionDate, matchNumber);
+
+            // Then
+            assertThat(result).isEmpty();
         }
     }
 
@@ -151,44 +166,40 @@ class MatchPairingServiceTest {
     class CreateTests {
 
         @Test
-        @DisplayName("有効なリクエストで対戦ペアリングを作成できる")
+        @DisplayName("対戦ペアリングを作成できる")
         void shouldCreatePairing() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
-            Long player1Id = 10L;
-            Long player2Id = 20L;
+            Long player1Id = 1L;
+            Long player2Id = 2L;
+            Long createdBy = 1L;
 
             MatchPairingCreateRequest request = new MatchPairingCreateRequest(
                     sessionDate, matchNumber, player1Id, player2Id
             );
 
-            Player player1 = createPlayer(player1Id, "選手A");
-            Player player2 = createPlayer(player2Id, "選手B");
-
-            when(playerRepository.findById(player1Id)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(player2Id)).thenReturn(Optional.of(player2));
-            when(matchPairingRepository.existsBySessionDateAndMatchNumber(sessionDate, matchNumber))
-                    .thenReturn(false);
-
-            MatchPairing savedPairing = createMatchPairing(1L, sessionDate, matchNumber, player1, player2);
+            MatchPairing savedPairing = createMatchPairing(1L, sessionDate, matchNumber, player1Id, player2Id);
             when(matchPairingRepository.save(any(MatchPairing.class))).thenReturn(savedPairing);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
 
             // When
-            MatchPairingDto result = matchPairingService.create(request);
+            MatchPairingDto result = matchPairingService.create(request, createdBy);
 
             // Then
-            assertThat(result.sessionDate()).isEqualTo(sessionDate);
-            assertThat(result.matchNumber()).isEqualTo(matchNumber);
-            assertThat(result.player1Id()).isEqualTo(player1Id);
-            assertThat(result.player2Id()).isEqualTo(player2Id);
+            assertThat(result.getSessionDate()).isEqualTo(sessionDate);
+            assertThat(result.getMatchNumber()).isEqualTo(matchNumber);
+            assertThat(result.getPlayer1Id()).isEqualTo(player1Id);
+            assertThat(result.getPlayer2Id()).isEqualTo(player2Id);
 
             verify(matchPairingRepository).save(matchPairingCaptor.capture());
             MatchPairing captured = matchPairingCaptor.getValue();
             assertThat(captured.getSessionDate()).isEqualTo(sessionDate);
             assertThat(captured.getMatchNumber()).isEqualTo(matchNumber);
-            assertThat(captured.getPlayer1().getId()).isEqualTo(player1Id);
-            assertThat(captured.getPlayer2().getId()).isEqualTo(player2Id);
+            assertThat(captured.getPlayer1Id()).isEqualTo(player1Id);
+            assertThat(captured.getPlayer2Id()).isEqualTo(player2Id);
+            assertThat(captured.getCreatedBy()).isEqualTo(createdBy);
         }
 
         @Test
@@ -197,95 +208,16 @@ class MatchPairingServiceTest {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
-            Long playerId = 10L;
+            Long playerId = 1L;
 
             MatchPairingCreateRequest request = new MatchPairingCreateRequest(
                     sessionDate, matchNumber, playerId, playerId
             );
 
             // When & Then
-            assertThatThrownBy(() -> matchPairingService.create(request))
+            assertThatThrownBy(() -> matchPairingService.create(request, 1L))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("cannot pair with themselves");
-
-            verify(playerRepository, never()).findById(anyLong());
-            verify(matchPairingRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("player1が見つからない場合はResourceNotFoundExceptionをスローする")
-        void shouldThrowExceptionWhenPlayer1NotFound() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Integer matchNumber = 1;
-            Long player1Id = 999L;
-            Long player2Id = 20L;
-
-            MatchPairingCreateRequest request = new MatchPairingCreateRequest(
-                    sessionDate, matchNumber, player1Id, player2Id
-            );
-
-            when(playerRepository.findById(player1Id)).thenReturn(Optional.empty());
-
-            // When & Then
-            assertThatThrownBy(() -> matchPairingService.create(request))
-                    .isInstanceOf(ResourceNotFoundException.class)
-                    .hasMessageContaining("Player not found");
-
-            verify(playerRepository, never()).findById(player2Id);
-            verify(matchPairingRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("player2が見つからない場合はResourceNotFoundExceptionをスローする")
-        void shouldThrowExceptionWhenPlayer2NotFound() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Integer matchNumber = 1;
-            Long player1Id = 10L;
-            Long player2Id = 999L;
-
-            MatchPairingCreateRequest request = new MatchPairingCreateRequest(
-                    sessionDate, matchNumber, player1Id, player2Id
-            );
-
-            Player player1 = createPlayer(player1Id, "選手A");
-            when(playerRepository.findById(player1Id)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(player2Id)).thenReturn(Optional.empty());
-
-            // When & Then
-            assertThatThrownBy(() -> matchPairingService.create(request))
-                    .isInstanceOf(ResourceNotFoundException.class)
-                    .hasMessageContaining("Player not found");
-
-            verify(matchPairingRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("同じ日付と試合番号の対戦が既に存在する場合はDuplicateResourceExceptionをスローする")
-        void shouldThrowExceptionWhenPairingAlreadyExists() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Integer matchNumber = 1;
-            Long player1Id = 10L;
-            Long player2Id = 20L;
-
-            MatchPairingCreateRequest request = new MatchPairingCreateRequest(
-                    sessionDate, matchNumber, player1Id, player2Id
-            );
-
-            Player player1 = createPlayer(player1Id, "選手A");
-            Player player2 = createPlayer(player2Id, "選手B");
-
-            when(playerRepository.findById(player1Id)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(player2Id)).thenReturn(Optional.of(player2));
-            when(matchPairingRepository.existsBySessionDateAndMatchNumber(sessionDate, matchNumber))
-                    .thenReturn(true);
-
-            // When & Then
-            assertThatThrownBy(() -> matchPairingService.create(request))
-                    .isInstanceOf(DuplicateResourceException.class)
-                    .hasMessageContaining("Match pairing already exists");
+                    .hasMessageContaining("同じ選手を対戦相手に設定できません");
 
             verify(matchPairingRepository, never()).save(any());
         }
@@ -296,81 +228,62 @@ class MatchPairingServiceTest {
     class CreateBatchTests {
 
         @Test
-        @DisplayName("複数の対戦ペアリングを一括作成できる")
-        void shouldCreateMultiplePairings() {
+        @DisplayName("対戦ペアリングを一括作成できる")
+        void shouldCreatePairingsBatch() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-
-            Player player1 = createPlayer(1L, "選手A");
-            Player player2 = createPlayer(2L, "選手B");
-            Player player3 = createPlayer(3L, "選手C");
-            Player player4 = createPlayer(4L, "選手D");
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
 
             List<MatchPairingCreateRequest> requests = Arrays.asList(
-                    new MatchPairingCreateRequest(sessionDate, 1, 1L, 2L),
-                    new MatchPairingCreateRequest(sessionDate, 2, 3L, 4L)
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 2L),
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 3L, 4L)
             );
 
+            List<MatchPairing> savedPairings = Arrays.asList(
+                    createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L),
+                    createMatchPairing(2L, sessionDate, matchNumber, 3L, 4L)
+            );
+
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
             when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
             when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
             when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
-            when(matchPairingRepository.existsBySessionDateAndMatchNumber(eq(sessionDate), anyInt()))
-                    .thenReturn(false);
-
-            List<MatchPairing> savedPairings = Arrays.asList(
-                    createMatchPairing(1L, sessionDate, 1, player1, player2),
-                    createMatchPairing(2L, sessionDate, 2, player3, player4)
-            );
-            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
 
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(requests);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, createdBy);
 
             // Then
             assertThat(result).hasSize(2);
-            assertThat(result.get(0).matchNumber()).isEqualTo(1);
-            assertThat(result.get(0).player1Id()).isEqualTo(1L);
-            assertThat(result.get(0).player2Id()).isEqualTo(2L);
-            assertThat(result.get(1).matchNumber()).isEqualTo(2);
-            assertThat(result.get(1).player1Id()).isEqualTo(3L);
-            assertThat(result.get(1).player2Id()).isEqualTo(4L);
+            assertThat(result.get(0).getMatchNumber()).isEqualTo(matchNumber);
+            assertThat(result.get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.get(1).getMatchNumber()).isEqualTo(matchNumber);
+            assertThat(result.get(1).getPlayer1Id()).isEqualTo(3L);
+            assertThat(result.get(1).getPlayer2Id()).isEqualTo(4L);
 
-            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
-            List<MatchPairing> capturedList = matchPairingListCaptor.getValue();
-            assertThat(capturedList).hasSize(2);
+            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+            verify(matchPairingRepository).saveAll(anyList());
         }
 
         @Test
-        @DisplayName("空のリクエストリストの場合は空のリストを返す")
-        void shouldReturnEmptyListForEmptyRequest() {
+        @DisplayName("空のリストで一括作成すると空のリストを返す")
+        void shouldReturnEmptyListForEmptyBatch() {
             // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
             List<MatchPairingCreateRequest> requests = Collections.emptyList();
 
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(Collections.emptyList());
+
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(requests);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, createdBy);
 
             // Then
             assertThat(result).isEmpty();
-            verify(matchPairingRepository, never()).saveAll(anyList());
-        }
-
-        @Test
-        @DisplayName("一括作成中に1件でも同じ選手同士の対戦がある場合はIllegalArgumentExceptionをスローする")
-        void shouldThrowExceptionWhenBatchContainsSamePlayer() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            List<MatchPairingCreateRequest> requests = Arrays.asList(
-                    new MatchPairingCreateRequest(sessionDate, 1, 1L, 2L),
-                    new MatchPairingCreateRequest(sessionDate, 2, 3L, 3L) // 同じ選手
-            );
-
-            // When & Then
-            assertThatThrownBy(() -> matchPairingService.createBatch(requests))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("cannot pair with themselves");
-
-            verify(matchPairingRepository, never()).saveAll(anyList());
+            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
         }
     }
 
@@ -379,16 +292,16 @@ class MatchPairingServiceTest {
     class DeleteTests {
 
         @Test
-        @DisplayName("指定日付の全ての対戦ペアリングを削除できる")
-        void shouldDeleteAllPairingsByDate() {
+        @DisplayName("IDで対戦ペアリングを削除できる")
+        void shouldDeletePairingById() {
             // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Long pairingId = 1L;
 
             // When
-            matchPairingService.delete(sessionDate);
+            matchPairingService.delete(pairingId);
 
             // Then
-            verify(matchPairingRepository).deleteBySessionDate(sessionDate);
+            verify(matchPairingRepository).deleteById(pairingId);
         }
     }
 
@@ -397,11 +310,11 @@ class MatchPairingServiceTest {
     class DeleteByDateAndMatchNumberTests {
 
         @Test
-        @DisplayName("指定日付と試合番号の対戦ペアリングを削除できる")
+        @DisplayName("日付と試合番号で対戦ペアリングを削除できる")
         void shouldDeletePairingByDateAndMatchNumber() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Integer matchNumber = 3;
+            Integer matchNumber = 1;
 
             // When
             matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber);
@@ -416,7 +329,7 @@ class MatchPairingServiceTest {
     class ExistsByDateAndMatchNumberTests {
 
         @Test
-        @DisplayName("対戦ペアリングが存在する場合はtrueを返す")
+        @DisplayName("対戦ペアリングが存在する場合trueを返す")
         void shouldReturnTrueWhenPairingExists() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
@@ -432,11 +345,11 @@ class MatchPairingServiceTest {
         }
 
         @Test
-        @DisplayName("対戦ペアリングが存在しない場合はfalseを返す")
+        @DisplayName("対戦ペアリングが存在しない場合falseを返す")
         void shouldReturnFalseWhenPairingDoesNotExist() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            Integer matchNumber = 99;
+            Integer matchNumber = 1;
             when(matchPairingRepository.existsBySessionDateAndMatchNumber(sessionDate, matchNumber))
                     .thenReturn(false);
 
@@ -453,229 +366,119 @@ class MatchPairingServiceTest {
     class AutoMatchTests {
 
         @Test
-        @DisplayName("基本的な自動マッチングが成功する")
-        void shouldPerformBasicAutoMatching() {
+        @DisplayName("偶数の参加者で自動マッチングできる")
+        void shouldAutoMatchEvenNumberOfPlayers() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
             List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
 
-            Player player1 = createPlayerWithRank(1L, "選手A", "A級");
-            Player player2 = createPlayerWithRank(2L, "選手B", "B級");
-            Player player3 = createPlayerWithRank(3L, "選手C", "A級");
-            Player player4 = createPlayerWithRank(4L, "選手D", "B級");
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .participantIds(playerIds)
+                    .build();
 
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
-            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
-            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
-
-            // 過去の対戦履歴なし
-            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(any()))
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
 
-            List<MatchPairing> savedPairings = Arrays.asList(
-                    createMatchPairing(1L, sessionDate, 1, player1, player3),
-                    createMatchPairing(2L, sessionDate, 2, player2, player4)
-            );
-            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
-
             // When
             AutoMatchingResult result = matchPairingService.autoMatch(request);
 
             // Then
-            assertThat(result.pairings()).hasSize(2);
-            assertThat(result.waitingPlayers()).isEmpty();
-            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
-
-            List<MatchPairing> capturedPairings = matchPairingListCaptor.getValue();
-            assertThat(capturedPairings).hasSize(2);
+            assertThat(result.getPairings()).hasSize(2);
+            assertThat(result.getWaitingPlayers()).isEmpty();
         }
 
         @Test
-        @DisplayName("奇数人数の場合は1人が待機選手になる")
-        void shouldHaveOneWaitingPlayerForOddNumber() {
+        @DisplayName("奇数の参加者で自動マッチングすると1人が待機者になる")
+        void shouldAutoMatchOddNumberOfPlayersWithOneWaiting() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            List<Long> playerIds = Arrays.asList(1L, 2L, 3L); // 奇数
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
+            Integer matchNumber = 1;
+            List<Long> playerIds = Arrays.asList(1L, 2L, 3L);
 
-            Player player1 = createPlayerWithRank(1L, "選手A", "A級");
-            Player player2 = createPlayerWithRank(2L, "選手B", "A級");
-            Player player3 = createPlayerWithRank(3L, "選手C", "B級");
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .participantIds(playerIds)
+                    .build();
 
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
-            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
-
-            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(any()))
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Arrays.asList(player1, player2, player3));
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
 
-            List<MatchPairing> savedPairings = Arrays.asList(
-                    createMatchPairing(1L, sessionDate, 1, player1, player2)
-            );
-            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
-
             // When
             AutoMatchingResult result = matchPairingService.autoMatch(request);
 
             // Then
-            assertThat(result.pairings()).hasSize(1);
-            assertThat(result.waitingPlayers()).hasSize(1);
-            assertThat(result.waitingPlayers().get(0).id()).isEqualTo(3L);
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(result.getWaitingPlayers()).hasSize(1);
         }
 
         @Test
-        @DisplayName("同じ級位の選手を優先的にマッチングする")
-        void shouldPrioritizeSameRankMatching() {
+        @DisplayName("参加者が1人の場合はペアリングできない")
+        void shouldReturnNoPairingsForSinglePlayer() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
-
-            // 2人のA級、2人のB級
-            Player player1 = createPlayerWithRank(1L, "選手A1", "A級");
-            Player player2 = createPlayerWithRank(2L, "選手A2", "A級");
-            Player player3 = createPlayerWithRank(3L, "選手B1", "B級");
-            Player player4 = createPlayerWithRank(4L, "選手B2", "B級");
-
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
-            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
-            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
-
-            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(any()))
-                    .thenReturn(Collections.emptyList());
-
-            when(matchPairingRepository.saveAll(anyList())).thenAnswer(invocation -> {
-                List<MatchPairing> pairings = invocation.getArgument(0);
-                return pairings;
-            });
-
-            // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
-
-            // Then
-            assertThat(result.pairings()).hasSize(2);
-            assertThat(result.waitingPlayers()).isEmpty();
-
-            // 同じ級位同士がマッチングされているか確認
-            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
-            List<MatchPairing> capturedPairings = matchPairingListCaptor.getValue();
-
-            boolean hasValidPairing = capturedPairings.stream().allMatch(pairing -> {
-                String rank1 = pairing.getPlayer1().getCurrentRank();
-                String rank2 = pairing.getPlayer2().getCurrentRank();
-                return rank1 != null && rank2 != null &&
-                       (rank1.equals(rank2) || Math.abs(getRankScore(rank1) - getRankScore(rank2)) <= 1);
-            });
-
-            assertThat(hasValidPairing).isTrue();
-        }
-
-        @Test
-        @DisplayName("過去に対戦したことがある選手の組み合わせを避ける")
-        void shouldAvoidPreviousOpponents() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
-
-            Player player1 = createPlayerWithRank(1L, "選手A", "A級");
-            Player player2 = createPlayerWithRank(2L, "選手B", "A級");
-            Player player3 = createPlayerWithRank(3L, "選手C", "A級");
-            Player player4 = createPlayerWithRank(4L, "選手D", "A級");
-
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
-            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
-            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
-
-            // player1 vs player2 の過去の対戦履歴
-            List<MatchPairing> historyPairings = Arrays.asList(
-                    createMatchPairing(100L, LocalDate.of(2024, 1, 8), 1, player1, player2)
-            );
-            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(any()))
-                    .thenReturn(historyPairings);
-
-            when(matchPairingRepository.saveAll(anyList())).thenAnswer(invocation -> {
-                List<MatchPairing> pairings = invocation.getArgument(0);
-                return pairings;
-            });
-
-            // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
-
-            // Then
-            assertThat(result.pairings()).hasSize(2);
-
-            // player1 vs player2 の組み合わせが避けられているか確認
-            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
-            List<MatchPairing> capturedPairings = matchPairingListCaptor.getValue();
-
-            boolean hasPlayer1VsPlayer2 = capturedPairings.stream().anyMatch(pairing ->
-                    (pairing.getPlayer1().getId().equals(1L) && pairing.getPlayer2().getId().equals(2L)) ||
-                    (pairing.getPlayer1().getId().equals(2L) && pairing.getPlayer2().getId().equals(1L))
-            );
-
-            // 他に選択肢がある場合は避けられるはず
-            // ただし、アルゴリズムの性質上100%保証できないため、少なくともマッチングは成功することを確認
-            assertThat(result.pairings()).isNotEmpty();
-        }
-
-        @Test
-        @DisplayName("選手が1人の場合は全員が待機選手になる")
-        void shouldMakeEveryoneWaitingForSinglePlayer() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
             List<Long> playerIds = Arrays.asList(1L);
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
 
-            Player player1 = createPlayerWithRank(1L, "選手A", "A級");
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .participantIds(playerIds)
+                    .build();
+
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Arrays.asList(player1));
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
 
             // When
             AutoMatchingResult result = matchPairingService.autoMatch(request);
 
             // Then
-            assertThat(result.pairings()).isEmpty();
-            assertThat(result.waitingPlayers()).hasSize(1);
-            verify(matchPairingRepository, never()).saveAll(anyList());
+            assertThat(result.getPairings()).isEmpty();
+            assertThat(result.getWaitingPlayers()).hasSize(1);
         }
 
         @Test
-        @DisplayName("選手が0人の場合は空の結果を返す")
+        @DisplayName("参加者が0人の場合は空の結果を返す")
         void shouldReturnEmptyResultForNoPlayers() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
             List<Long> playerIds = Collections.emptyList();
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
+
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .participantIds(playerIds)
+                    .build();
+
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
 
             // When
             AutoMatchingResult result = matchPairingService.autoMatch(request);
 
             // Then
-            assertThat(result.pairings()).isEmpty();
-            assertThat(result.waitingPlayers()).isEmpty();
-            verify(matchPairingRepository, never()).saveAll(anyList());
-        }
-
-        @Test
-        @DisplayName("存在しない選手IDが含まれる場合はResourceNotFoundExceptionをスローする")
-        void shouldThrowExceptionForNonexistentPlayer() {
-            // Given
-            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
-            List<Long> playerIds = Arrays.asList(1L, 999L);
-            AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
-
-            Player player1 = createPlayerWithRank(1L, "選手A", "A級");
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(999L)).thenReturn(Optional.empty());
-
-            // When & Then
-            assertThatThrownBy(() -> matchPairingService.autoMatch(request))
-                    .isInstanceOf(ResourceNotFoundException.class)
-                    .hasMessageContaining("Player not found");
+            assertThat(result.getPairings()).isEmpty();
+            assertThat(result.getWaitingPlayers()).isEmpty();
         }
     }
 
@@ -685,34 +488,22 @@ class MatchPairingServiceTest {
         Player player = new Player();
         player.setId(id);
         player.setName(name);
-        return player;
-    }
-
-    private Player createPlayerWithRank(Long id, String name, String rank) {
-        Player player = new Player();
-        player.setId(id);
-        player.setName(name);
-        player.setCurrentRank(rank);
+        player.setPassword("password");
+        player.setGender(Player.Gender.その他);
+        player.setDominantHand(Player.DominantHand.右);
+        player.setRole(Player.Role.PLAYER);
         return player;
     }
 
     private MatchPairing createMatchPairing(Long id, LocalDate sessionDate, Integer matchNumber,
-                                           Player player1, Player player2) {
+                                            Long player1Id, Long player2Id) {
         MatchPairing pairing = new MatchPairing();
         pairing.setId(id);
         pairing.setSessionDate(sessionDate);
         pairing.setMatchNumber(matchNumber);
-        pairing.setPlayer1(player1);
-        pairing.setPlayer2(player2);
+        pairing.setPlayer1Id(player1Id);
+        pairing.setPlayer2Id(player2Id);
+        pairing.setCreatedBy(1L);
         return pairing;
-    }
-
-    private int getRankScore(String rank) {
-        if (rank == null) return 0;
-        if (rank.startsWith("A")) return 4;
-        if (rank.startsWith("B")) return 3;
-        if (rank.startsWith("C")) return 2;
-        if (rank.startsWith("D")) return 1;
-        return 0;
     }
 }

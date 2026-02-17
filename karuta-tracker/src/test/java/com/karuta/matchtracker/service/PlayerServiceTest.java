@@ -317,8 +317,10 @@ class PlayerServiceTest {
                 .id(1L)
                 .name("山田太郎")
                 .password("password123")
+                .gender(Player.Gender.その他)
+                .dominantHand(Player.DominantHand.右)
                 .role(Player.Role.PLAYER)
-                .currentRank("A級")
+                .kyuRank(Player.KyuRank.A級)
                 .build();
 
         com.karuta.matchtracker.dto.LoginRequest request =

@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
@@ -37,7 +37,7 @@ class MatchPairingControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private MatchPairingService matchPairingService;
 
     @Nested
@@ -50,8 +50,8 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<MatchPairingDto> pairings = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 10L, "選手A", 20L, "選手B", 1L, null),
-                    new MatchPairingDto(2L, date, 2, 30L, "選手C", 40L, "選手D", 1L, null)
+                    MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(1).player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").createdBy(1L).build(),
+                    MatchPairingDto.builder().id(2L).sessionDate(date).matchNumber(2).player1Id(30L).player1Name("選手C").player2Id(40L).player2Name("選手D").createdBy(1L).build()
             );
 
             when(matchPairingService.getByDate(date)).thenReturn(pairings);
@@ -118,12 +118,15 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
-            MatchPairingDto pairing = new MatchPairingDto(
-                    1L, date, matchNumber, 10L, "選手A", 20L, "選手B", 1L, null
-            );
+            MatchPairingDto pairing = MatchPairingDto.builder()
+                    .id(1L).sessionDate(date).matchNumber(matchNumber)
+                    .player1Id(10L).player1Name("選手A")
+                    .player2Id(20L).player2Name("選手B")
+                    .createdBy(1L)
+                    .build();
 
             when(matchPairingService.getByDateAndMatchNumber(date, matchNumber))
-                    .thenReturn(pairing);
+                    .thenReturn(Arrays.asList(pairing));
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
@@ -219,9 +222,12 @@ class MatchPairingControllerTest {
                     date, 1, 10L, 20L
             );
 
-            MatchPairingDto created = new MatchPairingDto(
-                    1L, date, 1, 10L, "選手A", 20L, "選手B", 1L, null
-            );
+            MatchPairingDto created = MatchPairingDto.builder()
+                    .id(1L).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A")
+                    .player2Id(20L).player2Name("選手B")
+                    .createdBy(1L)
+                    .build();
 
             when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
                     .thenReturn(created);
@@ -250,9 +256,12 @@ class MatchPairingControllerTest {
                     date, 1, 10L, 20L
             );
 
-            MatchPairingDto created = new MatchPairingDto(
-                    1L, date, 1, 10L, "選手A", 20L, "選手B", 1L, null
-            );
+            MatchPairingDto created = MatchPairingDto.builder()
+                    .id(1L).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A")
+                    .player2Id(20L).player2Name("選手B")
+                    .createdBy(1L)
+                    .build();
 
             when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
                     .thenReturn(created);
@@ -380,8 +389,8 @@ class MatchPairingControllerTest {
             );
 
             List<MatchPairingDto> created = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 10L, "選手A", 20L, "選手B", 1L, null),
-                    new MatchPairingDto(2L, date, 2, 30L, "選手C", 40L, "選手D", 1L, null)
+                    MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(1).player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").createdBy(1L).build(),
+                    MatchPairingDto.builder().id(2L).sessionDate(date).matchNumber(2).player1Id(30L).player1Name("選手C").player2Id(40L).player2Name("選手D").createdBy(1L).build()
             );
 
             when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyLong()))
@@ -413,7 +422,7 @@ class MatchPairingControllerTest {
             );
 
             List<MatchPairingDto> created = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 10L, "選手A", 20L, "選手B", 1L, null)
+                    MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(1).player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").createdBy(1L).build()
             );
 
             when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyLong()))
@@ -586,14 +595,23 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
-            AutoMatchingRequest request = new AutoMatchingRequest(date, playerIds);
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
 
-            List<MatchPairingDto> pairings = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 1L, "選手A", 2L, "選手B", 1L, null),
-                    new MatchPairingDto(2L, date, 2, 3L, "選手C", 4L, "選手D", 1L, null)
+            List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
+                    AutoMatchingResult.PairingSuggestion.builder()
+                        .player1Id(1L).player1Name("選手A")
+                        .player2Id(2L).player2Name("選手B")
+                        .score(0.0).recentMatches(Collections.emptyList()).build(),
+                    AutoMatchingResult.PairingSuggestion.builder()
+                        .player1Id(3L).player1Name("選手C")
+                        .player2Id(4L).player2Name("選手D")
+                        .score(0.0).recentMatches(Collections.emptyList()).build()
             );
 
-            AutoMatchingResult result = new AutoMatchingResult(pairings, Collections.emptyList());
+            AutoMatchingResult result = AutoMatchingResult.builder()
+                    .pairings(pairings)
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
 
             when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
                     .thenReturn(result);
@@ -618,13 +636,19 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L);
-            AutoMatchingRequest request = new AutoMatchingRequest(date, playerIds);
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
 
-            List<MatchPairingDto> pairings = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 1L, "選手A", 2L, "選手B", 1L, null)
+            List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
+                    AutoMatchingResult.PairingSuggestion.builder()
+                        .player1Id(1L).player1Name("選手A")
+                        .player2Id(2L).player2Name("選手B")
+                        .score(0.0).recentMatches(Collections.emptyList()).build()
             );
 
-            AutoMatchingResult result = new AutoMatchingResult(pairings, Collections.emptyList());
+            AutoMatchingResult result = AutoMatchingResult.builder()
+                    .pairings(pairings)
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
 
             when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
                     .thenReturn(result);
@@ -644,19 +668,24 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L, 3L);
-            AutoMatchingRequest request = new AutoMatchingRequest(date, playerIds);
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
 
-            List<MatchPairingDto> pairings = Arrays.asList(
-                    new MatchPairingDto(1L, date, 1, 1L, "選手A", 2L, "選手B", 1L, null)
+            List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
+                    AutoMatchingResult.PairingSuggestion.builder()
+                        .player1Id(1L).player1Name("選手A")
+                        .player2Id(2L).player2Name("選手B")
+                        .score(0.0).recentMatches(Collections.emptyList()).build()
             );
 
-            PlayerDto waitingPlayer = new PlayerDto(
-                    3L, "選手C", "A級", null, Player.Role.PLAYER, null, null, null
-            );
+            AutoMatchingResult.PlayerInfo waitingPlayer = AutoMatchingResult.PlayerInfo.builder()
+                    .id(3L)
+                    .name("選手C")
+                    .build();
 
-            AutoMatchingResult result = new AutoMatchingResult(
-                    pairings, Arrays.asList(waitingPlayer)
-            );
+            AutoMatchingResult result = AutoMatchingResult.builder()
+                    .pairings(pairings)
+                    .waitingPlayers(Arrays.asList(waitingPlayer))
+                    .build();
 
             when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
                     .thenReturn(result);
@@ -679,7 +708,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L);
-            AutoMatchingRequest request = new AutoMatchingRequest(date, playerIds);
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -697,7 +726,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 999L);
-            AutoMatchingRequest request = new AutoMatchingRequest(date, playerIds);
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
 
             when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
                     .thenThrow(new ResourceNotFoundException("Player not found"));

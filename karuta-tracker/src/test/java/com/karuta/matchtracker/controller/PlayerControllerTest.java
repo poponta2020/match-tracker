@@ -313,8 +313,10 @@ class PlayerControllerTest {
                 com.karuta.matchtracker.dto.LoginResponse.builder()
                         .id(1L)
                         .name("山田太郎")
+                        .gender(Player.Gender.その他)
+                        .dominantHand(Player.DominantHand.右)
                         .role(Player.Role.PLAYER)
-                        .currentRank("A級")
+                        .kyuRank(Player.KyuRank.A級)
                         .build();
 
         when(playerService.login(any(com.karuta.matchtracker.dto.LoginRequest.class)))
@@ -328,7 +330,7 @@ class PlayerControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("山田太郎"))
                 .andExpect(jsonPath("$.role").value("PLAYER"))
-                .andExpect(jsonPath("$.currentRank").value("A級"));
+                .andExpect(jsonPath("$.kyuRank").value("A級"));
 
         verify(playerService).login(any(com.karuta.matchtracker.dto.LoginRequest.class));
     }

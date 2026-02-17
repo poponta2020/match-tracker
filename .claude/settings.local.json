@@ -48,7 +48,9 @@
       "Bash(mvn clean test:*)",
       "Bash(./mvnw clean:*)",
       "Bash(./gradlew test:*)",
-      "Bash(./gradlew clean test:*)"
+      "Bash(./gradlew clean test:*)",
+      "Bash(/home/poponta/match-tracker/karuta-tracker/src/test/java/com/karuta/matchtracker/service/MatchPairingServiceTest.java:*)",
+      "Bash(./gradlew compileTestJava:*)"
     ],
     "deny": [],
     "ask": []

@@ -57,7 +57,7 @@ class GlobalExceptionHandlerTest {
     void testHandleResourceNotFoundException_ByName_Returns404() throws Exception {
         // Given
         when(playerService.findById(1L))
-                .thenThrow(new ResourceNotFoundException("Player", "TestPlayer"));
+                .thenThrow(new ResourceNotFoundException("Player", "name", "TestPlayer"));
 
         // When & Then
         mockMvc.perform(get("/api/players/1"))
@@ -74,7 +74,7 @@ class GlobalExceptionHandlerTest {
     void testHandleDuplicateResourceException_Returns409() throws Exception {
         // Given
         when(playerService.findById(1L))
-                .thenThrow(new DuplicateResourceException("Player", "田中太郎"));
+                .thenThrow(new DuplicateResourceException("Player", "name", "田中太郎"));
 
         // When & Then
         mockMvc.perform(get("/api/players/1"))

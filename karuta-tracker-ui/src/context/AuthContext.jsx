@@ -19,7 +19,14 @@ export const AuthProvider = ({ children }) => {
     // ローカルストレージから認証情報を復元
     const savedPlayer = localStorage.getItem('currentPlayer');
     if (savedPlayer) {
-      setCurrentPlayer(JSON.parse(savedPlayer));
+      try {
+        setCurrentPlayer(JSON.parse(savedPlayer));
+      } catch (error) {
+        console.error('Failed to parse saved player data:', error);
+        // 破損したデータを削除
+        localStorage.removeItem('currentPlayer');
+        localStorage.removeItem('authToken');
+      }
     }
     setLoading(false);
   }, []);

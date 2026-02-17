@@ -190,7 +190,7 @@ class PracticeSessionServiceTest {
         when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(testSession);
 
         // When
-        PracticeSessionDto result = practiceSessionService.createSession(request);
+        PracticeSessionDto result = practiceSessionService.createSession(request, 1L);
 
         // Then
         assertThat(result).isNotNull();
@@ -210,7 +210,7 @@ class PracticeSessionServiceTest {
         when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
 
         // When & Then
-        assertThatThrownBy(() -> practiceSessionService.createSession(request))
+        assertThatThrownBy(() -> practiceSessionService.createSession(request, 1L))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("PracticeSession")
                 .hasMessageContaining(today.toString());

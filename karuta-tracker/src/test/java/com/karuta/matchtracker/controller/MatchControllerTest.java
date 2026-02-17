@@ -16,8 +16,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -306,7 +309,7 @@ class MatchControllerTest {
     void testFindPlayerMatchesWithFilters() throws Exception {
         // Given
         when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("MALE"), eq("RIGHT")))
-                .thenReturn(matches);
+                .thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1")
@@ -328,7 +331,7 @@ class MatchControllerTest {
         com.karuta.matchtracker.dto.RankStatisticsDto aRankStats =
                 com.karuta.matchtracker.dto.RankStatisticsDto.create("A級", 5L, 3L);
 
-        Map<String, com.karuta.matchtracker.dto.RankStatisticsDto> byRankMap = new java.util.HashMap<>();
+        Map<String, com.karuta.matchtracker.dto.RankStatisticsDto> byRankMap = new HashMap<>();
         byRankMap.put("A級", aRankStats);
 
         com.karuta.matchtracker.dto.StatisticsByRankDto stats =
@@ -386,16 +389,15 @@ class MatchControllerTest {
     void testCreateMatchSimple() throws Exception {
         // Given
         com.karuta.matchtracker.dto.MatchSimpleCreateRequest request =
-                com.karuta.matchtracker.dto.MatchSimpleCreateRequest.builder()
-                        .matchDate(today)
-                        .matchNumber(1)
-                        .playerId(1L)
-                        .opponentName("未登録選手")
-                        .result("勝ち")
-                        .scoreDifference(5)
-                        .build();
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        request.setMatchDate(today);
+        request.setMatchNumber(1);
+        request.setPlayerId(1L);
+        request.setOpponentName("未登録選手");
+        request.setResult("勝ち");
+        request.setScoreDifference(5);
 
-        when(matchService.createMatchSimple(any())).thenReturn(matchDto);
+        when(matchService.createMatchSimple(any())).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(post("/api/matches")
@@ -411,12 +413,12 @@ class MatchControllerTest {
     @DisplayName("POST /api/matches/detailed - 詳細版で試合結果を登録できる")
     void testCreateMatchDetailed() throws Exception {
         // Given
-        when(matchService.createMatch(any(MatchCreateRequest.class))).thenReturn(matchDto);
+        when(matchService.createMatch(any(MatchCreateRequest.class))).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(matchRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
@@ -428,16 +430,15 @@ class MatchControllerTest {
     void testUpdateMatchDetailed() throws Exception {
         // Given
         com.karuta.matchtracker.dto.MatchSimpleCreateRequest request =
-                com.karuta.matchtracker.dto.MatchSimpleCreateRequest.builder()
-                        .matchDate(today)
-                        .matchNumber(1)
-                        .playerId(1L)
-                        .opponentName("新しい対戦相手")
-                        .result("負け")
-                        .scoreDifference(3)
-                        .build();
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        request.setMatchDate(today);
+        request.setMatchNumber(1);
+        request.setPlayerId(1L);
+        request.setOpponentName("新しい対戦相手");
+        request.setResult("負け");
+        request.setScoreDifference(3);
 
-        when(matchService.updateMatchSimple(eq(1L), any())).thenReturn(matchDto);
+        when(matchService.updateMatchSimple(eq(1L), any())).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
@@ -453,7 +454,7 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/{id} - IDで試合結果を取得できる")
     void testFindById() throws Exception {
         // Given
-        when(matchService.findById(1L)).thenReturn(matchDto);
+        when(matchService.findById(1L)).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(get("/api/matches/1"))

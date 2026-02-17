@@ -511,15 +511,17 @@ public class MatchService {
                     if (match.getPlayer1Id() != 0L && match.getPlayer2Id() != 0L) {
                         dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                         dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
-                        dto.setWinnerName(playerNames.get(match.getWinnerId()));
 
                         // 詳細試合の結果を設定
                         if (match.getWinnerId() == 0L) {
                             dto.setResult("引き分け");
+                            dto.setWinnerName(null);  // 引き分けの場合は明示的にnull
                         } else if (match.getWinnerId().equals(match.getPlayer1Id())) {
                             dto.setResult("勝ち");
+                            dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         } else if (match.getWinnerId().equals(match.getPlayer2Id())) {
                             dto.setResult("負け");
+                            dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         }
 
                         // opponentNameには相手選手の名前を設定（一貫性のため）
@@ -537,15 +539,17 @@ public class MatchService {
                         if (match.getPlayer2Id() != 0L) {
                             dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
                         }
-                        dto.setWinnerName(playerNames.get(match.getWinnerId()));
 
                         // 結果を計算
                         if (match.getWinnerId() == 0L) {
                             dto.setResult("引き分け");
+                            dto.setWinnerName(null);  // 引き分けの場合は明示的にnull
                         } else if (match.getWinnerId().equals(registeredPlayerId)) {
                             dto.setResult("勝ち");
+                            dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         } else {
                             dto.setResult("負け");
+                            dto.setWinnerName(match.getOpponentName());  // 未登録選手が勝者の場合
                         }
                     }
 
@@ -594,7 +598,8 @@ public class MatchService {
                     // 通常の試合（両選手がシステムに登録されている場合）
                     dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                     dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
-                    dto.setWinnerName(playerNames.get(match.getWinnerId()));
+                    // winnerIdが0L（引き分け）の場合はnull、それ以外は選手名を設定
+                    dto.setWinnerName(match.getWinnerId() == 0L ? null : playerNames.get(match.getWinnerId()));
 
                     // 簡易試合（対戦相手が未登録の場合）
                     if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {

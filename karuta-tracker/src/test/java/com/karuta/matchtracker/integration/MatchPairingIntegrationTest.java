@@ -65,7 +65,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         MatchPairingDto created = objectMapper.readValue(createResponse, MatchPairingDto.class);
-        Long pairingId = created.id();
+        Long pairingId = created.getId();
 
         // Then: データベースに保存されていることを確認
         assertThat(matchPairingRepository.findById(pairingId)).isPresent();
@@ -256,7 +256,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         List<Long> playerIds = Arrays.asList(
                 player1.getId(), player2.getId(), player3.getId(), player4.getId()
         );
-        AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
+        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).participantIds(playerIds).build();
 
         // When: 自動マッチング実行
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -275,8 +275,8 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // Then: すべての選手がいずれかのペアリングに含まれている
         AutoMatchingResult result = objectMapper.readValue(response, AutoMatchingResult.class);
-        List<Long> pairedPlayerIds = result.pairings().stream()
-                .flatMap(p -> Arrays.asList(p.player1Id(), p.player2Id()).stream())
+        List<Long> pairedPlayerIds = result.getPairings().stream()
+                .flatMap(p -> Arrays.asList(p.getPlayer1Id(), p.getPlayer2Id()).stream())
                 .toList();
         assertThat(pairedPlayerIds).containsExactlyInAnyOrder(
                 player1.getId(), player2.getId(), player3.getId(), player4.getId()
@@ -295,7 +295,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         List<Long> playerIds = Arrays.asList(
                 player1.getId(), player2.getId(), player3.getId()
         );
-        AutoMatchingRequest request = new AutoMatchingRequest(sessionDate, playerIds);
+        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).participantIds(playerIds).build();
 
         // When: 自動マッチング実行
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -314,7 +314,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // Then: 1人が待機選手になっている
         AutoMatchingResult result = objectMapper.readValue(response, AutoMatchingResult.class);
-        assertThat(result.waitingPlayers()).hasSize(1);
+        assertThat(result.getWaitingPlayers()).hasSize(1);
     }
 
     @Test
@@ -364,12 +364,12 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         MatchPairingDto created = objectMapper.readValue(createResponse, MatchPairingDto.class);
 
         // When & Then: PLAYER権限では削除できない
-        mockMvc.perform(delete("/api/match-pairings/{id}", created.id())
+        mockMvc.perform(delete("/api/match-pairings/{id}", created.getId())
                         .header("X-User-Role", "PLAYER"))
                 .andExpect(status().isForbidden());
 
         // Then: データベースには残っている
-        assertThat(matchPairingRepository.findById(created.id())).isPresent();
+        assertThat(matchPairingRepository.findById(created.getId())).isPresent();
     }
 
     // ヘルパーメソッド
@@ -377,7 +377,15 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
     private Player createAndSavePlayer(String name, String rank) {
         Player player = new Player();
         player.setName(name);
-        player.setCurrentRank(rank);
+        player.setPassword("test-password");
+        player.setGender(Player.Gender.その他);
+        player.setDominantHand(Player.DominantHand.右);
+        // rankの値に基づいてkyuRankまたはdanRankを設定
+        if (rank.endsWith("級")) {
+            player.setKyuRank(Player.KyuRank.valueOf(rank));
+        } else if (!rank.equals("無段") && rank.contains("段")) {
+            player.setDanRank(Player.DanRank.valueOf(rank));
+        }
         player.setRole(Player.Role.PLAYER);
         return playerRepository.save(player);
     }

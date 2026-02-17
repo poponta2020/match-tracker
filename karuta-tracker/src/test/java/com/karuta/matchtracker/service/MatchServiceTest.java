@@ -376,12 +376,12 @@ class MatchServiceTest {
             Player opponent1 = Player.builder()
                     .id(3L)
                     .name("男性選手")
-                    .gender(Player.Gender.MALE)
+                    .gender(Player.Gender.男性)
                     .build();
             Player opponent2 = Player.builder()
                     .id(4L)
                     .name("女性選手")
-                    .gender(Player.Gender.FEMALE)
+                    .gender(Player.Gender.女性)
                     .build();
 
             Match match1 = Match.builder()
@@ -420,12 +420,12 @@ class MatchServiceTest {
             Player opponent1 = Player.builder()
                     .id(3L)
                     .name("右利き選手")
-                    .dominantHand(Player.DominantHand.RIGHT)
+                    .dominantHand(Player.DominantHand.右)
                     .build();
             Player opponent2 = Player.builder()
                     .id(4L)
                     .name("左利き選手")
-                    .dominantHand(Player.DominantHand.LEFT)
+                    .dominantHand(Player.DominantHand.左)
                     .build();
 
             Match match1 = Match.builder()
@@ -465,15 +465,15 @@ class MatchServiceTest {
                     .id(3L)
                     .name("A級・男性・右利き")
                     .kyuRank(Player.KyuRank.A級)
-                    .gender(Player.Gender.MALE)
-                    .dominantHand(Player.DominantHand.RIGHT)
+                    .gender(Player.Gender.男性)
+                    .dominantHand(Player.DominantHand.右)
                     .build();
             Player opponent2 = Player.builder()
                     .id(4L)
                     .name("A級・女性・右利き")
                     .kyuRank(Player.KyuRank.A級)
-                    .gender(Player.Gender.FEMALE)
-                    .dominantHand(Player.DominantHand.RIGHT)
+                    .gender(Player.Gender.女性)
+                    .dominantHand(Player.DominantHand.右)
                     .build();
 
             Match match1 = Match.builder()
@@ -611,13 +611,13 @@ class MatchServiceTest {
             StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, null, null, null, null);
 
             // Then
-            assertThat(result.getTotal().getMatches()).isEqualTo(3);
+            assertThat(result.getTotal().getTotal()).isEqualTo(3);
             assertThat(result.getTotal().getWins()).isEqualTo(2);
 
             Map<String, RankStatisticsDto> byRank = result.getByRank();
-            assertThat(byRank.get("A級").getMatches()).isEqualTo(2);
+            assertThat(byRank.get("A級").getTotal()).isEqualTo(2);
             assertThat(byRank.get("A級").getWins()).isEqualTo(1);
-            assertThat(byRank.get("B級").getMatches()).isEqualTo(1);
+            assertThat(byRank.get("B級").getTotal()).isEqualTo(1);
             assertThat(byRank.get("B級").getWins()).isEqualTo(1);
         }
 
@@ -629,13 +629,13 @@ class MatchServiceTest {
                     .id(3L)
                     .name("男性A級")
                     .kyuRank(Player.KyuRank.A級)
-                    .gender(Player.Gender.MALE)
+                    .gender(Player.Gender.男性)
                     .build();
             Player opponentFemale = Player.builder()
                     .id(4L)
                     .name("女性A級")
                     .kyuRank(Player.KyuRank.A級)
-                    .gender(Player.Gender.FEMALE)
+                    .gender(Player.Gender.女性)
                     .build();
 
             Match match1 = Match.builder()
@@ -663,8 +663,8 @@ class MatchServiceTest {
             StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, "MALE", null, null, null);
 
             // Then
-            assertThat(result.getTotal().getMatches()).isEqualTo(1);
-            assertThat(result.getByRank().get("A級").getMatches()).isEqualTo(1);
+            assertThat(result.getTotal().getTotal()).isEqualTo(1);
+            assertThat(result.getByRank().get("A級").getTotal()).isEqualTo(1);
         }
 
         @Test
@@ -703,7 +703,7 @@ class MatchServiceTest {
             StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, null, null, startDate, today);
 
             // Then
-            assertThat(result.getTotal().getMatches()).isEqualTo(1);
+            assertThat(result.getTotal().getTotal()).isEqualTo(1);
         }
     }
 
@@ -716,14 +716,13 @@ class MatchServiceTest {
         void shouldCreateMatchSimpleWithWin() {
             // Given
             LocalDate today = LocalDate.now();
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("未登録選手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
@@ -743,14 +742,13 @@ class MatchServiceTest {
         void shouldCreateMatchSimpleWithLoss() {
             // Given
             LocalDate today = LocalDate.now();
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("未登録選手")
-                    .result("負け")
-                    .scoreDifference(3)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("負け");
+            request.setScoreDifference(3);
 
             Match savedMatch = Match.builder()
                     .id(1L)
@@ -780,14 +778,13 @@ class MatchServiceTest {
         void shouldFailToCreateMatchForNonTodayDate() {
             // Given
             LocalDate pastDate = LocalDate.now().minusDays(1);
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(pastDate)
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("未登録選手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(pastDate);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             // When & Then
             assertThatThrownBy(() -> matchService.createMatchSimple(request))
@@ -802,14 +799,13 @@ class MatchServiceTest {
         void shouldFailToCreateMatchForNonPracticeDate() {
             // Given
             LocalDate today = LocalDate.now();
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("未登録選手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(false);
 
@@ -826,14 +822,13 @@ class MatchServiceTest {
         void shouldFailForNonexistentPlayer() {
             // Given
             LocalDate today = LocalDate.now();
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .playerId(999L)
-                    .opponentName("未登録選手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(999L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
             when(playerRepository.findById(999L)).thenReturn(Optional.empty());
@@ -865,14 +860,13 @@ class MatchServiceTest {
                     .scoreDifference(5)
                     .build();
 
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("新しい対戦相手")
-                    .result("負け")
-                    .scoreDifference(3)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("新しい対戦相手");
+            request.setResult("負け");
+            request.setScoreDifference(3);
 
             when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
@@ -901,14 +895,13 @@ class MatchServiceTest {
                     .scoreDifference(5)
                     .build();
 
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(LocalDate.now())
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("対戦相手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(LocalDate.now());
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("対戦相手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
 
@@ -924,14 +917,13 @@ class MatchServiceTest {
         @DisplayName("存在しない試合の更新はエラー")
         void shouldFailForNonexistentMatch() {
             // Given
-            MatchSimpleCreateRequest request = MatchSimpleCreateRequest.builder()
-                    .matchDate(LocalDate.now())
-                    .matchNumber(1)
-                    .playerId(1L)
-                    .opponentName("対戦相手")
-                    .result("勝ち")
-                    .scoreDifference(5)
-                    .build();
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(LocalDate.now());
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("対戦相手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
 
             when(matchRepository.findById(999L)).thenReturn(Optional.empty());
 
