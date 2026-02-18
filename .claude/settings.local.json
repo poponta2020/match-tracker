@@ -50,7 +50,10 @@
       "Bash(./gradlew test:*)",
       "Bash(./gradlew clean test:*)",
       "Bash(/home/poponta/match-tracker/karuta-tracker/src/test/java/com/karuta/matchtracker/service/MatchPairingServiceTest.java:*)",
-      "Bash(./gradlew compileTestJava:*)"
+      "Bash(./gradlew compileTestJava:*)",
+      "Bash(docker compose:*)",
+      "Bash(ss:*)",
+      "Bash(mysql:*)"
     ],
     "deny": [],
     "ask": []
