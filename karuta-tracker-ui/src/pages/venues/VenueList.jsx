@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../../api/client';
 import './VenueList.css';
 
 function VenueList() {
@@ -15,12 +16,8 @@ function VenueList() {
   const fetchVenues = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8080/api/venues');
-      if (!response.ok) {
-        throw new Error('会場の取得に失敗しました');
-      }
-      const data = await response.json();
-      setVenues(data);
+      const response = await apiClient.get('/venues');
+      setVenues(response.data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -34,13 +31,7 @@ function VenueList() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8080/api/venues/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('会場の削除に失敗しました');
-      }
+      await apiClient.delete(`/venues/${id}`);
 
       // 削除成功後、リストを再取得
       await fetchVenues();

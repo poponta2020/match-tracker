@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import apiClient from '../../api/client';
 import './VenueForm.css';
 
 function VenueForm() {
@@ -29,11 +30,8 @@ function VenueForm() {
   const fetchVenue = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8080/api/venues/${id}`);
-      if (!response.ok) {
-        throw new Error('会場の取得に失敗しました');
-      }
-      const data = await response.json();
+      const response = await apiClient.get(`/venues/${id}`);
+      const data = response.data;
 
       // 時刻を "HH:MM" 形式に変換
       const schedules = data.schedules.map((s) => ({
@@ -158,23 +156,10 @@ function VenueForm() {
         })),
       };
 
-      const url = isEditMode
-        ? `http://localhost:8080/api/venues/${id}`
-        : 'http://localhost:8080/api/venues';
-
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '会場の保存に失敗しました');
+      if (isEditMode) {
+        await apiClient.put(`/venues/${id}`, requestData);
+      } else {
+        await apiClient.post('/venues', requestData);
       }
 
       navigate('/venues');

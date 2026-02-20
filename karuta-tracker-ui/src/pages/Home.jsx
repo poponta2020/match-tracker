@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { matchAPI, practiceAPI, pairingAPI } from '../api';
+import apiClient from '../api/client';
 import {
   Trophy,
   BookOpen,
@@ -44,8 +45,8 @@ const Home = () => {
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
           matchAPI.getStatistics(currentPlayer.id).catch(() => ({ data: { totalMatches: 0, wins: 0, winRate: 0 } })),
           // 練習記録APIは全件取得のみサポート
-          fetch('http://localhost:8080/api/practice-sessions')
-            .then(res => res.json())
+          apiClient.get('/practice-sessions')
+            .then(res => res.data)
             .catch(() => []),
           // 今日の対戦組み合わせを取得
           pairingAPI.getByDate(todayStr).catch(() => ({ data: [] })),
@@ -91,8 +92,8 @@ const Home = () => {
     const fetchTodayMatch = async (todayStr) => {
       try {
         // 1. 今日の練習セッションを取得
-        const sessionRes = await fetch(`http://localhost:8080/api/practice-sessions/date?date=${todayStr}`)
-          .then(res => res.ok ? res.json() : null)
+        const sessionRes = await apiClient.get(`/practice-sessions/date?date=${todayStr}`)
+          .then(res => res.data)
           .catch(() => null);
 
         if (!sessionRes) {
@@ -120,14 +121,8 @@ const Home = () => {
         const allPairings = pairingsRes.data || [];
 
         // 4. 今日の試合結果を取得（キャッシュ無効化）
-        const matchesRes = await fetch(`http://localhost:8080/api/matches?date=${todayStr}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        })
-          .then(res => res.ok ? res.json() : [])
+        const matchesRes = await apiClient.get(`/matches?date=${todayStr}`)
+          .then(res => res.data)
           .catch(() => []);
 
         // 5. 自分が参加する試合で、未入力の最小試合番号を見つける

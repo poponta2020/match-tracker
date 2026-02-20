@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
+import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
@@ -91,15 +92,8 @@ const MatchResultsView = () => {
 
         // 試合結果取得（日付ベース）
         // キャッシュ無効化: 常に最新のデータを取得するため
-        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${selectedDate}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (!matchesResponse.ok) throw new Error('試合結果の取得に失敗しました');
-        const sessionMatches = await matchesResponse.json();
+        const matchesResponse = await apiClient.get(`/matches?date=${selectedDate}`);
+        const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
 
       } catch (err) {

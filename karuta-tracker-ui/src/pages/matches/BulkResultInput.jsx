@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI } from '../../api';
+import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
@@ -38,9 +39,8 @@ const BulkResultInput = () => {
         setError(null);
 
         // 練習セッション情報取得
-        const sessionResponse = await fetch(`http://localhost:8080/api/practice-sessions/${sessionId}`);
-        if (!sessionResponse.ok) throw new Error('練習セッション情報の取得に失敗しました');
-        const sessionData = await sessionResponse.json();
+        const sessionResponse = await apiClient.get(`/practice-sessions/${sessionId}`);
+        const sessionData = sessionResponse.data;
         setSession(sessionData);
 
         // 対戦ペアリング取得（日付ベース）
@@ -48,16 +48,8 @@ const BulkResultInput = () => {
         setPairings(pairingsResponse.data || []);
 
         // 既存の試合結果取得（日付ベース）
-        // キャッシュ無効化: 常に最新のデータを取得するため
-        const matchesResponse = await fetch(`http://localhost:8080/api/matches?date=${sessionData.sessionDate}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (!matchesResponse.ok) throw new Error('試合結果の取得に失敗しました');
-        const sessionMatches = await matchesResponse.json();
+        const matchesResponse = await apiClient.get(`/matches?date=${sessionData.sessionDate}`);
+        const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
 
         // 既存結果を初期値として設定
