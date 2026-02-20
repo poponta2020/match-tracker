@@ -53,7 +53,9 @@
       "Bash(./gradlew compileTestJava:*)",
       "Bash(docker compose:*)",
       "Bash(ss:*)",
-      "Bash(mysql:*)"
+      "Bash(mysql:*)",
+      "WebFetch(domain:aiven.io)",
+      "Bash(docker start:*)"
     ],
     "deny": [],
     "ask": []
