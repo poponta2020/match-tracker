@@ -374,10 +374,8 @@ public class PracticeSessionService {
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
 
-        // 全参加者を一括取得
-        List<PracticeParticipant> allParticipants = sessionIds.stream()
-                .flatMap(sessionId -> practiceParticipantRepository.findBySessionId(sessionId).stream())
-                .collect(Collectors.toList());
+        // 全参加者を一括取得（N+1解消: N回→1回）
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
 
         // セッションIDごとの参加者IDマップを作成
         Map<Long, List<Long>> sessionParticipantsMap = allParticipants.stream()
@@ -414,6 +412,17 @@ public class PracticeSessionService {
             }
         }
 
+        // 全セッション日付の実施済み試合数を一括取得（N+1解消: N回→1回）
+        List<LocalDate> allSessionDates = sessions.stream()
+                .map(PracticeSession::getSessionDate)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<LocalDate, Long> completedMatchesMap = matchRepository.countByMatchDateIn(allSessionDates).stream()
+                .collect(Collectors.toMap(
+                        row -> (LocalDate) row[0],
+                        row -> (Long) row[1]
+                ));
+
         // 各セッションに参加者情報と会場情報を付与
         final Map<Long, Venue> finalVenueMap = venueMap;
         final Map<Long, List<VenueMatchSchedule>> finalVenueScheduleMap = venueScheduleMap;
@@ -433,8 +442,8 @@ public class PracticeSessionService {
                     dto.setParticipants(playerDtos);
                     dto.setParticipantCount(playerDtos.size());
 
-                    // その日の実施済み試合数
-                    long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
+                    // その日の実施済み試合数（事前一括取得済みのマップから参照）
+                    long completedMatches = completedMatchesMap.getOrDefault(session.getSessionDate(), 0L);
                     dto.setCompletedMatches((int) completedMatches);
 
                     // 試合ごとの参加人数と参加者名を集計

@@ -21,6 +21,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findBySessionId(Long sessionId);
 
     /**
+     * 複数の練習セッションの全参加者を一括取得（N+1対策）
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId IN :sessionIds ORDER BY p.sessionId, p.matchNumber")
+    List<PracticeParticipant> findBySessionIdIn(@Param("sessionIds") List<Long> sessionIds);
+
+    /**
      * 特定の練習セッションに特定の選手が参加しているか確認
      */
     boolean existsBySessionIdAndPlayerId(Long sessionId, Long playerId);
