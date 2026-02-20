@@ -2,12 +2,12 @@ spring:
   application:
     name: karuta-tracker
 
-  # データソース設定（ローカル開発環境 + Docker MySQL）
+  # データソース設定（ローカル開発環境 + Docker PostgreSQL）
   datasource:
-    url: jdbc:mysql://localhost:3306/karuta_tracker?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Tokyo
+    url: jdbc:postgresql://localhost:5432/karuta_tracker
     username: karuta
     password: karuta123
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
 
     # HikariCP接続プール設定
     hikari:
@@ -18,7 +18,7 @@ spring:
 
   # JPA/Hibernate設定
   jpa:
-    database-platform: org.hibernate.dialect.MySQLDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
     show-sql: true
@@ -26,8 +26,6 @@ spring:
       hibernate:
         format_sql: true
         use_sql_comments: true
-        jdbc:
-          time_zone: Asia/Tokyo
 
   # 開発時のホットリロード
   devtools:

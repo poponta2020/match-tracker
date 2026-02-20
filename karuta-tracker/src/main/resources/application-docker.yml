@@ -4,10 +4,10 @@ spring:
 
   # データソース設定（Docker環境）
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://mysql:3306/karuta_tracker?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Tokyo}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/karuta_tracker}
     username: ${SPRING_DATASOURCE_USERNAME:karuta}
     password: ${SPRING_DATASOURCE_PASSWORD:karuta123}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
 
     # HikariCP接続プール設定
     hikari:
@@ -19,7 +19,7 @@ spring:
 
   # JPA/Hibernate設定
   jpa:
-    database-platform: org.hibernate.dialect.MySQLDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -27,8 +27,6 @@ spring:
       hibernate:
         format_sql: true
         use_sql_comments: true
-        jdbc:
-          time_zone: Asia/Tokyo
 
 # ログ設定
 logging:

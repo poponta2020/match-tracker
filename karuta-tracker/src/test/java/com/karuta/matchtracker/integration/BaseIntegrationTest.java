@@ -10,14 +10,14 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * 統合テストの基底クラス
  *
- * - Testcontainersを使用してMySQLコンテナを起動
+ * - Testcontainersを使用してPostgreSQLコンテナを起動
  * - Spring Boot全体をロード
  * - MockMvcを使用してHTTPリクエストをシミュレート
  * - 各テストでデータベースをクリーンアップ
@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public abstract class BaseIntegrationTest {
 
     @Container
-    protected static final MySQLContainer<?> mysqlContainer = new MySQLContainer<>("mysql:8.0")
+    protected static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
             .withDatabaseName("karuta_tracker_test")
             .withUsername("test")
             .withPassword("test")
@@ -43,33 +43,24 @@ public abstract class BaseIntegrationTest {
     protected JdbcTemplate jdbcTemplate;
 
     /**
-     * Testcontainersで起動したMySQLの接続情報をSpringに設定
+     * Testcontainersで起動したPostgreSQLの接続情報をSpringに設定
      */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysqlContainer::getJdbcUrl);
-        registry.add("spring.datasource.username", mysqlContainer::getUsername);
-        registry.add("spring.datasource.password", mysqlContainer::getPassword);
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
     }
 
     /**
      * 各テストの前にデータベースをクリーンアップ
+     * PostgreSQLではTRUNCATE ... CASCADEで外部キー制約を考慮しつつ削除
      */
     @BeforeEach
     void cleanDatabase() {
-        // 外部キー制約を一時的に無効化
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
-
-        // 全テーブルのデータを削除
-        jdbcTemplate.execute("TRUNCATE TABLE matches");
-        jdbcTemplate.execute("TRUNCATE TABLE player_profiles");
-        jdbcTemplate.execute("TRUNCATE TABLE practice_sessions");
-        jdbcTemplate.execute("TRUNCATE TABLE match_pairings");
-        jdbcTemplate.execute("TRUNCATE TABLE venue_match_schedules");
-        jdbcTemplate.execute("TRUNCATE TABLE venues");
-        jdbcTemplate.execute("TRUNCATE TABLE players");
-
-        // 外部キー制約を再有効化
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
+        jdbcTemplate.execute(
+            "TRUNCATE TABLE matches, player_profiles, practice_participants, practice_sessions, " +
+            "match_pairings, venue_match_schedules, venues, players RESTART IDENTITY CASCADE"
+        );
     }
 }

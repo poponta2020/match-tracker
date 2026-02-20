@@ -10,18 +10,17 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
       idle-timeout: 600000        # 10分（Renderスリープ15分より短く設定）
       connection-timeout: 30000   # 30秒
       max-lifetime: 1800000       # 30分
-      keepalive-time: 60000       # 60秒ごとにkeepalive送信（Aivenのfirewall対策）
-      connection-test-query: SELECT 1
+      keepalive-time: 60000       # 60秒ごとにkeepalive送信（接続維持）
 
   jpa:
-    database-platform: org.hibernate.dialect.MySQLDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
     show-sql: false

@@ -1,27 +1,20 @@
 version: '3.8'
 
 services:
-  # MySQL 8.0データベースのみ（開発用）
-  mysql:
-    image: mysql:8.0
-    container_name: karuta-tracker-mysql-dev
+  # PostgreSQL 16データベースのみ（開発用）
+  postgres:
+    image: postgres:16
+    container_name: karuta-tracker-postgres-dev
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: karuta_tracker
-      MYSQL_USER: karuta
-      MYSQL_PASSWORD: karuta123
-      TZ: Asia/Tokyo
+      POSTGRES_DB: karuta_tracker
+      POSTGRES_USER: karuta
+      POSTGRES_PASSWORD: karuta123
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_dev_data:/var/lib/mysql
-      - ./init-scripts:/docker-entrypoint-initdb.d
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=mysql_native_password
+      - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "pg_isready -U karuta -d karuta_tracker"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,7 +22,7 @@ services:
       - karuta-network
 
 volumes:
-  mysql_dev_data:
+  postgres_dev_data:
     driver: local
 
 networks:

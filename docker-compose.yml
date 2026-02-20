@@ -1,27 +1,20 @@
 version: '3.8'
 
 services:
-  # MySQL 8.0データベース
-  mysql:
-    image: mysql:8.0
-    container_name: karuta-tracker-mysql
+  # PostgreSQL 16データベース
+  postgres:
+    image: postgres:16
+    container_name: karuta-tracker-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: karuta_tracker
-      MYSQL_USER: karuta
-      MYSQL_PASSWORD: karuta123
-      TZ: Asia/Tokyo
+      POSTGRES_DB: karuta_tracker
+      POSTGRES_USER: karuta
+      POSTGRES_PASSWORD: karuta123
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./init-scripts:/docker-entrypoint-initdb.d
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=mysql_native_password
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "pg_isready -U karuta -d karuta_tracker"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,20 +29,20 @@ services:
     container_name: karuta-tracker-app
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/karuta_tracker?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Tokyo
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/karuta_tracker
       SPRING_DATASOURCE_USERNAME: karuta
       SPRING_DATASOURCE_PASSWORD: karuta123
     ports:
       - "8080:8080"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     networks:
       - karuta-network
     restart: unless-stopped
 
 volumes:
-  mysql_data:
+  postgres_data:
     driver: local
 
 networks:
