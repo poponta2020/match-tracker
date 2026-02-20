@@ -2,6 +2,10 @@ spring:
   application:
     name: karuta-tracker
 
+  # 起動時間を短縮するためレイジー初期化を有効化
+  main:
+    lazy-initialization: true
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -9,10 +13,12 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 5
-      minimum-idle: 2
-      idle-timeout: 300000
-      connection-timeout: 20000
-      max-lifetime: 1200000
+      minimum-idle: 1
+      idle-timeout: 600000        # 10分（Renderスリープ15分より短く設定）
+      connection-timeout: 30000   # 30秒
+      max-lifetime: 1800000       # 30分
+      keepalive-time: 60000       # 60秒ごとにkeepalive送信（Aivenのfirewall対策）
+      connection-test-query: SELECT 1
 
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect

@@ -32,6 +32,17 @@ const Home = () => {
   });
   const [todayMatch, setTodayMatch] = useState(null);
   const [todaySessionId, setTodaySessionId] = useState(null);
+  const [slowLoading, setSlowLoading] = useState(false);
+
+  // 3秒以上ローディングが続いたらコールドスタートメッセージを表示
+  useEffect(() => {
+    if (stats.loading) {
+      const timer = setTimeout(() => setSlowLoading(true), 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setSlowLoading(false);
+    }
+  }, [stats.loading]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -177,8 +188,14 @@ const Home = () => {
 
   if (stats.loading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
+      <div className="flex flex-col items-center justify-center min-h-96 gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        {slowLoading && (
+          <div className="text-center">
+            <p className="text-gray-600 font-medium">サーバーを起動中...</p>
+            <p className="text-sm text-gray-400 mt-1">初回アクセス時は少し時間がかかります（最大30秒）</p>
+          </div>
+        )}
       </div>
     );
   }
