@@ -37,7 +37,7 @@ public class MatchCreateRequest {
     private Long winnerId;
 
     @NotNull(message = "点差は必須です")
-    @Min(value = 0, message = "点差は0以上で入力してください")
+    @Min(value = -25, message = "点差は-25以上で入力してください")
     @Max(value = 25, message = "点差は25以下で入力してください")
     private Integer scoreDifference;
 

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
-import { User, Save, ArrowLeft } from 'lucide-react';
+import apiClient from '../../api/client';
+import { User, Save, ArrowLeft, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { isSuperAdmin } from '../../utils/auth';
 
 const PlayerEdit = () => {
   const { id } = useParams();
@@ -9,6 +11,8 @@ const PlayerEdit = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // 基本情報フォームデータ（PlayerUpdateRequestに対応）
   const [formData, setFormData] = useState({
     name: '',
     gender: '',
@@ -16,9 +20,21 @@ const PlayerEdit = () => {
     danRank: '',
     kyuRank: '',
     karutaClub: '',
-    role: 'USER',
     remarks: '',
   });
+
+  // ロールは別管理（別APIで更新）
+  const [role, setRole] = useState('PLAYER');
+  const [originalRole, setOriginalRole] = useState('PLAYER');
+
+  // パスワード変更用の状態（スーパー管理者のみ）
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -33,6 +49,7 @@ const PlayerEdit = () => {
       setLoading(true);
       const response = await playerAPI.getById(id);
       const player = response.data;
+
       setFormData({
         name: player.name || '',
         gender: player.gender || '',
@@ -40,9 +57,12 @@ const PlayerEdit = () => {
         danRank: player.danRank || '',
         kyuRank: player.kyuRank || '',
         karutaClub: player.karutaClub || '',
-        role: player.role || 'USER',
         remarks: player.remarks || '',
       });
+
+      // ロールは別管理
+      setRole(player.role || 'PLAYER');
+      setOriginalRole(player.role || 'PLAYER');
     } catch (err) {
       console.error('Failed to fetch player:', err);
       setError('選手情報の取得に失敗しました');
@@ -78,7 +98,7 @@ const PlayerEdit = () => {
         danRank = '参段';
         break;
       case 'A級':
-        danRank = '四段'; // A級はデフォルトで四段
+        danRank = '四段';
         break;
       default:
         danRank = '';
@@ -91,29 +111,79 @@ const PlayerEdit = () => {
     }));
   };
 
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    setPasswordError('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setPasswordError('');
 
     if (!formData.name.trim()) {
       setError('名前は必須です');
       return;
     }
 
+    // パスワード変更のバリデーション（スーパー管理者のみ）
+    if (isSuperAdmin() && id && (passwordData.newPassword || passwordData.confirmPassword)) {
+      if (passwordData.newPassword.length < 8) {
+        setPasswordError('パスワードは8文字以上で入力してください');
+        return;
+      }
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        setPasswordError('パスワードが一致しません');
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
+
       if (id) {
-        await playerAPI.update(id, formData);
+        // === 既存選手の更新 ===
+
+        // 1. 基本情報の更新データを準備（PlayerUpdateRequestに対応するフィールドのみ）
+        const updateData = {
+          name: formData.name,
+          gender: formData.gender || null,
+          dominantHand: formData.dominantHand || null,
+          danRank: formData.danRank || null,
+          kyuRank: formData.kyuRank || null,
+          karutaClub: formData.karutaClub || null,
+          remarks: formData.remarks || null,
+        };
+
+        // パスワード変更がある場合は追加
+        if (isSuperAdmin() && passwordData.newPassword) {
+          updateData.password = passwordData.newPassword;
+        }
+
+        // 2. 基本情報を更新
+        await playerAPI.update(id, updateData);
+
+        // 3. ロールが変更されている場合は別APIで更新（スーパー管理者のみ）
+        if (isSuperAdmin() && role !== originalRole) {
+          await apiClient.put(`/players/${id}/role?role=${role}`);
+        }
+
         alert('選手情報を更新しました');
         navigate(`/players/${id}`);
       } else {
-        const response = await playerAPI.create(formData);
+        // === 新規選手の登録 ===
+        const response = await playerAPI.register(formData);
         alert('選手を登録しました');
         navigate(`/players/${response.data.id}`);
       }
     } catch (err) {
       console.error('Failed to save player:', err);
-      setError(id ? '選手情報の更新に失敗しました' : '選手の登録に失敗しました');
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || '';
+      setError(id ? `選手情報の更新に失敗しました: ${errorMessage}` : `選手の登録に失敗しました: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -181,9 +251,9 @@ const PlayerEdit = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
                 <option value="">未設定</option>
-                <option value="MALE">男性</option>
-                <option value="FEMALE">女性</option>
-                <option value="OTHER">その他</option>
+                <option value="男性">男性</option>
+                <option value="女性">女性</option>
+                <option value="その他">その他</option>
               </select>
             </div>
 
@@ -198,8 +268,9 @@ const PlayerEdit = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
                 <option value="">未設定</option>
-                <option value="RIGHT">右利き</option>
-                <option value="LEFT">左利き</option>
+                <option value="右">右</option>
+                <option value="左">左</option>
+                <option value="両">両</option>
               </select>
             </div>
           </div>
@@ -264,20 +335,26 @@ const PlayerEdit = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              ロール
-            </label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="USER">一般ユーザー</option>
-              <option value="ADMIN">管理者</option>
-            </select>
-          </div>
+          {/* ロール選択（スーパー管理者のみ、編集時のみ） */}
+          {isSuperAdmin() && id && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ロール
+                <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                  スーパー管理者専用
+                </span>
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="PLAYER">一般ユーザー</option>
+                <option value="ADMIN">管理者</option>
+                <option value="SUPER_ADMIN">スーパー管理者</option>
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -292,6 +369,86 @@ const PlayerEdit = () => {
               placeholder="特記事項など..."
             />
           </div>
+
+          {/* パスワード変更セクション（スーパー管理者のみ、編集時のみ） */}
+          {isSuperAdmin() && id && (
+            <div className="border-t border-gray-200 pt-6 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Lock className="w-5 h-5 text-red-600" />
+                <h2 className="text-lg font-semibold text-gray-900">パスワード変更</h2>
+                <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                  スーパー管理者専用
+                </span>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-yellow-800 font-medium">注意</p>
+                    <p className="text-sm text-yellow-700">
+                      この機能は選手のパスワードを強制的にリセットします。
+                      パスワードを変更しない場合は空欄のままにしてください。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {passwordError && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-red-700 text-sm mb-4">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    新しいパスワード
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      name="newPassword"
+                      value={passwordData.newPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="8文字以上"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    新しいパスワード（確認）
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={passwordData.confirmPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="もう一度入力"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4 pt-4">
             <button

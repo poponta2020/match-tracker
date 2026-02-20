@@ -27,8 +27,7 @@ public class PracticeSessionUpdateRequest {
     @Max(value = 100, message = "予定試合数は100以下で入力してください")
     private Integer totalMatches;
 
-    @Size(max = 200, message = "練習場所は200文字以内で入力してください")
-    private String location;
+    private Long venueId;
 
     @Size(max = 1000, message = "メモは1000文字以内で入力してください")
     private String notes;

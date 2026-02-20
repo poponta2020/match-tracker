@@ -132,6 +132,19 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
                                                         @Param("matchNumber") Integer matchNumber);
 
     /**
+     * 特定の選手の同日同試合番号の試合を取得
+     *
+     * @param playerId 選手ID
+     * @param matchDate 対戦日
+     * @param matchNumber 試合番号
+     * @return 試合エンティティ（存在しない場合はnull）
+     */
+    @Query("SELECT m FROM Match m WHERE (m.player1Id = :playerId OR m.player2Id = :playerId) AND m.matchDate = :matchDate AND m.matchNumber = :matchNumber")
+    Match findByPlayerIdAndMatchDateAndMatchNumber(@Param("playerId") Long playerId,
+                                                    @Param("matchDate") LocalDate matchDate,
+                                                    @Param("matchNumber") Integer matchNumber);
+
+    /**
      * 過去の対戦履歴を取得（自動マッチング用）
      *
      * @param participantIds 参加者IDリスト

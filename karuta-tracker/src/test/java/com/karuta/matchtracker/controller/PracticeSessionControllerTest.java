@@ -209,7 +209,7 @@ class PracticeSessionControllerTest {
     @DisplayName("POST /api/practice-sessions - 練習日を登録できる")
     void testCreateSession() throws Exception {
         // Given
-        when(practiceSessionService.createSession(any(PracticeSessionCreateRequest.class)))
+        when(practiceSessionService.createSession(any(PracticeSessionCreateRequest.class), anyLong()))
                 .thenReturn(testSessionDto);
 
         // When & Then
@@ -221,14 +221,14 @@ class PracticeSessionControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.totalMatches").value(10));
 
-        verify(practiceSessionService).createSession(any(PracticeSessionCreateRequest.class));
+        verify(practiceSessionService).createSession(any(PracticeSessionCreateRequest.class), anyLong());
     }
 
     @Test
     @DisplayName("POST /api/practice-sessions - 重複した日付は409を返す")
     void testCreateSessionDuplicateDate() throws Exception {
         // Given
-        when(practiceSessionService.createSession(any(PracticeSessionCreateRequest.class)))
+        when(practiceSessionService.createSession(any(PracticeSessionCreateRequest.class), anyLong()))
                 .thenThrow(new DuplicateResourceException("PracticeSession", "sessionDate", today));
 
         // When & Then
@@ -239,7 +239,7 @@ class PracticeSessionControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(409));
 
-        verify(practiceSessionService).createSession(any(PracticeSessionCreateRequest.class));
+        verify(practiceSessionService).createSession(any(PracticeSessionCreateRequest.class), anyLong());
     }
 
     @Test

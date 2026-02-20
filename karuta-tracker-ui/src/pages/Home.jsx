@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { matchAPI, practiceAPI, pairingAPI } from '../api';
+import apiClient from '../api/client';
 import {
   Trophy,
   BookOpen,
@@ -9,16 +10,28 @@ import {
   Calendar,
   Plus,
   ArrowRight,
+  Clock,
+  MapPin,
+  ClipboardList,
 } from 'lucide-react';
+import { isAdmin, isSuperAdmin } from '../utils/auth';
 
 const Home = () => {
   const { currentPlayer } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [stats, setStats] = useState({
     recentMatches: [],
     recentPractices: [],
     todayPairings: [],
+    totalMatches: 0,
+    totalWins: 0,
+    winRate: 0,
+    upcomingPracticesCount: 0,
     loading: true,
   });
+  const [todayMatch, setTodayMatch] = useState(null);
+  const [todaySessionId, setTodaySessionId] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -28,11 +41,12 @@ const Home = () => {
         const todayStr = today.toISOString().split('T')[0];
         today.setHours(0, 0, 0, 0);
 
-        const [matchesRes, practicesRes, todayPairingsRes] = await Promise.all([
+        const [matchesRes, statisticsRes, practicesRes, todayPairingsRes] = await Promise.all([
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
+          matchAPI.getStatistics(currentPlayer.id).catch(() => ({ data: { totalMatches: 0, wins: 0, winRate: 0 } })),
           // 練習記録APIは全件取得のみサポート
-          fetch('http://localhost:8080/api/practice-sessions')
-            .then(res => res.json())
+          apiClient.get('/practice-sessions')
+            .then(res => res.data)
             .catch(() => []),
           // 今日の対戦組み合わせを取得
           pairingAPI.getByDate(todayStr).catch(() => ({ data: [] })),
@@ -50,18 +64,131 @@ const Home = () => {
           recentMatches: matchesRes.data.slice(0, 5),
           recentPractices: upcomingPractices,
           todayPairings: todayPairingsRes.data || [],
+          totalMatches: statisticsRes.data.totalMatches || 0,
+          totalWins: statisticsRes.data.wins || 0,
+          winRate: statisticsRes.data.winRate || 0,
+          upcomingPracticesCount: upcomingPractices.length,
           loading: false,
         });
+
+        // 今日の練習セッションIDを取得
+        if (Array.isArray(practicesRes)) {
+          const todaySession = practicesRes.find(
+            p => p.sessionDate === todayStr
+          );
+          if (todaySession) {
+            setTodaySessionId(todaySession.id);
+          }
+        }
+
+        // 今日の対戦情報を取得
+        await fetchTodayMatch(todayStr);
       } catch (error) {
         console.error('データ取得エラー:', error);
         setStats((prev) => ({ ...prev, loading: false }));
       }
     };
 
+    const fetchTodayMatch = async (todayStr) => {
+      try {
+        // 1. 今日の練習セッションを取得
+        const sessionRes = await apiClient.get(`/practice-sessions/date?date=${todayStr}`)
+          .then(res => res.data)
+          .catch(() => null);
+
+        if (!sessionRes) {
+          setTodayMatch(null);
+          return;
+        }
+
+        // 2. 自分が参加している試合番号を取得
+        const participantsRes = await practiceAPI.getParticipants(sessionRes.id);
+        const participants = participantsRes.data || [];
+
+        // 試合別参加状況を取得
+        const year = new Date(todayStr).getFullYear();
+        const month = new Date(todayStr).getMonth() + 1;
+        const participationsRes = await practiceAPI.getPlayerParticipations(currentPlayer.id, year, month);
+        const myParticipations = participationsRes.data[sessionRes.id] || [];
+
+        if (myParticipations.length === 0) {
+          setTodayMatch(null);
+          return;
+        }
+
+        // 3. 今日の対戦組み合わせを取得
+        const pairingsRes = await pairingAPI.getByDate(todayStr);
+        const allPairings = pairingsRes.data || [];
+
+        // 4. 今日の試合結果を取得（キャッシュ無効化）
+        const matchesRes = await apiClient.get(`/matches?date=${todayStr}`)
+          .then(res => res.data)
+          .catch(() => []);
+
+        // 5. 自分が参加する試合で、未入力の最小試合番号を見つける
+        let defaultMatchNumber = null;
+        for (const matchNum of myParticipations.sort((a, b) => a - b)) {
+          // この試合番号の自分の試合記録を確認
+          const hasRecord = matchesRes.some(m =>
+            m.matchNumber === matchNum &&
+            (m.player1Id === currentPlayer.id || m.player2Id === currentPlayer.id)
+          );
+
+          if (!hasRecord) {
+            defaultMatchNumber = matchNum;
+            break;
+          }
+        }
+
+        // 全試合入力済みの場合は最後の試合を表示
+        if (!defaultMatchNumber && myParticipations.length > 0) {
+          defaultMatchNumber = Math.max(...myParticipations);
+        }
+
+        if (!defaultMatchNumber) {
+          setTodayMatch(null);
+          return;
+        }
+
+        // 6. その試合の対戦カードを取得
+        const myPairing = allPairings.find(p =>
+          p.matchNumber === defaultMatchNumber &&
+          (p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id)
+        );
+
+        // 7. 今日の対戦情報を設定
+        setTodayMatch({
+          session: sessionRes,
+          defaultMatchNumber,
+          myParticipations,
+          allPairings: allPairings.filter(p => myParticipations.includes(p.matchNumber)),
+          myPairing,
+          matchRecords: matchesRes,
+        });
+
+      } catch (error) {
+        console.error('今日の対戦情報取得エラー:', error);
+        setTodayMatch(null);
+      }
+    };
+
     if (currentPlayer?.id) {
       fetchData();
     }
-  }, [currentPlayer]);
+
+    // 画面フォーカス時にデータを再取得（試合結果入力後の更新対応）
+    const handleFocus = () => {
+      if (currentPlayer?.id) {
+        fetchData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentPlayer, location.key]);
 
   const StatCard = ({ icon: Icon, title, value, color, link }) => (
     <Link
@@ -92,13 +219,180 @@ const Home = () => {
     <div className="space-y-8">
       {/* ウェルカムメッセージ */}
       <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold mb-2">
+        <p className="text-xl font-semibold mb-2">
           ようこそ、{currentPlayer?.name}さん
-        </h1>
+        </p>
         <p className="text-primary-100">
           今日も練習頑張りましょう！
         </p>
       </div>
+
+      {/* 今日の対戦カード */}
+      {todayMatch && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2 mb-4">
+            <Trophy className="w-6 h-6 text-primary-600" />
+            今日の対戦
+          </h2>
+
+          <div className="space-y-4">
+            {/* 練習日情報 */}
+            <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+              <div className="flex items-center gap-1">
+                <Calendar className="w-4 h-4" />
+                {new Date(todayMatch.session.sessionDate).toLocaleDateString('ja-JP', {
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short'
+                })}
+              </div>
+              {todayMatch.session.startTime && (
+                <div className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {todayMatch.session.startTime}～{todayMatch.session.endTime || ''}
+                </div>
+              )}
+              {todayMatch.session.venueName && (
+                <div className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4" />
+                  {todayMatch.session.venueName}
+                </div>
+              )}
+            </div>
+
+            {/* 対戦カード */}
+            <div className="border-2 border-primary-100 rounded-lg p-6 bg-primary-50">
+              <div className="text-center mb-4">
+                <span className="inline-block bg-primary-600 text-white px-4 py-1 rounded-full font-bold text-lg">
+                  第{todayMatch.defaultMatchNumber}試合
+                </span>
+              </div>
+
+              {todayMatch.myPairing ? (
+                <>
+                  {/* 対戦相手の名前のみ表示 */}
+                  <div className="text-center my-6">
+                    <div className="text-2xl font-bold text-gray-900">
+                      {todayMatch.myPairing.player1Id === currentPlayer.id
+                        ? todayMatch.myPairing.player2Name
+                        : todayMatch.myPairing.player1Name}
+                    </div>
+                  </div>
+
+                  {/* 試合結果の確認 */}
+                  {(() => {
+                    const myMatchRecord = todayMatch.matchRecords.find(m =>
+                      m.matchNumber === todayMatch.defaultMatchNumber &&
+                      (m.player1Id === currentPlayer.id || m.player2Id === currentPlayer.id)
+                    );
+
+                    if (myMatchRecord) {
+                      // 入力済み: 結果を表示（名前なし、記号と点差のみ）
+                      // winnerIdで勝敗を判定（詳細試合・簡易試合の両方に対応）
+                      const isWin = myMatchRecord.winnerId === currentPlayer.id;
+                      return (
+                        <div className="mt-4 p-4 bg-white rounded-lg border-2 border-gray-200">
+                          <div className="text-center text-lg font-bold text-gray-900">
+                            {isWin ? '〇' : '×'}{myMatchRecord.scoreDifference}
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // 未入力: 入力ボタンを表示
+                      return (
+                        <button
+                          onClick={() => {
+                            // 詳細試合作成用に対戦相手のIDと名前を取得
+                            const opponentId = todayMatch.myPairing.player1Id === currentPlayer.id
+                              ? todayMatch.myPairing.player2Id
+                              : todayMatch.myPairing.player1Id;
+                            const opponentName = todayMatch.myPairing.player1Id === currentPlayer.id
+                              ? todayMatch.myPairing.player2Name
+                              : todayMatch.myPairing.player1Name;
+                            navigate('/matches/new', {
+                              state: {
+                                matchDate: todayMatch.session.sessionDate,
+                                matchNumber: todayMatch.defaultMatchNumber,
+                                opponentId: opponentId,        // 詳細試合作成用（player ID）
+                                opponentName: opponentName     // 画面表示用
+                              }
+                            });
+                          }}
+                          className="w-full mt-4 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center gap-2"
+                        >
+                          ✏️ タップして結果を入力
+                        </button>
+                      );
+                    }
+                  })()}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-lg text-gray-600 mb-2">対戦相手: 未定</div>
+                  <div className="text-sm text-gray-500">組み合わせがまだ作成されていません</div>
+                </div>
+              )}
+            </div>
+
+            {/* 試合選択タブ */}
+            {todayMatch.myParticipations.length > 1 && (
+              <div className="grid gap-2" style={{
+                gridTemplateColumns: `repeat(${Math.min(todayMatch.myParticipations.length, 7)}, minmax(0, 1fr))`
+              }}>
+                {todayMatch.myParticipations.sort((a, b) => a - b).map((matchNum) => {
+                  const hasRecord = todayMatch.matchRecords.some(m =>
+                    m.matchNumber === matchNum &&
+                    (m.playerId === currentPlayer.id || m.opponentName === currentPlayer.name)
+                  );
+                  const isSelected = matchNum === todayMatch.defaultMatchNumber;
+
+                  return (
+                    <button
+                      key={matchNum}
+                      onClick={() => {
+                        // 試合番号を切り替える
+                        const myPairing = todayMatch.allPairings.find(p =>
+                          p.matchNumber === matchNum &&
+                          (p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id)
+                        );
+
+                        setTodayMatch({
+                          ...todayMatch,
+                          defaultMatchNumber: matchNum,
+                          myPairing
+                        });
+                      }}
+                      className={`py-3 rounded-lg border-2 font-medium transition-all ${
+                        isSelected
+                          ? 'border-primary-600 bg-primary-600 text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-primary-300'
+                      }`}
+                    >
+                      <div className="text-lg">{matchNum}</div>
+                      <div className="text-xs mt-1">
+                        {hasRecord ? '✓' : '□'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* スーパー管理者用：試合結果一括入力ボタン */}
+          {isSuperAdmin() && todaySessionId && (
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => navigate(`/matches/bulk-input/${todaySessionId}`)}
+                className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
+              >
+                <ClipboardList className="w-5 h-5" />
+                📝 試合結果一括入力
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* クイックアクション */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -135,7 +429,7 @@ const Home = () => {
         </Link>
 
         <Link
-          to="/pairings/generate"
+          to={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
           className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
@@ -156,30 +450,21 @@ const Home = () => {
         <StatCard
           icon={Trophy}
           title="試合数"
-          value={stats.recentMatches.length}
+          value={stats.totalMatches}
           color="bg-primary-500"
           link="/matches"
         />
         <StatCard
           icon={BookOpen}
-          title="練習回数"
-          value={stats.recentPractices.length}
+          title="今後の練習予定"
+          value={stats.upcomingPracticesCount}
           color="bg-green-500"
           link="/practice"
         />
         <StatCard
           icon={TrendingUp}
           title="勝率"
-          value={
-            stats.recentMatches.length > 0
-              ? `${Math.round(
-                  (stats.recentMatches.filter((m) => m.result === '勝ち')
-                    .length /
-                    stats.recentMatches.length) *
-                    100
-                )}%`
-              : '0%'
-          }
+          value={`${Math.round(stats.winRate)}%`}
           color="bg-blue-500"
           link="/statistics"
         />
@@ -188,12 +473,26 @@ const Home = () => {
           title="今日の対戦"
           value={stats.todayPairings.length}
           color="bg-purple-500"
-          link="/pairings/generate"
+          link={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
         />
       </div>
 
-      {/* 今日の対戦 */}
-      {stats.todayPairings.length > 0 && (
+      {/*
+        今日の対戦（全体リスト表示版）
+
+        【コメントアウトの理由】
+        - 上部の「今日の対戦」カードで個人用の試合情報を表示しているため、
+          下部の全体リスト表示は冗長と判断
+        - ただし、将来的に全選手の対戦一覧を表示する機能が必要になる可能性があるため、
+          コードは削除せず保持
+        - 一括入力ボタンは上部の「今日の対戦」カード内に移動済み（スーパー管理者のみ）
+
+        【保持している機能】
+        - stats.todayPairings: 今日の全対戦組み合わせデータ（fetchData関数内で取得中）
+        - 全選手の対戦カード表示
+        - 試合詳細へのリンク
+      */}
+      {/* {stats.todayPairings.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -201,7 +500,7 @@ const Home = () => {
               今日の対戦
             </h2>
             <Link
-              to="/pairings/generate"
+              to={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
               className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
             >
               詳細を見る
@@ -235,8 +534,21 @@ const Home = () => {
               </div>
             ))}
           </div>
+
+          {/* 管理者用：試合結果一括入力ボタン（上部カードに移動済み） *\/}
+          {/* {(isAdmin() || isSuperAdmin()) && todaySessionId && (
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => navigate(`/matches/bulk-input/${todaySessionId}`)}
+                className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
+              >
+                <ClipboardList className="w-5 h-5" />
+                📝 試合結果一括入力
+              </button>
+            </div>
+          )} *\/}
         </div>
-      )}
+      )} */}
 
       {/* 最近の活動 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -320,7 +632,7 @@ const Home = () => {
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-medium text-gray-900">
-                        {practice.location || '練習'}
+                        {practice.venueName || '練習'}
                       </p>
                       <p className="text-sm text-gray-600">
                         {new Date(practice.sessionDate).toLocaleDateString(
