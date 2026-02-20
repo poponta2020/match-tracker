@@ -6,10 +6,14 @@ import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.entity.Venue;
+import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +38,8 @@ public class PracticeSessionService {
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerRepository playerRepository;
     private final MatchRepository matchRepository;
+    private final VenueRepository venueRepository;
+    private final VenueMatchScheduleRepository venueMatchScheduleRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -133,7 +139,7 @@ public class PracticeSessionService {
         PracticeSession session = PracticeSession.builder()
                 .sessionDate(request.getSessionDate())
                 .totalMatches(request.getTotalMatches())
-                .location(request.getLocation())
+                .venueId(request.getVenueId())
                 .notes(request.getNotes())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
@@ -219,7 +225,7 @@ public class PracticeSessionService {
         // セッション情報を更新
         session.setSessionDate(request.getSessionDate());
         session.setTotalMatches(request.getTotalMatches());
-        session.setLocation(request.getLocation());
+        session.setVenueId(request.getVenueId());
         session.setNotes(request.getNotes());
         session.setStartTime(request.getStartTime());
         session.setEndTime(request.getEndTime());
@@ -230,6 +236,7 @@ public class PracticeSessionService {
 
         // 既存の参加者を削除して新しい参加者を登録
         practiceParticipantRepository.deleteBySessionId(id);
+        practiceParticipantRepository.flush(); // 削除を即座に反映
 
         // 管理者が登録した参加者は全試合に参加するものとして登録
         if (!participantIds.isEmpty()) {
@@ -294,6 +301,19 @@ public class PracticeSessionService {
      */
     private PracticeSessionDto enrichSessionWithParticipants(PracticeSession session) {
         PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
+
+        // 会場情報を取得
+        if (session.getVenueId() != null) {
+            venueRepository.findById(session.getVenueId()).ifPresent(venue -> {
+                dto.setVenueName(venue.getName());
+                List<VenueMatchSchedule> schedules = venueMatchScheduleRepository
+                        .findByVenueIdOrderByMatchNumberAsc(venue.getId());
+                List<VenueMatchScheduleDto> scheduleDtos = schedules.stream()
+                        .map(VenueMatchScheduleDto::fromEntity)
+                        .collect(Collectors.toList());
+                dto.setVenueSchedules(scheduleDtos);
+            });
+        }
 
         // 参加者リストを取得
         List<Long> playerIds = practiceParticipantRepository.findPlayerIdsBySessionId(session.getId());
@@ -375,7 +395,29 @@ public class PracticeSessionService {
         Map<Long, Player> playerMap = playerRepository.findAllById(allPlayerIds).stream()
                 .collect(Collectors.toMap(Player::getId, player -> player));
 
-        // 各セッションに参加者情報を付与
+        // 全会場IDを収集して一括取得
+        List<Long> allVenueIds = sessions.stream()
+                .map(PracticeSession::getVenueId)
+                .filter(venueId -> venueId != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, Venue> venueMap = new java.util.HashMap<>();
+        Map<Long, List<VenueMatchSchedule>> venueScheduleMap = new java.util.HashMap<>();
+
+        if (!allVenueIds.isEmpty()) {
+            venueMap = venueRepository.findAllById(allVenueIds).stream()
+                    .collect(Collectors.toMap(Venue::getId, venue -> venue));
+
+            for (Long venueId : allVenueIds) {
+                venueScheduleMap.put(venueId, venueMatchScheduleRepository.findByVenueIdOrderByMatchNumberAsc(venueId));
+            }
+        }
+
+        // 各セッションに参加者情報と会場情報を付与
+        final Map<Long, Venue> finalVenueMap = venueMap;
+        final Map<Long, List<VenueMatchSchedule>> finalVenueScheduleMap = venueScheduleMap;
+
         return sessions.stream()
                 .map(session -> {
                     PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
@@ -422,6 +464,21 @@ public class PracticeSessionService {
 
                     dto.setMatchParticipantCounts(matchCounts);
                     dto.setMatchParticipants(matchParticipants);
+
+                    // 会場情報を取得
+                    if (session.getVenueId() != null) {
+                        Venue venue = finalVenueMap.get(session.getVenueId());
+                        if (venue != null) {
+                            dto.setVenueName(venue.getName());
+                            List<VenueMatchSchedule> schedules = finalVenueScheduleMap.get(venue.getId());
+                            if (schedules != null) {
+                                List<VenueMatchScheduleDto> scheduleDtos = schedules.stream()
+                                        .map(VenueMatchScheduleDto::fromEntity)
+                                        .collect(Collectors.toList());
+                                dto.setVenueSchedules(scheduleDtos);
+                            }
+                        }
+                    }
 
                     return dto;
                 })

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: karuta-tracker-api
+    runtime: docker
+    rootDir: karuta-tracker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: render
+      - key: DB_URL
+        sync: false   # Renderの管理画面で設定
+      - key: DB_USERNAME
+        sync: false   # Renderの管理画面で設定
+      - key: DB_PASSWORD
+        sync: false   # Renderの管理画面で設定
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # VercelのURLを設定（例: https://your-app.vercel.app）
+    healthCheckPath: /actuator/health

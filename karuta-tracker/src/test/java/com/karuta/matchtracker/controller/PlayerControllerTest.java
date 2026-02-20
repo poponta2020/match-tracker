@@ -301,4 +301,109 @@ class PlayerControllerTest {
 
         verify(playerService).updateRole(1L, Player.Role.ADMIN);
     }
+
+    @Test
+    @DisplayName("POST /api/players/login - 正しい認証情報でログインできる")
+    void testLoginSuccess() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "password123");
+
+        com.karuta.matchtracker.dto.LoginResponse response =
+                com.karuta.matchtracker.dto.LoginResponse.builder()
+                        .id(1L)
+                        .name("山田太郎")
+                        .gender(Player.Gender.その他)
+                        .dominantHand(Player.DominantHand.右)
+                        .role(Player.Role.PLAYER)
+                        .kyuRank(Player.KyuRank.A級)
+                        .build();
+
+        when(playerService.login(any(com.karuta.matchtracker.dto.LoginRequest.class)))
+                .thenReturn(response);
+
+        // When & Then
+        mockMvc.perform(post("/api/players/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("山田太郎"))
+                .andExpect(jsonPath("$.role").value("PLAYER"))
+                .andExpect(jsonPath("$.kyuRank").value("A級"));
+
+        verify(playerService).login(any(com.karuta.matchtracker.dto.LoginRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/players/login - 存在しない選手名でログインすると404エラー")
+    void testLoginNonexistentUser() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("存在しない選手", "password");
+
+        when(playerService.login(any(com.karuta.matchtracker.dto.LoginRequest.class)))
+                .thenThrow(new com.karuta.matchtracker.exception.ResourceNotFoundException(
+                        "選手名またはパスワードが正しくありません"));
+
+        // When & Then
+        mockMvc.perform(post("/api/players/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound());
+
+        verify(playerService).login(any(com.karuta.matchtracker.dto.LoginRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/players/login - 誤ったパスワードでログインすると404エラー")
+    void testLoginWrongPassword() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "wrongPassword");
+
+        when(playerService.login(any(com.karuta.matchtracker.dto.LoginRequest.class)))
+                .thenThrow(new com.karuta.matchtracker.exception.ResourceNotFoundException(
+                        "選手名またはパスワードが正しくありません"));
+
+        // When & Then
+        mockMvc.perform(post("/api/players/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound());
+
+        verify(playerService).login(any(com.karuta.matchtracker.dto.LoginRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/players/login - 空の選手名でログインするとバリデーションエラー")
+    void testLoginEmptyName() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("", "password");
+
+        // When & Then
+        mockMvc.perform(post("/api/players/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verify(playerService, never()).login(any());
+    }
+
+    @Test
+    @DisplayName("POST /api/players/login - 空のパスワードでログインするとバリデーションエラー")
+    void testLoginEmptyPassword() throws Exception {
+        // Given
+        com.karuta.matchtracker.dto.LoginRequest request =
+                new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "");
+
+        // When & Then
+        mockMvc.perform(post("/api/players/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verify(playerService, never()).login(any());
+    }
 }

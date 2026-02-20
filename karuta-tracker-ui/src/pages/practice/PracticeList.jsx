@@ -198,6 +198,15 @@ const PracticeList = () => {
     });
   };
 
+  // 過去の日付かどうか判定
+  const isPastDate = (dateString) => {
+    const sessionDate = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    sessionDate.setHours(0, 0, 0, 0);
+    return sessionDate < today;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -217,8 +226,7 @@ const PracticeList = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">練習記録</h1>
+      <div className="flex justify-end items-center mb-6">
         <div className="flex gap-3">
           {isSuperAdmin() && (
             <button
@@ -319,9 +327,9 @@ const PracticeList = () => {
                               <span className="text-yellow-500 text-sm">◐</span>
                             )}
                           </div>
-                          {session && (
+                          {session && session.venueName && (
                             <div className="mt-1 text-xs text-gray-700">
-                              🏛{abbreviateLocation(session.location)}
+                              🏛{abbreviateLocation(session.venueName)}
                             </div>
                           )}
                         </div>
@@ -357,7 +365,7 @@ const PracticeList = () => {
             <div className="space-y-4">
               <div>
                 <div className="text-sm font-medium text-gray-700">📍 場所:</div>
-                <div className="text-base text-gray-900">{selectedSession.location || '-'}</div>
+                <div className="text-base text-gray-900">{selectedSession.venueName || '-'}</div>
               </div>
 
               <div>
@@ -373,6 +381,14 @@ const PracticeList = () => {
                         const myMatchNumbers = myParticipations[selectedSession.id] || [];
                         const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
 
+                        // 試合時間を取得
+                        const schedule = selectedSession.venueSchedules?.find(
+                          s => s.matchNumber === parseInt(matchNum)
+                        );
+                        const timeRange = schedule
+                          ? `${schedule.startTime?.substring(0, 5)}-${schedule.endTime?.substring(0, 5)}`
+                          : '';
+
                         return (
                           <div key={matchNum} className="border border-gray-200 rounded overflow-hidden">
                             <button
@@ -380,7 +396,7 @@ const PracticeList = () => {
                               className={`w-full px-3 py-2 ${isMyMatch ? 'bg-green-50 hover:bg-green-100' : 'bg-gray-50 hover:bg-gray-100'} transition-colors text-left flex items-center justify-between`}
                             >
                               <span className="text-sm font-medium text-gray-900">
-                                {isExpanded ? '▼' : '▶'} {matchNum}試合目 ({count}名)
+                                {isExpanded ? '▼' : '▶'} {matchNum}試合目{timeRange ? `: ${timeRange}` : ''} ({count}名)
                               </span>
                             </button>
                             {isExpanded && (
@@ -416,12 +432,21 @@ const PracticeList = () => {
             </div>
 
             <div className="flex justify-between items-center gap-3 mt-6">
-              <button
-                onClick={goToParticipation}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-              >
-                📝 参加登録
-              </button>
+              {isPastDate(selectedSession.sessionDate) ? (
+                <button
+                  onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
+                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                >
+                  📊 試合結果を見る
+                </button>
+              ) : (
+                <button
+                  onClick={goToParticipation}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                >
+                  📝 参加登録
+                </button>
+              )}
               <div className="flex gap-3">
                 {isSuperAdmin() && (
                   <>

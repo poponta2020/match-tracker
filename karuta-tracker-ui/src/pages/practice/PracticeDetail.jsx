@@ -48,6 +48,11 @@ const PracticeDetail = () => {
     });
   };
 
+  const formatTime = (time) => {
+    if (!time) return '';
+    return time.substring(0, 5); // "HH:MM:SS" -> "HH:MM"
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -74,8 +79,7 @@ const PracticeDetail = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">練習記録詳細</h1>
+      <div className="flex justify-end items-center mb-6">
         <div className="space-x-4">
           <button
             onClick={() => navigate(`/practice/${id}/edit`)}
@@ -102,8 +106,8 @@ const PracticeDetail = () => {
               <dd className="mt-1 text-lg text-gray-900">{formatDate(session.sessionDate)}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">練習場所</dt>
-              <dd className="mt-1 text-lg text-gray-900">{session.location || '-'}</dd>
+              <dt className="text-sm font-medium text-gray-500">会場</dt>
+              <dd className="mt-1 text-lg text-gray-900">{session.venueName || '-'}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-500">参加者数</dt>
@@ -120,6 +124,37 @@ const PracticeDetail = () => {
             </div>
           </dl>
         </div>
+
+        {/* 試合時間割 */}
+        {session.venueSchedules && session.venueSchedules.length > 0 && (
+          <div className="border-b border-gray-200 pb-4">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">試合時間割</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {session.venueSchedules.map((schedule) => {
+                const participantCount = session.matchParticipantCounts?.[schedule.matchNumber] || 0;
+                const participants = session.matchParticipants?.[schedule.matchNumber] || [];
+                return (
+                  <div key={schedule.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-medium text-gray-900">第{schedule.matchNumber}試合</div>
+                      <div className="text-sm text-gray-600">
+                        {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      参加者: {participantCount}名
+                    </div>
+                    {participants.length > 0 && (
+                      <div className="mt-1 text-xs text-gray-500">
+                        {participants.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 参加者リスト */}
         <div className="border-b border-gray-200 pb-4">

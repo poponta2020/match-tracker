@@ -44,6 +44,11 @@ public class ErrorResponse {
     private String path;
 
     /**
+     * 既存の試合ID（重複エラー時に使用）
+     */
+    private Long existingMatchId;
+
+    /**
      * 単一メッセージ用のコンストラクタ
      */
     public ErrorResponse(String message, int status, String path) {

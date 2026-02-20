@@ -1,0 +1,198 @@
+.venue-list-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.venue-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.venue-list-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.btn-primary {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #45a049;
+}
+
+.error-message {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.no-venues {
+  text-align: center;
+  padding: 60px 20px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.no-venues p {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.venues-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.venue-card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.venue-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.venue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.venue-card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.venue-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-edit {
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+  background-color: #1976D2;
+}
+
+.btn-delete {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+  background-color: #d32f2f;
+}
+
+.venue-card-body {
+  padding: 16px;
+}
+
+.venue-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #666;
+  margin-right: 8px;
+}
+
+.info-value {
+  font-weight: 600;
+  color: #333;
+  font-size: 16px;
+}
+
+.venue-schedules h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.schedule-table thead {
+  background-color: #f5f5f5;
+}
+
+.schedule-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 2px solid #ddd;
+}
+
+.schedule-table td {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  color: #333;
+}
+
+.schedule-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.schedule-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+@media (max-width: 768px) {
+  .venues-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .venue-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}

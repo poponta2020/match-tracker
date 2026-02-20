@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
-import { AlertCircle, Users, Shuffle, Save, Trash2, Calendar, Check, Plus, UserPlus } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus } from 'lucide-react';
 
 const PairingGenerator = () => {
+  const navigate = useNavigate();
   // デフォルトを今日に設定
   const today = new Date().toISOString().split('T')[0];
   const [sessionDate, setSessionDate] = useState(today);
@@ -18,6 +20,7 @@ const PairingGenerator = () => {
   const [allPlayers, setAllPlayers] = useState([]);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
+  const [currentSession, setCurrentSession] = useState(null);
 
   useEffect(() => {
     const fetchParticipants = async () => {
@@ -26,9 +29,11 @@ const PairingGenerator = () => {
       try {
         const response = await practiceAPI.getByDate(sessionDate);
         if (response.data) {
+          setCurrentSession(response.data);
           const participantsRes = await practiceAPI.getParticipants(response.data.id);
           setParticipants(participantsRes.data);
         } else {
+          setCurrentSession(null);
           setParticipants([]);
         }
 
@@ -43,6 +48,7 @@ const PairingGenerator = () => {
         console.error('Failed to fetch participants:', err);
         // 404エラー(練習会が存在しない)の場合は空配列を設定
         if (err.response && err.response.status === 404) {
+          setCurrentSession(null);
           setParticipants([]);
           setError('');
         } else {
@@ -114,6 +120,23 @@ const PairingGenerator = () => {
 
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
       setExistingPairings(pairingsRes.data);
+
+      // 次の試合番号に自動遷移
+      const nextMatchNumber = matchNumber + 1;
+      const maxMatches = currentSession?.totalMatches || 10;
+
+      if (nextMatchNumber <= maxMatches) {
+        // 試合番号を更新（useEffectが再実行される）
+        setMatchNumber(nextMatchNumber);
+        // 画面をクリア
+        setPairings([]);
+        setWaitingPlayers([]);
+      } else {
+        // 最終試合の場合は一括入力画面に遷移
+        if (currentSession && currentSession.id) {
+          navigate(`/matches/bulk-input/${currentSession.id}`);
+        }
+      }
     } catch (err) {
       console.error('Save failed:', err);
       setError('保存に失敗しました');
@@ -286,14 +309,6 @@ const PairingGenerator = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <Users className="w-8 h-8 text-primary-600" />
-          対戦組み合わせ生成
-        </h1>
-        <p className="text-gray-600 mt-1">参加者から自動的に対戦組み合わせを生成します</p>
-      </div>
-
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -326,7 +341,10 @@ const PairingGenerator = () => {
               onChange={(e) => setMatchNumber(Number(e.target.value))}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+              {Array.from(
+                { length: currentSession?.totalMatches || 10 },
+                (_, i) => i + 1
+              ).map((num) => (
                 <option key={num} value={num}>
                   試合 {num}
                 </option>

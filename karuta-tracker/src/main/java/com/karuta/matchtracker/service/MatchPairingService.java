@@ -272,6 +272,11 @@ public class MatchPairingService {
 
         long daysAgo = ChronoUnit.DAYS.between(lastMatch, sessionDate);
 
+        // 同日または未来の日付の場合は最低スコアを返す
+        if (daysAgo <= 0) {
+            return -1000.0;  // 同日対戦は避けるべきなので非常に低いスコア
+        }
+
         // 1日前: -100点, 2日前: -50点, 7日前: -14点, 14日前: -7点, 30日前: -3点
         return -(100.0 / daysAgo);
     }
@@ -313,8 +318,19 @@ public class MatchPairingService {
      */
     private MatchPairingDto convertToDto(MatchPairing pairing) {
         Player player1 = playerRepository.findById(pairing.getPlayer1Id()).orElse(null);
+        if (player1 == null) {
+            log.warn("Player1 not found with id: {} for pairing: {}", pairing.getPlayer1Id(), pairing.getId());
+        }
+
         Player player2 = playerRepository.findById(pairing.getPlayer2Id()).orElse(null);
+        if (player2 == null) {
+            log.warn("Player2 not found with id: {} for pairing: {}", pairing.getPlayer2Id(), pairing.getId());
+        }
+
         Player creator = playerRepository.findById(pairing.getCreatedBy()).orElse(null);
+        if (creator == null) {
+            log.warn("Creator not found with id: {} for pairing: {}", pairing.getCreatedBy(), pairing.getId());
+        }
 
         return MatchPairingDto.builder()
                 .id(pairing.getId())

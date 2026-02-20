@@ -72,12 +72,20 @@ public class MatchController {
      * 選手の試合履歴を取得
      *
      * @param playerId 選手ID
+     * @param kyuRank 級位フィルタ（オプション）
+     * @param gender 性別フィルタ（オプション）
+     * @param dominantHand 利き手フィルタ（オプション）
      * @return 試合結果リスト
      */
     @GetMapping("/player/{playerId}")
-    public ResponseEntity<List<MatchDto>> getPlayerMatches(@PathVariable Long playerId) {
-        log.debug("GET /api/matches/player/{} - Getting player matches", playerId);
-        List<MatchDto> matches = matchService.findPlayerMatches(playerId);
+    public ResponseEntity<List<MatchDto>> getPlayerMatches(
+            @PathVariable Long playerId,
+            @RequestParam(required = false) String kyuRank,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String dominantHand) {
+        log.debug("GET /api/matches/player/{} - Getting player matches with filters: kyuRank={}, gender={}, dominantHand={}",
+                playerId, kyuRank, gender, dominantHand);
+        List<MatchDto> matches = matchService.findPlayerMatchesWithFilters(playerId, kyuRank, gender, dominantHand);
         return ResponseEntity.ok(matches);
     }
 
@@ -129,6 +137,30 @@ public class MatchController {
     }
 
     /**
+     * 選手の級別統計情報を取得
+     *
+     * @param playerId 選手ID
+     * @param gender 性別フィルタ（オプション）
+     * @param dominantHand 利き手フィルタ（オプション）
+     * @param startDate 開始日（オプション）
+     * @param endDate 終了日（オプション）
+     * @return 級別統計情報
+     */
+    @GetMapping("/player/{playerId}/statistics-by-rank")
+    public ResponseEntity<com.karuta.matchtracker.dto.StatisticsByRankDto> getPlayerStatisticsByRank(
+            @PathVariable Long playerId,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String dominantHand,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        log.debug("GET /api/matches/player/{}/statistics-by-rank - Getting player statistics by rank with filters: gender={}, dominantHand={}, startDate={}, endDate={}",
+                playerId, gender, dominantHand, startDate, endDate);
+        com.karuta.matchtracker.dto.StatisticsByRankDto statistics =
+                matchService.getPlayerStatisticsByRank(playerId, gender, dominantHand, startDate, endDate);
+        return ResponseEntity.ok(statistics);
+    }
+
+    /**
      * 試合結果を新規登録（簡易版）
      *
      * @param request 簡易登録リクエスト
@@ -155,7 +187,23 @@ public class MatchController {
     }
 
     /**
-     * 試合結果を更新
+     * 試合結果を更新（簡易版）
+     *
+     * @param id 試合ID
+     * @param request 更新リクエスト
+     * @return 更新された試合結果
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<MatchDto> updateMatchSimple(
+            @PathVariable Long id,
+            @Valid @RequestBody MatchSimpleCreateRequest request) {
+        log.info("PUT /api/matches/{} - Updating match (simple)", id);
+        MatchDto updatedMatch = matchService.updateMatchSimple(id, request);
+        return ResponseEntity.ok(updatedMatch);
+    }
+
+    /**
+     * 試合結果を更新（詳細版）
      *
      * @param id 試合ID
      * @param winnerId 勝者ID
@@ -163,13 +211,13 @@ public class MatchController {
      * @param updatedBy 更新者ID
      * @return 更新された試合結果
      */
-    @PutMapping("/{id}")
-    public ResponseEntity<MatchDto> updateMatch(
+    @PutMapping("/{id}/detailed")
+    public ResponseEntity<MatchDto> updateMatchDetailed(
             @PathVariable Long id,
             @RequestParam Long winnerId,
             @RequestParam Integer scoreDifference,
             @RequestParam Long updatedBy) {
-        log.info("PUT /api/matches/{} - Updating match", id);
+        log.info("PUT /api/matches/{}/detailed - Updating match (detailed)", id);
         MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy);
         return ResponseEntity.ok(updatedMatch);
     }

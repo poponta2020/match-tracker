@@ -39,10 +39,10 @@ public class PracticeSession {
     private Integer totalMatches;
 
     /**
-     * 練習場所
+     * 会場ID
      */
-    @Column(name = "location", length = 200)
-    private String location;
+    @Column(name = "venue_id")
+    private Long venueId;
 
     /**
      * メモ・備考

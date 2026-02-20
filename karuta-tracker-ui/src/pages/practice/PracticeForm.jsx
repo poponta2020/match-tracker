@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { practiceAPI, playerAPI } from '../../api';
+import { practiceAPI, playerAPI, venueAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
 
 const PracticeForm = () => {
@@ -17,9 +17,10 @@ const PracticeForm = () => {
   }, [navigate]);
 
   const [players, setPlayers] = useState([]);
+  const [venues, setVenues] = useState([]);
   const [formData, setFormData] = useState({
     sessionDate: new Date().toISOString().split('T')[0],
-    location: '',
+    venueId: null,
     totalMatches: 10,
     notes: '',
     participantIds: []
@@ -29,6 +30,7 @@ const PracticeForm = () => {
 
   useEffect(() => {
     fetchPlayers();
+    fetchVenues();
     if (isEdit) {
       fetchSession();
     }
@@ -44,13 +46,22 @@ const PracticeForm = () => {
     }
   };
 
+  const fetchVenues = async () => {
+    try {
+      const response = await venueAPI.getAll();
+      setVenues(response.data);
+    } catch (err) {
+      console.error('Error fetching venues:', err);
+    }
+  };
+
   const fetchSession = async () => {
     try {
       const response = await practiceAPI.getById(id);
       const session = response.data;
       setFormData({
         sessionDate: session.sessionDate,
-        location: session.location || '',
+        venueId: session.venueId || null,
         totalMatches: session.totalMatches,
         notes: session.notes || '',
         participantIds: session.participants?.map(p => p.id) || []
@@ -67,6 +78,25 @@ const PracticeForm = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleVenueChange = (e) => {
+    const venueId = e.target.value ? parseInt(e.target.value) : null;
+    const selectedVenue = venues.find(v => v.id === venueId);
+
+    if (selectedVenue) {
+      // 会場選択時に試合数を自動設定
+      setFormData(prev => ({
+        ...prev,
+        venueId,
+        totalMatches: selectedVenue.defaultMatchCount
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        venueId: null
+      }));
+    }
   };
 
   const handleParticipantToggle = (playerId) => {
@@ -120,10 +150,6 @@ const PracticeForm = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">
-        {isEdit ? '練習記録編集' : '練習記録登録'}
-      </h1>
-
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}
@@ -146,20 +172,29 @@ const PracticeForm = () => {
           />
         </div>
 
-        {/* 練習場所 */}
+        {/* 会場選択 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            練習場所
+            会場
           </label>
-          <input
-            type="text"
-            name="location"
-            value={formData.location}
-            onChange={handleChange}
-            maxLength={200}
-            placeholder="例: 〇〇公民館"
+          <select
+            name="venueId"
+            value={formData.venueId || ''}
+            onChange={handleVenueChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          >
+            <option value="">会場を選択してください</option>
+            {venues.map((venue) => (
+              <option key={venue.id} value={venue.id}>
+                {venue.name} ({venue.defaultMatchCount}試合)
+              </option>
+            ))}
+          </select>
+          {formData.venueId && (
+            <p className="mt-1 text-sm text-gray-500">
+              会場を選択すると、試合数が自動設定されます
+            </p>
+          )}
         </div>
 
         {/* 予定試合数 */}
