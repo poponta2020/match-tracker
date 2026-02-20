@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
-import { X } from 'lucide-react';
+import { X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const PracticeList = () => {
@@ -23,27 +23,10 @@ const PracticeList = () => {
     fetchMyParticipations();
   }, [currentDate, currentPlayer?.id]); // currentPlayer.idまたは月が変わったときに再取得
 
-  // ページに戻ってきたときにデータを再取得
-  useEffect(() => {
-    // 画面が表示されるたびにデータを取得
-    const handleFocus = () => {
-      console.log('Page focused - refreshing data');
-      fetchSessions();
-      fetchMyParticipations();
-    };
-
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [currentDate, currentPlayer?.id]);
-
   const fetchSessions = async () => {
     try {
       setLoading(true);
       const response = await practiceAPI.getAll();
-      console.log('API Response:', response.data);
       setSessions(response.data);
     } catch (err) {
       setError('練習記録の取得に失敗しました');
@@ -61,7 +44,6 @@ const PracticeList = () => {
       const month = currentDate.getMonth() + 1;
       const response = await practiceAPI.getPlayerParticipations(currentPlayer.id, year, month);
       setMyParticipations(response.data || {});
-      console.log('My participations:', response.data);
     } catch (err) {
       console.error('Error fetching my participations:', err);
       setMyParticipations({});
@@ -166,8 +148,6 @@ const PracticeList = () => {
     if (!day) return;
     const session = getSessionForDate(day);
     if (session) {
-      console.log('Selected session:', session);
-      console.log('Match participants:', session.matchParticipants);
       setSelectedSession(session);
       setShowModal(true);
     }
@@ -228,6 +208,13 @@ const PracticeList = () => {
     <div className="max-w-7xl mx-auto">
       <div className="flex justify-end items-center mb-6">
         <div className="flex gap-3">
+          <button
+            onClick={() => { fetchSessions(); fetchMyParticipations(); }}
+            className="flex items-center gap-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            更新
+          </button>
           {isSuperAdmin() && (
             <button
               onClick={() => navigate('/practice/new')}

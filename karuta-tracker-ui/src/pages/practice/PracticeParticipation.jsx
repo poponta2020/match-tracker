@@ -48,7 +48,7 @@ const PracticeParticipation = () => {
     };
 
     fetchData();
-  }, [currentPlayer, year, month]);
+  }, [currentPlayer?.id, year, month]);
 
   // 前月へ
   const handlePrevMonth = () => {

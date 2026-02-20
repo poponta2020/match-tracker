@@ -43,12 +43,12 @@ const BulkResultInput = () => {
         const sessionData = sessionResponse.data;
         setSession(sessionData);
 
-        // 対戦ペアリング取得（日付ベース）
-        const pairingsResponse = await pairingAPI.getByDate(sessionData.sessionDate);
+        // 対戦ペアリングと既存試合結果を並列取得
+        const [pairingsResponse, matchesResponse] = await Promise.all([
+          pairingAPI.getByDate(sessionData.sessionDate),
+          apiClient.get(`/matches?date=${sessionData.sessionDate}`),
+        ]);
         setPairings(pairingsResponse.data || []);
-
-        // 既存の試合結果取得（日付ベース）
-        const matchesResponse = await apiClient.get(`/matches?date=${sessionData.sessionDate}`);
         const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
 

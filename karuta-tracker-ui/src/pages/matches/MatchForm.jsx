@@ -36,24 +36,24 @@ const MatchForm = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 選手一覧を取得（対戦相手候補）
-        const playersRes = await playerAPI.getAll();
+        const today = new Date().toISOString().split('T')[0];
+
+        // 選手一覧・練習セッション・（編集時）試合データを並列取得
+        const promises = [playerAPI.getAll(), practiceAPI.getAll()];
+        if (isEdit) promises.push(matchAPI.getById(id));
+        const [playersRes, sessionsRes, matchRes] = await Promise.all(promises);
+
         setPlayers(
           playersRes.data.filter((p) => p.id !== currentPlayer.id)
         );
 
-        // 全練習セッションを取得（日付選択用）
-        const sessionsRes = await practiceAPI.getAll();
-        // 今日の日付のみフィルタリング
-        const today = new Date().toISOString().split('T')[0];
         const todaySessions = sessionsRes.data.filter(
           session => session.sessionDate === today
         );
         setPracticeSessions(todaySessions);
 
-        // 編集モードの場合、既存データを取得
-        if (isEdit) {
-          const matchRes = await matchAPI.getById(id);
+        // 編集モードの場合、既存データを反映
+        if (isEdit && matchRes) {
           const match = matchRes.data;
 
           // 試合日が今日でない場合はエラー

@@ -71,12 +71,10 @@ const MatchResultsView = () => {
         setLoading(true);
         setError(null);
 
-        // 練習セッション情報取得（日付ベース）
-        const sessionResponse = await practiceAPI.getByDate(selectedDate);
-        const sessionData = sessionResponse.data;
+        // allSessionsから日付でセッションを直接取得（APIコール不要）
+        const sessionData = allSessions.find(s => s.sessionDate === selectedDate) || null;
 
         if (!sessionData) {
-          // セッションが存在しない場合
           setSession(null);
           setPairings([]);
           setMatches([]);
@@ -86,15 +84,13 @@ const MatchResultsView = () => {
 
         setSession(sessionData);
 
-        // 対戦ペアリング取得（日付ベース）
-        const pairingsResponse = await pairingAPI.getByDate(selectedDate);
+        // 対戦ペアリングと試合結果を並列取得
+        const [pairingsResponse, matchesResponse] = await Promise.all([
+          pairingAPI.getByDate(selectedDate),
+          apiClient.get(`/matches?date=${selectedDate}`),
+        ]);
         setPairings(pairingsResponse.data || []);
-
-        // 試合結果取得（日付ベース）
-        // キャッシュ無効化: 常に最新のデータを取得するため
-        const matchesResponse = await apiClient.get(`/matches?date=${selectedDate}`);
-        const sessionMatches = matchesResponse.data;
-        setMatches(sessionMatches);
+        setMatches(matchesResponse.data);
 
       } catch (err) {
         console.error('データ取得エラー:', err);
@@ -105,7 +101,7 @@ const MatchResultsView = () => {
     };
 
     fetchDataByDate();
-  }, [selectedDate]);
+  }, [selectedDate, allSessions]);
 
   // 前後の練習日に移動
   const goToPreviousDate = () => {
