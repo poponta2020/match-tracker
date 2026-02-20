@@ -36,6 +36,12 @@ export const practiceAPI = {
   registerParticipations: (data) =>
     apiClient.post('/practice-sessions/participations', data),
 
+  // 指定日以降の練習セッションを取得（エンリッチメントなし・高速）
+  getUpcoming: (fromDate) =>
+    apiClient.get('/practice-sessions/upcoming', {
+      params: { fromDate },
+    }),
+
   // 選手の特定月の参加状況を取得
   getPlayerParticipations: (playerId, year, month) =>
     apiClient.get(`/practice-sessions/participations/player/${playerId}`, {

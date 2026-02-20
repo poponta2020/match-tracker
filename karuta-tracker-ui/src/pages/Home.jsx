@@ -64,7 +64,7 @@ const Home = () => {
         ] = await Promise.all([
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
           matchAPI.getStatistics(currentPlayer.id).catch(() => ({ data: { totalMatches: 0, wins: 0, winRate: 0 } })),
-          apiClient.get('/practice-sessions').then(res => res.data).catch(() => []),
+          practiceAPI.getUpcoming(todayStr).then(res => res.data).catch(() => []),
           pairingAPI.getByDate(todayStr).catch(() => ({ data: [] })),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
           apiClient.get(`/matches?date=${todayStr}`).then(res => res.data).catch(() => []),
