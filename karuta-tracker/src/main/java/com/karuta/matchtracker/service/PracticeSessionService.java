@@ -407,9 +407,9 @@ public class PracticeSessionService {
             venueMap = venueRepository.findAllById(allVenueIds).stream()
                     .collect(Collectors.toMap(Venue::getId, venue -> venue));
 
-            for (Long venueId : allVenueIds) {
-                venueScheduleMap.put(venueId, venueMatchScheduleRepository.findByVenueIdOrderByMatchNumberAsc(venueId));
-            }
+            // 会場スケジュールを一括取得（N+1解消: N回→1回）
+            venueScheduleMap = venueMatchScheduleRepository.findByVenueIdIn(allVenueIds).stream()
+                    .collect(Collectors.groupingBy(VenueMatchSchedule::getVenueId));
         }
 
         // 全セッション日付の実施済み試合数を一括取得（N+1解消: N回→1回）
@@ -564,10 +564,9 @@ public class PracticeSessionService {
     public Map<Long, List<Integer>> getPlayerParticipationsByMonth(Long playerId, int year, int month) {
         log.debug("Getting participations for player {} in {}-{}", playerId, year, month);
 
-        // その月のセッションを取得
-        List<PracticeSessionDto> sessions = findSessionsByYearMonth(year, month);
-        List<Long> sessionIds = sessions.stream()
-                .map(PracticeSessionDto::getId)
+        // セッションIDのみ取得（エンリッチメント不要）
+        List<Long> sessionIds = practiceSessionRepository.findByYearAndMonth(year, month).stream()
+                .map(PracticeSession::getId)
                 .collect(Collectors.toList());
 
         if (sessionIds.isEmpty()) {
