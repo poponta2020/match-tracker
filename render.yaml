@@ -16,4 +16,4 @@ services:
         sync: false   # Renderの管理画面で設定
       - key: CORS_ALLOWED_ORIGINS
         sync: false   # VercelのURLを設定（例: https://your-app.vercel.app）
-    healthCheckPath: /ping
+    healthCheckPath: /actuator/health
