@@ -55,7 +55,15 @@
       "Bash(ss:*)",
       "Bash(mysql:*)",
       "WebFetch(domain:aiven.io)",
-      "Bash(docker start:*)"
+      "Bash(docker start:*)",
+      "Bash(pkill:*)",
+      "Bash(pip install:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs:*)",
+      "Bash(for i in {1..15})",
+      "Bash(do sleep 5)",
+      "Bash(break)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

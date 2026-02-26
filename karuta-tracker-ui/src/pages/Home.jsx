@@ -202,15 +202,6 @@ const Home = () => {
 
   return (
     <div className="space-y-8">
-      {/* ウェルカムメッセージ */}
-      <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6 rounded-lg shadow-md">
-        <p className="text-xl font-semibold mb-2">
-          ようこそ、{currentPlayer?.name}さん
-        </p>
-        <p className="text-primary-100">
-          今日も練習頑張りましょう！
-        </p>
-      </div>
 
       {/* 今日の対戦カード */}
       {todayMatch && (
@@ -374,53 +365,20 @@ const Home = () => {
       )}
 
       {/* クイックアクション */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <Link
           to="/matches/new"
-          className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
+          className="flex items-center justify-between p-4 bg-white border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-all"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-primary-50 rounded-full">
-              <Trophy className="w-6 h-6 text-primary-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">試合記録</h3>
-              <p className="text-sm text-gray-600">新しい試合を記録</p>
-            </div>
-          </div>
-          <Plus className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
+          <span className="font-semibold text-gray-900">結果入力</span>
+          <Trophy className="h-5 w-5 text-primary-600" />
         </Link>
-
         <Link
           to="/practice"
-          className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
+          className="flex items-center justify-between p-4 bg-white border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-all"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-50 rounded-full">
-              <BookOpen className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">練習記録</h3>
-              <p className="text-sm text-gray-600">カレンダーを確認</p>
-            </div>
-          </div>
-          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition-colors" />
-        </Link>
-
-        <Link
-          to={todaySessionId ? `/matches/results/${todaySessionId}` : "/pairings"}
-          className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-between group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-50 rounded-full">
-              <Calendar className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">組み合わせ</h3>
-              <p className="text-sm text-gray-600">対戦表を作成</p>
-            </div>
-          </div>
-          <Plus className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
+          <span className="font-semibold text-gray-900">練習日程確認</span>
+          <BookOpen className="h-5 w-5 text-primary-600" />
         </Link>
       </div>
 

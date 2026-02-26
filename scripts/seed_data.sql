@@ -1,0 +1,88 @@
+-- 既存データのクリーンアップ
+DELETE FROM practice_participations;
+DELETE FROM match_results;
+DELETE FROM practice_sessions;
+
+-- 全選手のパスワードを pppppppp に統一（BCryptハッシュ）
+-- BCryptで "pppppppp" をハッシュ化したもの: $2a$10$... （実際にはSpring Securityが必要）
+-- ここでは簡易的にプレーンテキストで入れる（本番ではBCryptを使用）
+UPDATE players SET password = 'pppppppp' WHERE deleted_at IS NULL;
+
+-- 新規選手を追加（A級3人、B級2人、C級1人、D級1人、E級1人）
+INSERT INTO players (username, password, name, gender, dominant_hand, dan_rank, kyu_rank, karuta_club, remarks, role, created_at, updated_at) VALUES
+('選手1', 'pppppppp', '選手1', '男性', '右', '二段', 'A級', '東京かるた会', 'テストユーザー1', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手2', 'pppppppp', '選手2', '女性', '右', '初段', 'A級', '大阪かるた会', 'テストユーザー2', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手3', 'pppppppp', '選手3', '男性', '左', '無段', 'A級', '京都かるた会', 'テストユーザー3', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手4', 'pppppppp', '選手4', '女性', '右', '初段', 'B級', '福岡かるた会', 'テストユーザー4', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手5', 'pppppppp', '選手5', '男性', '右', '無段', 'B級', '東京かるた会', 'テストユーザー5', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手6', 'pppppppp', '選手6', '女性', '左', '無段', 'C級', '大阪かるた会', 'テストユーザー6', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手7', 'pppppppp', '選手7', '男性', '右', '無段', 'D級', '京都かるた会', 'テストユーザー7', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('選手8', 'pppppppp', '選手8', '女性', '右', '無段', 'E級', '福岡かるた会', 'テストユーザー8', 'PLAYER', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 練習日程を作成（2/1〜3/31、会場を交互に）
+-- 中央区民センター: 17:00-21:00, 最大3試合
+-- クラーク会館: 09:00-21:00, 最大7試合
+
+-- 2月（28日まで）
+INSERT INTO practice_sessions (date, venue_name, start_time, end_time, max_matches, created_at, updated_at) VALUES
+('2026-02-01', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-02', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-03', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-04', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-05', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-06', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-07', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-08', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-09', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-10', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-11', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-12', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-13', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-14', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-15', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-16', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-17', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-18', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-19', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-20', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-21', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-22', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-23', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-24', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-25', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-26', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-27', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-02-28', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- 3月（31日まで）
+('2026-03-01', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-02', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-03', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-04', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-05', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-06', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-07', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-08', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-09', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-10', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-11', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-12', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-13', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-14', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-15', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-16', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-17', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-18', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-19', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-20', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-21', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-22', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-23', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-24', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-25', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-26', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-27', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-28', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-29', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-30', 'クラーク会館', '09:00:00', '21:00:00', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('2026-03-31', '中央区民センター', '17:00:00', '21:00:00', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

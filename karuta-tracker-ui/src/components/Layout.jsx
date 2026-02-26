@@ -33,8 +33,8 @@ const Layout = ({ children }) => {
   // 基本ナビゲーション（全ユーザー共通）
   const baseNavigation = [
     { name: 'ホーム', href: '/', icon: Home },
-    { name: '試合記録', href: '/matches', icon: Trophy },
-    { name: '練習記録', href: '/practice', icon: BookOpen },
+    { name: '結果入力', href: '/matches', icon: Trophy },
+    { name: '練習日程確認', href: '/practice', icon: BookOpen },
     { name: '練習参加登録', href: '/practice/participation', icon: Calendar },
     { name: '統計', href: '/statistics', icon: BarChart3 },
   ];
@@ -68,9 +68,9 @@ const Layout = ({ children }) => {
 
     // 完全一致
     if (path === '/') return 'ホーム';
-    if (path === '/matches') return '試合記録';
-    if (path === '/matches/new') return '試合記録登録';
-    if (path === '/practice') return '練習記録';
+    if (path === '/matches') return '結果入力';
+    if (path === '/matches/new') return '結果入力';
+    if (path === '/practice') return '練習日程確認';
     if (path === '/practice/participation') return '練習参加登録';
     if (path === '/statistics') return '統計';
     if (path === '/pairings') return '対戦組み合わせ';
@@ -82,10 +82,10 @@ const Layout = ({ children }) => {
     // パターンマッチ
     if (path.startsWith('/matches/results/')) return '試合結果詳細';
     if (path.startsWith('/matches/bulk-input/')) return '試合結果一括入力';
-    if (path.startsWith('/matches/') && path.includes('/edit')) return '試合記録編集';
-    if (path.startsWith('/matches/')) return '試合記録詳細';
-    if (path.startsWith('/practice/') && path.includes('/edit')) return '練習記録編集';
-    if (path.startsWith('/practice/') && path !== '/practice/participation') return '練習記録詳細';
+    if (path.startsWith('/matches/') && path.includes('/edit')) return '結果編集';
+    if (path.startsWith('/matches/')) return '結果詳細';
+    if (path.startsWith('/practice/') && path.includes('/edit')) return '練習日程編集';
+    if (path.startsWith('/practice/') && path !== '/practice/participation') return '練習日程詳細';
     if (path.startsWith('/players/') && path.includes('/edit')) return '選手編集';
     if (path.startsWith('/players/')) return '選手詳細';
     if (path.startsWith('/venues/') && path.includes('/edit')) return '会場編集';
