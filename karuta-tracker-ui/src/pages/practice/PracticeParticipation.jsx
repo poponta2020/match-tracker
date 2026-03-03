@@ -309,7 +309,7 @@ const PracticeParticipation = () => {
                             isPast ? 'text-gray-400' : 'text-gray-700'
                           }`}
                         >
-                          {session.location || '-'}
+                          {session.venueName || '-'}
                         </span>
                       </td>
 

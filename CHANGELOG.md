@@ -2,6 +2,115 @@
 
 このファイルには、プロジェクトの作業履歴を時系列で記録します。
 
+## 2026-03-03 - ホーム画面UI改善と試合別参加者表示の修正
+
+### 実装完了機能
+
+1. **ホーム画面のUI改善**
+   - 「試合記録」→「結果入力」に用語変更
+   - 「練習記録」→「練習日程確認」に用語変更
+   - ホーム画面のウェルカムメッセージを削除
+   - 「対戦組み合わせ」ボタンを削除
+   - ナビゲーションボタンをコンパクトな横並びレイアウトに変更
+
+2. **試合別参加者の表示修正**
+   - 練習日程確認画面のモーダルで試合別参加者が0名と表示される問題を修正
+   - DataSeedControllerで`matchNumber`を正しく設定するように改善
+   - 各選手が1〜3試合にランダムに参加するように分散配置
+
+3. **テストデータの大量投入**
+   - 2月〜3月の全日程（59日分）に練習セッションを作成
+   - 会場: 中央区民センター（3試合）とクラーク会館（7試合）を交互に設定
+   - 2/1〜2/26の期間に130試合の結果を作成
+   - 全日程に635件以上の練習参加者を登録
+   - 選手を8名から16名に増員
+
+### 技術的詳細
+
+**バックエンド修正**
+
+1. **DataSeedController.java（修正）**
+   - `/api/seed/all`エンドポイントで大量のテストデータを投入
+   - 練習参加者作成時に`matchNumber`を設定（行188-204）
+     ```java
+     for (Player player : sessionParticipants) {
+         int numMatchesToJoin = random.nextInt(Math.min(3, session.getTotalMatches())) + 1;
+         List<Integer> availableMatches = new ArrayList<>();
+         for (int m = 1; m <= session.getTotalMatches(); m++) {
+             availableMatches.add(m);
+         }
+         Collections.shuffle(availableMatches);
+
+         for (int i = 0; i < numMatchesToJoin; i++) {
+             PracticeParticipant participant = PracticeParticipant.builder()
+                     .sessionId(session.getId())
+                     .playerId(player.getId())
+                     .matchNumber(availableMatches.get(i))
+                     .build();
+             participants.add(participant);
+         }
+     }
+     ```
+   - 各選手が参加する試合をランダムに選択
+   - 試合番号の重複を避けるためにシャッフルしたリストから取得
+
+**フロントエンド修正**
+
+1. **Home.jsx（修正）**
+   - ウェルカムメッセージセクションを削除（行206-213を削除）
+   - クイックアクションボタンを2列グリッドレイアウトに変更
+   - 「対戦組み合わせ」ボタンを削除
+   - ナビゲーションボタンをコンパクトなスタイルに変更
+
+2. **Layout.jsx（修正）**
+   - ナビゲーションメニューの用語を変更
+     - `{ name: '結果入力', href: '/matches', icon: Trophy }`
+     - `{ name: '練習日程確認', href: '/practice', icon: BookOpen }`
+   - ページタイトルも対応する用語に変更
+
+3. **PracticeList.jsx（修正）**
+   - `handleCellClick()`でモーダルを開く際に`practiceAPI.getById()`を呼び出し
+   - 個別セッションの詳細データ（試合別参加者含む）を取得
+   - エンリッチメントされたデータをモーダルに表示
+
+### データフロー
+
+**試合別参加者表示フロー**
+1. 練習日程確認画面でカレンダーの日付をクリック
+2. `handleCellClick()`が`practiceAPI.getById(session.id)`を呼び出し
+3. バックエンドで`PracticeSessionService.findById()`が実行
+4. `enrichSessionsWithParticipants()`で試合別参加者情報を取得
+5. `matchParticipants`配列に各試合の参加者リストが格納される
+6. モーダルに試合別参加者が表示される
+
+**データ投入フロー**
+1. `POST /api/seed/all`を実行
+2. 既存データをクリーンアップ
+3. 全選手のパスワードを統一（pppppppp）
+4. 新規選手8名を追加（既存8名と合わせて16名）
+5. 2/1〜3/31の59日分の練習セッションを作成
+6. 2/1〜2/26の130試合の結果を作成
+7. 全日程の練習参加者を作成（各選手1〜3試合に参加）
+
+### 修正したバグ
+
+1. **試合別参加者が0名表示される問題**
+   - 原因: `PracticeParticipant.matchNumber`がNULL
+   - 対策: DataSeedControllerで参加者作成時に`matchNumber`を設定
+
+2. **参加者数が0名表示される問題（ホーム画面）**
+   - 原因: `findUpcomingSessions()`がエンリッチメントをスキップ
+   - 対策: `enrichSessionsWithParticipants()`を呼び出すように修正
+
+3. **練習日程確認画面で参加者数が0名表示される問題**
+   - 原因: DataSeedControllerが2/27〜3/31の参加者を作成していなかった
+   - 対策: 全日程の参加者を作成するように修正
+
+### 次のステップ
+
+- PostgreSQLを起動して`POST /api/seed/all`を実行
+- ブラウザで動作確認（試合別参加者が正しく表示されるか）
+
 ## 2025-11-19 - 練習参加状況の可視化とUI/UX改善
 
 ### 実装完了機能

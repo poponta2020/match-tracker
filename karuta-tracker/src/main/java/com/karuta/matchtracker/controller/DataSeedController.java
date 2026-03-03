@@ -173,24 +173,35 @@ public class DataSeedController {
             matchRepository.saveAll(matches);
             result.put("matchResults", matches.size() + "試合作成");
 
-            // 6. 練習参加登録作成（2/1〜2/26）
+            // 6. 練習参加登録作成（全日程、試合別に分散）
             List<PracticeParticipant> participants = new ArrayList<>();
             for (PracticeSession session : sessions) {
-                if (session.getSessionDate().isAfter(LocalDate.of(2026, 2, 26))) {
-                    continue;
-                }
 
                 // 60-80%の選手が参加
                 double participationRate = 0.6 + (random.nextDouble() * 0.2);
                 int numParticipants = (int) (allPlayersNow.size() * participationRate);
 
                 Collections.shuffle(allPlayersNow);
-                for (int i = 0; i < numParticipants && i < allPlayersNow.size(); i++) {
-                    PracticeParticipant participant = PracticeParticipant.builder()
-                            .sessionId(session.getId())
-                            .playerId(allPlayersNow.get(i).getId())
-                            .build();
-                    participants.add(participant);
+                List<Player> sessionParticipants = allPlayersNow.subList(0, Math.min(numParticipants, allPlayersNow.size()));
+
+                // 各選手を試合にランダムに割り当て
+                for (Player player : sessionParticipants) {
+                    // 試合数の範囲内でランダムに1〜3試合に参加
+                    int numMatchesToJoin = random.nextInt(Math.min(3, session.getTotalMatches())) + 1;
+                    List<Integer> availableMatches = new ArrayList<>();
+                    for (int m = 1; m <= session.getTotalMatches(); m++) {
+                        availableMatches.add(m);
+                    }
+                    Collections.shuffle(availableMatches);
+
+                    for (int i = 0; i < numMatchesToJoin; i++) {
+                        PracticeParticipant participant = PracticeParticipant.builder()
+                                .sessionId(session.getId())
+                                .playerId(player.getId())
+                                .matchNumber(availableMatches.get(i))
+                                .build();
+                        participants.add(participant);
+                    }
                 }
             }
             practiceParticipantRepository.saveAll(participants);

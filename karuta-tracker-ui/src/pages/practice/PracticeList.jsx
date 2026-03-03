@@ -144,12 +144,21 @@ const PracticeList = () => {
   };
 
   // セルクリック
-  const handleCellClick = (day) => {
+  const handleCellClick = async (day) => {
     if (!day) return;
     const session = getSessionForDate(day);
     if (session) {
-      setSelectedSession(session);
-      setShowModal(true);
+      try {
+        // 個別に詳細取得（試合別参加者を含むエンリッチメント済みデータ）
+        const response = await practiceAPI.getById(session.id);
+        setSelectedSession(response.data);
+        setShowModal(true);
+      } catch (err) {
+        console.error('Error fetching session details:', err);
+        // エラー時は元のデータで表示
+        setSelectedSession(session);
+        setShowModal(true);
+      }
     }
   };
 

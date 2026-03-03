@@ -99,10 +99,8 @@ public class PracticeSessionService {
      */
     public List<PracticeSessionDto> findUpcomingSessions(LocalDate fromDate) {
         log.debug("Finding upcoming practice sessions from {}", fromDate);
-        return practiceSessionRepository.findUpcomingSessions(fromDate)
-                .stream()
-                .map(PracticeSessionDto::fromEntity)
-                .collect(Collectors.toList());
+        List<PracticeSession> sessions = practiceSessionRepository.findUpcomingSessions(fromDate);
+        return enrichSessionsWithParticipants(sessions);
     }
 
     /**
