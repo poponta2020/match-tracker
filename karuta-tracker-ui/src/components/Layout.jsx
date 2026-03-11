@@ -113,6 +113,14 @@ const Layout = ({ children }) => {
     if (href === '/') {
       return location.pathname === '/';
     }
+    // 完全一致または特定のサブパスのみアクティブにする
+    if (href === '/matches/new') {
+      return location.pathname === '/matches/new';
+    }
+    if (href === '/matches') {
+      // /matches で始まるが /matches/new ではない場合
+      return location.pathname.startsWith('/matches') && location.pathname !== '/matches/new';
+    }
     return location.pathname.startsWith(href);
   };
 
