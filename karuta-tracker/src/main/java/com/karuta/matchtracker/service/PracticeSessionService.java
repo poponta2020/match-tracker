@@ -277,6 +277,53 @@ public class PracticeSessionService {
     }
 
     /**
+     * 特定の試合の参加者を設定（管理者用）
+     */
+    @Transactional
+    public void setMatchParticipants(Long sessionId, Integer matchNumber, List<Long> playerIds) {
+        log.info("Setting match participants for session: {}, match: {}", sessionId, matchNumber);
+
+        // 1. セッションの存在確認
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        // 2. 試合番号の妥当性チェック
+        if (matchNumber < 1 || matchNumber > session.getTotalMatches()) {
+            throw new IllegalArgumentException(
+                "Invalid match number: " + matchNumber + ". Must be between 1 and " + session.getTotalMatches()
+            );
+        }
+
+        // 3. 選手の存在確認
+        if (playerIds != null && !playerIds.isEmpty()) {
+            List<Player> players = playerRepository.findAllById(playerIds);
+            if (players.size() != playerIds.size()) {
+                throw new ResourceNotFoundException("Some players not found");
+            }
+        }
+
+        // 4. その試合の既存参加者を削除
+        practiceParticipantRepository.deleteBySessionIdAndMatchNumber(sessionId, matchNumber);
+        practiceParticipantRepository.flush();
+
+        // 5. 新しい参加者を登録
+        if (playerIds != null && !playerIds.isEmpty()) {
+            List<PracticeParticipant> participants = playerIds.stream()
+                    .map(playerId -> PracticeParticipant.builder()
+                            .sessionId(sessionId)
+                            .playerId(playerId)
+                            .matchNumber(matchNumber)
+                            .build())
+                    .toList();
+
+            practiceParticipantRepository.saveAll(participants);
+        }
+
+        log.info("Successfully set {} participants for session: {}, match: {}",
+                playerIds != null ? playerIds.size() : 0, sessionId, matchNumber);
+    }
+
+    /**
      * 特定の練習セッションの参加者一覧を取得
      */
     public List<PlayerDto> getParticipants(Long sessionId) {

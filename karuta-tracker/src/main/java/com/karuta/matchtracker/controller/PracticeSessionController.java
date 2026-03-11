@@ -239,4 +239,24 @@ public class PracticeSessionController {
         Map<Long, List<Integer>> participations = practiceSessionService.getPlayerParticipationsByMonth(playerId, year, month);
         return ResponseEntity.ok(participations);
     }
+
+    /**
+     * 特定の試合の参加者を設定（管理者のみ）
+     *
+     * @param sessionId 練習日ID
+     * @param matchNumber 試合番号
+     * @param request 参加者IDリスト
+     * @return 成功レスポンス
+     */
+    @PutMapping("/{sessionId}/matches/{matchNumber}/participants")
+    @RequireRole(Role.SUPER_ADMIN)
+    public ResponseEntity<Void> setMatchParticipants(
+            @PathVariable Long sessionId,
+            @PathVariable Integer matchNumber,
+            @Valid @RequestBody MatchParticipantsRequest request) {
+        log.info("PUT /api/practice-sessions/{}/matches/{}/participants - Setting participants",
+                sessionId, matchNumber);
+        practiceSessionService.setMatchParticipants(sessionId, matchNumber, request.getPlayerIds());
+        return ResponseEntity.ok().build();
+    }
 }

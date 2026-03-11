@@ -4,6 +4,7 @@ import { practiceAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
 import { X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ const PracticeList = () => {
   const [showModal, setShowModal] = useState(false);
   const [expandedMatches, setExpandedMatches] = useState({}); // アコーディオンの開閉状態
   const [myParticipations, setMyParticipations] = useState({}); // 自分の参加状況 {sessionId: [matchNumbers]}
+  const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
+  const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
 
   // データ取得を行う関数をメモ化
   useEffect(() => {
@@ -167,6 +170,33 @@ const PracticeList = () => {
     setShowModal(false);
     setSelectedSession(null);
     setExpandedMatches({}); // アコーディオンの状態をリセット
+  };
+
+  // 試合別参加者編集モーダルを開く
+  const handleEditMatchParticipants = (matchNumber) => {
+    setEditingMatchNumber(matchNumber);
+    setShowEditModal(true);
+  };
+
+  // 試合別参加者編集モーダルを閉じる
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingMatchNumber(null);
+  };
+
+  // 試合別参加者保存後の処理
+  const handleSaveMatchParticipants = async () => {
+    // モーダルを閉じる
+    handleCloseEditModal();
+    // セッション詳細を再取得して更新
+    if (selectedSession) {
+      try {
+        const response = await practiceAPI.getById(selectedSession.id);
+        setSelectedSession(response.data);
+      } catch (err) {
+        console.error('Error refreshing session:', err);
+      }
+    }
   };
 
   // アコーディオンのトグル
@@ -387,14 +417,27 @@ const PracticeList = () => {
 
                         return (
                           <div key={matchNum} className="border border-gray-200 rounded overflow-hidden">
-                            <button
-                              onClick={() => toggleMatch(matchNum)}
-                              className={`w-full px-3 py-2 ${isMyMatch ? 'bg-green-50 hover:bg-green-100' : 'bg-gray-50 hover:bg-gray-100'} transition-colors text-left flex items-center justify-between`}
-                            >
-                              <span className="text-sm font-medium text-gray-900">
-                                {isExpanded ? '▼' : '▶'} {matchNum}試合目{timeRange ? `: ${timeRange}` : ''} ({count}名)
-                              </span>
-                            </button>
+                            <div className={`w-full px-3 py-2 ${isMyMatch ? 'bg-green-50' : 'bg-gray-50'} transition-colors flex items-center justify-between`}>
+                              <button
+                                onClick={() => toggleMatch(matchNum)}
+                                className="flex-1 text-left hover:opacity-75"
+                              >
+                                <span className="text-sm font-medium text-gray-900">
+                                  {isExpanded ? '▼' : '▶'} {matchNum}試合目{timeRange ? `: ${timeRange}` : ''} ({count}名)
+                                </span>
+                              </button>
+                              {isSuperAdmin(currentPlayer) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditMatchParticipants(parseInt(matchNum));
+                                  }}
+                                  className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                >
+                                  編集
+                                </button>
+                              )}
+                            </div>
                             {isExpanded && (
                               <div className={`px-3 py-2 ${isMyMatch ? 'bg-green-50' : 'bg-white'}`}>
                                 {participants.length > 0 ? (
@@ -470,6 +513,16 @@ const PracticeList = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 試合別参加者編集モーダル */}
+      {showEditModal && selectedSession && editingMatchNumber && (
+        <MatchParticipantsEditModal
+          session={selectedSession}
+          matchNumber={editingMatchNumber}
+          onClose={handleCloseEditModal}
+          onSave={handleSaveMatchParticipants}
+        />
       )}
     </div>
   );

@@ -33,6 +33,9 @@ public class DataSeedController {
     @Autowired
     private VenueRepository venueRepository;
 
+    @Autowired
+    private VenueMatchScheduleRepository venueMatchScheduleRepository;
+
     private static final Map<KyuRank, Integer> KYU_RANK_ORDER = Map.of(
             KyuRank.A級, 5,
             KyuRank.B級, 4,
@@ -227,5 +230,96 @@ public class DataSeedController {
                 .remarks("テストユーザー")
                 .role(Role.PLAYER)
                 .build();
+    }
+
+    /**
+     * 会場の試合時間割を作成するエンドポイント
+     */
+    @PostMapping("/venue-schedules")
+    public ResponseEntity<Map<String, Object>> seedVenueSchedules() {
+        Map<String, Object> result = new HashMap<>();
+
+        // 既存の会場を取得
+        List<Venue> venues = venueRepository.findAll();
+
+        for (Venue venue : venues) {
+            // 既存のスケジュールを削除
+            venueMatchScheduleRepository.deleteByVenueId(venue.getId());
+
+            // 会場ごとに試合時間割を作成
+            int matchCount = venue.getDefaultMatchCount();
+            List<VenueMatchSchedule> schedules = new ArrayList<>();
+
+            if (venue.getName().contains("中央区民センター")) {
+                // 17-21時で3試合
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(1)
+                        .startTime(java.time.LocalTime.of(17, 0))
+                        .endTime(java.time.LocalTime.of(18, 20))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(2)
+                        .startTime(java.time.LocalTime.of(18, 20))
+                        .endTime(java.time.LocalTime.of(19, 40))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(3)
+                        .startTime(java.time.LocalTime.of(19, 40))
+                        .endTime(java.time.LocalTime.of(21, 0))
+                        .build());
+            } else if (venue.getName().contains("クラーク会館")) {
+                // 9-21時で7試合
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(1)
+                        .startTime(java.time.LocalTime.of(9, 0))
+                        .endTime(java.time.LocalTime.of(10, 40))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(2)
+                        .startTime(java.time.LocalTime.of(10, 40))
+                        .endTime(java.time.LocalTime.of(12, 20))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(3)
+                        .startTime(java.time.LocalTime.of(13, 0))
+                        .endTime(java.time.LocalTime.of(14, 40))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(4)
+                        .startTime(java.time.LocalTime.of(14, 40))
+                        .endTime(java.time.LocalTime.of(16, 20))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(5)
+                        .startTime(java.time.LocalTime.of(16, 20))
+                        .endTime(java.time.LocalTime.of(18, 0))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(6)
+                        .startTime(java.time.LocalTime.of(18, 0))
+                        .endTime(java.time.LocalTime.of(19, 40))
+                        .build());
+                schedules.add(VenueMatchSchedule.builder()
+                        .venueId(venue.getId())
+                        .matchNumber(7)
+                        .startTime(java.time.LocalTime.of(19, 40))
+                        .endTime(java.time.LocalTime.of(21, 0))
+                        .build());
+            }
+
+            venueMatchScheduleRepository.saveAll(schedules);
+            result.put(venue.getName(), schedules.size() + "試合分の時間割を作成");
+        }
+
+        return ResponseEntity.ok(result);
     }
 }

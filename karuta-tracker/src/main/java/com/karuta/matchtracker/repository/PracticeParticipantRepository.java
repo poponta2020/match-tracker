@@ -49,11 +49,13 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     /**
      * 特定のセッションの全参加者を削除
      */
+    @Modifying
     void deleteBySessionId(Long sessionId);
 
     /**
      * 特定のセッションから特定の参加者を削除
      */
+    @Modifying
     void deleteBySessionIdAndPlayerId(Long sessionId, Long playerId);
 
     /**
@@ -83,8 +85,15 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                              @Param("matchNumber") Integer matchNumber);
 
     /**
+     * 特定セッションの特定試合の全参加者を削除
+     */
+    @Modifying
+    void deleteBySessionIdAndMatchNumber(Long sessionId, Integer matchNumber);
+
+    /**
      * 特定の選手・セッション・試合の参加記録を削除
      */
+    @Modifying
     void deleteBySessionIdAndPlayerIdAndMatchNumber(Long sessionId, Long playerId, Integer matchNumber);
 
     /**

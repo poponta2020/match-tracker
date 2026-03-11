@@ -63,7 +63,10 @@
       "Bash(for i in {1..15})",
       "Bash(do sleep 5)",
       "Bash(break)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(mvn clean package:*)",
+      "Bash(sudo service postgresql start:*)",
+      "Bash(env:*)"
     ],
     "deny": [],
     "ask": []

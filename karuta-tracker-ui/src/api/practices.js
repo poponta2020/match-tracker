@@ -47,4 +47,10 @@ export const practiceAPI = {
     apiClient.get(`/practice-sessions/participations/player/${playerId}`, {
       params: { year, month },
     }),
+
+  // 試合別参加者を設定（管理者のみ）
+  setMatchParticipants: (sessionId, matchNumber, playerIds) =>
+    apiClient.put(`/practice-sessions/${sessionId}/matches/${matchNumber}/participants`, {
+      playerIds,
+    }),
 };

@@ -2,6 +2,7 @@ package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -36,5 +37,6 @@ public interface VenueMatchScheduleRepository extends JpaRepository<VenueMatchSc
      *
      * @param venueId 会場ID
      */
+    @Modifying
     void deleteByVenueId(Long venueId);
 }
