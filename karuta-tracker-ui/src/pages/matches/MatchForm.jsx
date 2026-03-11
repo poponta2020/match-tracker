@@ -317,50 +317,21 @@ const MatchForm = () => {
           </div>
         )}
 
-        {/* 試合日 */}
-        {practiceSessions.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              練習日 <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="matchDate"
-              value={formData.matchDate}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              required
-              disabled={isEdit}
-            >
-              <option value="">練習日を選択してください</option>
-              {practiceSessions.map((session) => (
-                <option key={session.id} value={session.sessionDate}>
-                  今日 ({new Date(session.sessionDate).toLocaleDateString('ja-JP', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    weekday: 'short'
-                  })})
-                  {session.venueName ? ` - ${session.venueName}` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-sm text-gray-500">
-              試合記録は当日の練習日のみ登録可能です
-            </p>
-          </div>
-        )}
-
-        {/* 試合番号 */}
-        {practiceSession && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              試合番号 <span className="text-red-500">*</span>
-            </label>
+        {/* 日付と試合番号（1行表示） */}
+        {practiceSessions.length > 0 && practiceSession && (
+          <div className="flex items-center justify-between text-lg font-medium text-gray-900">
+            <div>
+              {new Date(formData.matchDate).toLocaleDateString('ja-JP', {
+                month: 'long',
+                day: 'numeric',
+                weekday: 'short'
+              })}
+            </div>
             <select
               name="matchNumber"
               value={formData.matchNumber}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
               required
             >
               {Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1).map((num) => (
@@ -369,97 +340,34 @@ const MatchForm = () => {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-sm text-gray-500">
-              この練習日は全{practiceSession.totalMatches}試合です
-            </p>
           </div>
         )}
 
         {/* 対戦相手 */}
         {practiceSession && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              対戦相手 <span className="text-red-500">*</span>
-            </label>
-
-            {/* 対戦組み合わせがある場合 */}
-            {pairing ? (
-              <div>
-                <div className="mb-2 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-center gap-2 text-purple-700">
-                  <Lock className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm">
-                    対戦組み合わせが設定されています
-                  </span>
-                </div>
-                <div className="p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600 mb-1">対戦相手</p>
-                    <p className="text-xl font-bold text-gray-900">{formData.opponentName}</p>
-                  </div>
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  対戦組み合わせにより自動設定されています
-                </p>
-              </div>
-            ) : (
-              /* 対戦組み合わせがない場合 */
-              <div>
-                <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
-                  <Users className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm">
-                    この日の練習参加者: {availablePlayers.length}名
-                  </span>
-                </div>
-
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="選手名を検索..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent mb-2"
-                />
-
-                <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
-                  {availablePlayers
-                    .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            opponentName: player.name,
-                            opponentId: player.id
-                          }));
-                          setSearchTerm('');
-                        }}
-                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
-                          formData.opponentName === player.name ? 'bg-primary-50 text-primary-700 font-medium' : ''
-                        }`}
-                      >
-                        {player.name}
-                        {player.rank && <span className="text-sm text-gray-500 ml-2">({player.rank})</span>}
-                      </button>
-                    ))}
-                  {availablePlayers.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-                    <div className="px-4 py-8 text-center text-gray-500">
-                      該当する参加者がいません
-                    </div>
-                  )}
-                </div>
-
-                {formData.opponentName && (
-                  <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-sm">
-                    選択中: <span className="font-medium">{formData.opponentName}</span>
-                  </div>
-                )}
-
-                <p className="mt-2 text-sm text-gray-500">
-                  この日の練習参加者から選択してください
-                </p>
-              </div>
-            )}
+            <select
+              value={formData.opponentId || ''}
+              onChange={(e) => {
+                const selectedPlayer = availablePlayers.find(p => p.id === parseInt(e.target.value));
+                if (selectedPlayer) {
+                  setFormData(prev => ({
+                    ...prev,
+                    opponentName: selectedPlayer.name,
+                    opponentId: selectedPlayer.id
+                  }));
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+              required
+            >
+              <option value="">対戦相手を選択</option>
+              {availablePlayers.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -495,45 +403,52 @@ const MatchForm = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             枚数差 <span className="text-red-500">*</span>
           </label>
-          <div className="relative flex items-center justify-center py-4">
+          <div className="relative flex items-center justify-center py-2">
+            {/* 選択インジケーター（中央の横線） */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-3 pointer-events-none z-10">
+              <div className="w-20 h-0.5 bg-primary-600"></div>
+            </div>
+
             {/* スクロール可能なピッカー */}
             <div
-              className="relative overflow-y-scroll h-48 w-full max-w-xs hide-scrollbar snap-y snap-mandatory"
+              className="relative overflow-y-scroll h-24 w-full max-w-xs hide-scrollbar snap-y snap-mandatory"
               onScroll={(e) => {
                 const scrollTop = e.target.scrollTop;
-                const itemHeight = 48; // 各アイテムの高さ
-                const index = Math.round(scrollTop / itemHeight);
-                setFormData(prev => ({ ...prev, scoreDifference: index }));
+                const itemHeight = 32; // 各アイテムの高さ
+                const centerOffset = 48; // 上部パディング（h-12 = 48px）
+                const index = Math.round((scrollTop + 16 - centerOffset) / itemHeight); // 16px = h-8の半分
+                const clampedIndex = Math.max(0, Math.min(25, index));
+                setFormData(prev => ({ ...prev, scoreDifference: clampedIndex }));
               }}
               ref={(el) => {
                 if (el && !el.dataset.initialized) {
                   el.dataset.initialized = 'true';
-                  // 初期位置にスクロール
-                  el.scrollTop = formData.scoreDifference * 48;
+                  // 初期位置にスクロール（中央に来るように調整）
+                  el.scrollTop = formData.scoreDifference * 32 + 48 - 16;
                 }
               }}
             >
               {/* 上部パディング */}
-              <div className="h-24"></div>
+              <div className="h-12"></div>
 
               {/* 0-25枚の選択肢 */}
               {Array.from({ length: 26 }, (_, i) => i).map((num) => (
                 <div
                   key={num}
-                  className="h-12 flex items-center justify-center snap-center cursor-pointer transition-all"
+                  className="h-8 flex flex-col items-center justify-center snap-center cursor-pointer transition-all"
                   style={{
-                    fontSize: formData.scoreDifference === num ? '2rem' : '1.25rem',
+                    fontSize: formData.scoreDifference === num ? '1.5rem' : '1rem',
                     fontWeight: formData.scoreDifference === num ? '700' : '400',
                     color: formData.scoreDifference === num ? '#2563eb' : '#9ca3af',
                     opacity: Math.abs(formData.scoreDifference - num) > 2 ? 0.3 : 1,
                   }}
                   onClick={() => {
                     setFormData(prev => ({ ...prev, scoreDifference: num }));
-                    // スムーズスクロール
+                    // スムーズスクロール（中央に来るように調整）
                     const container = document.querySelector('.hide-scrollbar');
                     if (container) {
                       container.scrollTo({
-                        top: num * 48,
+                        top: num * 32 + 48 - 16,
                         behavior: 'smooth'
                       });
                     }
@@ -544,7 +459,7 @@ const MatchForm = () => {
               ))}
 
               {/* 下部パディング */}
-              <div className="h-24"></div>
+              <div className="h-12"></div>
             </div>
           </div>
 
