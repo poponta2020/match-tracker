@@ -15,6 +15,7 @@ import {
   MapPin,
   ClipboardList,
   Settings,
+  User,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -78,6 +79,7 @@ const Layout = ({ children }) => {
     if (path === '/players') return '選手管理';
     if (path === '/venues') return '会場管理';
     if (path === '/profile') return 'マイページ';
+    if (path === '/profile/edit') return 'プロフィール編集';
 
     // パターンマッチ
     if (path.startsWith('/matches/results/')) return '試合結果詳細';
@@ -96,8 +98,24 @@ const Layout = ({ children }) => {
     return '競技かるた記録';
   };
 
+  // ボトムナビゲーションの項目定義
+  const bottomNavItems = [
+    { name: 'Home', href: '/', icon: Home },
+    { name: 'Result', href: '/matches', icon: Trophy },
+    { name: 'Schedule', href: '/practice', icon: Calendar },
+    { name: 'Profile', href: '/profile', icon: User },
+  ];
+
+  // ボトムナビゲーションのアクティブ判定（パスの前方一致も考慮）
+  const isBottomNavActive = (href) => {
+    if (href === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(href);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -230,6 +248,37 @@ const Layout = ({ children }) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
+
+      {/* ボトムナビゲーション */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+        <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
+          {bottomNavItems.map((item) => {
+            const Icon = item.icon;
+            const active = isBottomNavActive(item.href);
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+              >
+                <Icon
+                  className={`w-6 h-6 ${
+                    active ? 'text-primary-600' : 'text-gray-400'
+                  }`}
+                  strokeWidth={active ? 2.5 : 2}
+                />
+                <span
+                  className={`text-xs mt-1 ${
+                    active ? 'text-primary-600 font-semibold' : 'text-gray-500'
+                  }`}
+                >
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 };

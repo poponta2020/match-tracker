@@ -20,6 +20,7 @@ import PlayerList from './pages/players/PlayerList';
 import PlayerDetail from './pages/players/PlayerDetail';
 import PlayerEdit from './pages/players/PlayerEdit';
 import Profile from './pages/Profile';
+import ProfileEdit from './pages/ProfileEdit';
 import VenueList from './pages/venues/VenueList';
 import VenueForm from './pages/venues/VenueForm';
 
@@ -220,7 +221,17 @@ function App() {
               path="/profile"
               element={
                 <PrivateRoute>
-                  <Profile />
+                  <Layout>
+                    <Profile />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/profile/edit"
+              element={
+                <PrivateRoute>
+                  <ProfileEdit />
                 </PrivateRoute>
               }
             />
