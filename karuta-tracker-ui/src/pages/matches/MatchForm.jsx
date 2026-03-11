@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock } from 'lucide-react';
+import { Trophy, Save, X, AlertCircle, Users, Lock, Home, PlusSquare, Calendar, User } from 'lucide-react';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -500,6 +500,47 @@ const MatchForm = () => {
         </div>
         )}
       </form>
+
+      {/* ボトムナビゲーション */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+        <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
+          <Link
+            to="/"
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+          >
+            <Home className="w-6 h-6 text-gray-400" strokeWidth={2} />
+            <span className="text-xs mt-1 text-gray-500">Home</span>
+          </Link>
+          <Link
+            to="/matches/new"
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+          >
+            <PlusSquare className="w-6 h-6 text-primary-600" strokeWidth={2.5} />
+            <span className="text-xs mt-1 text-primary-600 font-semibold">Add</span>
+          </Link>
+          <Link
+            to="/matches"
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+          >
+            <Trophy className="w-6 h-6 text-gray-400" strokeWidth={2} />
+            <span className="text-xs mt-1 text-gray-500">Results</span>
+          </Link>
+          <Link
+            to="/practice"
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+          >
+            <Calendar className="w-6 h-6 text-gray-400" strokeWidth={2} />
+            <span className="text-xs mt-1 text-gray-500">Schedule</span>
+          </Link>
+          <Link
+            to="/profile"
+            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+          >
+            <User className="w-6 h-6 text-gray-400" strokeWidth={2} />
+            <span className="text-xs mt-1 text-gray-500">Profile</span>
+          </Link>
+        </div>
+      </nav>
     </div>
   );
 };
