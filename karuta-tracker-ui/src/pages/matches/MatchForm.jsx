@@ -302,8 +302,8 @@ const MatchForm = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+    <div className="min-h-screen bg-gray-50 pb-16 overflow-hidden">
+      <form onSubmit={handleSubmit} className="h-full p-3 space-y-3 overflow-hidden">
         {/* 今日が練習日でない場合の警告 */}
         {!isEdit && practiceSessions.length === 0 && (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -373,10 +373,10 @@ const MatchForm = () => {
 
         {/* 結果 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             結果 <span className="text-red-500">*</span>
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             {['勝ち', '負け'].map((result) => (
               <button
                 key={result}
@@ -384,7 +384,7 @@ const MatchForm = () => {
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, result }))
                 }
-                className={`px-4 py-3 rounded-lg border-2 font-medium transition-all ${
+                className={`px-4 py-2 rounded-lg border-2 font-medium transition-all ${
                   formData.result === result
                     ? result === '勝ち'
                       ? 'border-green-500 bg-green-50 text-green-700'
@@ -400,10 +400,10 @@ const MatchForm = () => {
 
         {/* 枚数差 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             枚数差 <span className="text-red-500">*</span>
           </label>
-          <div className="relative flex items-center justify-center py-2">
+          <div className="relative flex items-center justify-center">
             {/* 選択インジケーター（中央の横線） */}
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-3 pointer-events-none z-10">
               <div className="w-20 h-0.5 bg-primary-600"></div>
@@ -474,32 +474,15 @@ const MatchForm = () => {
           `}</style>
         </div>
 
-        {/* メモ */}
-        {practiceSessions.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              メモ
-            </label>
-            <textarea
-              name="notes"
-              value={formData.notes}
-              onChange={handleChange}
-              rows="4"
-              placeholder="試合の感想、反省点など..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-            ></textarea>
-          </div>
-        )}
-
         {/* ボタン */}
         {practiceSessions.length > 0 && (
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             type="submit"
             disabled={loading}
-            className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+            className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
           >
-            <Save className="w-5 h-5" />
+            <Save className="w-4 h-4" />
             {loading
               ? '保存中...'
               : isEdit
@@ -509,9 +492,9 @@ const MatchForm = () => {
           <button
             type="button"
             onClick={() => navigate('/matches')}
-            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
             キャンセル
           </button>
         </div>
