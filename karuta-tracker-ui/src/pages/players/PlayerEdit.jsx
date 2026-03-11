@@ -172,12 +172,10 @@ const PlayerEdit = () => {
           await apiClient.put(`/players/${id}/role?role=${role}`);
         }
 
-        alert('選手情報を更新しました');
         navigate(`/players/${id}`);
       } else {
         // === 新規選手の登録 ===
         const response = await playerAPI.register(formData);
-        alert('選手を登録しました');
         navigate(`/players/${response.data.id}`);
       }
     } catch (err) {

@@ -47,7 +47,6 @@ const PlayerList = () => {
 
     try {
       await playerAPI.delete(id);
-      alert('選手を削除しました');
       fetchPlayers();
     } catch (err) {
       console.error('Failed to delete player:', err);

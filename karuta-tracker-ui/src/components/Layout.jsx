@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Settings,
   User,
+  PlusSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -69,7 +70,7 @@ const Layout = ({ children }) => {
 
     // 完全一致
     if (path === '/') return 'ホーム';
-    if (path === '/matches') return '結果入力';
+    if (path === '/matches') return '試合結果';
     if (path === '/matches/new') return '結果入力';
     if (path === '/practice') return '練習日程確認';
     if (path === '/practice/participation') return '練習参加登録';
@@ -101,7 +102,8 @@ const Layout = ({ children }) => {
   // ボトムナビゲーションの項目定義
   const bottomNavItems = [
     { name: 'Home', href: '/', icon: Home },
-    { name: 'Result', href: '/matches', icon: Trophy },
+    { name: 'Add', href: '/matches/new', icon: PlusSquare },
+    { name: 'Results', href: '/matches', icon: Trophy },
     { name: 'Schedule', href: '/practice', icon: Calendar },
     { name: 'Profile', href: '/profile', icon: User },
   ];

@@ -116,7 +116,6 @@ const PairingGenerator = () => {
       }));
 
       await pairingAPI.createBatch(sessionDate, matchNumber, requests);
-      alert('組み合わせを保存しました');
 
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
       setExistingPairings(pairingsRes.data);
@@ -156,7 +155,6 @@ const PairingGenerator = () => {
     try {
       await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber);
       setExistingPairings(null);
-      alert('既存の組み合わせを削除しました');
     } catch (err) {
       console.error('Delete failed:', err);
       setError('削除に失敗しました');
