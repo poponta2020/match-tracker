@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -108,4 +109,14 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     @Query("DELETE FROM PracticeParticipant p WHERE p.playerId = :playerId AND p.sessionId IN :sessionIds")
     void deleteByPlayerIdAndSessionIds(@Param("playerId") Long playerId,
                                        @Param("sessionIds") List<Long> sessionIds);
+
+    /**
+     * 指定日以降で特定の選手が参加登録しているセッションの試合番号を、日付昇順で取得
+     */
+    @Query("SELECT pp FROM PracticeParticipant pp " +
+           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE pp.playerId = :playerId AND ps.sessionDate >= :fromDate " +
+           "ORDER BY ps.sessionDate ASC, pp.matchNumber ASC")
+    List<PracticeParticipant> findUpcomingParticipations(@Param("playerId") Long playerId,
+                                                         @Param("fromDate") LocalDate fromDate);
 }

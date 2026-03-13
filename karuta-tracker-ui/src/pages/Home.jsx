@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { matchAPI, practiceAPI, pairingAPI } from '../api';
+import { matchAPI, practiceAPI } from '../api';
 import {
   Trophy,
-  BookOpen,
   TrendingUp,
-  Calendar,
   ArrowRight,
+  Settings,
+  Calendar,
   Clock,
   MapPin,
-  Settings,
 } from 'lucide-react';
 
 const Home = () => {
@@ -18,14 +17,12 @@ const Home = () => {
   const location = useLocation();
   const [stats, setStats] = useState({
     recentMatches: [],
-    recentPractices: [],
-    todayPairings: [],
     totalMatches: 0,
     totalWins: 0,
     winRate: 0,
-    upcomingPracticesCount: 0,
     loading: true,
   });
+  const [nextPractice, setNextPractice] = useState(null);
   const [slowLoading, setSlowLoading] = useState(false);
 
   // 3秒以上ローディングが続いたらコールドスタートメッセージを表示
@@ -41,43 +38,28 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        today.setHours(0, 0, 0, 0);
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1;
-
         // 必要なAPIのみ並列実行
         const [
           matchesRes,
           statisticsRes,
-          practicesRes,
-          todayPairingsRes,
+          nextPracticeRes,
         ] = await Promise.all([
           matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
           matchAPI.getStatistics(currentPlayer.id).catch(() => ({ data: { totalMatches: 0, wins: 0, winRate: 0 } })),
-          practiceAPI.getUpcoming(todayStr).then(res => res.data).catch(() => []),
-          pairingAPI.getByDate(todayStr).catch(() => ({ data: [] })),
+          practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
         ]);
-
-        const allPractices = Array.isArray(practicesRes) ? practicesRes : [];
-
-        // 今後の練習
-        const upcomingPractices = allPractices
-          .filter(p => new Date(p.sessionDate) >= today)
-          .sort((a, b) => new Date(a.sessionDate) - new Date(b.sessionDate))
-          .slice(0, 5);
 
         setStats({
           recentMatches: matchesRes.data.slice(0, 5),
-          recentPractices: upcomingPractices,
-          todayPairings: todayPairingsRes.data || [],
           totalMatches: statisticsRes.data.totalMatches || 0,
           totalWins: statisticsRes.data.wins || 0,
           winRate: statisticsRes.data.winRate || 0,
-          upcomingPracticesCount: upcomingPractices.length,
           loading: false,
         });
+
+        if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
+          setNextPractice(nextPracticeRes.data);
+        }
 
       } catch (error) {
         console.error('データ取得エラー:', error);
@@ -151,38 +133,50 @@ const Home = () => {
 
       {/* コンテンツ（上部パディング追加） */}
       <div className="pt-16">
-      {/* 次の練習会場情報 */}
-      {stats.recentPractices.length > 0 && stats.recentPractices[0] && (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
-            <MapPin className="w-6 h-6 text-green-600" />
-            次の練習
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-gray-600" />
-              <span className="text-lg font-medium">
-                {new Date(stats.recentPractices[0].sessionDate).toLocaleDateString('ja-JP', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  weekday: 'short'
-                })}
-              </span>
+      {/* 次の参加予定練習 */}
+      {nextPractice && (
+        <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#5f3a2d] text-white' : 'bg-[#f9f6f2]'}`}>
+          {nextPractice.today ? (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="bg-white text-[#5f3a2d] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
+              <h2 className="text-lg font-bold">今日は練習日です</h2>
             </div>
-            {stats.recentPractices[0].startTime && (
+          ) : (
+            <h2 className={`text-lg font-bold flex items-center gap-2 mb-3 ${nextPractice.today ? '' : 'text-[#5f3a2d]'}`}>
+              <Calendar className="w-5 h-5" />
+              次の練習
+            </h2>
+          )}
+          <div className="space-y-2">
+            {!nextPractice.today && (
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-gray-600" />
-                <span className="text-lg">
-                  {stats.recentPractices[0].startTime}～{stats.recentPractices[0].endTime || ''}
+                <Calendar className="w-4 h-4 opacity-70" />
+                <span className="font-medium">
+                  {new Date(nextPractice.sessionDate).toLocaleDateString('ja-JP', {
+                    month: 'long',
+                    day: 'numeric',
+                    weekday: 'short'
+                  })}
                 </span>
               </div>
             )}
-            {stats.recentPractices[0].venueName && (
+            {nextPractice.startTime && (
               <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-gray-600" />
-                <span className="text-lg font-medium">
-                  {stats.recentPractices[0].venueName}
+                <Clock className="w-4 h-4 opacity-70" />
+                <span>{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
+              </div>
+            )}
+            {nextPractice.venueName && (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 opacity-70" />
+                <span>{nextPractice.venueName}</span>
+              </div>
+            )}
+            {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+              <div className={`mt-2 pt-2 border-t ${nextPractice.today ? 'border-white/20' : 'border-gray-200'}`}>
+                <span className="text-sm opacity-80">参加試合：</span>
+                <span className="font-medium ml-1">
+                  {nextPractice.matchNumbers.map(n => `${n}試合目`).join('、')}
                 </span>
               </div>
             )}
@@ -191,7 +185,7 @@ const Home = () => {
       )}
 
       {/* 統計カード */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard
           icon={Trophy}
           title="試合数"
@@ -200,25 +194,11 @@ const Home = () => {
           link="/matches"
         />
         <StatCard
-          icon={BookOpen}
-          title="今後の練習予定"
-          value={stats.upcomingPracticesCount}
-          color="bg-[#a5927f]"
-          link="/practice"
-        />
-        <StatCard
           icon={TrendingUp}
           title="勝率"
           value={`${Math.round(stats.winRate)}%`}
           color="bg-[#8b7866]"
           link="/statistics"
-        />
-        <StatCard
-          icon={Calendar}
-          title="今日の対戦"
-          value={stats.todayPairings.length}
-          color="bg-[#9d8570]"
-          link="/pairings"
         />
       </div>
 

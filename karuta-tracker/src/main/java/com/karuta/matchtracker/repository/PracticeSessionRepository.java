@@ -71,4 +71,13 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
      * @return 登録されている場合true
      */
     boolean existsBySessionDate(LocalDate sessionDate);
+
+    /**
+     * 指定日以降の練習日の日付リストのみ取得（降順）
+     *
+     * @param date 基準日
+     * @return 日付リスト
+     */
+    @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.sessionDate >= :date ORDER BY ps.sessionDate DESC")
+    List<LocalDate> findSessionDates(@Param("date") LocalDate date);
 }

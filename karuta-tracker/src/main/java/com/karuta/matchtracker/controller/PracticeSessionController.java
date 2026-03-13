@@ -114,6 +114,36 @@ public class PracticeSessionController {
     }
 
     /**
+     * 次の参加予定練習を取得（ホーム画面用・軽量）
+     *
+     * @param playerId 選手ID
+     * @return 次の参加予定情報（なければ204）
+     */
+    @GetMapping("/next-participation")
+    public ResponseEntity<?> getNextParticipation(@RequestParam Long playerId) {
+        log.debug("GET /api/practice-sessions/next-participation?playerId={}", playerId);
+        var result = practiceSessionService.findNextParticipation(playerId);
+        if (result == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 指定日以降の練習日の日付リストのみ取得（軽量）
+     *
+     * @param fromDate 基準日
+     * @return 日付リスト
+     */
+    @GetMapping("/dates")
+    public ResponseEntity<List<LocalDate>> getSessionDates(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate) {
+        log.debug("GET /api/practice-sessions/dates?fromDate={}", fromDate);
+        List<LocalDate> dates = practiceSessionService.findSessionDates(fromDate);
+        return ResponseEntity.ok(dates);
+    }
+
+    /**
      * 練習日の存在確認
      *
      * @param date 日付

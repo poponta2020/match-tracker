@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock, Home, PlusSquare, Calendar, User } from 'lucide-react';
+import { Trophy, Save, X, AlertCircle, Users, Lock } from 'lucide-react';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -379,42 +379,45 @@ const MatchForm = () => {
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">
-      {/* ナビゲーションバー（日付表示と試合番号タブ） */}
-      {practiceSessions.length > 0 && practiceSession && (
-        <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
-          <div className="text-center mb-3">
-            <div className="text-lg font-semibold text-[#5f3a2d]">
-              {new Date(formData.matchDate).toLocaleDateString('ja-JP', {
+      {/* ナビゲーションバー */}
+      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* 日付表示 */}
+          <div className="flex items-center justify-center py-3">
+            <span className="text-lg font-semibold text-[#5f3a2d]">
+              {new Date(formData.matchDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
                 weekday: 'short'
               })}
-            </div>
+            </span>
           </div>
 
           {/* 試合番号タブ */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {(participatingMatchNumbers.length > 0
-              ? participatingMatchNumbers
-              : Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1)
-            ).map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
-                className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  formData.matchNumber === num
-                    ? 'bg-[#82655a] text-white'
-                    : 'bg-[#d0c5b8] text-[#5f3a2d] hover:bg-[#c0b5a8]'
-                }`}
-              >
-                第{num}試合
-              </button>
-            ))}
-          </div>
+          {practiceSession && (
+            <div className="flex overflow-x-auto -mb-px">
+              {(participatingMatchNumbers.length > 0
+                ? participatingMatchNumbers
+                : Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1)
+              ).map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
+                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                    formData.matchNumber === num
+                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
+                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                  }`}
+                >
+                  第{num}試合
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <form onSubmit={handleSubmit} className="h-full p-3 space-y-3 overflow-hidden pt-32">
         {/* 今日が練習日でない場合の警告 */}
@@ -555,46 +558,6 @@ const MatchForm = () => {
         )}
       </form>
 
-      {/* ボトムナビゲーション */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#a5b4aa] border-t border-[#8a9890] z-50">
-        <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
-          <Link
-            to="/"
-            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-          >
-            <Home className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
-            <span className="text-xs mt-1 text-[#f1ece5]">Home</span>
-          </Link>
-          <Link
-            to="/matches/new"
-            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-          >
-            <PlusSquare className="w-6 h-6 text-[#685e59]" strokeWidth={2.5} />
-            <span className="text-xs mt-1 text-[#685e59] font-semibold">Add</span>
-          </Link>
-          <Link
-            to="/matches"
-            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-          >
-            <Trophy className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
-            <span className="text-xs mt-1 text-[#f1ece5]">Results</span>
-          </Link>
-          <Link
-            to="/practice"
-            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-          >
-            <Calendar className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
-            <span className="text-xs mt-1 text-[#f1ece5]">Schedule</span>
-          </Link>
-          <Link
-            to="/profile"
-            className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-          >
-            <User className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
-            <span className="text-xs mt-1 text-[#f1ece5]">Profile</span>
-          </Link>
-        </div>
-      </nav>
     </div>
   );
 };

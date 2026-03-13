@@ -56,7 +56,9 @@ function App() {
               path="/matches/new"
               element={
                 <PrivateRoute>
-                  <MatchForm />
+                  <Layout>
+                    <MatchForm />
+                  </Layout>
                 </PrivateRoute>
               }
             />

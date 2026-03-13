@@ -105,7 +105,7 @@ const Layout = ({ children }) => {
     { name: 'Add', href: '/matches/new', icon: PlusSquare },
     { name: 'Results', href: '/matches/results', icon: Trophy },
     { name: 'Schedule', href: '/practice', icon: Calendar },
-    { name: 'Profile', href: '/matches', icon: User },
+    { name: 'MyRecord', href: '/matches', icon: User },
   ];
 
   // ボトムナビゲーションのアクティブ判定（パスの前方一致も考慮）

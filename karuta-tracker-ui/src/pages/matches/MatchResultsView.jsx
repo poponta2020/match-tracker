@@ -27,36 +27,18 @@ const MatchResultsView = () => {
       try {
         const today = new Date().toISOString().split('T')[0];
 
-        // 今日から過去30日分の練習セッションを取得（軽量）
+        // 今日から過去30日分の練習日付リストのみ取得（軽量API）
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - 30);
         const fromDateStr = fromDate.toISOString().split('T')[0];
 
-        const response = await practiceAPI.getUpcoming(fromDateStr);
-        const sessions = response.data || [];
-
-        // 日付リストを抽出（降順ソート）
-        const dates = sessions
-          .map(s => s.sessionDate)
-          .sort((a, b) => new Date(b) - new Date(a));
+        const response = await practiceAPI.getDates(fromDateStr);
+        const dates = response.data || [];
         setAvailableDates(dates);
 
         // 初期日付の決定
-        if (sessionId) {
-          // sessionIdがある場合、そのセッションの日付を取得
-          const targetSession = sessions.find(s => s.id === parseInt(sessionId));
-          if (targetSession) {
-            setSelectedDate(targetSession.sessionDate);
-          } else {
-            // sessionIdが見つからない場合は今日の日付
-            const todaySession = dates.find(d => d === today);
-            setSelectedDate(todaySession || dates[0] || null);
-          }
-        } else {
-          // sessionIdがない場合は今日の日付（存在しない場合は最新の練習日）
-          const todaySession = dates.find(d => d === today);
-          setSelectedDate(todaySession || dates[0] || null);
-        }
+        const todaySession = dates.find(d => d === today);
+        setSelectedDate(todaySession || dates[0] || null);
       } catch (err) {
         console.error('練習セッション一覧の取得に失敗:', err);
         setError('練習セッション一覧の取得に失敗しました');
@@ -207,35 +189,38 @@ const MatchResultsView = () => {
   // データなし画面
   if (!loading && !session && selectedDate) {
     return (
-      <div className="min-h-screen bg-[#f2ede6]">
-        <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            {/* 日付選択UI */}
-            <div className="flex items-center justify-center gap-2 mb-4">
+      <div className="min-h-screen bg-[#f2ede6] pb-20">
+        {/* ナビゲーションバー */}
+        <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between py-3">
               <button
                 onClick={goToPreviousDate}
                 disabled={!hasPreviousDate()}
-                className={`p-2 rounded-full ${
+                className={`p-2 rounded-full transition-colors ${
                   hasPreviousDate()
-                    ? 'hover:bg-gray-100 text-gray-700'
+                    ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
                     : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="w-6 h-6" />
               </button>
 
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100"
+                  className="text-lg font-semibold text-[#5f3a2d]"
                 >
-                  <Calendar className="h-4 w-4" />
-                  <span className="font-semibold">{selectedDate}</span>
+                  {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    weekday: 'short'
+                  })}
                 </button>
 
-                {/* 日付選択ドロップダウン */}
                 {showDatePicker && (
-                  <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto min-w-[200px]">
                     {availableDates.map((date) => (
                       <button
                         key={date}
@@ -243,11 +228,15 @@ const MatchResultsView = () => {
                           setSelectedDate(date);
                           setShowDatePicker(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${
-                          date === selectedDate ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-700'
+                        className={`block w-full text-left px-4 py-2 hover:bg-[#f0ebe3] ${
+                          date === selectedDate ? 'bg-[#e8e1d8] text-[#5f3a2d] font-semibold' : 'text-gray-700'
                         }`}
                       >
-                        {date}
+                        {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
+                          month: 'short',
+                          day: 'numeric',
+                          weekday: 'short'
+                        })}
                       </button>
                     ))}
                   </div>
@@ -257,27 +246,31 @@ const MatchResultsView = () => {
               <button
                 onClick={goToNextDate}
                 disabled={!hasNextDate()}
-                className={`p-2 rounded-full ${
+                className={`p-2 rounded-full transition-colors ${
                   hasNextDate()
-                    ? 'hover:bg-gray-100 text-gray-700'
+                    ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
                     : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="w-6 h-6" />
               </button>
             </div>
           </div>
         </div>
 
         {/* データなしメッセージ */}
-        <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <div className="max-w-4xl mx-auto px-4 pt-20 py-12 text-center">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
             <Calendar className="h-16 w-16 text-blue-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-blue-900 mb-2">
               この日は練習がありません
             </h2>
             <p className="text-blue-700">
-              {selectedDate} の練習セッションは登録されていません。
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })} の練習セッションは登録されていません。
             </p>
           </div>
         </div>
@@ -287,39 +280,38 @@ const MatchResultsView = () => {
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-20">
-      {/* ヘッダー */}
-      <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="mb-4">
-            <h1 className="text-xl font-bold">試合結果詳細</h1>
-          </div>
-
-          {/* 日付選択UI */}
-          <div className="flex items-center justify-center gap-2 mb-4">
+      {/* ナビゲーションバー */}
+      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* 日付選択 */}
+          <div className="flex items-center justify-between py-3">
             <button
               onClick={goToPreviousDate}
               disabled={!hasPreviousDate()}
-              className={`p-2 rounded-full ${
+              className={`p-2 rounded-full transition-colors ${
                 hasPreviousDate()
-                  ? 'hover:bg-gray-100 text-gray-700'
+                  ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
                   : 'text-gray-300 cursor-not-allowed'
               }`}
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="w-6 h-6" />
             </button>
 
             <div className="relative">
               <button
                 onClick={() => setShowDatePicker(!showDatePicker)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100"
+                className="text-lg font-semibold text-[#5f3a2d]"
               >
-                <Calendar className="h-4 w-4" />
-                <span className="font-semibold">{selectedDate}</span>
+                {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short'
+                })}
               </button>
 
-              {/* 日付選択ドロップダウン */}
               {showDatePicker && (
-                <div className="absolute top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto">
+                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto min-w-[200px]">
                   {availableDates.map((date) => (
                     <button
                       key={date}
@@ -327,11 +319,15 @@ const MatchResultsView = () => {
                         setSelectedDate(date);
                         setShowDatePicker(false);
                       }}
-                      className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${
-                        date === selectedDate ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-700'
+                      className={`block w-full text-left px-4 py-2 hover:bg-[#f0ebe3] ${
+                        date === selectedDate ? 'bg-[#e8e1d8] text-[#5f3a2d] font-semibold' : 'text-gray-700'
                       }`}
                     >
-                      {date}
+                      {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short'
+                      })}
                     </button>
                   ))}
                 </div>
@@ -341,55 +337,39 @@ const MatchResultsView = () => {
             <button
               onClick={goToNextDate}
               disabled={!hasNextDate()}
-              className={`p-2 rounded-full ${
+              className={`p-2 rounded-full transition-colors ${
                 hasNextDate()
-                  ? 'hover:bg-gray-100 text-gray-700'
+                  ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
                   : 'text-gray-300 cursor-not-allowed'
               }`}
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="w-6 h-6" />
             </button>
           </div>
 
-          {session && (
-            <div className="space-y-1 text-sm text-gray-600">
-              <p>🏛️ {session.venueName}</p>
-              <p>👥 参加者: {pairings.length * 2}名</p>
+          {/* タブバー */}
+          {totalMatches > 0 && (
+            <div className="flex overflow-x-auto -mb-px">
+              {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
+                <button
+                  key={num}
+                  onClick={() => setCurrentMatchNumber(num)}
+                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                    currentMatchNumber === num
+                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
+                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                  }`}
+                >
+                  {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* タブバー */}
-      <div className="bg-[#e2d9d0] sticky top-[120px] z-20">
-        <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
-          <div className="flex gap-1 pt-2">
-            {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
-              <button
-                key={num}
-                onClick={() => setCurrentMatchNumber(num)}
-                className={`flex-shrink-0 px-4 py-2 rounded-t-lg transition-colors ${
-                  currentMatchNumber === num
-                    ? 'bg-[#f9f6f2] text-[#5f3a2d] font-semibold border-t-2 border-x-2 border-[#d0c5b8]'
-                    : 'bg-[#d0c5b8] text-[#7a5f54] hover:bg-[#c5bab0]'
-                }`}
-              >
-                <div className="text-center">
-                  <div className="font-semibold">
-                    {num}試合{isMatchCompleted(num) ? '✓' : ''}
-                  </div>
-                  <div className="text-xs opacity-80">
-                    {session?.startTime && `${num === 1 ? session.startTime : ''}`}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto px-4 pt-24 py-6">
         <div className="bg-[#f9f6f2] rounded-b-lg rounded-tr-lg shadow-sm p-4 mb-4">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             第{currentMatchNumber}試合 ({currentPairings.length * 2}名参加)

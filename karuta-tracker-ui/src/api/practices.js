@@ -42,6 +42,18 @@ export const practiceAPI = {
       params: { fromDate },
     }),
 
+  // 次の参加予定練習を取得（ホーム画面用・軽量）
+  getNextParticipation: (playerId) =>
+    apiClient.get('/practice-sessions/next-participation', {
+      params: { playerId },
+    }),
+
+  // 指定日以降の練習日の日付リストのみ取得（軽量）
+  getDates: (fromDate) =>
+    apiClient.get('/practice-sessions/dates', {
+      params: { fromDate },
+    }),
+
   // 選手の特定月の参加状況を取得
   getPlayerParticipations: (playerId, year, month) =>
     apiClient.get(`/practice-sessions/participations/player/${playerId}`, {

@@ -306,11 +306,11 @@ const PracticeList = () => {
 
       {/* カレンダー */}
       <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full border-collapse">
+        <table className="w-full border-collapse table-fixed">
           <thead className="bg-[#e2d9d0]">
             <tr>
               {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
-                <th key={day} className="px-2 py-3 text-center text-sm font-medium border">
+                <th key={day} className="py-3 text-center text-sm font-medium border">
                   {day}
                 </th>
               ))}
@@ -328,40 +328,30 @@ const PracticeList = () => {
                   let bgColor = 'bg-[#f9f6f2]';
                   let borderColor = 'border-[#d0c5b8]';
                   let cursor = 'cursor-default';
+                  const isMyParticipation = participationStatus !== 'none';
 
-                  if (today && hasSession) {
-                    bgColor = 'bg-green-50';
-                    borderColor = 'border-green-400';
+                  if (hasSession) {
                     cursor = 'cursor-pointer';
-                  } else if (today) {
-                    bgColor = 'bg-yellow-50';
-                    borderColor = 'border-orange-300';
-                  } else if (hasSession) {
-                    bgColor = 'bg-[#e8e1d8] hover:bg-[#ddd4cb]';
-                    borderColor = 'border-[#a5927f]';
-                    cursor = 'cursor-pointer';
+                    if (isMyParticipation) {
+                      bgColor = 'bg-[#e8e1d8] hover:bg-[#ddd4cb]';
+                      borderColor = 'border-[#a5927f]';
+                    } else {
+                      bgColor = 'bg-[#f9f6f2] hover:bg-[#f0ebe3]';
+                    }
                   }
 
                   return (
                     <td
                       key={dayIdx}
-                      className={`px-2 py-4 border ${bgColor} ${borderColor} ${cursor} align-top h-24 relative`}
+                      className={`px-1 py-3 border ${bgColor} ${borderColor} ${cursor} align-top h-20 relative`}
                       onClick={() => handleCellClick(day)}
                     >
                       {day && (
                         <div className="text-center">
-                          <div className="flex items-start justify-center gap-1">
-                            <div className={`text-lg ${today ? 'font-bold' : ''}`}>{day}</div>
-                            {participationStatus === 'full' && (
-                              <span className="text-green-500 text-sm">●</span>
-                            )}
-                            {participationStatus === 'partial' && (
-                              <span className="text-yellow-500 text-sm">◐</span>
-                            )}
-                          </div>
+                          <div className={`text-lg ${today ? 'font-bold' : ''}`}>{day}</div>
                           {session && session.venueName && (
                             <div className="mt-1 text-xs text-gray-700">
-                              🏛{abbreviateLocation(session.venueName)}
+                              {abbreviateLocation(session.venueName)}
                             </div>
                           )}
                         </div>

@@ -104,6 +104,63 @@ public class PracticeSessionService {
     }
 
     /**
+     * 指定日以降の練習日の日付リストのみ取得（軽量）
+     */
+    @Transactional(readOnly = true)
+    public List<LocalDate> findSessionDates(LocalDate fromDate) {
+        log.debug("Finding session dates from {}", fromDate);
+        return practiceSessionRepository.findSessionDates(fromDate);
+    }
+
+    /**
+     * 次の参加予定練習を取得（ホーム画面用・軽量）
+     */
+    @Transactional(readOnly = true)
+    public NextParticipationDto findNextParticipation(Long playerId) {
+        LocalDate today = LocalDate.now();
+        log.debug("Finding next participation for player {} from {}", playerId, today);
+
+        // 今日以降の参加レコードを日付順で一括取得
+        List<PracticeParticipant> allParticipations = practiceParticipantRepository
+                .findUpcomingParticipations(playerId, today);
+        if (allParticipations.isEmpty()) {
+            return null;
+        }
+
+        // 最初の1件のセッションIDが最も近い練習日
+        Long nextSessionId = allParticipations.get(0).getSessionId();
+        PracticeSession nextSession = practiceSessionRepository.findById(nextSessionId).orElse(null);
+        if (nextSession == null) {
+            return null;
+        }
+
+        // そのセッションの試合番号を抽出
+        List<Integer> matchNumbers = allParticipations.stream()
+                .filter(p -> p.getSessionId().equals(nextSessionId))
+                .map(PracticeParticipant::getMatchNumber)
+                .filter(java.util.Objects::nonNull)
+                .sorted()
+                .toList();
+
+        // 会場名を取得
+        String venueName = null;
+        if (nextSession.getVenueId() != null) {
+            venueName = venueRepository.findById(nextSession.getVenueId())
+                    .map(venue -> venue.getName())
+                    .orElse(null);
+        }
+
+        return NextParticipationDto.builder()
+                .sessionDate(nextSession.getSessionDate())
+                .startTime(nextSession.getStartTime())
+                .endTime(nextSession.getEndTime())
+                .venueName(venueName)
+                .matchNumbers(matchNumbers)
+                .isToday(nextSession.getSessionDate().equals(today))
+                .build();
+    }
+
+    /**
      * 日付が練習日として登録されているか確認
      */
     public boolean existsSessionOnDate(LocalDate date) {
