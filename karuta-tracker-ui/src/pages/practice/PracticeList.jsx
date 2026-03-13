@@ -246,22 +246,22 @@ const PracticeList = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ナビゲーションバー */}
-      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-gray-700" />
+            <ChevronLeft className="w-6 h-6 text-[#5f3a2d]" />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">
+          <h1 className="text-lg font-semibold text-[#5f3a2d]">
             {monthStr}
           </h1>
           <button
             onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-gray-700" />
+            <ChevronRight className="w-6 h-6 text-[#5f3a2d]" />
           </button>
         </div>
       </div>
@@ -272,7 +272,7 @@ const PracticeList = () => {
         <div className="flex gap-3">
           <button
             onClick={() => { fetchSessions(); fetchMyParticipations(); }}
-            className="flex items-center gap-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            className="flex items-center gap-1 px-4 py-2 bg-[#e2d9d0] rounded-lg hover:bg-[#d0c5b8] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             更新
@@ -280,7 +280,7 @@ const PracticeList = () => {
           {isSuperAdmin() && (
             <button
               onClick={() => navigate('/practice/new')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors"
             >
               + 新規登録
             </button>
@@ -298,19 +298,19 @@ const PracticeList = () => {
       <div className="flex justify-center mb-6">
         <button
           onClick={goToParticipation}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+          className="px-6 py-3 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors font-medium"
         >
           📝 今月の参加登録を変更
         </button>
       </div>
 
       {/* カレンダー */}
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+      <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
         <table className="min-w-full border-collapse">
-          <thead className="bg-gray-100">
+          <thead className="bg-[#e2d9d0]">
             <tr>
               {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
-                <th key={day} className="px-2 py-3 text-center text-sm font-medium text-gray-700 border">
+                <th key={day} className="px-2 py-3 text-center text-sm font-medium border">
                   {day}
                 </th>
               ))}
@@ -325,8 +325,8 @@ const PracticeList = () => {
                   const hasSession = !!session;
                   const participationStatus = session ? getMyParticipationStatus(session) : 'none';
 
-                  let bgColor = 'bg-white';
-                  let borderColor = 'border-gray-200';
+                  let bgColor = 'bg-[#f9f6f2]';
+                  let borderColor = 'border-[#d0c5b8]';
                   let cursor = 'cursor-default';
 
                   if (today && hasSession) {
@@ -337,8 +337,8 @@ const PracticeList = () => {
                     bgColor = 'bg-yellow-50';
                     borderColor = 'border-orange-300';
                   } else if (hasSession) {
-                    bgColor = 'bg-blue-50 hover:bg-blue-100';
-                    borderColor = 'border-blue-200';
+                    bgColor = 'bg-[#e8e1d8] hover:bg-[#ddd4cb]';
+                    borderColor = 'border-[#a5927f]';
                     cursor = 'cursor-pointer';
                   }
 
@@ -382,11 +382,11 @@ const PracticeList = () => {
           onClick={closeModal}
         >
           <div
-            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+            className="bg-[#f9f6f2] rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-gray-900">
+              <h3 className="text-xl font-bold">
                 📅 {formatDateForModal(selectedSession.sessionDate)}
               </h3>
               <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
@@ -396,7 +396,7 @@ const PracticeList = () => {
 
             <div className="space-y-4">
               <div>
-                <div className="text-sm font-medium text-gray-700">📍 場所:</div>
+                <div className="text-sm font-medium text-gray-600">📍 場所:</div>
                 <div className="text-base text-gray-900">{selectedSession.venueName || '-'}</div>
               </div>
 
@@ -438,7 +438,7 @@ const PracticeList = () => {
                                     e.stopPropagation();
                                     handleEditMatchParticipants(parseInt(matchNum));
                                   }}
-                                  className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                  className="ml-2 px-2 py-1 text-xs bg-[#82655a] text-white rounded hover:bg-[#6b5048]"
                                 >
                                   編集
                                 </button>
@@ -480,14 +480,14 @@ const PracticeList = () => {
               {isPastDate(selectedSession.sessionDate) ? (
                 <button
                   onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
-                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                  className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
                 >
                   📊 試合結果を見る
                 </button>
               ) : (
                 <button
                   onClick={goToParticipation}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                  className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
                 >
                   📝 参加登録
                 </button>
@@ -497,7 +497,7 @@ const PracticeList = () => {
                   <>
                     <button
                       onClick={() => navigate(`/practice/${selectedSession.id}/edit`)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
                     >
                       編集
                     </button>

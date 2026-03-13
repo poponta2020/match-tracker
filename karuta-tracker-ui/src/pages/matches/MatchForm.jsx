@@ -346,9 +346,9 @@ const MatchForm = () => {
   // 初期ローディング中
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-[#f2ede6] pb-16 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>
@@ -359,7 +359,7 @@ const MatchForm = () => {
   if (error && isEdit) {
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-6 space-y-6">
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span>{error}</span>
@@ -367,7 +367,7 @@ const MatchForm = () => {
           <div className="flex justify-center">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors font-medium"
+              className="flex items-center justify-center gap-2 bg-[#82655a] text-white px-6 py-3 rounded-lg hover:bg-[#6b5048] transition-colors font-medium"
             >
               ホームに戻る
             </button>
@@ -378,12 +378,12 @@ const MatchForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-16 overflow-hidden">
+    <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">
       {/* ナビゲーションバー（日付表示と試合番号タブ） */}
       {practiceSessions.length > 0 && practiceSession && (
-        <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+        <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
           <div className="text-center mb-3">
-            <div className="text-lg font-semibold text-gray-900">
+            <div className="text-lg font-semibold text-[#5f3a2d]">
               {new Date(formData.matchDate).toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -405,8 +405,8 @@ const MatchForm = () => {
                 onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
                 className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-colors ${
                   formData.matchNumber === num
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#82655a] text-white'
+                    : 'bg-[#d0c5b8] text-[#5f3a2d] hover:bg-[#c0b5a8]'
                 }`}
               >
                 第{num}試合
@@ -453,7 +453,7 @@ const MatchForm = () => {
                   }));
                 }
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+              className="w-full px-4 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent text-base bg-[#f9f6f2]"
               required
             >
               <option value="">対戦相手を選択</option>
@@ -468,7 +468,7 @@ const MatchForm = () => {
 
         {/* 結果 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-600 mb-1">
             結果 <span className="text-red-500">*</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -484,7 +484,7 @@ const MatchForm = () => {
                     ? result === '勝ち'
                       ? 'border-green-500 bg-green-50 text-green-700'
                       : 'border-red-500 bg-red-50 text-red-700'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    : 'border-[#d0c5b8] text-gray-600 hover:border-[#c0b5a8]'
                 }`}
               >
                 {result}
@@ -495,14 +495,14 @@ const MatchForm = () => {
 
         {/* 枚数差 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-600 mb-1">
             枚数差 <span className="text-red-500">*</span>
           </label>
           <select
             name="scoreDifference"
             value={formData.scoreDifference}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+            className="w-full px-4 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent text-base bg-[#f9f6f2]"
             required
           >
             {Array.from({ length: 26 }, (_, i) => i).map((num) => (
@@ -515,7 +515,7 @@ const MatchForm = () => {
 
         {/* メモ */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-600 mb-1">
             メモ
           </label>
           <textarea
@@ -524,7 +524,7 @@ const MatchForm = () => {
             onChange={handleChange}
             rows="3"
             placeholder="試合の感想、反省点など..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            className="w-full px-4 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent resize-none bg-[#f9f6f2]"
           ></textarea>
         </div>
 
@@ -534,7 +534,7 @@ const MatchForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+            className="flex-1 flex items-center justify-center gap-2 bg-[#82655a] text-white px-4 py-2 rounded-lg hover:bg-[#6b5048] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
           >
             <Save className="w-4 h-4" />
             {loading
@@ -546,7 +546,7 @@ const MatchForm = () => {
           <button
             type="button"
             onClick={() => navigate('/matches')}
-            className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            className="flex items-center justify-center gap-2 bg-[#e2d9d0] px-4 py-2 rounded-lg hover:bg-[#d0c5b8] transition-colors font-medium"
           >
             <X className="w-4 h-4" />
             キャンセル
@@ -556,42 +556,42 @@ const MatchForm = () => {
       </form>
 
       {/* ボトムナビゲーション */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#a5b4aa] border-t border-[#8a9890] z-50">
         <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
           <Link
             to="/"
             className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
           >
-            <Home className="w-6 h-6 text-gray-400" strokeWidth={2} />
-            <span className="text-xs mt-1 text-gray-500">Home</span>
+            <Home className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
+            <span className="text-xs mt-1 text-[#f1ece5]">Home</span>
           </Link>
           <Link
             to="/matches/new"
             className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
           >
-            <PlusSquare className="w-6 h-6 text-primary-600" strokeWidth={2.5} />
-            <span className="text-xs mt-1 text-primary-600 font-semibold">Add</span>
+            <PlusSquare className="w-6 h-6 text-[#685e59]" strokeWidth={2.5} />
+            <span className="text-xs mt-1 text-[#685e59] font-semibold">Add</span>
           </Link>
           <Link
             to="/matches"
             className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
           >
-            <Trophy className="w-6 h-6 text-gray-400" strokeWidth={2} />
-            <span className="text-xs mt-1 text-gray-500">Results</span>
+            <Trophy className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
+            <span className="text-xs mt-1 text-[#f1ece5]">Results</span>
           </Link>
           <Link
             to="/practice"
             className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
           >
-            <Calendar className="w-6 h-6 text-gray-400" strokeWidth={2} />
-            <span className="text-xs mt-1 text-gray-500">Schedule</span>
+            <Calendar className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
+            <span className="text-xs mt-1 text-[#f1ece5]">Schedule</span>
           </Link>
           <Link
             to="/profile"
             className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
           >
-            <User className="w-6 h-6 text-gray-400" strokeWidth={2} />
-            <span className="text-xs mt-1 text-gray-500">Profile</span>
+            <User className="w-6 h-6 text-[#f1ece5]" strokeWidth={2} />
+            <span className="text-xs mt-1 text-[#f1ece5]">Profile</span>
           </Link>
         </div>
       </nav>

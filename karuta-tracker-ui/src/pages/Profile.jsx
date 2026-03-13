@@ -94,7 +94,7 @@ const Profile = () => {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>
@@ -117,24 +117,24 @@ const Profile = () => {
   return (
     <div className="space-y-6">
       {/* ハンバーガーメニューバー */}
-      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-900">マイページ</h1>
+          <h1 className="text-lg font-semibold text-[#5f3a2d]">マイページ</h1>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-[#d0c5b8] transition-colors"
           >
             {mobileMenuOpen ? (
-              <X className="w-6 h-6 text-gray-700" />
+              <X className="w-6 h-6 text-[#5f3a2d]" />
             ) : (
-              <Menu className="w-6 h-6 text-gray-700" />
+              <Menu className="w-6 h-6 text-[#5f3a2d]" />
             )}
           </button>
         </div>
 
         {/* モバイルメニュー */}
         {mobileMenuOpen && (
-          <div className="border-t border-gray-200 mt-4 pt-4 max-w-7xl mx-auto">
+          <div className="border-t border-[#d0c5b8] mt-4 pt-4 max-w-7xl mx-auto">
             <div className="space-y-1">
               {navigation.map((item) => {
                 const Icon = item.icon;
@@ -146,8 +146,8 @@ const Profile = () => {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
                       active
-                        ? 'bg-primary-50 text-primary-600'
-                        : 'text-gray-700 hover:bg-gray-100'
+                        ? 'bg-[#e8e1d8] text-[#82655a]'
+                        : 'hover:bg-[#e2d9d0]'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -157,7 +157,7 @@ const Profile = () => {
               })}
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-[#e2d9d0] rounded-lg"
               >
                 <LogOut className="w-4 h-4" />
                 ログアウト
@@ -171,13 +171,13 @@ const Profile = () => {
       <div className="pt-20 space-y-6">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <User className="h-6 w-6 text-primary-600" />
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <User className="h-6 w-6 text-[#82655a]" />
           プロフィール情報
         </h2>
         <button
           onClick={() => navigate('/profile/edit')}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold"
+          className="flex items-center gap-2 px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors font-semibold"
         >
           <Edit className="h-5 w-5" />
           編集
@@ -185,17 +185,17 @@ const Profile = () => {
       </div>
 
       {/* アカウント情報 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-[#f9f6f2] rounded-xl shadow-sm border border-[#d0c5b8] p-6">
         <div className="flex items-center gap-2 mb-4">
           <User className="h-5 w-5 text-gray-600" />
-          <h2 className="text-lg font-semibold text-gray-900">アカウント情報</h2>
+          <h2 className="text-lg font-semibold">アカウント情報</h2>
         </div>
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
               選手名
             </label>
-            <p className="text-base text-gray-900">{player.name}</p>
+            <p className="text-base">{player.name}</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
@@ -223,32 +223,32 @@ const Profile = () => {
       </div>
 
       {/* 基本情報 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-[#f9f6f2] rounded-xl shadow-sm border border-[#d0c5b8] p-6">
         <div className="flex items-center gap-2 mb-4">
-          <User className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900">基本情報</h2>
+          <User className="h-5 w-5 text-[#82655a]" />
+          <h2 className="text-lg font-semibold">基本情報</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
               性別
             </label>
-            <p className="text-base text-gray-900">{player.gender || '未設定'}</p>
+            <p className="text-base">{player.gender || '未設定'}</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
               利き手
             </label>
-            <p className="text-base text-gray-900">{player.dominantHand || '未設定'}</p>
+            <p className="text-base">{player.dominantHand || '未設定'}</p>
           </div>
         </div>
       </div>
 
       {/* 競技情報 */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-[#f9f6f2] rounded-xl shadow-sm border border-[#d0c5b8] p-6">
         <div className="flex items-center gap-2 mb-4">
           <Trophy className="h-5 w-5 text-yellow-600" />
-          <h2 className="text-lg font-semibold text-gray-900">競技情報</h2>
+          <h2 className="text-lg font-semibold">競技情報</h2>
         </div>
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -256,28 +256,28 @@ const Profile = () => {
               <label className="block text-sm font-medium text-gray-500 mb-1">
                 級位
               </label>
-              <p className="text-base text-gray-900">{player.kyuRank || '未設定'}</p>
+              <p className="text-base">{player.kyuRank || '未設定'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">
                 段位
               </label>
-              <p className="text-base text-gray-900">{player.danRank || '未設定'}</p>
+              <p className="text-base">{player.danRank || '未設定'}</p>
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">
               所属かるた会
             </label>
-            <p className="text-base text-gray-900">{player.karutaClub || '未設定'}</p>
+            <p className="text-base">{player.karutaClub || '未設定'}</p>
           </div>
         </div>
       </div>
 
       {/* 備考 */}
       {player.remarks && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">備考</h2>
+        <div className="bg-[#f9f6f2] rounded-xl shadow-sm border border-[#d0c5b8] p-6">
+          <h2 className="text-lg font-semibold mb-3">備考</h2>
           <p className="text-base text-gray-700 whitespace-pre-wrap">{player.remarks}</p>
         </div>
       )}
