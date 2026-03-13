@@ -190,24 +190,6 @@ const Home = () => {
         </div>
       )}
 
-      {/* クイックアクション */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <Link
-          to="/matches/new"
-          className="flex items-center justify-between p-4 bg-[#f9f6f2] border-2 border-[#d0c5b8] rounded-lg hover:border-[#82655a] hover:bg-[#f0ebe3] transition-all"
-        >
-          <span className="font-semibold">結果入力</span>
-          <Trophy className="h-5 w-5 text-[#82655a]" />
-        </Link>
-        <Link
-          to="/practice"
-          className="flex items-center justify-between p-4 bg-[#f9f6f2] border-2 border-[#d0c5b8] rounded-lg hover:border-[#82655a] hover:bg-[#f0ebe3] transition-all"
-        >
-          <span className="font-semibold">練習日程確認</span>
-          <BookOpen className="h-5 w-5 text-[#82655a]" />
-        </Link>
-      </div>
-
       {/* 統計カード */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard

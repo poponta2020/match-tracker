@@ -274,9 +274,9 @@ const BulkResultInput = () => {
   const totalMatches = session?.totalMatches || 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-[#f2ede6] pb-20">
       {/* ヘッダー */}
-      <div className="bg-white shadow-sm sticky top-0 z-30">
+      <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4">
           {session && (
             <div className="space-y-1 text-sm text-gray-600">
@@ -289,17 +289,17 @@ const BulkResultInput = () => {
       </div>
 
       {/* タブバー */}
-      <div className="bg-white border-b sticky top-[120px] z-20">
+      <div className="bg-[#e2d9d0] sticky top-[120px] z-20">
         <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
-          <div className="flex gap-2 py-2">
+          <div className="flex gap-1 pt-2">
             {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
               <button
                 key={num}
                 onClick={() => setCurrentMatchNumber(num)}
                 className={`flex-shrink-0 px-4 py-2 rounded-t-lg transition-colors ${
                   currentMatchNumber === num
-                    ? 'bg-primary-600 text-white border-b-2 border-primary-600'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#f9f6f2] text-[#5f3a2d] font-semibold border-t-2 border-x-2 border-[#d0c5b8]'
+                    : 'bg-[#d0c5b8] text-[#7a5f54] hover:bg-[#c5bab0]'
                 }`}
               >
                 <div className="text-center">
@@ -318,7 +318,7 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <div className="bg-[#f9f6f2] rounded-b-lg rounded-tr-lg shadow-sm p-4 mb-4">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             第{currentMatchNumber}試合 ({currentPairings.length * 2}名参加)
             {isMatchCompleted(currentMatchNumber) && (
@@ -332,7 +332,7 @@ const BulkResultInput = () => {
               return (
                 <div
                   key={index}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                  className="bg-[#f9f6f2] border border-[#d0c5b8] rounded-lg p-4 hover:border-[#a5927f] transition-colors"
                 >
                   <div className="flex items-center justify-between gap-4">
                     {/* 選手1 */}
@@ -346,7 +346,7 @@ const BulkResultInput = () => {
                       className={`flex-1 text-left px-4 py-2 rounded-lg transition-colors ${
                         result.winnerId === pairing.player1Id
                           ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-gray-50 hover:bg-gray-100'
+                          : 'bg-[#f0ebe3] hover:bg-gray-100'
                       }`}
                     >
                       {result.winnerId === pairing.player1Id && '🟢 '}
@@ -385,7 +385,7 @@ const BulkResultInput = () => {
                       className={`flex-1 text-right px-4 py-2 rounded-lg transition-colors ${
                         result.winnerId === pairing.player2Id
                           ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-gray-50 hover:bg-gray-100'
+                          : 'bg-[#f0ebe3] hover:bg-gray-100'
                       }`}
                     >
                       {result.winnerId === pairing.player2Id && '🟢 '}
@@ -447,7 +447,7 @@ const BulkResultInput = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowWarningDialog(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-[#f0ebe3]"
               >
                 キャンセル
               </button>

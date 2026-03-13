@@ -207,8 +207,8 @@ const MatchResultsView = () => {
   // データなし画面
   if (!loading && !session && selectedDate) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm sticky top-0 z-30">
+      <div className="min-h-screen bg-[#f2ede6]">
+        <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
           <div className="max-w-4xl mx-auto px-4 py-4">
             {/* 日付選択UI */}
             <div className="flex items-center justify-center gap-2 mb-4">
@@ -286,12 +286,12 @@ const MatchResultsView = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-[#f2ede6] pb-20">
       {/* ヘッダー */}
-      <div className="bg-white shadow-sm sticky top-0 z-30">
+      <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="mb-4">
-            <h1 className="text-xl font-bold text-gray-900">試合結果詳細</h1>
+            <h1 className="text-xl font-bold">試合結果詳細</h1>
           </div>
 
           {/* 日付選択UI */}
@@ -361,17 +361,17 @@ const MatchResultsView = () => {
       </div>
 
       {/* タブバー */}
-      <div className="bg-white border-b sticky top-[120px] z-20">
+      <div className="bg-[#e2d9d0] sticky top-[120px] z-20">
         <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
-          <div className="flex gap-2 py-2">
+          <div className="flex gap-1 pt-2">
             {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
               <button
                 key={num}
                 onClick={() => setCurrentMatchNumber(num)}
                 className={`flex-shrink-0 px-4 py-2 rounded-t-lg transition-colors ${
                   currentMatchNumber === num
-                    ? 'bg-primary-600 text-white border-b-2 border-primary-600'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#f9f6f2] text-[#5f3a2d] font-semibold border-t-2 border-x-2 border-[#d0c5b8]'
+                    : 'bg-[#d0c5b8] text-[#7a5f54] hover:bg-[#c5bab0]'
                 }`}
               >
                 <div className="text-center">
@@ -390,7 +390,7 @@ const MatchResultsView = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <div className="bg-[#f9f6f2] rounded-b-lg rounded-tr-lg shadow-sm p-4 mb-4">
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
             第{currentMatchNumber}試合 ({currentPairings.length * 2}名参加)
             {isMatchCompleted(currentMatchNumber) && (
@@ -407,7 +407,7 @@ const MatchResultsView = () => {
               return (
                 <div
                   key={index}
-                  className="border border-gray-200 rounded-lg p-4"
+                  className="bg-[#f9f6f2] border border-[#d0c5b8] rounded-lg p-4"
                 >
                   {match ? (
                     // 結果入力済み: A 〇 11 × B 形式
@@ -431,13 +431,13 @@ const MatchResultsView = () => {
                   ) : (
                     // 未入力: 従来の表示
                     <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 px-4 py-2 rounded-lg bg-gray-50">
+                      <div className="flex-1 px-4 py-2 rounded-lg bg-[#f0ebe3]">
                         {pairing.player1Name}
                       </div>
                       <div className="px-3 py-2 text-center min-w-[80px] flex-shrink-0">
                         <span className="text-gray-400">未入力</span>
                       </div>
-                      <div className="flex-1 text-right px-4 py-2 rounded-lg bg-gray-50">
+                      <div className="flex-1 text-right px-4 py-2 rounded-lg bg-[#f0ebe3]">
                         {pairing.player2Name}
                       </div>
                     </div>
