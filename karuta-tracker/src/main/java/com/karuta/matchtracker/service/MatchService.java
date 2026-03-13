@@ -46,6 +46,18 @@ public class MatchService {
     }
 
     /**
+     * 選手ID・日付・試合番号で試合結果を取得
+     */
+    public MatchDto findByPlayerDateAndMatchNumber(Long playerId, LocalDate matchDate, Integer matchNumber) {
+        log.debug("Finding match by playerId: {}, matchDate: {}, matchNumber: {}", playerId, matchDate, matchNumber);
+        Match match = matchRepository.findByPlayerIdAndMatchDateAndMatchNumber(playerId, matchDate, matchNumber);
+        if (match == null) {
+            return null;
+        }
+        return enrichMatchWithPlayerNames(match);
+    }
+
+    /**
      * 日付別の試合結果を取得（試合番号順）
      */
     public List<MatchDto> findMatchesByDate(LocalDate date) {

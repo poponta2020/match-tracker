@@ -70,6 +70,11 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     boolean existsBySessionIdAndPlayerIdAndMatchNumber(Long sessionId, Long playerId, Integer matchNumber);
 
     /**
+     * 特定の選手の特定セッション・試合の参加記録を取得
+     */
+    List<PracticeParticipant> findBySessionIdAndPlayerIdAndMatchNumber(Long sessionId, Long playerId, Integer matchNumber);
+
+    /**
      * 特定の選手の特定月の参加記録を取得
      */
     @Query("SELECT p FROM PracticeParticipant p WHERE p.playerId = :playerId " +

@@ -69,6 +69,28 @@ public class MatchController {
     }
 
     /**
+     * 選手ID・日付・試合番号で試合結果を取得
+     *
+     * @param playerId 選手ID
+     * @param matchDate 試合日
+     * @param matchNumber 試合番号
+     * @return 試合結果（存在しない場合は404）
+     */
+    @GetMapping("/player/{playerId}/date/{matchDate}/match/{matchNumber}")
+    public ResponseEntity<MatchDto> getMatchByPlayerDateAndMatchNumber(
+            @PathVariable Long playerId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate matchDate,
+            @PathVariable Integer matchNumber) {
+        log.debug("GET /api/matches/player/{}/date/{}/match/{} - Getting match by player, date, and match number",
+                playerId, matchDate, matchNumber);
+        MatchDto match = matchService.findByPlayerDateAndMatchNumber(playerId, matchDate, matchNumber);
+        if (match == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(match);
+    }
+
+    /**
      * 選手の試合履歴を取得
      *
      * @param playerId 選手ID

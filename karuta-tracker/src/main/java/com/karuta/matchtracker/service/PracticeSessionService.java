@@ -630,4 +630,48 @@ public class PracticeSessionService {
                         Collectors.mapping(PracticeParticipant::getMatchNumber, Collectors.toList())
                 ));
     }
+
+    /**
+     * 特定の試合に参加者を1名追加
+     */
+    @Transactional
+    public void addParticipantToMatch(LocalDate sessionDate, Integer matchNumber, Long playerId) {
+        log.info("Adding participant {} to match {} on {}", playerId, matchNumber, sessionDate);
+
+        // 1. セッションの存在確認
+        PracticeSession session = practiceSessionRepository.findBySessionDate(sessionDate)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", sessionDate));
+
+        // 2. 試合番号の妥当性チェック
+        if (matchNumber < 1 || matchNumber > session.getTotalMatches()) {
+            throw new IllegalArgumentException(
+                "Invalid match number: " + matchNumber + ". Must be between 1 and " + session.getTotalMatches()
+            );
+        }
+
+        // 3. 選手の存在確認
+        if (!playerRepository.existsById(playerId)) {
+            throw new ResourceNotFoundException("Player", playerId);
+        }
+
+        // 4. 既に参加登録されているかチェック
+        List<PracticeParticipant> existing = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(session.getId(), playerId, matchNumber);
+
+        if (!existing.isEmpty()) {
+            log.info("Player {} is already registered for match {} on {}", playerId, matchNumber, sessionDate);
+            return; // 既に登録済みの場合は何もしない
+        }
+
+        // 5. 参加者を登録
+        PracticeParticipant participant = PracticeParticipant.builder()
+                .sessionId(session.getId())
+                .playerId(playerId)
+                .matchNumber(matchNumber)
+                .build();
+
+        practiceParticipantRepository.save(participant);
+
+        log.info("Successfully added participant {} to match {} on {}", playerId, matchNumber, sessionDate);
+    }
 }

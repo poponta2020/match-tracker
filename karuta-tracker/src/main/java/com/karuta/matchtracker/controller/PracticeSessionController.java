@@ -259,4 +259,26 @@ public class PracticeSessionController {
         practiceSessionService.setMatchParticipants(sessionId, matchNumber, request.getPlayerIds());
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * 特定の試合に参加者を1名追加
+     *
+     * @param date 練習日の日付
+     * @param matchNumber 試合番号
+     * @param playerId 追加する選手ID
+     * @return 更新された練習日情報
+     */
+    @PostMapping("/date/{date}/matches/{matchNumber}/participants/{playerId}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<PracticeSessionDto> addParticipantToMatch(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @PathVariable Integer matchNumber,
+            @PathVariable Long playerId) {
+        log.info("POST /api/practice-sessions/date/{}/matches/{}/participants/{} - Adding participant to match",
+                date, matchNumber, playerId);
+        practiceSessionService.addParticipantToMatch(date, matchNumber, playerId);
+        // 更新後の練習セッション情報を返す
+        PracticeSessionDto session = practiceSessionService.findByDate(date);
+        return ResponseEntity.ok(session);
+    }
 }
