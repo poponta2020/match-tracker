@@ -66,7 +66,17 @@
       "Bash(done)",
       "Bash(mvn clean package:*)",
       "Bash(sudo service postgresql start:*)",
-      "Bash(env:*)"
+      "Bash(env:*)",
+      "Bash(pgrep:*)",
+      "Bash(for i in {1..10})",
+      "Bash(do echo \"Try $i:\")",
+      "Bash(./gradlew clean:*)",
+      "Bash(for i in {1..30})",
+      "Bash(do)",
+      "Bash(if grep -q \"Started MatchTrackerApplication\" /tmp/bootrun.log)",
+      "Bash(then)",
+      "Bash(fi)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
