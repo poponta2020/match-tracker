@@ -435,21 +435,8 @@ const PairingGenerator = () => {
           <div className="space-y-3">
             {pairings.map((pairing, index) => (
               <div key={index} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-gray-900">組み合わせ {index + 1}</h3>
-                  <button
-                    onClick={() => handleRemovePair(index)}
-                    className="text-red-600 hover:text-red-700 p-1 flex items-center gap-1"
-                    title="この組み合わせを削除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-xs">削除</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 mb-3">
                   <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-sm text-gray-600 mb-2">選手1</p>
                     <select
                       value={pairing.player1Id}
                       onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
@@ -480,7 +467,6 @@ const PairingGenerator = () => {
                     </select>
                   </div>
                   <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-sm text-gray-600 mb-2">選手2</p>
                     <select
                       value={pairing.player2Id}
                       onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
@@ -512,27 +498,23 @@ const PairingGenerator = () => {
                   </div>
                 </div>
 
-                {pairing.recentMatches && pairing.recentMatches.length > 0 && (
-                  <div className="mt-3 text-sm text-gray-600">
-                    <p className="font-medium mb-1">過去30日間の対戦履歴:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      {pairing.recentMatches.map((match, idx) => (
-                        <li key={idx}>
-                          {match.matchDate} ({match.daysAgo}日前)
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-1 text-xs text-gray-500">
-                      スコア: {pairing.score?.toFixed(1)} ポイント
-                    </p>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    {pairing.recentMatches && pairing.recentMatches.length > 0 ? (
+                      <span>直近の試合：{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
+                    ) : (
+                      <span className="text-green-600 font-medium">初対戦</span>
+                    )}
                   </div>
-                )}
-
-                {pairing.recentMatches && pairing.recentMatches.length === 0 && (
-                  <div className="mt-3 text-sm text-green-600 font-medium">
-                    初対戦
-                  </div>
-                )}
+                  <button
+                    onClick={() => handleRemovePair(index)}
+                    className="text-red-600 hover:text-red-700 p-1 flex items-center gap-1"
+                    title="この組み合わせを削除"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-xs">削除</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>

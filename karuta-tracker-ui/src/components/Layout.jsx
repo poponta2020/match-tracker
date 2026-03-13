@@ -103,9 +103,9 @@ const Layout = ({ children }) => {
   const bottomNavItems = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Add', href: '/matches/new', icon: PlusSquare },
-    { name: 'Results', href: '/matches', icon: Trophy },
+    { name: 'Results', href: '/matches/results', icon: Trophy },
     { name: 'Schedule', href: '/practice', icon: Calendar },
-    { name: 'Profile', href: '/profile', icon: User },
+    { name: 'Profile', href: '/matches', icon: User },
   ];
 
   // ボトムナビゲーションのアクティブ判定（パスの前方一致も考慮）
@@ -117,9 +117,15 @@ const Layout = ({ children }) => {
     if (href === '/matches/new') {
       return location.pathname === '/matches/new';
     }
+    if (href === '/matches/results') {
+      // /matches/results で始まる場合（/matches/results/:sessionId含む）
+      return location.pathname.startsWith('/matches/results');
+    }
     if (href === '/matches') {
-      // /matches で始まるが /matches/new ではない場合
-      return location.pathname.startsWith('/matches') && location.pathname !== '/matches/new';
+      // /matches で始まるが /matches/new と /matches/results ではない場合
+      return location.pathname.startsWith('/matches') &&
+             location.pathname !== '/matches/new' &&
+             !location.pathname.startsWith('/matches/results');
     }
     return location.pathname.startsWith(href);
   };
