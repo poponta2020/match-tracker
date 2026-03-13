@@ -1,15 +1,72 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
-import { User, Edit, Trophy, AlertCircle } from 'lucide-react';
+import {
+  User,
+  Edit,
+  Trophy,
+  AlertCircle,
+  Menu,
+  X,
+  Home,
+  Calendar,
+  BookOpen,
+  BarChart3,
+  Shuffle,
+  ClipboardList,
+  Users,
+  MapPin,
+  LogOut,
+  PlusSquare,
+} from 'lucide-react';
+import { isSuperAdmin, isAdmin } from '../utils/auth';
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { currentPlayer } = useAuth();
+  const location = useLocation();
+  const { currentPlayer, logout } = useAuth();
   const [player, setPlayer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // 基本ナビゲーション（全ユーザー共通）
+  const baseNavigation = [
+    { name: 'ホーム', href: '/', icon: Home },
+    { name: '結果入力', href: '/matches', icon: Trophy },
+    { name: '練習日程確認', href: '/practice', icon: BookOpen },
+    { name: '練習参加登録', href: '/practice/participation', icon: Calendar },
+    { name: '統計', href: '/statistics', icon: BarChart3 },
+  ];
+
+  // 管理者メニュー（ADMIN + SUPER_ADMIN）
+  const adminNavigation = [
+    { name: '対戦組み合わせ', href: '/pairings', icon: Shuffle },
+    { name: '試合結果閲覧', href: '/matches/results', icon: ClipboardList },
+  ];
+
+  // スーパー管理者メニュー（SUPER_ADMINのみ）
+  const superAdminNavigation = [
+    { name: '選手管理', href: '/players', icon: Users },
+    { name: '会場管理', href: '/venues', icon: MapPin },
+  ];
+
+  // ロールに応じてナビゲーションを組み立て
+  const navigation = [
+    ...baseNavigation,
+    ...(isAdmin() ? adminNavigation : []),
+    ...(isSuperAdmin() ? superAdminNavigation : []),
+  ];
+
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
 
   useEffect(() => {
     const fetchPlayerData = async () => {
@@ -59,12 +116,65 @@ const Profile = () => {
 
   return (
     <div className="space-y-6">
+      {/* ハンバーガーメニューバー */}
+      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-900">マイページ</h1>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            {mobileMenuOpen ? (
+              <X className="w-6 h-6 text-gray-700" />
+            ) : (
+              <Menu className="w-6 h-6 text-gray-700" />
+            )}
+          </button>
+        </div>
+
+        {/* モバイルメニュー */}
+        {mobileMenuOpen && (
+          <div className="border-t border-gray-200 mt-4 pt-4 max-w-7xl mx-auto">
+            <div className="space-y-1">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                      active
+                        ? 'bg-primary-50 text-primary-600'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                <LogOut className="w-4 h-4" />
+                ログアウト
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* コンテンツ（上部パディング追加） */}
+      <div className="pt-20 space-y-6">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <User className="h-6 w-6 text-primary-600" />
-          マイページ
-        </h1>
+          プロフィール情報
+        </h2>
         <button
           onClick={() => navigate('/profile/edit')}
           className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold"
@@ -171,6 +281,7 @@ const Profile = () => {
           <p className="text-base text-gray-700 whitespace-pre-wrap">{player.remarks}</p>
         </div>
       )}
+    </div>
     </div>
   );
 };

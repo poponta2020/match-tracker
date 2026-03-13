@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Clock,
   MapPin,
+  Settings,
 } from 'lucide-react';
 
 const Home = () => {
@@ -133,7 +134,23 @@ const Home = () => {
 
   return (
     <div className="space-y-8">
+      {/* ナビゲーションバー */}
+      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-semibold text-gray-900">{currentPlayer?.name}</span>
+          </div>
+          <Link
+            to="/profile"
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <Settings className="w-6 h-6 text-gray-700" />
+          </Link>
+        </div>
+      </div>
 
+      {/* コンテンツ（上部パディング追加） */}
+      <div className="pt-16">
       {/* 次の練習会場情報 */}
       {stats.recentPractices.length > 0 && stats.recentPractices[0] && (
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -275,6 +292,7 @@ const Home = () => {
             まだ試合記録がありません
           </p>
         )}
+      </div>
       </div>
     </div>
   );

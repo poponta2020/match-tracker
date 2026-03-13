@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 
@@ -245,6 +245,29 @@ const PracticeList = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* ナビゲーションバー */}
+      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <button
+            onClick={() => changeMonth(-1)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6 text-gray-700" />
+          </button>
+          <h1 className="text-lg font-semibold text-gray-900">
+            {monthStr}
+          </h1>
+          <button
+            onClick={() => changeMonth(1)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <ChevronRight className="w-6 h-6 text-gray-700" />
+          </button>
+        </div>
+      </div>
+
+      {/* コンテンツ（上部パディング追加） */}
+      <div className="pt-20">
       <div className="flex justify-end items-center mb-6">
         <div className="flex gap-3">
           <button
@@ -270,23 +293,6 @@ const PracticeList = () => {
           {error}
         </div>
       )}
-
-      {/* 月切り替え */}
-      <div className="flex justify-center items-center mb-6 gap-4">
-        <button
-          onClick={() => changeMonth(-1)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
-        >
-          ← 前月
-        </button>
-        <h2 className="text-2xl font-bold text-gray-900">{monthStr}</h2>
-        <button
-          onClick={() => changeMonth(1)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
-        >
-          次月 →
-        </button>
-      </div>
 
       {/* 参加登録ボタン */}
       <div className="flex justify-center mb-6">
@@ -524,6 +530,7 @@ const PracticeList = () => {
           onSave={handleSaveMatchParticipants}
         />
       )}
+    </div>
     </div>
   );
 };

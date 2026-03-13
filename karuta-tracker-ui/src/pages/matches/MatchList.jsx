@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI } from '../../api';
+import FilterBottomSheet from '../../components/FilterBottomSheet';
 import {
   Trophy,
   Plus,
@@ -34,6 +35,9 @@ const MatchList = () => {
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // デフォルトは今月（1-12）
   const [availableYears, setAvailableYears] = useState([]);
   const [availableMonths, setAvailableMonths] = useState([]);
+
+  // ボトムシート表示状態
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -191,125 +195,22 @@ const MatchList = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* フィルタセクション */}
-      <div className="bg-white rounded-lg shadow-sm p-4 space-y-3">
-        {/* 期間フィルタ - 年と月のみ */}
-        <div className="flex flex-wrap gap-2">
-          {/* 年選択 */}
-          <div className="relative flex-1 min-w-[140px]">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-sm"
-            >
-              <option value="">すべての年</option>
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}年
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 月選択 */}
-          <div className="relative flex-1 min-w-[140px]">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-sm"
-            >
-              <option value="">すべての月</option>
-              {availableMonths.map((month) => (
-                <option key={month} value={month}>
-                  {month}月
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* 対戦相手フィルタ - 1行に横並び */}
-        <div className="flex gap-2">
-          {/* 級フィルタ */}
-          <div className="relative flex-1">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={filterKyuRank}
-              onChange={(e) => setFilterKyuRank(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none bg-white text-sm"
-            >
-              <option value="">全ての級</option>
-              <option value="A級">A級</option>
-              <option value="B級">B級</option>
-              <option value="C級">C級</option>
-              <option value="D級">D級</option>
-              <option value="E級">E級</option>
-            </select>
-          </div>
-
-          {/* 性別フィルタ */}
-          <div className="relative flex-1">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={filterGender}
-              onChange={(e) => setFilterGender(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none bg-white text-sm"
-            >
-              <option value="">性別</option>
-              <option value="男性">男性</option>
-              <option value="女性">女性</option>
-              <option value="その他">その他</option>
-            </select>
-          </div>
-
-          {/* 利き手フィルタ */}
-          <div className="relative flex-1">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={filterDominantHand}
-              onChange={(e) => setFilterDominantHand(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none bg-white text-sm"
-            >
-              <option value="">利き手</option>
-              <option value="右">右</option>
-              <option value="左">左</option>
-              <option value="両">両</option>
-            </select>
-          </div>
-        </div>
-
-        {/* 検索と結果フィルタ - 1行に横並び */}
-        <div className="flex flex-wrap gap-2">
-          {/* 検索 */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="対戦相手で検索..."
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-            />
-          </div>
-
-          {/* 結果フィルタ */}
-          <div className="relative flex-1 min-w-[140px]">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <select
-              value={filterResult}
-              onChange={(e) => setFilterResult(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none bg-white text-sm"
-            >
-              <option value="全て">全ての結果</option>
-              <option value="勝ち">勝ちのみ</option>
-              <option value="負け">負けのみ</option>
-              <option value="引き分け">引き分けのみ</option>
-            </select>
-          </div>
+    <div className="space-y-6 pb-20">
+      {/* ナビゲーションバー */}
+      <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-lg font-semibold text-gray-900">
+            {selectedYear && selectedMonth
+              ? `${selectedYear}年 ${selectedMonth}月`
+              : selectedYear
+              ? `${selectedYear}年`
+              : '試合結果'}
+          </h1>
         </div>
       </div>
 
+      {/* コンテンツ（上部パディング追加） */}
+      <div className="pt-16 space-y-6">
       {/* 級別統計テーブル */}
       {rankStatistics && (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -452,6 +353,37 @@ const MatchList = () => {
           </div>
         </div>
       )}
+
+      {/* フローティングアクションボタン (FAB) */}
+      <button
+        onClick={() => setIsFilterOpen(true)}
+        className="fixed bottom-20 right-4 z-20 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-all hover:shadow-xl"
+      >
+        <Filter className="w-6 h-6" />
+      </button>
+
+      {/* ボトムシート */}
+      <FilterBottomSheet
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        selectedYear={selectedYear}
+        setSelectedYear={setSelectedYear}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        availableYears={availableYears}
+        availableMonths={availableMonths}
+        filterKyuRank={filterKyuRank}
+        setFilterKyuRank={setFilterKyuRank}
+        filterGender={filterGender}
+        setFilterGender={setFilterGender}
+        filterDominantHand={filterDominantHand}
+        setFilterDominantHand={setFilterDominantHand}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        filterResult={filterResult}
+        setFilterResult={setFilterResult}
+      />
+      </div>
     </div>
   );
 };

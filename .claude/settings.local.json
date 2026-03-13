@@ -76,7 +76,8 @@
       "Bash(if grep -q \"Started MatchTrackerApplication\" /tmp/bootrun.log)",
       "Bash(then)",
       "Bash(fi)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(./mvnw spring-boot:run:*)"
     ],
     "deny": [],
     "ask": []

@@ -379,7 +379,44 @@ const MatchForm = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 overflow-hidden">
-      <form onSubmit={handleSubmit} className="h-full p-3 space-y-3 overflow-hidden">
+      {/* ナビゲーションバー（日付表示と試合番号タブ） */}
+      {practiceSessions.length > 0 && practiceSession && (
+        <div className="bg-white shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+          <div className="text-center mb-3">
+            <div className="text-lg font-semibold text-gray-900">
+              {new Date(formData.matchDate).toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'short'
+              })}
+            </div>
+          </div>
+
+          {/* 試合番号タブ */}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(participatingMatchNumbers.length > 0
+              ? participatingMatchNumbers
+              : Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1)
+            ).map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
+                className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  formData.matchNumber === num
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                第{num}試合
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="h-full p-3 space-y-3 overflow-hidden pt-32">
         {/* 今日が練習日でない場合の警告 */}
         {!isEdit && practiceSessions.length === 0 && (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -390,40 +427,6 @@ const MatchForm = () => {
             <p className="text-sm text-yellow-700">
               試合記録の登録は当日の練習日のみ可能です。練習日を登録してから試合記録を入力してください。
             </p>
-          </div>
-        )}
-
-        {/* 日付と試合番号（1行表示） */}
-        {practiceSessions.length > 0 && practiceSession && (
-          <div className="flex items-center justify-between text-lg font-medium text-gray-900">
-            <div>
-              {new Date(formData.matchDate).toLocaleDateString('ja-JP', {
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short'
-              })}
-            </div>
-            <select
-              name="matchNumber"
-              value={formData.matchNumber}
-              onChange={handleChange}
-              className="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
-              required
-            >
-              {participatingMatchNumbers.length > 0 ? (
-                participatingMatchNumbers.map((num) => (
-                  <option key={num} value={num}>
-                    第{num}試合
-                  </option>
-                ))
-              ) : (
-                Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1).map((num) => (
-                  <option key={num} value={num}>
-                    第{num}試合
-                  </option>
-                ))
-              )}
-            </select>
           </div>
         )}
 
