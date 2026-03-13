@@ -254,7 +254,7 @@ const PairingGenerator = () => {
     setError('');
   };
 
-  const handleAddPlayer = () => {
+  const handleAddPlayer = async () => {
     if (!selectedPlayerId) {
       setError('選手を選択してください');
       return;
@@ -289,12 +289,25 @@ const PairingGenerator = () => {
       return;
     }
 
-    // 待機リストに追加
-    setWaitingPlayers([...waitingPlayers, { id: player.id, name: player.name }]);
-    setParticipants([...participants, player]);
-    setSelectedPlayerId('');
-    setShowAddPlayer(false);
-    setError('');
+    try {
+      // DBに参加者を追加
+      await practiceAPI.addParticipantToMatch(sessionDate, matchNumber, playerId);
+
+      // 参加者リストを再取得
+      if (currentSession) {
+        const participantsRes = await practiceAPI.getParticipants(currentSession.id);
+        setParticipants(participantsRes.data);
+      }
+
+      // 待機リストに追加
+      setWaitingPlayers([...waitingPlayers, { id: player.id, name: player.name }]);
+      setSelectedPlayerId('');
+      setShowAddPlayer(false);
+      setError('');
+    } catch (err) {
+      console.error('Failed to add participant:', err);
+      setError('参加者の追加に失敗しました');
+    }
   };
 
   // 既に参加している選手を除外

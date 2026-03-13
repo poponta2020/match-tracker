@@ -18,17 +18,22 @@ const MatchResultsView = () => {
 
   // 日付選択関連の状態
   const [selectedDate, setSelectedDate] = useState(null);
-  const [allSessions, setAllSessions] = useState([]);
   const [availableDates, setAvailableDates] = useState([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // 全練習セッション取得（初回のみ）
+  // 利用可能な日付を取得（初回のみ）
   useEffect(() => {
-    const fetchAllSessions = async () => {
+    const fetchAvailableDates = async () => {
       try {
-        const response = await practiceAPI.getAll();
+        const today = new Date().toISOString().split('T')[0];
+
+        // 今日から過去30日分の練習セッションを取得（軽量）
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - 30);
+        const fromDateStr = fromDate.toISOString().split('T')[0];
+
+        const response = await practiceAPI.getUpcoming(fromDateStr);
         const sessions = response.data || [];
-        setAllSessions(sessions);
 
         // 日付リストを抽出（降順ソート）
         const dates = sessions
@@ -43,12 +48,14 @@ const MatchResultsView = () => {
           if (targetSession) {
             setSelectedDate(targetSession.sessionDate);
           } else {
-            // sessionIdが見つからない場合は最新日付
-            setSelectedDate(dates[0] || null);
+            // sessionIdが見つからない場合は今日の日付
+            const todaySession = dates.find(d => d === today);
+            setSelectedDate(todaySession || dates[0] || null);
           }
         } else {
-          // sessionIdがない場合は最新の練習日
-          setSelectedDate(dates[0] || null);
+          // sessionIdがない場合は今日の日付（存在しない場合は最新の練習日）
+          const todaySession = dates.find(d => d === today);
+          setSelectedDate(todaySession || dates[0] || null);
         }
       } catch (err) {
         console.error('練習セッション一覧の取得に失敗:', err);
@@ -56,7 +63,7 @@ const MatchResultsView = () => {
       }
     };
 
-    fetchAllSessions();
+    fetchAvailableDates();
   }, [sessionId]);
 
   // 選択された日付のデータ取得
@@ -71,10 +78,10 @@ const MatchResultsView = () => {
         setLoading(true);
         setError(null);
 
-        // allSessionsから日付でセッションを直接取得（APIコール不要）
-        const sessionData = allSessions.find(s => s.sessionDate === selectedDate) || null;
+        // 選択された日付のセッションデータを取得
+        const sessionResponse = await practiceAPI.getByDate(selectedDate).catch(() => null);
 
-        if (!sessionData) {
+        if (!sessionResponse || !sessionResponse.data) {
           setSession(null);
           setPairings([]);
           setMatches([]);
@@ -82,7 +89,7 @@ const MatchResultsView = () => {
           return;
         }
 
-        setSession(sessionData);
+        setSession(sessionResponse.data);
 
         // 対戦ペアリングと試合結果を並列取得
         const [pairingsResponse, matchesResponse] = await Promise.all([
@@ -101,7 +108,7 @@ const MatchResultsView = () => {
     };
 
     fetchDataByDate();
-  }, [selectedDate, allSessions]);
+  }, [selectedDate]);
 
   // 前後の練習日に移動
   const goToPreviousDate = () => {
@@ -128,11 +135,6 @@ const MatchResultsView = () => {
     return currentIndex > 0;
   };
 
-  // 選択可能な日付かチェック
-  const isDateAvailable = (dateStr) => {
-    return availableDates.includes(dateStr);
-  };
-
   // 試合番号ごとのペアリングを取得
   const getPairingsForMatch = (matchNumber) => {
     return pairings.filter(p => p.matchNumber === matchNumber);
@@ -150,42 +152,11 @@ const MatchResultsView = () => {
   // 試合が完了しているかチェック
   const isMatchCompleted = (matchNumber) => {
     const matchPairings = getPairingsForMatch(matchNumber);
+    if (matchPairings.length === 0) return false;
     return matchPairings.every(pairing => {
       const match = getMatchResult(matchNumber, pairing.player1Id, pairing.player2Id);
       return match !== undefined;
     });
-  };
-
-  // 試合の統計を計算
-  const getMatchStats = (matchNumber) => {
-    const matchPairings = getPairingsForMatch(matchNumber);
-    const completedCount = matchPairings.filter(pairing => {
-      const match = getMatchResult(matchNumber, pairing.player1Id, pairing.player2Id);
-      return match !== undefined;
-    }).length;
-
-    const totalPairs = matchPairings.length;
-    const completionRate = totalPairs > 0 ? Math.round((completedCount / totalPairs) * 100) : 0;
-
-    // 平均枚数差を計算
-    let totalScoreDiff = 0;
-    let countWithScore = 0;
-    matchPairings.forEach(pairing => {
-      const match = getMatchResult(matchNumber, pairing.player1Id, pairing.player2Id);
-      if (match && match.scoreDifference !== null) {
-        totalScoreDiff += match.scoreDifference;
-        countWithScore++;
-      }
-    });
-    const avgScoreDiff = countWithScore > 0 ? (totalScoreDiff / countWithScore).toFixed(1) : 0;
-
-    return {
-      totalPairs,
-      completedCount,
-      pendingCount: totalPairs - completedCount,
-      completionRate,
-      avgScoreDiff,
-    };
   };
 
   if (loading) {
@@ -221,7 +192,6 @@ const MatchResultsView = () => {
 
   const currentPairings = getPairingsForMatch(currentMatchNumber);
   const totalMatches = session?.totalMatches || 0;
-  const stats = getMatchStats(currentMatchNumber);
 
   // 今日の日付を取得（YYYY-MM-DD形式）
   const getTodayDate = () => {
@@ -439,70 +409,42 @@ const MatchResultsView = () => {
                   key={index}
                   className="border border-gray-200 rounded-lg p-4"
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    {/* 選手1 */}
-                    <div
-                      className={`flex-1 px-4 py-2 rounded-lg whitespace-nowrap overflow-hidden text-ellipsis ${
-                        isPlayer1Winner
-                          ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-gray-50'
-                      }`}
-                    >
-                      {pairing.player1Name}
+                  {match ? (
+                    // 結果入力済み: A 〇 11 × B 形式
+                    <div className="flex items-center justify-center text-lg">
+                      <div className={`font-semibold text-right w-32 pr-2 ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                        {pairing.player1Name}
+                      </div>
+                      <div className={`font-bold text-2xl w-8 text-center ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer1Winner ? '〇' : '×'}
+                      </div>
+                      <div className="font-bold text-gray-900 w-12 text-center">
+                        {match.scoreDifference}
+                      </div>
+                      <div className={`font-bold text-2xl w-8 text-center ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer2Winner ? '〇' : '×'}
+                      </div>
+                      <div className={`font-semibold text-left w-32 pl-2 ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                        {pairing.player2Name}
+                      </div>
                     </div>
-
-                    {/* 枚数差 */}
-                    <div className="px-3 py-2 text-center min-w-[80px] flex-shrink-0">
-                      {match ? (
-                        <span className="font-semibold text-gray-900">
-                          {match.scoreDifference}枚差
-                        </span>
-                      ) : (
+                  ) : (
+                    // 未入力: 従来の表示
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 px-4 py-2 rounded-lg bg-gray-50">
+                        {pairing.player1Name}
+                      </div>
+                      <div className="px-3 py-2 text-center min-w-[80px] flex-shrink-0">
                         <span className="text-gray-400">未入力</span>
-                      )}
+                      </div>
+                      <div className="flex-1 text-right px-4 py-2 rounded-lg bg-gray-50">
+                        {pairing.player2Name}
+                      </div>
                     </div>
-
-                    {/* 選手2 */}
-                    <div
-                      className={`flex-1 text-right px-4 py-2 rounded-lg whitespace-nowrap overflow-hidden text-ellipsis ${
-                        isPlayer2Winner
-                          ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-gray-50'
-                      }`}
-                    >
-                      {pairing.player2Name}
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
-          </div>
-        </div>
-
-        {/* 統計情報 */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-            📊 第{currentMatchNumber}試合の統計
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-blue-700">対戦数</p>
-              <p className="text-lg font-bold text-blue-900">{stats.totalPairs}組</p>
-            </div>
-            <div>
-              <p className="text-blue-700">入力済み</p>
-              <p className="text-lg font-bold text-green-600">
-                {stats.completedCount}組 ({stats.completionRate}%)
-              </p>
-            </div>
-            <div>
-              <p className="text-blue-700">未入力</p>
-              <p className="text-lg font-bold text-gray-600">{stats.pendingCount}組</p>
-            </div>
-            <div>
-              <p className="text-blue-700">平均枚数差</p>
-              <p className="text-lg font-bold text-blue-900">{stats.avgScoreDiff}枚</p>
-            </div>
           </div>
         </div>
 

@@ -29,8 +29,9 @@ const MatchList = () => {
   const [rankStatistics, setRankStatistics] = useState(null);
 
   // 期間フィルタ関連の状態
-  const [selectedYear, setSelectedYear] = useState(''); // 空文字列 = すべての年
-  const [selectedMonth, setSelectedMonth] = useState(''); // 空文字列 = すべての月
+  const today = new Date();
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear()); // デフォルトは今年
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // デフォルトは今月（1-12）
   const [availableYears, setAvailableYears] = useState([]);
   const [availableMonths, setAvailableMonths] = useState([]);
 
@@ -98,8 +99,9 @@ const MatchList = () => {
           )].sort((a, b) => b - a);
           setAvailableMonths(months);
 
-          // 選択中の月が利用可能な月に含まれていない場合、最新の月を選択
-          if (months.length > 0 && !months.includes(selectedMonth)) {
+          // 選択中の月が利用可能な月に含まれていない場合のみ、最新の月を選択
+          // ただし、初期表示時は今月を優先
+          if (months.length > 0 && selectedMonth && !months.includes(Number(selectedMonth))) {
             setSelectedMonth(months[0]);
           }
         }

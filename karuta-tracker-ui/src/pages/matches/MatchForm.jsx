@@ -31,25 +31,29 @@ const MatchForm = () => {
   const [pairing, setPairing] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
+  const [participatingMatchNumbers, setParticipatingMatchNumbers] = useState([]); // 参加する試合番号リスト
+  const [isExistingMatch, setIsExistingMatch] = useState(false); // 既存試合かどうか
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
 
-        // 選手一覧・練習セッション・（編集時）試合データを並列取得
-        const promises = [playerAPI.getAll(), practiceAPI.getAll()];
+        // 選手一覧・今日の練習セッション・（編集時）試合データを並列取得
+        const promises = [
+          playerAPI.getAll(),
+          practiceAPI.getByDate(today).catch(() => ({ data: null }))
+        ];
         if (isEdit) promises.push(matchAPI.getById(id));
-        const [playersRes, sessionsRes, matchRes] = await Promise.all(promises);
+        const [playersRes, todaySessionRes, matchRes] = await Promise.all(promises);
 
         setPlayers(
           playersRes.data.filter((p) => p.id !== currentPlayer.id)
         );
 
-        const todaySessions = sessionsRes.data.filter(
-          session => session.sessionDate === today
-        );
+        const todaySessions = todaySessionRes.data ? [todaySessionRes.data] : [];
         setPracticeSessions(todaySessions);
 
         // 編集モードの場合、既存データを反映
@@ -59,7 +63,7 @@ const MatchForm = () => {
           // 試合日が今日でない場合はエラー
           if (match.matchDate !== today) {
             setError('過去の試合記録は編集できません。試合記録の編集は当日のみ可能です。');
-            setLoading(false);
+            setInitialLoading(false);
             return;
           }
 
@@ -72,9 +76,12 @@ const MatchForm = () => {
             notes: match.notes || '',
           });
         }
+
+        setInitialLoading(false);
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError('データの取得に失敗しました');
+        setInitialLoading(false);
       }
     };
 
@@ -90,90 +97,147 @@ const MatchForm = () => {
         const response = await practiceAPI.getByDate(formData.matchDate);
         if (response.data) {
           setPracticeSession(response.data);
+
           // 練習セッションがある場合、参加者を取得
           const participantsRes = await practiceAPI.getParticipants(response.data.id);
           const participants = participantsRes.data.filter(p => p.id !== currentPlayer.id);
           setAvailablePlayers(participants);
 
-          // 試合番号をリセット
-          setFormData(prev => ({ ...prev, matchNumber: 1 }));
+          // ①自分が参加する試合番号を把握
+          const myMatchNumbers = [];
+          if (response.data.matchParticipants) {
+            for (const [matchNum, playerNames] of Object.entries(response.data.matchParticipants)) {
+              if (playerNames.includes(currentPlayer.name)) {
+                myMatchNumbers.push(parseInt(matchNum));
+              }
+            }
+          }
+          myMatchNumbers.sort((a, b) => a - b);
+          setParticipatingMatchNumbers(myMatchNumbers);
+
+          // ②未入力の最小試合番号をデフォルトに設定（編集モードでない場合のみ）
+          if (!isEdit && myMatchNumbers.length > 0) {
+            // 当日の全試合記録を取得
+            const matchPromises = myMatchNumbers.map(num =>
+              matchAPI.getByPlayerDateAndMatchNumber(currentPlayer.id, formData.matchDate, num)
+                .then(res => ({ matchNumber: num, exists: true, data: res.data }))
+                .catch(() => ({ matchNumber: num, exists: false }))
+            );
+            const matchResults = await Promise.all(matchPromises);
+
+            // 未入力の最小試合番号を探す
+            const unrecordedMatch = matchResults.find(result => !result.exists);
+            const defaultMatchNumber = unrecordedMatch ? unrecordedMatch.matchNumber : myMatchNumbers[0];
+
+            setFormData(prev => ({ ...prev, matchNumber: defaultMatchNumber }));
+          }
         } else {
           setPracticeSession(null);
           setAvailablePlayers([]);
+          setParticipatingMatchNumbers([]);
         }
       } catch (err) {
         setPracticeSession(null);
         setAvailablePlayers([]);
+        setParticipatingMatchNumbers([]);
       }
     };
 
-    if (players.length > 0) {
+    if (players.length > 0 && !isEdit) {
       fetchPracticeSession();
     }
-  }, [formData.matchDate, players, currentPlayer]);
+  }, [formData.matchDate, players.length, currentPlayer.id, currentPlayer.name, isEdit]);
 
-  // 試合番号が変更されたら、対戦組み合わせをチェック
+  // 試合番号が変更されたら、対戦組み合わせと既存試合記録をチェック
   useEffect(() => {
-    const checkPairing = async () => {
+    const checkPairingAndExistingMatch = async () => {
       if (!formData.matchDate || !formData.matchNumber) return;
 
       try {
-        const response = await pairingAPI.getByDateAndMatchNumber(
+        // ③既存の試合記録を確認
+        const existingMatchRes = await matchAPI.getByPlayerDateAndMatchNumber(
+          currentPlayer.id,
           formData.matchDate,
           formData.matchNumber
-        );
+        ).catch(() => null);
 
-        if (response.data && response.data.length > 0) {
-          // 自分が含まれる対戦組み合わせを探す
-          const myPairing = response.data.find(
-            p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
+        if (existingMatchRes && existingMatchRes.data) {
+          // 既存記録がある場合、フォームに反映
+          const match = existingMatchRes.data;
+          setIsExistingMatch(true);
+          setFormData(prev => ({
+            ...prev,
+            opponentName: match.opponentName,
+            opponentId: match.opponentId || null,
+            result: match.result,
+            scoreDifference: match.scoreDifference,
+            notes: match.notes || ''
+          }));
+        } else {
+          // 既存記録がない場合、対戦組み合わせをチェック
+          setIsExistingMatch(false);
+
+          const response = await pairingAPI.getByDateAndMatchNumber(
+            formData.matchDate,
+            formData.matchNumber
           );
 
-          if (myPairing) {
-            setPairing(myPairing);
-            // 対戦相手を自動設定
-            const opponentId = myPairing.player1Id === currentPlayer.id
-              ? myPairing.player2Id
-              : myPairing.player1Id;
-            const opponentName = myPairing.player1Id === currentPlayer.id
-              ? myPairing.player2Name
-              : myPairing.player1Name;
+          if (response.data && response.data.length > 0) {
+            // 自分が含まれる対戦組み合わせを探す
+            const myPairing = response.data.find(
+              p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
+            );
 
-            setFormData(prev => ({
-              ...prev,
-              opponentId: opponentId,
-              opponentName: opponentName
-            }));
+            if (myPairing) {
+              setPairing(myPairing);
+              // 対戦相手を自動設定
+              const opponentId = myPairing.player1Id === currentPlayer.id
+                ? myPairing.player2Id
+                : myPairing.player1Id;
+              const opponentName = myPairing.player1Id === currentPlayer.id
+                ? myPairing.player2Name
+                : myPairing.player1Name;
+
+              setFormData(prev => ({
+                ...prev,
+                opponentId: opponentId,
+                opponentName: opponentName,
+                result: '勝ち',
+                scoreDifference: 0,
+                notes: ''
+              }));
+            } else {
+              // 自分の組み合わせがない場合
+              setPairing(null);
+              setFormData(prev => ({
+                ...prev,
+                opponentId: null,
+                opponentName: '',
+                result: '勝ち',
+                scoreDifference: 0,
+                notes: ''
+              }));
+            }
           } else {
-            // 自分の組み合わせがない場合
+            // 組み合わせが存在しない場合
             setPairing(null);
             setFormData(prev => ({
               ...prev,
               opponentId: null,
-              opponentName: ''
+              opponentName: '',
+              result: '勝ち',
+              scoreDifference: 0,
+              notes: ''
             }));
           }
-        } else {
-          // 組み合わせが存在しない場合
-          setPairing(null);
-          setFormData(prev => ({
-            ...prev,
-            opponentId: null,
-            opponentName: ''
-          }));
         }
       } catch (err) {
-        // 組み合わせが存在しない場合
+        setIsExistingMatch(false);
         setPairing(null);
-        setFormData(prev => ({
-          ...prev,
-          opponentId: null,
-          opponentName: ''
-        }));
       }
     };
 
-    checkPairing();
+    checkPairingAndExistingMatch();
   }, [formData.matchDate, formData.matchNumber, currentPlayer]);
 
   const handleChange = (e) => {
@@ -279,6 +343,18 @@ const MatchForm = () => {
     }
   };
 
+  // 初期ローディング中
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-16 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
   // 過去の試合記録編集エラーの場合
   if (error && isEdit) {
     return (
@@ -334,12 +410,28 @@ const MatchForm = () => {
               className="px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
               required
             >
-              {Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1).map((num) => (
-                <option key={num} value={num}>
-                  第{num}試合
-                </option>
-              ))}
+              {participatingMatchNumbers.length > 0 ? (
+                participatingMatchNumbers.map((num) => (
+                  <option key={num} value={num}>
+                    第{num}試合
+                  </option>
+                ))
+              ) : (
+                Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1).map((num) => (
+                  <option key={num} value={num}>
+                    第{num}試合
+                  </option>
+                ))
+              )}
             </select>
+          </div>
+        )}
+
+        {/* 既存試合の警告メッセージ */}
+        {!isEdit && isExistingMatch && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">この試合は既に入力済みです。保存すると上書きされます。</span>
           </div>
         )}
 
@@ -403,75 +495,34 @@ const MatchForm = () => {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             枚数差 <span className="text-red-500">*</span>
           </label>
-          <div className="relative flex items-center justify-center">
-            {/* 選択インジケーター（中央の横線） */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-3 pointer-events-none z-10">
-              <div className="w-20 h-0.5 bg-primary-600"></div>
-            </div>
+          <select
+            name="scoreDifference"
+            value={formData.scoreDifference}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+            required
+          >
+            {Array.from({ length: 26 }, (_, i) => i).map((num) => (
+              <option key={num} value={num}>
+                {num} 枚
+              </option>
+            ))}
+          </select>
+        </div>
 
-            {/* スクロール可能なピッカー */}
-            <div
-              className="relative overflow-y-scroll h-24 w-full max-w-xs hide-scrollbar snap-y snap-mandatory"
-              onScroll={(e) => {
-                const scrollTop = e.target.scrollTop;
-                const itemHeight = 32; // 各アイテムの高さ
-                const centerOffset = 48; // 上部パディング（h-12 = 48px）
-                const index = Math.round((scrollTop + 16 - centerOffset) / itemHeight); // 16px = h-8の半分
-                const clampedIndex = Math.max(0, Math.min(25, index));
-                setFormData(prev => ({ ...prev, scoreDifference: clampedIndex }));
-              }}
-              ref={(el) => {
-                if (el && !el.dataset.initialized) {
-                  el.dataset.initialized = 'true';
-                  // 初期位置にスクロール（中央に来るように調整）
-                  el.scrollTop = formData.scoreDifference * 32 + 48 - 16;
-                }
-              }}
-            >
-              {/* 上部パディング */}
-              <div className="h-12"></div>
-
-              {/* 0-25枚の選択肢 */}
-              {Array.from({ length: 26 }, (_, i) => i).map((num) => (
-                <div
-                  key={num}
-                  className="h-8 flex flex-col items-center justify-center snap-center cursor-pointer transition-all"
-                  style={{
-                    fontSize: formData.scoreDifference === num ? '1.5rem' : '1rem',
-                    fontWeight: formData.scoreDifference === num ? '700' : '400',
-                    color: formData.scoreDifference === num ? '#2563eb' : '#9ca3af',
-                    opacity: Math.abs(formData.scoreDifference - num) > 2 ? 0.3 : 1,
-                  }}
-                  onClick={() => {
-                    setFormData(prev => ({ ...prev, scoreDifference: num }));
-                    // スムーズスクロール（中央に来るように調整）
-                    const container = document.querySelector('.hide-scrollbar');
-                    if (container) {
-                      container.scrollTo({
-                        top: num * 32 + 48 - 16,
-                        behavior: 'smooth'
-                      });
-                    }
-                  }}
-                >
-                  {num} 枚
-                </div>
-              ))}
-
-              {/* 下部パディング */}
-              <div className="h-12"></div>
-            </div>
-          </div>
-
-          <style>{`
-            .hide-scrollbar::-webkit-scrollbar {
-              display: none;
-            }
-            .hide-scrollbar {
-              -ms-overflow-style: none;
-              scrollbar-width: none;
-            }
-          `}</style>
+        {/* メモ */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            メモ
+          </label>
+          <textarea
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            rows="3"
+            placeholder="試合の感想、反省点など..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+          ></textarea>
         </div>
 
         {/* ボタン */}

@@ -42,4 +42,8 @@ export const matchAPI = {
   // 級別統計取得
   getStatisticsByRank: (playerId, params = {}) =>
     apiClient.get(`/matches/player/${playerId}/statistics-by-rank`, { params }),
+
+  // 選手ID・日付・試合番号で試合結果を取得
+  getByPlayerDateAndMatchNumber: (playerId, matchDate, matchNumber) =>
+    apiClient.get(`/matches/player/${playerId}/date/${matchDate}/match/${matchNumber}`),
 };

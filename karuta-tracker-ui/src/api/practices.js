@@ -53,4 +53,8 @@ export const practiceAPI = {
     apiClient.put(`/practice-sessions/${sessionId}/matches/${matchNumber}/participants`, {
       playerIds,
     }),
+
+  // 特定の試合に参加者を1名追加
+  addParticipantToMatch: (date, matchNumber, playerId) =>
+    apiClient.post(`/practice-sessions/date/${date}/matches/${matchNumber}/participants/${playerId}`),
 };
