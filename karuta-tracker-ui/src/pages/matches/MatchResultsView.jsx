@@ -14,6 +14,7 @@ const MatchResultsView = () => {
   const [matches, setMatches] = useState([]);
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // 日付選択関連の状態
@@ -39,9 +40,11 @@ const MatchResultsView = () => {
         // 初期日付の決定
         const todaySession = dates.find(d => d === today);
         setSelectedDate(todaySession || dates[0] || null);
+        setInitialLoading(false);
       } catch (err) {
         console.error('練習セッション一覧の取得に失敗:', err);
         setError('練習セッション一覧の取得に失敗しました');
+        setInitialLoading(false);
       }
     };
 
@@ -141,11 +144,11 @@ const MatchResultsView = () => {
     });
   };
 
-  if (loading) {
+  if (initialLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>

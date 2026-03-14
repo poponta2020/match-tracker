@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
-import { X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, RefreshCw, ChevronLeft, ChevronRight, CalendarCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 
@@ -294,15 +294,6 @@ const PracticeList = () => {
         </div>
       )}
 
-      {/* 参加登録ボタン */}
-      <div className="flex justify-center mb-6">
-        <button
-          onClick={goToParticipation}
-          className="px-6 py-3 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors font-medium"
-        >
-          📝 今月の参加登録を変更
-        </button>
-      </div>
 
       {/* カレンダー */}
       <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
@@ -520,6 +511,13 @@ const PracticeList = () => {
           onSave={handleSaveMatchParticipants}
         />
       )}
+      {/* フローティングアクションボタン (FAB) */}
+      <button
+        onClick={goToParticipation}
+        className="fixed bottom-20 right-4 z-20 bg-[#82655a] text-white p-4 rounded-full shadow-lg hover:bg-[#6e5549] transition-all hover:shadow-xl"
+      >
+        <CalendarCheck className="w-6 h-6" />
+      </button>
     </div>
     </div>
   );
