@@ -54,7 +54,8 @@ public class MatchService {
         if (match == null) {
             return null;
         }
-        return enrichMatchWithPlayerNames(match);
+        List<MatchDto> enriched = enrichMatchesWithPlayerPerspective(List.of(match), playerId);
+        return enriched.isEmpty() ? null : enriched.get(0);
     }
 
     /**

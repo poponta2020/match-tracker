@@ -241,9 +241,9 @@ const BulkResultInput = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>
@@ -252,7 +252,7 @@ const BulkResultInput = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center p-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
           <div className="flex items-center gap-2 text-red-800 mb-2">
             <AlertCircle className="h-5 w-5" />
@@ -261,7 +261,7 @@ const BulkResultInput = () => {
           <p className="text-red-700">{error}</p>
           <button
             onClick={() => navigate('/')}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            className="mt-4 px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048]"
           >
             ホームに戻る
           </button>
@@ -275,153 +275,136 @@ const BulkResultInput = () => {
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-20">
-      {/* ヘッダー */}
-      <div className="bg-[#e2d9d0] shadow-sm sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          {session && (
-            <div className="space-y-1 text-sm text-gray-600">
-              <p>📅 {session.sessionDate}</p>
-              <p>🏛️ {session.venueName}</p>
-              <p>👥 参加者: {pairings.length * 2}名</p>
+      {/* 固定ナビゲーションバー */}
+      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* 日付表示 */}
+          <div className="flex items-center justify-center py-3">
+            <span className="text-lg font-semibold text-[#5f3a2d]">
+              {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'short'
+              })}
+            </span>
+          </div>
+
+          {/* タブバー */}
+          {totalMatches > 0 && (
+            <div className="flex overflow-x-auto -mb-px">
+              {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
+                <button
+                  key={num}
+                  onClick={() => setCurrentMatchNumber(num)}
+                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                    currentMatchNumber === num
+                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
+                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                  }`}
+                >
+                  {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* タブバー */}
-      <div className="bg-[#e2d9d0] sticky top-[120px] z-20">
-        <div className="max-w-4xl mx-auto px-4 overflow-x-auto">
-          <div className="flex gap-1 pt-2">
-            {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
-              <button
-                key={num}
-                onClick={() => setCurrentMatchNumber(num)}
-                className={`flex-shrink-0 px-4 py-2 rounded-t-lg transition-colors ${
-                  currentMatchNumber === num
-                    ? 'bg-[#f9f6f2] text-[#5f3a2d] font-semibold border-t-2 border-x-2 border-[#d0c5b8]'
-                    : 'bg-[#d0c5b8] text-[#7a5f54] hover:bg-[#c5bab0]'
-                }`}
-              >
-                <div className="text-center">
-                  <div className="font-semibold">
-                    {num}試合{isMatchCompleted(num) ? '✓' : ''}
-                  </div>
-                  <div className="text-xs opacity-80">
-                    {session?.startTime && `${num === 1 ? session.startTime : ''}`}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-[#f9f6f2] rounded-b-lg rounded-tr-lg shadow-sm p-4 mb-4">
-          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            第{currentMatchNumber}試合 ({currentPairings.length * 2}名参加)
-            {isMatchCompleted(currentMatchNumber) && (
-              <CheckCircle className="h-5 w-5 text-green-600" />
-            )}
-          </h2>
+      <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        <div className="divide-y divide-[#e2d9d0]">
+          {currentPairings.map((pairing, index) => {
+            const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
+            const isPlayer1Winner = result.winnerId === pairing.player1Id;
+            const isPlayer2Winner = result.winnerId === pairing.player2Id;
+            const hasWinner = result.winnerId !== null;
 
-          <div className="space-y-3">
-            {currentPairings.map((pairing, index) => {
-              const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
-              return (
-                <div
-                  key={index}
-                  className="bg-[#f9f6f2] border border-[#d0c5b8] rounded-lg p-4 hover:border-[#a5927f] transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    {/* 選手1 */}
-                    <button
-                      onClick={() => setWinner(
-                        currentMatchNumber,
-                        pairing.player1Id,
-                        pairing.player2Id,
-                        pairing.player1Id
-                      )}
-                      className={`flex-1 text-left px-4 py-2 rounded-lg transition-colors ${
-                        result.winnerId === pairing.player1Id
-                          ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-[#f0ebe3] hover:bg-gray-100'
-                      }`}
-                    >
-                      {result.winnerId === pairing.player1Id && '🟢 '}
-                      {pairing.player1Name}
-                    </button>
+            return (
+              <div key={index} className="py-4">
+                <div className="flex items-center text-lg">
+                  {/* 選手1 */}
+                  <button
+                    type="button"
+                    onClick={() => setWinner(
+                      currentMatchNumber,
+                      pairing.player1Id,
+                      pairing.player2Id,
+                      pairing.player1Id
+                    )}
+                    className={`flex-1 text-right pr-2 font-semibold truncate transition-colors ${
+                      isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
+                    }`}
+                  >
+                    {pairing.player1Name}
+                  </button>
 
-                    {/* 枚数差 */}
-                    <select
-                      value={result.scoreDifference ?? ''}
-                      onChange={(e) => setScoreDifference(
-                        currentMatchNumber,
-                        pairing.player1Id,
-                        pairing.player2Id,
-                        e.target.value
-                      )}
-                      className={`px-3 py-2 border rounded-lg ${
-                        result.scoreDifference === null
-                          ? 'text-gray-400 border-gray-300'
-                          : 'text-gray-900 border-gray-400'
-                      }`}
-                    >
-                      <option value="">枚数差</option>
-                      {Array.from({ length: 26 }, (_, i) => i).map(num => (
-                        <option key={num} value={num}>{num}枚</option>
-                      ))}
-                    </select>
+                  {/* 中央: 勝敗マーク + 枚数差 or vs */}
+                  {hasWinner ? (
+                    <>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer1Winner ? '〇' : '×'}
+                      </div>
+                      <select
+                        value={result.scoreDifference ?? ''}
+                        onChange={(e) => setScoreDifference(
+                          currentMatchNumber,
+                          pairing.player1Id,
+                          pairing.player2Id,
+                          e.target.value
+                        )}
+                        className="w-14 text-center font-bold text-gray-900 bg-transparent border-0 border-b border-[#d0c5b8] focus:ring-0 focus:border-[#82655a] flex-shrink-0 px-0 py-0 text-base"
+                      >
+                        <option value="">-</option>
+                        {Array.from({ length: 26 }, (_, i) => i).map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer2Winner ? '〇' : '×'}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm font-medium text-[#b0a396] w-8 text-center flex-shrink-0">
+                      vs
+                    </div>
+                  )}
 
-                    {/* 選手2 */}
-                    <button
-                      onClick={() => setWinner(
-                        currentMatchNumber,
-                        pairing.player1Id,
-                        pairing.player2Id,
-                        pairing.player2Id
-                      )}
-                      className={`flex-1 text-right px-4 py-2 rounded-lg transition-colors ${
-                        result.winnerId === pairing.player2Id
-                          ? 'bg-green-100 border-2 border-green-500 font-semibold'
-                          : 'bg-[#f0ebe3] hover:bg-gray-100'
-                      }`}
-                    >
-                      {result.winnerId === pairing.player2Id && '🟢 '}
-                      {pairing.player2Name}
-                    </button>
-                  </div>
+                  {/* 選手2 */}
+                  <button
+                    type="button"
+                    onClick={() => setWinner(
+                      currentMatchNumber,
+                      pairing.player1Id,
+                      pairing.player2Id,
+                      pairing.player2Id
+                    )}
+                    className={`flex-1 text-left pl-2 font-semibold truncate transition-colors ${
+                      isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
+                    }`}
+                  >
+                    {pairing.player2Name}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-
-        {/* 変更カウンター */}
-        <div className="text-center text-gray-600 mb-4">
-          📊 変更: {changedMatches.size}試合
-        </div>
-
-        {/* 保存ボタン */}
-        <button
-          onClick={() => handleSave(false)}
-          disabled={changedMatches.size === 0 || saving}
-          className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${
-            changedMatches.size === 0
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-primary-600 text-white hover:bg-primary-700'
-          }`}
-        >
-          <Save className="h-5 w-5" />
-          {saving ? '保存中...' : 'すべて保存'}
-        </button>
-        {changedMatches.size === 0 && (
-          <p className="text-center text-sm text-gray-500 mt-2">
-            (変更がある場合のみ有効)
-          </p>
-        )}
       </div>
+
+      {/* 固定保存ボタン（変更がある場合のみ表示） */}
+      {changedMatches.size > 0 && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg">
+          <button
+            onClick={() => handleSave(false)}
+            disabled={saving}
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            <Save className="w-5 h-5" />
+            {saving ? '保存中...' : `保存する（${changedMatches.size}件）`}
+          </button>
+        </div>
+      )}
 
       {/* 枚数差未選択警告ダイアログ */}
       {showWarningDialog && (
@@ -453,7 +436,7 @@ const BulkResultInput = () => {
               </button>
               <button
                 onClick={() => handleSave(true)}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                className="flex-1 px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048]"
               >
                 0枚差で保存
               </button>

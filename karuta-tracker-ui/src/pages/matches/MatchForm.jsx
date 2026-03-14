@@ -38,6 +38,10 @@ const MatchForm = () => {
 
   // 初期ロード完了フラグ（タブ切り替え時の重複API呼び出し防止用）
   const initialLoadDone = useRef(false);
+  // 全試合データのキャッシュ（タブ即時切替用）
+  const matchDataCache = useRef({});   // matchNumber -> { exists, data }
+  const pairingCache = useRef({});     // matchNumber -> myPairing or null
+  const allPairingsCache = useRef([]); // 全ペアリングデータ
 
   // useEffect 1: 選手一覧 + 今日の練習セッション取得
   useEffect(() => {
@@ -104,119 +108,49 @@ const MatchForm = () => {
       if (!practiceSession || isEdit) return;
 
       try {
-        // 自分の参加試合番号を特定
-        const myMatchNumbers = [];
-        if (practiceSession.matchParticipants) {
-          for (const [matchNum, playerNames] of Object.entries(practiceSession.matchParticipants)) {
-            if (playerNames.includes(currentPlayer.name)) {
-              myMatchNumbers.push(parseInt(matchNum));
-            }
-          }
-        }
-        myMatchNumbers.sort((a, b) => a - b);
-        setParticipatingMatchNumbers(myMatchNumbers);
-
-        // 全参加試合の既存記録を一括チェック
+        // 全ペアリングを先に取得（IDベースで参加試合番号を特定するため）
         let defaultMatchNumber = formData.matchNumber;
-        const matchResultsMap = {};
+        const newMatchDataCache = {};
+        const newPairingCache = {};
 
-        if (myMatchNumbers.length > 0) {
-          const matchPromises = myMatchNumbers.map(num =>
-            matchAPI.getByPlayerDateAndMatchNumber(currentPlayer.id, formData.matchDate, num)
-              .then(res => ({ matchNumber: num, exists: true, data: res.data }))
-              .catch(() => ({ matchNumber: num, exists: false }))
+        const allPairingsRes = await pairingAPI.getByDate(formData.matchDate).catch(() => ({ data: [] }));
+        const allPairings = allPairingsRes.data || [];
+        allPairingsCache.current = allPairings;
+
+        // 全試合番号をタブ表示用にセット
+        const allMatchNumbers = Array.from({ length: practiceSession.totalMatches || 1 }, (_, i) => i + 1);
+        setParticipatingMatchNumbers(allMatchNumbers);
+
+        // ペアリングを試合番号ごとにキャッシュ
+        allMatchNumbers.forEach(num => {
+          const matchPairings = allPairings.filter(p => p.matchNumber === num);
+          const myPairing = matchPairings.find(
+            p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
           );
-          const matchResults = await Promise.all(matchPromises);
-          matchResults.forEach(r => { matchResultsMap[r.matchNumber] = r; });
+          newPairingCache[num] = myPairing || null;
+        });
 
-          const unrecordedMatch = matchResults.find(result => !result.exists);
-          defaultMatchNumber = unrecordedMatch ? unrecordedMatch.matchNumber : myMatchNumbers[0];
-        }
+        // 全試合の既存記録を一括取得
+        const matchResults = await Promise.all(allMatchNumbers.map(num =>
+          matchAPI.getByPlayerDateAndMatchNumber(currentPlayer.id, formData.matchDate, num)
+            .then(res => ({ matchNumber: num, exists: true, data: res.data }))
+            .catch(() => ({ matchNumber: num, exists: false }))
+        ));
 
-        // デフォルト試合番号の既存記録 or 組み合わせをチェック
-        const existingResult = matchResultsMap[defaultMatchNumber];
-        if (existingResult && existingResult.exists) {
-          const match = existingResult.data;
-          setIsExistingMatch(true);
-          setFormData(prev => ({
-            ...prev,
-            matchNumber: defaultMatchNumber,
-            opponentName: match.opponentName,
-            opponentId: match.opponentId || null,
-            result: match.result,
-            scoreDifference: match.scoreDifference,
-            notes: match.notes || ''
-          }));
-        } else {
-          setIsExistingMatch(false);
+        // 既存記録をキャッシュ
+        matchResults.forEach(r => { newMatchDataCache[r.matchNumber] = r; });
 
-          // 組み合わせチェック
-          try {
-            const response = await pairingAPI.getByDateAndMatchNumber(
-              formData.matchDate,
-              defaultMatchNumber
-            );
+        // refにキャッシュ保存
+        matchDataCache.current = newMatchDataCache;
+        pairingCache.current = newPairingCache;
 
-            if (response.data && response.data.length > 0) {
-              const myPairing = response.data.find(
-                p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
-              );
+        // デフォルト試合番号を決定
+        // 未記録の試合を優先表示
+        const unrecordedMatch = matchResults.find(result => !result.exists);
+        defaultMatchNumber = unrecordedMatch ? unrecordedMatch.matchNumber : allMatchNumbers[0];
 
-              if (myPairing) {
-                setPairing(myPairing);
-                const opponentId = myPairing.player1Id === currentPlayer.id
-                  ? myPairing.player2Id
-                  : myPairing.player1Id;
-                const opponentName = myPairing.player1Id === currentPlayer.id
-                  ? myPairing.player2Name
-                  : myPairing.player1Name;
-
-                setFormData(prev => ({
-                  ...prev,
-                  matchNumber: defaultMatchNumber,
-                  opponentId: opponentId,
-                  opponentName: opponentName,
-                  result: '勝ち',
-                  scoreDifference: 0,
-                  notes: ''
-                }));
-              } else {
-                setPairing(null);
-                setAvailablePlayers(getMatchPlayers(defaultMatchNumber));
-                setFormData(prev => ({
-                  ...prev,
-                  matchNumber: defaultMatchNumber,
-                  opponentId: null,
-                  opponentName: '',
-                  result: '勝ち',
-                  scoreDifference: 0,
-                  notes: ''
-                }));
-              }
-            } else {
-              setPairing(null);
-              setAvailablePlayers(getMatchPlayers(defaultMatchNumber));
-              setFormData(prev => ({
-                ...prev,
-                matchNumber: defaultMatchNumber,
-                opponentId: null,
-                opponentName: '',
-                result: '勝ち',
-                scoreDifference: 0,
-                notes: ''
-              }));
-            }
-          } catch {
-            setPairing(null);
-            setAvailablePlayers(getMatchPlayers(defaultMatchNumber));
-            setFormData(prev => ({
-              ...prev,
-              matchNumber: defaultMatchNumber,
-              opponentId: null,
-              opponentName: '',
-            }));
-          }
-        }
+        // デフォルト試合番号のデータを適用
+        applyMatchData(defaultMatchNumber, newMatchDataCache, newPairingCache);
 
         initialLoadDone.current = true;
       } catch (err) {
@@ -230,102 +164,77 @@ const MatchForm = () => {
     fetchSessionDetails();
   }, [practiceSession, currentPlayer.id, currentPlayer.name, isEdit]);
 
-  // useEffect 3: タブ切り替え時のみ（初回ロード後の試合番号変更）
-  useEffect(() => {
-    // 初回ロード完了前はスキップ（useEffect 2で処理済み）
-    if (!initialLoadDone.current) return;
-
-    const checkPairingAndExistingMatch = async () => {
-      if (!formData.matchDate || !formData.matchNumber) return;
-
-      try {
-        const existingMatchRes = await matchAPI.getByPlayerDateAndMatchNumber(
-          currentPlayer.id,
-          formData.matchDate,
-          formData.matchNumber
-        ).catch(() => null);
-
-        if (existingMatchRes && existingMatchRes.data) {
-          const match = existingMatchRes.data;
-          setIsExistingMatch(true);
-          setFormData(prev => ({
-            ...prev,
-            opponentName: match.opponentName,
-            opponentId: match.opponentId || null,
-            result: match.result,
-            scoreDifference: match.scoreDifference,
-            notes: match.notes || ''
-          }));
-        } else {
-          setIsExistingMatch(false);
-
-          const response = await pairingAPI.getByDateAndMatchNumber(
-            formData.matchDate,
-            formData.matchNumber
-          );
-
-          if (response.data && response.data.length > 0) {
-            const myPairing = response.data.find(
-              p => p.player1Id === currentPlayer.id || p.player2Id === currentPlayer.id
-            );
-
-            if (myPairing) {
-              setPairing(myPairing);
-              const opponentId = myPairing.player1Id === currentPlayer.id
-                ? myPairing.player2Id
-                : myPairing.player1Id;
-              const opponentName = myPairing.player1Id === currentPlayer.id
-                ? myPairing.player2Name
-                : myPairing.player1Name;
-
-              setFormData(prev => ({
-                ...prev,
-                opponentId: opponentId,
-                opponentName: opponentName,
-                result: '勝ち',
-                scoreDifference: 0,
-                notes: ''
-              }));
-            } else {
-              setPairing(null);
-              setAvailablePlayers(getMatchPlayers(formData.matchNumber));
-              setFormData(prev => ({
-                ...prev,
-                opponentId: null,
-                opponentName: '',
-                result: '勝ち',
-                scoreDifference: 0,
-                notes: ''
-              }));
-            }
-          } else {
-            setPairing(null);
-            setAvailablePlayers(getMatchPlayers(formData.matchNumber));
-            setFormData(prev => ({
-              ...prev,
-              opponentId: null,
-              opponentName: '',
-              result: '勝ち',
-              scoreDifference: 0,
-              notes: ''
-            }));
-          }
-        }
-      } catch (err) {
-        setIsExistingMatch(false);
+  // 試合番号のデータをstateに適用する共通関数
+  const applyMatchData = (matchNumber, matchCache, pairCache) => {
+    const existingResult = matchCache[matchNumber];
+    if (existingResult && existingResult.exists) {
+      const match = existingResult.data;
+      setIsExistingMatch(true);
+      setPairing(null);
+      // opponentIdをplayer1Id/player2Idから算出
+      const opponentId = match.player1Id === currentPlayer.id ? match.player2Id : match.player1Id;
+      setFormData(prev => ({
+        ...prev,
+        matchNumber: matchNumber,
+        opponentName: match.opponentName,
+        opponentId: opponentId || null,
+        result: match.result,
+        scoreDifference: Number(match.scoreDifference),
+        notes: match.notes || ''
+      }));
+    } else {
+      setIsExistingMatch(false);
+      const myPairing = pairCache[matchNumber];
+      if (myPairing) {
+        setPairing(myPairing);
+        const opponentId = myPairing.player1Id === currentPlayer.id
+          ? myPairing.player2Id
+          : myPairing.player1Id;
+        const opponentName = myPairing.player1Id === currentPlayer.id
+          ? myPairing.player2Name
+          : myPairing.player1Name;
+        setFormData(prev => ({
+          ...prev,
+          matchNumber: matchNumber,
+          opponentId: opponentId,
+          opponentName: opponentName,
+          result: '勝ち',
+          scoreDifference: 0,
+          notes: ''
+        }));
+      } else {
         setPairing(null);
+        setAvailablePlayers(getMatchPlayers(matchNumber));
+        setFormData(prev => ({
+          ...prev,
+          matchNumber: matchNumber,
+          opponentId: null,
+          opponentName: '',
+          result: '勝ち',
+          scoreDifference: 0,
+          notes: ''
+        }));
       }
-    };
+    }
+  };
 
-    checkPairingAndExistingMatch();
+  // useEffect 3: タブ切り替え時（キャッシュから即座に反映）
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    applyMatchData(formData.matchNumber, matchDataCache.current, pairingCache.current);
   }, [formData.matchNumber]);
 
-  // 試合番号に対応する参加選手リストを構築（matchParticipants + players突き合わせ）
+  // 試合番号に対応する参加選手リストを構築（全ペアリングキャッシュから取得）
   const getMatchPlayers = (matchNumber) => {
-    if (!practiceSession?.matchParticipants) return players;
-    const participantNames = practiceSession.matchParticipants[matchNumber] || [];
-    if (participantNames.length === 0) return players;
-    return players.filter(p => participantNames.includes(p.name));
+    const matchPairings = allPairingsCache.current.filter(p => p.matchNumber === matchNumber);
+    if (matchPairings.length === 0) return players;
+    const playerIds = new Set();
+    matchPairings.forEach(p => {
+      playerIds.add(p.player1Id);
+      playerIds.add(p.player2Id);
+    });
+    playerIds.delete(currentPlayer.id);
+    return players.filter(p => playerIds.has(p.id));
   };
 
   const handleChange = (e) => {

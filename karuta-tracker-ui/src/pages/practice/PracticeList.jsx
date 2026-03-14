@@ -363,140 +363,128 @@ const PracticeList = () => {
           onClick={closeModal}
         >
           <div
-            className="bg-[#f9f6f2] rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+            className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold">
-                📅 {formatDateForModal(selectedSession.sessionDate)}
-              </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+            {/* ヘッダー */}
+            <div className="px-6 pt-5 pb-4 flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-bold text-[#5f3a2d]">
+                  {formatDateForModal(selectedSession.sessionDate)}
+                </h3>
+                {selectedSession.venueName && (
+                  <p className="text-sm text-[#8a7568] mt-0.5">{selectedSession.venueName}</p>
+                )}
+              </div>
+              <button onClick={closeModal} className="text-[#8a7568] hover:text-[#5f3a2d] -mt-1">
+                <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm font-medium text-gray-600">📍 場所:</div>
-                <div className="text-base text-gray-900">{selectedSession.venueName || '-'}</div>
-              </div>
+            {/* 試合リスト */}
+            <div className="divide-y divide-[#e2d9d0]">
+              {selectedSession.matchParticipants &&
+              Object.keys(selectedSession.matchParticipants).length > 0 ? (
+                Object.entries(selectedSession.matchParticipants)
+                  .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                  .map(([matchNum, participants]) => {
+                    const isExpanded = expandedMatches[matchNum];
+                    const count = participants.length;
+                    const myMatchNumbers = myParticipations[selectedSession.id] || [];
+                    const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
 
-              <div>
-                <div className="text-sm font-medium text-gray-700 mb-2">🎯 試合別参加者:</div>
-                <div className="space-y-2">
-                  {selectedSession.matchParticipants &&
-                  Object.keys(selectedSession.matchParticipants).length > 0 ? (
-                    Object.entries(selectedSession.matchParticipants)
-                      .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                      .map(([matchNum, participants]) => {
-                        const isExpanded = expandedMatches[matchNum];
-                        const count = participants.length;
-                        const myMatchNumbers = myParticipations[selectedSession.id] || [];
-                        const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
+                    const schedule = selectedSession.venueSchedules?.find(
+                      s => s.matchNumber === parseInt(matchNum)
+                    );
+                    const timeRange = schedule
+                      ? `${schedule.startTime?.substring(0, 5)}-${schedule.endTime?.substring(0, 5)}`
+                      : '';
 
-                        // 試合時間を取得
-                        const schedule = selectedSession.venueSchedules?.find(
-                          s => s.matchNumber === parseInt(matchNum)
-                        );
-                        const timeRange = schedule
-                          ? `${schedule.startTime?.substring(0, 5)}-${schedule.endTime?.substring(0, 5)}`
-                          : '';
-
-                        return (
-                          <div key={matchNum} className="border border-gray-200 rounded overflow-hidden">
-                            <div className={`w-full px-3 py-2 ${isMyMatch ? 'bg-green-50' : 'bg-gray-50'} transition-colors flex items-center justify-between`}>
-                              <button
-                                onClick={() => toggleMatch(matchNum)}
-                                className="flex-1 text-left hover:opacity-75"
-                              >
-                                <span className="text-sm font-medium text-gray-900">
-                                  {isExpanded ? '▼' : '▶'} {matchNum}試合目{timeRange ? `: ${timeRange}` : ''} ({count}名)
-                                </span>
-                              </button>
-                              {isSuperAdmin(currentPlayer) && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditMatchParticipants(parseInt(matchNum));
-                                  }}
-                                  className="ml-2 px-2 py-1 text-xs bg-[#82655a] text-white rounded hover:bg-[#6b5048]"
-                                >
-                                  編集
-                                </button>
-                              )}
-                            </div>
-                            {isExpanded && (
-                              <div className={`px-3 py-2 ${isMyMatch ? 'bg-green-50' : 'bg-white'}`}>
-                                {participants.length > 0 ? (
-                                  <ul className="list-disc list-inside space-y-1">
-                                    {participants.map((name, idx) => (
-                                      <li key={idx} className="text-sm text-gray-700">
-                                        {name}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <div className="text-sm text-gray-500">参加者なし</div>
-                                )}
+                    return (
+                      <div key={matchNum}>
+                        <div className={`px-6 py-3 flex items-center justify-between ${isMyMatch ? 'bg-[#f0ebe3]' : ''}`}>
+                          <button
+                            onClick={() => toggleMatch(matchNum)}
+                            className="flex-1 text-left flex items-center gap-3"
+                          >
+                            <span className="text-sm font-semibold text-[#5f3a2d] w-16 flex-shrink-0">
+                              第{matchNum}試合
+                            </span>
+                            {timeRange && (
+                              <span className="text-xs text-[#8a7568]">{timeRange}</span>
+                            )}
+                            <span className="text-xs text-[#8a7568] ml-auto mr-2">{count}名</span>
+                            <ChevronRight
+                              size={14}
+                              className={`text-[#8a7568] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            />
+                          </button>
+                          {isSuperAdmin(currentPlayer) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditMatchParticipants(parseInt(matchNum));
+                              }}
+                              className="ml-2 px-2 py-1 text-xs text-[#82655a] border border-[#82655a] rounded hover:bg-[#82655a] hover:text-white transition-colors"
+                            >
+                              編集
+                            </button>
+                          )}
+                        </div>
+                        {isExpanded && (
+                          <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#f0ebe3]' : ''}`}>
+                            {participants.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5 pl-16">
+                                {participants.map((name, idx) => (
+                                  <span key={idx} className="text-xs text-[#5f3a2d] bg-[#e2d9d0] px-2 py-0.5 rounded-full">
+                                    {name}
+                                  </span>
+                                ))}
                               </div>
+                            ) : (
+                              <div className="text-xs text-[#8a7568] pl-16">参加者なし</div>
                             )}
                           </div>
-                        );
-                      })
-                  ) : (
-                    <div className="text-sm text-gray-500">試合別参加者データなし</div>
-                  )}
-                </div>
-              </div>
-
-              {selectedSession.remarks && (
-                <div>
-                  <div className="text-sm font-medium text-gray-700">📝 備考:</div>
-                  <div className="text-base text-gray-900">{selectedSession.remarks}</div>
-                </div>
+                        )}
+                      </div>
+                    );
+                  })
+              ) : (
+                <div className="px-6 py-4 text-sm text-[#8a7568]">試合データなし</div>
               )}
             </div>
 
-            <div className="flex justify-between items-center gap-3 mt-6">
+            {selectedSession.remarks && (
+              <div className="px-6 py-3 border-t border-[#e2d9d0]">
+                <p className="text-sm text-[#8a7568]">{selectedSession.remarks}</p>
+              </div>
+            )}
+
+            {/* ボタン */}
+            <div className="px-6 py-4 border-t border-[#e2d9d0] flex items-center gap-2">
               {isPastDate(selectedSession.sessionDate) ? (
                 <button
                   onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
-                  className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
+                  className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors whitespace-nowrap"
                 >
-                  📊 試合結果を見る
+                  試合結果
                 </button>
               ) : (
                 <button
                   onClick={goToParticipation}
-                  className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
+                  className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors whitespace-nowrap"
                 >
-                  📝 参加登録
+                  参加登録
                 </button>
               )}
-              <div className="flex gap-3">
-                {isSuperAdmin() && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/practice/${selectedSession.id}/edit`)}
-                      className="px-4 py-2 bg-[#82655a] text-white rounded hover:bg-[#6b5048] transition-colors"
-                    >
-                      編集
-                    </button>
-                    <button
-                      onClick={() => handleDelete(selectedSession.id)}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                    >
-                      削除
-                    </button>
-                  </>
-                )}
+              {isSuperAdmin() && (
                 <button
-                  onClick={closeModal}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+                  onClick={() => handleDelete(selectedSession.id)}
+                  className="flex-1 py-2 text-sm font-medium text-red-600 border border-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-colors whitespace-nowrap"
                 >
-                  閉じる
+                  削除
                 </button>
-              </div>
+              )}
             </div>
           </div>
         </div>

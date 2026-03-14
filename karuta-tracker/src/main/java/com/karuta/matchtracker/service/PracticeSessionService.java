@@ -74,6 +74,16 @@ public class PracticeSessionService {
     }
 
     /**
+     * 日付で練習日を取得（参加者情報付き）
+     */
+    public PracticeSessionDto findByDateWithParticipants(LocalDate date) {
+        log.debug("Finding practice session with participants by date: {}", date);
+        PracticeSession session = practiceSessionRepository.findBySessionDate(date)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
+        return enrichSessionWithParticipants(session);
+    }
+
+    /**
      * 期間内の練習日を取得
      */
     public List<PracticeSessionDto> findSessionsInRange(LocalDate startDate, LocalDate endDate) {

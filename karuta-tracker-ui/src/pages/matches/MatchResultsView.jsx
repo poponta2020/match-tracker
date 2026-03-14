@@ -63,8 +63,12 @@ const MatchResultsView = () => {
         setLoading(true);
         setError(null);
 
-        // 選択された日付のセッションデータを取得
-        const sessionResponse = await practiceAPI.getByDate(selectedDate).catch(() => null);
+        // セッション・ペアリング・試合結果を全て並列取得
+        const [sessionResponse, pairingsResponse, matchesResponse] = await Promise.all([
+          practiceAPI.getByDate(selectedDate).catch(() => null),
+          pairingAPI.getByDate(selectedDate).catch(() => ({ data: [] })),
+          apiClient.get(`/matches?date=${selectedDate}`).catch(() => ({ data: [] })),
+        ]);
 
         if (!sessionResponse || !sessionResponse.data) {
           setSession(null);
@@ -75,14 +79,8 @@ const MatchResultsView = () => {
         }
 
         setSession(sessionResponse.data);
-
-        // 対戦ペアリングと試合結果を並列取得
-        const [pairingsResponse, matchesResponse] = await Promise.all([
-          pairingAPI.getByDate(selectedDate),
-          apiClient.get(`/matches?date=${selectedDate}`),
-        ]);
         setPairings(pairingsResponse.data || []);
-        setMatches(matchesResponse.data);
+        setMatches(matchesResponse.data || []);
 
       } catch (err) {
         console.error('データ取得エラー:', err);
@@ -372,70 +370,58 @@ const MatchResultsView = () => {
       </div>
 
       {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-4 pt-24 py-6">
-        <div className="bg-[#f9f6f2] rounded-b-lg rounded-tr-lg shadow-sm p-4 mb-4">
-          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            第{currentMatchNumber}試合 ({currentPairings.length * 2}名参加)
-            {isMatchCompleted(currentMatchNumber) && (
-              <CheckCircle className="h-5 w-5 text-green-600" />
-            )}
-          </h2>
+      <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        <div className="divide-y divide-[#e2d9d0]">
+          {currentPairings.map((pairing, index) => {
+            const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
+            const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
+            const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
 
-          <div className="space-y-3">
-            {currentPairings.map((pairing, index) => {
-              const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
-              const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
-              const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
-
-              return (
-                <div
-                  key={index}
-                  className="bg-[#f9f6f2] border border-[#d0c5b8] rounded-lg p-4"
-                >
-                  {match ? (
-                    // 結果入力済み: A 〇 11 × B 形式
-                    <div className="flex items-center justify-center text-lg">
-                      <div className={`font-semibold text-right w-32 pr-2 ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}>
-                        {pairing.player1Name}
-                      </div>
-                      <div className={`font-bold text-2xl w-8 text-center ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer1Winner ? '〇' : '×'}
-                      </div>
-                      <div className="font-bold text-gray-900 w-12 text-center">
-                        {match.scoreDifference}
-                      </div>
-                      <div className={`font-bold text-2xl w-8 text-center ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer2Winner ? '〇' : '×'}
-                      </div>
-                      <div className={`font-semibold text-left w-32 pl-2 ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}>
-                        {pairing.player2Name}
-                      </div>
+            return (
+              <div key={index} className="py-4">
+                {match ? (
+                  // 結果入力済み: A 〇 枚数差 × B
+                  <div className="flex items-center text-lg">
+                    <div className={`flex-1 text-right pr-2 font-semibold truncate ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                      {pairing.player1Name}
                     </div>
-                  ) : (
-                    // 未入力: 従来の表示
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 px-4 py-2 rounded-lg bg-[#f0ebe3]">
-                        {pairing.player1Name}
-                      </div>
-                      <div className="px-3 py-2 text-center min-w-[80px] flex-shrink-0">
-                        <span className="text-gray-400">未入力</span>
-                      </div>
-                      <div className="flex-1 text-right px-4 py-2 rounded-lg bg-[#f0ebe3]">
-                        {pairing.player2Name}
-                      </div>
+                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                      {isPlayer1Winner ? '〇' : '×'}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
+                      {match.scoreDifference}
+                    </div>
+                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                      {isPlayer2Winner ? '〇' : '×'}
+                    </div>
+                    <div className={`flex-1 text-left pl-2 font-semibold truncate ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                      {pairing.player2Name}
+                    </div>
+                  </div>
+                ) : (
+                  // 未入力: A vs B
+                  <div className="flex items-center text-lg">
+                    <div className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate">
+                      {pairing.player1Name}
+                    </div>
+                    <div className="text-sm font-medium text-[#b0a396] w-8 text-center flex-shrink-0">
+                      vs
+                    </div>
+                    <div className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate">
+                      {pairing.player2Name}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* 管理者用：編集ボタン */}
         {(isAdmin() || isSuperAdmin()) && (isSuperAdmin() || isToday()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 font-semibold"
+            className="w-full mt-6 py-3 px-4 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
             結果を編集・入力する
