@@ -27,6 +27,7 @@ import java.util.Map;
 public class PracticeSessionController {
 
     private final PracticeSessionService practiceSessionService;
+    private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
 
     /**
      * 全ての練習日を取得
@@ -310,5 +311,36 @@ public class PracticeSessionController {
         // 更新後の練習セッション情報を返す
         PracticeSessionDto session = practiceSessionService.findByDate(date);
         return ResponseEntity.ok(session);
+    }
+
+    /**
+     * 伝助から参加者データをインポート
+     *
+     * @param request インポートリクエスト（url, targetDate）
+     * @return インポート結果
+     */
+    @PostMapping("/import-densuke")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> importFromDensuke(@RequestBody Map<String, String> request) {
+        String url = request.get("url");
+        String targetDateStr = request.get("targetDate");
+
+        if (url == null || url.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "URLを指定してください"));
+        }
+
+        log.info("POST /api/practice-sessions/import-densuke - Importing from densuke: {}", url);
+
+        try {
+            LocalDate targetDate = targetDateStr != null && !targetDateStr.isBlank()
+                    ? LocalDate.parse(targetDateStr)
+                    : null;
+            var result = densukeImportService.importFromDensuke(url, targetDate);
+            return ResponseEntity.ok(result);
+        } catch (java.io.IOException e) {
+            log.error("Densuke scraping failed", e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "伝助からのデータ取得に失敗しました: " + e.getMessage()));
+        }
     }
 }

@@ -130,13 +130,14 @@ const PracticeList = () => {
     );
   };
 
-  // 場所名を省略
+  // 場所名を省略（4文字まではそのまま表示）
   const abbreviateLocation = (location) => {
     if (!location) return '';
-    if (location.includes('市民館')) return '市民';
-    if (location.includes('公民館')) return '公民';
-    if (location.includes('体育館')) return '体育';
-    return location.substring(0, 3);
+    if (location.length <= 4) return location;
+    if (location.includes('市民館')) return '市民館';
+    if (location.includes('公民館')) return '公民館';
+    if (location.includes('体育館')) return '体育館';
+    return location.substring(0, 4);
   };
 
   // 月を変更
@@ -334,16 +335,21 @@ const PracticeList = () => {
                   return (
                     <td
                       key={dayIdx}
-                      className={`px-1 py-3 border ${bgColor} ${borderColor} ${cursor} align-top h-20 relative`}
+                      className={`px-1 py-2 border ${bgColor} ${borderColor} ${cursor} align-top h-20 relative`}
                       onClick={() => handleCellClick(day)}
                     >
                       {day && (
-                        <div className="text-center">
-                          <div className={`text-lg ${today ? 'font-bold' : ''}`}>{day}</div>
+                        <div className="text-center flex flex-col items-center">
+                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#82655a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                            {day}
+                          </div>
                           {session && session.venueName && (
-                            <div className="mt-1 text-xs text-gray-700">
+                            <div className="mt-0.5 text-[10px] text-[#8a7568] leading-tight">
                               {abbreviateLocation(session.venueName)}
                             </div>
+                          )}
+                          {hasSession && !session?.venueName && (
+                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-[#82655a]" />
                           )}
                         </div>
                       )}
@@ -502,9 +508,10 @@ const PracticeList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={goToParticipation}
-        className="fixed bottom-20 right-4 z-20 bg-[#82655a] text-white p-4 rounded-full shadow-lg hover:bg-[#6e5549] transition-all hover:shadow-xl"
+        className="fixed bottom-20 right-4 z-20 bg-[#82655a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#6e5549] transition-all hover:shadow-xl flex items-center gap-2"
       >
-        <CalendarCheck className="w-6 h-6" />
+        <CalendarCheck className="w-5 h-5" />
+        <span className="text-sm font-medium">参加登録</span>
       </button>
     </div>
     </div>
