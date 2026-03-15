@@ -65,7 +65,7 @@ public class PracticeSessionController {
     public ResponseEntity<PracticeSessionDto> getSessionByDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.debug("GET /api/practice-sessions/date?date={} - Getting practice session by date", date);
-        PracticeSessionDto session = practiceSessionService.findByDate(date);
+        PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date);
         return ResponseEntity.ok(session);
     }
 

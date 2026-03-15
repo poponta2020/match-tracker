@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
@@ -17,7 +17,6 @@ const PairingGenerator = () => {
   const [waitingPlayers, setWaitingPlayers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [existingPairings, setExistingPairings] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
@@ -32,6 +31,13 @@ const PairingGenerator = () => {
   const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [showParticipantList, setShowParticipantList] = useState(true);
   const [matchExistsMap, setMatchExistsMap] = useState({});
+  const [isEditingExisting, setIsEditingExisting] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(true);
+  const [cacheVersion, setCacheVersion] = useState(0); // キャッシュ更新トリガー
+
+  // 各試合番号の組み合わせデータキャッシュ
+  const pairingsCache = useRef({}); // matchNumber -> pairings array or null
+  const fetchIdRef = useRef(0); // stale fetch防止用
 
   // マウント時にlocalStorageから同期結果を復元
   useEffect(() => {
@@ -49,57 +55,147 @@ const PairingGenerator = () => {
     }
   }, []);
 
+  // 既存の組み合わせデータを編集可能な形式に変換してstateにロード
+  const loadExistingPairingsToState = useCallback((existingData) => {
+    if (!existingData || existingData.length === 0) {
+      setPairings([]);
+      setWaitingPlayers([]);
+      setIsEditingExisting(false);
+      return;
+    }
+    const converted = existingData.map(p => ({
+      player1Id: p.player1Id,
+      player1Name: p.player1Name,
+      player2Id: p.player2Id,
+      player2Name: p.player2Name,
+      recentMatches: p.recentMatches || [],
+    }));
+    setPairings(converted);
+    setWaitingPlayers([]);
+    setIsEditingExisting(true);
+  }, []);
+
+  // 試合番号に対応する参加者をセッションデータから取得してstateに反映
+  const updateParticipantsForMatch = useCallback((session, matchNum) => {
+    if (!session) {
+      setParticipants([]);
+      return;
+    }
+    // matchParticipants: { "1" -> [playerName, ...], "2" -> [...] }
+    // JSONのキーは文字列なのでString()で変換
+    const matchParticipantNames = session.matchParticipants?.[String(matchNum)] || [];
+    const sessionParticipants = session.participants || [];
+    if (matchParticipantNames.length > 0) {
+      // 名前ベースでフィルタ
+      const filtered = sessionParticipants.filter(p => matchParticipantNames.includes(p.name));
+      setParticipants(filtered);
+    } else {
+      // matchParticipantsが空の場合はセッション全体の参加者を使う（後方互換）
+      setParticipants(sessionParticipants);
+    }
+  }, []);
+
+  // 日付変更時: セッション・参加者・全試合の組み合わせを一括取得
   useEffect(() => {
-    const fetchParticipants = async () => {
-      if (!sessionDate) return;
+    if (!sessionDate) return;
+
+    // stale fetch防止: このfetchのIDを記録
+    const thisId = ++fetchIdRef.current;
+
+    const fetchAllData = async () => {
+      // 一括ローディング開始
+      setMatchLoading(true);
+      pairingsCache.current = {};
+      setMatchExistsMap({});
+      setPairings([]);
+      setWaitingPlayers([]);
+      setIsEditingExisting(false);
+      setParticipants([]);
 
       try {
         const response = await practiceAPI.getByDate(sessionDate);
-        if (response.data) {
-          setCurrentSession(response.data);
-          const participantsRes = await practiceAPI.getParticipants(response.data.id);
-          setParticipants(participantsRes.data);
+        // staleチェック: 後から別のfetchが走っていたらこの結果は無視
+        if (fetchIdRef.current !== thisId) return;
 
-          // 各試合番号の既存組み合わせ有無をチェック
-          const totalMatches = response.data.totalMatches || 10;
-          const existsMap = {};
-          for (let i = 1; i <= totalMatches; i++) {
+        if (response.data) {
+          const session = response.data;
+          setCurrentSession(session);
+
+          // 全試合番号の組み合わせを並列で一括取得
+          const totalMatches = session.totalMatches || 10;
+          const fetchPromises = Array.from({ length: totalMatches }, (_, i) => i + 1).map(async (num) => {
             try {
-              const res = await pairingAPI.exists(sessionDate, i);
-              existsMap[i] = !!res.data;
+              const existsRes = await pairingAPI.exists(sessionDate, num);
+              if (existsRes.data) {
+                const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, num);
+                return { num, exists: true, data: pairingsRes.data };
+              }
+              return { num, exists: false, data: null };
             } catch {
-              existsMap[i] = false;
+              return { num, exists: false, data: null };
             }
-          }
-          setMatchExistsMap(existsMap);
+          });
+
+          const results = await Promise.all(fetchPromises);
+          // staleチェック
+          if (fetchIdRef.current !== thisId) return;
+
+          const newExistsMap = {};
+          results.forEach(({ num, exists, data }) => {
+            newExistsMap[num] = exists;
+            pairingsCache.current[num] = data;
+          });
+          setMatchExistsMap(newExistsMap);
+          // キャッシュ更新をトリガー → matchNumber useEffectが再実行される
+          setCacheVersion(v => v + 1);
         } else {
           setCurrentSession(null);
           setParticipants([]);
           setMatchExistsMap({});
         }
-
-        const existsRes = await pairingAPI.exists(sessionDate, matchNumber);
-        if (existsRes.data) {
-          const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
-          setExistingPairings(pairingsRes.data);
-        } else {
-          setExistingPairings(null);
-        }
       } catch (err) {
-        console.error('Failed to fetch participants:', err);
+        if (fetchIdRef.current !== thisId) return;
+        console.error('Failed to fetch data:', err);
         if (err.response && err.response.status === 404) {
           setCurrentSession(null);
           setParticipants([]);
           setMatchExistsMap({});
           setError('');
         } else {
-          setError('Failed to fetch participants');
+          setError('データの取得に失敗しました');
+        }
+      } finally {
+        if (fetchIdRef.current === thisId) {
+          setMatchLoading(false);
         }
       }
     };
 
-    fetchParticipants();
-  }, [sessionDate, matchNumber]);
+    fetchAllData();
+  }, [sessionDate]);
+
+  // 試合番号 or キャッシュ更新時: キャッシュから即座に表示 + 参加者も切替
+  useEffect(() => {
+    // 参加者を試合番号に応じて切替
+    updateParticipantsForMatch(currentSession, matchNumber);
+
+    // 組み合わせをキャッシュから反映
+    const cached = pairingsCache.current[matchNumber];
+    if (cached !== undefined) {
+      if (cached) {
+        loadExistingPairingsToState(cached);
+      } else {
+        setPairings([]);
+        setWaitingPlayers([]);
+        setIsEditingExisting(false);
+      }
+    } else {
+      // キャッシュ未取得（初回ロード中等）の場合はクリア
+      setPairings([]);
+      setWaitingPlayers([]);
+      setIsEditingExisting(false);
+    }
+  }, [matchNumber, cacheVersion, currentSession, loadExistingPairingsToState, updateParticipantsForMatch]);
 
   useEffect(() => {
     const fetchAllPlayers = async () => {
@@ -151,6 +247,11 @@ const PairingGenerator = () => {
     setError('');
 
     try {
+      // 既存の組み合わせを編集していた場合は先に削除
+      if (isEditingExisting) {
+        await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber);
+      }
+
       const requests = pairings.map((p) => ({
         player1Id: p.player1Id,
         player2Id: p.player2Id,
@@ -158,24 +259,30 @@ const PairingGenerator = () => {
 
       await pairingAPI.createBatch(sessionDate, matchNumber, requests);
 
+      // キャッシュとマップを更新
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
-      setExistingPairings(pairingsRes.data);
+      pairingsCache.current[matchNumber] = pairingsRes.data;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: true }));
 
       // 次の試合番号に自動遷移
       const nextMatchNumber = matchNumber + 1;
       const maxMatches = currentSession?.totalMatches || 10;
 
       if (nextMatchNumber <= maxMatches) {
-        // 試合番号を更新（useEffectが再実行される）
-        setMatchNumber(nextMatchNumber);
-        // 画面をクリア
-        setPairings([]);
-        setWaitingPlayers([]);
-      } else {
-        // 最終試合の場合は一括入力画面に遷移
-        if (currentSession && currentSession.id) {
-          navigate(`/matches/bulk-input/${currentSession.id}`);
+        // 次の試合番号のキャッシュを確認して先にstateをセット
+        const nextCached = pairingsCache.current[nextMatchNumber];
+        if (nextCached) {
+          loadExistingPairingsToState(nextCached);
+        } else {
+          setPairings([]);
+          setWaitingPlayers([]);
+          setIsEditingExisting(false);
         }
+        // matchNumberを変更（useEffectが走るが、stateは既に正しい）
+        setMatchNumber(nextMatchNumber);
+      } else {
+        // 最終試合の場合はLINE送信用テキスト画面に遷移
+        navigate(`/pairings/summary?date=${sessionDate}`);
       }
     } catch (err) {
       console.error('Save failed:', err);
@@ -186,7 +293,7 @@ const PairingGenerator = () => {
   };
 
   const handleDeleteExisting = async () => {
-    if (!window.confirm('既存の組み合わせを削除しますか?')) {
+    if (!window.confirm('既存の組み合わせを削除しますか？')) {
       return;
     }
 
@@ -195,7 +302,11 @@ const PairingGenerator = () => {
 
     try {
       await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber);
-      setExistingPairings(null);
+      pairingsCache.current[matchNumber] = null;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: false }));
+      setPairings([]);
+      setWaitingPlayers([]);
+      setIsEditingExisting(false);
     } catch (err) {
       console.error('Delete failed:', err);
       setError('削除に失敗しました');
@@ -334,10 +445,11 @@ const PairingGenerator = () => {
       // DBに参加者を追加
       await practiceAPI.addParticipantToMatch(sessionDate, matchNumber, playerId);
 
-      // 参加者リストを再取得
-      if (currentSession) {
-        const participantsRes = await practiceAPI.getParticipants(currentSession.id);
-        setParticipants(participantsRes.data);
+      // セッションを再取得して参加者リストを更新
+      const sessionRes = await practiceAPI.getByDate(sessionDate);
+      if (sessionRes.data) {
+        setCurrentSession(sessionRes.data);
+        updateParticipantsForMatch(sessionRes.data, matchNumber);
       }
 
       // 待機リストに追加
@@ -354,9 +466,15 @@ const PairingGenerator = () => {
   // 同期結果をUIに反映（localStorage復元時にも使用）
   const applySyncResult = async (data) => {
     setSyncMessage(`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`);
-    if (currentSession) {
-      const participantsRes = await practiceAPI.getParticipants(currentSession.id);
-      setParticipants(participantsRes.data);
+    // セッションを再取得して参加者リストを更新
+    try {
+      const sessionRes = await practiceAPI.getByDate(sessionDate);
+      if (sessionRes.data) {
+        setCurrentSession(sessionRes.data);
+        updateParticipantsForMatch(sessionRes.data, matchNumber);
+      }
+    } catch (e) {
+      // ignore
     }
     const hasUnmatched = data.unmatchedNames && data.unmatchedNames.length > 0;
     const hasRemoved = data.removedPlayers && data.removedPlayers.length > 0;
@@ -469,9 +587,11 @@ const PairingGenerator = () => {
       setRemovedPlayers(prev => prev.filter(p =>
         !(p.playerId === player.playerId && p.sessionId === player.sessionId && p.matchNumber === player.matchNumber)
       ));
-      if (currentSession) {
-        const participantsRes = await practiceAPI.getParticipants(currentSession.id);
-        setParticipants(participantsRes.data);
+      // セッションを再取得して参加者リストを更新
+      const sessionRes = await practiceAPI.getByDate(sessionDate);
+      if (sessionRes.data) {
+        setCurrentSession(sessionRes.data);
+        updateParticipantsForMatch(sessionRes.data, matchNumber);
       }
     } catch (err) {
       console.error('Remove participant error:', err);
@@ -486,6 +606,15 @@ const PairingGenerator = () => {
     const isInPairings = pairings.some(p => p.player1Id === player.id || p.player2Id === player.id);
     return !isParticipant && !isWaiting && !isInPairings;
   });
+
+  if (matchLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
+        <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -550,26 +679,6 @@ const PairingGenerator = () => {
             </button>
           </div>
         )}
-
-        {existingPairings && (
-          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-yellow-900 font-medium mb-2">
-                この試合の組み合わせは既に存在します
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleDeleteExisting}
-                  className="text-sm text-red-700 hover:text-red-900 underline"
-                  disabled={loading}
-                >
-                  削除して再作成
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 参加者セクション */}
@@ -626,8 +735,8 @@ const PairingGenerator = () => {
         )}
       </div>
 
-      {/* 自動組み合わせボタン */}
-      {sessionDate && participants.length > 0 && (
+      {/* 自動組み合わせボタン（組み合わせ未生成時のみ表示） */}
+      {sessionDate && participants.length > 0 && pairings.length === 0 && (
         <div className="flex justify-center">
           <button
             onClick={handleAutoMatch}
@@ -650,9 +759,28 @@ const PairingGenerator = () => {
       {pairings.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">生成された組み合わせ</h2>
-            <div className="text-sm text-gray-600">
-              組み合わせを編集後、確定ボタンで保存してください
+            <h2 className="text-xl font-bold text-[#374151]">
+              {isEditingExisting ? `第${matchNumber}試合の組み合わせ` : '生成された組み合わせ'}
+            </h2>
+            <div className="flex items-center gap-3">
+              {isEditingExisting && (
+                <button
+                  onClick={handleDeleteExisting}
+                  className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                  disabled={loading}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  全削除
+                </button>
+              )}
+              <button
+                onClick={handleAutoMatch}
+                disabled={loading}
+                className="text-sm text-[#4a6b5a] hover:text-[#3d5a4c] flex items-center gap-1"
+              >
+                <Shuffle className="w-3.5 h-3.5" />
+                再生成
+              </button>
             </div>
           </div>
 

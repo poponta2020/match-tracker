@@ -16,6 +16,7 @@ import PracticeForm from './pages/practice/PracticeForm';
 import PracticeDetail from './pages/practice/PracticeDetail';
 import PracticeParticipation from './pages/practice/PracticeParticipation';
 import PairingGenerator from './pages/pairings/PairingGenerator';
+import PairingSummary from './pages/pairings/PairingSummary';
 import PlayerList from './pages/players/PlayerList';
 import PlayerDetail from './pages/players/PlayerDetail';
 import PlayerEdit from './pages/players/PlayerEdit';
@@ -173,6 +174,16 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <PairingGenerator />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/pairings/summary"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <PairingSummary />
                   </Layout>
                 </PrivateRoute>
               }
