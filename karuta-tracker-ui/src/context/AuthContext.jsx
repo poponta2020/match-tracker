@@ -55,6 +55,11 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('authToken');
   };
 
+  const updateCurrentPlayer = (playerData) => {
+    setCurrentPlayer(playerData);
+    localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+  };
+
   const register = async (playerData) => {
     try {
       const response = await playerAPI.register(playerData);
@@ -74,6 +79,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     register,
+    updateCurrentPlayer,
     isAuthenticated: !!currentPlayer,
   };
 

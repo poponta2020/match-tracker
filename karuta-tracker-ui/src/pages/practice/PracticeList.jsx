@@ -365,22 +365,22 @@ const PracticeList = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronLeft className="w-6 h-6 text-[#374151]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#5f3a2d]">
+          <h1 className="text-lg font-semibold text-[#374151]">
             {monthStr}
           </h1>
           <button
             onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronRight className="w-6 h-6 text-[#374151]" />
           </button>
         </div>
       </div>
@@ -393,7 +393,7 @@ const PracticeList = () => {
             <button
               onClick={handleSyncDensuke}
               disabled={syncing}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#e2d9d0] rounded-lg hover:bg-[#d0c5b8] transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#d4ddd7] rounded-lg hover:bg-[#c5cec8] transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? '同期中...' : '伝助同期'}
@@ -402,7 +402,7 @@ const PracticeList = () => {
           {isSuperAdmin() && (
             <button
               onClick={() => navigate('/practice/new')}
-              className="px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors"
+              className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors"
             >
               + 新規登録
             </button>
@@ -411,9 +411,9 @@ const PracticeList = () => {
       </div>
 
       {syncMessage && (
-        <div className="mb-4 p-3 bg-[#e2d9d0] text-[#5f3a2d] text-sm rounded-lg flex justify-between items-center">
+        <div className="mb-4 p-3 bg-[#d4ddd7] text-[#374151] text-sm rounded-lg flex justify-between items-center">
           <span>{syncMessage}</span>
-          <button onClick={() => setSyncMessage(null)} className="text-[#8a7568] hover:text-[#5f3a2d]">
+          <button onClick={() => setSyncMessage(null)} className="text-[#6b7280] hover:text-[#374151]">
             <X size={16} />
           </button>
         </div>
@@ -429,7 +429,7 @@ const PracticeList = () => {
       {/* カレンダー */}
       <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
         <table className="w-full border-collapse table-fixed">
-          <thead className="bg-[#e2d9d0]">
+          <thead className="bg-[#d4ddd7]">
             <tr>
               {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
                 <th key={day} className="py-3 text-center text-sm font-medium border">
@@ -448,17 +448,17 @@ const PracticeList = () => {
                   const participationStatus = session ? getMyParticipationStatus(session) : 'none';
 
                   let bgColor = 'bg-[#f9f6f2]';
-                  let borderColor = 'border-[#d0c5b8]';
+                  let borderColor = 'border-[#c5cec8]';
                   let cursor = 'cursor-default';
                   const isMyParticipation = participationStatus !== 'none';
 
                   if (hasSession) {
                     cursor = 'cursor-pointer';
                     if (isMyParticipation) {
-                      bgColor = 'bg-[#e8e1d8] hover:bg-[#ddd4cb]';
-                      borderColor = 'border-[#a5927f]';
+                      bgColor = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
+                      borderColor = 'border-[#8a9e90]';
                     } else {
-                      bgColor = 'bg-[#f9f6f2] hover:bg-[#f0ebe3]';
+                      bgColor = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
                     }
                   }
 
@@ -470,16 +470,16 @@ const PracticeList = () => {
                     >
                       {day && (
                         <div className="text-center flex flex-col items-center">
-                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#82655a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                             {day}
                           </div>
                           {session && session.venueName && (
-                            <div className="mt-0.5 text-[10px] text-[#8a7568] leading-tight">
+                            <div className="mt-0.5 text-[10px] text-[#6b7280] leading-tight">
                               {abbreviateLocation(session.venueName)}
                             </div>
                           )}
                           {hasSession && !session?.venueName && (
-                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-[#82655a]" />
+                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-[#4a6b5a]" />
                           )}
                         </div>
                       )}
@@ -505,20 +505,20 @@ const PracticeList = () => {
             {/* ヘッダー */}
             <div className="px-6 pt-5 pb-4 flex justify-between items-start">
               <div>
-                <h3 className="text-lg font-bold text-[#5f3a2d]">
+                <h3 className="text-lg font-bold text-[#374151]">
                   {formatDateForModal(selectedSession.sessionDate)}
                 </h3>
                 {selectedSession.venueName && (
-                  <p className="text-sm text-[#8a7568] mt-0.5">{selectedSession.venueName}</p>
+                  <p className="text-sm text-[#6b7280] mt-0.5">{selectedSession.venueName}</p>
                 )}
               </div>
-              <button onClick={closeModal} className="text-[#8a7568] hover:text-[#5f3a2d] -mt-1">
+              <button onClick={closeModal} className="text-[#6b7280] hover:text-[#374151] -mt-1">
                 <X size={20} />
               </button>
             </div>
 
             {/* 試合リスト */}
-            <div className="divide-y divide-[#e2d9d0]">
+            <div className="divide-y divide-[#d4ddd7]">
               {selectedSession.matchParticipants &&
               Object.keys(selectedSession.matchParticipants).length > 0 ? (
                 Object.entries(selectedSession.matchParticipants)
@@ -538,21 +538,21 @@ const PracticeList = () => {
 
                     return (
                       <div key={matchNum}>
-                        <div className={`px-6 py-3 flex items-center justify-between ${isMyMatch ? 'bg-[#f0ebe3]' : ''}`}>
+                        <div className={`px-6 py-3 flex items-center justify-between ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
                           <button
                             onClick={() => toggleMatch(matchNum)}
                             className="flex-1 text-left flex items-center gap-3"
                           >
-                            <span className="text-sm font-semibold text-[#5f3a2d] w-16 flex-shrink-0">
+                            <span className="text-sm font-semibold text-[#374151] w-16 flex-shrink-0">
                               第{matchNum}試合
                             </span>
                             {timeRange && (
-                              <span className="text-xs text-[#8a7568]">{timeRange}</span>
+                              <span className="text-xs text-[#6b7280]">{timeRange}</span>
                             )}
-                            <span className="text-xs text-[#8a7568] ml-auto mr-2">{count}名</span>
+                            <span className="text-xs text-[#6b7280] ml-auto mr-2">{count}名</span>
                             <ChevronRight
                               size={14}
-                              className={`text-[#8a7568] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              className={`text-[#6b7280] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                             />
                           </button>
                           {isSuperAdmin(currentPlayer) && (
@@ -561,24 +561,24 @@ const PracticeList = () => {
                                 e.stopPropagation();
                                 handleEditMatchParticipants(parseInt(matchNum));
                               }}
-                              className="ml-2 px-2 py-1 text-xs text-[#82655a] border border-[#82655a] rounded hover:bg-[#82655a] hover:text-white transition-colors"
+                              className="ml-2 px-2 py-1 text-xs text-[#4a6b5a] border border-[#4a6b5a] rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
                             >
                               編集
                             </button>
                           )}
                         </div>
                         {isExpanded && (
-                          <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#f0ebe3]' : ''}`}>
+                          <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
                             {participants.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5 pl-16">
                                 {participants.map((name, idx) => (
-                                  <span key={idx} className="text-xs text-[#5f3a2d] bg-[#e2d9d0] px-2 py-0.5 rounded-full">
+                                  <span key={idx} className="text-xs text-[#374151] bg-[#d4ddd7] px-2 py-0.5 rounded-full">
                                     {name}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <div className="text-xs text-[#8a7568] pl-16">参加者なし</div>
+                              <div className="text-xs text-[#6b7280] pl-16">参加者なし</div>
                             )}
                           </div>
                         )}
@@ -586,29 +586,29 @@ const PracticeList = () => {
                     );
                   })
               ) : (
-                <div className="px-6 py-4 text-sm text-[#8a7568]">試合データなし</div>
+                <div className="px-6 py-4 text-sm text-[#6b7280]">試合データなし</div>
               )}
             </div>
 
             {selectedSession.remarks && (
-              <div className="px-6 py-3 border-t border-[#e2d9d0]">
-                <p className="text-sm text-[#8a7568]">{selectedSession.remarks}</p>
+              <div className="px-6 py-3 border-t border-[#d4ddd7]">
+                <p className="text-sm text-[#6b7280]">{selectedSession.remarks}</p>
               </div>
             )}
 
             {/* ボタン */}
-            <div className="px-6 py-4 border-t border-[#e2d9d0] flex items-center gap-2">
+            <div className="px-6 py-4 border-t border-[#d4ddd7] flex items-center gap-2">
               {isPastDate(selectedSession.sessionDate) ? (
                 <button
                   onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
-                  className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors whitespace-nowrap"
+                  className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   試合結果
                 </button>
               ) : (
                 <button
                   onClick={goToParticipation}
-                  className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors whitespace-nowrap"
+                  className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   参加登録
                 </button>
@@ -646,34 +646,34 @@ const PracticeList = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 pt-5 pb-4 flex justify-between items-start">
-              <h3 className="text-lg font-bold text-[#5f3a2d]">
+              <h3 className="text-lg font-bold text-[#374151]">
                 {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月の伝助URL
               </h3>
-              <button onClick={() => setShowUrlModal(false)} className="text-[#8a7568] hover:text-[#5f3a2d]">
+              <button onClick={() => setShowUrlModal(false)} className="text-[#6b7280] hover:text-[#374151]">
                 <X size={20} />
               </button>
             </div>
             <div className="px-6 pb-2">
-              <p className="text-sm text-[#8a7568] mb-3">この月の伝助URLを入力してください</p>
+              <p className="text-sm text-[#6b7280] mb-3">この月の伝助URLを入力してください</p>
               <input
                 type="url"
                 value={densukeUrlInput}
                 onChange={(e) => setDensukeUrlInput(e.target.value)}
                 placeholder="https://densuke.biz/list?cd=..."
-                className="w-full px-3 py-2 border border-[#d0c5b8] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#82655a]"
+                className="w-full px-3 py-2 border border-[#c5cec8] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]"
               />
             </div>
             <div className="px-6 py-4 flex gap-2">
               <button
                 onClick={() => setShowUrlModal(false)}
-                className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors"
+                className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleSaveUrlAndSync}
                 disabled={!densukeUrlInput.trim()}
-                className="flex-1 py-2 text-sm font-medium text-white bg-[#82655a] rounded-lg hover:bg-[#6b5048] transition-colors disabled:opacity-50"
+                className="flex-1 py-2 text-sm font-medium text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50"
               >
                 保存して同期
               </button>
@@ -693,38 +693,38 @@ const PracticeList = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 pt-5 pb-4 flex justify-between items-start">
-              <h3 className="text-lg font-bold text-[#5f3a2d]">
+              <h3 className="text-lg font-bold text-[#374151]">
                 未登録のユーザーがいます
               </h3>
-              <button onClick={handleCloseUnmatchedModal} className="text-[#8a7568] hover:text-[#5f3a2d]">
+              <button onClick={handleCloseUnmatchedModal} className="text-[#6b7280] hover:text-[#374151]">
                 <X size={20} />
               </button>
             </div>
             <div className="px-6 pb-3">
-              <p className="text-sm text-[#8a7568] mb-3">
+              <p className="text-sm text-[#6b7280] mb-3">
                 以下の{unmatchedNames.length}名がアプリに未登録です。登録しますか？
               </p>
               <div className="flex flex-wrap gap-2">
                 {unmatchedNames.map((name, idx) => (
-                  <span key={idx} className="text-sm text-[#5f3a2d] bg-[#e2d9d0] px-3 py-1 rounded-full">
+                  <span key={idx} className="text-sm text-[#374151] bg-[#d4ddd7] px-3 py-1 rounded-full">
                     {name}
                   </span>
                 ))}
               </div>
-              <p className="text-xs text-[#8a7568] mt-3">
+              <p className="text-xs text-[#6b7280] mt-3">
                 パスワード: pppppppp / 性別: その他 で登録されます
               </p>
             </div>
-            <div className="px-6 py-4 border-t border-[#e2d9d0] flex gap-2">
+            <div className="px-6 py-4 border-t border-[#d4ddd7] flex gap-2">
               <button
                 onClick={handleCloseUnmatchedModal}
-                className="flex-1 py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors"
+                className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
               >
                 スキップ
               </button>
               <button
                 onClick={handleRegisterAndSync}
-                className="flex-1 py-2 text-sm font-medium text-white bg-[#82655a] rounded-lg hover:bg-[#6b5048] transition-colors"
+                className="flex-1 py-2 text-sm font-medium text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors"
               >
                 登録して同期
               </button>
@@ -744,23 +744,23 @@ const PracticeList = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 pt-5 pb-4 flex justify-between items-start">
-              <h3 className="text-lg font-bold text-[#5f3a2d]">
+              <h3 className="text-lg font-bold text-[#374151]">
                 伝助から消えた参加者
               </h3>
-              <button onClick={() => setShowRemovedModal(false)} className="text-[#8a7568] hover:text-[#5f3a2d]">
+              <button onClick={() => setShowRemovedModal(false)} className="text-[#6b7280] hover:text-[#374151]">
                 <X size={20} />
               </button>
             </div>
             <div className="px-6 pb-3">
-              <p className="text-sm text-[#8a7568] mb-3">
+              <p className="text-sm text-[#6b7280] mb-3">
                 以下の参加者が伝助上に見つかりません。参加を外しますか？
               </p>
               <div className="space-y-2">
                 {removedPlayers.map((p, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-[#e2d9d0] px-3 py-2 rounded-lg">
+                  <div key={idx} className="flex items-center justify-between bg-[#d4ddd7] px-3 py-2 rounded-lg">
                     <div>
-                      <span className="text-sm font-medium text-[#5f3a2d]">{p.playerName}</span>
-                      <span className="text-xs text-[#8a7568] ml-2">
+                      <span className="text-sm font-medium text-[#374151]">{p.playerName}</span>
+                      <span className="text-xs text-[#6b7280] ml-2">
                         {p.sessionDate} 第{p.matchNumber}試合
                       </span>
                     </div>
@@ -774,10 +774,10 @@ const PracticeList = () => {
                 ))}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-[#e2d9d0]">
+            <div className="px-6 py-4 border-t border-[#d4ddd7]">
               <button
                 onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); }}
-                className="w-full py-2 text-sm font-medium text-[#82655a] border border-[#82655a] rounded-lg hover:bg-[#82655a] hover:text-white transition-colors"
+                className="w-full py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
               >
                 閉じる
               </button>
@@ -789,7 +789,7 @@ const PracticeList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={goToParticipation}
-        className="fixed bottom-20 right-4 z-20 bg-[#82655a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#6e5549] transition-all hover:shadow-xl flex items-center gap-2"
+        className="fixed bottom-20 right-4 z-20 bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
       >
         <CalendarCheck className="w-5 h-5" />
         <span className="text-sm font-medium">参加登録</span>

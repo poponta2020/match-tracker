@@ -338,7 +338,7 @@ const MatchForm = () => {
     return (
       <div className="min-h-screen bg-[#f2ede6] pb-16 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>
@@ -357,7 +357,7 @@ const MatchForm = () => {
           <div className="flex justify-center">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center justify-center gap-2 bg-[#82655a] text-white px-6 py-3 rounded-lg hover:bg-[#6b5048] transition-colors font-medium"
+              className="flex items-center justify-center gap-2 bg-[#4a6b5a] text-white px-6 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors font-medium"
             >
               ホームに戻る
             </button>
@@ -370,11 +370,11 @@ const MatchForm = () => {
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">
       {/* ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 */}
           <div className="flex items-center justify-center py-3">
-            <span className="text-lg font-semibold text-[#5f3a2d]">
+            <span className="text-lg font-semibold text-[#374151]">
               {new Date(formData.matchDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -397,8 +397,8 @@ const MatchForm = () => {
                   onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     formData.matchNumber === num
-                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
-                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                      ? 'border-[#374151] text-[#374151]'
+                      : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
                   }`}
                 >
                   第{num}試合
@@ -434,10 +434,10 @@ const MatchForm = () => {
         {/* 対戦相手 */}
         {practiceSession && (
           <div>
-            <div className="text-xs font-medium text-[#8a7568] tracking-wide mb-2">対戦相手</div>
+            <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">対戦相手</div>
             {formData.opponentId ? (
               <div className="text-center py-2">
-                <div className="text-3xl font-bold text-[#5f3a2d] tracking-wide">
+                <div className="text-3xl font-bold text-[#374151] tracking-wide">
                   {formData.opponentName}
                 </div>
                 {pairing && (
@@ -448,7 +448,7 @@ const MatchForm = () => {
                       setAvailablePlayers(getMatchPlayers(formData.matchNumber));
                       setFormData(prev => ({ ...prev, opponentId: null, opponentName: '' }));
                     }}
-                    className="mt-2 text-xs text-[#8a7568] underline underline-offset-2"
+                    className="mt-2 text-xs text-[#6b7280] underline underline-offset-2"
                   >
                     変更する
                   </button>
@@ -467,7 +467,7 @@ const MatchForm = () => {
                     }));
                   }
                 }}
-                className="w-full px-0 py-3 border-0 border-b border-[#d0c5b8] bg-transparent focus:ring-0 focus:border-[#82655a] text-lg text-[#5f3a2d]"
+                className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
                 required
               >
                 <option value="">選択してください</option>
@@ -483,7 +483,7 @@ const MatchForm = () => {
 
         {/* 結果 */}
         <div>
-          <div className="text-xs font-medium text-[#8a7568] tracking-wide mb-3">結果</div>
+          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-3">結果</div>
           <div className="grid grid-cols-2 gap-4">
             {['勝ち', '負け'].map((result) => (
               <button
@@ -497,7 +497,7 @@ const MatchForm = () => {
                     ? result === '勝ち'
                       ? 'bg-green-500 text-white shadow-lg shadow-green-200'
                       : 'bg-red-500 text-white shadow-lg shadow-red-200'
-                    : 'bg-[#ebe6df] text-[#b0a396]'
+                    : 'bg-[#e5ebe7] text-[#9ca3af]'
                 }`}
               >
                 {result === '勝ち' ? '〇' : '×'} {result}
@@ -508,12 +508,12 @@ const MatchForm = () => {
 
         {/* 枚数差 */}
         <div>
-          <div className="text-xs font-medium text-[#8a7568] tracking-wide mb-2">枚数差</div>
+          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">枚数差</div>
           <select
             name="scoreDifference"
             value={formData.scoreDifference}
             onChange={handleChange}
-            className="w-full px-0 py-3 border-0 border-b border-[#d0c5b8] bg-transparent focus:ring-0 focus:border-[#82655a] text-lg text-[#5f3a2d]"
+            className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
             required
           >
             {Array.from({ length: 26 }, (_, i) => i).map((num) => (
@@ -526,14 +526,14 @@ const MatchForm = () => {
 
         {/* メモ */}
         <div>
-          <div className="text-xs font-medium text-[#8a7568] tracking-wide mb-2">メモ</div>
+          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">メモ</div>
           <textarea
             name="notes"
             value={formData.notes}
             onChange={handleChange}
             rows="2"
             placeholder="試合の感想、反省点など..."
-            className="w-full px-0 py-2 border-0 border-b border-[#d0c5b8] bg-transparent focus:ring-0 focus:border-[#82655a] resize-none text-[#5f3a2d] placeholder-[#c0b5a8]"
+            className="w-full px-0 py-2 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] resize-none text-[#374151] placeholder-[#9ca3af]"
           ></textarea>
         </div>
 
@@ -551,7 +551,7 @@ const MatchForm = () => {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#82655a] text-white py-4 rounded-2xl hover:bg-[#6b5048] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
+              className="flex-1 flex items-center justify-center gap-2 bg-[#4a6b5a] text-white py-4 rounded-2xl hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
             >
               {loading
                 ? '保存中...'
@@ -562,7 +562,7 @@ const MatchForm = () => {
             <button
               type="button"
               onClick={() => navigate('/matches')}
-              className="flex items-center justify-center px-5 py-4 rounded-2xl text-[#8a7568] hover:bg-[#ebe6df] transition-colors"
+              className="flex items-center justify-center px-5 py-4 rounded-2xl text-[#6b7280] hover:bg-[#e5ebe7] transition-colors"
             >
               <X className="w-5 h-5" />
             </button>

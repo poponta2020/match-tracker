@@ -146,7 +146,7 @@ const MatchResultsView = () => {
     return (
       <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
           <p className="mt-4 text-gray-600">読み込み中...</p>
         </div>
       </div>
@@ -192,7 +192,7 @@ const MatchResultsView = () => {
     return (
       <div className="min-h-screen bg-[#f2ede6] pb-20">
         {/* ナビゲーションバー */}
-        <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between py-3">
               <button
@@ -200,7 +200,7 @@ const MatchResultsView = () => {
                 disabled={!hasPreviousDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasPreviousDate()
-                    ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
+                    ? 'hover:bg-[#c5cec8] text-[#374151]'
                     : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
@@ -210,7 +210,7 @@ const MatchResultsView = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="text-lg font-semibold text-[#5f3a2d]"
+                  className="text-lg font-semibold text-[#374151]"
                 >
                   {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                     year: 'numeric',
@@ -229,8 +229,8 @@ const MatchResultsView = () => {
                           setSelectedDate(date);
                           setShowDatePicker(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 hover:bg-[#f0ebe3] ${
-                          date === selectedDate ? 'bg-[#e8e1d8] text-[#5f3a2d] font-semibold' : 'text-gray-700'
+                        className={`block w-full text-left px-4 py-2 hover:bg-[#eef2ef] ${
+                          date === selectedDate ? 'bg-[#dce5de] text-[#374151] font-semibold' : 'text-gray-700'
                         }`}
                       >
                         {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
@@ -249,7 +249,7 @@ const MatchResultsView = () => {
                 disabled={!hasNextDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasNextDate()
-                    ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
+                    ? 'hover:bg-[#c5cec8] text-[#374151]'
                     : 'text-gray-300 cursor-not-allowed'
                 }`}
               >
@@ -282,7 +282,7 @@ const MatchResultsView = () => {
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付選択 */}
           <div className="flex items-center justify-between py-3">
@@ -291,7 +291,7 @@ const MatchResultsView = () => {
               disabled={!hasPreviousDate()}
               className={`p-2 rounded-full transition-colors ${
                 hasPreviousDate()
-                  ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
+                  ? 'hover:bg-[#c5cec8] text-[#374151]'
                   : 'text-gray-300 cursor-not-allowed'
               }`}
             >
@@ -301,7 +301,7 @@ const MatchResultsView = () => {
             <div className="relative">
               <button
                 onClick={() => setShowDatePicker(!showDatePicker)}
-                className="text-lg font-semibold text-[#5f3a2d]"
+                className="text-lg font-semibold text-[#374151]"
               >
                 {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                   year: 'numeric',
@@ -320,8 +320,8 @@ const MatchResultsView = () => {
                         setSelectedDate(date);
                         setShowDatePicker(false);
                       }}
-                      className={`block w-full text-left px-4 py-2 hover:bg-[#f0ebe3] ${
-                        date === selectedDate ? 'bg-[#e8e1d8] text-[#5f3a2d] font-semibold' : 'text-gray-700'
+                      className={`block w-full text-left px-4 py-2 hover:bg-[#eef2ef] ${
+                        date === selectedDate ? 'bg-[#dce5de] text-[#374151] font-semibold' : 'text-gray-700'
                       }`}
                     >
                       {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
@@ -340,7 +340,7 @@ const MatchResultsView = () => {
               disabled={!hasNextDate()}
               className={`p-2 rounded-full transition-colors ${
                 hasNextDate()
-                  ? 'hover:bg-[#d0c5b8] text-[#5f3a2d]'
+                  ? 'hover:bg-[#c5cec8] text-[#374151]'
                   : 'text-gray-300 cursor-not-allowed'
               }`}
             >
@@ -357,8 +357,8 @@ const MatchResultsView = () => {
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
-                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                      ? 'border-[#374151] text-[#374151]'
+                      : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
                   }`}
                 >
                   {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
@@ -371,7 +371,7 @@ const MatchResultsView = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
-        <div className="divide-y divide-[#e2d9d0]">
+        <div className="divide-y divide-[#d4ddd7]">
           {currentPairings.map((pairing, index) => {
             const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
@@ -404,7 +404,7 @@ const MatchResultsView = () => {
                     <div className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate">
                       {pairing.player1Name}
                     </div>
-                    <div className="text-sm font-medium text-[#b0a396] w-8 text-center flex-shrink-0">
+                    <div className="text-sm font-medium text-[#9ca3af] w-8 text-center flex-shrink-0">
                       vs
                     </div>
                     <div className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate">
@@ -421,7 +421,7 @@ const MatchResultsView = () => {
         {(isAdmin() || isSuperAdmin()) && (isSuperAdmin() || isToday()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] flex items-center justify-center gap-2 font-semibold transition-colors"
+            className="w-full mt-6 py-3 px-4 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
             結果を編集・入力する

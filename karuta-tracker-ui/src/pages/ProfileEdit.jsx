@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
 import {
-  User, Lock, Trophy, ArrowLeft, Save, AlertCircle, CheckCircle, Eye, EyeOff
+  User, Lock, Trophy, ArrowLeft, Save, AlertCircle, CheckCircle, Eye, EyeOff, Info
 } from 'lucide-react';
 
 const ProfileEdit = () => {
   const navigate = useNavigate();
-  const { currentPlayer, login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const isSetup = searchParams.get('setup') === 'true';
+  const { currentPlayer, login, updateCurrentPlayer } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -195,14 +197,14 @@ const ProfileEdit = () => {
         await login(currentPlayer.name, formData.newPassword);
       } else {
         // パスワード変更なしの場合は currentPlayer を更新
-        localStorage.setItem('currentPlayer', JSON.stringify(playerData));
+        updateCurrentPlayer(playerData);
       }
 
       setSuccess(true);
 
-      // 1秒後にプロフィール画面へ
+      // 1秒後に遷移（初期設定時はホームへ、通常時はプロフィール画面へ）
       setTimeout(() => {
-        navigate('/profile');
+        navigate(isSetup ? '/' : '/profile');
       }, 1000);
 
     } catch (err) {
@@ -230,15 +232,17 @@ const ProfileEdit = () => {
       <div className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/profile')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5 text-gray-600" />
-            </button>
+            {!isSetup && (
+              <button
+                onClick={() => navigate('/profile')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5 text-gray-600" />
+              </button>
+            )}
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <User className="h-6 w-6 text-primary-600" />
-              プロフィール編集
+              {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
             </h1>
           </div>
         </div>
@@ -246,6 +250,19 @@ const ProfileEdit = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-3xl mx-auto px-4 py-8">
+        {/* 初期設定メッセージ */}
+        {isSetup && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-blue-800 font-semibold">ようこそ！プロフィールを設定してください</p>
+              <p className="text-blue-700 text-sm mt-1">
+                級位・性別・利き手・所属かるた会を設定すると、アプリの全機能が使えるようになります。
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 成功メッセージ */}
         {success && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 animate-fadeIn">
@@ -536,14 +553,16 @@ const ProfileEdit = () => {
 
           {/* ボタン */}
           <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              disabled={saving}
-              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-            >
-              キャンセル
-            </button>
+            {!isSetup && (
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                disabled={saving}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              >
+                キャンセル
+              </button>
+            )}
             <button
               type="submit"
               disabled={saving}

@@ -138,7 +138,7 @@ const Layout = ({ children }) => {
       </main>
 
       {/* ボトムナビゲーション */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#a5b4aa] border-t border-[#8a9890] z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50">
         <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
@@ -151,13 +151,13 @@ const Layout = ({ children }) => {
               >
                 <Icon
                   className={`w-6 h-6 ${
-                    active ? 'text-[#685e59]' : 'text-[#f1ece5]'
+                    active ? 'text-white' : 'text-[#b8ccbf]'
                   }`}
                   strokeWidth={active ? 2.5 : 2}
                 />
                 <span
                   className={`text-xs mt-1 ${
-                    active ? 'text-[#685e59] font-semibold' : 'text-[#f1ece5]'
+                    active ? 'text-white font-semibold' : 'text-[#b8ccbf]'
                   }`}
                 >
                   {item.name}

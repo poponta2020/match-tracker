@@ -17,8 +17,12 @@ const Login = () => {
     setLoading(true);
 
     try {
-      await login(name, password);
-      navigate('/');
+      const player = await login(name, password);
+      if (!player.kyuRank) {
+        navigate('/profile/edit?setup=true');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'ログインに失敗しました');
     } finally {

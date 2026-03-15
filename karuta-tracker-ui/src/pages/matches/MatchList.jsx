@@ -189,7 +189,7 @@ const MatchList = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
       </div>
     );
   }
@@ -197,9 +197,9 @@ const MatchList = () => {
   return (
     <div className="space-y-6 pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-lg font-semibold text-[#5f3a2d]">
+          <h1 className="text-lg font-semibold text-[#374151]">
             {selectedYear && selectedMonth
               ? `${selectedYear}年 ${selectedMonth}月`
               : selectedYear
@@ -215,8 +215,8 @@ const MatchList = () => {
       {rankStatistics && (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#d0c5b8]">
-              <thead className="bg-[#e2d9d0]">
+            <table className="min-w-full divide-y divide-[#c5cec8]">
+              <thead className="bg-[#d4ddd7]">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
 
@@ -235,9 +235,9 @@ const MatchList = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-[#f9f6f2] divide-y divide-[#d0c5b8]">
+              <tbody className="bg-[#f9f6f2] divide-y divide-[#c5cec8]">
                 {/* 総計行 */}
-                <tr className="bg-[#e2d9d0] font-semibold">
+                <tr className="bg-[#d4ddd7] font-semibold">
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     総計
                   </td>
@@ -259,7 +259,7 @@ const MatchList = () => {
                 {['A級', 'B級', 'C級', 'D級', 'E級'].map((rank) => {
                   const stats = rankStatistics.byRank[rank];
                   return (
-                    <tr key={rank} className="hover:bg-[#f0ebe3]">
+                    <tr key={rank} className="hover:bg-[#eef2ef]">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         対{rank}
                       </td>
@@ -297,7 +297,7 @@ const MatchList = () => {
           {!searchTerm && filterResult === '全て' && (
             <Link
               to="/matches/new"
-              className="inline-flex items-center gap-2 bg-[#82655a] text-white px-6 py-3 rounded-lg hover:bg-[#6b5048] transition-colors"
+              className="inline-flex items-center gap-2 bg-[#4a6b5a] text-white px-6 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors"
             >
               <Plus className="w-5 h-5" />
               試合記録を登録
@@ -307,8 +307,8 @@ const MatchList = () => {
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#d0c5b8]">
-              <thead className="bg-[#e2d9d0]">
+            <table className="min-w-full divide-y divide-[#c5cec8]">
+              <thead className="bg-[#d4ddd7]">
                 <tr>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     日付
@@ -321,11 +321,11 @@ const MatchList = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-[#f9f6f2] divide-y divide-[#d0c5b8]">
+              <tbody className="bg-[#f9f6f2] divide-y divide-[#c5cec8]">
                 {filteredMatches.map((match) => (
                   <tr
                     key={match.id}
-                    className="hover:bg-[#f0ebe3] cursor-pointer transition-colors"
+                    className="hover:bg-[#eef2ef] cursor-pointer transition-colors"
                     onClick={() =>
                       (window.location.href = `/matches/${match.id}`)
                     }
@@ -357,7 +357,7 @@ const MatchList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={() => setIsFilterOpen(true)}
-        className="fixed bottom-20 right-4 z-20 bg-[#82655a] text-white p-4 rounded-full shadow-lg hover:bg-[#6e5549] transition-all hover:shadow-xl"
+        className="fixed bottom-20 right-4 z-20 bg-[#4a6b5a] text-white p-4 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl"
       >
         <Filter className="w-6 h-6" />
       </button>

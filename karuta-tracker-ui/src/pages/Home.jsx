@@ -103,7 +103,7 @@ const Home = () => {
   if (stats.loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-96 gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
         {slowLoading && (
           <div className="text-center">
             <p className="text-gray-600 font-medium">サーバーを起動中...</p>
@@ -117,16 +117,16 @@ const Home = () => {
   return (
     <div className="space-y-8">
       {/* ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-[#5f3a2d]">{currentPlayer?.name}</span>
+            <span className="text-lg font-semibold text-[#374151]">{currentPlayer?.name}</span>
           </div>
           <Link
             to="/profile"
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
           >
-            <Settings className="w-6 h-6 text-[#5f3a2d]" />
+            <Settings className="w-6 h-6 text-[#374151]" />
           </Link>
         </div>
       </div>
@@ -135,14 +135,14 @@ const Home = () => {
       <div className="pt-16">
       {/* 次の参加予定練習 */}
       {nextPractice && (
-        <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#5f3a2d] text-white' : 'bg-[#f9f6f2]'}`}>
+        <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#374151] text-white' : 'bg-[#f9f6f2]'}`}>
           {nextPractice.today ? (
             <div className="flex items-center gap-2 mb-3">
-              <span className="bg-white text-[#5f3a2d] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
+              <span className="bg-white text-[#374151] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
               <h2 className="text-lg font-bold">今日は練習日です</h2>
             </div>
           ) : (
-            <h2 className={`text-lg font-bold flex items-center gap-2 mb-3 ${nextPractice.today ? '' : 'text-[#5f3a2d]'}`}>
+            <h2 className={`text-lg font-bold flex items-center gap-2 mb-3 ${nextPractice.today ? '' : 'text-[#374151]'}`}>
               <Calendar className="w-5 h-5" />
               次の練習
             </h2>
@@ -190,14 +190,14 @@ const Home = () => {
           icon={Trophy}
           title="試合数"
           value={stats.totalMatches}
-          color="bg-[#82655a]"
+          color="bg-[#4a6b5a]"
           link="/matches"
         />
         <StatCard
           icon={TrendingUp}
           title="勝率"
           value={`${Math.round(stats.winRate)}%`}
-          color="bg-[#8b7866]"
+          color="bg-[#6b7280]"
           link="/statistics"
         />
       </div>
@@ -206,12 +206,12 @@ const Home = () => {
       <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-[#82655a]" />
+            <Trophy className="w-5 h-5 text-[#4a6b5a]" />
             最近の試合
           </h2>
           <Link
             to="/matches"
-            className="text-sm text-[#82655a] hover:text-[#6b5048] flex items-center gap-1"
+            className="text-sm text-[#4a6b5a] hover:text-[#3d5a4c] flex items-center gap-1"
           >
             すべて見る
             <ArrowRight className="w-4 h-4" />
@@ -223,7 +223,7 @@ const Home = () => {
               <Link
                 key={match.id}
                 to={`/matches/${match.id}`}
-                className="block p-3 hover:bg-[#f0ebe3] rounded-lg transition-colors"
+                className="block p-3 hover:bg-[#eef2ef] rounded-lg transition-colors"
               >
                 <div className="flex justify-between items-center">
                   <div>
