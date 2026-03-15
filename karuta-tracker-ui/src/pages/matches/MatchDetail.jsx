@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { matchAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import {
   Trophy,
   Calendar,
@@ -14,6 +15,7 @@ import {
 const MatchDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentPlayer } = useAuth();
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -138,9 +140,23 @@ const MatchDetail = () => {
             <p className="text-sm text-gray-600 mb-2">対戦相手</p>
             <div className="flex items-center justify-center gap-2">
               <User className="w-5 h-5 text-gray-400" />
-              <p className="text-xl font-semibold text-gray-900">
-                {match.opponentName}
-              </p>
+              {(() => {
+                const opponentId = match.player1Id === currentPlayer?.id
+                  ? match.player2Id
+                  : match.player1Id;
+                return opponentId && opponentId !== 0 ? (
+                  <button
+                    onClick={() => navigate(`/matches?playerId=${opponentId}`)}
+                    className="text-xl font-semibold text-[#4a6b5a] hover:underline"
+                  >
+                    {match.opponentName}
+                  </button>
+                ) : (
+                  <p className="text-xl font-semibold text-gray-900">
+                    {match.opponentName}
+                  </p>
+                );
+              })()}
             </div>
           </div>
 

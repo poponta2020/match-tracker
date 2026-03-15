@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
@@ -382,9 +382,12 @@ const MatchResultsView = () => {
                 {match ? (
                   // 結果入力済み: A 〇 枚数差 × B
                   <div className="flex items-center text-lg">
-                    <div className={`flex-1 text-right pr-2 font-semibold truncate ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                    <Link
+                      to={`/matches?playerId=${pairing.player1Id}`}
+                      className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
+                    >
                       {pairing.player1Name}
-                    </div>
+                    </Link>
                     <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
                       {isPlayer1Winner ? '〇' : '×'}
                     </div>
@@ -394,22 +397,31 @@ const MatchResultsView = () => {
                     <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
                       {isPlayer2Winner ? '〇' : '×'}
                     </div>
-                    <div className={`flex-1 text-left pl-2 font-semibold truncate ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}>
+                    <Link
+                      to={`/matches?playerId=${pairing.player2Id}`}
+                      className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
+                    >
                       {pairing.player2Name}
-                    </div>
+                    </Link>
                   </div>
                 ) : (
                   // 未入力: A vs B
                   <div className="flex items-center text-lg">
-                    <div className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate">
+                    <Link
+                      to={`/matches?playerId=${pairing.player1Id}`}
+                      className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate hover:underline"
+                    >
                       {pairing.player1Name}
-                    </div>
+                    </Link>
                     <div className="text-sm font-medium text-[#9ca3af] w-8 text-center flex-shrink-0">
                       vs
                     </div>
-                    <div className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate">
+                    <Link
+                      to={`/matches?playerId=${pairing.player2Id}`}
+                      className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate hover:underline"
+                    >
                       {pairing.player2Name}
-                    </div>
+                    </Link>
                   </div>
                 )}
               </div>

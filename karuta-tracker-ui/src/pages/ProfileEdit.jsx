@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
 import {
-  User, Lock, Trophy, ArrowLeft, Save, AlertCircle, CheckCircle, Eye, EyeOff, Info
+  ArrowLeft, Save, AlertCircle, CheckCircle, Eye, EyeOff, Info, ChevronDown
 } from 'lucide-react';
 
 const ProfileEdit = () => {
@@ -16,6 +16,7 @@ const ProfileEdit = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -34,7 +35,6 @@ const ProfileEdit = () => {
 
   const [validationErrors, setValidationErrors] = useState({});
 
-  // ユーザー情報を取得
   useEffect(() => {
     const fetchUserData = async () => {
       if (!currentPlayer?.id) {
@@ -89,12 +89,7 @@ const ProfileEdit = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    // エラーをクリア
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (validationErrors[name]) {
       setValidationErrors(prev => {
         const newErrors = { ...prev };
@@ -106,33 +101,20 @@ const ProfileEdit = () => {
 
   const validate = () => {
     const errors = {};
-
-    // 必須項目チェック
     if (!formData.gender) errors.gender = '性別を選択してください';
     if (!formData.dominantHand) errors.dominantHand = '利き手を選択してください';
     if (!formData.kyuRank) errors.kyuRank = '級位を選択してください';
     if (!formData.danRank) errors.danRank = '段位を選択してください';
 
-    // パスワード変更時のバリデーション
     if (formData.newPassword || formData.confirmPassword) {
-      if (!formData.currentPassword) {
-        errors.currentPassword = '現在のパスワードを入力してください';
-      }
-
-      if (!formData.newPassword) {
-        errors.newPassword = '新しいパスワードを入力してください';
-      } else if (formData.newPassword.length < 8) {
-        errors.newPassword = 'パスワードは8文字以上で入力してください';
-      }
-
-      if (formData.newPassword !== formData.confirmPassword) {
-        errors.confirmPassword = 'パスワードが一致しません';
-      }
+      if (!formData.currentPassword) errors.currentPassword = '現在のパスワードを入力してください';
+      if (!formData.newPassword) errors.newPassword = '新しいパスワードを入力してください';
+      else if (formData.newPassword.length < 8) errors.newPassword = '8文字以上で入力してください';
+      if (formData.newPassword !== formData.confirmPassword) errors.confirmPassword = 'パスワードが一致しません';
     }
 
-    // 所属かるた会の文字数チェック
     if (formData.karutaClub && formData.karutaClub.length > 200) {
-      errors.karutaClub = '所属かるた会は200文字以内で入力してください';
+      errors.karutaClub = '200文字以内で入力してください';
     }
 
     setValidationErrors(errors);
@@ -141,16 +123,12 @@ const ProfileEdit = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validate()) {
-      return;
-    }
+    if (!validate()) return;
 
     try {
       setSaving(true);
       setError(null);
 
-      // 更新データを準備
       const updateData = {
         gender: formData.gender,
         dominantHand: formData.dominantHand,
@@ -160,27 +138,20 @@ const ProfileEdit = () => {
         remarks: formData.remarks || null,
       };
 
-      // パスワード変更がある場合
       if (formData.newPassword) {
-        // まず現在のパスワードで再ログインして確認
         try {
           await playerAPI.login(currentPlayer.name, formData.currentPassword);
-        } catch (err) {
-          setValidationErrors({
-            currentPassword: '現在のパスワードが正しくありません',
-          });
+        } catch {
+          setValidationErrors({ currentPassword: '現在のパスワードが正しくありません' });
           setSaving(false);
           return;
         }
-
         updateData.password = formData.newPassword;
       }
 
-      // 更新実行
       const response = await playerAPI.update(currentPlayer.id, updateData);
       const updatedPlayer = response.data;
 
-      // AuthContext の currentPlayer を更新
       const playerData = {
         id: updatedPlayer.id,
         name: updatedPlayer.name,
@@ -192,21 +163,16 @@ const ProfileEdit = () => {
         role: updatedPlayer.role,
       };
 
-      // パスワード変更した場合は再ログイン
       if (formData.newPassword) {
         await login(currentPlayer.name, formData.newPassword);
       } else {
-        // パスワード変更なしの場合は currentPlayer を更新
         updateCurrentPlayer(playerData);
       }
 
       setSuccess(true);
-
-      // 1秒後に遷移（初期設定時はホームへ、通常時はプロフィール画面へ）
       setTimeout(() => {
         navigate(isSetup ? '/' : '/profile');
       }, 1000);
-
     } catch (err) {
       console.error('保存に失敗:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
@@ -215,274 +181,201 @@ const ProfileEdit = () => {
     }
   };
 
+  const selectClass = (name) =>
+    `w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] transition-shadow bg-white ${
+      validationErrors[name] ? 'border-red-400' : 'border-gray-200'
+    }`;
+
+  const inputClass = (name) =>
+    `w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] transition-shadow ${
+      validationErrors[name] ? 'border-red-400' : 'border-gray-200'
+    }`;
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-blue-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50 pb-20">
+    <div className="space-y-6">
       {/* ヘッダー */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            {!isSetup && (
-              <button
-                onClick={() => navigate('/profile')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </button>
-            )}
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <User className="h-6 w-6 text-primary-600" />
-              {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
-            </h1>
-          </div>
-        </div>
+      <div className="flex items-center justify-between">
+        {!isSetup && (
+          <button
+            onClick={() => navigate('/profile')}
+            className="flex items-center gap-1 text-sm text-[#6b7280] hover:text-[#374151]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            戻る
+          </button>
+        )}
+        <h1 className="text-lg font-bold text-[#374151]">
+          {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
+        </h1>
+        <div className="w-12" />
       </div>
 
-      {/* メインコンテンツ */}
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {/* 初期設定メッセージ */}
-        {isSetup && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-blue-800 font-semibold">ようこそ！プロフィールを設定してください</p>
-              <p className="text-blue-700 text-sm mt-1">
-                級位・性別・利き手・所属かるた会を設定すると、アプリの全機能が使えるようになります。
-              </p>
-            </div>
-          </div>
-        )}
+      {/* 初期設定メッセージ */}
+      {isSetup && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-700">
+            プロフィールを設定すると全機能が使えるようになります
+          </p>
+        </div>
+      )}
 
-        {/* 成功メッセージ */}
-        {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 animate-fadeIn">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <div>
-              <p className="text-green-800 font-semibold">保存しました</p>
-              <p className="text-green-700 text-sm">プロフィール画面に戻ります...</p>
-            </div>
-          </div>
-        )}
+      {/* 成功・エラーメッセージ */}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <p className="text-sm text-green-800">保存しました</p>
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
 
-        {/* エラーメッセージ */}
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* 選手名（変更不可） */}
+        <div>
+          <label className="block text-xs text-[#6b7280] mb-1">選手名</label>
+          <div className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-500">
+            {currentPlayer?.name}
+            <span className="ml-1 text-xs text-gray-400">(変更不可)</span>
           </div>
-        )}
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 選手名表示（変更不可） */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <User className="h-5 w-5 text-gray-600" />
-              <h2 className="text-lg font-semibold text-gray-900">アカウント情報</h2>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                選手名
-              </label>
-              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600">
-                {currentPlayer?.name}
-                <span className="ml-2 text-xs text-gray-500">(変更不可)</span>
-              </div>
-            </div>
+        {/* 基本情報：2列グリッド */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-[#6b7280] mb-1">
+              性別 <span className="text-red-400">*</span>
+            </label>
+            <select name="gender" value={formData.gender} onChange={handleChange} className={selectClass('gender')}>
+              <option value="">選択</option>
+              <option value="男性">男性</option>
+              <option value="女性">女性</option>
+              <option value="その他">その他</option>
+            </select>
+            {validationErrors.gender && <p className="mt-0.5 text-xs text-red-500">{validationErrors.gender}</p>}
           </div>
+          <div>
+            <label className="block text-xs text-[#6b7280] mb-1">
+              利き手 <span className="text-red-400">*</span>
+            </label>
+            <select name="dominantHand" value={formData.dominantHand} onChange={handleChange} className={selectClass('dominantHand')}>
+              <option value="">選択</option>
+              <option value="右">右</option>
+              <option value="左">左</option>
+              <option value="両">両</option>
+            </select>
+            {validationErrors.dominantHand && <p className="mt-0.5 text-xs text-red-500">{validationErrors.dominantHand}</p>}
+          </div>
+        </div>
 
-          {/* 基本情報 */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <User className="h-5 w-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">基本情報</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 性別 */}
+        {/* 競技情報：2列グリッド */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-[#6b7280] mb-1">
+              級位 <span className="text-red-400">*</span>
+            </label>
+            <select name="kyuRank" value={formData.kyuRank} onChange={handleChange} className={selectClass('kyuRank')}>
+              <option value="">選択</option>
+              <option value="A級">A級</option>
+              <option value="B級">B級</option>
+              <option value="C級">C級</option>
+              <option value="D級">D級</option>
+              <option value="E級">E級</option>
+            </select>
+            {validationErrors.kyuRank && <p className="mt-0.5 text-xs text-red-500">{validationErrors.kyuRank}</p>}
+          </div>
+          <div>
+            <label className="block text-xs text-[#6b7280] mb-1">
+              段位 <span className="text-red-400">*</span>
+            </label>
+            <select name="danRank" value={formData.danRank} onChange={handleChange} className={selectClass('danRank')}>
+              <option value="">選択</option>
+              <option value="無段">無段</option>
+              <option value="初段">初段</option>
+              <option value="弐段">弐段</option>
+              <option value="参段">参段</option>
+              <option value="四段">四段</option>
+              <option value="五段">五段</option>
+              <option value="六段">六段</option>
+              <option value="七段">七段</option>
+              <option value="八段">八段</option>
+            </select>
+            {validationErrors.danRank && <p className="mt-0.5 text-xs text-red-500">{validationErrors.danRank}</p>}
+          </div>
+        </div>
+
+        {/* 所属かるた会 */}
+        <div>
+          <label className="block text-xs text-[#6b7280] mb-1">所属かるた会</label>
+          <input
+            type="text"
+            name="karutaClub"
+            value={formData.karutaClub}
+            onChange={handleChange}
+            placeholder="例: ○○かるた会"
+            className={inputClass('karutaClub')}
+          />
+          {validationErrors.karutaClub && <p className="mt-0.5 text-xs text-red-500">{validationErrors.karutaClub}</p>}
+        </div>
+
+        {/* 備考 */}
+        <div>
+          <label className="block text-xs text-[#6b7280] mb-1">備考</label>
+          <textarea
+            name="remarks"
+            value={formData.remarks}
+            onChange={handleChange}
+            rows={3}
+            placeholder="個人的なメモなど"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] resize-none"
+          />
+        </div>
+
+        {/* パスワード変更（折りたたみ） */}
+        <div className="border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowPasswordSection(!showPasswordSection)}
+            className="flex items-center gap-2 text-sm text-[#6b7280] hover:text-[#374151]"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform ${showPasswordSection ? 'rotate-180' : ''}`} />
+            パスワード変更
+          </button>
+
+          {showPasswordSection && (
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-[#9b8a7e]">変更しない場合は空欄のままにしてください</p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  性別 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow ${
-                    validationErrors.gender ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">選択してください</option>
-                  <option value="男性">男性</option>
-                  <option value="女性">女性</option>
-                  <option value="その他">その他</option>
-                </select>
-                {validationErrors.gender && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.gender}</p>
-                )}
-              </div>
-
-              {/* 利き手 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  利き手 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="dominantHand"
-                  value={formData.dominantHand}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow ${
-                    validationErrors.dominantHand ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">選択してください</option>
-                  <option value="右">右</option>
-                  <option value="左">左</option>
-                  <option value="両">両</option>
-                </select>
-                {validationErrors.dominantHand && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.dominantHand}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 競技情報 */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="h-5 w-5 text-yellow-600" />
-              <h2 className="text-lg font-semibold text-gray-900">競技情報</h2>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 級位 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    級位 <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="kyuRank"
-                    value={formData.kyuRank}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow ${
-                      validationErrors.kyuRank ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">選択してください</option>
-                    <option value="A級">A級</option>
-                    <option value="B級">B級</option>
-                    <option value="C級">C級</option>
-                    <option value="D級">D級</option>
-                    <option value="E級">E級</option>
-                  </select>
-                  {validationErrors.kyuRank && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.kyuRank}</p>
-                  )}
-                </div>
-
-                {/* 段位 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    段位 <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="danRank"
-                    value={formData.danRank}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow ${
-                      validationErrors.danRank ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">選択してください</option>
-                    <option value="無段">無段</option>
-                    <option value="初段">初段</option>
-                    <option value="弐段">弐段</option>
-                    <option value="参段">参段</option>
-                    <option value="四段">四段</option>
-                    <option value="五段">五段</option>
-                    <option value="六段">六段</option>
-                    <option value="七段">七段</option>
-                    <option value="八段">八段</option>
-                  </select>
-                  {validationErrors.danRank && (
-                    <p className="mt-1 text-sm text-red-600">{validationErrors.danRank}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* 所属かるた会 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  所属かるた会
-                </label>
-                <input
-                  type="text"
-                  name="karutaClub"
-                  value={formData.karutaClub}
-                  onChange={handleChange}
-                  placeholder="例: ○○かるた会"
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow ${
-                    validationErrors.karutaClub ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-                {validationErrors.karutaClub && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.karutaClub}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* パスワード変更 */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Lock className="h-5 w-5 text-red-600" />
-              <h2 className="text-lg font-semibold text-gray-900">パスワード変更</h2>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              パスワードを変更しない場合は空欄のままにしてください
-            </p>
-            <div className="space-y-4">
-              {/* 現在のパスワード */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  現在のパスワード
-                </label>
+                <label className="block text-xs text-[#6b7280] mb-1">現在のパスワード</label>
                 <div className="relative">
                   <input
                     type={showCurrentPassword ? 'text' : 'password'}
                     name="currentPassword"
                     value={formData.currentPassword}
                     onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow pr-10 ${
-                      validationErrors.currentPassword ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`${inputClass('currentPassword')} pr-9`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {validationErrors.currentPassword && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.currentPassword}</p>
-                )}
+                {validationErrors.currentPassword && <p className="mt-0.5 text-xs text-red-500">{validationErrors.currentPassword}</p>}
               </div>
-
-              {/* 新しいパスワード */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  新しいパスワード
-                </label>
+                <label className="block text-xs text-[#6b7280] mb-1">新しいパスワード</label>
                 <div className="relative">
                   <input
                     type={showNewPassword ? 'text' : 'password'}
@@ -490,99 +383,68 @@ const ProfileEdit = () => {
                     value={formData.newPassword}
                     onChange={handleChange}
                     placeholder="8文字以上"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow pr-10 ${
-                      validationErrors.newPassword ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`${inputClass('newPassword')} pr-9`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {validationErrors.newPassword && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.newPassword}</p>
-                )}
+                {validationErrors.newPassword && <p className="mt-0.5 text-xs text-red-500">{validationErrors.newPassword}</p>}
               </div>
-
-              {/* パスワード確認 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  新しいパスワード（確認）
-                </label>
+                <label className="block text-xs text-[#6b7280] mb-1">新しいパスワード（確認）</label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    placeholder="もう一度入力してください"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow pr-10 ${
-                      validationErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    placeholder="もう一度入力"
+                    className={`${inputClass('confirmPassword')} pr-9`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {validationErrors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
-                )}
+                {validationErrors.confirmPassword && <p className="mt-0.5 text-xs text-red-500">{validationErrors.confirmPassword}</p>}
               </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* 備考 */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">備考</h2>
-            <textarea
-              name="remarks"
-              value={formData.remarks}
-              onChange={handleChange}
-              rows={4}
-              placeholder="個人的なメモなど（任意）"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow resize-none"
-            />
-          </div>
-
-          {/* ボタン */}
-          <div className="flex gap-4">
-            {!isSetup && (
-              <button
-                type="button"
-                onClick={() => navigate('/profile')}
-                disabled={saving}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-              >
-                キャンセル
-              </button>
-            )}
+        {/* ボタン */}
+        <div className="flex gap-3 pt-2">
+          {!isSetup && (
             <button
-              type="submit"
+              type="button"
+              onClick={() => navigate('/profile')}
               disabled={saving}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 text-sm border border-gray-200 text-[#6b7280] rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              {saving ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  保存中...
-                </>
-              ) : (
-                <>
-                  <Save className="h-5 w-5" />
-                  保存する
-                </>
-              )}
+              キャンセル
             </button>
-          </div>
-        </form>
-      </div>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50 font-medium"
+          >
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                保存
+              </>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

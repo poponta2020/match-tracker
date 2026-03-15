@@ -17,6 +17,7 @@ import {
   Settings,
   User,
   PlusSquare,
+  Swords,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isSuperAdmin, isAdmin } from '../utils/auth';
@@ -103,9 +104,9 @@ const Layout = ({ children }) => {
   const bottomNavItems = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Add', href: '/matches/new', icon: PlusSquare },
-    { name: 'Results', href: '/matches/results', icon: Trophy },
+    { name: 'Match', href: '/matches/results', icon: Swords },
     { name: 'Schedule', href: '/practice', icon: Calendar },
-    { name: 'MyRecord', href: '/matches', icon: User },
+    { name: 'Record', href: '/matches', icon: BarChart3 },
   ];
 
   // ボトムナビゲーションのアクティブ判定（パスの前方一致も考慮）

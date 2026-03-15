@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI } from '../../api';
+import { matchAPI, playerAPI } from '../../api';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import {
   Trophy,
@@ -11,10 +11,25 @@ import {
   Filter,
   TrendingUp,
   TrendingDown,
+  X,
 } from 'lucide-react';
 
 const MatchList = () => {
   const { currentPlayer } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryPlayerId = searchParams.get('playerId');
+  const targetPlayerId = queryPlayerId ? Number(queryPlayerId) : currentPlayer?.id;
+  const isOtherPlayer = targetPlayerId !== currentPlayer?.id;
+
+  // 選手検索関連
+  const [targetPlayerName, setTargetPlayerName] = useState('');
+  const [playerSearchText, setPlayerSearchText] = useState('');
+  const [playerSearchResults, setPlayerSearchResults] = useState([]);
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+  const [allPlayers, setAllPlayers] = useState([]);
+  const playerSearchRef = useRef(null);
+
   const [matches, setMatches] = useState([]);
   const [filteredMatches, setFilteredMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +53,60 @@ const MatchList = () => {
 
   // ボトムシート表示状態
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // 選手一覧を取得（検索用）
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        const res = await playerAPI.getAll();
+        setAllPlayers(res.data || []);
+      } catch (e) {
+        console.error('選手一覧の取得に失敗:', e);
+      }
+    };
+    fetchPlayers();
+  }, []);
+
+  // ターゲット選手名の取得
+  useEffect(() => {
+    if (isOtherPlayer && targetPlayerId) {
+      const fetchTargetPlayer = async () => {
+        try {
+          const res = await playerAPI.getById(targetPlayerId);
+          setTargetPlayerName(res.data?.name || '');
+        } catch (e) {
+          console.error('選手情報の取得に失敗:', e);
+        }
+      };
+      fetchTargetPlayer();
+    } else {
+      setTargetPlayerName(currentPlayer?.name || '');
+    }
+  }, [targetPlayerId, isOtherPlayer, currentPlayer]);
+
+  // 選手検索のフィルタリング
+  useEffect(() => {
+    if (playerSearchText.trim()) {
+      const filtered = allPlayers.filter(p =>
+        p.name.toLowerCase().includes(playerSearchText.toLowerCase()) &&
+        p.id !== currentPlayer?.id
+      );
+      setPlayerSearchResults(filtered.slice(0, 10));
+    } else {
+      setPlayerSearchResults([]);
+    }
+  }, [playerSearchText, allPlayers, currentPlayer]);
+
+  // 検索外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (playerSearchRef.current && !playerSearchRef.current.contains(e.target)) {
+        setShowPlayerSearch(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -70,8 +139,8 @@ const MatchList = () => {
 
         // 並列で取得
         const [matchesResponse, statsResponse] = await Promise.all([
-          matchAPI.getByPlayerId(currentPlayer.id, matchParams),
-          matchAPI.getStatisticsByRank(currentPlayer.id, statsParams),
+          matchAPI.getByPlayerId(targetPlayerId, matchParams),
+          matchAPI.getStatisticsByRank(targetPlayerId, statsParams),
         ]);
 
         const sortedMatches = matchesResponse.data.sort(
@@ -116,10 +185,10 @@ const MatchList = () => {
       }
     };
 
-    if (currentPlayer?.id) {
+    if (targetPlayerId) {
       fetchMatches();
     }
-  }, [currentPlayer, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand]);
+  }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand]);
 
   useEffect(() => {
     let filtered = matches;
@@ -197,20 +266,76 @@ const MatchList = () => {
   return (
     <div className="space-y-6 pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-lg font-semibold text-[#374151]">
-            {selectedYear && selectedMonth
-              ? `${selectedYear}年 ${selectedMonth}月`
-              : selectedYear
-              ? `${selectedYear}年`
-              : '試合結果'}
-          </h1>
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+        <div className="max-w-7xl mx-auto">
+          {/* タイトル行 */}
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-lg font-semibold text-[#374151]">
+              {isOtherPlayer ? targetPlayerName : ''}
+              {selectedYear && selectedMonth
+                ? ` ${selectedYear}年 ${selectedMonth}月`
+                : selectedYear
+                ? ` ${selectedYear}年`
+                : isOtherPlayer ? '' : '試合結果'}
+            </h1>
+            {isOtherPlayer && (
+              <button
+                onClick={() => navigate('/matches')}
+                className="text-xs text-[#4a6b5a] border border-[#4a6b5a] px-2 py-1 rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
+              >
+                自分に戻す
+              </button>
+            )}
+          </div>
+
+          {/* 選手検索バー */}
+          <div className="relative" ref={playerSearchRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="選手名で検索..."
+                value={playerSearchText}
+                onChange={(e) => {
+                  setPlayerSearchText(e.target.value);
+                  setShowPlayerSearch(true);
+                }}
+                onFocus={() => setShowPlayerSearch(true)}
+                className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
+              />
+              {playerSearchText && (
+                <button
+                  onClick={() => { setPlayerSearchText(''); setShowPlayerSearch(false); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              )}
+            </div>
+            {showPlayerSearch && playerSearchResults.length > 0 && (
+              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
+                {playerSearchResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      navigate(`/matches?playerId=${p.id}`);
+                      setPlayerSearchText('');
+                      setShowPlayerSearch(false);
+                    }}
+                    className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+                  >
+                    {p.name}
+                    {p.kyuRank && <span className="ml-2 text-xs text-gray-400">{p.kyuRank}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* コンテンツ（上部パディング追加） */}
-      <div className="pt-16 space-y-6">
+      <div className="pt-28 space-y-6">
       {/* 級別統計テーブル */}
       {rankStatistics && (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
@@ -294,7 +419,7 @@ const MatchList = () => {
               ? '検索条件を変更してください'
               : '最初の試合記録を登録しましょう'}
           </p>
-          {!searchTerm && filterResult === '全て' && (
+          {!searchTerm && filterResult === '全て' && !isOtherPlayer && (
             <Link
               to="/matches/new"
               className="inline-flex items-center gap-2 bg-[#4a6b5a] text-white px-6 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors"
@@ -326,9 +451,7 @@ const MatchList = () => {
                   <tr
                     key={match.id}
                     className="hover:bg-[#eef2ef] cursor-pointer transition-colors"
-                    onClick={() =>
-                      (window.location.href = `/matches/${match.id}`)
-                    }
+                    onClick={() => navigate(`/matches/${match.id}`)}
                   >
                     <td className="px-3 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-1 text-sm">
@@ -337,9 +460,16 @@ const MatchList = () => {
                       </div>
                     </td>
                     <td className="px-3 py-4">
-                      <div className="text-sm font-medium">
+                      <button
+                        className="text-sm font-medium text-[#4a6b5a] hover:underline text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const opponentId = match.player1Id === targetPlayerId ? match.player2Id : match.player1Id;
+                          if (opponentId) navigate(`/matches?playerId=${opponentId}`);
+                        }}
+                      >
                         {match.opponentName}
-                      </div>
+                      </button>
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-center">
                       <span className={`text-base ${getResultColor(match.result)}`}>
