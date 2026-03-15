@@ -741,4 +741,13 @@ public class PracticeSessionService {
 
         log.info("Successfully added participant {} to match {} on {}", playerId, matchNumber, sessionDate);
     }
+
+    /**
+     * 特定の試合から参加者を1名削除
+     */
+    @Transactional
+    public void removeParticipantFromMatch(Long sessionId, Integer matchNumber, Long playerId) {
+        log.info("Removing participant {} from session {} match {}", playerId, sessionId, matchNumber);
+        practiceParticipantRepository.deleteBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+    }
 }

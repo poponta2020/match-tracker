@@ -28,6 +28,7 @@ public class PracticeSessionController {
 
     private final PracticeSessionService practiceSessionService;
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
+    private final com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
 
     /**
      * 全ての練習日を取得
@@ -341,6 +342,119 @@ public class PracticeSessionController {
             log.error("Densuke scraping failed", e);
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(Map.of("message", "伝助からのデータ取得に失敗しました: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 未登録者を一括登録して伝助から再同期
+     */
+    @PostMapping("/register-and-sync-densuke")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> registerAndSyncDensuke(@RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<String> names = (List<String>) request.get("names");
+        Integer year = (Integer) request.get("year");
+        Integer month = (Integer) request.get("month");
+
+        if (names == null || names.isEmpty() || year == null || month == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "names, year, monthは必須です"));
+        }
+
+        var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
+        if (densukeUrl.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message",
+                    year + "年" + month + "月の伝助URLが登録されていません"));
+        }
+
+        try {
+            var result = densukeImportService.registerAndSync(names, densukeUrl.get().getUrl(), null);
+            return ResponseEntity.ok(result);
+        } catch (java.io.IOException e) {
+            log.error("Register and sync failed", e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "伝助との同期に失敗しました: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 特定の試合から参加者を1名削除
+     */
+    @DeleteMapping("/{sessionId}/matches/{matchNumber}/participants/{playerId}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Void> removeParticipantFromMatch(
+            @PathVariable Long sessionId,
+            @PathVariable Integer matchNumber,
+            @PathVariable Long playerId) {
+        log.info("DELETE /api/practice-sessions/{}/matches/{}/participants/{} - Removing participant",
+                sessionId, matchNumber, playerId);
+        practiceSessionService.removeParticipantFromMatch(sessionId, matchNumber, playerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ========== 伝助URL管理 ==========
+
+    /**
+     * 指定年月の伝助URLを取得
+     */
+    @GetMapping("/densuke-url")
+    public ResponseEntity<?> getDensukeUrl(@RequestParam int year, @RequestParam int month) {
+        var url = densukeUrlRepository.findByYearAndMonth(year, month);
+        return url.map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
+    /**
+     * 伝助URLを登録/更新（upsert）
+     */
+    @PutMapping("/densuke-url")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> saveDensukeUrl(@RequestBody Map<String, Object> request) {
+        Integer year = (Integer) request.get("year");
+        Integer month = (Integer) request.get("month");
+        String url = (String) request.get("url");
+
+        if (year == null || month == null || url == null || url.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "year, month, urlは必須です"));
+        }
+
+        var entity = densukeUrlRepository.findByYearAndMonth(year, month)
+                .orElse(com.karuta.matchtracker.entity.DensukeUrl.builder()
+                        .year(year)
+                        .month(month)
+                        .build());
+        entity.setUrl(url);
+        densukeUrlRepository.save(entity);
+        return ResponseEntity.ok(entity);
+    }
+
+    /**
+     * 指定年月の伝助データを同期（URLはDBから取得）
+     */
+    @PostMapping("/sync-densuke")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> syncDensuke(@RequestBody Map<String, Integer> request) {
+        Integer year = request.get("year");
+        Integer month = request.get("month");
+
+        if (year == null || month == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "yearとmonthは必須です"));
+        }
+
+        var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
+        if (densukeUrl.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message",
+                    year + "年" + month + "月の伝助URLが登録されていません"));
+        }
+
+        log.info("POST /api/practice-sessions/sync-densuke - Syncing {}/{} from {}", year, month, densukeUrl.get().getUrl());
+
+        try {
+            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null);
+            return ResponseEntity.ok(result);
+        } catch (java.io.IOException e) {
+            log.error("Densuke sync failed", e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "伝助との同期に失敗しました: " + e.getMessage()));
         }
     }
 }

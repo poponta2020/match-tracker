@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X } from 'lucide-react';
+import { isAdmin } from '../../utils/auth';
 
 const PairingGenerator = () => {
   const navigate = useNavigate();
@@ -21,6 +22,14 @@ const PairingGenerator = () => {
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [showUrlModal, setShowUrlModal] = useState(false);
+  const [densukeUrlInput, setDensukeUrlInput] = useState('');
+  const [syncMessage, setSyncMessage] = useState(null);
+  const [unmatchedNames, setUnmatchedNames] = useState([]);
+  const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
+  const [removedPlayers, setRemovedPlayers] = useState([]);
+  const [showRemovedModal, setShowRemovedModal] = useState(false);
 
   useEffect(() => {
     const fetchParticipants = async () => {
@@ -310,6 +319,119 @@ const PairingGenerator = () => {
     }
   };
 
+  // 同期結果を処理（共通）
+  const handleSyncResult = async (result) => {
+    const data = result.data;
+    setSyncMessage(`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`);
+    if (currentSession) {
+      const participantsRes = await practiceAPI.getParticipants(currentSession.id);
+      setParticipants(participantsRes.data);
+    }
+    if (data.unmatchedNames && data.unmatchedNames.length > 0) {
+      setUnmatchedNames(data.unmatchedNames);
+      setShowUnmatchedModal(true);
+    }
+    if (data.removedPlayers && data.removedPlayers.length > 0) {
+      setRemovedPlayers(data.removedPlayers);
+      if (!data.unmatchedNames || data.unmatchedNames.length === 0) {
+        setShowRemovedModal(true);
+      }
+    }
+  };
+
+  // 伝助同期
+  const handleSyncDensuke = async () => {
+    const date = new Date(sessionDate);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const urlRes = await practiceAPI.getDensukeUrl(year, month);
+      if (!urlRes.data || !urlRes.data.url) {
+        setSyncing(false);
+        setShowUrlModal(true);
+        return;
+      }
+      const result = await practiceAPI.syncDensuke(year, month);
+      await handleSyncResult(result);
+    } catch (err) {
+      if (err.response?.status === 204) {
+        setSyncing(false);
+        setShowUrlModal(true);
+        return;
+      }
+      setSyncMessage('同期に失敗しました');
+      console.error('Densuke sync error:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleSaveUrlAndSync = async () => {
+    const date = new Date(sessionDate);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    if (!densukeUrlInput.trim()) return;
+    try {
+      await practiceAPI.saveDensukeUrl(year, month, densukeUrlInput.trim());
+      setShowUrlModal(false);
+      setDensukeUrlInput('');
+      setSyncing(true);
+      const result = await practiceAPI.syncDensuke(year, month);
+      await handleSyncResult(result);
+    } catch (err) {
+      setSyncMessage('同期に失敗しました');
+      console.error('Densuke save/sync error:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 未登録者を登録して再同期
+  const handleRegisterAndSync = async () => {
+    const date = new Date(sessionDate);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    setSyncing(true);
+    setShowUnmatchedModal(false);
+    try {
+      const result = await practiceAPI.registerAndSyncDensuke(unmatchedNames, year, month);
+      await handleSyncResult(result);
+      setUnmatchedNames([]);
+    } catch (err) {
+      setSyncMessage('登録・同期に失敗しました');
+      console.error('Register and sync error:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 未登録者モーダルを閉じた後に消えた参加者モーダルを表示
+  const handleCloseUnmatchedModal = () => {
+    setShowUnmatchedModal(false);
+    if (removedPlayers.length > 0) {
+      setShowRemovedModal(true);
+    }
+  };
+
+  // 参加者を試合から外す
+  const handleRemoveParticipant = async (player) => {
+    try {
+      await practiceAPI.removeParticipantFromMatch(player.sessionId, player.matchNumber, player.playerId);
+      setRemovedPlayers(prev => prev.filter(p =>
+        !(p.playerId === player.playerId && p.sessionId === player.sessionId && p.matchNumber === player.matchNumber)
+      ));
+      if (currentSession) {
+        const participantsRes = await practiceAPI.getParticipants(currentSession.id);
+        setParticipants(participantsRes.data);
+      }
+    } catch (err) {
+      console.error('Remove participant error:', err);
+      setSyncMessage('参加者の削除に失敗しました');
+    }
+  };
+
   // 既に参加している選手を除外
   const availablePlayers = allPlayers.filter(player => {
     const isParticipant = participants.some(p => p.id === player.id);
@@ -373,14 +495,35 @@ const PairingGenerator = () => {
               </span>
             )}
           </p>
-          <button
-            onClick={() => setShowAddPlayer(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            当日参加者を追加
-          </button>
+          <div className="flex gap-2">
+            {isAdmin() && (
+              <button
+                onClick={handleSyncDensuke}
+                disabled={syncing}
+                className="flex items-center gap-1.5 bg-white text-blue-700 border border-blue-300 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors text-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? '同期中...' : '伝助同期'}
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              当日参加者を追加
+            </button>
+          </div>
         </div>
+
+        {syncMessage && (
+          <div className="bg-green-50 border border-green-200 p-3 rounded-lg flex justify-between items-center text-sm text-green-800">
+            <span>{syncMessage}</span>
+            <button onClick={() => setSyncMessage(null)} className="text-green-600 hover:text-green-800">
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         {existingPairings && (
           <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex items-start gap-3">
@@ -615,6 +758,137 @@ const PairingGenerator = () => {
                 追加
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* 伝助URL入力モーダル */}
+      {showUrlModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowUrlModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-900 mb-4">
+              {(() => { const d = new Date(sessionDate); return `${d.getFullYear()}年${d.getMonth() + 1}月`; })()}の伝助URL
+            </h2>
+            <p className="text-sm text-gray-600 mb-3">この月の伝助URLを入力してください</p>
+            <input
+              type="url"
+              value={densukeUrlInput}
+              onChange={(e) => setDensukeUrlInput(e.target.value)}
+              placeholder="https://densuke.biz/list?cd=..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowUrlModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleSaveUrlAndSync}
+                disabled={!densukeUrlInput.trim()}
+                className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                保存して同期
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 未登録者確認モーダル */}
+      {showUnmatchedModal && unmatchedNames.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={handleCloseUnmatchedModal}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-lg font-bold text-gray-900">未登録のユーザーがいます</h2>
+              <button onClick={handleCloseUnmatchedModal} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              以下の{unmatchedNames.length}名がアプリに未登録です。登録しますか？
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {unmatchedNames.map((name, idx) => (
+                <span key={idx} className="text-sm text-gray-800 bg-gray-100 px-3 py-1 rounded-full">
+                  {name}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              パスワード: pppppppp / 性別: その他 で登録されます
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCloseUnmatchedModal}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                スキップ
+              </button>
+              <button
+                onClick={handleRegisterAndSync}
+                className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                登録して同期
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 伝助から消えた参加者モーダル */}
+      {showRemovedModal && removedPlayers.length > 0 && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowRemovedModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-lg font-bold text-gray-900">伝助から消えた参加者</h2>
+              <button onClick={() => setShowRemovedModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              以下の参加者が伝助上に見つかりません。参加を外しますか？
+            </p>
+            <div className="space-y-2 mb-4">
+              {removedPlayers.map((p, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">{p.playerName}</span>
+                    <span className="text-xs text-gray-500 ml-2">
+                      {p.sessionDate} 第{p.matchNumber}試合
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveParticipant(p)}
+                    className="text-xs text-red-600 border border-red-400 px-2 py-1 rounded hover:bg-red-600 hover:text-white transition-colors"
+                  >
+                    外す
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); }}
+              className="w-full py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              閉じる
+            </button>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,18 @@ public class DensukeImportService {
         private int skippedCount;           // スキップした数
         private List<String> unmatchedNames = new ArrayList<>();  // アプリに未登録の名前
         private List<String> unmatchedVenues = new ArrayList<>(); // 会場名がDBに見つからない
+        private List<RemovedPlayer> removedPlayers = new ArrayList<>(); // 伝助から消えた参加者
         private List<String> details = new ArrayList<>();         // 詳細ログ
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class RemovedPlayer {
+        private Long playerId;
+        private String playerName;
+        private Long sessionId;
+        private LocalDate sessionDate;
+        private Integer matchNumber;
     }
 
     /**
@@ -59,10 +71,12 @@ public class DensukeImportService {
         // スクレイピング
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);
 
-        // 全選手の名前→IDマップ
+        // 全選手の名前→IDマップ、ID→名前マップ
         Map<String, Long> playerNameMap = playerRepository.findAll().stream()
                 .filter(p -> p.getDeletedAt() == null)
                 .collect(Collectors.toMap(Player::getName, Player::getId, (a, b) -> a));
+        Map<Long, String> playerIdMap = playerNameMap.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey, (a, b) -> a));
 
         // 会場名→Venueマップ
         Map<String, Venue> venueNameMap = venueRepository.findAll().stream()
@@ -127,10 +141,35 @@ public class DensukeImportService {
                 session = sessionOpt.get();
             }
 
-            // 既存の参加者を削除（上書きモード）
-            practiceParticipantRepository.deleteBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
+            // 既存の参加者を取得
+            List<PracticeParticipant> existingParticipants =
+                    practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
+            Set<Long> existingPlayerIds = existingParticipants.stream()
+                    .map(PracticeParticipant::getPlayerId)
+                    .collect(Collectors.toSet());
 
-            // ○の参加者を登録
+            // 伝助の参加者IDを収集
+            Set<Long> densukePlayerIds = new LinkedHashSet<>();
+            for (String name : entry.getParticipants()) {
+                Long playerId = playerNameMap.get(name);
+                if (playerId != null) {
+                    densukePlayerIds.add(playerId);
+                }
+            }
+
+            // 伝助から消えた参加者を検出（DBにいるが伝助にいない）
+            for (Long existingId : existingPlayerIds) {
+                if (!densukePlayerIds.contains(existingId)) {
+                    String playerName = playerIdMap.get(existingId);
+                    if (playerName != null) {
+                        result.getRemovedPlayers().add(new RemovedPlayer(
+                                existingId, playerName, session.getId(),
+                                entry.getDate(), entry.getMatchNumber()));
+                    }
+                }
+            }
+
+            // 新規参加者のみ追加（既存はそのまま）
             int matchRegistered = 0;
             for (String name : entry.getParticipants()) {
                 Long playerId = playerNameMap.get(name);
@@ -138,6 +177,10 @@ public class DensukeImportService {
                     unmatchedNameSet.add(name);
                     result.setSkippedCount(result.getSkippedCount() + 1);
                     continue;
+                }
+
+                if (existingPlayerIds.contains(playerId)) {
+                    continue; // 既に登録済み、スキップ
                 }
 
                 PracticeParticipant participant = PracticeParticipant.builder()
@@ -162,5 +205,39 @@ public class DensukeImportService {
                 result.getSkippedCount(), result.getUnmatchedNames().size());
 
         return result;
+    }
+
+    /**
+     * 未登録者を一括登録し、再度伝助からインポート
+     *
+     * @param names 登録する名前リスト
+     * @param url 伝助URL（再同期用）
+     * @param targetDate 対象日付（nullなら全日付）
+     * @return 再同期のインポート結果
+     */
+    @Transactional
+    public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate) throws IOException {
+        int created = 0;
+        for (String name : names) {
+            // 既存チェック
+            if (playerRepository.findByNameAndActive(name).isPresent()) {
+                continue;
+            }
+            Player player = Player.builder()
+                    .name(name)
+                    .password("pppppppp")
+                    .gender(Player.Gender.その他)
+                    .dominantHand(Player.DominantHand.右)
+                    .role(Player.Role.PLAYER)
+                    .build();
+            playerRepository.save(player);
+            created++;
+            log.info("Auto-registered player: {}", name);
+        }
+
+        log.info("Registered {} new players, now re-syncing from densuke", created);
+
+        // 再同期
+        return importFromDensuke(url, targetDate);
     }
 }

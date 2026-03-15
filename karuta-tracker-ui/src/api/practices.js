@@ -69,4 +69,24 @@ export const practiceAPI = {
   // 特定の試合に参加者を1名追加
   addParticipantToMatch: (date, matchNumber, playerId) =>
     apiClient.post(`/practice-sessions/date/${date}/matches/${matchNumber}/participants/${playerId}`),
+
+  // 伝助URL取得（月別）
+  getDensukeUrl: (year, month) =>
+    apiClient.get('/practice-sessions/densuke-url', { params: { year, month } }),
+
+  // 伝助URL登録/更新
+  saveDensukeUrl: (year, month, url) =>
+    apiClient.put('/practice-sessions/densuke-url', { year, month, url }),
+
+  // 伝助同期（月指定）
+  syncDensuke: (year, month) =>
+    apiClient.post('/practice-sessions/sync-densuke', { year, month }),
+
+  // 未登録者を一括登録して再同期
+  registerAndSyncDensuke: (names, year, month) =>
+    apiClient.post('/practice-sessions/register-and-sync-densuke', { names, year, month }),
+
+  // 特定の試合から参加者を削除
+  removeParticipantFromMatch: (sessionId, matchNumber, playerId) =>
+    apiClient.delete(`/practice-sessions/${sessionId}/matches/${matchNumber}/participants/${playerId}`),
 };
