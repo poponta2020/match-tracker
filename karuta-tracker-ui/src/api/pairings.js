@@ -39,4 +39,10 @@ export const pairingAPI = {
 
   // 自動マッチングを実行
   autoMatch: (data) => apiClient.post('/match-pairings/auto-match', data),
+
+  // ペアの直近対戦履歴を取得
+  getPairHistory: (player1Id, player2Id, sessionDate, matchNumber) =>
+    apiClient.get('/match-pairings/pair-history', {
+      params: { player1Id, player2Id, sessionDate, matchNumber },
+    }),
 };

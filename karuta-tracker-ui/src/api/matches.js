@@ -35,6 +35,12 @@ export const matchAPI = {
       params: { startDate, endDate },
     }),
 
+  // 選手の期間内試合記録取得
+  getByPlayerIdAndPeriod: (playerId, startDate, endDate) =>
+    apiClient.get(`/matches/player/${playerId}/period`, {
+      params: { startDate, endDate },
+    }),
+
   // 試合統計取得
   getStatistics: (playerId) =>
     apiClient.get(`/matches/player/${playerId}/statistics`),

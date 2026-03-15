@@ -117,6 +117,20 @@ public class MatchPairingController {
     }
 
     /**
+     * ペアの直近対戦履歴を取得（手動組み合わせ時のリアルタイム表示用）
+     */
+    @GetMapping("/pair-history")
+    public ResponseEntity<List<AutoMatchingResult.MatchHistory>> getPairHistory(
+            @RequestParam Long player1Id,
+            @RequestParam Long player2Id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate sessionDate,
+            @RequestParam(required = false) Integer matchNumber) {
+        List<AutoMatchingResult.MatchHistory> history =
+                matchPairingService.getPairRecentMatches(player1Id, player2Id, sessionDate, matchNumber);
+        return ResponseEntity.ok(history);
+    }
+
+    /**
      * 自動マッチングを実行
      */
     @PostMapping("/auto-match")
