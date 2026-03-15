@@ -75,8 +75,6 @@ public class DensukeScraper {
             Element cell = headerCells.get(i);
             Element link = cell.selectFirst("a");
             String name = link != null ? link.text().trim() : cell.text().trim();
-            // 🔰プレフィックスを除去
-            name = name.replaceAll("^🔰", "").trim();
             memberNames.add(name);
         }
         log.info("Found {} members in densuke", memberNames.size());

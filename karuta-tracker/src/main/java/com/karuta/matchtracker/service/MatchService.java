@@ -287,12 +287,6 @@ public class MatchService {
     public MatchDto createMatchSimple(MatchSimpleCreateRequest request) {
         log.info("Creating new match (simple) on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
-        // 当日の日付かチェック
-        LocalDate today = LocalDate.now();
-        if (!request.getMatchDate().equals(today)) {
-            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
-        }
-
         // 練習日として登録されているかチェック
         if (!practiceSessionRepository.existsBySessionDate(request.getMatchDate())) {
             throw new IllegalArgumentException("試合記録は練習日として登録されている日のみ登録可能です");
@@ -358,12 +352,6 @@ public class MatchService {
     public MatchDto createMatch(MatchCreateRequest request) {
         log.info("Creating new match on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
-        // 当日の日付かチェック
-        LocalDate today = LocalDate.now();
-        if (!request.getMatchDate().equals(today)) {
-            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
-        }
-
         // 練習日として登録されているかチェック
         if (!practiceSessionRepository.existsBySessionDate(request.getMatchDate())) {
             throw new IllegalArgumentException("試合記録は練習日として登録されている日のみ登録可能です");
@@ -402,12 +390,6 @@ public class MatchService {
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
 
-        // 当日の日付かチェック
-        LocalDate today = LocalDate.now();
-        if (!match.getMatchDate().equals(today)) {
-            throw new IllegalArgumentException("過去の試合記録は編集できません");
-        }
-
         // 勝者が対戦者のいずれかであることを確認
         if (!winnerId.equals(match.getPlayer1Id()) && !winnerId.equals(match.getPlayer2Id())) {
             throw new IllegalArgumentException("Winner must be one of the players");
@@ -432,15 +414,6 @@ public class MatchService {
 
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
-
-        // 当日の日付かチェック（既存の試合日も、リクエストの日付も当日でなければならない）
-        LocalDate today = LocalDate.now();
-        if (!match.getMatchDate().equals(today)) {
-            throw new IllegalArgumentException("過去の試合記録は編集できません");
-        }
-        if (!request.getMatchDate().equals(today)) {
-            throw new IllegalArgumentException("試合記録の登録・編集は当日のみ可能です");
-        }
 
         // 選手の存在確認
         Player player = playerRepository.findById(request.getPlayerId())

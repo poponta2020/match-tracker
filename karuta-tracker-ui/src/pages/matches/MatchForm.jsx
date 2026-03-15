@@ -71,10 +71,20 @@ const MatchForm = () => {
         if (isEdit && matchRes) {
           const match = matchRes.data;
 
+          // 過去の日付の場合、その日のセッションも取得
           if (match.matchDate !== today) {
-            setError('過去の試合記録は編集できません。試合記録の編集は当日のみ可能です。');
-            setInitialLoading(false);
-            return;
+            try {
+              const editSessionRes = await practiceAPI.getByDate(match.matchDate);
+              if (editSessionRes.data) {
+                setPracticeSessions(prev => {
+                  const exists = prev.some(s => s.id === editSessionRes.data.id);
+                  return exists ? prev : [...prev, editSessionRes.data];
+                });
+                setPracticeSession(editSessionRes.data);
+              }
+            } catch (e) {
+              // セッションが見つからなくても編集は許可
+            }
           }
 
           setFormData({
@@ -345,27 +355,6 @@ const MatchForm = () => {
     );
   }
 
-  // 過去の試合記録編集エラーの場合
-  if (error && isEdit) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-6 space-y-6">
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-          <div className="flex justify-center">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center justify-center gap-2 bg-[#4a6b5a] text-white px-6 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors font-medium"
-            >
-              ホームに戻る
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">

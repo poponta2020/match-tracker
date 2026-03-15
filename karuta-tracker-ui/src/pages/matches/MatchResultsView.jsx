@@ -418,7 +418,7 @@ const MatchResultsView = () => {
         </div>
 
         {/* 管理者用：編集ボタン */}
-        {(isAdmin() || isSuperAdmin()) && (isSuperAdmin() || isToday()) && session && (
+        {(isAdmin() || isSuperAdmin()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
             className="w-full mt-6 py-3 px-4 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] flex items-center justify-center gap-2 font-semibold transition-colors"

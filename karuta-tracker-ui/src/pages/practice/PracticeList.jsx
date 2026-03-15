@@ -28,6 +28,22 @@ const PracticeList = () => {
   const [removedPlayers, setRemovedPlayers] = useState([]); // 伝助から消えた参加者
   const [showRemovedModal, setShowRemovedModal] = useState(false); // 消えた参加者モーダル
 
+  // マウント時にlocalStorageから同期結果を復元
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('densukeSyncResult');
+      if (saved) {
+        const { page, data } = JSON.parse(saved);
+        if (page === '/practice') {
+          localStorage.removeItem('densukeSyncResult');
+          applySyncResult(data);
+        }
+      }
+    } catch (e) {
+      localStorage.removeItem('densukeSyncResult');
+    }
+  }, []);
+
   // データ取得を行う関数をメモ化
   useEffect(() => {
     fetchSessions();
@@ -226,25 +242,37 @@ const PracticeList = () => {
     });
   };
 
-  // 同期結果を処理（共通）
-  const handleSyncResult = (result) => {
-    const data = result.data;
+  // 同期結果をUIに反映（localStorage復元時にも使用）
+  const applySyncResult = (data) => {
     setSyncMessage(`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`);
     fetchSessions();
     fetchMyParticipations();
-    // 未登録者がいればモーダルを表示
-    if (data.unmatchedNames && data.unmatchedNames.length > 0) {
+    const hasUnmatched = data.unmatchedNames && data.unmatchedNames.length > 0;
+    const hasRemoved = data.removedPlayers && data.removedPlayers.length > 0;
+    if (hasUnmatched) {
       setUnmatchedNames(data.unmatchedNames);
       setShowUnmatchedModal(true);
     }
-    // 伝助から消えた参加者がいればモーダルを表示
-    if (data.removedPlayers && data.removedPlayers.length > 0) {
+    if (hasRemoved) {
       setRemovedPlayers(data.removedPlayers);
-      // 未登録者モーダルが出ない場合のみ即表示（出る場合は未登録者モーダル閉じた後に表示）
-      if (!data.unmatchedNames || data.unmatchedNames.length === 0) {
+      if (!hasUnmatched) {
         setShowRemovedModal(true);
       }
     }
+    // モーダルが不要なら即クリア
+    if (!hasUnmatched && !hasRemoved) {
+      localStorage.removeItem('densukeSyncResult');
+    }
+  };
+
+  // 同期結果を処理（共通） — UIに反映し、localStorageにも保存
+  const handleSyncResult = (result) => {
+    const data = result.data;
+    // 画面を離れても復元できるようlocalStorageに保存
+    try {
+      localStorage.setItem('densukeSyncResult', JSON.stringify({ page: '/practice', data }));
+    } catch (e) { /* ignore */ }
+    applySyncResult(data);
   };
 
   // 伝助同期
@@ -318,6 +346,8 @@ const PracticeList = () => {
     setShowUnmatchedModal(false);
     if (removedPlayers.length > 0) {
       setShowRemovedModal(true);
+    } else {
+      localStorage.removeItem('densukeSyncResult');
     }
   };
 
@@ -776,7 +806,7 @@ const PracticeList = () => {
             </div>
             <div className="px-6 py-4 border-t border-[#d4ddd7]">
               <button
-                onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); }}
+                onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); localStorage.removeItem('densukeSyncResult'); }}
                 className="w-full py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
               >
                 閉じる

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { isAdmin } from '../../utils/auth';
 
 const PairingGenerator = () => {
@@ -30,6 +30,24 @@ const PairingGenerator = () => {
   const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
   const [removedPlayers, setRemovedPlayers] = useState([]);
   const [showRemovedModal, setShowRemovedModal] = useState(false);
+  const [showParticipantList, setShowParticipantList] = useState(true);
+  const [matchExistsMap, setMatchExistsMap] = useState({});
+
+  // マウント時にlocalStorageから同期結果を復元
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('densukeSyncResult');
+      if (saved) {
+        const { page, data } = JSON.parse(saved);
+        if (page === '/pairings') {
+          localStorage.removeItem('densukeSyncResult');
+          applySyncResult(data);
+        }
+      }
+    } catch (e) {
+      localStorage.removeItem('densukeSyncResult');
+    }
+  }, []);
 
   useEffect(() => {
     const fetchParticipants = async () => {
@@ -41,9 +59,23 @@ const PairingGenerator = () => {
           setCurrentSession(response.data);
           const participantsRes = await practiceAPI.getParticipants(response.data.id);
           setParticipants(participantsRes.data);
+
+          // 各試合番号の既存組み合わせ有無をチェック
+          const totalMatches = response.data.totalMatches || 10;
+          const existsMap = {};
+          for (let i = 1; i <= totalMatches; i++) {
+            try {
+              const res = await pairingAPI.exists(sessionDate, i);
+              existsMap[i] = !!res.data;
+            } catch {
+              existsMap[i] = false;
+            }
+          }
+          setMatchExistsMap(existsMap);
         } else {
           setCurrentSession(null);
           setParticipants([]);
+          setMatchExistsMap({});
         }
 
         const existsRes = await pairingAPI.exists(sessionDate, matchNumber);
@@ -55,10 +87,10 @@ const PairingGenerator = () => {
         }
       } catch (err) {
         console.error('Failed to fetch participants:', err);
-        // 404エラー(練習会が存在しない)の場合は空配列を設定
         if (err.response && err.response.status === 404) {
           setCurrentSession(null);
           setParticipants([]);
+          setMatchExistsMap({});
           setError('');
         } else {
           setError('Failed to fetch participants');
@@ -319,24 +351,37 @@ const PairingGenerator = () => {
     }
   };
 
-  // 同期結果を処理（共通）
-  const handleSyncResult = async (result) => {
-    const data = result.data;
+  // 同期結果をUIに反映（localStorage復元時にも使用）
+  const applySyncResult = async (data) => {
     setSyncMessage(`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`);
     if (currentSession) {
       const participantsRes = await practiceAPI.getParticipants(currentSession.id);
       setParticipants(participantsRes.data);
     }
-    if (data.unmatchedNames && data.unmatchedNames.length > 0) {
+    const hasUnmatched = data.unmatchedNames && data.unmatchedNames.length > 0;
+    const hasRemoved = data.removedPlayers && data.removedPlayers.length > 0;
+    if (hasUnmatched) {
       setUnmatchedNames(data.unmatchedNames);
       setShowUnmatchedModal(true);
     }
-    if (data.removedPlayers && data.removedPlayers.length > 0) {
+    if (hasRemoved) {
       setRemovedPlayers(data.removedPlayers);
-      if (!data.unmatchedNames || data.unmatchedNames.length === 0) {
+      if (!hasUnmatched) {
         setShowRemovedModal(true);
       }
     }
+    if (!hasUnmatched && !hasRemoved) {
+      localStorage.removeItem('densukeSyncResult');
+    }
+  };
+
+  // 同期結果を処理（共通） — UIに反映し、localStorageにも保存
+  const handleSyncResult = async (result) => {
+    const data = result.data;
+    try {
+      localStorage.setItem('densukeSyncResult', JSON.stringify({ page: '/pairings', data }));
+    } catch (e) { /* ignore */ }
+    await applySyncResult(data);
   };
 
   // 伝助同期
@@ -412,6 +457,8 @@ const PairingGenerator = () => {
     setShowUnmatchedModal(false);
     if (removedPlayers.length > 0) {
       setShowRemovedModal(true);
+    } else {
+      localStorage.removeItem('densukeSyncResult');
     }
   };
 
@@ -442,84 +489,63 @@ const PairingGenerator = () => {
 
   return (
     <div className="space-y-6">
+      {/* 日付選択 */}
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              日付
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={sessionDate}
-                onChange={(e) => setSessionDate(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-              <button
-                onClick={() => setSessionDate(today)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                今日
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              試合番号
-            </label>
-            <select
-              value={matchNumber}
-              onChange={(e) => setMatchNumber(Number(e.target.value))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              {Array.from(
-                { length: currentSession?.totalMatches || 10 },
-                (_, i) => i + 1
-              ).map((num) => (
-                <option key={num} value={num}>
-                  試合 {num}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="bg-blue-50 p-4 rounded-lg flex items-center justify-between">
-          <p className="text-blue-900 font-medium">
-            参加者: {participants.length}名
-            {participants.length === 0 && (
-              <span className="text-sm text-blue-700 ml-2">
-                (事前登録なし - 当日参加者を追加してください)
-              </span>
-            )}
-          </p>
+        <div>
+          <label className="block text-sm font-medium text-[#374151] mb-2">
+            <Calendar className="w-4 h-4 inline mr-1" />
+            日付
+          </label>
           <div className="flex gap-2">
-            {isAdmin() && (
-              <button
-                onClick={handleSyncDensuke}
-                disabled={syncing}
-                className="flex items-center gap-1.5 bg-white text-blue-700 border border-blue-300 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors text-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? '同期中...' : '伝助同期'}
-              </button>
-            )}
+            <input
+              type="date"
+              value={sessionDate}
+              onChange={(e) => setSessionDate(e.target.value)}
+              className="flex-1 px-4 py-2 border border-[#c5cec8] rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+            />
             <button
-              onClick={() => setShowAddPlayer(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              onClick={() => setSessionDate(today)}
+              className="px-4 py-2 bg-[#e5ebe7] text-[#374151] rounded-lg hover:bg-[#d4ddd7] transition-colors"
             >
-              <UserPlus className="w-4 h-4" />
-              当日参加者を追加
+              今日
             </button>
           </div>
         </div>
 
+        {/* 試合番号タブ */}
+        <div>
+          <label className="block text-sm font-medium text-[#374151] mb-2">
+            試合番号
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {Array.from(
+              { length: currentSession?.totalMatches || 10 },
+              (_, i) => i + 1
+            ).map((num) => (
+              <button
+                key={num}
+                onClick={() => setMatchNumber(num)}
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  matchNumber === num
+                    ? 'bg-[#4a6b5a] text-white shadow-md'
+                    : matchExistsMap[num]
+                      ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
+                      : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
+                }`}
+              >
+                {num}
+                {matchExistsMap[num] && matchNumber !== num && (
+                  <Check className="w-3 h-3 absolute -top-1 -right-1 text-white bg-[#4a6b5a] rounded-full p-0.5" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {syncMessage && (
-          <div className="bg-green-50 border border-green-200 p-3 rounded-lg flex justify-between items-center text-sm text-green-800">
+          <div className="bg-[#e5ebe7] border border-[#a5b4aa] p-3 rounded-lg flex justify-between items-center text-sm text-[#374151]">
             <span>{syncMessage}</span>
-            <button onClick={() => setSyncMessage(null)} className="text-green-600 hover:text-green-800">
+            <button onClick={() => setSyncMessage(null)} className="text-[#6b7280] hover:text-[#374151]">
               <X size={16} />
             </button>
           </div>
@@ -546,12 +572,67 @@ const PairingGenerator = () => {
         )}
       </div>
 
+      {/* 参加者セクション */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-[#e5ebe7] px-6 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setShowParticipantList(!showParticipantList)}
+            className="flex items-center gap-2 text-[#374151] font-medium"
+          >
+            <Users className="w-4 h-4 text-[#4a6b5a]" />
+            参加者: {participants.length}名
+            {showParticipantList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          <div className="flex gap-2">
+            {isAdmin() && (
+              <button
+                onClick={handleSyncDensuke}
+                disabled={syncing}
+                className="flex items-center gap-1.5 bg-white text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#f9f6f2] transition-colors text-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? '同期中...' : '伝助同期'}
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="flex items-center gap-1.5 bg-[#4a6b5a] text-white px-3 py-1.5 rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              追加
+            </button>
+          </div>
+        </div>
+
+        {showParticipantList && (
+          <div className="px-6 py-4">
+            {participants.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {participants.map((p) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-[#f9f6f2] border border-[#d4ddd7] text-[#374151]"
+                  >
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[#6b7280]">
+                事前登録なし - 伝助同期または当日参加者を追加してください
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 自動組み合わせボタン */}
       {sessionDate && participants.length > 0 && (
         <div className="flex justify-center">
           <button
             onClick={handleAutoMatch}
             disabled={loading}
-            className="flex items-center gap-2 bg-primary-600 text-white px-8 py-3 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 text-lg font-medium"
+            className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 text-lg font-medium shadow-md"
           >
             <Shuffle className="w-5 h-5" />
             {loading ? '生成中...' : '自動組み合わせ'}
@@ -583,7 +664,7 @@ const PairingGenerator = () => {
                     <select
                       value={pairing.player1Id}
                       onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
                     >
                       <option value={pairing.player1Id}>{pairing.player1Name}</option>
                       <optgroup label="待機中の選手">
@@ -613,7 +694,7 @@ const PairingGenerator = () => {
                     <select
                       value={pairing.player2Id}
                       onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
                     >
                       <option value={pairing.player2Id}>{pairing.player2Name}</option>
                       <optgroup label="待機中の選手">
@@ -669,7 +750,7 @@ const PairingGenerator = () => {
                 {waitingPlayers.length >= 2 && (
                   <button
                     onClick={handleAddPairing}
-                    className="flex items-center gap-1 text-sm bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700"
+                    className="flex items-center gap-1 text-sm bg-[#4a6b5a] text-white px-3 py-1 rounded hover:bg-[#3d5a4c]"
                   >
                     <Plus className="w-4 h-4" />
                     組み合わせを追加
@@ -696,7 +777,7 @@ const PairingGenerator = () => {
             <button
               onClick={handleSave}
               disabled={loading}
-              className="flex items-center gap-2 bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+              className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
             >
               <Check className="w-5 h-5" />
               {loading ? '保存中...' : '確定して保存'}
@@ -710,7 +791,7 @@ const PairingGenerator = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <UserPlus className="w-6 h-6 text-primary-600" />
+              <UserPlus className="w-6 h-6 text-[#4a6b5a]" />
               当日参加者を追加
             </h2>
 
@@ -721,7 +802,7 @@ const PairingGenerator = () => {
               <select
                 value={selectedPlayerId}
                 onChange={(e) => setSelectedPlayerId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
               >
                 <option value="">選手を選択してください</option>
                 {availablePlayers.map((player) => (
@@ -752,7 +833,7 @@ const PairingGenerator = () => {
               </button>
               <button
                 onClick={handleAddPlayer}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 追加
@@ -780,7 +861,7 @@ const PairingGenerator = () => {
               value={densukeUrlInput}
               onChange={(e) => setDensukeUrlInput(e.target.value)}
               placeholder="https://densuke.biz/list?cd=..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] mb-4"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -792,7 +873,7 @@ const PairingGenerator = () => {
               <button
                 onClick={handleSaveUrlAndSync}
                 disabled={!densukeUrlInput.trim()}
-                className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50"
               >
                 保存して同期
               </button>
@@ -838,7 +919,7 @@ const PairingGenerator = () => {
               </button>
               <button
                 onClick={handleRegisterAndSync}
-                className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors"
               >
                 登録して同期
               </button>
@@ -884,7 +965,7 @@ const PairingGenerator = () => {
               ))}
             </div>
             <button
-              onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); }}
+              onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); localStorage.removeItem('densukeSyncResult'); }}
               className="w-full py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
               閉じる
