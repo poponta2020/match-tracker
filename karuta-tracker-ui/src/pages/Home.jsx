@@ -10,7 +10,9 @@ import {
   Calendar,
   Clock,
   MapPin,
+  Shuffle,
 } from 'lucide-react';
+import { isAdmin } from '../utils/auth';
 
 const Home = () => {
   const { currentPlayer } = useAuth();
@@ -180,8 +182,31 @@ const Home = () => {
                 </span>
               </div>
             )}
+            {nextPractice.today && isAdmin() && (
+              <Link
+                to="/pairings"
+                className="mt-3 flex items-center justify-center gap-2 bg-white text-[#374151] font-medium py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Shuffle className="w-4 h-4" />
+                組み合わせを作成
+              </Link>
+            )}
           </div>
         </div>
+      )}
+
+      {/* 組み合わせ作成リンク（管理者のみ、TODAYカード内にボタンがない場合） */}
+      {isAdmin() && !(nextPractice?.today) && (
+        <Link
+          to="/pairings"
+          className="flex items-center justify-between bg-[#f9f6f2] border border-[#d4ddd7] px-5 py-3 rounded-lg hover:bg-[#e5ebe7] transition-colors mb-4"
+        >
+          <div className="flex items-center gap-2 text-[#374151] font-medium">
+            <Shuffle className="w-4 h-4 text-[#4a6b5a]" />
+            組み合わせ作成
+          </div>
+          <ArrowRight className="w-4 h-4 text-[#6b7280]" />
+        </Link>
       )}
 
       {/* 統計カード */}

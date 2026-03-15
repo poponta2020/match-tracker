@@ -39,6 +39,20 @@ const PairingGenerator = () => {
   // 各試合番号の組み合わせデータキャッシュ
   const pairingsCache = useRef({}); // matchNumber -> pairings array or null
   const fetchIdRef = useRef(0); // stale fetch防止用
+  const unsavedDraft = useRef(null); // 未保存の編集中データ { matchNumber, pairings, waitingPlayers, isEditingExisting }
+
+  // 現在の試合が閲覧専用か（他の試合に未保存の変更がある場合）
+  const isReadOnly = hasUnsavedChanges && unsavedDraft.current?.matchNumber !== matchNumber;
+
+  // 未保存ドラフトを保存するヘルパー
+  const saveDraft = useCallback((newPairings, newWaitingPlayers, editing) => {
+    unsavedDraft.current = {
+      matchNumber,
+      pairings: newPairings,
+      waitingPlayers: newWaitingPlayers,
+      isEditingExisting: editing,
+    };
+  }, [matchNumber]);
 
   // マウント時にlocalStorageから同期結果を復元
   useEffect(() => {
@@ -112,6 +126,7 @@ const PairingGenerator = () => {
       setWaitingPlayers([]);
       setIsEditingExisting(false);
       setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
       setParticipants([]);
 
       try {
@@ -181,6 +196,14 @@ const PairingGenerator = () => {
     // 参加者を試合番号に応じて切替
     updateParticipantsForMatch(currentSession, matchNumber);
 
+    // 未保存ドラフトの試合に戻ってきた場合はドラフトを復元
+    if (unsavedDraft.current && unsavedDraft.current.matchNumber === matchNumber) {
+      setPairings(unsavedDraft.current.pairings);
+      setWaitingPlayers(unsavedDraft.current.waitingPlayers);
+      setIsEditingExisting(unsavedDraft.current.isEditingExisting);
+      return;
+    }
+
     // 組み合わせをキャッシュから反映
     const cached = pairingsCache.current[matchNumber];
     if (cached !== undefined) {
@@ -232,6 +255,7 @@ const PairingGenerator = () => {
       setPairings(response.data.pairings);
       setWaitingPlayers(response.data.waitingPlayers);
       setHasUnsavedChanges(true);
+      saveDraft(response.data.pairings, response.data.waitingPlayers, false);
     } catch (err) {
       console.error('Auto matching failed:', err);
       setError('自動組み合わせに失敗しました');
@@ -267,6 +291,7 @@ const PairingGenerator = () => {
       pairingsCache.current[matchNumber] = pairingsRes.data;
       setMatchExistsMap(prev => ({ ...prev, [matchNumber]: true }));
       setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
 
       // 次の試合番号に自動遷移
       const nextMatchNumber = matchNumber + 1;
@@ -312,6 +337,7 @@ const PairingGenerator = () => {
       setWaitingPlayers([]);
       setIsEditingExisting(false);
       setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
     } catch (err) {
       console.error('Delete failed:', err);
       setError('削除に失敗しました');
@@ -324,14 +350,16 @@ const PairingGenerator = () => {
     const newPairings = [...pairings];
     const removed = newPairings.splice(index, 1)[0];
 
-    setWaitingPlayers([
+    const newWaiting = [
       ...waitingPlayers,
       { id: removed.player1Id, name: removed.player1Name },
       { id: removed.player2Id, name: removed.player2Name },
-    ]);
+    ];
 
     setPairings(newPairings);
+    setWaitingPlayers(newWaiting);
     setHasUnsavedChanges(true);
+    saveDraft(newPairings, newWaiting, isEditingExisting);
   };
 
   const handleSwapPlayer = (pairingIndex, playerPosition, newPlayerId) => {
@@ -346,6 +374,7 @@ const PairingGenerator = () => {
     // 選択された選手が待機リストにいるか確認
     const waitingPlayer = waitingPlayers.find((p) => p.id === newPlayerId);
 
+    let updatedWaiting = waitingPlayers;
     if (waitingPlayer) {
       // 待機リストから選手を選んだ場合
       if (playerPosition === 1) {
@@ -357,9 +386,9 @@ const PairingGenerator = () => {
       }
 
       // 待機リストを更新
-      const newWaitingPlayers = waitingPlayers.filter((p) => p.id !== newPlayerId);
-      newWaitingPlayers.push(oldPlayer);
-      setWaitingPlayers(newWaitingPlayers);
+      updatedWaiting = waitingPlayers.filter((p) => p.id !== newPlayerId);
+      updatedWaiting.push(oldPlayer);
+      setWaitingPlayers(updatedWaiting);
     } else {
       // 他の組み合わせから選手を選んだ場合
       const otherPairingIndex = newPairings.findIndex(
@@ -392,6 +421,7 @@ const PairingGenerator = () => {
 
     setPairings(newPairings);
     setHasUnsavedChanges(true);
+    saveDraft(newPairings, updatedWaiting, isEditingExisting);
   };
 
   const handleAddPairing = () => {
@@ -408,9 +438,12 @@ const PairingGenerator = () => {
       recentMatches: [],
     };
 
-    setPairings([...pairings, newPairing]);
-    setWaitingPlayers(waitingPlayers.slice(2));
+    const newPairings = [...pairings, newPairing];
+    const newWaiting = waitingPlayers.slice(2);
+    setPairings(newPairings);
+    setWaitingPlayers(newWaiting);
     setHasUnsavedChanges(true);
+    saveDraft(newPairings, newWaiting, isEditingExisting);
     setError('');
   };
 
@@ -664,12 +697,11 @@ const PairingGenerator = () => {
               <button
                 key={num}
                 onClick={() => setMatchNumber(num)}
-                disabled={hasUnsavedChanges && matchNumber !== num}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchNumber === num
                     ? 'bg-[#4a6b5a] text-white shadow-md'
-                    : hasUnsavedChanges
-                      ? 'bg-gray-100 text-[#9ca3af] border border-gray-200 cursor-not-allowed opacity-50'
+                    : hasUnsavedChanges && unsavedDraft.current?.matchNumber === num
+                      ? 'bg-[#fef3c7] text-[#b45309] border border-[#fbbf24] hover:bg-[#fde68a]'
                       : matchExistsMap[num]
                         ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
                         : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
@@ -748,8 +780,8 @@ const PairingGenerator = () => {
         )}
       </div>
 
-      {/* 自動組み合わせボタン（組み合わせ未生成時のみ表示） */}
-      {sessionDate && participants.length > 0 && pairings.length === 0 && (
+      {/* 自動組み合わせボタン（組み合わせ未生成時のみ表示、閲覧モードでは非表示） */}
+      {!isReadOnly && sessionDate && participants.length > 0 && pairings.length === 0 && (
         <div className="flex justify-center">
           <button
             onClick={handleAutoMatch}
@@ -775,116 +807,130 @@ const PairingGenerator = () => {
             <h2 className="text-xl font-bold text-[#374151]">
               {isEditingExisting ? `第${matchNumber}試合の組み合わせ` : '生成された組み合わせ'}
             </h2>
-            <div className="flex items-center gap-3">
-              {isEditingExisting && (
+            {!isReadOnly && (
+              <div className="flex items-center gap-3">
+                {isEditingExisting && (
+                  <button
+                    onClick={handleDeleteExisting}
+                    className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                    disabled={loading}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    全削除
+                  </button>
+                )}
                 <button
-                  onClick={handleDeleteExisting}
-                  className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                  onClick={handleAutoMatch}
                   disabled={loading}
+                  className="text-sm text-[#4a6b5a] hover:text-[#3d5a4c] flex items-center gap-1"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  全削除
+                  <Shuffle className="w-3.5 h-3.5" />
+                  再生成
                 </button>
-              )}
-              <button
-                onClick={handleAutoMatch}
-                disabled={loading}
-                className="text-sm text-[#4a6b5a] hover:text-[#3d5a4c] flex items-center gap-1"
-              >
-                <Shuffle className="w-3.5 h-3.5" />
-                再生成
-              </button>
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
             {pairings.map((pairing, index) => (
               <div key={index} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div className="grid grid-cols-2 gap-4 mb-3">
-                  <div className="bg-gray-50 p-3 rounded">
-                    <select
-                      value={pairing.player1Id}
-                      onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
-                    >
-                      <option value={pairing.player1Id}>{pairing.player1Name}</option>
-                      <optgroup label="待機中の選手">
-                        {waitingPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>
-                            {player.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="他の組み合わせの選手">
-                        {pairings
-                          .filter((_, idx) => idx !== index)
-                          .flatMap((p) => [
-                            { id: p.player1Id, name: p.player1Name },
-                            { id: p.player2Id, name: p.player2Name },
-                          ])
-                          .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
-                          .map((player) => (
-                            <option key={player.id} value={player.id}>
-                              {player.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
+                {isReadOnly ? (
+                  /* 閲覧モード: シンプルな表示 */
+                  <div className="flex items-center justify-center gap-4 py-2">
+                    <span className="font-medium text-[#374151]">{pairing.player1Name}</span>
+                    <span className="text-[#6b7280] text-sm">vs</span>
+                    <span className="font-medium text-[#374151]">{pairing.player2Name}</span>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded">
-                    <select
-                      value={pairing.player2Id}
-                      onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
-                    >
-                      <option value={pairing.player2Id}>{pairing.player2Name}</option>
-                      <optgroup label="待機中の選手">
-                        {waitingPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>
-                            {player.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="他の組み合わせの選手">
-                        {pairings
-                          .filter((_, idx) => idx !== index)
-                          .flatMap((p) => [
-                            { id: p.player1Id, name: p.player1Name },
-                            { id: p.player2Id, name: p.player2Name },
-                          ])
-                          .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
-                          .map((player) => (
-                            <option key={player.id} value={player.id}>
-                              {player.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
-                  </div>
-                </div>
+                ) : (
+                  /* 編集モード */
+                  <>
+                    <div className="grid grid-cols-2 gap-4 mb-3">
+                      <div className="bg-gray-50 p-3 rounded">
+                        <select
+                          value={pairing.player1Id}
+                          onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+                        >
+                          <option value={pairing.player1Id}>{pairing.player1Name}</option>
+                          <optgroup label="待機中の選手">
+                            {waitingPlayers.map((player) => (
+                              <option key={player.id} value={player.id}>
+                                {player.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="他の組み合わせの選手">
+                            {pairings
+                              .filter((_, idx) => idx !== index)
+                              .flatMap((p) => [
+                                { id: p.player1Id, name: p.player1Name },
+                                { id: p.player2Id, name: p.player2Name },
+                              ])
+                              .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
+                              .map((player) => (
+                                <option key={player.id} value={player.id}>
+                                  {player.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        </select>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded">
+                        <select
+                          value={pairing.player2Id}
+                          onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+                        >
+                          <option value={pairing.player2Id}>{pairing.player2Name}</option>
+                          <optgroup label="待機中の選手">
+                            {waitingPlayers.map((player) => (
+                              <option key={player.id} value={player.id}>
+                                {player.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="他の組み合わせの選手">
+                            {pairings
+                              .filter((_, idx) => idx !== index)
+                              .flatMap((p) => [
+                                { id: p.player1Id, name: p.player1Name },
+                                { id: p.player2Id, name: p.player2Name },
+                              ])
+                              .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
+                              .map((player) => (
+                                <option key={player.id} value={player.id}>
+                                  {player.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        </select>
+                      </div>
+                    </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
-                    {pairing.recentMatches && pairing.recentMatches.length > 0 ? (
-                      <span>直近の試合：{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
-                    ) : (
-                      <span className="text-green-600 font-medium">初対戦</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleRemovePair(index)}
-                    className="text-red-600 hover:text-red-700 p-1 flex items-center gap-1"
-                    title="この組み合わせを削除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-xs">削除</span>
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        {pairing.recentMatches && pairing.recentMatches.length > 0 ? (
+                          <span>直近の試合：{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
+                        ) : (
+                          <span className="text-green-600 font-medium">初対戦</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemovePair(index)}
+                        className="text-red-600 hover:text-red-700 p-1 flex items-center gap-1"
+                        title="この組み合わせを削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="text-xs">削除</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
 
-          {waitingPlayers.length > 0 && (
+          {!isReadOnly && waitingPlayers.length > 0 && (
             <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-medium text-gray-900">待機中の選手</h3>
@@ -914,23 +960,31 @@ const PairingGenerator = () => {
             </div>
           )}
 
-          <div className="space-y-2">
-            {hasUnsavedChanges && (
-              <p className="text-xs text-[#b45309] text-center">
-                保存するまで他の試合に移動できません
+          {isReadOnly ? (
+            <div className="bg-[#fef3c7] border border-[#fbbf24] p-3 rounded-lg text-center">
+              <p className="text-sm text-[#92400e]">
+                第{unsavedDraft.current?.matchNumber}試合に未保存の組み合わせがあります
               </p>
-            )}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
-              >
-                <Check className="w-5 h-5" />
-                {loading ? '保存中...' : '確定して保存'}
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-2">
+              {hasUnsavedChanges && (
+                <p className="text-xs text-[#b45309] text-center">
+                  保存するまで他の試合の編集はできません
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+                >
+                  <Check className="w-5 h-5" />
+                  {loading ? '保存中...' : '確定して保存'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
