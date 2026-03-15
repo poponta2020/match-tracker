@@ -313,6 +313,7 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        <p className="text-xs text-[#9b8a7e] mb-3">勝者の名前をタップ → 枚数差を選択</p>
         <div className="divide-y divide-[#e2d9d0]">
           {currentPairings.map((pairing, index) => {
             const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);

@@ -34,6 +34,7 @@ const PairingGenerator = () => {
   const [isEditingExisting, setIsEditingExisting] = useState(false);
   const [matchLoading, setMatchLoading] = useState(true);
   const [cacheVersion, setCacheVersion] = useState(0); // キャッシュ更新トリガー
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 未保存の組み合わせがあるか
 
   // 各試合番号の組み合わせデータキャッシュ
   const pairingsCache = useRef({}); // matchNumber -> pairings array or null
@@ -110,6 +111,7 @@ const PairingGenerator = () => {
       setPairings([]);
       setWaitingPlayers([]);
       setIsEditingExisting(false);
+      setHasUnsavedChanges(false);
       setParticipants([]);
 
       try {
@@ -229,6 +231,7 @@ const PairingGenerator = () => {
 
       setPairings(response.data.pairings);
       setWaitingPlayers(response.data.waitingPlayers);
+      setHasUnsavedChanges(true);
     } catch (err) {
       console.error('Auto matching failed:', err);
       setError('自動組み合わせに失敗しました');
@@ -263,6 +266,7 @@ const PairingGenerator = () => {
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
       pairingsCache.current[matchNumber] = pairingsRes.data;
       setMatchExistsMap(prev => ({ ...prev, [matchNumber]: true }));
+      setHasUnsavedChanges(false);
 
       // 次の試合番号に自動遷移
       const nextMatchNumber = matchNumber + 1;
@@ -307,6 +311,7 @@ const PairingGenerator = () => {
       setPairings([]);
       setWaitingPlayers([]);
       setIsEditingExisting(false);
+      setHasUnsavedChanges(false);
     } catch (err) {
       console.error('Delete failed:', err);
       setError('削除に失敗しました');
@@ -326,6 +331,7 @@ const PairingGenerator = () => {
     ]);
 
     setPairings(newPairings);
+    setHasUnsavedChanges(true);
   };
 
   const handleSwapPlayer = (pairingIndex, playerPosition, newPlayerId) => {
@@ -385,6 +391,7 @@ const PairingGenerator = () => {
     }
 
     setPairings(newPairings);
+    setHasUnsavedChanges(true);
   };
 
   const handleAddPairing = () => {
@@ -403,6 +410,7 @@ const PairingGenerator = () => {
 
     setPairings([...pairings, newPairing]);
     setWaitingPlayers(waitingPlayers.slice(2));
+    setHasUnsavedChanges(true);
     setError('');
   };
 
@@ -630,11 +638,13 @@ const PairingGenerator = () => {
               type="date"
               value={sessionDate}
               onChange={(e) => setSessionDate(e.target.value)}
-              className="flex-1 px-4 py-2 border border-[#c5cec8] rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+              disabled={hasUnsavedChanges}
+              className={`flex-1 px-4 py-2 border border-[#c5cec8] rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : ''}`}
             />
             <button
               onClick={() => setSessionDate(today)}
-              className="px-4 py-2 bg-[#e5ebe7] text-[#374151] rounded-lg hover:bg-[#d4ddd7] transition-colors"
+              disabled={hasUnsavedChanges}
+              className={`px-4 py-2 bg-[#e5ebe7] text-[#374151] rounded-lg transition-colors ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#d4ddd7]'}`}
             >
               今日
             </button>
@@ -654,12 +664,15 @@ const PairingGenerator = () => {
               <button
                 key={num}
                 onClick={() => setMatchNumber(num)}
+                disabled={hasUnsavedChanges && matchNumber !== num}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchNumber === num
                     ? 'bg-[#4a6b5a] text-white shadow-md'
-                    : matchExistsMap[num]
-                      ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
-                      : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
+                    : hasUnsavedChanges
+                      ? 'bg-gray-100 text-[#9ca3af] border border-gray-200 cursor-not-allowed opacity-50'
+                      : matchExistsMap[num]
+                        ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
+                        : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
                 }`}
               >
                 {num}
@@ -901,15 +914,22 @@ const PairingGenerator = () => {
             </div>
           )}
 
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
-            >
-              <Check className="w-5 h-5" />
-              {loading ? '保存中...' : '確定して保存'}
-            </button>
+          <div className="space-y-2">
+            {hasUnsavedChanges && (
+              <p className="text-xs text-[#b45309] text-center">
+                保存するまで他の試合に移動できません
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+              >
+                <Check className="w-5 h-5" />
+                {loading ? '保存中...' : '確定して保存'}
+              </button>
+            </div>
           </div>
         </div>
       )}
