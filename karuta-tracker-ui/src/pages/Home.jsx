@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { matchAPI, practiceAPI } from '../api';
@@ -53,75 +53,73 @@ const Home = () => {
     }
   }, [loading]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const startOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
-        const lastDay = new Date(year, month, 0).getDate();
-        const endOfMonth = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+  const fetchData = useCallback(async () => {
+    if (!currentPlayer?.id) return;
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const startOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endOfMonth = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
-        // 並列で全データ取得
-        const [
-          matchesRes,
-          nextPracticeRes,
-          participationsRes,
-          monthlyMatchesRes,
-        ] = await Promise.all([
-          matchAPI.getByPlayerId(currentPlayer.id).catch(() => ({ data: [] })),
-          practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
-          practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
-          matchAPI.getByPlayerIdAndPeriod(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: [] })),
-        ]);
+      // 並列で全データ取得
+      const [
+        matchesRes,
+        nextPracticeRes,
+        participationsRes,
+        monthlyMatchesRes,
+      ] = await Promise.all([
+        matchAPI.getByPlayerId(currentPlayer.id, { limit: 5 }).catch(() => ({ data: [] })),
+        practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
+        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
+        matchAPI.getMatchCount(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: 0 })),
+      ]);
 
-        setRecentMatches(matchesRes.data.slice(0, 5));
+      setRecentMatches(matchesRes.data.slice(0, 5));
 
-        // 今月の参加回数 = セッション数（マップのキー数）
-        const participationMap = participationsRes.data || {};
-        setMonthlyPracticeCount(Object.keys(participationMap).length);
+      // 今月の参加回数 = セッション数（マップのキー数）
+      const participationMap = participationsRes.data || {};
+      setMonthlyPracticeCount(Object.keys(participationMap).length);
 
-        // 今月の対戦数
-        setMonthlyMatchCount(Array.isArray(monthlyMatchesRes.data) ? monthlyMatchesRes.data.length : 0);
+      // 今月の対戦数
+      setMonthlyMatchCount(typeof monthlyMatchesRes.data === 'number' ? monthlyMatchesRes.data : 0);
 
-        // 次の練習情報
-        if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
-          setNextPractice(nextPracticeRes.data);
-
-          // 次回の参加者リストを取得
-          try {
-            const sessionRes = await practiceAPI.getByDate(nextPracticeRes.data.sessionDate);
-            if (sessionRes.data?.participants) {
-              setNextPracticeParticipants(sessionRes.data.participants);
-            }
-          } catch {
-            // 参加者取得失敗は無視
-          }
+      // 次の練習情報（参加者リストも含まれている）
+      if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
+        setNextPractice(nextPracticeRes.data);
+        if (nextPracticeRes.data.participants) {
+          setNextPracticeParticipants(nextPracticeRes.data.participants);
         }
-      } catch (error) {
-        console.error('データ取得エラー:', error);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error('データ取得エラー:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPlayer]);
 
+  // 初回データ取得
+  useEffect(() => {
     if (currentPlayer?.id) {
       fetchData();
     }
+  }, [currentPlayer, fetchData]);
 
+  // フォーカス復帰時のリフレッシュ（初回マウント直後は無視）
+  useEffect(() => {
+    const mountedAt = Date.now();
     const handleFocus = () => {
+      // マウントから2秒以内のfocusは無視（初回ロードとの重複防止）
+      if (Date.now() - mountedAt < 2000) return;
       if (currentPlayer?.id) {
         setLoading(true);
         fetchData();
       }
     };
-
     window.addEventListener('focus', handleFocus);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [currentPlayer, location.key]);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [currentPlayer, fetchData]);
 
   const isMyself = (p) => p.id === currentPlayer?.id;
   const iAmParticipating = nextPracticeParticipants.some(isMyself);

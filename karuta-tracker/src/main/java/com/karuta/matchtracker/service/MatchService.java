@@ -165,6 +165,14 @@ public class MatchService {
     }
 
     /**
+     * 選手の期間内の試合数を取得（軽量）
+     */
+    public long countPlayerMatchesInPeriod(Long playerId, LocalDate startDate, LocalDate endDate) {
+        log.debug("Counting matches for player {} between {} and {}", playerId, startDate, endDate);
+        return matchRepository.countByPlayerIdAndDateRange(playerId, startDate, endDate);
+    }
+
+    /**
      * 2人の選手間の対戦履歴を取得
      */
     public List<MatchDto> findMatchesBetweenPlayers(Long player1Id, Long player2Id) {

@@ -7,10 +7,7 @@ import {
   Trophy,
   Plus,
   Search,
-  Calendar,
   Filter,
-  TrendingUp,
-  TrendingDown,
   X,
 } from 'lucide-react';
 
@@ -233,12 +230,10 @@ const MatchList = () => {
     return styles[result] || styles['引き分け'];
   };
 
-  // 日付をMM/DD形式でフォーマット
+  // 日付をM/D形式でフォーマット
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${month}/${day}`;
+    const [, m, d] = dateString.split('-');
+    return `${Number(m)}/${Number(d)}`;
   };
 
   // 勝敗と枚数差を結合して表示
@@ -336,75 +331,53 @@ const MatchList = () => {
 
       {/* コンテンツ（上部パディング追加） */}
       <div className="pt-28 space-y-6">
-      {/* 級別統計テーブル */}
+      {/* 統計 */}
       {rankStatistics && (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#c5cec8]">
-              <thead className="bg-[#d4ddd7]">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <div className="space-y-3">
+          {/* 総計カード */}
+          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
+            <div className="flex items-baseline justify-between mb-2">
+              <div className="flex items-baseline gap-3">
+                <span className="text-2xl font-bold text-[#374151]">{rankStatistics.total.total}<span className="text-sm font-normal text-[#9ca3af] ml-0.5">試合</span></span>
+                <span className="text-sm"><span className="text-green-600 font-semibold">{rankStatistics.total.wins}</span><span className="text-[#9ca3af]">勝</span></span>
+                <span className="text-sm"><span className="text-red-600 font-semibold">{rankStatistics.total.losses}</span><span className="text-[#9ca3af]">敗</span></span>
+              </div>
+              <span className="text-xl font-bold text-[#374151]">{rankStatistics.total.winRate}%</span>
+            </div>
+            {/* 勝率バー */}
+            <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all"
+                style={{ width: `${rankStatistics.total.winRate}%` }}
+              />
+            </div>
+          </div>
 
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    試合数
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    勝ち
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    負け
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    勝率
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-[#f9f6f2] divide-y divide-[#c5cec8]">
-                {/* 総計行 */}
-                <tr className="bg-[#d4ddd7] font-semibold">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    総計
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                    {rankStatistics.total.total}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600">
-                    {rankStatistics.total.wins}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600">
-                    {rankStatistics.total.losses}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-600">
-                    {rankStatistics.total.winRate}%
-                  </td>
-                </tr>
-
-                {/* 級別行 */}
-                {['A級', 'B級', 'C級', 'D級', 'E級'].map((rank) => {
-                  const stats = rankStatistics.byRank[rank];
-                  return (
-                    <tr key={rank} className="hover:bg-[#eef2ef]">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        対{rank}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                        {stats.total}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600">
-                        {stats.wins}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600">
-                        {stats.losses}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-600">
-                        {stats.winRate}%
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          {/* 級別リスト */}
+          <div className="bg-[#f9f6f2] rounded-lg shadow-sm divide-y divide-[#e5e0da]">
+            {['A級', 'B級', 'C級', 'D級', 'E級'].map((rank) => {
+              const stats = rankStatistics.byRank[rank];
+              const isEmpty = stats.total === 0;
+              return (
+                <div key={rank} className={`flex items-center px-4 py-2 ${isEmpty ? 'opacity-35' : ''}`}>
+                  <span className="text-sm font-medium text-[#374151] w-12 flex-shrink-0">対{rank.charAt(0)}</span>
+                  <span className="text-xs text-[#9ca3af] w-16 flex-shrink-0 text-right">
+                    {isEmpty ? '—' : `${stats.wins}勝 ${stats.losses}敗`}
+                  </span>
+                  <div className="flex-1 mx-3 h-1.5 bg-[#e5e0da] rounded-full overflow-hidden">
+                    {!isEmpty && (
+                      <div
+                        className="h-full bg-[#4a6b5a] rounded-full transition-all"
+                        style={{ width: `${stats.winRate}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className={`text-sm font-semibold w-10 text-right flex-shrink-0 ${isEmpty ? 'text-[#9ca3af]' : 'text-[#374151]'}`}>
+                    {isEmpty ? '—' : `${stats.winRate}%`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -431,55 +404,29 @@ const MatchList = () => {
         </div>
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#c5cec8]">
-              <thead className="bg-[#d4ddd7]">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    日付
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    対戦相手
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    勝敗
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-[#f9f6f2] divide-y divide-[#c5cec8]">
+          <div className="divide-y divide-[#e5e0da]">
                 {filteredMatches.map((match) => (
-                  <tr
+                  <div
                     key={match.id}
-                    className="hover:bg-[#eef2ef] cursor-pointer transition-colors"
+                    className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
                     onClick={() => navigate(`/matches/${match.id}`)}
                   >
-                    <td className="px-3 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDate(match.matchDate)}
-                      </div>
-                    </td>
-                    <td className="px-3 py-4">
-                      <button
-                        className="text-sm font-medium text-[#4a6b5a] hover:underline text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const opponentId = match.player1Id === targetPlayerId ? match.player2Id : match.player1Id;
-                          if (opponentId) navigate(`/matches?playerId=${opponentId}`);
-                        }}
-                      >
-                        {match.opponentName}
-                      </button>
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-center">
-                      <span className={`text-base ${getResultColor(match.result)}`}>
-                        {getResultDisplay(match.result, match.scoreDifference)}
-                      </span>
-                    </td>
-                  </tr>
+                    <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
+                    <button
+                      className="flex-1 min-w-0 text-sm font-medium text-[#374151] hover:text-[#4a6b5a] hover:underline text-left truncate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const opponentId = match.player1Id === targetPlayerId ? match.player2Id : match.player1Id;
+                        if (opponentId) navigate(`/matches?playerId=${opponentId}`);
+                      }}
+                    >
+                      {match.opponentName}
+                    </button>
+                    <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
+                      {getResultDisplay(match.result, match.scoreDifference)}
+                    </span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}

@@ -104,10 +104,14 @@ public class MatchController {
             @PathVariable Long playerId,
             @RequestParam(required = false) String kyuRank,
             @RequestParam(required = false) String gender,
-            @RequestParam(required = false) String dominantHand) {
-        log.debug("GET /api/matches/player/{} - Getting player matches with filters: kyuRank={}, gender={}, dominantHand={}",
-                playerId, kyuRank, gender, dominantHand);
+            @RequestParam(required = false) String dominantHand,
+            @RequestParam(required = false) Integer limit) {
+        log.debug("GET /api/matches/player/{} - Getting player matches with filters: kyuRank={}, gender={}, dominantHand={}, limit={}",
+                playerId, kyuRank, gender, dominantHand, limit);
         List<MatchDto> matches = matchService.findPlayerMatchesWithFilters(playerId, kyuRank, gender, dominantHand);
+        if (limit != null && limit > 0 && matches.size() > limit) {
+            matches = matches.subList(0, limit);
+        }
         return ResponseEntity.ok(matches);
     }
 
@@ -127,6 +131,19 @@ public class MatchController {
         log.debug("GET /api/matches/player/{}/period?startDate={}&endDate={}", playerId, startDate, endDate);
         List<MatchDto> matches = matchService.findPlayerMatchesInPeriod(playerId, startDate, endDate);
         return ResponseEntity.ok(matches);
+    }
+
+    /**
+     * 選手の期間内の試合数を取得（軽量）
+     */
+    @GetMapping("/player/{playerId}/period/count")
+    public ResponseEntity<Long> getPlayerMatchCountInPeriod(
+            @PathVariable Long playerId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        log.debug("GET /api/matches/player/{}/period/count?startDate={}&endDate={}", playerId, startDate, endDate);
+        long count = matchService.countPlayerMatchesInPeriod(playerId, startDate, endDate);
+        return ResponseEntity.ok(count);
     }
 
     /**

@@ -23,4 +23,14 @@ public class NextParticipationDto {
     private String venueName;
     private List<Integer> matchNumbers;
     private boolean isToday;
+    private List<ParticipantInfo> participants;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ParticipantInfo {
+        private Long id;
+        private String name;
+    }
 }

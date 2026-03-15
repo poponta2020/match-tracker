@@ -41,6 +41,12 @@ export const matchAPI = {
       params: { startDate, endDate },
     }),
 
+  // 選手の期間内試合数取得（軽量）
+  getMatchCount: (playerId, startDate, endDate) =>
+    apiClient.get(`/matches/player/${playerId}/period/count`, {
+      params: { startDate, endDate },
+    }),
+
   // 試合統計取得
   getStatistics: (playerId) =>
     apiClient.get(`/matches/player/${playerId}/statistics`),

@@ -31,11 +31,23 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDate(LocalDate sessionDate) {
+        return getByDate(sessionDate, false);
+    }
+
+    /**
+     * 指定日の対戦組み合わせを取得（軽量オプション付き）
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getByDate(LocalDate sessionDate, boolean light) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+        // 全選手IDを一括取得してN+1問題を回避
+        Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
-                .map(this::convertToDto)
+                .map(p -> convertToDtoWithCache(p, playerNames))
                 .collect(Collectors.toList());
-        enrichWithRecentMatches(dtos, sessionDate, null);
+        if (!light) {
+            enrichWithRecentMatches(dtos, sessionDate, null);
+        }
         return dtos;
     }
 
@@ -45,8 +57,9 @@ public class MatchPairingService {
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
+        Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
-                .map(this::convertToDto)
+                .map(p -> convertToDtoWithCache(p, playerNames))
                 .collect(Collectors.toList());
         enrichWithRecentMatches(dtos, sessionDate, matchNumber);
         return dtos;
@@ -463,23 +476,44 @@ public class MatchPairingService {
     }
 
     /**
-     * エンティティをDTOに変換
+     * ペアリングリストから全選手名を一括取得
+     */
+    private Map<Long, String> collectPlayerNames(List<MatchPairing> pairings) {
+        List<Long> allIds = pairings.stream()
+                .flatMap(p -> Stream.of(p.getPlayer1Id(), p.getPlayer2Id(), p.getCreatedBy()))
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> names = new HashMap<>();
+        playerRepository.findAllById(allIds).forEach(p -> names.put(p.getId(), p.getName()));
+        return names;
+    }
+
+    /**
+     * エンティティをDTOに変換（キャッシュ済み選手名を使用）
+     */
+    private MatchPairingDto convertToDtoWithCache(MatchPairing pairing, Map<Long, String> playerNames) {
+        return MatchPairingDto.builder()
+                .id(pairing.getId())
+                .sessionDate(pairing.getSessionDate())
+                .matchNumber(pairing.getMatchNumber())
+                .player1Id(pairing.getPlayer1Id())
+                .player1Name(playerNames.getOrDefault(pairing.getPlayer1Id(), "Unknown"))
+                .player2Id(pairing.getPlayer2Id())
+                .player2Name(playerNames.getOrDefault(pairing.getPlayer2Id(), "Unknown"))
+                .createdBy(pairing.getCreatedBy())
+                .createdByName(playerNames.getOrDefault(pairing.getCreatedBy(), "Unknown"))
+                .createdAt(pairing.getCreatedAt())
+                .updatedAt(pairing.getUpdatedAt())
+                .build();
+    }
+
+    /**
+     * エンティティをDTOに変換（個別取得版・後方互換）
      */
     private MatchPairingDto convertToDto(MatchPairing pairing) {
         Player player1 = playerRepository.findById(pairing.getPlayer1Id()).orElse(null);
-        if (player1 == null) {
-            log.warn("Player1 not found with id: {} for pairing: {}", pairing.getPlayer1Id(), pairing.getId());
-        }
-
         Player player2 = playerRepository.findById(pairing.getPlayer2Id()).orElse(null);
-        if (player2 == null) {
-            log.warn("Player2 not found with id: {} for pairing: {}", pairing.getPlayer2Id(), pairing.getId());
-        }
-
         Player creator = playerRepository.findById(pairing.getCreatedBy()).orElse(null);
-        if (creator == null) {
-            log.warn("Creator not found with id: {} for pairing: {}", pairing.getCreatedBy(), pairing.getId());
-        }
 
         return MatchPairingDto.builder()
                 .id(pairing.getId())

@@ -27,9 +27,10 @@ public class MatchPairingController {
      */
     @GetMapping("/date")
     public ResponseEntity<List<MatchPairingDto>> getByDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        log.info("対戦組み合わせ取得: 日付={}", date);
-        List<MatchPairingDto> pairings = matchPairingService.getByDate(date);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false, defaultValue = "false") boolean light) {
+        log.info("対戦組み合わせ取得: 日付={}, light={}", date, light);
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light);
         return ResponseEntity.ok(pairings);
     }
 

@@ -73,6 +73,15 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     long countByPlayerId(@Param("playerId") Long playerId);
 
     /**
+     * 選手の期間内の対戦数を取得
+     */
+    @Query("SELECT COUNT(m) FROM Match m WHERE (m.player1Id = :playerId OR m.player2Id = :playerId) " +
+           "AND m.matchDate BETWEEN :startDate AND :endDate")
+    long countByPlayerIdAndDateRange(@Param("playerId") Long playerId,
+                                     @Param("startDate") LocalDate startDate,
+                                     @Param("endDate") LocalDate endDate);
+
+    /**
      * 選手の勝利数を取得
      *
      * @param playerId 選手ID

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
@@ -21,67 +21,88 @@ const MatchResultsView = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [availableDates, setAvailableDates] = useState([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const initialFetchDone = useRef(false);
+  const lastFetchedDate = useRef(null);
 
-  // 利用可能な日付を取得（初回のみ）
+  // 日付データの取得ヘルパー
+  const fetchDataForDate = async (date) => {
+    const [sessionResponse, pairingsResponse, matchesResponse] = await Promise.all([
+      practiceAPI.getByDate(date).catch(() => null),
+      apiClient.get('/match-pairings/date', { params: { date, light: true } }).catch(() => ({ data: [] })),
+      apiClient.get(`/matches?date=${date}`).catch(() => ({ data: [] })),
+    ]);
+    return { sessionResponse, pairingsResponse, matchesResponse };
+  };
+
+  const applyData = (data) => {
+    if (data.sessionResponse?.data) {
+      setSession(data.sessionResponse.data);
+      setPairings(data.pairingsResponse.data || []);
+      setMatches(data.matchesResponse.data || []);
+    } else {
+      setSession(null);
+      setPairings([]);
+      setMatches([]);
+    }
+  };
+
+  // 初回：日付リスト + 今日のデータを並列取得
   useEffect(() => {
-    const fetchAvailableDates = async () => {
+    const fetchInitial = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
-
-        // 今日から過去30日分の練習日付リストのみ取得（軽量API）
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - 30);
         const fromDateStr = fromDate.toISOString().split('T')[0];
 
-        const response = await practiceAPI.getDates(fromDateStr);
-        const dates = response.data || [];
+        // 日付リストと今日のデータを同時取得
+        const [datesResponse, todayData] = await Promise.all([
+          practiceAPI.getDates(fromDateStr),
+          fetchDataForDate(today),
+        ]);
+
+        const dates = datesResponse.data || [];
         setAvailableDates(dates);
 
         // 初期日付の決定
         const todaySession = dates.find(d => d === today);
-        setSelectedDate(todaySession || dates[0] || null);
+        const initialDate = todaySession || dates[0] || null;
+        setSelectedDate(initialDate);
+
+        if (initialDate === today) {
+          applyData(todayData);
+        } else if (initialDate) {
+          const data = await fetchDataForDate(initialDate);
+          applyData(data);
+        }
+
+        lastFetchedDate.current = initialDate;
+        initialFetchDone.current = true;
         setInitialLoading(false);
       } catch (err) {
-        console.error('練習セッション一覧の取得に失敗:', err);
-        setError('練習セッション一覧の取得に失敗しました');
+        console.error('データ取得エラー:', err);
+        setError('データの取得に失敗しました');
+        initialFetchDone.current = true;
         setInitialLoading(false);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchAvailableDates();
+    fetchInitial();
   }, [sessionId]);
 
-  // 選択された日付のデータ取得
+  // 日付変更時のデータ取得（ユーザー操作による変更のみ）
   useEffect(() => {
-    const fetchDataByDate = async () => {
-      if (!selectedDate) {
-        setLoading(false);
-        return;
-      }
+    if (!initialFetchDone.current || !selectedDate || selectedDate === lastFetchedDate.current) return;
+    lastFetchedDate.current = selectedDate;
 
+    const fetchDataByDate = async () => {
       try {
         setLoading(true);
         setError(null);
-
-        // セッション・ペアリング・試合結果を全て並列取得
-        const [sessionResponse, pairingsResponse, matchesResponse] = await Promise.all([
-          practiceAPI.getByDate(selectedDate).catch(() => null),
-          pairingAPI.getByDate(selectedDate).catch(() => ({ data: [] })),
-          apiClient.get(`/matches?date=${selectedDate}`).catch(() => ({ data: [] })),
-        ]);
-
-        if (!sessionResponse || !sessionResponse.data) {
-          setSession(null);
-          setPairings([]);
-          setMatches([]);
-          setLoading(false);
-          return;
-        }
-
-        setSession(sessionResponse.data);
-        setPairings(pairingsResponse.data || []);
-        setMatches(matchesResponse.data || []);
-
+        const data = await fetchDataForDate(selectedDate);
+        applyData(data);
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError(err.message);

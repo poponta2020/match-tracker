@@ -160,6 +160,23 @@ public class PracticeSessionService {
                     .orElse(null);
         }
 
+        // そのセッションの全参加者を取得
+        List<PracticeParticipant> sessionParticipants = practiceParticipantRepository
+                .findBySessionId(nextSessionId);
+        List<Long> participantPlayerIds = sessionParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .toList();
+        List<NextParticipationDto.ParticipantInfo> participantInfos = new java.util.ArrayList<>();
+        if (!participantPlayerIds.isEmpty()) {
+            playerRepository.findAllById(participantPlayerIds).forEach(p ->
+                participantInfos.add(NextParticipationDto.ParticipantInfo.builder()
+                        .id(p.getId())
+                        .name(p.getName())
+                        .build())
+            );
+        }
+
         return NextParticipationDto.builder()
                 .sessionDate(nextSession.getSessionDate())
                 .startTime(nextSession.getStartTime())
@@ -167,6 +184,7 @@ public class PracticeSessionService {
                 .venueName(venueName)
                 .matchNumbers(matchNumbers)
                 .isToday(nextSession.getSessionDate().equals(today))
+                .participants(participantInfos)
                 .build();
     }
 
