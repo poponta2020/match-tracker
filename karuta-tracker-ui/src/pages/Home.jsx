@@ -37,8 +37,9 @@ const Home = () => {
   const [calSyncMessage, setCalSyncMessage] = useState(null);
   const [calSyncError, setCalSyncError] = useState(false);
 
-  // モバイル判定
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // スタンドアロン(PWA/ホーム画面ショートカット)判定
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
 
   // 同期実行（トークン取得後の共通処理）
   const executeSyncWithToken = useCallback(async (accessToken, playerId) => {
@@ -89,45 +90,45 @@ const Home = () => {
   // Google Calendar同期ハンドラー
   const handleCalendarSync = useCallback(() => {
     if (!currentPlayer?.id) return;
-    if (!window.google?.accounts?.oauth2) {
-      setCalSyncMessage('Google認証の読み込みに失敗しました。ページを再読み込みしてください。');
-      setCalSyncError(true);
-      return;
-    }
 
     setCalSyncing(true);
     setCalSyncMessage(null);
     setCalSyncError(false);
 
-    if (isMobile) {
-      // モバイル: リダイレクト方式（ポップアップがブロックされるため）
+    if (isStandalone) {
+      // PWA/ホーム画面ショートカット: GISライブラリが動作しないため、直接OAuth URLにリダイレクト
       sessionStorage.setItem('cal_sync_player_id', String(currentPlayer.id));
-      const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/calendar.events',
-        ux_mode: 'redirect',
-        redirect_uri: window.location.origin + '/',
-        callback: () => {}, // リダイレクト方式では使われないがrequired
-      });
-      tokenClient.requestAccessToken();
-    } else {
-      // PC: ポップアップ方式（従来通り）
-      const tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/calendar.events',
-        callback: async (tokenResponse) => {
-          if (tokenResponse.error) {
-            setCalSyncMessage('Google認証がキャンセルされました');
-            setCalSyncError(true);
-            setCalSyncing(false);
-            return;
-          }
-          await executeSyncWithToken(tokenResponse.access_token, currentPlayer.id);
-        },
-      });
-      tokenClient.requestAccessToken();
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      const redirectUri = encodeURIComponent(window.location.origin + '/');
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=token&scope=${scope}&prompt=consent`;
+      window.location.href = authUrl;
+      return;
     }
-  }, [currentPlayer, isMobile, executeSyncWithToken]);
+
+    // ブラウザ: GISライブラリのポップアップ方式
+    if (!window.google?.accounts?.oauth2) {
+      setCalSyncMessage('Google認証の読み込みに失敗しました。ページを再読み込みしてください。');
+      setCalSyncError(true);
+      setCalSyncing(false);
+      return;
+    }
+
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          setCalSyncMessage('Google認証がキャンセルされました');
+          setCalSyncError(true);
+          setCalSyncing(false);
+          return;
+        }
+        await executeSyncWithToken(tokenResponse.access_token, currentPlayer.id);
+      },
+    });
+    tokenClient.requestAccessToken();
+  }, [currentPlayer, isStandalone, executeSyncWithToken]);
 
   // メニュー外クリックで閉じる
   useEffect(() => {
