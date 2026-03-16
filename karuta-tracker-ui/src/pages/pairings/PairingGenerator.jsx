@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
 import { isAdmin } from '../../utils/auth';
 
 const PairingGenerator = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // URLパラメータの日付があればそれを使用、なければ今日
   const today = new Date().toISOString().split('T')[0];
@@ -162,38 +162,35 @@ const PairingGenerator = () => {
       setParticipants([]);
 
       try {
-        const response = await practiceAPI.getByDate(sessionDate);
+        // セッション情報と全組み合わせデータを並列で取得
+        const [sessionResponse, allPairingsResponse] = await Promise.all([
+          practiceAPI.getByDate(sessionDate),
+          pairingAPI.getByDate(sessionDate).catch(() => ({ data: [] })),
+        ]);
+
         // staleチェック: 後から別のfetchが走っていたらこの結果は無視
         if (fetchIdRef.current !== thisId) return;
 
-        if (response.data) {
-          const session = response.data;
+        if (sessionResponse.data) {
+          const session = sessionResponse.data;
           setCurrentSession(session);
 
-          // 全試合番号の組み合わせを並列で一括取得
+          // 全組み合わせデータを試合番号ごとにグループ化
           const totalMatches = session.totalMatches || 10;
-          const fetchPromises = Array.from({ length: totalMatches }, (_, i) => i + 1).map(async (num) => {
-            try {
-              const existsRes = await pairingAPI.exists(sessionDate, num);
-              if (existsRes.data) {
-                const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, num);
-                return { num, exists: true, data: pairingsRes.data };
-              }
-              return { num, exists: false, data: null };
-            } catch {
-              return { num, exists: false, data: null };
-            }
+          const allPairings = allPairingsResponse.data || [];
+          const pairingsByMatch = {};
+          allPairings.forEach(p => {
+            const num = p.matchNumber;
+            if (!pairingsByMatch[num]) pairingsByMatch[num] = [];
+            pairingsByMatch[num].push(p);
           });
-
-          const results = await Promise.all(fetchPromises);
-          // staleチェック
-          if (fetchIdRef.current !== thisId) return;
 
           const newExistsMap = {};
-          results.forEach(({ num, exists, data }) => {
-            newExistsMap[num] = exists;
-            pairingsCache.current[num] = data;
-          });
+          for (let num = 1; num <= totalMatches; num++) {
+            const matchPairings = pairingsByMatch[num] || null;
+            newExistsMap[num] = matchPairings !== null && matchPairings.length > 0;
+            pairingsCache.current[num] = matchPairings;
+          }
           setMatchExistsMap(newExistsMap);
           // キャッシュ更新をトリガー → matchNumber useEffectが再実行される
           setCacheVersion(v => v + 1);
@@ -268,18 +265,19 @@ const PairingGenerator = () => {
     }
   }, [matchNumber, cacheVersion, currentSession, loadExistingPairingsToState, updateParticipantsForMatch]);
 
-  useEffect(() => {
-    const fetchAllPlayers = async () => {
-      try {
-        const response = await playerAPI.getAll();
-        setAllPlayers(response.data);
-      } catch (err) {
-        console.error('Failed to fetch all players:', err);
-      }
-    };
-
-    fetchAllPlayers();
-  }, []);
+  // 選手一覧を遅延取得（選手追加モーダル表示時に初めて取得）
+  const playersLoadedRef = useRef(false);
+  const fetchPlayersIfNeeded = async () => {
+    if (playersLoadedRef.current) return;
+    playersLoadedRef.current = true;
+    try {
+      const response = await playerAPI.getAll();
+      setAllPlayers(response.data);
+    } catch (err) {
+      playersLoadedRef.current = false;
+      console.error('Failed to fetch all players:', err);
+    }
+  };
 
   const handleAutoMatch = async () => {
     if (participants.length === 0) {
@@ -348,8 +346,7 @@ const PairingGenerator = () => {
         // matchNumberを変更 → useEffectがキャッシュ・参加者から適切にstateをセット
         setMatchNumber(nextMatchNumber);
       } else {
-        // 最終試合の場合はLINE送信用テキスト画面に遷移
-        navigate(`/pairings/summary?date=${sessionDate}`);
+        // 最終試合の場合もそのまま画面に留まる（テキスト生成ボタンで遷移可能）
       }
     } catch (err) {
       console.error('Save failed:', err);
@@ -777,6 +774,21 @@ const PairingGenerator = () => {
           </div>
         </div>
 
+        {/* 全試合の組み合わせが揃った場合にテキスト生成ボタンを表示 */}
+        {currentSession && (() => {
+          const total = currentSession.totalMatches || 10;
+          const allComplete = total > 0 && Array.from({ length: total }, (_, i) => i + 1).every(num => matchExistsMap[num]);
+          return allComplete ? (
+            <Link
+              to={`/pairings/summary?date=${sessionDate}`}
+              className="flex items-center justify-center gap-2 w-full bg-[#2d4a3e] text-white px-6 py-3 rounded-lg hover:bg-[#1e3a2e] transition-colors font-medium text-base shadow-md"
+            >
+              <FileText className="w-5 h-5" />
+              LINE送信用テキスト生成
+            </Link>
+          ) : null;
+        })()}
+
         {syncMessage && (
           <div className="bg-[#e5ebe7] border border-[#a5b4aa] p-3 rounded-lg flex justify-between items-center text-sm text-[#374151]">
             <span>{syncMessage}</span>
@@ -810,7 +822,7 @@ const PairingGenerator = () => {
               </button>
             )}
             <button
-              onClick={() => setShowAddPlayer(true)}
+              onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
               className="flex items-center gap-1.5 bg-[#4a6b5a] text-white px-3 py-1.5 rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm"
             >
               <UserPlus className="w-4 h-4" />
@@ -997,7 +1009,7 @@ const PairingGenerator = () => {
                     </button>
                   )}
                   <button
-                    onClick={() => setShowAddPlayer(true)}
+                    onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
                     className="flex items-center gap-1 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1 rounded hover:bg-[#e5ebe7] transition-colors"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
