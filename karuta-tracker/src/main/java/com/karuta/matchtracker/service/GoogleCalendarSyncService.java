@@ -290,6 +290,7 @@ public class GoogleCalendarSyncService {
         event.setSummary("わすら@" + venueName);
         event.setDescription(session.getTotalMatches() + "試合");
         event.setLocation(venueName);
+        event.setColorId("2"); // バジル（緑）
 
         LocalDate date = session.getSessionDate();
 
