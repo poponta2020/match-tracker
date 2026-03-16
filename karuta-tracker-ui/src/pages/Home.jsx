@@ -37,6 +37,55 @@ const Home = () => {
   const [calSyncMessage, setCalSyncMessage] = useState(null);
   const [calSyncError, setCalSyncError] = useState(false);
 
+  // モバイル判定
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // 同期実行（トークン取得後の共通処理）
+  const executeSyncWithToken = useCallback(async (accessToken, playerId) => {
+    setCalSyncing(true);
+    setCalSyncMessage(null);
+    setCalSyncError(false);
+    try {
+      const result = await calendarAPI.sync(accessToken, playerId);
+      const data = result.data;
+      const parts = [];
+      if (data.createdCount > 0) parts.push(`${data.createdCount}件作成`);
+      if (data.updatedCount > 0) parts.push(`${data.updatedCount}件更新`);
+      if (data.deletedCount > 0) parts.push(`${data.deletedCount}件削除`);
+      if (data.unchangedCount > 0) parts.push(`${data.unchangedCount}件変更なし`);
+      if (data.errorCount > 0) parts.push(`${data.errorCount}件エラー`);
+      setCalSyncMessage(
+        `カレンダー同期完了: ${parts.join('、') || '対象の予定なし'}`
+      );
+      setCalSyncError(data.errorCount > 0);
+    } catch (err) {
+      console.error('Calendar sync error:', err);
+      setCalSyncMessage('カレンダー同期に失敗しました');
+      setCalSyncError(true);
+    } finally {
+      setCalSyncing(false);
+    }
+  }, []);
+
+  // Google OAuth リダイレクト戻り時のトークン処理
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash || !hash.includes('access_token')) return;
+
+    // URLハッシュからトークンをパース
+    const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get('access_token');
+    const savedPlayerId = sessionStorage.getItem('cal_sync_player_id');
+
+    // ハッシュをクリーンアップ
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    sessionStorage.removeItem('cal_sync_player_id');
+
+    if (accessToken && savedPlayerId) {
+      executeSyncWithToken(accessToken, Number(savedPlayerId));
+    }
+  }, [executeSyncWithToken]);
+
   // Google Calendar同期ハンドラー
   const handleCalendarSync = useCallback(() => {
     if (!currentPlayer?.id) return;
@@ -50,45 +99,35 @@ const Home = () => {
     setCalSyncMessage(null);
     setCalSyncError(false);
 
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/calendar.events',
-      callback: async (tokenResponse) => {
-        if (tokenResponse.error) {
-          setCalSyncMessage('Google認証がキャンセルされました');
-          setCalSyncError(true);
-          setCalSyncing(false);
-          return;
-        }
-
-        try {
-          const result = await calendarAPI.sync(
-            tokenResponse.access_token,
-            currentPlayer.id
-          );
-          const data = result.data;
-          const parts = [];
-          if (data.createdCount > 0) parts.push(`${data.createdCount}件作成`);
-          if (data.updatedCount > 0) parts.push(`${data.updatedCount}件更新`);
-          if (data.deletedCount > 0) parts.push(`${data.deletedCount}件削除`);
-          if (data.unchangedCount > 0) parts.push(`${data.unchangedCount}件変更なし`);
-          if (data.errorCount > 0) parts.push(`${data.errorCount}件エラー`);
-          setCalSyncMessage(
-            `カレンダー同期完了: ${parts.join('、') || '対象の予定なし'}`
-          );
-          setCalSyncError(data.errorCount > 0);
-        } catch (err) {
-          console.error('Calendar sync error:', err);
-          setCalSyncMessage('カレンダー同期に失敗しました');
-          setCalSyncError(true);
-        } finally {
-          setCalSyncing(false);
-        }
-      },
-    });
-
-    tokenClient.requestAccessToken();
-  }, [currentPlayer]);
+    if (isMobile) {
+      // モバイル: リダイレクト方式（ポップアップがブロックされるため）
+      sessionStorage.setItem('cal_sync_player_id', String(currentPlayer.id));
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/calendar.events',
+        ux_mode: 'redirect',
+        redirect_uri: window.location.origin + '/',
+        callback: () => {}, // リダイレクト方式では使われないがrequired
+      });
+      tokenClient.requestAccessToken();
+    } else {
+      // PC: ポップアップ方式（従来通り）
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/calendar.events',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            setCalSyncMessage('Google認証がキャンセルされました');
+            setCalSyncError(true);
+            setCalSyncing(false);
+            return;
+          }
+          await executeSyncWithToken(tokenResponse.access_token, currentPlayer.id);
+        },
+      });
+      tokenClient.requestAccessToken();
+    }
+  }, [currentPlayer, isMobile, executeSyncWithToken]);
 
   // メニュー外クリックで閉じる
   useEffect(() => {
