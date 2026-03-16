@@ -105,6 +105,37 @@ public class PracticeSessionService {
     }
 
     /**
+     * 特定の年月の練習日サマリーを取得（カレンダー表示用・軽量）
+     * 参加者詳細情報なし、会場名のみ付与
+     */
+    @Transactional(readOnly = true)
+    public List<PracticeSessionDto> findSessionSummariesByYearMonth(int year, int month) {
+        log.debug("Finding practice session summaries for {}-{}", year, month);
+        YearMonth yearMonth = YearMonth.of(year, month);
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(yearMonth.getYear(), yearMonth.getMonthValue());
+
+        // 会場名だけ付与（参加者のenrichmentはスキップ）
+        List<Long> venueIds = sessions.stream()
+                .map(PracticeSession::getVenueId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, String> venueNameMap = venueIds.isEmpty()
+                ? Map.of()
+                : venueRepository.findAllById(venueIds).stream()
+                    .collect(Collectors.toMap(v -> v.getId(), v -> v.getName()));
+
+        return sessions.stream().map(session -> {
+            PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
+            if (session.getVenueId() != null) {
+                dto.setVenueName(venueNameMap.get(session.getVenueId()));
+            }
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    /**
      * 指定日以降の練習日を取得
      */
     public List<PracticeSessionDto> findUpcomingSessions(LocalDate fromDate) {

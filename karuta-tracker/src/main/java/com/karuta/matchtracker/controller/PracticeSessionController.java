@@ -102,6 +102,18 @@ public class PracticeSessionController {
     }
 
     /**
+     * 年月別で練習日サマリーを取得（カレンダー用・軽量）
+     */
+    @GetMapping("/year-month/summary")
+    public ResponseEntity<List<PracticeSessionDto>> getSessionSummariesByYearMonth(
+            @RequestParam int year,
+            @RequestParam int month) {
+        log.debug("GET /api/practice-sessions/year-month/summary?year={}&month={}", year, month);
+        List<PracticeSessionDto> sessions = practiceSessionService.findSessionSummariesByYearMonth(year, month);
+        return ResponseEntity.ok(sessions);
+    }
+
+    /**
      * 指定日以降の練習日を取得
      *
      * @param fromDate 基準日

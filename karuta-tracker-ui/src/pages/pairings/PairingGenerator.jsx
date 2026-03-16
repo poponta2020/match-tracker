@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
@@ -8,9 +8,10 @@ import { isAdmin } from '../../utils/auth';
 
 const PairingGenerator = () => {
   const navigate = useNavigate();
-  // デフォルトを今日に設定
+  const [searchParams] = useSearchParams();
+  // URLパラメータの日付があればそれを使用、なければ今日
   const today = new Date().toISOString().split('T')[0];
-  const [sessionDate, setSessionDate] = useState(today);
+  const [sessionDate, setSessionDate] = useState(searchParams.get('date') || today);
   const [matchNumber, setMatchNumber] = useState(1);
   const [participants, setParticipants] = useState([]);
   const [pairings, setPairings] = useState([]);

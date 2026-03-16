@@ -53,7 +53,7 @@ const Home = () => {
     }
   }, [loading]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
     try {
       const now = new Date();
@@ -76,6 +76,9 @@ const Home = () => {
         matchAPI.getMatchCount(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: 0 })),
       ]);
 
+      // リクエストがキャンセルされた場合は状態更新をスキップ
+      if (signal?.aborted) return;
+
       setRecentMatches(matchesRes.data.slice(0, 5));
 
       // 今月の参加回数 = セッション数（マップのキー数）
@@ -93,32 +96,51 @@ const Home = () => {
         }
       }
     } catch (error) {
-      console.error('データ取得エラー:', error);
+      if (error.name !== 'AbortError') {
+        console.error('データ取得エラー:', error);
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [currentPlayer]);
 
   // 初回データ取得
   useEffect(() => {
+    const abortController = new AbortController();
     if (currentPlayer?.id) {
-      fetchData();
+      fetchData(abortController.signal);
     }
+    return () => {
+      abortController.abort();
+    };
   }, [currentPlayer, fetchData]);
 
   // フォーカス復帰時のリフレッシュ（初回マウント直後は無視）
   useEffect(() => {
     const mountedAt = Date.now();
+    let abortController = null;
     const handleFocus = () => {
       // マウントから2秒以内のfocusは無視（初回ロードとの重複防止）
       if (Date.now() - mountedAt < 2000) return;
       if (currentPlayer?.id) {
+        // 前回のリクエストをキャンセル
+        if (abortController) {
+          abortController.abort();
+        }
+        abortController = new AbortController();
         setLoading(true);
-        fetchData();
+        fetchData(abortController.signal);
       }
     };
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      if (abortController) {
+        abortController.abort();
+      }
+    };
   }, [currentPlayer, fetchData]);
 
   const isMyself = (p) => p.id === currentPlayer?.id;
@@ -249,7 +271,7 @@ const Home = () => {
               )}
               {nextPractice.today && isAdmin() && (
                 <Link
-                  to="/pairings"
+                  to={`/pairings?date=${nextPractice.sessionDate}`}
                   className="mt-3 flex items-center justify-center gap-2 bg-white text-[#374151] font-medium py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <Shuffle className="w-4 h-4" />
@@ -263,7 +285,7 @@ const Home = () => {
         {/* 組み合わせ作成リンク（管理者のみ、TODAYカード内にボタンがない場合） */}
         {isAdmin() && !(nextPractice?.today) && (
           <Link
-            to="/pairings"
+            to={nextPractice ? `/pairings?date=${nextPractice.sessionDate}` : '/pairings'}
             className="flex items-center justify-between bg-[#f9f6f2] border border-[#d4ddd7] px-5 py-3 rounded-lg hover:bg-[#e5ebe7] transition-colors mb-4"
           >
             <div className="flex items-center gap-2 text-[#374151] font-medium">

@@ -77,7 +77,13 @@
       "Bash(then)",
       "Bash(fi)",
       "Bash(echo:*)",
-      "Bash(./mvnw spring-boot:run:*)"
+      "Bash(./mvnw spring-boot:run:*)",
+      "Bash(DB_URL=\"jdbc:postgresql://dpg-d6c3rgn5r7bs73an03pg-a.oregon-postgres.render.com:5432/karuta_tracker\" DB_USERNAME=\"karuta\" DB_PASSWORD=\"tQMNFG3XxpSo4CpFWipGwhInXMo2uv5N\" ./gradlew bootRun:*)",
+      "Bash(kill:*)",
+      "WebFetch(domain:medium.com)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(gzip:*)"
     ],
     "deny": [],
     "ask": []

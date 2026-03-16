@@ -51,18 +51,19 @@ const MatchList = () => {
   // ボトムシート表示状態
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // 選手一覧を取得（検索用）
-  useEffect(() => {
-    const fetchPlayers = async () => {
-      try {
-        const res = await playerAPI.getAll();
-        setAllPlayers(res.data || []);
-      } catch (e) {
-        console.error('選手一覧の取得に失敗:', e);
-      }
-    };
-    fetchPlayers();
-  }, []);
+  // 選手一覧を遅延取得（検索フォーカス時に初めて取得）
+  const playersLoadedRef = useRef(false);
+  const fetchPlayersIfNeeded = async () => {
+    if (playersLoadedRef.current) return;
+    playersLoadedRef.current = true;
+    try {
+      const res = await playerAPI.getAll();
+      setAllPlayers(res.data || []);
+    } catch (e) {
+      playersLoadedRef.current = false;
+      console.error('選手一覧の取得に失敗:', e);
+    }
+  };
 
   // ターゲット選手名の取得
   useEffect(() => {
@@ -105,8 +106,17 @@ const MatchList = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // StrictMode重複呼び出し防止用
+  const fetchingMatchesRef = useRef(false);
+
   useEffect(() => {
+    let cancelled = false;
+
     const fetchMatches = async () => {
+      // StrictModeで2回目の呼び出しをスキップ
+      if (fetchingMatchesRef.current) return;
+      fetchingMatchesRef.current = true;
+
       try {
         // 試合一覧取得用のパラメータ（級フィルタ含む）
         const matchParams = {};
@@ -139,6 +149,8 @@ const MatchList = () => {
           matchAPI.getByPlayerId(targetPlayerId, matchParams),
           matchAPI.getStatisticsByRank(targetPlayerId, statsParams),
         ]);
+
+        if (cancelled) return;
 
         const sortedMatches = matchesResponse.data.sort(
           (a, b) => new Date(b.matchDate) - new Date(a.matchDate)
@@ -176,15 +188,25 @@ const MatchList = () => {
           }
         }
       } catch (error) {
-        console.error('試合記録の取得に失敗しました:', error);
+        if (!cancelled) {
+          console.error('試合記録の取得に失敗しました:', error);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
+        fetchingMatchesRef.current = false;
       }
     };
 
     if (targetPlayerId) {
       fetchMatches();
     }
+
+    return () => {
+      cancelled = true;
+      fetchingMatchesRef.current = false;
+    };
   }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand]);
 
   useEffect(() => {
@@ -295,7 +317,7 @@ const MatchList = () => {
                   setPlayerSearchText(e.target.value);
                   setShowPlayerSearch(true);
                 }}
-                onFocus={() => setShowPlayerSearch(true)}
+                onFocus={() => { setShowPlayerSearch(true); fetchPlayersIfNeeded(); }}
                 className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
               />
               {playerSearchText && (

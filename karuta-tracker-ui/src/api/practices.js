@@ -32,6 +32,12 @@ export const practiceAPI = {
       params: { year, month },
     }),
 
+  // 年月で練習セッションサマリーを取得（カレンダー用・軽量）
+  getSessionSummaries: (year, month) =>
+    apiClient.get('/practice-sessions/year-month/summary', {
+      params: { year, month },
+    }),
+
   // 選手の練習参加を一括登録
   registerParticipations: (data) =>
     apiClient.post('/practice-sessions/participations', data),

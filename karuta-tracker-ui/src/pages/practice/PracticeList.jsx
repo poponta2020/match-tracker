@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
@@ -44,16 +44,68 @@ const PracticeList = () => {
     }
   }, []);
 
-  // データ取得を行う関数をメモ化
-  useEffect(() => {
-    fetchSessions();
-    fetchMyParticipations();
-  }, [currentDate, currentPlayer?.id]); // currentPlayer.idまたは月が変わったときに再取得
+  // StrictMode重複呼び出し防止用
+  const fetchingRef = useRef(false);
 
+  // データ取得を並列化して高速化
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchAllData = async () => {
+      if (!currentPlayer?.id) {
+        setLoading(false);
+        return;
+      }
+
+      // StrictModeで2回目の呼び出しをスキップ
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
+
+      try {
+        setLoading(true);
+        setError('');
+
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1;
+
+        // 並列でデータ取得（軽量エンドポイント使用）
+        const [sessionsRes, participationsRes] = await Promise.all([
+          practiceAPI.getSessionSummaries(year, month),
+          practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
+        ]);
+
+        if (!cancelled) {
+          setSessions(sessionsRes.data);
+          setMyParticipations(participationsRes.data || {});
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError('練習記録の取得に失敗しました');
+          console.error('Error fetching practice data:', err);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchAllData();
+
+    return () => {
+      cancelled = true;
+      fetchingRef.current = false;
+    };
+  }, [currentDate, currentPlayer?.id]);
+
+  // 同期後などの再取得用関数（軽量エンドポイント使用）
   const fetchSessions = async () => {
     try {
       setLoading(true);
-      const response = await practiceAPI.getAll();
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const response = await practiceAPI.getSessionSummaries(year, month);
       setSessions(response.data);
     } catch (err) {
       setError('練習記録の取得に失敗しました');
