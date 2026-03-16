@@ -83,7 +83,8 @@
       "WebFetch(domain:medium.com)",
       "Bash(wc:*)",
       "Bash(file:*)",
-      "Bash(gzip:*)"
+      "Bash(gzip:*)",
+      "Bash(npx vite build:*)"
     ],
     "deny": [],
     "ask": []

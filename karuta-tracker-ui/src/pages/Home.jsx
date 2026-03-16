@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { matchAPI, practiceAPI } from '../api';
+import { matchAPI, practiceAPI, calendarAPI } from '../api';
 import {
   Trophy,
   ArrowRight,
@@ -15,6 +15,8 @@ import {
   CheckCircle,
   User,
   LogOut,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 
@@ -31,6 +33,62 @@ const Home = () => {
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
   const [monthlyPracticeCount, setMonthlyPracticeCount] = useState(0);
   const [monthlyMatchCount, setMonthlyMatchCount] = useState(0);
+  const [calSyncing, setCalSyncing] = useState(false);
+  const [calSyncMessage, setCalSyncMessage] = useState(null);
+  const [calSyncError, setCalSyncError] = useState(false);
+
+  // Google Calendar同期ハンドラー
+  const handleCalendarSync = useCallback(() => {
+    if (!currentPlayer?.id) return;
+    if (!window.google?.accounts?.oauth2) {
+      setCalSyncMessage('Google認証の読み込みに失敗しました。ページを再読み込みしてください。');
+      setCalSyncError(true);
+      return;
+    }
+
+    setCalSyncing(true);
+    setCalSyncMessage(null);
+    setCalSyncError(false);
+
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          setCalSyncMessage('Google認証がキャンセルされました');
+          setCalSyncError(true);
+          setCalSyncing(false);
+          return;
+        }
+
+        try {
+          const result = await calendarAPI.sync(
+            tokenResponse.access_token,
+            currentPlayer.id
+          );
+          const data = result.data;
+          const parts = [];
+          if (data.createdCount > 0) parts.push(`${data.createdCount}件作成`);
+          if (data.updatedCount > 0) parts.push(`${data.updatedCount}件更新`);
+          if (data.deletedCount > 0) parts.push(`${data.deletedCount}件削除`);
+          if (data.unchangedCount > 0) parts.push(`${data.unchangedCount}件変更なし`);
+          if (data.errorCount > 0) parts.push(`${data.errorCount}件エラー`);
+          setCalSyncMessage(
+            `カレンダー同期完了: ${parts.join('、') || '対象の予定なし'}`
+          );
+          setCalSyncError(data.errorCount > 0);
+        } catch (err) {
+          console.error('Calendar sync error:', err);
+          setCalSyncMessage('カレンダー同期に失敗しました');
+          setCalSyncError(true);
+        } finally {
+          setCalSyncing(false);
+        }
+      },
+    });
+
+    tokenClient.requestAccessToken();
+  }, [currentPlayer]);
 
   // メニュー外クリックで閉じる
   useEffect(() => {
@@ -208,6 +266,15 @@ const Home = () => {
                 )}
                 <div className="border-t border-gray-100 my-1" />
                 <button
+                  onClick={() => { setMenuOpen(false); handleCalendarSync(); }}
+                  disabled={calSyncing}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 text-[#6b7280] ${calSyncing ? 'animate-spin' : ''}`} />
+                  {calSyncing ? '同期中...' : 'Googleカレンダー同期'}
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                <button
                   onClick={() => { setMenuOpen(false); logout(); navigate('/login'); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                 >
@@ -222,6 +289,22 @@ const Home = () => {
 
       {/* コンテンツ */}
       <div className="pt-16">
+        {/* カレンダー同期メッセージ */}
+        {calSyncMessage && (
+          <div className={`mb-4 p-3 text-sm rounded-lg flex justify-between items-center ${
+            calSyncError
+              ? 'bg-red-50 text-red-700 border border-red-200'
+              : 'bg-[#d4ddd7] text-[#374151]'
+          }`}>
+            <span>{calSyncMessage}</span>
+            <button
+              onClick={() => setCalSyncMessage(null)}
+              className={`ml-2 ${calSyncError ? 'text-red-400 hover:text-red-600' : 'text-[#6b7280] hover:text-[#374151]'}`}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         {/* 次の参加予定練習 */}
         {nextPractice && (
           <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#374151] text-white' : 'bg-[#f9f6f2]'}`}>

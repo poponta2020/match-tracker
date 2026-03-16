@@ -3,4 +3,5 @@ export { matchAPI } from './matches';
 export { practiceAPI } from './practices';
 export { pairingAPI } from './pairings';
 export { venueAPI } from './venues';
+export { calendarAPI } from './calendar';
 export { default as apiClient } from './client';
