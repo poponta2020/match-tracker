@@ -28,8 +28,6 @@ const PairingGenerator = () => {
   const [syncMessage, setSyncMessage] = useState(null);
   const [unmatchedNames, setUnmatchedNames] = useState([]);
   const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
-  const [removedPlayers, setRemovedPlayers] = useState([]);
-  const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [showParticipantList, setShowParticipantList] = useState(true);
   const [matchExistsMap, setMatchExistsMap] = useState({});
   const [isEditingExisting, setIsEditingExisting] = useState(false);
@@ -564,7 +562,11 @@ const PairingGenerator = () => {
 
   // 同期結果をUIに反映（localStorage復元時にも使用）
   const applySyncResult = async (data) => {
-    setSyncMessage(`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`);
+    const parts = [`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`];
+    if (data.removedCount > 0) {
+      parts.push(`${data.removedCount}名削除`);
+    }
+    setSyncMessage(parts.join(', '));
     // セッションを再取得して参加者リストを更新
     try {
       const sessionRes = await practiceAPI.getByDate(sessionDate);
@@ -576,18 +578,10 @@ const PairingGenerator = () => {
       // ignore
     }
     const hasUnmatched = data.unmatchedNames && data.unmatchedNames.length > 0;
-    const hasRemoved = data.removedPlayers && data.removedPlayers.length > 0;
     if (hasUnmatched) {
       setUnmatchedNames(data.unmatchedNames);
       setShowUnmatchedModal(true);
-    }
-    if (hasRemoved) {
-      setRemovedPlayers(data.removedPlayers);
-      if (!hasUnmatched) {
-        setShowRemovedModal(true);
-      }
-    }
-    if (!hasUnmatched && !hasRemoved) {
+    } else {
       localStorage.removeItem('densukeSyncResult');
     }
   };
@@ -669,33 +663,9 @@ const PairingGenerator = () => {
     }
   };
 
-  // 未登録者モーダルを閉じた後に消えた参加者モーダルを表示
   const handleCloseUnmatchedModal = () => {
     setShowUnmatchedModal(false);
-    if (removedPlayers.length > 0) {
-      setShowRemovedModal(true);
-    } else {
-      localStorage.removeItem('densukeSyncResult');
-    }
-  };
-
-  // 参加者を試合から外す
-  const handleRemoveParticipant = async (player) => {
-    try {
-      await practiceAPI.removeParticipantFromMatch(player.sessionId, player.matchNumber, player.playerId);
-      setRemovedPlayers(prev => prev.filter(p =>
-        !(p.playerId === player.playerId && p.sessionId === player.sessionId && p.matchNumber === player.matchNumber)
-      ));
-      // セッションを再取得して参加者リストを更新
-      const sessionRes = await practiceAPI.getByDate(sessionDate);
-      if (sessionRes.data) {
-        setCurrentSession(sessionRes.data);
-        updateParticipantsForMatch(sessionRes.data, matchNumber);
-      }
-    } catch (err) {
-      console.error('Remove participant error:', err);
-      setSyncMessage('参加者の削除に失敗しました');
-    }
+    localStorage.removeItem('densukeSyncResult');
   };
 
   // 既に参加している選手を除外
@@ -1236,52 +1206,6 @@ const PairingGenerator = () => {
                 登録して同期
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {/* 伝助から消えた参加者モーダル */}
-      {showRemovedModal && removedPlayers.length > 0 && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setShowRemovedModal(false)}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-bold text-gray-900">伝助から消えた参加者</h2>
-              <button onClick={() => setShowRemovedModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-3">
-              以下の参加者が伝助上に見つかりません。参加を外しますか？
-            </p>
-            <div className="space-y-2 mb-4">
-              {removedPlayers.map((p, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
-                  <div>
-                    <span className="text-sm font-medium text-gray-900">{p.playerName}</span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      {p.sessionDate} 第{p.matchNumber}試合
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveParticipant(p)}
-                    className="text-xs text-red-600 border border-red-400 px-2 py-1 rounded hover:bg-red-600 hover:text-white transition-colors"
-                  >
-                    外す
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => { setShowRemovedModal(false); setRemovedPlayers([]); localStorage.removeItem('densukeSyncResult'); }}
-              className="w-full py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              閉じる
-            </button>
           </div>
         </div>
       )}

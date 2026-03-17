@@ -8,7 +8,6 @@ import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,20 +39,10 @@ public class DensukeImportService {
         private int createdSessionCount;    // 作成した練習日数
         private int registeredCount;        // 登録した参加者数
         private int skippedCount;           // スキップした数
+        private int removedCount;           // 伝助から消えて自動削除した参加者数
         private List<String> unmatchedNames = new ArrayList<>();  // アプリに未登録の名前
         private List<String> unmatchedVenues = new ArrayList<>(); // 会場名がDBに見つからない
-        private List<RemovedPlayer> removedPlayers = new ArrayList<>(); // 伝助から消えた参加者
         private List<String> details = new ArrayList<>();         // 詳細ログ
-    }
-
-    @Data
-    @AllArgsConstructor
-    public static class RemovedPlayer {
-        private Long playerId;
-        private String playerName;
-        private Long sessionId;
-        private LocalDate sessionDate;
-        private Integer matchNumber;
     }
 
     /**
@@ -157,15 +146,20 @@ public class DensukeImportService {
                 }
             }
 
-            // 伝助から消えた参加者を検出（DBにいるが伝助にいない）
+            // 伝助から消えた参加者を自動削除（DBにいるが伝助にいない）
             for (Long existingId : existingPlayerIds) {
                 if (!densukePlayerIds.contains(existingId)) {
                     String playerName = playerIdMap.get(existingId);
-                    if (playerName != null) {
-                        result.getRemovedPlayers().add(new RemovedPlayer(
-                                existingId, playerName, session.getId(),
-                                entry.getDate(), entry.getMatchNumber()));
-                    }
+                    // DBから参加者を削除
+                    existingParticipants.stream()
+                            .filter(p -> p.getPlayerId().equals(existingId))
+                            .findFirst()
+                            .ifPresent(p -> {
+                                practiceParticipantRepository.delete(p);
+                                result.setRemovedCount(result.getRemovedCount() + 1);
+                                log.info("Auto-removed participant: {} from session {} match {}",
+                                        playerName, entry.getDate(), entry.getMatchNumber());
+                            });
                 }
             }
 
