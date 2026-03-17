@@ -456,7 +456,8 @@ const MatchList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={() => setIsFilterOpen(true)}
-        className="fixed bottom-20 right-4 z-20 bg-[#4a6b5a] text-white p-4 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl"
+        className="fixed right-4 z-20 bg-[#4a6b5a] text-white p-4 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl"
+        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <Filter className="w-6 h-6" />
       </button>

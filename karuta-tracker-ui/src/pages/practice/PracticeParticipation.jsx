@@ -301,7 +301,7 @@ const PracticeParticipation = () => {
 
       {/* 固定保存ボタン（変更がある場合のみ表示） */}
       {futureSessions.length > 0 && hasChanges() && (
-        <div className="fixed bottom-14 left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg">
+        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg" style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={handleSave}
             disabled={saving}

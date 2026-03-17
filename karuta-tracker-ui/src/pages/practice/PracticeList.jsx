@@ -871,7 +871,8 @@ const PracticeList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={goToParticipation}
-        className="fixed bottom-20 right-4 z-20 bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+        className="fixed right-4 z-20 bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <CalendarCheck className="w-5 h-5" />
         <span className="text-sm font-medium">参加登録</span>

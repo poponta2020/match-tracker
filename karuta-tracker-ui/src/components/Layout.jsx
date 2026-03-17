@@ -138,8 +138,8 @@ const Layout = ({ children }) => {
         {children}
       </main>
 
-      {/* ボトムナビゲーション */}
-      <nav className="fixed left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50" style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {/* ボトムナビゲーション: bottom-0固定、safe-area分は背景のみ拡張 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
