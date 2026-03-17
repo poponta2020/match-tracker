@@ -682,7 +682,7 @@ const PracticeList = () => {
             <div className="px-6 py-4 border-t border-[#d4ddd7] flex items-center gap-2">
               {isPastDate(selectedSession.sessionDate) ? (
                 <button
-                  onClick={() => navigate(`/matches/results/${selectedSession.id}`)}
+                  onClick={() => navigate(`/matches/results/${selectedSession.id}?date=${selectedSession.sessionDate}`)}
                   className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   試合結果

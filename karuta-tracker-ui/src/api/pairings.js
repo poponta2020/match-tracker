@@ -28,6 +28,12 @@ export const pairingAPI = {
       params: { date, matchNumber },
     }),
 
+  // 対戦組み合わせの選手を変更
+  updatePlayer: (id, newPlayerId, side) =>
+    apiClient.put(`/match-pairings/${id}/player`, null, {
+      params: { newPlayerId, side },
+    }),
+
   // 対戦組み合わせを削除
   delete: (id) => apiClient.delete(`/match-pairings/${id}`),
 

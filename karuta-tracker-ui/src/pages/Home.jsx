@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
+import { sortPlayersByRank } from '../utils/playerSort';
 
 const Home = () => {
   const { currentPlayer, logout } = useAuth();
@@ -459,7 +460,7 @@ const Home = () => {
               </div>
             )}
             <div className="flex flex-wrap gap-1.5">
-              {nextPracticeParticipants.map((p) => (
+              {sortPlayersByRank(nextPracticeParticipants).map((p) => (
                 <span
                   key={p.id}
                   className={`px-2.5 py-1 rounded-full text-xs ${

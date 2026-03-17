@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
@@ -110,6 +111,51 @@ public class MatchPairingService {
         return saved.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 対戦組み合わせの選手を更新（旧ペアの試合結果も削除）
+     */
+    @Transactional
+    public MatchPairingDto updatePlayer(Long id, Long newPlayerId, String side, Long updatedBy) {
+        MatchPairing pairing = matchPairingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("ペアリングが見つかりません: " + id));
+
+        Long oldPlayer1Id = pairing.getPlayer1Id();
+        Long oldPlayer2Id = pairing.getPlayer2Id();
+
+        // 新しい選手を設定
+        if ("player1".equals(side)) {
+            if (newPlayerId.equals(pairing.getPlayer2Id())) {
+                throw new IllegalArgumentException("同じ選手を対戦相手に設定できません");
+            }
+            pairing.setPlayer1Id(newPlayerId);
+        } else {
+            if (newPlayerId.equals(pairing.getPlayer1Id())) {
+                throw new IllegalArgumentException("同じ選手を対戦相手に設定できません");
+            }
+            pairing.setPlayer2Id(newPlayerId);
+        }
+
+        // 旧ペアの試合結果を削除
+        deleteMatchForPairing(pairing.getSessionDate(), pairing.getMatchNumber(), oldPlayer1Id, oldPlayer2Id);
+
+        MatchPairing saved = matchPairingRepository.save(pairing);
+        return convertToDto(saved);
+    }
+
+    /**
+     * 特定のペアリングに対応する試合結果を削除
+     */
+    private void deleteMatchForPairing(LocalDate matchDate, Integer matchNumber, Long player1Id, Long player2Id) {
+        List<Match> matches = matchRepository.findByMatchDateAndMatchNumber(matchDate, matchNumber);
+        for (Match match : matches) {
+            boolean matchesPair = (match.getPlayer1Id().equals(player1Id) && match.getPlayer2Id().equals(player2Id))
+                    || (match.getPlayer1Id().equals(player2Id) && match.getPlayer2Id().equals(player1Id));
+            if (matchesPair) {
+                matchRepository.delete(match);
+            }
+        }
     }
 
     /**

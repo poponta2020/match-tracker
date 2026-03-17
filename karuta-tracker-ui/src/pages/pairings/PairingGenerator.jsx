@@ -5,6 +5,7 @@ import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
+import { sortPlayersByRank } from '../../utils/playerSort';
 
 
 const PairingGenerator = () => {
@@ -706,7 +707,7 @@ const PairingGenerator = () => {
           <div className="px-6 py-4">
             {participants.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {participants.map((p) => (
+                {sortPlayersByRank(participants).map((p) => (
                   <span
                     key={p.id}
                     className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-[#f9f6f2] border border-[#d4ddd7] text-[#374151]"
@@ -891,7 +892,7 @@ const PairingGenerator = () => {
               {waitingPlayers.length > 0 ? (
                 <>
                   <div className="flex flex-wrap gap-2">
-                    {waitingPlayers.map((player) => (
+                    {sortPlayersByRank(waitingPlayers).map((player) => (
                       <span
                         key={player.id}
                         className="bg-white px-3 py-1 rounded-full border border-yellow-300 text-sm"

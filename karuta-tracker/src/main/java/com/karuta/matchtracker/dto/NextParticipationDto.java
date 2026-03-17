@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.karuta.matchtracker.entity.Player;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -32,5 +34,7 @@ public class NextParticipationDto {
     public static class ParticipantInfo {
         private Long id;
         private String name;
+        private Player.KyuRank kyuRank;
+        private Player.DanRank danRank;
     }
 }

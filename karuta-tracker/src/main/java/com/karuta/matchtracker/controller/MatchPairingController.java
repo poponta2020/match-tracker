@@ -94,6 +94,21 @@ public class MatchPairingController {
     }
 
     /**
+     * 対戦組み合わせの選手を変更
+     */
+    @PutMapping("/{id}/player")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<MatchPairingDto> updatePlayer(
+            @PathVariable Long id,
+            @RequestParam Long newPlayerId,
+            @RequestParam String side) {
+        log.info("対戦組み合わせ選手変更: ID={}, newPlayerId={}, side={}", id, newPlayerId, side);
+        Long updatedBy = 1L; // TODO: UserDetailsから取得
+        MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy);
+        return ResponseEntity.ok(updated);
+    }
+
+    /**
      * 対戦組み合わせを削除
      */
     @DeleteMapping("/{id}")

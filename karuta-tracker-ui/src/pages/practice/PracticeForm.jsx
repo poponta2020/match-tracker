@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { practiceAPI, playerAPI, venueAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
+import { sortPlayersByRank } from '../../utils/playerSort';
 
 const PracticeForm = () => {
   const navigate = useNavigate();
@@ -245,7 +246,7 @@ const PracticeForm = () => {
               <p className="text-gray-500 text-center">選手が登録されていません</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {players.map((player) => (
+                {sortPlayersByRank(players).map((player) => (
                   <label
                     key={player.id}
                     className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded"

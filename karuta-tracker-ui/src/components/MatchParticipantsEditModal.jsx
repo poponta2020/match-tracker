@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
 import { practiceAPI } from '../api';
 import apiClient from '../api/client';
+import { sortPlayersByRank } from '../utils/playerSort';
 
 const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) => {
   const [allPlayers, setAllPlayers] = useState([]);
@@ -79,18 +80,19 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
 
   const isSelected = (id) => selectedPlayerIds.includes(id);
 
-  // 選択済みプレイヤー
+  // 選択済みプレイヤー（級位→段位→名前順）
   const selectedPlayers = useMemo(() =>
-    allPlayers.filter(p => selectedPlayerIds.includes(p.id)),
+    sortPlayersByRank(allPlayers.filter(p => selectedPlayerIds.includes(p.id))),
     [allPlayers, selectedPlayerIds]
   );
 
-  // 未選択で検索にマッチするプレイヤー
+  // 未選択で検索にマッチするプレイヤー（級位→段位→名前順）
   const filteredUnselected = useMemo(() => {
     const unselected = allPlayers.filter(p => !selectedPlayerIds.includes(p.id));
-    if (!searchQuery.trim()) return unselected;
-    const q = searchQuery.toLowerCase();
-    return unselected.filter(p => p.name.toLowerCase().includes(q));
+    const filtered = !searchQuery.trim()
+      ? unselected
+      : unselected.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return sortPlayersByRank(filtered);
   }, [allPlayers, selectedPlayerIds, searchQuery]);
 
   return (

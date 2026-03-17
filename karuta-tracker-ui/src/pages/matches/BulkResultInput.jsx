@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { matchAPI, pairingAPI } from '../../api';
+import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Save, AlertCircle, Pencil, X } from 'lucide-react';
 
 const BulkResultInput = () => {
   const { sessionId } = useParams();
@@ -22,6 +22,12 @@ const BulkResultInput = () => {
   const [error, setError] = useState(null);
   const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [missingScoreDiffs, setMissingScoreDiffs] = useState([]);
+
+  // 対戦変更モード
+  const [editMode, setEditMode] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [selectingPairing, setSelectingPairing] = useState(null); // { pairingId, side: 'player1'|'player2' }
+  const [updatingPairing, setUpdatingPairing] = useState(false);
 
   // 権限チェック
   useEffect(() => {
@@ -43,12 +49,14 @@ const BulkResultInput = () => {
         const sessionData = sessionResponse.data;
         setSession(sessionData);
 
-        // 対戦ペアリングと既存試合結果を並列取得
-        const [pairingsResponse, matchesResponse] = await Promise.all([
+        // 対戦ペアリングと既存試合結果と参加者を並列取得
+        const [pairingsResponse, matchesResponse, participantsResponse] = await Promise.all([
           pairingAPI.getByDate(sessionData.sessionDate),
           apiClient.get(`/matches?date=${sessionData.sessionDate}`),
+          practiceAPI.getParticipants(sessionId),
         ]);
         setPairings(pairingsResponse.data || []);
+        setParticipants(participantsResponse.data || []);
         const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
 
@@ -157,6 +165,60 @@ const BulkResultInput = () => {
       }
     });
     return missing;
+  };
+
+  // 対戦相手変更処理
+  const handlePlayerChange = async (pairing, side, newPlayerId) => {
+    try {
+      setUpdatingPairing(true);
+      const response = await pairingAPI.updatePlayer(pairing.id, newPlayerId, side);
+
+      // ペアリングリストを更新
+      setPairings(prev => prev.map(p =>
+        p.id === pairing.id ? response.data : p
+      ));
+
+      // 旧ペアの結果キーを削除
+      const oldKey = getResultKey(pairing.matchNumber, pairing.player1Id, pairing.player2Id);
+      setResults(prev => {
+        const next = { ...prev };
+        delete next[oldKey];
+        return next;
+      });
+      setChangedMatches(prev => {
+        const next = new Set(prev);
+        next.delete(oldKey);
+        return next;
+      });
+
+      setSelectingPairing(null);
+    } catch (err) {
+      console.error('対戦相手変更エラー:', err);
+      setError(err.response?.data?.message || '対戦相手の変更に失敗しました');
+    } finally {
+      setUpdatingPairing(false);
+    }
+  };
+
+  // 選手選択リストに表示する参加者（現在のペアリングで既に使われている選手を除外）
+  const getAvailablePlayers = (pairing, side) => {
+    const currentMatchPairings = getPairingsForMatch(currentMatchNumber);
+    const usedPlayerIds = new Set();
+    currentMatchPairings.forEach(p => {
+      // 編集対象のペアリングの、編集対象側は除外しない
+      if (p.id === pairing.id) {
+        if (side === 'player1') {
+          usedPlayerIds.add(p.player2Id);
+        } else {
+          usedPlayerIds.add(p.player1Id);
+        }
+      } else {
+        usedPlayerIds.add(p.player1Id);
+        usedPlayerIds.add(p.player2Id);
+      }
+    });
+
+    return participants.filter(p => !usedPlayerIds.has(p.id));
   };
 
   // 保存処理
@@ -278,8 +340,9 @@ const BulkResultInput = () => {
       {/* 固定ナビゲーションバー */}
       <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
-          {/* 日付表示 */}
-          <div className="flex items-center justify-center py-3">
+          {/* 日付表示 + 対戦変更ボタン */}
+          <div className="flex items-center justify-between py-3">
+            <div className="w-10" />
             <span className="text-lg font-semibold text-[#5f3a2d]">
               {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
@@ -288,6 +351,20 @@ const BulkResultInput = () => {
                 weekday: 'short'
               })}
             </span>
+            <button
+              onClick={() => {
+                setEditMode(prev => !prev);
+                setSelectingPairing(null);
+              }}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                editMode
+                  ? 'bg-[#5f3a2d] text-white'
+                  : 'bg-white/60 text-[#5f3a2d] hover:bg-white/80'
+              }`}
+            >
+              {editMode ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+              {editMode ? '完了' : '対戦変更'}
+            </button>
           </div>
 
           {/* タブバー */}
@@ -296,7 +373,10 @@ const BulkResultInput = () => {
               {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
                 <button
                   key={num}
-                  onClick={() => setCurrentMatchNumber(num)}
+                  onClick={() => {
+                    setCurrentMatchNumber(num);
+                    setSelectingPairing(null);
+                  }}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
                       ? 'border-[#5f3a2d] text-[#5f3a2d]'
@@ -313,35 +393,46 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
-        <p className="text-xs text-[#9b8a7e] mb-3">勝者の名前をタップ → 枚数差を選択</p>
+        <p className="text-xs text-[#9b8a7e] mb-3">
+          {editMode ? '変更したい選手名をタップしてください' : '勝者の名前をタップ → 枚数差を選択'}
+        </p>
         <div className="divide-y divide-[#e2d9d0]">
           {currentPairings.map((pairing, index) => {
             const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = result.winnerId === pairing.player1Id;
             const isPlayer2Winner = result.winnerId === pairing.player2Id;
             const hasWinner = result.winnerId !== null;
+            const isSelectingPlayer1 = selectingPairing?.pairingId === pairing.id && selectingPairing?.side === 'player1';
+            const isSelectingPlayer2 = selectingPairing?.pairingId === pairing.id && selectingPairing?.side === 'player2';
 
             return (
-              <div key={index} className="py-4">
+              <div key={pairing.id || index} className="py-4">
                 <div className="flex items-center text-lg">
                   {/* 選手1 */}
                   <button
                     type="button"
-                    onClick={() => setWinner(
-                      currentMatchNumber,
-                      pairing.player1Id,
-                      pairing.player2Id,
-                      pairing.player1Id
-                    )}
+                    onClick={() => {
+                      if (editMode) {
+                        setSelectingPairing(
+                          isSelectingPlayer1 ? null : { pairingId: pairing.id, side: 'player1' }
+                        );
+                      } else {
+                        setWinner(currentMatchNumber, pairing.player1Id, pairing.player2Id, pairing.player1Id);
+                      }
+                    }}
                     className={`flex-1 text-right pr-2 font-semibold truncate transition-colors ${
-                      isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
+                      editMode
+                        ? isSelectingPlayer1
+                          ? 'text-[#5f3a2d] underline decoration-2'
+                          : 'text-[#5f3a2d]'
+                        : isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
                   >
                     {pairing.player1Name}
                   </button>
 
                   {/* 中央: 勝敗マーク + 枚数差 or vs */}
-                  {hasWinner ? (
+                  {!editMode && hasWinner ? (
                     <>
                       <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
                         {isPlayer1Winner ? '〇' : '×'}
@@ -374,27 +465,54 @@ const BulkResultInput = () => {
                   {/* 選手2 */}
                   <button
                     type="button"
-                    onClick={() => setWinner(
-                      currentMatchNumber,
-                      pairing.player1Id,
-                      pairing.player2Id,
-                      pairing.player2Id
-                    )}
+                    onClick={() => {
+                      if (editMode) {
+                        setSelectingPairing(
+                          isSelectingPlayer2 ? null : { pairingId: pairing.id, side: 'player2' }
+                        );
+                      } else {
+                        setWinner(currentMatchNumber, pairing.player1Id, pairing.player2Id, pairing.player2Id);
+                      }
+                    }}
                     className={`flex-1 text-left pl-2 font-semibold truncate transition-colors ${
-                      isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
+                      editMode
+                        ? isSelectingPlayer2
+                          ? 'text-[#5f3a2d] underline decoration-2'
+                          : 'text-[#5f3a2d]'
+                        : isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
                   >
                     {pairing.player2Name}
                   </button>
                 </div>
+
+                {/* 選手選択リスト */}
+                {(isSelectingPlayer1 || isSelectingPlayer2) && (
+                  <div className="mt-3 bg-white rounded-lg border border-[#d0c5b8] shadow-sm max-h-48 overflow-y-auto">
+                    {getAvailablePlayers(pairing, selectingPairing.side).length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-500">選択可能な選手がいません</p>
+                    ) : (
+                      getAvailablePlayers(pairing, selectingPairing.side).map(player => (
+                        <button
+                          key={player.id}
+                          onClick={() => handlePlayerChange(pairing, selectingPairing.side, player.id)}
+                          disabled={updatingPairing}
+                          className="w-full text-left px-4 py-3 text-sm hover:bg-[#f0ebe3] transition-colors border-b border-[#f0ebe3] last:border-b-0 disabled:opacity-50"
+                        >
+                          {player.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* 固定保存ボタン（変更がある場合のみ表示） */}
-      {changedMatches.size > 0 && (
+      {/* 固定保存ボタン（変更がある場合のみ表示、編集モード中は非表示） */}
+      {!editMode && changedMatches.size > 0 && (
         <div className="fixed bottom-16 left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg">
           <button
             onClick={() => handleSave(false)}

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -204,9 +205,12 @@ public class PracticeSessionService {
                 participantInfos.add(NextParticipationDto.ParticipantInfo.builder()
                         .id(p.getId())
                         .name(p.getName())
+                        .kyuRank(p.getKyuRank())
+                        .danRank(p.getDanRank())
                         .build())
             );
         }
+        participantInfos.sort(PlayerSortHelper.participantInfoComparator());
 
         return NextParticipationDto.builder()
                 .sessionDate(nextSession.getSessionDate())
@@ -500,20 +504,28 @@ public class PracticeSessionService {
             matchParticipants.put(i, new java.util.ArrayList<>());
         }
 
-        // プレイヤーIDと名前のマップを作成
-        Map<Long, String> playerNameMap = players.stream()
-                .collect(Collectors.toMap(Player::getId, Player::getName, (existing, replacement) -> existing));
+        // プレイヤーIDとPlayerのマップを作成
+        Map<Long, Player> playerByIdMap = players.stream()
+                .collect(Collectors.toMap(Player::getId, p -> p, (existing, replacement) -> existing));
+        Map<Integer, List<Player>> matchParticipantPlayers = new java.util.HashMap<>();
 
         for (PracticeParticipant participant : allParticipants) {
             if (participant.getMatchNumber() != null) {
                 matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
-                String playerName = playerNameMap.get(participant.getPlayerId());
-                if (playerName != null) {
-                    // 試合番号が範囲外の場合は新しくリストを作成
-                    matchParticipants.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
-                            .add(playerName);
+                Player player = playerByIdMap.get(participant.getPlayerId());
+                if (player != null) {
+                    matchParticipantPlayers.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                            .add(player);
                 }
             }
+        }
+
+        // 級位→段位→名前順でソートして名前リストに変換
+        Comparator<Player> playerComp = PlayerSortHelper.playerComparator();
+        for (Map.Entry<Integer, List<Player>> entry : matchParticipantPlayers.entrySet()) {
+            entry.getValue().sort(playerComp);
+            matchParticipants.put(entry.getKey(),
+                    entry.getValue().stream().map(Player::getName).collect(Collectors.toList()));
         }
 
         dto.setMatchParticipantCounts(matchCounts);
@@ -619,17 +631,25 @@ public class PracticeSessionService {
                         matchParticipants.put(i, new java.util.ArrayList<>());
                     }
 
-                    // プレイヤーIDと名前のマップを作成（全プレイヤーマップから）
+                    // プレイヤーを試合番号ごとに集計（全プレイヤーマップから）
+                    Map<Integer, List<Player>> matchPlayersList = new java.util.HashMap<>();
                     for (PracticeParticipant participant : sessionParticipants) {
                         if (participant.getMatchNumber() != null) {
                             matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
                             Player player = playerMap.get(participant.getPlayerId());
                             if (player != null) {
-                                // 試合番号が範囲外の場合は新しくリストを作成
-                                matchParticipants.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
-                                        .add(player.getName());
+                                matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                                        .add(player);
                             }
                         }
+                    }
+
+                    // 級位→段位→名前順でソートして名前リストに変換
+                    Comparator<Player> comp = PlayerSortHelper.playerComparator();
+                    for (Map.Entry<Integer, List<Player>> entry : matchPlayersList.entrySet()) {
+                        entry.getValue().sort(comp);
+                        matchParticipants.put(entry.getKey(),
+                                entry.getValue().stream().map(Player::getName).collect(Collectors.toList()));
                     }
 
                     dto.setMatchParticipantCounts(matchCounts);

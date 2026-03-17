@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
@@ -8,6 +8,8 @@ import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } f
 const MatchResultsView = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get('date');
 
   const [session, setSession] = useState(null);
   const [pairings, setPairings] = useState([]);
@@ -51,26 +53,26 @@ const MatchResultsView = () => {
     const fetchInitial = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
+        const targetDate = dateParam || today;
         const fromDate = new Date();
         fromDate.setDate(fromDate.getDate() - 30);
         const fromDateStr = fromDate.toISOString().split('T')[0];
 
-        // 日付リストと今日のデータを同時取得
-        const [datesResponse, todayData] = await Promise.all([
+        // 日付リストとターゲット日付のデータを同時取得
+        const [datesResponse, targetData] = await Promise.all([
           practiceAPI.getDates(fromDateStr),
-          fetchDataForDate(today),
+          fetchDataForDate(targetDate),
         ]);
 
         const dates = datesResponse.data || [];
         setAvailableDates(dates);
 
-        // 初期日付の決定
-        const todaySession = dates.find(d => d === today);
-        const initialDate = todaySession || dates[0] || null;
+        // 初期日付の決定: URLパラメータ > 今日 > 最新日付
+        const initialDate = dateParam || dates.find(d => d === today) || dates[0] || null;
         setSelectedDate(initialDate);
 
-        if (initialDate === today) {
-          applyData(todayData);
+        if (initialDate === targetDate) {
+          applyData(targetData);
         } else if (initialDate) {
           const data = await fetchDataForDate(initialDate);
           applyData(data);

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock } from 'lucide-react';
+import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus } from 'lucide-react';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -35,6 +35,8 @@ const MatchForm = () => {
   const [error, setError] = useState('');
   const [participatingMatchNumbers, setParticipatingMatchNumbers] = useState([]);
   const [isExistingMatch, setIsExistingMatch] = useState(false);
+  const [showParticipationDialog, setShowParticipationDialog] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // 初期ロード完了フラグ（タブ切り替え時の重複API呼び出し防止用）
   const initialLoadDone = useRef(false);
@@ -66,6 +68,23 @@ const MatchForm = () => {
         // 練習セッションを直接セット（useEffect 2で再取得しない）
         if (todaySessionRes.data) {
           setPracticeSession(todaySessionRes.data);
+
+          // 参加登録チェック（新規作成時のみ）
+          if (!isEdit) {
+            try {
+              const now = new Date();
+              const participationsRes = await practiceAPI.getPlayerParticipations(
+                currentPlayer.id, now.getFullYear(), now.getMonth() + 1
+              );
+              const sessionParticipations = participationsRes.data?.[todaySessionRes.data.id] || [];
+              if (sessionParticipations.length === 0) {
+                setShowParticipationDialog(true);
+              }
+            } catch (e) {
+              // 参加状況取得に失敗しても結果入力は許可
+              console.warn('参加状況の取得に失敗:', e);
+            }
+          }
         }
 
         if (isEdit && matchRes) {
@@ -245,6 +264,54 @@ const MatchForm = () => {
     });
     playerIds.delete(currentPlayer.id);
     return players.filter(p => playerIds.has(p.id));
+  };
+
+  // 参加登録を自動実行
+  const handleAutoRegister = async () => {
+    if (!practiceSession) return;
+    setIsRegistering(true);
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+
+      // 既存の月間参加登録を取得
+      const existingRes = await practiceAPI.getPlayerParticipations(currentPlayer.id, year, month);
+      const existing = existingRes.data || {};
+
+      // 今日のセッションの全試合番号を追加
+      const totalMatches = practiceSession.totalMatches || 1;
+      const todayMatchNumbers = Array.from({ length: totalMatches }, (_, i) => i + 1);
+      const existingForSession = existing[practiceSession.id] || [];
+      const merged = [...new Set([...existingForSession, ...todayMatchNumbers])];
+      existing[practiceSession.id] = merged;
+
+      // 全参加データを構築して保存
+      const participationsList = [];
+      Object.entries(existing).forEach(([sessionId, matchNumbers]) => {
+        matchNumbers.forEach((matchNumber) => {
+          participationsList.push({
+            sessionId: Number(sessionId),
+            matchNumber: matchNumber,
+          });
+        });
+      });
+
+      await practiceAPI.registerParticipations({
+        playerId: currentPlayer.id,
+        year,
+        month,
+        participations: participationsList,
+      });
+
+      setShowParticipationDialog(false);
+    } catch (err) {
+      console.error('参加登録エラー:', err);
+      setError('参加登録に失敗しました');
+      setShowParticipationDialog(false);
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -558,6 +625,38 @@ const MatchForm = () => {
           </div>
         )}
       </form>
+
+      {/* 参加未登録ダイアログ */}
+      {showParticipationDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                <UserPlus className="w-5 h-5 text-yellow-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#374151]">参加未登録</h3>
+            </div>
+            <p className="text-sm text-[#6b7280] mb-6">
+              本日の練習に参加登録されていません。参加登録を行いますか？
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowParticipationDialog(false); navigate('/'); }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-[#6b7280] hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                戻る
+              </button>
+              <button
+                onClick={handleAutoRegister}
+                disabled={isRegistering}
+                className="flex-1 px-4 py-2.5 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50 text-sm font-medium"
+              >
+                {isRegistering ? '登録中...' : '登録して入力する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
