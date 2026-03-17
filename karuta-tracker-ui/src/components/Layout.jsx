@@ -132,7 +132,7 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2ede6]" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="min-h-screen bg-[#f2ede6]" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* メインコンテンツ */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
