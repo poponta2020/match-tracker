@@ -132,14 +132,14 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-14">
+    <div className="min-h-screen bg-[#f2ede6]" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* メインコンテンツ */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
 
-      {/* ボトムナビゲーション（PWA前提: safe-areaに重ねて配置） */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50">
+      {/* ボトムナビゲーション */}
+      <nav className="fixed left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50" style={{ bottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
