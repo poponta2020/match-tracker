@@ -37,8 +37,9 @@ const Home = () => {
   const [calSyncMessage, setCalSyncMessage] = useState(null);
   const [calSyncError, setCalSyncError] = useState(false);
 
-  // スタンドアロン(PWA/ホーム画面ショートカット)判定
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+  // モバイル判定（スタンドアロンPWA含む）
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
 
   // 同期実行（トークン取得後の共通処理）
@@ -95,7 +96,7 @@ const Home = () => {
     setCalSyncMessage(null);
     setCalSyncError(false);
 
-    if (isStandalone) {
+    if (isMobile) {
       // PWA/ホーム画面ショートカット: GISライブラリが動作しないため、直接OAuth URLにリダイレクト
       sessionStorage.setItem('cal_sync_player_id', String(currentPlayer.id));
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -128,7 +129,7 @@ const Home = () => {
       },
     });
     tokenClient.requestAccessToken();
-  }, [currentPlayer, isStandalone, executeSyncWithToken]);
+  }, [currentPlayer, isMobile, executeSyncWithToken]);
 
   // メニュー外クリックで閉じる
   useEffect(() => {
