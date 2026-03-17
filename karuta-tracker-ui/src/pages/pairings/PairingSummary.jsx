@@ -94,6 +94,12 @@ function pickRandom(arr, n) {
   return shuffled.slice(0, n);
 }
 
+/** 名前を全角6文字幅に左詰めパディング（全角スペースで埋める） */
+function padName(name, width = 6) {
+  if (name.length >= width) return name;
+  return name + '\u3000'.repeat(width - name.length);
+}
+
 /**
  * テキスト生成
  */
@@ -110,7 +116,7 @@ function generateText(date, matchData, cardRules) {
     text += `${i + 1}試合目　${rule ? rule.description : ''}\n`;
 
     for (const pairing of match.pairings) {
-      text += `${pairing.player1Name}　${pairing.player2Name}\n`;
+      text += `${padName(pairing.player1Name)}　${padName(pairing.player2Name)}\n`;
     }
   }
 

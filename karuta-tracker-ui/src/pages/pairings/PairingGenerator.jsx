@@ -4,8 +4,8 @@ import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, X, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
-import { isAdmin } from '../../utils/auth';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
+
 
 const PairingGenerator = () => {
   const [searchParams] = useSearchParams();
@@ -22,12 +22,7 @@ const PairingGenerator = () => {
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
-  const [syncing, setSyncing] = useState(false);
-  const [showUrlModal, setShowUrlModal] = useState(false);
-  const [densukeUrlInput, setDensukeUrlInput] = useState('');
-  const [syncMessage, setSyncMessage] = useState(null);
-  const [unmatchedNames, setUnmatchedNames] = useState([]);
-  const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showParticipantList, setShowParticipantList] = useState(true);
   const [matchExistsMap, setMatchExistsMap] = useState({});
   const [isEditingExisting, setIsEditingExisting] = useState(false);
@@ -72,22 +67,6 @@ const PairingGenerator = () => {
       isEditingExisting: editing,
     };
   }, [matchNumber]);
-
-  // マウント時にlocalStorageから同期結果を復元
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('densukeSyncResult');
-      if (saved) {
-        const { page, data } = JSON.parse(saved);
-        if (page === '/pairings') {
-          localStorage.removeItem('densukeSyncResult');
-          applySyncResult(data);
-        }
-      }
-    } catch (e) {
-      localStorage.removeItem('densukeSyncResult');
-    }
-  }, []);
 
   // 既存の組み合わせデータを編集可能な形式に変換してstateにロード
   const loadExistingPairingsToState = useCallback((existingData, matchParticipants) => {
@@ -560,112 +539,44 @@ const PairingGenerator = () => {
     }
   };
 
-  // 同期結果をUIに反映（localStorage復元時にも使用）
-  const applySyncResult = async (data) => {
-    const parts = [`同期完了: ${data.createdSessionCount}件作成, ${data.registeredCount}名登録`];
-    if (data.removedCount > 0) {
-      parts.push(`${data.removedCount}名削除`);
-    }
-    setSyncMessage(parts.join(', '));
-    // セッションを再取得して参加者リストを更新
+  // DBからセッション・参加者データを再取得
+  const handleRefresh = async () => {
+    setRefreshing(true);
     try {
-      const sessionRes = await practiceAPI.getByDate(sessionDate);
-      if (sessionRes.data) {
-        setCurrentSession(sessionRes.data);
-        updateParticipantsForMatch(sessionRes.data, matchNumber);
+      const [sessionResponse, allPairingsResponse] = await Promise.all([
+        practiceAPI.getByDate(sessionDate),
+        pairingAPI.getByDate(sessionDate).catch(() => ({ data: [] })),
+      ]);
+
+      if (sessionResponse.data) {
+        const session = sessionResponse.data;
+        setCurrentSession(session);
+        updateParticipantsForMatch(session, matchNumber);
+
+        const totalMatches = session.totalMatches || 10;
+        const allPairings = allPairingsResponse.data || [];
+        const pairingsByMatch = {};
+        allPairings.forEach(p => {
+          const num = p.matchNumber;
+          if (!pairingsByMatch[num]) pairingsByMatch[num] = [];
+          pairingsByMatch[num].push(p);
+        });
+
+        const newExistsMap = {};
+        for (let num = 1; num <= totalMatches; num++) {
+          const matchPairings = pairingsByMatch[num] || null;
+          newExistsMap[num] = matchPairings !== null && matchPairings.length > 0;
+          pairingsCache.current[num] = matchPairings;
+        }
+        setMatchExistsMap(newExistsMap);
+        setCacheVersion(v => v + 1);
       }
-    } catch (e) {
-      // ignore
-    }
-    const hasUnmatched = data.unmatchedNames && data.unmatchedNames.length > 0;
-    if (hasUnmatched) {
-      setUnmatchedNames(data.unmatchedNames);
-      setShowUnmatchedModal(true);
-    } else {
-      localStorage.removeItem('densukeSyncResult');
-    }
-  };
-
-  // 同期結果を処理（共通） — UIに反映し、localStorageにも保存
-  const handleSyncResult = async (result) => {
-    const data = result.data;
-    try {
-      localStorage.setItem('densukeSyncResult', JSON.stringify({ page: '/pairings', data }));
-    } catch (e) { /* ignore */ }
-    await applySyncResult(data);
-  };
-
-  // 伝助同期
-  const handleSyncDensuke = async () => {
-    const date = new Date(sessionDate);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    setSyncing(true);
-    setSyncMessage(null);
-    try {
-      const urlRes = await practiceAPI.getDensukeUrl(year, month);
-      if (!urlRes.data || !urlRes.data.url) {
-        setSyncing(false);
-        setShowUrlModal(true);
-        return;
-      }
-      const result = await practiceAPI.syncDensuke(year, month);
-      await handleSyncResult(result);
     } catch (err) {
-      if (err.response?.status === 204) {
-        setSyncing(false);
-        setShowUrlModal(true);
-        return;
-      }
-      setSyncMessage('同期に失敗しました');
-      console.error('Densuke sync error:', err);
+      console.error('Refresh failed:', err);
+      setError('データの更新に失敗しました');
     } finally {
-      setSyncing(false);
+      setRefreshing(false);
     }
-  };
-
-  const handleSaveUrlAndSync = async () => {
-    const date = new Date(sessionDate);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    if (!densukeUrlInput.trim()) return;
-    try {
-      await practiceAPI.saveDensukeUrl(year, month, densukeUrlInput.trim());
-      setShowUrlModal(false);
-      setDensukeUrlInput('');
-      setSyncing(true);
-      const result = await practiceAPI.syncDensuke(year, month);
-      await handleSyncResult(result);
-    } catch (err) {
-      setSyncMessage('同期に失敗しました');
-      console.error('Densuke save/sync error:', err);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  // 未登録者を登録して再同期
-  const handleRegisterAndSync = async () => {
-    const date = new Date(sessionDate);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    setSyncing(true);
-    setShowUnmatchedModal(false);
-    try {
-      const result = await practiceAPI.registerAndSyncDensuke(unmatchedNames, year, month);
-      await handleSyncResult(result);
-      setUnmatchedNames([]);
-    } catch (err) {
-      setSyncMessage('登録・同期に失敗しました');
-      console.error('Register and sync error:', err);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleCloseUnmatchedModal = () => {
-    setShowUnmatchedModal(false);
-    localStorage.removeItem('densukeSyncResult');
   };
 
   // 既に参加している選手を除外
@@ -759,14 +670,6 @@ const PairingGenerator = () => {
           ) : null;
         })()}
 
-        {syncMessage && (
-          <div className="bg-[#e5ebe7] border border-[#a5b4aa] p-3 rounded-lg flex justify-between items-center text-sm text-[#374151]">
-            <span>{syncMessage}</span>
-            <button onClick={() => setSyncMessage(null)} className="text-[#6b7280] hover:text-[#374151]">
-              <X size={16} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* 参加者セクション（組み合わせ未作成時のみ表示） */}
@@ -781,16 +684,14 @@ const PairingGenerator = () => {
             {showParticipantList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           <div className="flex gap-2">
-            {isAdmin() && (
-              <button
-                onClick={handleSyncDensuke}
-                disabled={syncing}
-                className="flex items-center gap-1.5 bg-white text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#f9f6f2] transition-colors text-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? '同期中...' : '伝助同期'}
-              </button>
-            )}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 bg-white text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#f9f6f2] transition-colors text-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? '更新中...' : '更新'}
+            </button>
             <button
               onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
               className="flex items-center gap-1.5 bg-[#4a6b5a] text-white px-3 py-1.5 rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm"
@@ -816,7 +717,7 @@ const PairingGenerator = () => {
               </div>
             ) : (
               <p className="text-sm text-[#6b7280]">
-                事前登録なし - 伝助同期または当日参加者を追加してください
+                参加者なし - 更新ボタンまたは選手追加で参加者を登録してください
               </p>
             )}
           </div>
@@ -1119,91 +1020,6 @@ const PairingGenerator = () => {
               >
                 <Plus className="w-4 h-4" />
                 追加
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* 伝助URL入力モーダル */}
-      {showUrlModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setShowUrlModal(false)}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {(() => { const d = new Date(sessionDate); return `${d.getFullYear()}年${d.getMonth() + 1}月`; })()}の伝助URL
-            </h2>
-            <p className="text-sm text-gray-600 mb-3">この月の伝助URLを入力してください</p>
-            <input
-              type="url"
-              value={densukeUrlInput}
-              onChange={(e) => setDensukeUrlInput(e.target.value)}
-              placeholder="https://densuke.biz/list?cd=..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] mb-4"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowUrlModal(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={handleSaveUrlAndSync}
-                disabled={!densukeUrlInput.trim()}
-                className="px-4 py-2 text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50"
-              >
-                保存して同期
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* 未登録者確認モーダル */}
-      {showUnmatchedModal && unmatchedNames.length > 0 && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={handleCloseUnmatchedModal}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-bold text-gray-900">未登録のユーザーがいます</h2>
-              <button onClick={handleCloseUnmatchedModal} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-3">
-              以下の{unmatchedNames.length}名がアプリに未登録です。登録しますか？
-            </p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {unmatchedNames.map((name, idx) => (
-                <span key={idx} className="text-sm text-gray-800 bg-gray-100 px-3 py-1 rounded-full">
-                  {name}
-                </span>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mb-4">
-              パスワード: pppppppp / 性別: その他 で登録されます
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={handleCloseUnmatchedModal}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                スキップ
-              </button>
-              <button
-                onClick={handleRegisterAndSync}
-                className="px-4 py-2 text-white bg-[#4a6b5a] rounded-lg hover:bg-[#3d5a4c] transition-colors"
-              >
-                登録して同期
               </button>
             </div>
           </div>
