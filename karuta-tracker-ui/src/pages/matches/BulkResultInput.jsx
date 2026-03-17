@@ -513,7 +513,7 @@ const BulkResultInput = () => {
 
       {/* 固定保存ボタン（変更がある場合のみ表示、編集モード中は非表示） */}
       {!editMode && changedMatches.size > 0 && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg">
+        <div className="fixed bottom-12 left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg">
           <button
             onClick={() => handleSave(false)}
             disabled={saving}
