@@ -31,7 +31,7 @@ const FilterBottomSheet = ({
       />
 
       {/* ボトムシート */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#f9f6f2] rounded-t-2xl shadow-xl z-50 animate-slide-up max-h-[80vh] overflow-y-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-[#f9f6f2] rounded-t-2xl shadow-xl z-50 animate-slide-up max-h-[80vh] overflow-y-auto" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* ヘッダー */}
         <div className="sticky top-0 bg-[#f9f6f2] border-b border-[#d0c5b8] px-4 py-4 flex items-center justify-between rounded-t-2xl">
           <h2 className="text-lg font-semibold flex items-center gap-2">
