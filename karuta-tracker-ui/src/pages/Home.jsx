@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { matchAPI, practiceAPI, calendarAPI } from '../api';
 import {
-  Trophy,
   ArrowRight,
   Menu,
   Calendar,
@@ -23,13 +22,11 @@ import { sortPlayersByRank } from '../utils/playerSort';
 
 const Home = () => {
   const { currentPlayer, logout } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [slowLoading, setSlowLoading] = useState(false);
-  const [recentMatches, setRecentMatches] = useState([]);
   const [nextPractice, setNextPractice] = useState(null);
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
   const [monthlyPracticeCount, setMonthlyPracticeCount] = useState(0);
@@ -165,12 +162,10 @@ const Home = () => {
 
       // 並列で全データ取得
       const [
-        matchesRes,
         nextPracticeRes,
         participationsRes,
         monthlyMatchesRes,
       ] = await Promise.all([
-        matchAPI.getByPlayerId(currentPlayer.id, { limit: 5 }).catch(() => ({ data: [] })),
         practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
         practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
         matchAPI.getMatchCount(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: 0 })),
@@ -178,8 +173,6 @@ const Home = () => {
 
       // リクエストがキャンセルされた場合は状態更新をスキップ
       if (signal?.aborted) return;
-
-      setRecentMatches(matchesRes.data.slice(0, 5));
 
       // 今月の参加回数 = セッション数（マップのキー数）
       const participationMap = participationsRes.data || {};
@@ -303,6 +296,13 @@ const Home = () => {
                     >
                       <MapPin className="w-4 h-4 text-[#6b7280]" />
                       会場管理
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); navigate('/practice/new'); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                    >
+                      <Calendar className="w-4 h-4 text-[#6b7280]" />
+                      練習日登録
                     </button>
                   </>
                 )}
@@ -476,59 +476,6 @@ const Home = () => {
           </div>
         )}
 
-        {/* 最近の試合 */}
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-[#4a6b5a]" />
-              最近の試合
-            </h2>
-            <Link
-              to="/matches"
-              className="text-sm text-[#4a6b5a] hover:text-[#3d5a4c] flex items-center gap-1"
-            >
-              すべて見る
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-          {recentMatches.length > 0 ? (
-            <div className="space-y-3">
-              {recentMatches.map((match) => (
-                <Link
-                  key={match.id}
-                  to={`/matches/${match.id}`}
-                  className="block p-3 hover:bg-[#eef2ef] rounded-lg transition-colors"
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">
-                        vs {match.opponentName}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(match.matchDate).toLocaleDateString('ja-JP')}
-                      </p>
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        match.result === '勝ち'
-                          ? 'bg-green-100 text-green-700'
-                          : match.result === '負け'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {match.result}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-8">
-              まだ試合記録がありません
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );

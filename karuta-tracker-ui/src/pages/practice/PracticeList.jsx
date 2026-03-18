@@ -341,26 +341,6 @@ const PracticeList = () => {
 
       {/* コンテンツ（上部パディング追加） */}
       <div className="pt-20">
-      <div className="flex justify-end items-center mb-4">
-        <div className="flex gap-2">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#d4ddd7] rounded-lg hover:bg-[#c5cec8] transition-colors disabled:opacity-50"
-          >
-            {refreshing ? '更新中...' : '更新'}
-          </button>
-          {isSuperAdmin() && (
-            <button
-              onClick={() => navigate('/practice/new')}
-              className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors"
-            >
-              + 新規登録
-            </button>
-          )}
-        </div>
-      </div>
-
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}

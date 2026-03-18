@@ -67,8 +67,8 @@ const MatchResultsView = () => {
         const dates = datesResponse.data || [];
         setAvailableDates(dates);
 
-        // 初期日付の決定: URLパラメータ > 今日 > 最新日付
-        const initialDate = dateParam || dates.find(d => d === today) || dates[0] || null;
+        // 初期日付の決定: URLパラメータ > 今日 > 今日以前で最も近い練習日 > 最新日付
+        const initialDate = dateParam || dates.find(d => d === today) || dates.find(d => d <= today) || dates[0] || null;
         setSelectedDate(initialDate);
 
         if (initialDate === targetDate) {
