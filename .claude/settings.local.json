@@ -90,7 +90,9 @@
       "Bash(lsb_release:*)",
       "Bash(PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal psql:*)",
       "Bash(git rebase:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(DB_URL=\"jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297\" DB_USERNAME=\"karuta\" DB_PASSWORD=\"b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal\" ./gradlew bootRun)",
+      "Bash(timeout 10 psql -h dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com -U karuta -d karuta_tracker_b297 -c \"SELECT version\\(\\);\")"
     ],
     "deny": [],
     "ask": []
