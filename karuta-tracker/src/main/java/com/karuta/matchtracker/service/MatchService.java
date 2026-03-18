@@ -105,11 +105,16 @@ public class MatchService {
                         return false;
                     }
 
-                    // 級位でフィルタ
+                    // 級位でフィルタ（対戦時の級を優先）
                     if (kyuRank != null && !kyuRank.isEmpty()) {
-                        if (opponent.getKyuRank() == null ||
-                            !opponent.getKyuRank().name().equals(kyuRank)) {
-                            return false;
+                        String opponentRank = getOpponentKyuRankFromMatch(match, playerId);
+                        if (opponentRank != null) {
+                            if (!opponentRank.equals(kyuRank)) return false;
+                        } else {
+                            if (opponent.getKyuRank() == null ||
+                                !opponent.getKyuRank().name().equals(kyuRank)) {
+                                return false;
+                            }
                         }
                     }
 
@@ -267,6 +272,12 @@ public class MatchService {
         for (String rank : java.util.List.of("A級", "B級", "C級", "D級", "E級")) {
             List<MatchDto> rankMatches = filteredMatches.stream()
                     .filter(match -> {
+                        // 保存された対戦時の級を使用
+                        String opponentRank = getOpponentKyuRankFromMatch(match, playerId);
+                        if (opponentRank != null) {
+                            return opponentRank.equals(rank);
+                        }
+                        // フォールバック: 保存された級がない場合は現在の級を参照
                         Player opponent = getOpponentPlayer(match, playerId);
                         return opponent != null &&
                                opponent.getKyuRank() != null &&
@@ -344,6 +355,9 @@ public class MatchService {
                 .updatedBy(request.getPlayerId())
                 .build();
 
+        // 対戦時の級位を記録
+        setPlayerKyuRanks(match);
+
         Match saved = matchRepository.save(match);
 
         // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
@@ -382,6 +396,10 @@ public class MatchService {
         }
 
         Match match = request.toEntity();
+
+        // 対戦時の級位を記録
+        setPlayerKyuRanks(match);
+
         Match saved = matchRepository.save(match);
 
         log.info("Successfully created match with id: {}", saved.getId());
@@ -447,6 +465,9 @@ public class MatchService {
         match.setNotes(request.getNotes());
         match.setUpdatedBy(request.getPlayerId());
 
+        // 対戦時の級位を再記録
+        setPlayerKyuRanks(match);
+
         Match updated = matchRepository.save(match);
 
         log.info("Successfully updated match with id: {}", id);
@@ -466,6 +487,36 @@ public class MatchService {
 
         matchRepository.deleteById(id);
         log.info("Successfully deleted match with id: {}", id);
+    }
+
+    /**
+     * MatchDtoから対戦相手の対戦時の級位を取得
+     */
+    private String getOpponentKyuRankFromMatch(MatchDto match, Long viewingPlayerId) {
+        if (match.getPlayer1Id() != null && match.getPlayer1Id().equals(viewingPlayerId)) {
+            return match.getPlayer2KyuRank();
+        } else if (match.getPlayer2Id() != null && match.getPlayer2Id().equals(viewingPlayerId)) {
+            return match.getPlayer1KyuRank();
+        }
+        return null;
+    }
+
+    /**
+     * 選手の級位をString形式で取得（nullの場合はnull）
+     */
+    private String getPlayerKyuRankString(Long playerId) {
+        if (playerId == null || playerId == 0L) return null;
+        return playerRepository.findById(playerId)
+                .map(p -> p.getKyuRank() != null ? p.getKyuRank().name() : null)
+                .orElse(null);
+    }
+
+    /**
+     * Matchエンティティに両選手の級位を設定
+     */
+    private void setPlayerKyuRanks(Match match) {
+        match.setPlayer1KyuRank(getPlayerKyuRankString(match.getPlayer1Id()));
+        match.setPlayer2KyuRank(getPlayerKyuRankString(match.getPlayer2Id()));
     }
 
     /**

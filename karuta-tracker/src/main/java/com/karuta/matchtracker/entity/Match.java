@@ -67,6 +67,18 @@ public class Match {
     private Integer scoreDifference;
 
     /**
+     * 選手1の対戦時の級位
+     */
+    @Column(name = "player1_kyu_rank", length = 10)
+    private String player1KyuRank;
+
+    /**
+     * 選手2の対戦時の級位
+     */
+    @Column(name = "player2_kyu_rank", length = 10)
+    private String player2KyuRank;
+
+    /**
      * 対戦相手名（システム未登録の選手用）
      */
     @Column(name = "opponent_name", length = 100)
@@ -130,6 +142,10 @@ public class Match {
             Long temp = player1Id;
             player1Id = player2Id;
             player2Id = temp;
+
+            String tempRank = player1KyuRank;
+            player1KyuRank = player2KyuRank;
+            player2KyuRank = tempRank;
         }
     }
 

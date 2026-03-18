@@ -622,7 +622,7 @@ const MatchForm = () => {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#C96B5A] text-white py-4 rounded-2xl hover:bg-[#B55A49] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
+              className="flex-1 flex items-center justify-center gap-2 bg-[#1A3654] text-white py-4 rounded-2xl hover:bg-[#122740] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
             >
               {loading
                 ? '保存中...'

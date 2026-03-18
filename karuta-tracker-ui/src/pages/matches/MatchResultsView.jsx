@@ -92,7 +92,7 @@ const MatchResultsView = () => {
     };
 
     fetchInitial();
-  }, [sessionId]);
+  }, [sessionId, dateParam]);
 
   // 日付変更時のデータ取得（ユーザー操作による変更のみ）
   useEffect(() => {
@@ -198,6 +198,21 @@ const MatchResultsView = () => {
 
   const currentPairings = getPairingsForMatch(currentMatchNumber);
   const totalMatches = session?.totalMatches || 0;
+
+  // 対戦組み合わせに含まれていない参加者（抜けの選手）を算出
+  const getByePlayersForMatch = (matchNumber) => {
+    const matchParticipants = session?.matchParticipants?.[matchNumber] || [];
+    if (matchParticipants.length === 0) return [];
+    const matchPairings = getPairingsForMatch(matchNumber);
+    const pairedNames = new Set();
+    matchPairings.forEach(p => {
+      pairedNames.add(p.player1Name);
+      pairedNames.add(p.player2Name);
+    });
+    return matchParticipants.filter(name => !pairedNames.has(name));
+  };
+
+  const currentByePlayers = getByePlayersForMatch(currentMatchNumber);
 
   // 今日の日付を取得（YYYY-MM-DD形式）
   const getTodayDate = () => {
@@ -380,7 +395,7 @@ const MatchResultsView = () => {
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#C96B5A] text-[#C96B5A]'
+                      ? 'border-[#374151] text-[#374151]'
                       : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
                   }`}
                 >
@@ -452,11 +467,19 @@ const MatchResultsView = () => {
           })}
         </div>
 
+        {/* 抜けの選手 */}
+        {currentByePlayers.length > 0 && (
+          <div className="mt-4 px-3 py-2.5 bg-[#e5ebe7] rounded-lg flex items-center gap-2 text-sm text-[#6b7280]">
+            <span className="font-medium text-[#374151] flex-shrink-0">抜け:</span>
+            <span>{currentByePlayers.join('、')}</span>
+          </div>
+        )}
+
         {/* 管理者用：編集ボタン */}
         {(isAdmin() || isSuperAdmin()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#C96B5A] text-white rounded-lg hover:bg-[#B55A49] flex items-center justify-center gap-2 font-semibold transition-colors"
+            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
             結果を編集・入力する
