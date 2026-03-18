@@ -640,6 +640,7 @@ const MatchForm = () => {
           </div>
         )}
       </form>
+      )}
 
       {/* 参加未登録ダイアログ */}
       {showParticipationDialog && (

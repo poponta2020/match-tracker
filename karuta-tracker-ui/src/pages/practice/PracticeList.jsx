@@ -266,7 +266,7 @@ const PracticeList = () => {
   const toggleMatch = (matchNum) => {
     setExpandedMatches((prev) => ({
       ...prev,
-      [matchNum]: !prev[matchNum],
+      [matchNum]: prev[matchNum] === false,
     }));
   };
 
@@ -466,7 +466,7 @@ const PracticeList = () => {
                 Object.entries(selectedSession.matchParticipants)
                   .sort(([a], [b]) => parseInt(a) - parseInt(b))
                   .map(([matchNum, participants]) => {
-                    const isExpanded = expandedMatches[matchNum];
+                    const isExpanded = expandedMatches[matchNum] !== false;
                     const count = participants.length;
                     const myMatchNumbers = myParticipations[selectedSession.id] || [];
                     const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
