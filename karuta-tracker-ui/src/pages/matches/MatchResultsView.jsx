@@ -380,7 +380,7 @@ const MatchResultsView = () => {
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#374151] text-[#374151]'
+                      ? 'border-[#C96B5A] text-[#C96B5A]'
                       : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
                   }`}
                 >
@@ -456,7 +456,7 @@ const MatchResultsView = () => {
         {(isAdmin() || isSuperAdmin()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] flex items-center justify-center gap-2 font-semibold transition-colors"
+            className="w-full mt-6 py-3 px-4 bg-[#C96B5A] text-white rounded-lg hover:bg-[#B55A49] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
             結果を編集・入力する

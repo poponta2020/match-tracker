@@ -639,7 +639,7 @@ const PairingGenerator = () => {
                 onClick={() => setMatchNumber(num)}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchNumber === num
-                    ? 'bg-[#4a6b5a] text-white shadow-md'
+                    ? 'bg-[#C96B5A] text-white shadow-md'
                     : hasUnsavedChanges && unsavedDraft.current?.matchNumber === num
                       ? 'bg-[#fef3c7] text-[#b45309] border border-[#fbbf24] hover:bg-[#fde68a]'
                       : matchExistsMap[num]
@@ -731,7 +731,7 @@ const PairingGenerator = () => {
           <button
             onClick={handleAutoMatch}
             disabled={loading}
-            className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 text-lg font-medium shadow-md"
+            className="flex items-center gap-2 bg-[#C96B5A] text-white px-8 py-3 rounded-lg hover:bg-[#B55A49] transition-colors disabled:bg-gray-400 text-lg font-medium shadow-md"
           >
             <Shuffle className="w-5 h-5" />
             {loading ? '生成中...' : '自動組み合わせ'}
@@ -959,7 +959,7 @@ const PairingGenerator = () => {
                 <button
                   onClick={handleSave}
                   disabled={loading}
-                  className="flex items-center gap-2 bg-[#4a6b5a] text-white px-8 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+                  className="flex items-center gap-2 bg-[#C96B5A] text-white px-8 py-3 rounded-lg hover:bg-[#B55A49] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />
                   {loading ? '保存中...' : '確定して保存'}

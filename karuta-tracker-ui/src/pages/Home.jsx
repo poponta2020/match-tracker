@@ -409,7 +409,7 @@ const Home = () => {
               {nextPractice.today && isAdmin() && (
                 <Link
                   to={`/pairings?date=${nextPractice.sessionDate}`}
-                  className="mt-3 flex items-center justify-center gap-2 bg-white text-[#374151] font-medium py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="mt-3 flex items-center justify-center gap-2 bg-[#C96B5A] text-white font-medium py-2.5 rounded-lg hover:bg-[#B55A49] transition-colors shadow-sm"
                 >
                   <Shuffle className="w-4 h-4" />
                   組み合わせを作成

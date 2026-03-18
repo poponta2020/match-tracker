@@ -148,7 +148,7 @@ const Layout = ({ children }) => {
               <Link
                 key={item.name}
                 to={item.href}
-                className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
+                className="flex flex-col items-center justify-center flex-1 h-full transition-colors relative"
               >
                 <Icon
                   className={`w-6 h-6 ${
@@ -163,6 +163,9 @@ const Layout = ({ children }) => {
                 >
                   {item.name}
                 </span>
+                {active && (
+                  <span className="absolute -bottom-0.5 w-5 h-1 rounded-full bg-[#C96B5A]" />
+                )}
               </Link>
             );
           })}
