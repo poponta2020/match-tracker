@@ -306,6 +306,18 @@ const Home = () => {
                     </button>
                   </>
                 )}
+                {isAdmin() && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <button
+                      onClick={() => { setMenuOpen(false); navigate('/pairings'); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                    >
+                      <Shuffle className="w-4 h-4 text-[#6b7280]" />
+                      組み合わせ作成
+                    </button>
+                  </>
+                )}
                 <div className="border-t border-gray-100 my-1" />
                 <button
                   onClick={() => { setMenuOpen(false); handleCalendarSync(); }}
@@ -405,20 +417,6 @@ const Home = () => {
               )}
             </div>
           </div>
-        )}
-
-        {/* 組み合わせ作成リンク（管理者のみ、TODAYカード内にボタンがない場合） */}
-        {isAdmin() && !(nextPractice?.today) && (
-          <Link
-            to={nextPractice ? `/pairings?date=${nextPractice.sessionDate}` : '/pairings'}
-            className="flex items-center justify-between bg-[#f9f6f2] border border-[#d4ddd7] px-5 py-3 rounded-lg hover:bg-[#e5ebe7] transition-colors mb-4"
-          >
-            <div className="flex items-center gap-2 text-[#374151] font-medium">
-              <Shuffle className="w-4 h-4 text-[#4a6b5a]" />
-              組み合わせ作成
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#6b7280]" />
-          </Link>
         )}
 
         {/* 今月のアクティビティ */}
