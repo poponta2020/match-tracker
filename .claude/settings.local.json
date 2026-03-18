@@ -86,7 +86,9 @@
       "Bash(gzip:*)",
       "Bash(npx vite build:*)",
       "Bash(git -C /home/poponta/match-tracker log --all --oneline --grep=\"vercel\\\\|deploy\\\\|production\")",
-      "Bash(git -C /home/poponta/match-tracker remote:*)"
+      "Bash(git -C /home/poponta/match-tracker remote:*)",
+      "Bash(lsb_release:*)",
+      "Bash(PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal psql:*)"
     ],
     "deny": [],
     "ask": []

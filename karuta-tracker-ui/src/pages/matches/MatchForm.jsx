@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
 import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus } from 'lucide-react';
@@ -465,19 +465,34 @@ const MatchForm = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="h-full px-6 overflow-hidden pt-28 space-y-6">
-        {/* 今日が練習日でない場合の警告 */}
-        {!isEdit && practiceSessions.length === 0 && (
-          <div className="p-4 bg-yellow-50 rounded-lg">
-            <div className="flex items-center gap-2 text-yellow-800 mb-1">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="font-semibold text-sm">今日は練習日として登録されていません</span>
-            </div>
-            <p className="text-xs text-yellow-700 ml-7">
+      {/* 今日が練習日でない場合はフォームを表示せずブロック */}
+      {!isEdit && practiceSessions.length === 0 ? (
+        <div className="h-full px-6 overflow-hidden pt-28 flex items-start justify-center">
+          <div className="p-6 bg-[#f9f6f2] rounded-lg shadow-sm text-center max-w-sm w-full mt-8">
+            <AlertCircle className="w-10 h-10 text-[#6b7280] mx-auto mb-3" />
+            <h3 className="font-bold text-[#374151] mb-2">今日は練習日ではありません</h3>
+            <p className="text-sm text-[#6b7280] mb-4">
               練習日を登録してから試合記録を入力してください。
             </p>
+            <div className="space-y-2">
+              <Link
+                to="/practice"
+                className="block w-full bg-[#4a6b5a] text-white py-2.5 px-4 rounded-lg hover:bg-[#3d5a4c] transition-colors font-medium text-sm"
+              >
+                練習日を確認する
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="block w-full text-[#6b7280] py-2 px-4 rounded-lg hover:bg-[#e5ebe7] transition-colors text-sm"
+              >
+                戻る
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      ) : (
+      <form onSubmit={handleSubmit} className="h-full px-6 overflow-hidden pt-28 space-y-6">
 
         {/* 既存試合の警告メッセージ */}
         {!isEdit && isExistingMatch && (
