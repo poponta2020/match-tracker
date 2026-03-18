@@ -88,7 +88,9 @@
       "Bash(git -C /home/poponta/match-tracker log --all --oneline --grep=\"vercel\\\\|deploy\\\\|production\")",
       "Bash(git -C /home/poponta/match-tracker remote:*)",
       "Bash(lsb_release:*)",
-      "Bash(PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal psql:*)"
+      "Bash(PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal psql:*)",
+      "Bash(git rebase:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []
