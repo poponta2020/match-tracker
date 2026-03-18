@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
-import { Users, Search, Edit, Trash2, UserPlus } from 'lucide-react';
+import { Search, UserPlus, ChevronRight } from 'lucide-react';
+import { sortPlayersByRank } from '../../utils/playerSort';
 
 const PlayerList = () => {
   const navigate = useNavigate();
@@ -16,13 +17,13 @@ const PlayerList = () => {
   }, []);
 
   useEffect(() => {
+    const sorted = sortPlayersByRank(players);
     if (searchTerm) {
-      const filtered = players.filter((player) =>
-        player.name.toLowerCase().includes(searchTerm.toLowerCase())
+      setFilteredPlayers(
+        sorted.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
       );
-      setFilteredPlayers(filtered);
     } else {
-      setFilteredPlayers(players);
+      setFilteredPlayers(sorted);
     }
   }, [searchTerm, players]);
 
@@ -31,7 +32,6 @@ const PlayerList = () => {
       setLoading(true);
       const response = await playerAPI.getAll();
       setPlayers(response.data);
-      setFilteredPlayers(response.data);
     } catch (err) {
       console.error('Failed to fetch players:', err);
       setError('選手一覧の取得に失敗しました');
@@ -40,181 +40,111 @@ const PlayerList = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`${name}を削除してもよろしいですか？`)) {
-      return;
-    }
-
-    try {
-      await playerAPI.delete(id);
-      fetchPlayers();
-    } catch (err) {
-      console.error('Failed to delete player:', err);
-      alert('選手の削除に失敗しました');
-    }
+  const getRoleBadge = (role) => {
+    if (role === 'SUPER_ADMIN') return { label: '管理者', color: 'bg-purple-100 text-purple-700' };
+    if (role === 'ADMIN') return { label: '幹部', color: 'bg-blue-100 text-blue-700' };
+    return null;
   };
 
-  const getGenderLabel = (gender) => {
-    switch (gender) {
-      case 'MALE':
-        return '男性';
-      case 'FEMALE':
-        return '女性';
-      case 'OTHER':
-        return 'その他';
-      default:
-        return '未設定';
-    }
-  };
-
-  const getDominantHandLabel = (hand) => {
-    switch (hand) {
-      case 'RIGHT':
-        return '右利き';
-      case 'LEFT':
-        return '左利き';
-      default:
-        return '未設定';
-    }
-  };
-
-  const getRankDisplay = (danRank, kyuRank) => {
-    if (danRank) return danRank;
-    if (kyuRank) return kyuRank;
-    return '-';
+  const isProfileSet = (player) => {
+    return !!(player.kyuRank || player.danRank);
   };
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <button
-          onClick={() => navigate('/register')}
-          className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <UserPlus className="w-5 h-5" />
-          新規登録
-        </button>
+    <div className="min-h-screen bg-[#f2ede6]">
+      {/* ナビゲーションバー */}
+      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-[#374151]">選手管理</h1>
+          <button
+            onClick={() => navigate('/register')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm font-medium"
+          >
+            <UserPlus className="w-4 h-4" />
+            新規登録
+          </button>
+        </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
+      <div className="pt-20 pb-24 px-4 max-w-7xl mx-auto">
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
 
-      <div className="bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Search className="w-5 h-5 text-gray-400" />
+        {/* 検索 */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9ca3af]" />
           <input
             type="text"
             placeholder="選手名で検索..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d4ddd7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent text-sm"
           />
         </div>
 
-        <div className="text-sm text-gray-600 mb-4">
-          {filteredPlayers.length}人の選手が見つかりました
+        <div className="text-xs text-[#6b7280] mb-3">
+          {filteredPlayers.length}人の選手
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  名前
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  段位・級位
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  所属かるた会
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  性別
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ロール
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredPlayers.map((player) => (
-                <tr
+        {/* 選手リスト */}
+        {filteredPlayers.length === 0 ? (
+          <div className="bg-[#f9f6f2] rounded-xl p-12 text-center">
+            <p className="text-[#6b7280]">
+              {searchTerm ? '検索結果が見つかりませんでした' : '選手が登録されていません'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-gray-100">
+            {filteredPlayers.map((player) => {
+              const role = getRoleBadge(player.role);
+              const profileDone = isProfileSet(player);
+
+              return (
+                <div
                   key={player.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className="flex items-center px-4 py-3 hover:bg-[#f9f9f7] active:bg-[#f0f4f1] transition-colors cursor-pointer"
                   onClick={() => navigate(`/players/${player.id}`)}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">{player.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {getRankDisplay(player.danRank, player.kyuRank)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {player.karutaClub || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {getGenderLabel(player.gender)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        player.role === 'ADMIN'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}
-                    >
-                      {player.role === 'ADMIN' ? '管理者' : '一般ユーザー'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/players/${player.id}/edit`);
-                        }}
-                        className="text-primary-600 hover:text-primary-900 p-1"
-                        title="編集"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(player.id, player.name);
-                        }}
-                        className="text-red-600 hover:text-red-900 p-1"
-                        title="削除"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[#374151] truncate">
+                        {player.name}
+                      </span>
+                      {player.kyuRank && (
+                        <span className="flex-shrink-0 text-xs text-[#6b7280] bg-[#f0f4f1] px-1.5 py-0.5 rounded">
+                          {player.kyuRank}
+                        </span>
+                      )}
+                      {role && (
+                        <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${role.color}`}>
+                          {role.label}
+                        </span>
+                      )}
+                      {!profileDone && (
+                        <span className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
+                          未設定
+                        </span>
+                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
 
-          {filteredPlayers.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              {searchTerm ? '検索結果が見つかりませんでした' : '選手が登録されていません'}
-            </div>
-          )}
-        </div>
+                  <ChevronRight className="w-4 h-4 text-[#d1d5db] ml-2 flex-shrink-0" />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

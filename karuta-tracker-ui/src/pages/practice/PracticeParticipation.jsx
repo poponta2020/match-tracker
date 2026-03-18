@@ -271,7 +271,8 @@ const PracticeParticipation = () => {
                                       type="checkbox"
                                       checked={isChecked}
                                       onChange={() => toggleMatch(session.id, matchNumber)}
-                                      className="w-5 h-5 text-[#82655a] border-gray-300 rounded focus:ring-[#82655a]"
+                                      className="w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a]"
+                                      style={{ accentColor: '#4a6b5a' }}
                                     />
                                     <span
                                       className={`text-[10px] px-1 rounded font-medium ${getParticipantBadgeColor(
