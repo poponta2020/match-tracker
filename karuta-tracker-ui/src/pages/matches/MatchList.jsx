@@ -21,6 +21,7 @@ const MatchList = () => {
 
   // 選手検索関連
   const [targetPlayerName, setTargetPlayerName] = useState('');
+  const [targetPlayerKyuRank, setTargetPlayerKyuRank] = useState('');
   const [playerSearchText, setPlayerSearchText] = useState('');
   const [playerSearchResults, setPlayerSearchResults] = useState([]);
   const [showPlayerSearch, setShowPlayerSearch] = useState(false);
@@ -72,6 +73,7 @@ const MatchList = () => {
         try {
           const res = await playerAPI.getById(targetPlayerId);
           setTargetPlayerName(res.data?.name || '');
+          setTargetPlayerKyuRank(res.data?.kyuRank || '');
         } catch (e) {
           console.error('選手情報の取得に失敗:', e);
         }
@@ -79,6 +81,7 @@ const MatchList = () => {
       fetchTargetPlayer();
     } else {
       setTargetPlayerName(currentPlayer?.name || '');
+      setTargetPlayerKyuRank(currentPlayer?.kyuRank || '');
     }
   }, [targetPlayerId, isOtherPlayer, currentPlayer]);
 
@@ -285,74 +288,91 @@ const MatchList = () => {
       {/* ナビゲーションバー */}
       <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-7xl mx-auto">
-          {/* タイトル行 */}
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-lg font-semibold text-[#374151]">
-              {isOtherPlayer ? targetPlayerName : ''}
-              {selectedYear && selectedMonth
-                ? ` ${selectedYear}年 ${selectedMonth}月`
-                : selectedYear
-                ? ` ${selectedYear}年`
-                : isOtherPlayer ? '' : '試合結果'}
-            </h1>
-            {isOtherPlayer && (
-              <button
-                onClick={() => navigate('/matches')}
-                className="text-xs text-[#4a6b5a] border border-[#4a6b5a] px-2 py-1 rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
-              >
-                自分に戻す
-              </button>
-            )}
-          </div>
-
-          {/* 選手検索バー */}
-          <div className="relative" ref={playerSearchRef}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="選手名で検索..."
-                value={playerSearchText}
-                onChange={(e) => {
-                  setPlayerSearchText(e.target.value);
-                  setShowPlayerSearch(true);
-                }}
-                onFocus={() => { setShowPlayerSearch(true); fetchPlayersIfNeeded(); }}
-                className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
-              />
-              {playerSearchText && (
+          <div className="flex items-start justify-between">
+            {/* 左: 名前 + 年月 */}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold text-[#374151] truncate flex items-baseline gap-2">
+                <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
+                {targetPlayerKyuRank && (
+                  <span className="text-sm font-normal text-[#6b7280]">{targetPlayerKyuRank}</span>
+                )}
+              </h1>
+              <p className="text-sm text-[#6b7280] mt-0.5">
+                {selectedYear && selectedMonth
+                  ? `${selectedYear}年 ${selectedMonth}月`
+                  : selectedYear
+                  ? `${selectedYear}年`
+                  : '全期間'}
+              </p>
+            </div>
+            {/* 右: アクションボタン */}
+            <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+              {isOtherPlayer && (
                 <button
-                  onClick={() => { setPlayerSearchText(''); setShowPlayerSearch(false); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  onClick={() => navigate('/matches')}
+                  className="text-xs text-[#4a6b5a] border border-[#4a6b5a] px-2 py-1 rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
                 >
-                  <X className="w-4 h-4 text-gray-400" />
+                  自分に戻す
                 </button>
               )}
+              <button
+                onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
+                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-[#4a6b5a] text-white' : 'text-[#6b7280] hover:bg-[#c5cec8]'}`}
+              >
+                <Search className="w-5 h-5" />
+              </button>
             </div>
-            {showPlayerSearch && playerSearchResults.length > 0 && (
-              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
-                {playerSearchResults.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      navigate(`/matches?playerId=${p.id}`);
-                      setPlayerSearchText('');
-                      setShowPlayerSearch(false);
-                    }}
-                    className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
-                  >
-                    {p.name}
-                    {p.kyuRank && <span className="ml-2 text-xs text-gray-400">{p.kyuRank}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
+
+          {/* 選手検索バー（トグル表示） */}
+          {showPlayerSearch && (
+            <div className="relative mt-3" ref={playerSearchRef}>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="選手名で検索..."
+                  value={playerSearchText}
+                  autoFocus
+                  onChange={(e) => {
+                    setPlayerSearchText(e.target.value);
+                  }}
+                  className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
+                />
+                {playerSearchText && (
+                  <button
+                    onClick={() => { setPlayerSearchText(''); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                  >
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
+              </div>
+              {playerSearchResults.length > 0 && (
+                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
+                  {playerSearchResults.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        navigate(`/matches?playerId=${p.id}`);
+                        setPlayerSearchText('');
+                        setShowPlayerSearch(false);
+                      }}
+                      className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+                    >
+                      {p.name}
+                      {p.kyuRank && <span className="ml-2 text-xs text-gray-400">{p.kyuRank}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* コンテンツ（上部パディング追加） */}
-      <div className="pt-28 space-y-6">
+      <div className={`${showPlayerSearch ? 'pt-32' : 'pt-20'} space-y-6 transition-all`}>
       {/* 統計 */}
       {rankStatistics && (
         <div className="space-y-3">

@@ -11,7 +11,7 @@ import {
   Shuffle,
   Users,
   Swords,
-  CheckCircle,
+
   User,
   LogOut,
   RefreshCw,
@@ -237,7 +237,6 @@ const Home = () => {
   }, [currentPlayer, fetchData]);
 
   const isMyself = (p) => p.id === currentPlayer?.id;
-  const iAmParticipating = nextPracticeParticipants.some(isMyself);
 
   const now = new Date();
   const monthLabel = `${now.getMonth() + 1}月`;
@@ -359,7 +358,7 @@ const Home = () => {
             </button>
           </div>
         )}
-        {/* 次の参加予定練習 */}
+        {/* 次の練習 + 参加者（統合カード） */}
         {nextPractice && (
           <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#374151] text-white' : 'bg-[#f9f6f2]'}`}>
             {nextPractice.today ? (
@@ -368,9 +367,8 @@ const Home = () => {
                 <h2 className="text-lg font-bold">今日は練習日です</h2>
               </div>
             ) : (
-              <h2 className={`text-lg font-bold flex items-center gap-2 mb-3 text-[#374151]`}>
-                <Calendar className="w-5 h-5" />
-                次の練習
+              <h2 className="text-lg font-bold mb-3 text-[#374151]">
+                NEXT
               </h2>
             )}
             <div className="space-y-2">
@@ -404,6 +402,37 @@ const Home = () => {
                   <span className="font-medium ml-1">
                     {nextPractice.matchNumbers.map(n => `${n}試合目`).join('、')}
                   </span>
+                </div>
+              )}
+              {/* 参加者セクション */}
+              {nextPracticeParticipants.length > 0 && (
+                <div className={`mt-3 pt-3 border-t ${nextPractice.today ? 'border-white/20' : 'border-gray-200'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm font-medium flex items-center gap-1.5 ${nextPractice.today ? 'text-white/80' : 'text-[#6b7280]'}`}>
+                      <Users className="w-3.5 h-3.5" />
+                      参加者
+                    </span>
+                    <span className={`text-xs ${nextPractice.today ? 'text-white/60' : 'text-[#6b7280]'}`}>{nextPracticeParticipants.length}名</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {sortPlayersByRank(nextPracticeParticipants).map((p) => (
+                      <span
+                        key={p.id}
+                        className={`px-2.5 py-1 rounded-full text-xs ${
+                          nextPractice.today
+                            ? isMyself(p)
+                              ? 'bg-white text-[#374151] font-medium'
+                              : 'bg-white/20 text-white'
+                            : isMyself(p)
+                              ? 'bg-[#4a6b5a] text-white font-medium'
+                              : 'bg-white border border-[#d4ddd7] text-[#374151]'
+                        }`}
+                      >
+                        {p.name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
               {nextPractice.today && isAdmin() && (
@@ -440,39 +469,6 @@ const Home = () => {
             </p>
           </div>
         </div>
-
-        {/* 次回の参加者 */}
-        {nextPractice && nextPracticeParticipants.length > 0 && (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-5 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-bold text-[#374151] flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#4a6b5a]" />
-                {nextPractice.today ? '今日' : '次回'}の参加者
-              </h2>
-              <span className="text-sm text-[#6b7280]">{nextPracticeParticipants.length}名</span>
-            </div>
-            {iAmParticipating && (
-              <div className="flex items-center gap-1.5 text-xs text-[#4a6b5a] mb-3">
-                <CheckCircle className="w-3.5 h-3.5" />
-                あなたも参加予定です
-              </div>
-            )}
-            <div className="flex flex-wrap gap-1.5">
-              {sortPlayersByRank(nextPracticeParticipants).map((p) => (
-                <span
-                  key={p.id}
-                  className={`px-2.5 py-1 rounded-full text-xs ${
-                    isMyself(p)
-                      ? 'bg-[#4a6b5a] text-white font-medium'
-                      : 'bg-white border border-[#d4ddd7] text-[#374151]'
-                  }`}
-                >
-                  {p.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
