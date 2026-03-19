@@ -6,6 +6,7 @@ import { playerAPI } from '../../api/players';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
+import PlayerChip from '../../components/PlayerChip';
 
 
 const PairingGenerator = () => {
@@ -106,9 +107,10 @@ const PairingGenerator = () => {
       setParticipants([]);
       return;
     }
-    // matchParticipants: { "1" -> [playerName, ...], "2" -> [...] }
+    // matchParticipants: { "1" -> [{name, kyuRank}, ...], "2" -> [...] }
     // JSONのキーは文字列なのでString()で変換
-    const matchParticipantNames = session.matchParticipants?.[String(matchNum)] || [];
+    const matchParticipantEntries = session.matchParticipants?.[String(matchNum)] || [];
+    const matchParticipantNames = matchParticipantEntries.map(p => typeof p === 'string' ? p : p.name);
     const sessionParticipants = session.participants || [];
     if (matchParticipantNames.length > 0) {
       // 名前ベースでフィルタ
@@ -708,12 +710,12 @@ const PairingGenerator = () => {
             {participants.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {sortPlayersByRank(participants).map((p) => (
-                  <span
+                  <PlayerChip
                     key={p.id}
-                    className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-[#f9f6f2] border border-[#d4ddd7] text-[#374151]"
-                  >
-                    {p.name}
-                  </span>
+                    name={p.name}
+                    kyuRank={p.kyuRank}
+                    className="text-sm bg-[#f9f6f2] text-[#374151]"
+                  />
                 ))}
               </div>
             ) : (
@@ -893,12 +895,12 @@ const PairingGenerator = () => {
                 <>
                   <div className="flex flex-wrap gap-2">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
-                      <span
+                      <PlayerChip
                         key={player.id}
-                        className="bg-white px-3 py-1 rounded-full border border-yellow-300 text-sm"
-                      >
-                        {player.name}
-                      </span>
+                        name={player.name}
+                        kyuRank={player.kyuRank}
+                        className="text-sm bg-[#f9f6f2] text-[#374151]"
+                      />
                     ))}
                   </div>
                   <p className="text-xs text-gray-600 mt-2">

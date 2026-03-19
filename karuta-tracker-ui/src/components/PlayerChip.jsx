@@ -4,8 +4,8 @@
  */
 
 const KYU_BORDER_COLORS = {
-  'A級': 'border-pink-400',
-  'B級': 'border-red-400',
+  'A級': 'border-red-400',
+  'B級': 'border-blue-400',
   'C級': 'border-orange-400',
   'D級': 'border-yellow-400',
   'E級': 'border-lime-400',
@@ -43,7 +43,7 @@ const PlayerChip = ({
   return (
     <Component
       {...(onClick && { onClick, type: 'button' })}
-      className={`px-2.5 py-1 rounded-full border-2 ${borderColor} ${className}`}
+      className={`px-2.5 py-1 rounded-full border ${borderColor} ${className}`}
     >
       {name}
       {children}

@@ -425,11 +425,11 @@ const Home = () => {
                         className={`text-xs ${
                           nextPractice.today
                             ? isMyself(p)
-                              ? 'bg-white text-[#374151] font-medium'
+                              ? 'bg-white/90 text-[#374151] font-medium'
                               : 'bg-white/20 text-white'
                             : isMyself(p)
                               ? 'bg-[#4a6b5a] text-white font-medium'
-                              : 'bg-white text-[#374151]'
+                              : 'bg-[#f0f4f1] text-[#374151]'
                         }`}
                       />
                     ))}

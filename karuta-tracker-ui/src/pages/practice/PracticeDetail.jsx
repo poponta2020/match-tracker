@@ -152,7 +152,7 @@ const PracticeDetail = () => {
                             key={idx}
                             name={typeof p === 'string' ? p : p.name}
                             kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
-                            className="text-xs text-gray-600 bg-white"
+                            className="text-xs text-gray-600 bg-gray-50"
                           />
                         ))}
                       </div>
@@ -172,7 +172,7 @@ const PracticeDetail = () => {
               {session.participants.map((participant) => (
                 <div
                   key={participant.id}
-                  className={`px-4 py-2 bg-gray-50 border-2 ${getKyuBorderColor(participant.kyuRank)} rounded-lg text-center hover:bg-gray-100 cursor-pointer`}
+                  className={`px-4 py-2 bg-gray-50 border ${getKyuBorderColor(participant.kyuRank)} rounded-lg text-center hover:bg-gray-100 cursor-pointer`}
                   onClick={() => navigate(`/players/${participant.id}`)}
                 >
                   <div className="text-sm font-medium text-gray-900">{participant.name}</div>
