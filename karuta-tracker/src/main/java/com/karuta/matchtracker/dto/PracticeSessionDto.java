@@ -50,6 +50,7 @@ public class PracticeSessionDto {
     public static class MatchParticipantInfo {
         private String name;
         private Player.KyuRank kyuRank;
+        private Player.Role role;
     }
 
     /**

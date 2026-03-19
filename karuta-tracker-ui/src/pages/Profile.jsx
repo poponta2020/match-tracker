@@ -73,7 +73,7 @@ const Profile = () => {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#374151]">{player.name}</h1>
-          <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
+          <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
             {roleLabel.text}
           </span>
         </div>
@@ -86,15 +86,17 @@ const Profile = () => {
         </button>
       </div>
 
-      {/* 情報リスト */}
+      {/* 情報リスト（PlayerDetailと同じカードスタイル） */}
       {items.length > 0 && (
-        <div className="divide-y divide-gray-100">
-          {items.map((item) => (
-            <div key={item.label} className="flex justify-between py-3">
-              <span className="text-sm text-[#6b7280]">{item.label}</span>
-              <span className="text-sm font-medium text-[#374151]">{item.value}</span>
-            </div>
-          ))}
+        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
+          <div className="divide-y divide-[#e2d9d0]">
+            {items.map((item) => (
+              <div key={item.label} className="flex justify-between py-3 first:pt-0 last:pb-0">
+                <span className="text-sm text-[#6b7280]">{item.label}</span>
+                <span className="text-sm font-medium text-[#374151]">{item.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

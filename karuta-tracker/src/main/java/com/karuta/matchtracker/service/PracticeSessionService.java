@@ -529,6 +529,7 @@ public class PracticeSessionService {
                             .map(p -> PracticeSessionDto.MatchParticipantInfo.builder()
                                     .name(p.getName())
                                     .kyuRank(p.getKyuRank())
+                                    .role(p.getRole())
                                     .build())
                             .collect(Collectors.toList()));
         }

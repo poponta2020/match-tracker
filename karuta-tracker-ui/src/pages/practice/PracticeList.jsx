@@ -6,6 +6,7 @@ import { X, ChevronLeft, ChevronRight, CalendarCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
+import { sortPlayersByRank } from '../../utils/playerSort';
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -494,14 +495,22 @@ const PracticeList = () => {
                           <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
                             {participants.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
-                                {participants.map((p, idx) => (
-                                  <PlayerChip
-                                    key={idx}
-                                    name={typeof p === 'string' ? p : p.name}
-                                    kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
-                                    className="text-xs text-[#374151] bg-[#d4ddd7]"
-                                  />
-                                ))}
+                                {sortPlayersByRank(participants).map((p, idx) => {
+                                  const pName = typeof p === 'string' ? p : p.name;
+                                  const isMyself = pName === currentPlayer?.name;
+                                  return (
+                                    <PlayerChip
+                                      key={idx}
+                                      name={pName}
+                                      kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                      className={`text-xs ${
+                                        isMyself
+                                          ? 'bg-[#4a6b5a] text-white font-medium'
+                                          : 'text-[#374151] bg-white'
+                                      }`}
+                                    />
+                                  );
+                                })}
                               </div>
                             ) : (
                               <div className="text-xs text-[#6b7280]">参加者なし</div>
