@@ -66,7 +66,7 @@ const PrivacyPolicy = () => {
               </li>
               <li>
                 <span className="font-medium">Googleアカウント情報：</span>
-                Googleカレンダー同期機能を利用する際に、Googleアカウントのメールアドレスを取得します
+                Googleカレンダー同期機能の実行に必要な範囲で、Googleアカウントに紐づく識別情報（メールアドレス等）が提供される場合がありますが、ユーザー認証および同期処理以外の目的には利用しません。なお、メールアドレスはサーバーに保存しません。
               </li>
               <li>
                 <span className="font-medium">Googleカレンダーへのアクセス権：</span>
@@ -127,10 +127,29 @@ const PrivacyPolicy = () => {
             </p>
           </section>
 
+          {/* Google API ポリシー準拠 */}
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+              6. Google API の利用について
+            </h2>
+            <p className="text-gray-700">
+              本アプリは{' '}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Google API Services User Data Policy
+              </a>
+              {' '}に準拠して Google Calendar API を利用しています。Google API から取得したデータは、アプリの機能提供のみに使用され、広告目的での利用や、第三者への提供・販売は一切行いません。
+            </p>
+          </section>
+
           {/* データの削除 */}
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
-              6. データの削除・アクセス権の取り消し
+              7. データの削除・アクセス権の取り消し
             </h2>
             <ul className="list-disc ml-6 space-y-2 text-gray-700">
               <li>
@@ -158,7 +177,7 @@ const PrivacyPolicy = () => {
           {/* 改定 */}
           <section>
             <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
-              7. プライバシーポリシーの改定
+              8. プライバシーポリシーの改定
             </h2>
             <p className="text-gray-700">
               本ポリシーは、必要に応じて改定することがあります。重要な変更がある場合は、アプリ内でお知らせします。
