@@ -25,6 +25,7 @@ import ProfileEdit from './pages/ProfileEdit';
 import VenueList from './pages/venues/VenueList';
 import VenueForm from './pages/venues/VenueForm';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route
               path="/"
               element={
