@@ -114,6 +114,22 @@ public class PracticeSessionController {
     }
 
     /**
+     * 月別参加率TOP3を取得
+     *
+     * @param year 年
+     * @param month 月
+     * @return 参加率TOP3リスト
+     */
+    @GetMapping("/participation-rate-top3")
+    public ResponseEntity<List<ParticipationRateDto>> getParticipationRateTop3(
+            @RequestParam int year,
+            @RequestParam int month) {
+        log.debug("GET /api/practice-sessions/participation-rate-top3?year={}&month={}", year, month);
+        List<ParticipationRateDto> top3 = practiceSessionService.getParticipationRateTop3(year, month);
+        return ResponseEntity.ok(top3);
+    }
+
+    /**
      * 指定日以降の練習日を取得
      *
      * @param fromDate 基準日

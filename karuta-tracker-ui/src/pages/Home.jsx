@@ -11,7 +11,7 @@ import {
   Shuffle,
   Users,
   Swords,
-
+  Trophy,
   User,
   LogOut,
   RefreshCw,
@@ -35,6 +35,7 @@ const Home = () => {
   const [calSyncing, setCalSyncing] = useState(false);
   const [calSyncMessage, setCalSyncMessage] = useState(null);
   const [calSyncError, setCalSyncError] = useState(false);
+  const [participationTop3, setParticipationTop3] = useState([]);
 
   // モバイル判定（スタンドアロンPWA含む）
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -166,10 +167,12 @@ const Home = () => {
         nextPracticeRes,
         participationsRes,
         monthlyMatchesRes,
+        top3Res,
       ] = await Promise.all([
         practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
         practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
         matchAPI.getMatchCount(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: 0 })),
+        practiceAPI.getParticipationRateTop3(year, month).catch(() => ({ data: [] })),
       ]);
 
       // リクエストがキャンセルされた場合は状態更新をスキップ
@@ -181,6 +184,9 @@ const Home = () => {
 
       // 今月の対戦数
       setMonthlyMatchCount(typeof monthlyMatchesRes.data === 'number' ? monthlyMatchesRes.data : 0);
+
+      // 参加率TOP3
+      setParticipationTop3(top3Res.data || []);
 
       // 次の練習情報（参加者リストも含まれている）
       if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
@@ -363,14 +369,26 @@ const Home = () => {
         {nextPractice && (
           <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#374151] text-white' : 'bg-[#f9f6f2]'}`}>
             {nextPractice.today ? (
-              <div className="flex items-center gap-2 mb-3">
-                <span className="bg-white text-[#374151] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
-                <h2 className="text-lg font-bold">今日は練習日です</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="bg-white text-[#374151] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
+                  <h2 className="text-lg font-bold">今日は練習日です</h2>
+                </div>
+                {nextPractice.registered === false && (
+                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
+                    参加登録 <ArrowRight className="w-3 h-3" />
+                  </Link>
+                )}
               </div>
             ) : (
-              <h2 className="text-lg font-bold mb-3 text-[#374151]">
-                NEXT
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-[#374151]">NEXT</h2>
+                {nextPractice.registered === false && (
+                  <Link to="/practice/participation" className="text-xs font-semibold text-[#4a6b5a] hover:text-[#374151] flex items-center gap-0.5">
+                    参加登録 <ArrowRight className="w-3 h-3" />
+                  </Link>
+                )}
+              </div>
             )}
             <div className="space-y-2">
               {!nextPractice.today && (
@@ -470,6 +488,42 @@ const Home = () => {
             </p>
           </div>
         </div>
+
+        {/* 参加率TOP3 */}
+        {participationTop3.length > 0 && (
+          <div className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-5 h-5 text-[#4a6b5a]" />
+              <h2 className="text-base font-bold text-[#374151]">{monthLabel} 参加率TOP3</h2>
+            </div>
+            <div className="space-y-3">
+              {participationTop3.map((player, index) => {
+                const rankColors = ['bg-[#1A3654] text-white', 'bg-[#2d5a8a] text-white', 'bg-[#5a8ab5] text-white'];
+                const ratePercent = Math.round(player.rate * 100);
+                return (
+                  <div key={player.playerId} className="flex items-center gap-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${rankColors[index]}`}>{index + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-[#374151] truncate">{player.playerName}</span>
+                        <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{ratePercent}%</span>
+                      </div>
+                      <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
+                        <div
+                          className="bg-[#1A3654] h-1.5 rounded-full transition-all"
+                          style={{ width: `${ratePercent}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-[#6b7280] mt-0.5 block">
+                        {player.participatedMatches}/{player.totalCompletedMatches}試合
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

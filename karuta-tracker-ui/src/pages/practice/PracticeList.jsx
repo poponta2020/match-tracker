@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import { isSuperAdmin } from '../../utils/auth';
@@ -7,6 +7,61 @@ import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
 import { sortPlayersByRank } from '../../utils/playerSort';
+
+// 年月グリッドピッカー（ドロップダウン型）
+const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
+  const pickerRef = useRef(null);
+  const [viewYear, setViewYear] = useState(currentYear);
+
+  // 外側クリックで閉じる
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={pickerRef}
+      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-[60] w-[240px] p-3"
+    >
+      {/* 年ナビゲーション */}
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => setViewYear(viewYear - 1)} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="font-semibold text-sm text-[#374151]">{viewYear}年</span>
+        <button onClick={() => setViewYear(viewYear + 1)} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* 月グリッド 3x4 */}
+      <div className="grid grid-cols-3 gap-1">
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+          const isSelected = viewYear === currentYear && month === currentMonth;
+          return (
+            <button
+              key={month}
+              onClick={() => { onSelect(viewYear, month); onClose(); }}
+              className={`py-2 text-sm rounded-lg transition-colors
+                ${isSelected
+                  ? 'bg-[#4a6b5a] text-white font-bold'
+                  : 'text-[#374151] hover:bg-[#eef2ef]'
+                }`}
+            >
+              {month}月
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -22,6 +77,7 @@ const PracticeList = () => {
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [refreshing, setRefreshing] = useState(false); // データ更新中
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
@@ -329,9 +385,25 @@ const PracticeList = () => {
           >
             <ChevronLeft className="w-6 h-6 text-[#374151]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#374151]">
-            {monthStr}
-          </h1>
+          <div className="relative">
+            <button
+              onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
+              className="text-lg font-semibold text-[#374151]"
+            >
+              {monthStr}
+            </button>
+            {showYearMonthPicker && (
+              <YearMonthPicker
+                currentYear={currentDate.getFullYear()}
+                currentMonth={currentDate.getMonth() + 1}
+                onSelect={(year, month) => {
+                  const newDate = new Date(year, month - 1, 1);
+                  setCurrentDate(newDate);
+                }}
+                onClose={() => setShowYearMonthPicker(false)}
+              />
+            )}
+          </div>
           <button
             onClick={() => changeMonth(1)}
             className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
@@ -579,6 +651,7 @@ const PracticeList = () => {
         <CalendarCheck className="w-5 h-5" />
         <span className="text-sm font-medium">参加登録</span>
       </button>
+
     </div>
     </div>
   );

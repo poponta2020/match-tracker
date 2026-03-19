@@ -165,24 +165,33 @@ public class PracticeSessionService {
         // 今日以降の参加レコードを日付順で一括取得
         List<PracticeParticipant> allParticipations = practiceParticipantRepository
                 .findUpcomingParticipations(playerId, today);
-        if (allParticipations.isEmpty()) {
-            return null;
+
+        PracticeSession nextSession = null;
+        List<Integer> matchNumbers = List.of();
+        boolean registered = false;
+
+        if (!allParticipations.isEmpty()) {
+            // 参加登録あり → 最も近い参加予定の練習日
+            Long nextSessionId = allParticipations.get(0).getSessionId();
+            nextSession = practiceSessionRepository.findById(nextSessionId).orElse(null);
+            matchNumbers = allParticipations.stream()
+                    .filter(p -> p.getSessionId().equals(nextSessionId))
+                    .map(PracticeParticipant::getMatchNumber)
+                    .filter(java.util.Objects::nonNull)
+                    .sorted()
+                    .toList();
+            registered = true;
         }
 
-        // 最初の1件のセッションIDが最も近い練習日
-        Long nextSessionId = allParticipations.get(0).getSessionId();
-        PracticeSession nextSession = practiceSessionRepository.findById(nextSessionId).orElse(null);
         if (nextSession == null) {
-            return null;
+            // 参加登録なし → 直近の未来の練習日を取得
+            List<PracticeSession> upcomingSessions = practiceSessionRepository.findUpcomingSessions(today);
+            if (upcomingSessions.isEmpty()) {
+                return null;
+            }
+            nextSession = upcomingSessions.get(0);
+            registered = false;
         }
-
-        // そのセッションの試合番号を抽出
-        List<Integer> matchNumbers = allParticipations.stream()
-                .filter(p -> p.getSessionId().equals(nextSessionId))
-                .map(PracticeParticipant::getMatchNumber)
-                .filter(java.util.Objects::nonNull)
-                .sorted()
-                .toList();
 
         // 会場名を取得
         String venueName = null;
@@ -194,7 +203,7 @@ public class PracticeSessionService {
 
         // そのセッションの全参加者を取得
         List<PracticeParticipant> sessionParticipants = practiceParticipantRepository
-                .findBySessionId(nextSessionId);
+                .findBySessionId(nextSession.getId());
         List<Long> participantPlayerIds = sessionParticipants.stream()
                 .map(PracticeParticipant::getPlayerId)
                 .distinct()
@@ -219,6 +228,7 @@ public class PracticeSessionService {
                 .venueName(venueName)
                 .matchNumbers(matchNumbers)
                 .isToday(nextSession.getSessionDate().equals(today))
+                .registered(registered)
                 .participants(participantInfos)
                 .build();
     }
@@ -829,5 +839,81 @@ public class PracticeSessionService {
     public void removeParticipantFromMatch(Long sessionId, Integer matchNumber, Long playerId) {
         log.info("Removing participant {} from session {} match {}", playerId, sessionId, matchNumber);
         practiceParticipantRepository.deleteBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+    }
+
+    /**
+     * 月別参加率TOP3を取得
+     *
+     * 分母: その月の結果入力済み試合数（ユニークな matchDate + matchNumber の組数）
+     * 分子: 各選手がmatchParticipantsに含まれている試合のうち、結果入力済みの試合数
+     */
+    public List<ParticipationRateDto> getParticipationRateTop3(int year, int month) {
+        log.debug("Calculating participation rate top3 for {}-{}", year, month);
+
+        // 1. その月の全セッションを取得
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        if (sessions.isEmpty()) {
+            return List.of();
+        }
+
+        List<LocalDate> sessionDates = sessions.stream()
+                .map(PracticeSession::getSessionDate)
+                .collect(Collectors.toList());
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+        Map<Long, LocalDate> sessionDateMap = sessions.stream()
+                .collect(Collectors.toMap(PracticeSession::getId, PracticeSession::getSessionDate));
+
+        // 2. 結果入力済み試合 + 全参加記録 + 選手名を並列取得
+        var completedFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                matchRepository.findDistinctMatchDateAndNumberByDates(sessionDates));
+        var participantsFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                practiceParticipantRepository.findBySessionIdIn(sessionIds));
+        var playersFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                playerRepository.findAllActive());
+
+        java.util.concurrent.CompletableFuture.allOf(completedFuture, participantsFuture, playersFuture).join();
+
+        List<Object[]> completedPairs = completedFuture.join();
+        java.util.Set<String> completedMatchKeys = new java.util.HashSet<>();
+        for (Object[] pair : completedPairs) {
+            completedMatchKeys.add(pair[0] + ":" + pair[1]);
+        }
+
+        int totalCompletedMatches = completedMatchKeys.size();
+        if (totalCompletedMatches == 0) {
+            return List.of();
+        }
+
+        // 3. 選手ごとに、結果入力済み試合に参加した数を集計
+        List<PracticeParticipant> allParticipants = participantsFuture.join();
+        Map<Long, Integer> playerParticipationCount = new java.util.HashMap<>();
+        for (PracticeParticipant pp : allParticipants) {
+            if (pp.getMatchNumber() == null) continue;
+            LocalDate date = sessionDateMap.get(pp.getSessionId());
+            if (date == null) continue;
+            String key = date + ":" + pp.getMatchNumber();
+            if (completedMatchKeys.contains(key)) {
+                playerParticipationCount.merge(pp.getPlayerId(), 1, Integer::sum);
+            }
+        }
+
+        // 4. 選手名を取得してDTOに変換、TOP3を返す
+        Map<Long, String> playerNames = playersFuture.join().stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName));
+
+        return playerParticipationCount.entrySet().stream()
+                .map(entry -> ParticipationRateDto.builder()
+                        .playerId(entry.getKey())
+                        .playerName(playerNames.getOrDefault(entry.getKey(), "不明"))
+                        .participatedMatches(entry.getValue())
+                        .totalCompletedMatches(totalCompletedMatches)
+                        .rate((double) entry.getValue() / totalCompletedMatches)
+                        .build())
+                .sorted(Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
+                        .thenComparing(Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
+                .limit(3)
+                .collect(Collectors.toList());
     }
 }

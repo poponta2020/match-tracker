@@ -1,9 +1,106 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+
+// カレンダーピッカーコンポーネント
+const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
+  const calendarRef = useRef(null);
+  const initDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
+  const [viewYear, setViewYear] = useState(initDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initDate.getMonth()); // 0-indexed
+
+  // 外側クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const practiceDateSet = new Set(availableDates);
+
+  const changeMonth = (delta) => {
+    let newMonth = viewMonth + delta;
+    let newYear = viewYear;
+    if (newMonth < 0) { newMonth = 11; newYear--; }
+    if (newMonth > 11) { newMonth = 0; newYear++; }
+    setViewYear(newYear);
+    setViewMonth(newMonth);
+    onMonthChange(newYear, newMonth + 1);
+  };
+
+  // カレンダーのグリッドを生成
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const today = new Date().toISOString().split('T')[0];
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
+
+  return (
+    <div ref={calendarRef} className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 p-3 w-[280px]">
+      {/* 月ナビゲーション */}
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="font-semibold text-sm text-[#374151]">
+          {viewYear}年{viewMonth + 1}月
+        </span>
+        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* 曜日ヘッダー */}
+      <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
+        {weekDays.map(w => <div key={w}>{w}</div>)}
+      </div>
+
+      {/* 日付グリッド */}
+      {calendarLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4a6b5a]"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 text-center text-sm">
+          {cells.map((day, i) => {
+            if (day === null) return <div key={`empty-${i}`} />;
+            const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isPractice = practiceDateSet.has(dateStr);
+            const isSelected = dateStr === selectedDate;
+            const isToday = dateStr === today;
+
+            return (
+              <button
+                key={dateStr}
+                disabled={!isPractice}
+                onClick={() => { onSelectDate(dateStr); onClose(); }}
+                className={`relative w-9 h-9 mx-auto rounded-full flex items-center justify-center transition-colors
+                  ${isSelected ? 'bg-[#4a6b5a] text-white font-bold' : ''}
+                  ${!isSelected && isPractice ? 'text-[#374151] font-semibold hover:bg-[#dce5de] cursor-pointer' : ''}
+                  ${!isPractice ? 'text-gray-300 cursor-default' : ''}
+                  ${isToday && !isSelected ? 'ring-1 ring-[#4a6b5a]' : ''}
+                `}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MatchResultsView = () => {
   const { sessionId } = useParams();
@@ -23,8 +120,33 @@ const MatchResultsView = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [availableDates, setAvailableDates] = useState([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const initialFetchDone = useRef(false);
   const lastFetchedDate = useRef(null);
+  const fetchedMonths = useRef(new Set()); // キャッシュ済み月を管理
+
+  // 月の練習日を取得してavailableDatesにマージ
+  const fetchDatesForMonth = useCallback(async (year, month) => {
+    const key = `${year}-${month}`;
+    if (fetchedMonths.current.has(key)) return;
+    fetchedMonths.current.add(key);
+    try {
+      setCalendarLoading(true);
+      const fromDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const toDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+      const response = await practiceAPI.getDates(fromDate);
+      const dates = (response.data || []).filter(d => d <= toDate);
+      setAvailableDates(prev => {
+        const merged = new Set([...prev, ...dates]);
+        return [...merged].sort((a, b) => b.localeCompare(a));
+      });
+    } catch (err) {
+      console.error('月別日付取得エラー:', err);
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
 
   // 日付データの取得ヘルパー
   const fetchDataForDate = async (date) => {
@@ -48,26 +170,31 @@ const MatchResultsView = () => {
     }
   };
 
-  // 初回：日付リスト + 今日のデータを並列取得
+  // 初回：当月＋前月の練習日 + 今日のデータを並列取得
   useEffect(() => {
     const fetchInitial = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
         const targetDate = dateParam || today;
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 30);
-        const fromDateStr = fromDate.toISOString().split('T')[0];
+        const now = new Date();
+        const thisYear = now.getFullYear();
+        const thisMonth = now.getMonth() + 1;
+        const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
+        const prevYear = thisMonth === 1 ? thisYear - 1 : thisYear;
 
-        // 日付リストとターゲット日付のデータを同時取得
+        // 当月の1日からの練習日を取得（前月分も含まれる）
+        const fromDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+
         const [datesResponse, targetData] = await Promise.all([
-          practiceAPI.getDates(fromDateStr),
+          practiceAPI.getDates(fromDate),
           fetchDataForDate(targetDate),
         ]);
 
         const dates = datesResponse.data || [];
         setAvailableDates(dates);
+        fetchedMonths.current.add(`${thisYear}-${thisMonth}`);
+        fetchedMonths.current.add(`${prevYear}-${prevMonth}`);
 
-        // 初期日付の決定: URLパラメータ > 今日 > 今日以前で最も近い練習日 > 最新日付
         const initialDate = dateParam || dates.find(d => d === today) || dates.find(d => d <= today) || dates[0] || null;
         setSelectedDate(initialDate);
 
@@ -261,26 +388,14 @@ const MatchResultsView = () => {
                 </button>
 
                 {showDatePicker && (
-                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto min-w-[200px]">
-                    {availableDates.map((date) => (
-                      <button
-                        key={date}
-                        onClick={() => {
-                          setSelectedDate(date);
-                          setShowDatePicker(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2 hover:bg-[#eef2ef] ${
-                          date === selectedDate ? 'bg-[#dce5de] text-[#374151] font-semibold' : 'text-gray-700'
-                        }`}
-                      >
-                        {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
-                          month: 'short',
-                          day: 'numeric',
-                          weekday: 'short'
-                        })}
-                      </button>
-                    ))}
-                  </div>
+                  <CalendarPicker
+                    selectedDate={selectedDate}
+                    availableDates={availableDates}
+                    onSelectDate={setSelectedDate}
+                    onClose={() => setShowDatePicker(false)}
+                    onMonthChange={fetchDatesForMonth}
+                    calendarLoading={calendarLoading}
+                  />
                 )}
               </div>
 
@@ -352,26 +467,14 @@ const MatchResultsView = () => {
               </button>
 
               {showDatePicker && (
-                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-60 overflow-y-auto min-w-[200px]">
-                  {availableDates.map((date) => (
-                    <button
-                      key={date}
-                      onClick={() => {
-                        setSelectedDate(date);
-                        setShowDatePicker(false);
-                      }}
-                      className={`block w-full text-left px-4 py-2 hover:bg-[#eef2ef] ${
-                        date === selectedDate ? 'bg-[#dce5de] text-[#374151] font-semibold' : 'text-gray-700'
-                      }`}
-                    >
-                      {new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', {
-                        month: 'short',
-                        day: 'numeric',
-                        weekday: 'short'
-                      })}
-                    </button>
-                  ))}
-                </div>
+                <CalendarPicker
+                  selectedDate={selectedDate}
+                  availableDates={availableDates}
+                  onSelectDate={setSelectedDate}
+                  onClose={() => setShowDatePicker(false)}
+                  onMonthChange={fetchDatesForMonth}
+                  calendarLoading={calendarLoading}
+                />
               )}
             </div>
 

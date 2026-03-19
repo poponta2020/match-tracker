@@ -25,6 +25,7 @@ public class NextParticipationDto {
     private String venueName;
     private List<Integer> matchNumbers;
     private boolean isToday;
+    private boolean registered; // ログインユーザーが参加登録済みか
     private List<ParticipantInfo> participants;
 
     @Data

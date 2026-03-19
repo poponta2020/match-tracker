@@ -127,6 +127,15 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     List<Object[]> countByMatchDateIn(@Param("dates") List<LocalDate> dates);
 
     /**
+     * 複数の日付のユニークな(matchDate, matchNumber)ペアを一括取得（参加率計算用）
+     *
+     * @param dates 日付リスト
+     * @return [matchDate, matchNumber] の配列リスト
+     */
+    @Query("SELECT DISTINCT m.matchDate, m.matchNumber FROM Match m WHERE m.matchDate IN :dates")
+    List<Object[]> findDistinctMatchDateAndNumberByDates(@Param("dates") List<LocalDate> dates);
+
+    /**
      * 選手が作成または更新した対戦結果を取得
      * 編集・削除権限の判定に使用
      *

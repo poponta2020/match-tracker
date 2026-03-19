@@ -95,4 +95,10 @@ export const practiceAPI = {
   // 特定の試合から参加者を削除
   removeParticipantFromMatch: (sessionId, matchNumber, playerId) =>
     apiClient.delete(`/practice-sessions/${sessionId}/matches/${matchNumber}/participants/${playerId}`),
+
+  // 月別参加率TOP3を取得
+  getParticipationRateTop3: (year, month) =>
+    apiClient.get('/practice-sessions/participation-rate-top3', {
+      params: { year, month },
+    }),
 };
