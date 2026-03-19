@@ -57,7 +57,7 @@ const Register = () => {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-primary-600 mb-2">
-            競技かるた記録
+            わすらログ
           </h1>
           <p className="text-gray-600">試合・練習記録管理システム</p>
         </div>

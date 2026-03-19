@@ -97,7 +97,7 @@ const Layout = ({ children }) => {
     if (path.startsWith('/venues/')) return '会場詳細';
     if (path.startsWith('/pairings/')) return '組み合わせ作成';
 
-    return '競技かるた記録';
+    return 'わすらログ';
   };
 
   // ボトムナビゲーションの項目定義
