@@ -26,6 +26,8 @@ import VenueList from './pages/venues/VenueList';
 import VenueForm from './pages/venues/VenueForm';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import Landing from './pages/Landing';
+import AuthRoute from './components/AuthRoute';
 
 function App() {
   return (
@@ -40,11 +42,16 @@ function App() {
             <Route
               path="/"
               element={
-                <PrivateRoute>
-                  <Layout>
-                    <Home />
-                  </Layout>
-                </PrivateRoute>
+                <AuthRoute
+                  authenticated={
+                    <PrivateRoute>
+                      <Layout>
+                        <Home />
+                      </Layout>
+                    </PrivateRoute>
+                  }
+                  unauthenticated={<Landing />}
+                />
               }
             />
             <Route
