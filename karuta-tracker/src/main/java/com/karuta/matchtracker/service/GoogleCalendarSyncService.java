@@ -287,7 +287,7 @@ public class GoogleCalendarSyncService {
     private Event buildEvent(PracticeSession session, String venueName,
                              LocalTime eventStartTime, LocalTime eventEndTime) {
         Event event = new Event();
-        event.setSummary("わすら@" + venueName);
+        event.setSummary("わすら");
         event.setDescription(session.getTotalMatches() + "試合");
         event.setLocation(venueName);
         event.setColorId("2"); // バジル（緑）

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 import { sortPlayersByRank } from '../utils/playerSort';
+import PlayerChip from '../components/PlayerChip';
 
 const Home = () => {
   const { currentPlayer, logout } = useAuth();
@@ -417,20 +418,20 @@ const Home = () => {
 
                   <div className="flex flex-wrap gap-1.5">
                     {sortPlayersByRank(nextPracticeParticipants).map((p) => (
-                      <span
+                      <PlayerChip
                         key={p.id}
-                        className={`px-2.5 py-1 rounded-full text-xs ${
+                        name={p.name}
+                        kyuRank={p.kyuRank}
+                        className={`text-xs ${
                           nextPractice.today
                             ? isMyself(p)
                               ? 'bg-white text-[#374151] font-medium'
                               : 'bg-white/20 text-white'
                             : isMyself(p)
                               ? 'bg-[#4a6b5a] text-white font-medium'
-                              : 'bg-white border border-[#d4ddd7] text-[#374151]'
+                              : 'bg-white text-[#374151]'
                         }`}
-                      >
-                        {p.name}
-                      </span>
+                      />
                     ))}
                   </div>
                 </div>

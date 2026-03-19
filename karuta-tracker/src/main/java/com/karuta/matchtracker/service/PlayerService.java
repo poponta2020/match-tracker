@@ -185,7 +185,7 @@ public class PlayerService {
     /**
      * ログイン認証
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         log.info("Login attempt for user: {}", request.getName());
 
@@ -198,7 +198,13 @@ public class PlayerService {
             throw new ResourceNotFoundException("選手名またはパスワードが正しくありません");
         }
 
-        log.info("Successful login for user: {}", request.getName());
-        return LoginResponse.fromEntity(player);
+        boolean isFirstLogin = player.getLastLoginAt() == null;
+
+        // 最終ログイン日時を更新
+        player.setLastLoginAt(LocalDateTime.now());
+        playerRepository.save(player);
+
+        log.info("Successful login for user: {} (firstLogin: {})", request.getName(), isFirstLogin);
+        return LoginResponse.fromEntity(player, isFirstLogin);
     }
 }

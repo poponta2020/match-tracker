@@ -23,11 +23,12 @@ public class LoginResponse {
     private Player.KyuRank kyuRank;
     private String karutaClub;
     private Player.Role role;
+    private boolean firstLogin;
 
     /**
      * エンティティからレスポンスへ変換
      */
-    public static LoginResponse fromEntity(Player player) {
+    public static LoginResponse fromEntity(Player player, boolean firstLogin) {
         if (player == null) {
             return null;
         }
@@ -40,6 +41,7 @@ public class LoginResponse {
                 .kyuRank(player.getKyuRank())
                 .karutaClub(player.getKarutaClub())
                 .role(player.getRole())
+                .firstLogin(firstLogin)
                 .build();
     }
 }

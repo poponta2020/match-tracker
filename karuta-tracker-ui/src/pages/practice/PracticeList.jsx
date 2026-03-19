@@ -5,6 +5,7 @@ import { isSuperAdmin } from '../../utils/auth';
 import { X, ChevronLeft, ChevronRight, CalendarCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
+import PlayerChip from '../../components/PlayerChip';
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -493,10 +494,13 @@ const PracticeList = () => {
                           <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
                             {participants.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
-                                {participants.map((name, idx) => (
-                                  <span key={idx} className="text-xs text-[#374151] bg-[#d4ddd7] px-2 py-0.5 rounded-full">
-                                    {name}
-                                  </span>
+                                {participants.map((p, idx) => (
+                                  <PlayerChip
+                                    key={idx}
+                                    name={typeof p === 'string' ? p : p.name}
+                                    kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                    className="text-xs text-[#374151] bg-[#d4ddd7]"
+                                  />
                                 ))}
                               </div>
                             ) : (

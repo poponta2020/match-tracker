@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.dto;
 
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeSession;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,8 +40,17 @@ public class PracticeSessionDto {
     private Integer participantCount;      // 参加者数
     private Integer completedMatches;      // 実施済み試合数
     private java.util.Map<Integer, Integer> matchParticipantCounts;  // 試合番号ごとの参加人数
-    private java.util.Map<Integer, List<String>> matchParticipants;  // 試合番号ごとの参加者名リスト
+    private java.util.Map<Integer, List<MatchParticipantInfo>> matchParticipants;  // 試合番号ごとの参加者情報リスト
     private List<VenueMatchScheduleDto> venueSchedules;  // 会場の試合時間割
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class MatchParticipantInfo {
+        private String name;
+        private Player.KyuRank kyuRank;
+    }
 
     /**
      * エンティティからDTOへ変換

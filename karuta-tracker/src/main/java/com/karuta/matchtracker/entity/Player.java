@@ -87,6 +87,13 @@ public class Player {
     private Role role = Role.PLAYER;
 
     /**
+     * 最終ログイン日時
+     * NULLの場合は一度もログインしていない（初回ログイン）
+     */
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    /**
      * 削除日時（論理削除）
      * NULLの場合はアクティブな選手
      */

@@ -497,7 +497,7 @@ public class PracticeSessionService {
         // 試合ごとの参加人数を集計
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionId(session.getId());
         Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
-        Map<Integer, List<String>> matchParticipants = new java.util.HashMap<>();
+        Map<Integer, List<PracticeSessionDto.MatchParticipantInfo>> matchParticipants = new java.util.HashMap<>();
 
         for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
             matchCounts.put(i, 0);
@@ -520,12 +520,17 @@ public class PracticeSessionService {
             }
         }
 
-        // 級位→段位→名前順でソートして名前リストに変換
+        // 級位→段位→名前順でソートしてParticipantInfoリストに変換
         Comparator<Player> playerComp = PlayerSortHelper.playerComparator();
         for (Map.Entry<Integer, List<Player>> entry : matchParticipantPlayers.entrySet()) {
             entry.getValue().sort(playerComp);
             matchParticipants.put(entry.getKey(),
-                    entry.getValue().stream().map(Player::getName).collect(Collectors.toList()));
+                    entry.getValue().stream()
+                            .map(p -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                    .name(p.getName())
+                                    .kyuRank(p.getKyuRank())
+                                    .build())
+                            .collect(Collectors.toList()));
         }
 
         dto.setMatchParticipantCounts(matchCounts);
@@ -624,7 +629,7 @@ public class PracticeSessionService {
                             .filter(p -> p.getSessionId().equals(session.getId()))
                             .collect(Collectors.toList());
                     Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
-                    Map<Integer, List<String>> matchParticipants = new java.util.HashMap<>();
+                    Map<Integer, List<PracticeSessionDto.MatchParticipantInfo>> matchParticipants = new java.util.HashMap<>();
 
                     for (int i = 1; i <= (session.getTotalMatches() != null ? session.getTotalMatches() : 7); i++) {
                         matchCounts.put(i, 0);
@@ -644,12 +649,17 @@ public class PracticeSessionService {
                         }
                     }
 
-                    // 級位→段位→名前順でソートして名前リストに変換
+                    // 級位→段位→名前順でソートしてParticipantInfoリストに変換
                     Comparator<Player> comp = PlayerSortHelper.playerComparator();
                     for (Map.Entry<Integer, List<Player>> entry : matchPlayersList.entrySet()) {
                         entry.getValue().sort(comp);
                         matchParticipants.put(entry.getKey(),
-                                entry.getValue().stream().map(Player::getName).collect(Collectors.toList()));
+                                entry.getValue().stream()
+                                        .map(p -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                                .name(p.getName())
+                                                .kyuRank(p.getKyuRank())
+                                                .build())
+                                        .collect(Collectors.toList()));
                     }
 
                     dto.setMatchParticipantCounts(matchCounts);

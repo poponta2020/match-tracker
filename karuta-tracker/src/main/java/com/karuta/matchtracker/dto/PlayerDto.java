@@ -26,6 +26,7 @@ public class PlayerDto {
     private String karutaClub;
     private String remarks;
     private Player.Role role;
+    private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
@@ -47,6 +48,7 @@ public class PlayerDto {
                 .karutaClub(player.getKarutaClub())
                 .remarks(player.getRemarks())
                 .role(player.getRole())
+                .lastLoginAt(player.getLastLoginAt())
                 .createdAt(player.getCreatedAt())
                 .updatedAt(player.getUpdatedAt())
                 .deletedAt(player.getDeletedAt())

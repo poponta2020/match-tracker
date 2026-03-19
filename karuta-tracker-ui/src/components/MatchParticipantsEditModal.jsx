@@ -3,6 +3,7 @@ import { X, Search } from 'lucide-react';
 import { practiceAPI } from '../api';
 import apiClient from '../api/client';
 import { sortPlayersByRank } from '../utils/playerSort';
+import PlayerChip from './PlayerChip';
 
 const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) => {
   const [allPlayers, setAllPlayers] = useState([]);
@@ -30,7 +31,7 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
             nameToIdMap[player.name] = player.id;
           });
           const ids = participants
-            .map(name => nameToIdMap[name])
+            .map(p => nameToIdMap[typeof p === 'string' ? p : p.name])
             .filter(id => id !== undefined);
           setSelectedPlayerIds(ids);
         }
@@ -133,15 +134,15 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedPlayers.map((player) => (
-                      <button
+                      <PlayerChip
                         key={player.id}
-                        type="button"
+                        name={player.name}
+                        kyuRank={player.kyuRank}
                         onClick={() => handleRemovePlayer(player.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm bg-[#82655a] text-white hover:bg-[#6b5048] transition-colors"
+                        className="inline-flex items-center gap-1 text-sm bg-[#82655a] text-white hover:bg-[#6b5048] transition-colors"
                       >
-                        {player.name}
                         <X size={12} className="text-white/70" />
-                      </button>
+                      </PlayerChip>
                     ))}
                   </div>
                 </div>
@@ -176,14 +177,13 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
               {/* 未選択チップ */}
               <div className="flex flex-wrap gap-1.5">
                 {filteredUnselected.map((player) => (
-                  <button
+                  <PlayerChip
                     key={player.id}
-                    type="button"
+                    name={player.name}
+                    kyuRank={player.kyuRank}
                     onClick={() => handleTogglePlayer(player.id)}
-                    className="px-2.5 py-1 rounded-full text-sm text-[#8a7568] border border-[#c5b8ab] hover:border-[#82655a] hover:text-[#5f3a2d] transition-colors"
-                  >
-                    {player.name}
-                  </button>
+                    className="text-sm text-[#8a7568] hover:text-[#5f3a2d] transition-colors"
+                  />
                 ))}
                 {filteredUnselected.length === 0 && searchQuery && (
                   <p className="text-sm text-[#b0a093] py-2">該当なし</p>

@@ -37,8 +37,10 @@ export const AuthProvider = ({ children }) => {
       const response = await playerAPI.login(name, password);
       const player = response.data;
 
-      setCurrentPlayer(player);
-      localStorage.setItem('currentPlayer', JSON.stringify(player));
+      // firstLoginフラグはログイン判定用のみ。localStorageには保存しない
+      const { firstLogin, ...playerData } = player;
+      setCurrentPlayer(playerData);
+      localStorage.setItem('currentPlayer', JSON.stringify(playerData));
       localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
       return player;
     } catch (error) {

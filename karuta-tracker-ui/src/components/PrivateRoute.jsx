@@ -17,7 +17,7 @@ const PrivateRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // プロフィール未設定チェック（kyuRankがnullなら未設定）
+  // プロフィール未設定チェック（kyuRankがnullなら未設定 = 初ログイン後にプロフィール未入力）
   // /profile/edit 以外のページにアクセスしようとした場合はリダイレクト
   if (!currentPlayer?.kyuRank && !location.pathname.startsWith('/profile')) {
     return <Navigate to="/profile/edit?setup=true" replace />;

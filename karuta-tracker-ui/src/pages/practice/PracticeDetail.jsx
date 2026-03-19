@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { practiceAPI } from '../../api';
+import PlayerChip, { getKyuBorderColor } from '../../components/PlayerChip';
 
 const PracticeDetail = () => {
   const navigate = useNavigate();
@@ -145,8 +146,15 @@ const PracticeDetail = () => {
                       参加者: {participantCount}名
                     </div>
                     {participants.length > 0 && (
-                      <div className="mt-1 text-xs text-gray-500">
-                        {participants.join(', ')}
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {participants.map((p, idx) => (
+                          <PlayerChip
+                            key={idx}
+                            name={typeof p === 'string' ? p : p.name}
+                            kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                            className="text-xs text-gray-600 bg-white"
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
@@ -164,7 +172,7 @@ const PracticeDetail = () => {
               {session.participants.map((participant) => (
                 <div
                   key={participant.id}
-                  className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 cursor-pointer"
+                  className={`px-4 py-2 bg-gray-50 border-2 ${getKyuBorderColor(participant.kyuRank)} rounded-lg text-center hover:bg-gray-100 cursor-pointer`}
                   onClick={() => navigate(`/players/${participant.id}`)}
                 >
                   <div className="text-sm font-medium text-gray-900">{participant.name}</div>

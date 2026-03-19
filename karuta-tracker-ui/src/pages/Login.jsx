@@ -18,7 +18,7 @@ const Login = () => {
 
     try {
       const player = await login(name, password);
-      if (!player.kyuRank) {
+      if (player.firstLogin) {
         navigate('/profile/edit?setup=true');
       } else {
         navigate('/');

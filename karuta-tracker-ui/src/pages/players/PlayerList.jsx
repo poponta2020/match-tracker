@@ -50,6 +50,20 @@ const PlayerList = () => {
     return !!(player.kyuRank || player.danRank);
   };
 
+  const formatLastLogin = (lastLoginAt) => {
+    if (!lastLoginAt) return '未ログイン';
+    const date = new Date(lastLoginAt);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return '今日';
+    if (diffDays === 1) return '昨日';
+    if (diffDays < 30) return `${diffDays}日前`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) return `${diffMonths}ヶ月前`;
+    return `${Math.floor(diffMonths / 12)}年前`;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -136,6 +150,9 @@ const PlayerList = () => {
                           未設定
                         </span>
                       )}
+                    </div>
+                    <div className="text-[11px] text-[#9ca3af] mt-0.5">
+                      最終ログイン: {formatLastLogin(player.lastLoginAt)}
                     </div>
                   </div>
 
