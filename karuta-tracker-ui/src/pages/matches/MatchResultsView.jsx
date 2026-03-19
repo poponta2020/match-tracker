@@ -209,7 +209,9 @@ const MatchResultsView = () => {
       pairedNames.add(p.player1Name);
       pairedNames.add(p.player2Name);
     });
-    return matchParticipants.filter(name => !pairedNames.has(name));
+    return matchParticipants
+      .map(p => typeof p === 'string' ? p : p.name)
+      .filter(name => !pairedNames.has(name));
   };
 
   const currentByePlayers = getByePlayersForMatch(currentMatchNumber);
