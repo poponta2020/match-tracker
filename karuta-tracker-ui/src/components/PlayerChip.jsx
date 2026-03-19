@@ -4,14 +4,14 @@
  */
 
 const KYU_BORDER_COLORS = {
-  'A級': 'border-red-400',
-  'B級': 'border-blue-400',
-  'C級': 'border-orange-400',
-  'D級': 'border-yellow-400',
-  'E級': 'border-lime-400',
+  'A級': 'border-red-200',
+  'B級': 'border-blue-200',
+  'C級': 'border-orange-200',
+  'D級': 'border-yellow-200',
+  'E級': 'border-lime-200',
 };
 
-const DEFAULT_BORDER_COLOR = 'border-gray-300';
+const DEFAULT_BORDER_COLOR = 'border-gray-200';
 
 /**
  * 級に応じた枠線色クラスを取得
