@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { matchAPI, practiceAPI, calendarAPI } from '../api';
 import {
   ArrowRight,
+  ChevronsRight,
   Menu,
   Calendar,
   Clock,
@@ -367,12 +368,34 @@ const Home = () => {
         )}
         {/* 次の練習 + 参加者（統合カード） */}
         {nextPractice && (
-          <div className={`rounded-lg shadow-md p-6 mb-4 ${nextPractice.today ? 'bg-[#374151] text-white' : 'bg-[#f9f6f2]'}`}>
+          <div className="rounded-lg shadow-md overflow-hidden mb-4">
+            {/* ヘッダー帯 */}
             {nextPractice.today ? (
-              <div className="flex items-center justify-between mb-3">
+              <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="bg-white text-[#374151] text-xs font-bold px-2 py-1 rounded-full">TODAY</span>
-                  <h2 className="text-lg font-bold">今日は練習日です</h2>
+                  <span className="bg-white text-[#374151] text-xs font-bold px-2 py-0.5 rounded-full">TODAY</span>
+                  <h2 className="text-base font-bold text-white">今日は練習日です</h2>
+                </div>
+                {nextPractice.registered === false ? (
+                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
+                    参加登録 <ArrowRight className="w-3 h-3" />
+                  </Link>
+                ) : nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                  <span className="text-xs text-white/70">
+                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="bg-[#1A3654] px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ChevronsRight className="w-6 h-6 text-white/80" />
+                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/80 decoration-2">NEXT</h2>
+                  {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                    <span className="text-xs text-white/70">
+                      {nextPractice.matchNumbers.join('、')}試合目に参加予定
+                    </span>
+                  )}
                 </div>
                 {nextPractice.registered === false && (
                   <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
@@ -380,107 +403,89 @@ const Home = () => {
                   </Link>
                 )}
               </div>
-            ) : (
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-[#374151]">NEXT</h2>
-                {nextPractice.registered === false && (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-[#4a6b5a] hover:text-[#374151] flex items-center gap-0.5">
-                    参加登録 <ArrowRight className="w-3 h-3" />
+            )}
+            {/* ボディ */}
+            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
+              <div className="space-y-2">
+                {!nextPractice.today && (
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-[#1A3654]" />
+                    <span className="font-semibold text-[#374151]">
+                      {(() => {
+                        const d = new Date(nextPractice.sessionDate);
+                        const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+                        return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                      })()}
+                    </span>
+                  </div>
+                )}
+                {nextPractice.startTime && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#1A3654]" />
+                    <span className="text-[#374151]">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
+                  </div>
+                )}
+                {nextPractice.venueName && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#1A3654]" />
+                    <span className="text-[#374151]">{nextPractice.venueName}</span>
+                  </div>
+                )}
+                {/* 参加者セクション */}
+                {nextPracticeParticipants.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-[#6b7280]">
+                        <Users className="w-3.5 h-3.5" />
+                        参加者
+                      </span>
+                      <span className="text-xs text-[#6b7280]">{nextPracticeParticipants.length}名</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {sortPlayersByRank(nextPracticeParticipants).map((p) => (
+                        <PlayerChip
+                          key={p.id}
+                          name={p.name}
+                          kyuRank={p.kyuRank}
+                          className={`text-xs ${
+                            isMyself(p)
+                              ? 'bg-[#1A3654] text-white font-medium'
+                              : 'bg-[#e8ecef] text-[#374151]'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {nextPractice.today && isAdmin() && (
+                  <Link
+                    to={`/pairings?date=${nextPractice.sessionDate}`}
+                    className="mt-3 flex items-center justify-center gap-2 bg-[#1A3654] text-white font-medium py-2.5 rounded-lg hover:bg-[#122740] transition-colors shadow-sm"
+                  >
+                    <Shuffle className="w-4 h-4" />
+                    組み合わせを作成
                   </Link>
                 )}
               </div>
-            )}
-            <div className="space-y-2">
-              {!nextPractice.today && (
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 opacity-70" />
-                  <span className="font-medium">
-                    {new Date(nextPractice.sessionDate).toLocaleDateString('ja-JP', {
-                      month: 'long',
-                      day: 'numeric',
-                      weekday: 'short'
-                    })}
-                  </span>
-                </div>
-              )}
-              {nextPractice.startTime && (
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 opacity-70" />
-                  <span>{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
-                </div>
-              )}
-              {nextPractice.venueName && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 opacity-70" />
-                  <span>{nextPractice.venueName}</span>
-                </div>
-              )}
-              {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                <div className={`mt-2 pt-2 border-t ${nextPractice.today ? 'border-white/20' : 'border-gray-200'}`}>
-                  <span className="text-sm opacity-80">参加試合：</span>
-                  <span className="font-medium ml-1">
-                    {nextPractice.matchNumbers.map(n => `${n}試合目`).join('、')}
-                  </span>
-                </div>
-              )}
-              {/* 参加者セクション */}
-              {nextPracticeParticipants.length > 0 && (
-                <div className={`mt-3 pt-3 border-t ${nextPractice.today ? 'border-white/20' : 'border-gray-200'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`text-sm font-medium flex items-center gap-1.5 ${nextPractice.today ? 'text-white/80' : 'text-[#6b7280]'}`}>
-                      <Users className="w-3.5 h-3.5" />
-                      参加者
-                    </span>
-                    <span className={`text-xs ${nextPractice.today ? 'text-white/60' : 'text-[#6b7280]'}`}>{nextPracticeParticipants.length}名</span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {sortPlayersByRank(nextPracticeParticipants).map((p) => (
-                      <PlayerChip
-                        key={p.id}
-                        name={p.name}
-                        kyuRank={p.kyuRank}
-                        className={`text-xs ${
-                          nextPractice.today
-                            ? isMyself(p)
-                              ? 'bg-white/90 text-[#374151] font-medium'
-                              : 'bg-white/20 text-white'
-                            : isMyself(p)
-                              ? 'bg-[#4a6b5a] text-white font-medium'
-                              : 'bg-[#f0f4f1] text-[#374151]'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {nextPractice.today && isAdmin() && (
-                <Link
-                  to={`/pairings?date=${nextPractice.sessionDate}`}
-                  className="mt-3 flex items-center justify-center gap-2 bg-[#1A3654] text-white font-medium py-2.5 rounded-lg hover:bg-[#122740] transition-colors shadow-sm"
-                >
-                  <Shuffle className="w-4 h-4" />
-                  組み合わせを作成
-                </Link>
-              )}
             </div>
           </div>
         )}
 
         {/* 今月のアクティビティ */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm">
+          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
             <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-[#4a6b5a]" />
+              <Calendar className="w-4 h-4 text-[#1A3654]" />
               <span className="text-xs text-[#6b7280]">{monthLabel}の参加</span>
             </div>
             <p className="text-2xl font-bold text-[#374151]">
               {monthlyPracticeCount}<span className="text-sm font-normal text-[#6b7280] ml-1">回</span>
             </p>
           </div>
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm">
+          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
             <div className="flex items-center gap-2 mb-1">
-              <Swords className="w-4 h-4 text-[#4a6b5a]" />
+              <Swords className="w-4 h-4 text-[#1A3654]" />
               <span className="text-xs text-[#6b7280]">{monthLabel}の対戦</span>
             </div>
             <p className="text-2xl font-bold text-[#374151]">
@@ -493,8 +498,8 @@ const Home = () => {
         {participationTop3.length > 0 && (
           <div className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
             <div className="flex items-center gap-2 mb-4">
-              <Trophy className="w-5 h-5 text-[#4a6b5a]" />
-              <h2 className="text-base font-bold text-[#374151]">{monthLabel} 参加率TOP3</h2>
+              <Trophy className="w-5 h-5 text-[#1A3654]" />
+              <h2 className="text-base font-bold text-[#1A3654]">{monthLabel} 参加率TOP3</h2>
             </div>
             <div className="space-y-3">
               {participationTop3.map((player, index) => {
@@ -515,7 +520,7 @@ const Home = () => {
                         />
                       </div>
                       <span className="text-xs text-[#6b7280] mt-0.5 block">
-                        {player.participatedMatches}/{player.totalCompletedMatches}試合
+                        {player.participatedMatches}/{player.totalScheduledMatches}試合
                       </span>
                     </div>
                   </div>

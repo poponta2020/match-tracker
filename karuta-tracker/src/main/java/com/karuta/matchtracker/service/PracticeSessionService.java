@@ -844,8 +844,8 @@ public class PracticeSessionService {
     /**
      * 月別参加率TOP3を取得
      *
-     * 分母: その月の結果入力済み試合数（ユニークな matchDate + matchNumber の組数）
-     * 分子: 各選手がmatchParticipantsに含まれている試合のうち、結果入力済みの試合数
+     * 分母: その月に予定されていた全試合数（各セッションのtotalMatchesの合計）
+     * 分子: 各選手のPracticeParticipant登録数（抜け番含む）
      */
     public List<ParticipationRateDto> getParticipationRateTop3(int year, int month) {
         log.debug("Calculating participation rate top3 for {}-{}", year, month);
@@ -856,50 +856,35 @@ public class PracticeSessionService {
             return List.of();
         }
 
-        List<LocalDate> sessionDates = sessions.stream()
-                .map(PracticeSession::getSessionDate)
-                .collect(Collectors.toList());
+        // 2. 分母: 全セッションのtotalMatchesの合計
+        int totalScheduledMatches = sessions.stream()
+                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0)
+                .sum();
+        if (totalScheduledMatches == 0) {
+            return List.of();
+        }
+
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
-        Map<Long, LocalDate> sessionDateMap = sessions.stream()
-                .collect(Collectors.toMap(PracticeSession::getId, PracticeSession::getSessionDate));
 
-        // 2. 結果入力済み試合 + 全参加記録 + 選手名を並列取得
-        var completedFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
-                matchRepository.findDistinctMatchDateAndNumberByDates(sessionDates));
+        // 3. 全参加記録 + 選手名を並列取得
         var participantsFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
                 practiceParticipantRepository.findBySessionIdIn(sessionIds));
         var playersFuture = java.util.concurrent.CompletableFuture.supplyAsync(() ->
                 playerRepository.findAllActive());
 
-        java.util.concurrent.CompletableFuture.allOf(completedFuture, participantsFuture, playersFuture).join();
+        java.util.concurrent.CompletableFuture.allOf(participantsFuture, playersFuture).join();
 
-        List<Object[]> completedPairs = completedFuture.join();
-        java.util.Set<String> completedMatchKeys = new java.util.HashSet<>();
-        for (Object[] pair : completedPairs) {
-            completedMatchKeys.add(pair[0] + ":" + pair[1]);
-        }
-
-        int totalCompletedMatches = completedMatchKeys.size();
-        if (totalCompletedMatches == 0) {
-            return List.of();
-        }
-
-        // 3. 選手ごとに、結果入力済み試合に参加した数を集計
+        // 4. 選手ごとの参加試合数を集計（抜け番含む）
         List<PracticeParticipant> allParticipants = participantsFuture.join();
         Map<Long, Integer> playerParticipationCount = new java.util.HashMap<>();
         for (PracticeParticipant pp : allParticipants) {
             if (pp.getMatchNumber() == null) continue;
-            LocalDate date = sessionDateMap.get(pp.getSessionId());
-            if (date == null) continue;
-            String key = date + ":" + pp.getMatchNumber();
-            if (completedMatchKeys.contains(key)) {
-                playerParticipationCount.merge(pp.getPlayerId(), 1, Integer::sum);
-            }
+            playerParticipationCount.merge(pp.getPlayerId(), 1, Integer::sum);
         }
 
-        // 4. 選手名を取得してDTOに変換、TOP3を返す
+        // 5. 選手名を取得してDTOに変換、TOP3を返す
         Map<Long, String> playerNames = playersFuture.join().stream()
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
@@ -908,8 +893,8 @@ public class PracticeSessionService {
                         .playerId(entry.getKey())
                         .playerName(playerNames.getOrDefault(entry.getKey(), "不明"))
                         .participatedMatches(entry.getValue())
-                        .totalCompletedMatches(totalCompletedMatches)
-                        .rate((double) entry.getValue() / totalCompletedMatches)
+                        .totalScheduledMatches(totalScheduledMatches)
+                        .rate((double) entry.getValue() / totalScheduledMatches)
                         .build())
                 .sorted(Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
                         .thenComparing(Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))

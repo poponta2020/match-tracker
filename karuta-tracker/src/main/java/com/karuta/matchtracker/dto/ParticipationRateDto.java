@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class ParticipationRateDto {
     private Long playerId;
     private String playerName;
-    private int participatedMatches; // 参加試合数（matchParticipantsに含まれる結果入力済み試合数）
-    private int totalCompletedMatches; // その月の結果入力済み試合数（分母）
+    private int participatedMatches; // 参加試合数（PracticeParticipant登録数、抜け番含む）
+    private int totalScheduledMatches; // その月の予定試合数（各セッションのtotalMatchesの合計）
     private double rate; // 参加率（0.0〜1.0）
 }
