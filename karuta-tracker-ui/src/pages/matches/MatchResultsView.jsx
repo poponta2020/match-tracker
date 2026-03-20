@@ -47,29 +47,29 @@ const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, o
   const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
 
   return (
-    <div ref={calendarRef} className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-40 p-3 w-[280px]">
+    <div ref={calendarRef} className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-bg border border-border-subtle rounded-lg shadow-lg z-40 p-3 w-[280px]">
       {/* 月ナビゲーション */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded">
+        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-surface rounded">
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="font-semibold text-sm text-[#374151]">
+        <span className="font-semibold text-sm text-text">
           {viewYear}年{viewMonth + 1}月
         </span>
-        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded">
+        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-surface rounded">
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
       {/* 曜日ヘッダー */}
-      <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
+      <div className="grid grid-cols-7 text-center text-xs text-text-placeholder mb-1">
         {weekDays.map(w => <div key={w}>{w}</div>)}
       </div>
 
       {/* 日付グリッド */}
       {calendarLoading ? (
         <div className="flex items-center justify-center py-6">
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#4a6b5a]"></div>
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-secondary"></div>
         </div>
       ) : (
         <div className="grid grid-cols-7 text-center text-sm">
@@ -86,10 +86,10 @@ const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, o
                 disabled={!isPractice}
                 onClick={() => { onSelectDate(dateStr); onClose(); }}
                 className={`relative w-9 h-9 mx-auto rounded-full flex items-center justify-center transition-colors
-                  ${isSelected ? 'bg-[#4a6b5a] text-white font-bold' : ''}
-                  ${!isSelected && isPractice ? 'text-[#374151] font-semibold hover:bg-[#dce5de] cursor-pointer' : ''}
-                  ${!isPractice ? 'text-gray-300 cursor-default' : ''}
-                  ${isToday && !isSelected ? 'ring-1 ring-[#4a6b5a]' : ''}
+                  ${isSelected ? 'bg-secondary text-text-inverse font-bold' : ''}
+                  ${!isSelected && isPractice ? 'text-text font-semibold hover:bg-surface cursor-pointer' : ''}
+                  ${!isPractice ? 'text-text-placeholder cursor-default' : ''}
+                  ${isToday && !isSelected ? 'ring-1 ring-secondary' : ''}
                 `}
               >
                 {day}
@@ -294,10 +294,10 @@ const MatchResultsView = () => {
 
   if (initialLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
+      <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary mx-auto"></div>
+          <p className="mt-4 text-text-muted">読み込み中...</p>
         </div>
       </div>
     );
@@ -306,15 +306,15 @@ const MatchResultsView = () => {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <div className="flex items-center gap-2 text-red-800 mb-2">
+        <div className="bg-status-danger-surface border border-status-danger/20 rounded-lg p-6 max-w-md">
+          <div className="flex items-center gap-2 text-status-danger mb-2">
             <AlertCircle className="h-5 w-5" />
             <h2 className="font-semibold">エラー</h2>
           </div>
-          <p className="text-red-700">{error}</p>
+          <p className="text-status-danger">{error}</p>
           <button
             onClick={() => navigate('/')}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            className="mt-4 px-4 py-2 bg-red-600 text-text-inverse rounded-lg hover:bg-red-700"
           >
             ホームに戻る
           </button>
@@ -357,9 +357,9 @@ const MatchResultsView = () => {
   // データなし画面
   if (!loading && !session && selectedDate) {
     return (
-      <div className="min-h-screen bg-[#f2ede6] pb-20">
+      <div className="min-h-screen bg-bg pb-20">
         {/* ナビゲーションバー */}
-        <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between py-3">
               <button
@@ -367,8 +367,8 @@ const MatchResultsView = () => {
                 disabled={!hasPreviousDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasPreviousDate()
-                    ? 'hover:bg-[#c5cec8] text-[#374151]'
-                    : 'text-gray-300 cursor-not-allowed'
+                    ? 'hover:bg-surface text-text'
+                    : 'text-text-placeholder cursor-not-allowed'
                 }`}
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -377,7 +377,7 @@ const MatchResultsView = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="text-lg font-semibold text-[#374151]"
+                  className="text-lg font-semibold text-text"
                 >
                   {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                     year: 'numeric',
@@ -404,8 +404,8 @@ const MatchResultsView = () => {
                 disabled={!hasNextDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasNextDate()
-                    ? 'hover:bg-[#c5cec8] text-[#374151]'
-                    : 'text-gray-300 cursor-not-allowed'
+                    ? 'hover:bg-surface text-text'
+                    : 'text-text-placeholder cursor-not-allowed'
                 }`}
               >
                 <ChevronRight className="w-6 h-6" />
@@ -416,12 +416,12 @@ const MatchResultsView = () => {
 
         {/* データなしメッセージ */}
         <div className="max-w-4xl mx-auto px-4 pt-20 py-12 text-center">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
-            <Calendar className="h-16 w-16 text-blue-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-blue-900 mb-2">
+          <div className="bg-status-info-surface border border-status-info/20 rounded-lg p-8">
+            <Calendar className="h-16 w-16 text-status-info mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-status-info mb-2">
               この日は練習がありません
             </h2>
-            <p className="text-blue-700">
+            <p className="text-status-info">
               {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -435,9 +435,9 @@ const MatchResultsView = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-20">
+    <div className="min-h-screen bg-bg pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付選択 */}
           <div className="flex items-center justify-between py-3">
@@ -446,8 +446,8 @@ const MatchResultsView = () => {
               disabled={!hasPreviousDate()}
               className={`p-2 rounded-full transition-colors ${
                 hasPreviousDate()
-                  ? 'hover:bg-[#c5cec8] text-[#374151]'
-                  : 'text-gray-300 cursor-not-allowed'
+                  ? 'hover:bg-surface text-text'
+                  : 'text-text-placeholder cursor-not-allowed'
               }`}
             >
               <ChevronLeft className="w-6 h-6" />
@@ -456,7 +456,7 @@ const MatchResultsView = () => {
             <div className="relative">
               <button
                 onClick={() => setShowDatePicker(!showDatePicker)}
-                className="text-lg font-semibold text-[#374151]"
+                className="text-lg font-semibold text-text"
               >
                 {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                   year: 'numeric',
@@ -483,8 +483,8 @@ const MatchResultsView = () => {
               disabled={!hasNextDate()}
               className={`p-2 rounded-full transition-colors ${
                 hasNextDate()
-                  ? 'hover:bg-[#c5cec8] text-[#374151]'
-                  : 'text-gray-300 cursor-not-allowed'
+                  ? 'hover:bg-surface text-text'
+                  : 'text-text-placeholder cursor-not-allowed'
               }`}
             >
               <ChevronRight className="w-6 h-6" />
@@ -500,8 +500,8 @@ const MatchResultsView = () => {
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#374151] text-[#374151]'
-                      : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
+                      ? 'border-text text-text'
+                      : 'border-transparent text-text-muted hover:text-text hover:border-border-subtle'
                   }`}
                 >
                   {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
@@ -514,7 +514,7 @@ const MatchResultsView = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
-        <div className="divide-y divide-[#d4ddd7]">
+        <div className="divide-y divide-border-subtle">
           {currentPairings.map((pairing, index) => {
             const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
@@ -527,22 +527,22 @@ const MatchResultsView = () => {
                   <div className="flex items-center text-lg">
                     <Link
                       to={`/matches?playerId=${pairing.player1Id}`}
-                      className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-status-success' : 'text-text'}`}
                     >
                       {pairing.player1Name}
                     </Link>
-                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-status-success' : 'text-status-danger'}`}>
                       {isPlayer1Winner ? '〇' : '×'}
                     </div>
-                    <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
+                    <div className="font-bold text-text w-10 text-center flex-shrink-0">
                       {match.scoreDifference}
                     </div>
-                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-status-success' : 'text-status-danger'}`}>
                       {isPlayer2Winner ? '〇' : '×'}
                     </div>
                     <Link
                       to={`/matches?playerId=${pairing.player2Id}`}
-                      className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-status-success' : 'text-text'}`}
                     >
                       {pairing.player2Name}
                     </Link>
@@ -552,16 +552,16 @@ const MatchResultsView = () => {
                   <div className="flex items-center text-lg">
                     <Link
                       to={`/matches?playerId=${pairing.player1Id}`}
-                      className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate hover:underline"
+                      className="flex-1 text-right pr-3 font-semibold text-text truncate hover:underline"
                     >
                       {pairing.player1Name}
                     </Link>
-                    <div className="text-sm font-medium text-[#9ca3af] w-8 text-center flex-shrink-0">
+                    <div className="text-sm font-medium text-text-placeholder w-8 text-center flex-shrink-0">
                       vs
                     </div>
                     <Link
                       to={`/matches?playerId=${pairing.player2Id}`}
-                      className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate hover:underline"
+                      className="flex-1 text-left pl-3 font-semibold text-text truncate hover:underline"
                     >
                       {pairing.player2Name}
                     </Link>
@@ -574,8 +574,8 @@ const MatchResultsView = () => {
 
         {/* 抜けの選手 */}
         {currentByePlayers.length > 0 && (
-          <div className="mt-4 px-3 py-2.5 bg-[#e5ebe7] rounded-lg flex items-center gap-2 text-sm text-[#6b7280]">
-            <span className="font-medium text-[#374151] flex-shrink-0">抜け:</span>
+          <div className="mt-4 px-3 py-2.5 bg-surface-disabled rounded-lg flex items-center gap-2 text-sm text-text-muted">
+            <span className="font-medium text-text flex-shrink-0">抜け:</span>
             <span>{currentByePlayers.join('、')}</span>
           </div>
         )}
@@ -584,7 +584,7 @@ const MatchResultsView = () => {
         {(isAdmin() || isSuperAdmin()) && session && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
+            className="w-full mt-6 py-3 px-4 bg-primary text-text-inverse rounded-lg hover:bg-primary-active flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
             結果を編集・入力する

@@ -248,9 +248,9 @@ const MatchList = () => {
 
   const getResultBadge = (result) => {
     const styles = {
-      勝ち: 'bg-green-100 text-green-700',
-      負け: 'bg-red-100 text-red-700',
-      引き分け: 'bg-gray-100 text-gray-700',
+      勝ち: 'bg-status-success-surface text-status-success',
+      負け: 'bg-status-danger-surface text-status-danger',
+      引き分け: 'bg-surface text-text',
     };
     return styles[result] || styles['引き分け'];
   };
@@ -269,16 +269,16 @@ const MatchList = () => {
 
   // 勝敗に応じた色スタイル
   const getResultColor = (result) => {
-    if (result === '勝ち') return 'text-green-600 font-bold';
-    if (result === '負け') return 'text-red-600 font-bold';
-    return 'text-gray-600 font-bold';
+    if (result === '勝ち') return 'text-status-success font-bold';
+    if (result === '負け') return 'text-status-danger font-bold';
+    return 'text-text-muted font-bold';
   };
 
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div>
       </div>
     );
   }
@@ -286,18 +286,18 @@ const MatchList = () => {
   return (
     <div className="space-y-6 pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between">
             {/* 左: 名前 + 年月 */}
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-[#374151] truncate flex items-baseline gap-2">
+              <h1 className="text-xl font-bold text-text truncate flex items-baseline gap-2">
                 <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
                 {targetPlayerKyuRank && (
-                  <span className="text-sm font-normal text-[#6b7280]">{targetPlayerKyuRank}</span>
+                  <span className="text-sm font-normal text-text-muted">{targetPlayerKyuRank}</span>
                 )}
               </h1>
-              <p className="text-sm text-[#6b7280] mt-0.5">
+              <p className="text-sm text-text-muted mt-0.5">
                 {selectedYear && selectedMonth
                   ? `${selectedYear}年 ${selectedMonth}月`
                   : selectedYear
@@ -310,14 +310,14 @@ const MatchList = () => {
               {isOtherPlayer && (
                 <button
                   onClick={() => navigate('/matches')}
-                  className="text-xs text-[#4a6b5a] border border-[#4a6b5a] px-2 py-1 rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
+                  className="text-xs text-secondary border border-secondary px-2 py-1 rounded hover:bg-secondary hover:text-text-inverse transition-colors"
                 >
                   自分に戻す
                 </button>
               )}
               <button
                 onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
-                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-[#4a6b5a] text-white' : 'text-[#6b7280] hover:bg-[#c5cec8]'}`}
+                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-primary text-text-inverse' : 'text-text-muted hover:bg-surface'}`}
               >
                 <Search className="w-5 h-5" />
               </button>
@@ -328,7 +328,7 @@ const MatchList = () => {
           {showPlayerSearch && (
             <div className="relative mt-3" ref={playerSearchRef}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-placeholder" />
                 <input
                   type="text"
                   placeholder="選手名で検索..."
@@ -337,19 +337,19 @@ const MatchList = () => {
                   onChange={(e) => {
                     setPlayerSearchText(e.target.value);
                   }}
-                  className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
+                  className="w-full pl-9 pr-8 py-2 text-sm bg-bg border border-border-subtle rounded-lg focus:outline-none focus:ring-1 focus:ring-focus"
                 />
                 {playerSearchText && (
                   <button
                     onClick={() => { setPlayerSearchText(''); }}
                     className="absolute right-3 top-1/2 -translate-y-1/2"
                   >
-                    <X className="w-4 h-4 text-gray-400" />
+                    <X className="w-4 h-4 text-text-placeholder" />
                   </button>
                 )}
               </div>
               {playerSearchResults.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
+                <div className="absolute top-full mt-1 left-0 right-0 bg-bg border border-border-subtle rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
                   {playerSearchResults.map((p) => (
                     <button
                       key={p.id}
@@ -358,10 +358,10 @@ const MatchList = () => {
                         setPlayerSearchText('');
                         setShowPlayerSearch(false);
                       }}
-                      className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+                      className="block w-full text-left px-4 py-2.5 text-sm hover:bg-surface text-text"
                     >
                       {p.name}
-                      {p.kyuRank && <span className="ml-2 text-xs text-gray-400">{p.kyuRank}</span>}
+                      {p.kyuRank && <span className="ml-2 text-xs text-text-placeholder">{p.kyuRank}</span>}
                     </button>
                   ))}
                 </div>
@@ -377,14 +377,14 @@ const MatchList = () => {
       {rankStatistics && (
         <div className="space-y-3">
           {/* 総計カード */}
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
+          <div className="bg-surface rounded-lg shadow-sm p-4">
             <div className="flex items-baseline justify-between mb-2">
               <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-bold text-[#374151]">{rankStatistics.total.total}<span className="text-sm font-normal text-[#9ca3af] ml-0.5">試合</span></span>
-                <span className="text-sm"><span className="text-green-600 font-semibold">{rankStatistics.total.wins}</span><span className="text-[#9ca3af]">勝</span></span>
-                <span className="text-sm"><span className="text-red-600 font-semibold">{rankStatistics.total.losses}</span><span className="text-[#9ca3af]">敗</span></span>
+                <span className="text-2xl font-bold text-text">{rankStatistics.total.total}<span className="text-sm font-normal text-text-placeholder ml-0.5">試合</span></span>
+                <span className="text-sm"><span className="text-status-success font-semibold">{rankStatistics.total.wins}</span><span className="text-text-placeholder">勝</span></span>
+                <span className="text-sm"><span className="text-status-danger font-semibold">{rankStatistics.total.losses}</span><span className="text-text-placeholder">敗</span></span>
               </div>
-              <span className="text-xl font-bold text-[#374151]">{rankStatistics.total.winRate}%</span>
+              <span className="text-xl font-bold text-text">{rankStatistics.total.winRate}%</span>
             </div>
             {/* 勝率バー */}
             <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
@@ -396,25 +396,25 @@ const MatchList = () => {
           </div>
 
           {/* 級別リスト */}
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm divide-y divide-[#e5e0da]">
+          <div className="bg-surface rounded-lg shadow-sm divide-y divide-border-subtle">
             {['A級', 'B級', 'C級', 'D級', 'E級'].map((rank) => {
               const stats = rankStatistics.byRank[rank];
               const isEmpty = stats.total === 0;
               return (
                 <div key={rank} className={`flex items-center px-4 py-2 ${isEmpty ? 'opacity-35' : ''}`}>
-                  <span className="text-sm font-medium text-[#374151] w-12 flex-shrink-0">対{rank.charAt(0)}</span>
-                  <span className="text-xs text-[#9ca3af] w-16 flex-shrink-0 text-right">
+                  <span className="text-sm font-medium text-text w-12 flex-shrink-0">対{rank.charAt(0)}</span>
+                  <span className="text-xs text-text-placeholder w-16 flex-shrink-0 text-right">
                     {isEmpty ? '—' : `${stats.wins}勝 ${stats.losses}敗`}
                   </span>
-                  <div className="flex-1 mx-3 h-1.5 bg-[#e5e0da] rounded-full overflow-hidden">
+                  <div className="flex-1 mx-3 h-1.5 bg-border-subtle rounded-full overflow-hidden">
                     {!isEmpty && (
                       <div
-                        className="h-full bg-[#4a6b5a] rounded-full transition-all"
+                        className="h-full bg-secondary rounded-full transition-all"
                         style={{ width: `${stats.winRate}%` }}
                       />
                     )}
                   </div>
-                  <span className={`text-sm font-semibold w-10 text-right flex-shrink-0 ${isEmpty ? 'text-[#9ca3af]' : 'text-[#374151]'}`}>
+                  <span className={`text-sm font-semibold w-10 text-right flex-shrink-0 ${isEmpty ? 'text-text-placeholder' : 'text-text'}`}>
                     {isEmpty ? '—' : `${stats.winRate}%`}
                   </span>
                 </div>
@@ -426,10 +426,10 @@ const MatchList = () => {
 
       {/* 試合一覧 */}
       {filteredMatches.length === 0 ? (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-12 text-center">
-          <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg mb-2">試合記録がありません</p>
-          <p className="text-gray-500 mb-6">
+        <div className="bg-surface rounded-lg shadow-sm p-12 text-center">
+          <Trophy className="w-16 h-16 text-text-placeholder mx-auto mb-4" />
+          <p className="text-text-muted text-lg mb-2">試合記録がありません</p>
+          <p className="text-text-muted mb-6">
             {searchTerm || filterResult !== '全て'
               ? '検索条件を変更してください'
               : '最初の試合記録を登録しましょう'}
@@ -437,7 +437,7 @@ const MatchList = () => {
           {!searchTerm && filterResult === '全て' && !isOtherPlayer && (
             <Link
               to="/matches/new"
-              className="inline-flex items-center gap-2 bg-[#4a6b5a] text-white px-6 py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors"
+              className="inline-flex items-center gap-2 bg-primary text-text-inverse px-6 py-3 rounded-lg hover:bg-primary-hover transition-colors"
             >
               <Plus className="w-5 h-5" />
               試合記録を登録
@@ -445,17 +445,17 @@ const MatchList = () => {
           )}
         </div>
       ) : (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
-          <div className="divide-y divide-[#e5e0da]">
+        <div className="bg-surface rounded-lg shadow-sm overflow-hidden">
+          <div className="divide-y divide-border-subtle">
                 {filteredMatches.map((match) => (
                   <div
                     key={match.id}
-                    className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
+                    className="flex items-center px-4 py-2 hover:bg-surface cursor-pointer transition-colors"
                     onClick={() => navigate(`/matches/${match.id}`)}
                   >
-                    <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
+                    <span className="text-xs text-text-placeholder w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
                     <button
-                      className="flex-1 min-w-0 text-sm font-medium text-[#374151] hover:text-[#4a6b5a] hover:underline text-left truncate"
+                      className="flex-1 min-w-0 text-sm font-medium text-text hover:text-secondary hover:underline text-left truncate"
                       onClick={(e) => {
                         e.stopPropagation();
                         const opponentId = match.player1Id === targetPlayerId ? match.player2Id : match.player1Id;
@@ -476,7 +476,7 @@ const MatchList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={() => setIsFilterOpen(true)}
-        className="fixed right-4 z-20 bg-[#4a6b5a] text-white p-4 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl"
+        className="fixed right-4 z-20 bg-primary text-text-inverse p-4 rounded-full shadow-lg hover:bg-primary-hover transition-all hover:shadow-xl"
         style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <Filter className="w-6 h-6" />

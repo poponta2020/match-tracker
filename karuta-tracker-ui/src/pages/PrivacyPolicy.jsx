@@ -3,32 +3,32 @@ import { ArrowLeft, Shield } from 'lucide-react';
 
 const PrivacyPolicy = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bg">
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* ヘッダー */}
         <div className="mb-8">
           <Link
             to="/"
-            className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-4"
+            className="inline-flex items-center text-secondary hover:text-secondary-hover mb-4 underline"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
             トップページへ
           </Link>
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900">
+            <Shield className="w-8 h-8 text-secondary" />
+            <h1 className="text-2xl font-bold text-text">
               プライバシーポリシー
             </h1>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6 space-y-8">
+        <div className="bg-surface rounded-lg shadow-sm p-6 space-y-8">
           {/* アプリ名・運営者情報 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               1. アプリケーション情報
             </h2>
-            <dl className="space-y-2 text-gray-700">
+            <dl className="space-y-2 text-text-muted">
               <div>
                 <dt className="font-medium">アプリ名</dt>
                 <dd className="ml-4">わすらログ</dd>
@@ -42,7 +42,7 @@ const PrivacyPolicy = () => {
                 <dd className="ml-4">
                   <a
                     href="mailto:poponta2020@gmail.com"
-                    className="text-blue-600 hover:underline"
+                    className="text-secondary hover:underline"
                   >
                     poponta2020@gmail.com
                   </a>
@@ -53,13 +53,13 @@ const PrivacyPolicy = () => {
 
           {/* 取得する情報 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               2. 取得する情報
             </h2>
-            <p className="text-gray-700 mb-3">
+            <p className="text-text-muted mb-3">
               本アプリでは、以下の情報を取得・利用します。
             </p>
-            <ul className="list-disc ml-6 space-y-2 text-gray-700">
+            <ul className="list-disc ml-6 space-y-2 text-text-muted">
               <li>
                 <span className="font-medium">ユーザー登録情報：</span>
                 選手名、パスワード（暗号化して保存）、性別、利き手、段位・級位、所属かるた会
@@ -71,7 +71,7 @@ const PrivacyPolicy = () => {
               <li>
                 <span className="font-medium">Googleカレンダーへのアクセス権：</span>
                 練習予定をGoogleカレンダーに同期するため、カレンダーの予定の読み書き権限（
-                <code className="bg-gray-100 px-1 rounded text-sm">
+                <code className="bg-surface-disabled px-1 rounded text-sm">
                   calendar.events
                 </code>
                 スコープ）を取得します
@@ -81,14 +81,14 @@ const PrivacyPolicy = () => {
 
           {/* 利用目的 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               3. 利用目的
             </h2>
-            <ul className="list-disc ml-6 space-y-2 text-gray-700">
+            <ul className="list-disc ml-6 space-y-2 text-text-muted">
               <li>競技かるたの試合結果・練習記録の管理</li>
               <li>
                 練習予定をユーザーのGoogleカレンダーに同期するため
-                <span className="text-gray-500">
+                <span className="text-text-placeholder">
                   （ユーザーが手動で「同期」ボタンを押した際にのみ実行されます）
                 </span>
               </li>
@@ -98,10 +98,10 @@ const PrivacyPolicy = () => {
 
           {/* データの保存 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               4. データの保存
             </h2>
-            <ul className="list-disc ml-6 space-y-2 text-gray-700">
+            <ul className="list-disc ml-6 space-y-2 text-text-muted">
               <li>
                 <span className="font-medium">アクセストークン：</span>
                 Googleから取得するアクセストークンはサーバーに保存しません。同期処理中のみ一時的に使用し、処理完了後に破棄します。
@@ -119,26 +119,26 @@ const PrivacyPolicy = () => {
 
           {/* 第三者提供 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               5. 第三者への提供
             </h2>
-            <p className="text-gray-700">
+            <p className="text-text-muted">
               ユーザーの個人情報およびGoogleアカウントに関するデータを、第三者に提供・販売・共有することはありません。
             </p>
           </section>
 
           {/* Google API ポリシー準拠 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               6. Google API の利用について
             </h2>
-            <p className="text-gray-700">
+            <p className="text-text-muted">
               本アプリは{' '}
               <a
                 href="https://developers.google.com/terms/api-services-user-data-policy"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-secondary hover:underline"
               >
                 Google API Services User Data Policy
               </a>
@@ -148,10 +148,10 @@ const PrivacyPolicy = () => {
 
           {/* データの削除 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               7. データの削除・アクセス権の取り消し
             </h2>
-            <ul className="list-disc ml-6 space-y-2 text-gray-700">
+            <ul className="list-disc ml-6 space-y-2 text-text-muted">
               <li>
                 ユーザーはいつでもGoogleアカウントの設定画面
                 （
@@ -159,7 +159,7 @@ const PrivacyPolicy = () => {
                   href="https://myaccount.google.com/permissions"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
+                  className="text-secondary hover:underline"
                 >
                   myaccount.google.com/permissions
                 </a>
@@ -176,17 +176,17 @@ const PrivacyPolicy = () => {
 
           {/* 改定 */}
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+            <h2 className="text-lg font-semibold text-text mb-3 border-b border-border-subtle pb-2">
               8. プライバシーポリシーの改定
             </h2>
-            <p className="text-gray-700">
+            <p className="text-text-muted">
               本ポリシーは、必要に応じて改定することがあります。重要な変更がある場合は、アプリ内でお知らせします。
             </p>
           </section>
 
           {/* 施行日 */}
-          <section className="pt-4 border-t">
-            <p className="text-gray-500 text-sm">
+          <section className="pt-4 border-t border-border-subtle">
+            <p className="text-text-placeholder text-sm">
               制定日：2026年3月16日
             </p>
           </section>

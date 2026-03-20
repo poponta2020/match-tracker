@@ -252,11 +252,11 @@ const Home = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-96 gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div>
         {slowLoading && (
           <div className="text-center">
-            <p className="text-gray-600 font-medium">サーバーを起動中...</p>
-            <p className="text-sm text-gray-400 mt-1">初回アクセス時は少し時間がかかります（最大30秒）</p>
+            <p className="text-text-muted font-medium">サーバーを起動中...</p>
+            <p className="text-sm text-text-placeholder mt-1">初回アクセス時は少し時間がかかります（最大30秒）</p>
           </div>
         )}
       </div>
@@ -266,78 +266,78 @@ const Home = () => {
   return (
     <div className="space-y-8">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-[#374151]">{currentPlayer?.name}</span>
+            <span className="text-lg font-semibold text-text">{currentPlayer?.name}</span>
           </div>
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+              className="p-2 hover:bg-border-subtle rounded-full transition-colors"
             >
-              <Menu className="w-6 h-6 text-[#374151]" />
+              <Menu className="w-6 h-6 text-text" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <div className="absolute right-0 mt-2 w-48 bg-bg rounded-lg shadow-lg border border-border-subtle py-1 z-50">
                 <button
                   onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors"
                 >
-                  <User className="w-4 h-4 text-[#6b7280]" />
+                  <User className="w-4 h-4 text-text-muted" />
                   プロフィール
                 </button>
                 {isSuperAdmin() && (
                   <>
-                    <div className="border-t border-gray-100 my-1" />
+                    <div className="border-t border-border-subtle my-1" />
                     <button
                       onClick={() => { setMenuOpen(false); navigate('/players'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors"
                     >
-                      <Users className="w-4 h-4 text-[#6b7280]" />
+                      <Users className="w-4 h-4 text-text-muted" />
                       選手管理
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); navigate('/venues'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors"
                     >
-                      <MapPin className="w-4 h-4 text-[#6b7280]" />
+                      <MapPin className="w-4 h-4 text-text-muted" />
                       会場管理
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); navigate('/practice/new'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors"
                     >
-                      <Calendar className="w-4 h-4 text-[#6b7280]" />
+                      <Calendar className="w-4 h-4 text-text-muted" />
                       練習日登録
                     </button>
                   </>
                 )}
                 {isAdmin() && (
                   <>
-                    <div className="border-t border-gray-100 my-1" />
+                    <div className="border-t border-border-subtle my-1" />
                     <button
                       onClick={() => { setMenuOpen(false); navigate('/pairings'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors"
                     >
-                      <Shuffle className="w-4 h-4 text-[#6b7280]" />
+                      <Shuffle className="w-4 h-4 text-text-muted" />
                       組み合わせ作成
                     </button>
                   </>
                 )}
-                <div className="border-t border-gray-100 my-1" />
+                <div className="border-t border-border-subtle my-1" />
                 <button
                   onClick={() => { setMenuOpen(false); handleCalendarSync(); }}
                   disabled={calSyncing}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw className={`w-4 h-4 text-[#6b7280] ${calSyncing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 text-text-muted ${calSyncing ? 'animate-spin' : ''}`} />
                   {calSyncing ? '同期中...' : 'Googleカレンダー同期'}
                 </button>
-                <div className="border-t border-gray-100 my-1" />
+                <div className="border-t border-border-subtle my-1" />
                 <button
                   onClick={() => { setMenuOpen(false); logout(); navigate('/login'); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-status-danger hover:bg-status-danger-surface transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                   ログアウト
@@ -354,13 +354,13 @@ const Home = () => {
         {calSyncMessage && (
           <div className={`mb-4 p-3 text-sm rounded-lg flex justify-between items-center ${
             calSyncError
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-[#d4ddd7] text-[#374151]'
+              ? 'bg-status-danger-surface text-status-danger border border-status-danger/20'
+              : 'bg-status-success-surface text-text'
           }`}>
             <span>{calSyncMessage}</span>
             <button
               onClick={() => setCalSyncMessage(null)}
-              className={`ml-2 ${calSyncError ? 'text-red-400 hover:text-red-600' : 'text-[#6b7280] hover:text-[#374151]'}`}
+              className={`ml-2 ${calSyncError ? 'text-status-danger hover:text-status-danger' : 'text-text-muted hover:text-text'}`}
             >
               <X size={16} />
             </button>
@@ -371,46 +371,46 @@ const Home = () => {
           <div className="rounded-lg shadow-md overflow-hidden mb-4">
             {/* ヘッダー帯 */}
             {nextPractice.today ? (
-              <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
+              <div className="bg-primary px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="bg-white text-[#374151] text-xs font-bold px-2 py-0.5 rounded-full">TODAY</span>
-                  <h2 className="text-base font-bold text-white">今日は練習日です</h2>
+                  <span className="bg-text-inverse text-primary text-xs font-bold px-2 py-0.5 rounded-full">TODAY</span>
+                  <h2 className="text-base font-bold text-text-inverse">今日は練習日です</h2>
                 </div>
                 {nextPractice.registered === false ? (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
+                  <Link to="/practice/participation" className="text-xs font-semibold text-text-inverse/80 hover:text-text-inverse flex items-center gap-0.5">
                     参加登録 <ArrowRight className="w-3 h-3" />
                   </Link>
                 ) : nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                  <span className="text-xs text-white/70">
+                  <span className="text-xs text-text-inverse/70">
                     {nextPractice.matchNumbers.join('、')}試合目に参加予定
                   </span>
                 )}
               </div>
             ) : (
-              <div className="bg-[#1A3654] px-5 py-3 flex items-center justify-between">
+              <div className="bg-primary px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ChevronsRight className="w-6 h-6 text-white/80" />
-                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/80 decoration-2">NEXT</h2>
+                  <ChevronsRight className="w-6 h-6 text-text-inverse/80" />
+                  <h2 className="text-xl font-bold text-text-inverse tracking-wide underline underline-offset-2 decoration-text-inverse/80 decoration-2">NEXT</h2>
                   {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                    <span className="text-xs text-white/70">
+                    <span className="text-xs text-text-inverse/70">
                       {nextPractice.matchNumbers.join('、')}試合目に参加予定
                     </span>
                   )}
                 </div>
                 {nextPractice.registered === false && (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
+                  <Link to="/practice/participation" className="text-xs font-semibold text-text-inverse/80 hover:text-text-inverse flex items-center gap-0.5">
                     参加登録 <ArrowRight className="w-3 h-3" />
                   </Link>
                 )}
               </div>
             )}
             {/* ボディ */}
-            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
+            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-surface' : 'bg-surface'}`}>
               <div className="space-y-2">
                 {!nextPractice.today && (
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-[#1A3654]" />
-                    <span className="font-semibold text-[#374151]">
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-text">
                       {(() => {
                         const d = new Date(nextPractice.sessionDate);
                         const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
@@ -421,25 +421,25 @@ const Home = () => {
                 )}
                 {nextPractice.startTime && (
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#1A3654]" />
-                    <span className="text-[#374151]">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
+                    <Clock className="w-4 h-4 text-primary" />
+                    <span className="text-text">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
                   </div>
                 )}
                 {nextPractice.venueName && (
                   <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#1A3654]" />
-                    <span className="text-[#374151]">{nextPractice.venueName}</span>
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span className="text-text">{nextPractice.venueName}</span>
                   </div>
                 )}
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="mt-3 pt-3 border-t border-border-subtle">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-[#6b7280]">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-text-muted">
                         <Users className="w-3.5 h-3.5" />
                         参加者
                       </span>
-                      <span className="text-xs text-[#6b7280]">{nextPracticeParticipants.length}名</span>
+                      <span className="text-xs text-text-muted">{nextPracticeParticipants.length}名</span>
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
@@ -450,8 +450,8 @@ const Home = () => {
                           kyuRank={p.kyuRank}
                           className={`text-xs ${
                             isMyself(p)
-                              ? 'bg-[#1A3654] text-white font-medium'
-                              : 'bg-[#e8ecef] text-[#374151]'
+                              ? 'bg-primary text-text-inverse font-medium'
+                              : 'bg-surface-disabled text-text'
                           }`}
                         />
                       ))}
@@ -461,7 +461,7 @@ const Home = () => {
                 {nextPractice.today && isAdmin() && (
                   <Link
                     to={`/pairings?date=${nextPractice.sessionDate}`}
-                    className="mt-3 flex items-center justify-center gap-2 bg-[#1A3654] text-white font-medium py-2.5 rounded-lg hover:bg-[#122740] transition-colors shadow-sm"
+                    className="mt-3 flex items-center justify-center gap-2 bg-primary text-text-inverse font-medium py-2.5 rounded-lg hover:bg-primary-hover transition-colors shadow-sm"
                   >
                     <Shuffle className="w-4 h-4" />
                     組み合わせを作成
@@ -474,52 +474,52 @@ const Home = () => {
 
         {/* 今月のアクティビティ */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
+          <div className="bg-surface p-4 rounded-lg shadow-sm border-l-3 border-primary">
             <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-[#1A3654]" />
-              <span className="text-xs text-[#6b7280]">{monthLabel}の参加</span>
+              <Calendar className="w-4 h-4 text-primary" />
+              <span className="text-xs text-text-muted">{monthLabel}の参加</span>
             </div>
-            <p className="text-2xl font-bold text-[#374151]">
-              {monthlyPracticeCount}<span className="text-sm font-normal text-[#6b7280] ml-1">回</span>
+            <p className="text-2xl font-bold text-text">
+              {monthlyPracticeCount}<span className="text-sm font-normal text-text-muted ml-1">回</span>
             </p>
           </div>
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
+          <div className="bg-surface p-4 rounded-lg shadow-sm border-l-3 border-primary">
             <div className="flex items-center gap-2 mb-1">
-              <Swords className="w-4 h-4 text-[#1A3654]" />
-              <span className="text-xs text-[#6b7280]">{monthLabel}の対戦</span>
+              <Swords className="w-4 h-4 text-primary" />
+              <span className="text-xs text-text-muted">{monthLabel}の対戦</span>
             </div>
-            <p className="text-2xl font-bold text-[#374151]">
-              {monthlyMatchCount}<span className="text-sm font-normal text-[#6b7280] ml-1">試合</span>
+            <p className="text-2xl font-bold text-text">
+              {monthlyMatchCount}<span className="text-sm font-normal text-text-muted ml-1">試合</span>
             </p>
           </div>
         </div>
 
         {/* 参加率TOP3 */}
         {participationTop3.length > 0 && (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
+          <div className="bg-surface rounded-lg shadow-md p-5 mb-4">
             <div className="flex items-center gap-2 mb-4">
-              <Trophy className="w-5 h-5 text-[#1A3654]" />
-              <h2 className="text-base font-bold text-[#1A3654]">{monthLabel} 参加率TOP3</h2>
+              <Trophy className="w-5 h-5 text-primary" />
+              <h2 className="text-base font-bold text-primary">{monthLabel} 参加率TOP3</h2>
             </div>
             <div className="space-y-3">
               {participationTop3.map((player, index) => {
-                const rankColors = ['bg-[#1A3654] text-white', 'bg-[#2d5a8a] text-white', 'bg-[#5a8ab5] text-white'];
+                const rankColors = ['bg-primary text-text-inverse', 'bg-secondary text-text-inverse', 'bg-border-strong text-text-inverse'];
                 const ratePercent = Math.round(player.rate * 100);
                 return (
                   <div key={player.playerId} className="flex items-center gap-3">
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${rankColors[index]}`}>{index + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-[#374151] truncate">{player.playerName}</span>
-                        <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{ratePercent}%</span>
+                        <span className="text-sm font-semibold text-text truncate">{player.playerName}</span>
+                        <span className="text-sm font-bold text-primary flex-shrink-0 ml-2">{ratePercent}%</span>
                       </div>
-                      <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
+                      <div className="w-full bg-primary/15 rounded-full h-1.5">
                         <div
-                          className="bg-[#1A3654] h-1.5 rounded-full transition-all"
+                          className="bg-primary h-1.5 rounded-full transition-all"
                           style={{ width: `${ratePercent}%` }}
                         />
                       </div>
-                      <span className="text-xs text-[#6b7280] mt-0.5 block">
+                      <span className="text-xs text-text-muted mt-0.5 block">
                         {player.participatedMatches}/{player.totalScheduledMatches}試合
                       </span>
                     </div>

@@ -11,20 +11,20 @@
 .venue-form-header h2 {
   margin: 0;
   font-size: 24px;
-  color: #333;
+  color: var(--text);
 }
 
 .error-message {
-  background-color: #ffebee;
-  color: #c62828;
+  background-color: var(--status-danger-surface);
+  color: var(--status-danger);
   padding: 12px;
   border-radius: 4px;
   margin-bottom: 20px;
 }
 
 .venue-form {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 24px;
 }
@@ -40,14 +40,14 @@
 .form-section h3 {
   margin: 0 0 16px 0;
   font-size: 18px;
-  color: #333;
+  color: var(--text);
   padding-bottom: 8px;
-  border-bottom: 2px solid #4CAF50;
+  border-bottom: 2px solid var(--secondary);
 }
 
 .section-description {
   margin: 0 0 16px 0;
-  color: #666;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -59,12 +59,12 @@
   display: block;
   margin-bottom: 6px;
   font-weight: 500;
-  color: #333;
+  color: var(--text);
   font-size: 14px;
 }
 
 .required {
-  color: #f44336;
+  color: var(--status-danger);
   font-weight: 600;
 }
 
@@ -72,7 +72,7 @@
 .form-group input[type="number"] {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   font-size: 14px;
   transition: border-color 0.2s;
@@ -81,13 +81,13 @@
 .form-group input[type="text"]:focus,
 .form-group input[type="number"]:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: var(--secondary);
 }
 
 .form-group small {
   display: block;
   margin-top: 4px;
-  color: #666;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -102,15 +102,15 @@
   align-items: center;
   gap: 16px;
   padding: 12px;
-  background-color: #f8f9fa;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
 }
 
 .schedule-label {
   min-width: 80px;
   font-weight: 500;
-  color: #333;
+  color: var(--text);
   font-size: 14px;
 }
 
@@ -129,13 +129,13 @@
 
 .time-input-group label {
   font-size: 12px;
-  color: #666;
+  color: var(--text-muted);
   font-weight: 400;
 }
 
 .time-input-group input[type="time"] {
   padding: 8px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   font-size: 14px;
   transition: border-color 0.2s;
@@ -143,11 +143,11 @@
 
 .time-input-group input[type="time"]:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: var(--secondary);
 }
 
 .time-separator {
-  color: #666;
+  color: var(--text-muted);
   font-size: 14px;
   margin-top: 20px;
 }
@@ -157,13 +157,13 @@
   justify-content: flex-end;
   gap: 12px;
   padding-top: 20px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .btn-cancel {
-  background-color: #fff;
-  color: #666;
-  border: 1px solid #ddd;
+  background-color: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
   padding: 10px 24px;
   border-radius: 4px;
   cursor: pointer;
@@ -172,13 +172,13 @@
 }
 
 .btn-cancel:hover:not(:disabled) {
-  background-color: #f5f5f5;
-  border-color: #999;
+  background-color: var(--surface);
+  border-color: var(--border-strong);
 }
 
 .btn-submit {
-  background-color: #4CAF50;
-  color: white;
+  background-color: var(--secondary);
+  color: var(--bg);
   border: none;
   padding: 10px 32px;
   border-radius: 4px;
@@ -189,7 +189,7 @@
 }
 
 .btn-submit:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: var(--secondary-hover);
 }
 
 .btn-cancel:disabled,

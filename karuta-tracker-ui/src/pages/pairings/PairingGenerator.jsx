@@ -593,8 +593,8 @@ const PairingGenerator = () => {
   if (matchLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
-        <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
+        <p className="text-text-muted text-sm">データを読み込み中...</p>
       </div>
     );
   }
@@ -602,9 +602,9 @@ const PairingGenerator = () => {
   return (
     <div className="space-y-6">
       {/* 日付選択 */}
-      <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
+      <div className="bg-bg p-6 rounded-lg shadow-sm space-y-4">
         <div>
-          <label className="block text-sm font-medium text-[#374151] mb-2">
+          <label className="block text-sm font-medium text-text mb-2">
             <Calendar className="w-4 h-4 inline mr-1" />
             日付
           </label>
@@ -614,12 +614,12 @@ const PairingGenerator = () => {
               value={sessionDate}
               onChange={(e) => setSessionDate(e.target.value)}
               disabled={hasUnsavedChanges}
-              className={`flex-1 px-4 py-2 border border-[#c5cec8] rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`flex-1 px-4 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : ''}`}
             />
             <button
               onClick={() => setSessionDate(today)}
               disabled={hasUnsavedChanges}
-              className={`px-4 py-2 bg-[#e5ebe7] text-[#374151] rounded-lg transition-colors ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#d4ddd7]'}`}
+              className={`px-4 py-2 bg-surface-disabled text-text rounded-lg transition-colors ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface'}`}
             >
               今日
             </button>
@@ -628,7 +628,7 @@ const PairingGenerator = () => {
 
         {/* 試合番号タブ */}
         <div>
-          <label className="block text-sm font-medium text-[#374151] mb-2">
+          <label className="block text-sm font-medium text-text mb-2">
             試合番号
           </label>
           <div className="flex flex-wrap gap-2">
@@ -641,17 +641,17 @@ const PairingGenerator = () => {
                 onClick={() => setMatchNumber(num)}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchNumber === num
-                    ? 'bg-[#1A3654] text-white shadow-md'
+                    ? 'bg-primary text-text-inverse shadow-md'
                     : hasUnsavedChanges && unsavedDraft.current?.matchNumber === num
-                      ? 'bg-[#fef3c7] text-[#b45309] border border-[#fbbf24] hover:bg-[#fde68a]'
+                      ? 'bg-status-warning-surface text-status-warning border border-status-warning hover:bg-status-warning-surface'
                       : matchExistsMap[num]
-                        ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
-                        : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
+                        ? 'bg-surface-disabled text-secondary border border-border-subtle hover:bg-surface'
+                        : 'bg-surface-disabled text-text-muted border border-border-subtle hover:bg-border-subtle'
                 }`}
               >
                 {num}
                 {matchExistsMap[num] && matchNumber !== num && (
-                  <Check className="w-3 h-3 absolute -top-1 -right-1 text-white bg-[#4a6b5a] rounded-full p-0.5" />
+                  <Check className="w-3 h-3 absolute -top-1 -right-1 text-text-inverse bg-primary rounded-full p-0.5" />
                 )}
               </button>
             ))}
@@ -665,7 +665,7 @@ const PairingGenerator = () => {
           return allComplete ? (
             <Link
               to={`/pairings/summary?date=${sessionDate}`}
-              className="flex items-center justify-center gap-2 w-full bg-[#2d4a3e] text-white px-6 py-3 rounded-lg hover:bg-[#1e3a2e] transition-colors font-medium text-base shadow-md"
+              className="flex items-center justify-center gap-2 w-full bg-primary text-text-inverse px-6 py-3 rounded-lg hover:bg-primary-hover transition-colors font-medium text-base shadow-md"
             >
               <FileText className="w-5 h-5" />
               LINE送信用テキスト生成
@@ -676,13 +676,13 @@ const PairingGenerator = () => {
       </div>
 
       {/* 参加者セクション（組み合わせ未作成時のみ表示） */}
-      {pairings.length === 0 && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="bg-[#e5ebe7] px-6 py-3 flex items-center justify-between">
+      {pairings.length === 0 && <div className="bg-bg rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-surface-disabled px-6 py-3 flex items-center justify-between">
           <button
             onClick={() => setShowParticipantList(!showParticipantList)}
-            className="flex items-center gap-2 text-[#374151] font-medium"
+            className="flex items-center gap-2 text-text font-medium"
           >
-            <Users className="w-4 h-4 text-[#4a6b5a]" />
+            <Users className="w-4 h-4 text-secondary" />
             参加者: {participants.length}名
             {showParticipantList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -690,14 +690,14 @@ const PairingGenerator = () => {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-1.5 bg-white text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#f9f6f2] transition-colors text-sm disabled:opacity-50"
+              className="flex items-center gap-1.5 bg-bg text-secondary border border-border-subtle px-3 py-1.5 rounded-lg hover:bg-surface transition-colors text-sm disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? '更新中...' : '更新'}
             </button>
             <button
               onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
-              className="flex items-center gap-1.5 bg-[#4a6b5a] text-white px-3 py-1.5 rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm"
+              className="flex items-center gap-1.5 bg-primary text-text-inverse px-3 py-1.5 rounded-lg hover:bg-primary-hover transition-colors text-sm"
             >
               <UserPlus className="w-4 h-4" />
               追加
@@ -714,12 +714,12 @@ const PairingGenerator = () => {
                     key={p.id}
                     name={p.name}
                     kyuRank={p.kyuRank}
-                    className="text-sm bg-[#f9f6f2] text-[#374151]"
+                    className="text-sm bg-surface text-text"
                   />
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-[#6b7280]">
+              <p className="text-sm text-text-muted">
                 参加者なし - 更新ボタンまたは選手追加で参加者を登録してください
               </p>
             )}
@@ -733,7 +733,7 @@ const PairingGenerator = () => {
           <button
             onClick={handleAutoMatch}
             disabled={loading}
-            className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 text-lg font-medium shadow-md"
+            className="flex items-center gap-2 bg-primary text-text-inverse px-8 py-3 rounded-lg hover:bg-primary-active transition-colors disabled:bg-surface-disabled disabled:text-text-disabled text-lg font-medium shadow-md"
           >
             <Shuffle className="w-5 h-5" />
             {loading ? '生成中...' : '自動組み合わせ'}
@@ -742,7 +742,7 @@ const PairingGenerator = () => {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded-lg flex items-center gap-2 text-red-700">
+        <div className="bg-status-danger-surface border border-status-danger/20 p-4 rounded-lg flex items-center gap-2 text-status-danger">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
@@ -751,7 +751,7 @@ const PairingGenerator = () => {
       {pairings.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-[#374151]">
+            <h2 className="text-xl font-bold text-text">
               {isEditingExisting ? `第${matchNumber}試合の組み合わせ` : '生成された組み合わせ'}
             </h2>
             {!isReadOnly && !isViewMode && (
@@ -759,7 +759,7 @@ const PairingGenerator = () => {
                 {isEditingExisting && (
                   <button
                     onClick={handleDeleteExisting}
-                    className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
+                    className="text-sm text-status-danger hover:text-status-danger flex items-center gap-1"
                     disabled={loading}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -771,7 +771,7 @@ const PairingGenerator = () => {
             {!isReadOnly && isViewMode && (
               <button
                 onClick={() => { setIsViewMode(false); setHasUnsavedChanges(true); saveDraft(pairings, waitingPlayers, isEditingExisting); }}
-                className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
+                className="flex items-center gap-1.5 text-sm text-secondary border border-border-subtle px-3 py-1.5 rounded-lg hover:bg-surface-disabled transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5" />
                 編集
@@ -779,15 +779,15 @@ const PairingGenerator = () => {
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
+          <div className="bg-bg rounded-lg shadow-sm border border-border-subtle divide-y divide-border-subtle">
             {pairings.map((pairing, index) => (
               <div key={index} className="px-3 py-2.5">
                 {(isReadOnly || isViewMode) ? (
                   /* 閲覧モード */
                   <div className="flex items-center justify-center gap-3">
-                    <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
-                    <span className="text-[#a5b4aa] text-xs">vs</span>
-                    <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
+                    <span className="font-medium text-text text-sm">{pairing.player1Name}</span>
+                    <span className="text-text-placeholder text-xs">vs</span>
+                    <span className="font-medium text-text text-sm">{pairing.player2Name}</span>
                   </div>
                 ) : (
                   /* 編集モード: コンパクト1行 */
@@ -795,7 +795,7 @@ const PairingGenerator = () => {
                     <select
                       value={pairing.player1Id}
                       onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-200 rounded bg-[#f9f6f2] focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a]"
+                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-border-subtle rounded bg-surface focus:ring-1 focus:ring-focus focus:border-focus"
                     >
                       <option value={pairing.player1Id}>{pairing.player1Name}</option>
                       <optgroup label="待機中">
@@ -817,12 +817,12 @@ const PairingGenerator = () => {
                       </optgroup>
                     </select>
 
-                    <span className="text-[#a5b4aa] text-xs flex-shrink-0">vs</span>
+                    <span className="text-text-placeholder text-xs flex-shrink-0">vs</span>
 
                     <select
                       value={pairing.player2Id}
                       onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-200 rounded bg-[#f9f6f2] focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a]"
+                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-border-subtle rounded bg-surface focus:ring-1 focus:ring-focus focus:border-focus"
                     >
                       <option value={pairing.player2Id}>{pairing.player2Name}</option>
                       <optgroup label="待機中">
@@ -844,18 +844,18 @@ const PairingGenerator = () => {
                       </optgroup>
                     </select>
 
-                    <span className="text-xs text-[#6b7280] flex-shrink-0 w-12 text-right">
+                    <span className="text-xs text-text-muted flex-shrink-0 w-12 text-right">
                       {pairing.recentMatches === null
-                        ? <span className="text-gray-300">...</span>
+                        ? <span className="text-text-placeholder">...</span>
                         : pairing.recentMatches && pairing.recentMatches.length > 0
                           ? pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')
-                          : <span className="text-[#4a6b5a]">初</span>
+                          : <span className="text-secondary">初</span>
                       }
                     </span>
 
                     <button
                       onClick={() => handleRemovePair(index)}
-                      className="text-[#d1d5db] hover:text-red-500 flex-shrink-0 transition-colors"
+                      className="text-border-subtle hover:text-red-500 flex-shrink-0 transition-colors"
                       title="この組み合わせを削除"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -867,16 +867,16 @@ const PairingGenerator = () => {
           </div>
 
           {!isReadOnly && !isViewMode && (
-            <div className={`${waitingPlayers.length > 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'} p-4 rounded-lg`}>
+            <div className={`${waitingPlayers.length > 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-bg border border-border-subtle'} p-4 rounded-lg`}>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">
+                <h3 className="font-medium text-text">
                   待機中の選手{waitingPlayers.length > 0 && `（${waitingPlayers.length}名）`}
                 </h3>
                 <div className="flex items-center gap-2">
                   {waitingPlayers.length >= 2 && (
                     <button
                       onClick={handleAddPairing}
-                      className="flex items-center gap-1 text-sm bg-[#4a6b5a] text-white px-3 py-1 rounded hover:bg-[#3d5a4c]"
+                      className="flex items-center gap-1 text-sm bg-primary text-text-inverse px-3 py-1 rounded hover:bg-primary-hover"
                     >
                       <Plus className="w-4 h-4" />
                       組み合わせを追加
@@ -884,7 +884,7 @@ const PairingGenerator = () => {
                   )}
                   <button
                     onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
-                    className="flex items-center gap-1 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1 rounded hover:bg-[#e5ebe7] transition-colors"
+                    className="flex items-center gap-1 text-sm text-secondary border border-border-subtle px-3 py-1 rounded hover:bg-surface-disabled transition-colors"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     選手追加
@@ -899,23 +899,23 @@ const PairingGenerator = () => {
                         key={player.id}
                         name={player.name}
                         kyuRank={player.kyuRank}
-                        className="text-sm bg-[#f9f6f2] text-[#374151]"
+                        className="text-sm bg-surface text-text"
                       />
                     ))}
                   </div>
-                  <p className="text-xs text-gray-600 mt-2">
+                  <p className="text-xs text-text-muted mt-2">
                     ※各組み合わせのドロップダウンから選手を入れ替えることができます
                   </p>
                 </>
               ) : (
-                <p className="text-xs text-[#6b7280]">待機中の選手はいません</p>
+                <p className="text-xs text-text-muted">待機中の選手はいません</p>
               )}
             </div>
           )}
 
           {isReadOnly ? (
-            <div className="bg-[#fef3c7] border border-[#fbbf24] p-3 rounded-lg text-center">
-              <p className="text-sm text-[#92400e]">
+            <div className="bg-status-warning-surface border border-status-warning p-3 rounded-lg text-center">
+              <p className="text-sm text-status-warning">
                 第{unsavedDraft.current?.matchNumber}試合に未保存の組み合わせがあります
               </p>
             </div>
@@ -924,7 +924,7 @@ const PairingGenerator = () => {
           ) : (
             <div className="space-y-2">
               {hasUnsavedChanges && (
-                <p className="text-xs text-[#b45309] text-center">
+                <p className="text-xs text-status-warning text-center">
                   保存するまで他の試合の編集はできません
                 </p>
               )}
@@ -954,14 +954,14 @@ const PairingGenerator = () => {
                     setError('');
                   }}
                   disabled={loading}
-                  className="flex items-center gap-2 text-[#6b7280] bg-gray-100 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium text-lg"
+                  className="flex items-center gap-2 text-text-muted bg-surface-disabled px-6 py-3 rounded-lg hover:bg-border-subtle transition-colors font-medium text-lg"
                 >
                   キャンセル
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={loading}
-                  className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+                  className="flex items-center gap-2 bg-primary text-text-inverse px-8 py-3 rounded-lg hover:bg-primary-active transition-colors disabled:bg-surface-disabled disabled:text-text-disabled font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />
                   {loading ? '保存中...' : '確定して保存'}
@@ -975,20 +975,20 @@ const PairingGenerator = () => {
       {/* 選手追加モーダル */}
       {showAddPlayer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <UserPlus className="w-6 h-6 text-[#4a6b5a]" />
+          <div className="bg-bg rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h2 className="text-xl font-bold text-text mb-4 flex items-center gap-2">
+              <UserPlus className="w-6 h-6 text-secondary" />
               当日参加者を追加
             </h2>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 選手を選択
               </label>
               <select
                 value={selectedPlayerId}
                 onChange={(e) => setSelectedPlayerId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               >
                 <option value="">選手を選択してください</option>
                 {availablePlayers.map((player) => (
@@ -1000,7 +1000,7 @@ const PairingGenerator = () => {
             </div>
 
             {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+              <div className="mb-4 bg-status-danger-surface border border-status-danger/20 p-3 rounded-lg flex items-center gap-2 text-status-danger text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -1013,13 +1013,13 @@ const PairingGenerator = () => {
                   setSelectedPlayerId('');
                   setError('');
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-text bg-surface-disabled rounded-lg hover:bg-border-subtle transition-colors"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleAddPlayer}
-                className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover transition-colors flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 追加

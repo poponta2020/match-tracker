@@ -132,14 +132,14 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2ede6]" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="min-h-screen bg-bg" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* メインコンテンツ */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
 
       {/* ボトムナビゲーション: bottom-0固定、safe-area分は背景のみ拡張 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50 pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed bottom-0 left-0 right-0 bg-primary border-t border-border-subtle z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
@@ -152,13 +152,13 @@ const Layout = ({ children }) => {
               >
                 <Icon
                   className={`w-6 h-6 ${
-                    active ? 'text-white' : 'text-[#b8ccbf]'
+                    active ? 'text-text-inverse' : 'text-border-subtle'
                   }`}
                   strokeWidth={active ? 2.5 : 2}
                 />
                 <span
                   className={`text-xs mt-0.5 ${
-                    active ? 'text-white font-semibold' : 'text-[#b8ccbf]'
+                    active ? 'text-text-inverse font-semibold' : 'text-border-subtle'
                   }`}
                 >
                   {item.name}

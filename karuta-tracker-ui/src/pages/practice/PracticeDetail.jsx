@@ -57,7 +57,7 @@ const PracticeDetail = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
+        <div className="text-text-muted">読み込み中...</div>
       </div>
     );
   }
@@ -65,12 +65,12 @@ const PracticeDetail = () => {
   if (error || !session) {
     return (
       <div className="max-w-4xl mx-auto">
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="p-4 bg-status-danger-surface border border-status-danger/20 text-status-danger rounded-lg">
           {error || '練習記録が見つかりません'}
         </div>
         <button
           onClick={() => navigate('/practice')}
-          className="mt-4 text-blue-600 hover:text-blue-800"
+          className="mt-4 text-status-info hover:text-status-info"
         >
           ← 一覧に戻る
         </button>
@@ -84,41 +84,41 @@ const PracticeDetail = () => {
         <div className="space-x-4">
           <button
             onClick={() => navigate(`/practice/${id}/edit`)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-status-info text-text-inverse rounded-lg hover:bg-status-info transition-colors"
           >
             編集
           </button>
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="px-4 py-2 bg-status-danger text-text-inverse rounded-lg hover:bg-status-danger transition-colors"
           >
             削除
           </button>
         </div>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg p-6 space-y-6">
+      <div className="bg-bg shadow-md rounded-lg p-6 space-y-6">
         {/* 基本情報 */}
-        <div className="border-b border-gray-200 pb-4">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">基本情報</h2>
+        <div className="border-b border-border-subtle pb-4">
+          <h2 className="text-xl font-semibold text-text mb-4">基本情報</h2>
           <dl className="grid grid-cols-2 gap-4">
             <div>
-              <dt className="text-sm font-medium text-gray-500">練習日</dt>
-              <dd className="mt-1 text-lg text-gray-900">{formatDate(session.sessionDate)}</dd>
+              <dt className="text-sm font-medium text-text-muted">練習日</dt>
+              <dd className="mt-1 text-lg text-text">{formatDate(session.sessionDate)}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">会場</dt>
-              <dd className="mt-1 text-lg text-gray-900">{session.venueName || '-'}</dd>
+              <dt className="text-sm font-medium text-text-muted">会場</dt>
+              <dd className="mt-1 text-lg text-text">{session.venueName || '-'}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">参加者数</dt>
-              <dd className="mt-1 text-lg text-gray-900">{session.participantCount || 0}名</dd>
+              <dt className="text-sm font-medium text-text-muted">参加者数</dt>
+              <dd className="mt-1 text-lg text-text">{session.participantCount || 0}名</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">試合数</dt>
-              <dd className="mt-1 text-lg text-gray-900">
+              <dt className="text-sm font-medium text-text-muted">試合数</dt>
+              <dd className="mt-1 text-lg text-text">
                 {session.completedMatches || 0} / {session.totalMatches}
-                <span className="text-sm text-gray-500 ml-2">
+                <span className="text-sm text-text-muted ml-2">
                   ({session.totalMatches ? Math.round((session.completedMatches || 0) / session.totalMatches * 100) : 0}%)
                 </span>
               </dd>
@@ -128,21 +128,21 @@ const PracticeDetail = () => {
 
         {/* 試合時間割 */}
         {session.venueSchedules && session.venueSchedules.length > 0 && (
-          <div className="border-b border-gray-200 pb-4">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">試合時間割</h2>
+          <div className="border-b border-border-subtle pb-4">
+            <h2 className="text-xl font-semibold text-text mb-4">試合時間割</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {session.venueSchedules.map((schedule) => {
                 const participantCount = session.matchParticipantCounts?.[schedule.matchNumber] || 0;
                 const participants = session.matchParticipants?.[schedule.matchNumber] || [];
                 return (
-                  <div key={schedule.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div key={schedule.id} className="bg-bg border border-border-subtle rounded-lg p-3">
                     <div className="flex justify-between items-center mb-2">
-                      <div className="font-medium text-gray-900">第{schedule.matchNumber}試合</div>
-                      <div className="text-sm text-gray-600">
+                      <div className="font-medium text-text">第{schedule.matchNumber}試合</div>
+                      <div className="text-sm text-text-muted">
                         {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-text-muted">
                       参加者: {participantCount}名
                     </div>
                     {participants.length > 0 && (
@@ -152,7 +152,7 @@ const PracticeDetail = () => {
                             key={idx}
                             name={typeof p === 'string' ? p : p.name}
                             kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
-                            className="text-xs text-gray-600 bg-gray-50"
+                            className="text-xs text-text-muted bg-bg"
                           />
                         ))}
                       </div>
@@ -165,34 +165,34 @@ const PracticeDetail = () => {
         )}
 
         {/* 参加者リスト */}
-        <div className="border-b border-gray-200 pb-4">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">参加者</h2>
+        <div className="border-b border-border-subtle pb-4">
+          <h2 className="text-xl font-semibold text-text mb-4">参加者</h2>
           {session.participants && session.participants.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {session.participants.map((participant) => (
                 <div
                   key={participant.id}
-                  className={`px-4 py-2 bg-gray-50 border ${getKyuBorderColor(participant.kyuRank)} rounded-lg text-center hover:bg-gray-100 cursor-pointer`}
+                  className={`px-4 py-2 bg-bg border ${getKyuBorderColor(participant.kyuRank)} rounded-lg text-center hover:bg-surface cursor-pointer`}
                   onClick={() => navigate(`/players/${participant.id}`)}
                 >
-                  <div className="text-sm font-medium text-gray-900">{participant.name}</div>
+                  <div className="text-sm font-medium text-text">{participant.name}</div>
                   {participant.rank && (
-                    <div className="text-xs text-gray-500">{participant.rank}</div>
+                    <div className="text-xs text-text-muted">{participant.rank}</div>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500">参加者情報がありません</p>
+            <p className="text-text-muted">参加者情報がありません</p>
           )}
         </div>
 
         {/* メモ */}
         {session.notes && (
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">メモ</h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-900 whitespace-pre-wrap">{session.notes}</p>
+            <h2 className="text-xl font-semibold text-text mb-4">メモ</h2>
+            <div className="bg-bg p-4 rounded-lg">
+              <p className="text-text whitespace-pre-wrap">{session.notes}</p>
             </div>
           </div>
         )}
@@ -201,7 +201,7 @@ const PracticeDetail = () => {
         <div className="pt-4">
           <button
             onClick={() => navigate('/practice')}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-status-info hover:text-status-info"
           >
             ← 一覧に戻る
           </button>
@@ -211,24 +211,24 @@ const PracticeDetail = () => {
       {/* 削除確認モーダル */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-bg rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-text mb-4">
               練習記録の削除
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-text-muted mb-6">
               この練習記録を削除してもよろしいですか？<br />
               この操作は取り消せません。
             </p>
             <div className="flex justify-end space-x-4">
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-border-strong text-text rounded-lg hover:bg-bg"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                className="px-4 py-2 bg-status-danger text-text-inverse rounded-lg hover:bg-status-danger"
               >
                 削除
               </button>

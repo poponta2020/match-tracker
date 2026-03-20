@@ -3,11 +3,56 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* === CareTeal Design Tokens (Light) === */
+
+    /* Core */
+    --bg: #FFFFFF;
+    --surface: #ECFDF5;
+
+    --primary: #0B1F3B;
+    --secondary: #115E59;
+
+    /* Text */
+    --text: #0B1F3B;
+    --text-muted: #334155;
+    --text-inverse: #FFFFFF;
+    --text-placeholder: #64748B;
+
+    /* Border */
+    --border-strong: #64748B;
+    --border-subtle: #CBD5E1;
+
+    /* Focus */
+    --focus: #1E40AF;
+
+    /* Disabled */
+    --surface-disabled: #E2E8F0;
+    --text-disabled: #475569;
+
+    /* Status */
+    --status-success: #166534;
+    --status-warning: #92400E;
+    --status-danger: #991B1B;
+    --status-info: #1E40AF;
+
+    --status-success-surface: #F0FDF4;
+    --status-warning-surface: #FFFBEB;
+    --status-danger-surface: #FEF2F2;
+    --status-info-surface: #EFF6FF;
+
+    /* Button hover/active */
+    --primary-hover: #0A1D36;
+    --primary-active: #091A32;
+    --secondary-hover: #105652;
+    --secondary-active: #0E4F4B;
+  }
+
   html {
-    background-color: #4a6b5a;
+    background-color: var(--primary);
   }
   body {
-    @apply bg-gray-50;
-    color: #1A2744;
+    background-color: var(--bg);
+    color: var(--text);
   }
 }

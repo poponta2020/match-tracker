@@ -98,17 +98,17 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+      <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
         {/* ヘッダー */}
         <div className="px-6 pt-5 pb-3 flex justify-between items-start flex-shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-[#5f3a2d]">
+            <h2 className="text-lg font-bold text-text">
               第{matchNumber}試合の参加者
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-[#8a7568] hover:text-[#5f3a2d] -mt-1"
+            className="text-text-muted hover:text-text -mt-1"
           >
             <X size={20} />
           </button>
@@ -117,19 +117,19 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
         {/* コンテンツ */}
         <div className="flex-1 overflow-y-auto px-6 pb-4">
           {error && (
-            <div className="mb-3 p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+            <div className="mb-3 p-3 bg-status-danger-surface text-status-danger text-sm rounded-lg">
               {error}
             </div>
           )}
 
           {loading ? (
-            <div className="text-center py-8 text-[#8a7568]">読み込み中...</div>
+            <div className="text-center py-8 text-text-muted">読み込み中...</div>
           ) : (
             <>
               {/* 選択済みエリア */}
               {selectedPlayers.length > 0 && (
                 <div className="mb-4">
-                  <div className="text-xs text-[#8a7568] mb-2">
+                  <div className="text-xs text-text-muted mb-2">
                     選択中 ({selectedPlayers.length}名)
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -139,7 +139,7 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
                         name={player.name}
                         kyuRank={player.kyuRank}
                         onClick={() => handleRemovePlayer(player.id)}
-                        className="inline-flex items-center gap-1 text-sm bg-[#82655a] text-white hover:bg-[#6b5048] transition-colors"
+                        className="inline-flex items-center gap-1 text-sm bg-primary text-text-inverse hover:bg-primary-hover transition-colors"
                       >
                         <X size={12} className="text-white/70" />
                       </PlayerChip>
@@ -151,24 +151,24 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
               {/* 検索 + 一括操作 */}
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex-1 relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#b0a093]" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-placeholder" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="名前で検索..."
-                    className="w-full pl-8 pr-3 py-1.5 text-sm bg-white border border-[#e2d9d0] rounded-full focus:outline-none focus:border-[#82655a] text-[#5f3a2d] placeholder-[#b0a093]"
+                    className="w-full pl-8 pr-3 py-1.5 text-sm bg-bg border border-border-subtle rounded-full focus:outline-none focus:border-focus text-text placeholder-text-placeholder"
                   />
                 </div>
                 <button
                   onClick={handleSelectAll}
-                  className="px-2.5 py-1.5 text-xs text-[#82655a] border border-[#82655a] rounded-full hover:bg-[#82655a] hover:text-white transition-colors flex-shrink-0"
+                  className="px-2.5 py-1.5 text-xs text-secondary border border-secondary rounded-full hover:bg-primary hover:text-text-inverse transition-colors flex-shrink-0"
                 >
                   全選択
                 </button>
                 <button
                   onClick={handleDeselectAll}
-                  className="px-2.5 py-1.5 text-xs text-[#8a7568] border border-[#c5b8ab] rounded-full hover:bg-[#e2d9d0] transition-colors flex-shrink-0"
+                  className="px-2.5 py-1.5 text-xs text-text-muted border border-border-subtle rounded-full hover:bg-surface-disabled transition-colors flex-shrink-0"
                 >
                   全解除
                 </button>
@@ -182,11 +182,11 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
                     name={player.name}
                     kyuRank={player.kyuRank}
                     onClick={() => handleTogglePlayer(player.id)}
-                    className="text-sm text-[#8a7568] hover:text-[#5f3a2d] transition-colors"
+                    className="text-sm text-text-muted hover:text-text transition-colors"
                   />
                 ))}
                 {filteredUnselected.length === 0 && searchQuery && (
-                  <p className="text-sm text-[#b0a093] py-2">該当なし</p>
+                  <p className="text-sm text-text-placeholder py-2">該当なし</p>
                 )}
               </div>
             </>
@@ -194,17 +194,17 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
         </div>
 
         {/* フッター */}
-        <div className="px-6 py-4 border-t border-[#e2d9d0] flex justify-end gap-2 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-border-subtle flex justify-end gap-2 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-[#8a7568] border border-[#c5b8ab] rounded-lg hover:bg-[#e2d9d0] transition-colors"
+            className="px-4 py-2 text-sm font-medium text-text-muted border border-border-subtle rounded-lg hover:bg-surface-disabled transition-colors"
             disabled={saving}
           >
             キャンセル
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#82655a] rounded-lg hover:bg-[#6b5048] disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-text-inverse bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-50 transition-colors"
             disabled={saving || loading}
           >
             {saving ? '保存中...' : '保存'}

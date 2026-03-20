@@ -162,7 +162,7 @@ const PracticeParticipation = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -170,22 +170,22 @@ const PracticeParticipation = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* 固定ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={handlePrevMonth}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-surface rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronLeft className="w-6 h-6 text-text" />
           </button>
-          <h1 className="text-lg font-semibold text-[#5f3a2d]">
+          <h1 className="text-lg font-semibold text-text">
             {year}年{month}月 参加登録
           </h1>
           <button
             onClick={handleNextMonth}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-surface rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronRight className="w-6 h-6 text-text" />
           </button>
         </div>
       </div>
@@ -194,53 +194,53 @@ const PracticeParticipation = () => {
       <div className="pt-20 pb-24">
         {/* エラー・成功メッセージ */}
         {error && (
-          <div className="mx-4 mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mx-4 mb-4 bg-status-danger-surface border border-status-danger/20 rounded-lg p-3 flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-status-danger flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-status-danger">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="mx-4 mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-2">
-            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-green-700">{success}</p>
+          <div className="mx-4 mb-4 bg-status-success-surface border border-status-success/20 rounded-lg p-3 flex items-start gap-2">
+            <Check className="w-5 h-5 text-status-success flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-status-success">{success}</p>
           </div>
         )}
 
         {/* 練習セッション一覧 */}
         {futureSessions.length === 0 ? (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-12 text-center mx-4">
-            <p className="text-gray-500">この月の今後の練習予定はありません</p>
+          <div className="bg-surface rounded-lg shadow-sm p-12 text-center mx-4">
+            <p className="text-text-muted">この月の今後の練習予定はありません</p>
           </div>
         ) : (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden mx-4">
+          <div className="bg-surface rounded-lg shadow-sm overflow-hidden mx-4">
             <div className="overflow-x-auto">
               <table className="w-full table-fixed">
-                <thead className="bg-[#e2d9d0] border-b border-[#d0c5b8]">
+                <thead className="bg-surface border-b border-border-subtle">
                   <tr>
-                    <th className="w-[72px] px-2 py-2 text-left text-xs font-semibold text-[#5f3a2d]">
+                    <th className="w-[72px] px-2 py-2 text-left text-xs font-semibold text-text">
                       日付
                     </th>
-                    <th className="w-[52px] px-1 py-2 text-left text-xs font-semibold text-[#5f3a2d]">
+                    <th className="w-[52px] px-1 py-2 text-left text-xs font-semibold text-text">
                       場所
                     </th>
                     {Array.from({ length: 7 }, (_, i) => i + 1).map((n) => (
-                      <th key={n} className="px-0 py-2 text-center text-xs font-semibold text-[#5f3a2d]">
+                      <th key={n} className="px-0 py-2 text-center text-xs font-semibold text-text">
                         {n}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#d0c5b8]">
+                <tbody className="divide-y divide-border-subtle">
                   {futureSessions.map((session) => {
                     const sessionParticipations = participations[session.id] || [];
                     const matchCount = Math.min(session.totalMatches || 7, 7);
 
                     return (
-                      <tr key={session.id} className="hover:bg-[#f0ebe3]">
+                      <tr key={session.id} className="hover:bg-bg">
                         {/* 日付 */}
                         <td className="px-2 py-3">
-                          <span className="text-sm text-gray-900 whitespace-nowrap">
+                          <span className="text-sm text-text whitespace-nowrap">
                             {new Date(session.sessionDate).toLocaleDateString(
                               'ja-JP',
                               { month: 'numeric', day: 'numeric', weekday: 'short' }
@@ -250,7 +250,7 @@ const PracticeParticipation = () => {
 
                         {/* 場所（省略表示） */}
                         <td className="px-1 py-3">
-                          <span className="text-xs text-gray-700 whitespace-nowrap">
+                          <span className="text-xs text-text whitespace-nowrap">
                             {abbreviateVenue(session.venueName)}
                           </span>
                         </td>
@@ -271,8 +271,8 @@ const PracticeParticipation = () => {
                                       type="checkbox"
                                       checked={isChecked}
                                       onChange={() => toggleMatch(session.id, matchNumber)}
-                                      className="w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a]"
-                                      style={{ accentColor: '#4a6b5a' }}
+                                      className="w-5 h-5 border-border-strong rounded focus:ring-focus"
+                                      style={{ accentColor: 'var(--color-primary)' }}
                                     />
                                     <span
                                       className={`text-[10px] px-1 rounded font-medium ${getParticipantBadgeColor(
@@ -284,7 +284,7 @@ const PracticeParticipation = () => {
                                     </span>
                                   </div>
                                 ) : (
-                                  <span className="text-gray-300">-</span>
+                                  <span className="text-text-placeholder">-</span>
                                 )}
                               </td>
                             );
@@ -302,11 +302,11 @@ const PracticeParticipation = () => {
 
       {/* 固定保存ボタン（変更がある場合のみ表示） */}
       {futureSessions.length > 0 && hasChanges() && (
-        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg" style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-bg border-t border-border-subtle shadow-lg" style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             <Save className="w-5 h-5" />
             {saving ? '保存中...' : '保存する'}

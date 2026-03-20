@@ -24,11 +24,11 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       // エラーが発生した場合のフォールバックUI
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100">
-          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
+        <div className="min-h-screen flex items-center justify-center bg-bg">
+          <div className="max-w-md w-full bg-bg shadow-lg rounded-lg p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-status-danger-surface rounded-full">
               <svg
-                className="w-6 h-6 text-red-600"
+                className="w-6 h-6 text-status-danger"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -41,18 +41,18 @@ class ErrorBoundary extends Component {
                 />
               </svg>
             </div>
-            <h2 className="mt-4 text-xl font-semibold text-center text-gray-900">
+            <h2 className="mt-4 text-xl font-semibold text-center text-text">
               エラーが発生しました
             </h2>
-            <p className="mt-2 text-sm text-center text-gray-600">
+            <p className="mt-2 text-sm text-center text-text-muted">
               申し訳ございません。予期しないエラーが発生しました。
             </p>
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-4 text-sm">
-                <summary className="cursor-pointer text-gray-700 font-medium">
+                <summary className="cursor-pointer text-text font-medium">
                   エラー詳細
                 </summary>
-                <pre className="mt-2 p-2 bg-gray-50 rounded text-xs overflow-auto">
+                <pre className="mt-2 p-2 bg-bg rounded text-xs overflow-auto">
                   {this.state.error.toString()}
                   {this.state.errorInfo && this.state.errorInfo.componentStack}
                 </pre>
@@ -61,7 +61,7 @@ class ErrorBoundary extends Component {
             <div className="mt-6">
               <button
                 onClick={() => window.location.reload()}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="w-full px-4 py-2 bg-status-info text-text-inverse rounded-md hover:bg-status-info transition-colors"
               >
                 ページを再読み込み
               </button>

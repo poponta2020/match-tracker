@@ -67,20 +67,20 @@ const PlayerList = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f2ede6]">
+    <div className="min-h-screen bg-bg">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-[#374151]">選手管理</h1>
+          <h1 className="text-lg font-semibold text-text">選手管理</h1>
           <button
             onClick={() => navigate('/register')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm font-medium"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover transition-colors text-sm font-medium"
           >
             <UserPlus className="w-4 h-4" />
             新規登録
@@ -90,36 +90,36 @@ const PlayerList = () => {
 
       <div className="pt-20 pb-24 px-4 max-w-7xl mx-auto">
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div className="mb-4 p-3 bg-status-danger-surface border border-status-danger/20 text-status-danger rounded-lg text-sm">
             {error}
           </div>
         )}
 
         {/* 検索 */}
         <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9ca3af]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-placeholder" />
           <input
             type="text"
             placeholder="選手名で検索..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d4ddd7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent text-sm"
+            className="w-full pl-9 pr-4 py-2.5 bg-bg border border-border-subtle rounded-lg focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent text-sm"
           />
         </div>
 
-        <div className="text-xs text-[#6b7280] mb-3">
+        <div className="text-xs text-text-muted mb-3">
           {filteredPlayers.length}人の選手
         </div>
 
         {/* 選手リスト */}
         {filteredPlayers.length === 0 ? (
-          <div className="bg-[#f9f6f2] rounded-xl p-12 text-center">
-            <p className="text-[#6b7280]">
+          <div className="bg-surface rounded-xl p-12 text-center">
+            <p className="text-text-muted">
               {searchTerm ? '検索結果が見つかりませんでした' : '選手が登録されていません'}
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-gray-100">
+          <div className="bg-bg rounded-xl shadow-sm overflow-hidden divide-y divide-border-subtle">
             {filteredPlayers.map((player) => {
               const role = getRoleBadge(player.role);
               const profileDone = isProfileSet(player);
@@ -127,16 +127,16 @@ const PlayerList = () => {
               return (
                 <div
                   key={player.id}
-                  className="flex items-center px-4 py-3 hover:bg-[#f9f9f7] active:bg-[#f0f4f1] transition-colors cursor-pointer"
+                  className="flex items-center px-4 py-3 hover:bg-surface active:bg-surface transition-colors cursor-pointer"
                   onClick={() => navigate(`/players/${player.id}`)}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-[#374151] truncate">
+                      <span className="font-semibold text-text truncate">
                         {player.name}
                       </span>
                       {player.kyuRank && (
-                        <span className="flex-shrink-0 text-xs text-[#6b7280] bg-[#f0f4f1] px-1.5 py-0.5 rounded">
+                        <span className="flex-shrink-0 text-xs text-text-muted bg-surface px-1.5 py-0.5 rounded">
                           {player.kyuRank}
                         </span>
                       )}
@@ -151,12 +151,12 @@ const PlayerList = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-[#9ca3af] mt-0.5">
+                    <div className="text-[11px] text-text-placeholder mt-0.5">
                       最終ログイン: {formatLastLogin(player.lastLoginAt)}
                     </div>
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-[#d1d5db] ml-2 flex-shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-border-subtle ml-2 flex-shrink-0" />
                 </div>
               );
             })}

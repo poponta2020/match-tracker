@@ -36,16 +36,16 @@ const Profile = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary mx-auto"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-        <p className="text-red-800">{error}</p>
+      <div className="bg-status-danger-surface border border-status-danger/20 rounded-lg p-4 flex items-center gap-3">
+        <AlertCircle className="h-5 w-5 text-status-danger flex-shrink-0" />
+        <p className="text-status-danger">{error}</p>
       </div>
     );
   }
@@ -53,10 +53,10 @@ const Profile = () => {
   if (!player) return null;
 
   const roleLabel = {
-    SUPER_ADMIN: { text: 'スーパー管理者', cls: 'bg-purple-100 text-purple-700' },
-    ADMIN: { text: '管理者', cls: 'bg-blue-100 text-blue-700' },
-    PLAYER: { text: '選手', cls: 'bg-gray-100 text-gray-600' },
-  }[player.role] || { text: player.role, cls: 'bg-gray-100 text-gray-600' };
+    SUPER_ADMIN: { text: 'スーパー管理者', cls: 'bg-status-info-surface text-status-info' },
+    ADMIN: { text: '管理者', cls: 'bg-status-info-surface text-status-info' },
+    PLAYER: { text: '選手', cls: 'bg-surface-disabled text-text-muted' },
+  }[player.role] || { text: player.role, cls: 'bg-surface-disabled text-text-muted' };
 
   const items = [
     { label: '性別', value: player.gender },
@@ -72,28 +72,28 @@ const Profile = () => {
       {/* ヘッダー：名前 + ロール + 編集ボタン */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#374151]">{player.name}</h1>
+          <h1 className="text-2xl font-bold text-text">{player.name}</h1>
           <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
             {roleLabel.text}
           </span>
         </div>
         <button
           onClick={() => navigate('/profile/edit')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-secondary border border-secondary rounded-lg hover:bg-secondary hover:text-text-inverse transition-colors"
         >
           <Edit className="w-3.5 h-3.5" />
           編集
         </button>
       </div>
 
-      {/* 情報リスト（PlayerDetailと同じカードスタイル） */}
+      {/* 情報リスト */}
       {items.length > 0 && (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
-          <div className="divide-y divide-[#e2d9d0]">
+        <div className="bg-surface rounded-lg shadow-sm p-4">
+          <div className="divide-y divide-border-subtle">
             {items.map((item) => (
               <div key={item.label} className="flex justify-between py-3 first:pt-0 last:pb-0">
-                <span className="text-sm text-[#6b7280]">{item.label}</span>
-                <span className="text-sm font-medium text-[#374151]">{item.value}</span>
+                <span className="text-sm text-text-muted">{item.label}</span>
+                <span className="text-sm font-medium text-text">{item.value}</span>
               </div>
             ))}
           </div>
@@ -101,7 +101,7 @@ const Profile = () => {
       )}
 
       {items.length === 0 && (
-        <p className="text-sm text-[#6b7280] text-center py-8">
+        <p className="text-sm text-text-muted text-center py-8">
           プロフィール情報が未設定です
         </p>
       )}

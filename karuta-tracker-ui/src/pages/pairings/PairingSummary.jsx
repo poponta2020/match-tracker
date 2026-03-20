@@ -194,8 +194,8 @@ const PairingSummary = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
-        <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
+        <p className="text-text-muted text-sm">データを読み込み中...</p>
       </div>
     );
   }
@@ -205,20 +205,20 @@ const PairingSummary = () => {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/pairings')}
-          className="flex items-center gap-1 text-[#4a6b5a] hover:text-[#3d5a4c] text-sm"
+          className="flex items-center gap-1 text-secondary hover:text-primary-hover text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
           組み合わせに戻る
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
+      <div className="bg-bg rounded-lg shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#374151]">LINE送信用テキスト</h2>
+          <h2 className="text-lg font-bold text-text">LINE送信用テキスト</h2>
           <div className="flex gap-2">
             <button
               onClick={handleRegenerate}
-              className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
+              className="flex items-center gap-1.5 text-sm text-secondary border border-border-subtle px-3 py-1.5 rounded-lg hover:bg-surface-disabled transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               札を再生成
@@ -227,8 +227,8 @@ const PairingSummary = () => {
               onClick={handleCopy}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
                 copied
-                  ? 'bg-[#4a6b5a] text-white'
-                  : 'bg-[#4a6b5a] text-white hover:bg-[#3d5a4c]'
+                  ? 'bg-primary text-text-inverse'
+                  : 'bg-primary text-text-inverse hover:bg-primary-hover'
               }`}
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -241,17 +241,17 @@ const PairingSummary = () => {
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="w-full h-80 px-4 py-3 border border-[#c5cec8] rounded-lg font-mono text-sm text-[#374151] leading-relaxed resize-y focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+          className="w-full h-80 px-4 py-3 border border-border-subtle rounded-lg font-mono text-sm text-text leading-relaxed resize-y focus:ring-2 focus:ring-focus focus:border-transparent"
         />
 
-        <p className="text-xs text-[#6b7280]">
+        <p className="text-xs text-text-muted">
           テキストは自由に編集できます。「札を再生成」で札ルールのみ再ランダムします。
         </p>
       </div>
 
       <button
         onClick={() => navigate('/')}
-        className="w-full flex items-center justify-center gap-2 bg-[#4a6b5a] text-white py-3 rounded-lg hover:bg-[#3d5a4c] transition-colors font-medium"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-text-inverse py-3 rounded-lg hover:bg-primary-hover transition-colors font-medium"
       >
         <Home className="w-5 h-5" />
         ホームに戻る

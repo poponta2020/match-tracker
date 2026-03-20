@@ -190,7 +190,7 @@ const PlayerEdit = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
+        <div className="text-text-muted">読み込み中...</div>
       </div>
     );
   }
@@ -200,15 +200,15 @@ const PlayerEdit = () => {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate(id ? `/players/${id}` : '/players')}
-          className="flex items-center gap-2 text-primary-600 hover:text-primary-800"
+          className="flex items-center gap-2 text-secondary hover:text-secondary-hover"
         >
           <ArrowLeft className="w-5 h-5" />
           {id ? '選手詳細に戻る' : '選手一覧に戻る'}
         </button>
       </div>
 
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="bg-primary-600 text-white px-6 py-4">
+      <div className="bg-bg shadow-sm rounded-lg overflow-hidden">
+        <div className="bg-primary text-text-inverse px-6 py-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <User className="w-8 h-8" />
             {id ? '選手情報編集' : '選手新規登録'}
@@ -217,13 +217,13 @@ const PlayerEdit = () => {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-red-700">
+            <div className="bg-status-danger-surface border border-status-danger/20 p-4 rounded-lg text-status-danger">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-text mb-2">
               名前 <span className="text-red-500">*</span>
             </label>
             <input
@@ -232,21 +232,21 @@ const PlayerEdit = () => {
               value={formData.name}
               onChange={handleChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               placeholder="山田 太郎"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 性別
               </label>
               <select
                 name="gender"
                 value={formData.gender}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               >
                 <option value="">未設定</option>
                 <option value="男性">男性</option>
@@ -256,14 +256,14 @@ const PlayerEdit = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 利き手
               </label>
               <select
                 name="dominantHand"
                 value={formData.dominantHand}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               >
                 <option value="">未設定</option>
                 <option value="右">右</option>
@@ -275,14 +275,14 @@ const PlayerEdit = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 級位
               </label>
               <select
                 name="kyuRank"
                 value={formData.kyuRank}
                 onChange={handleKyuRankChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               >
                 <option value="">未設定</option>
                 <option value="E級">E級</option>
@@ -294,7 +294,7 @@ const PlayerEdit = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 段位 {formData.kyuRank === 'A級' && '(A級は四段〜八段)'}
               </label>
               <select
@@ -302,7 +302,7 @@ const PlayerEdit = () => {
                 value={formData.danRank}
                 onChange={handleChange}
                 disabled={formData.kyuRank !== 'A級'}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent disabled:bg-surface-disabled disabled:cursor-not-allowed"
               >
                 <option value="">未設定</option>
                 <option value="無段">無段</option>
@@ -319,7 +319,7 @@ const PlayerEdit = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-text mb-2">
               所属かるた会
             </label>
             <input
@@ -327,7 +327,7 @@ const PlayerEdit = () => {
               name="karutaClub"
               value={formData.karutaClub}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               placeholder="〇〇かるた会"
               maxLength={200}
             />
@@ -336,7 +336,7 @@ const PlayerEdit = () => {
           {/* ロール選択（スーパー管理者のみ、編集時のみ） */}
           {isSuperAdmin() && id && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 ロール
                 <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
                   スーパー管理者専用
@@ -345,7 +345,7 @@ const PlayerEdit = () => {
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               >
                 <option value="PLAYER">一般ユーザー</option>
                 <option value="ADMIN">管理者</option>
@@ -355,7 +355,7 @@ const PlayerEdit = () => {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-text mb-2">
               備考
             </label>
             <textarea
@@ -363,17 +363,17 @@ const PlayerEdit = () => {
               value={formData.remarks}
               onChange={handleChange}
               rows={4}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent"
               placeholder="特記事項など..."
             />
           </div>
 
           {/* パスワード変更セクション（スーパー管理者のみ、編集時のみ） */}
           {isSuperAdmin() && id && (
-            <div className="border-t border-gray-200 pt-6 mt-6">
+            <div className="border-t border-border-subtle pt-6 mt-6">
               <div className="flex items-center gap-2 mb-4">
-                <Lock className="w-5 h-5 text-red-600" />
-                <h2 className="text-lg font-semibold text-gray-900">パスワード変更</h2>
+                <Lock className="w-5 h-5 text-status-danger" />
+                <h2 className="text-lg font-semibold text-text">パスワード変更</h2>
                 <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
                   スーパー管理者専用
                 </span>
@@ -393,14 +393,14 @@ const PlayerEdit = () => {
               </div>
 
               {passwordError && (
-                <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-red-700 text-sm mb-4">
+                <div className="bg-status-danger-surface border border-status-danger/20 p-3 rounded-lg text-status-danger text-sm mb-4">
                   {passwordError}
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text mb-2">
                     新しいパスワード
                   </label>
                   <div className="relative">
@@ -410,12 +410,12 @@ const PlayerEdit = () => {
                       value={passwordData.newPassword}
                       onChange={handlePasswordChange}
                       placeholder="8文字以上"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                      className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-placeholder hover:text-text-muted"
                     >
                       {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
@@ -423,7 +423,7 @@ const PlayerEdit = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text mb-2">
                     新しいパスワード（確認）
                   </label>
                   <div className="relative">
@@ -433,12 +433,12 @@ const PlayerEdit = () => {
                       value={passwordData.confirmPassword}
                       onChange={handlePasswordChange}
                       placeholder="もう一度入力"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                      className="w-full px-4 py-2 border border-border-strong rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-placeholder hover:text-text-muted"
                     >
                       {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
@@ -452,7 +452,7 @@ const PlayerEdit = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-primary text-text-inverse px-6 py-3 rounded-lg hover:bg-primary-hover transition-colors disabled:bg-surface-disabled disabled:text-text-disabled disabled:cursor-not-allowed"
             >
               <Save className="w-5 h-5" />
               {submitting ? '保存中...' : '保存'}
@@ -460,7 +460,7 @@ const PlayerEdit = () => {
             <button
               type="button"
               onClick={() => navigate(id ? `/players/${id}` : '/players')}
-              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-3 border border-border-strong rounded-lg hover:bg-bg transition-colors"
             >
               キャンセル
             </button>

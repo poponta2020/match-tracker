@@ -303,10 +303,10 @@ const BulkResultInput = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
+      <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-text-muted">読み込み中...</p>
         </div>
       </div>
     );
@@ -314,16 +314,16 @@ const BulkResultInput = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center p-4">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <div className="flex items-center gap-2 text-red-800 mb-2">
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+        <div className="bg-status-danger-surface border border-status-danger/20 rounded-lg p-6 max-w-md">
+          <div className="flex items-center gap-2 text-status-danger mb-2">
             <AlertCircle className="h-5 w-5" />
             <h2 className="font-semibold">エラー</h2>
           </div>
-          <p className="text-red-700">{error}</p>
+          <p className="text-status-danger">{error}</p>
           <button
             onClick={() => navigate('/')}
-            className="mt-4 px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048]"
+            className="mt-4 px-4 py-2 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover"
           >
             ホームに戻る
           </button>
@@ -336,14 +336,14 @@ const BulkResultInput = () => {
   const totalMatches = session?.totalMatches || 0;
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-20">
+    <div className="min-h-screen bg-bg pb-20">
       {/* 固定ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-surface-disabled border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 + 対戦変更ボタン */}
           <div className="flex items-center justify-between py-3">
             <div className="w-10" />
-            <span className="text-lg font-semibold text-[#5f3a2d]">
+            <span className="text-lg font-semibold text-text">
               {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -358,8 +358,8 @@ const BulkResultInput = () => {
               }}
               className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
                 editMode
-                  ? 'bg-[#5f3a2d] text-white'
-                  : 'bg-white/60 text-[#5f3a2d] hover:bg-white/80'
+                  ? 'bg-text text-text-inverse'
+                  : 'bg-bg/60 text-text hover:bg-bg/80'
               }`}
             >
               {editMode ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
@@ -379,8 +379,8 @@ const BulkResultInput = () => {
                   }}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
-                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                      ? 'border-text text-text'
+                      : 'border-transparent text-text-muted hover:text-text hover:border-border-subtle'
                   }`}
                 >
                   {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
@@ -393,10 +393,10 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
-        <p className="text-xs text-[#9b8a7e] mb-3">
+        <p className="text-xs text-text-placeholder mb-3">
           {editMode ? '変更したい選手名をタップしてください' : '勝者の名前をタップ → 枚数差を選択'}
         </p>
-        <div className="divide-y divide-[#e2d9d0]">
+        <div className="divide-y divide-border-subtle">
           {currentPairings.map((pairing, index) => {
             const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = result.winnerId === pairing.player1Id;
@@ -423,9 +423,9 @@ const BulkResultInput = () => {
                     className={`flex-1 text-right pr-2 font-semibold truncate transition-colors ${
                       editMode
                         ? isSelectingPlayer1
-                          ? 'text-[#5f3a2d] underline decoration-2'
-                          : 'text-[#5f3a2d]'
-                        : isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
+                          ? 'text-text underline decoration-2'
+                          : 'text-text'
+                        : isPlayer1Winner ? 'text-status-success' : isPlayer2Winner ? 'text-text-placeholder' : 'text-text'
                     }`}
                   >
                     {pairing.player1Name}
@@ -434,7 +434,7 @@ const BulkResultInput = () => {
                   {/* 中央: 勝敗マーク + 枚数差 or vs */}
                   {!editMode && hasWinner ? (
                     <>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-status-success' : 'text-status-danger'}`}>
                         {isPlayer1Winner ? '〇' : '×'}
                       </div>
                       <select
@@ -445,19 +445,19 @@ const BulkResultInput = () => {
                           pairing.player2Id,
                           e.target.value
                         )}
-                        className="w-14 text-center font-bold text-gray-900 bg-transparent border-0 border-b border-[#d0c5b8] focus:ring-0 focus:border-[#82655a] flex-shrink-0 px-0 py-0 text-base"
+                        className="w-14 text-center font-bold text-text bg-transparent border-0 border-b border-border-subtle focus:ring-0 focus:border-focus flex-shrink-0 px-0 py-0 text-base"
                       >
                         <option value="">-</option>
                         {Array.from({ length: 26 }, (_, i) => i).map(num => (
                           <option key={num} value={num}>{num}</option>
                         ))}
                       </select>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-status-success' : 'text-status-danger'}`}>
                         {isPlayer2Winner ? '〇' : '×'}
                       </div>
                     </>
                   ) : (
-                    <div className="text-sm font-medium text-[#b0a396] w-8 text-center flex-shrink-0">
+                    <div className="text-sm font-medium text-text-placeholder w-8 text-center flex-shrink-0">
                       vs
                     </div>
                   )}
@@ -477,9 +477,9 @@ const BulkResultInput = () => {
                     className={`flex-1 text-left pl-2 font-semibold truncate transition-colors ${
                       editMode
                         ? isSelectingPlayer2
-                          ? 'text-[#5f3a2d] underline decoration-2'
-                          : 'text-[#5f3a2d]'
-                        : isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
+                          ? 'text-text underline decoration-2'
+                          : 'text-text'
+                        : isPlayer2Winner ? 'text-status-success' : isPlayer1Winner ? 'text-text-placeholder' : 'text-text'
                     }`}
                   >
                     {pairing.player2Name}
@@ -488,16 +488,16 @@ const BulkResultInput = () => {
 
                 {/* 選手選択リスト */}
                 {(isSelectingPlayer1 || isSelectingPlayer2) && (
-                  <div className="mt-3 bg-white rounded-lg border border-[#d0c5b8] shadow-sm max-h-48 overflow-y-auto">
+                  <div className="mt-3 bg-bg rounded-lg border border-border-subtle shadow-sm max-h-48 overflow-y-auto">
                     {getAvailablePlayers(pairing, selectingPairing.side).length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-500">選択可能な選手がいません</p>
+                      <p className="px-4 py-3 text-sm text-text-muted">選択可能な選手がいません</p>
                     ) : (
                       getAvailablePlayers(pairing, selectingPairing.side).map(player => (
                         <button
                           key={player.id}
                           onClick={() => handlePlayerChange(pairing, selectingPairing.side, player.id)}
                           disabled={updatingPairing}
-                          className="w-full text-left px-4 py-3 text-sm hover:bg-[#f0ebe3] transition-colors border-b border-[#f0ebe3] last:border-b-0 disabled:opacity-50"
+                          className="w-full text-left px-4 py-3 text-sm hover:bg-bg transition-colors border-b border-border-subtle last:border-b-0 disabled:opacity-50"
                         >
                           {player.name}
                         </button>
@@ -513,11 +513,11 @@ const BulkResultInput = () => {
 
       {/* 固定保存ボタン（変更がある場合のみ表示、編集モード中は非表示） */}
       {!editMode && changedMatches.size > 0 && (
-        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg" style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-bg border-t border-border-subtle shadow-lg" style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={() => handleSave(false)}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-text-inverse rounded-lg hover:bg-primary-active transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             <Save className="w-5 h-5" />
             {saving ? '保存中...' : `保存する（${changedMatches.size}件）`}
@@ -528,34 +528,34 @@ const BulkResultInput = () => {
       {/* 枚数差未選択警告ダイアログ */}
       {showWarningDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-bg rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               確認
             </h3>
-            <p className="text-gray-700 mb-4">
+            <p className="text-text mb-4">
               以下の対戦で枚数差が未選択です。
             </p>
-            <ul className="list-disc list-inside text-gray-700 mb-4 space-y-1">
+            <ul className="list-disc list-inside text-text mb-4 space-y-1">
               {missingScoreDiffs.map((item, index) => (
                 <li key={index}>
                   第{item.matchNumber}試合: {item.player1Name} vs {item.player2Name}
                 </li>
               ))}
             </ul>
-            <p className="text-gray-700 mb-6">
+            <p className="text-text mb-6">
               0枚差として保存しますか？
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowWarningDialog(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-[#f0ebe3]"
+                className="flex-1 px-4 py-2 border border-border-strong rounded-lg hover:bg-bg"
               >
                 キャンセル
               </button>
               <button
                 onClick={() => handleSave(true)}
-                className="flex-1 px-4 py-2 bg-[#82655a] text-white rounded-lg hover:bg-[#6b5048]"
+                className="flex-1 px-4 py-2 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover"
               >
                 0枚差で保存
               </button>

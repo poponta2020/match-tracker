@@ -31,18 +31,18 @@ const FilterBottomSheet = ({
       />
 
       {/* ボトムシート */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#f9f6f2] rounded-t-2xl shadow-xl z-50 animate-slide-up max-h-[80vh] overflow-y-auto" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="fixed bottom-0 left-0 right-0 bg-surface rounded-t-2xl shadow-xl z-50 animate-slide-up max-h-[80vh] overflow-y-auto" style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* ヘッダー */}
-        <div className="sticky top-0 bg-[#f9f6f2] border-b border-[#d0c5b8] px-4 py-4 flex items-center justify-between rounded-t-2xl">
+        <div className="sticky top-0 bg-surface border-b border-border-subtle px-4 py-4 flex items-center justify-between rounded-t-2xl">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Filter className="w-5 h-5" />
             絞り込み
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[#e2d9d0] rounded-full transition-colors"
+            className="p-2 hover:bg-surface-disabled rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-600" />
+            <X className="w-5 h-5 text-text-muted" />
           </button>
         </div>
 
@@ -50,13 +50,13 @@ const FilterBottomSheet = ({
         <div className="p-4 space-y-4">
           {/* 年月選択 */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">期間</label>
+            <label className="block text-sm font-medium text-text-muted mb-2">期間</label>
             <div className="grid grid-cols-2 gap-3">
               {/* 年選択 */}
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               >
                 <option value="">すべての年</option>
                 {availableYears.map((year) => (
@@ -70,7 +70,7 @@ const FilterBottomSheet = ({
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               >
                 <option value="">すべての月</option>
                 {availableMonths.map((month) => (
@@ -84,26 +84,26 @@ const FilterBottomSheet = ({
 
           {/* 検索 */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">対戦相手</label>
+            <label className="block text-sm font-medium text-text-muted mb-2">対戦相手</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-placeholder w-4 h-4" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="対戦相手で検索..."
-                className="w-full pl-9 pr-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="w-full pl-9 pr-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               />
             </div>
           </div>
 
           {/* 結果フィルタ */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">試合結果</label>
+            <label className="block text-sm font-medium text-text-muted mb-2">試合結果</label>
             <select
               value={filterResult}
               onChange={(e) => setFilterResult(e.target.value)}
-              className="w-full px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+              className="w-full px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
             >
               <option value="全て">全ての結果</option>
               <option value="勝ち">勝ちのみ</option>
@@ -114,13 +114,13 @@ const FilterBottomSheet = ({
 
           {/* 対戦相手フィルタ */}
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">対戦相手の条件</label>
+            <label className="block text-sm font-medium text-text-muted mb-2">対戦相手の条件</label>
             <div className="grid grid-cols-3 gap-3">
               {/* 級フィルタ */}
               <select
                 value={filterKyuRank}
                 onChange={(e) => setFilterKyuRank(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               >
                 <option value="">全ての級</option>
                 <option value="A級">A級</option>
@@ -134,7 +134,7 @@ const FilterBottomSheet = ({
               <select
                 value={filterGender}
                 onChange={(e) => setFilterGender(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               >
                 <option value="">性別</option>
                 <option value="男性">男性</option>
@@ -146,7 +146,7 @@ const FilterBottomSheet = ({
               <select
                 value={filterDominantHand}
                 onChange={(e) => setFilterDominantHand(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                className="px-3 py-2 border border-border-subtle rounded-lg focus:ring-2 focus:ring-focus focus:border-transparent bg-surface"
               >
                 <option value="">利き手</option>
                 <option value="右">右</option>
@@ -159,7 +159,7 @@ const FilterBottomSheet = ({
           {/* 適用ボタン */}
           <button
             onClick={onClose}
-            className="w-full bg-[#82655a] text-white py-3 rounded-lg hover:bg-[#6b5048] transition-colors font-medium"
+            className="w-full bg-primary text-text-inverse py-3 rounded-lg hover:bg-primary-hover transition-colors font-medium"
           >
             適用
           </button>

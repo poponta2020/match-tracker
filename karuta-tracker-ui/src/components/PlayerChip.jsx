@@ -11,7 +11,7 @@ const KYU_BORDER_COLORS = {
   'E級': 'border-lime-200',
 };
 
-const DEFAULT_BORDER_COLOR = 'border-gray-200';
+const DEFAULT_BORDER_COLOR = 'border-border-subtle';
 
 /**
  * 級に応じた枠線色クラスを取得

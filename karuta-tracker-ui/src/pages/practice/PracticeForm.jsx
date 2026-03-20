@@ -70,33 +70,33 @@ const PracticeEditForm = ({ id }) => {
   return (
     <div className="max-w-4xl mx-auto">
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">{error}</div>
+        <div className="mb-4 p-4 bg-status-danger-surface border border-status-danger/20 text-status-danger rounded-lg">{error}</div>
       )}
-      <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="bg-bg shadow-md rounded-lg p-6 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">練習日</label>
+          <label className="block text-sm font-medium text-text mb-2">練習日</label>
           <input type="date" value={formData.sessionDate} disabled
-            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" />
+            className="w-full px-3 py-2 border border-border-strong rounded-md bg-bg" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">会場</label>
+          <label className="block text-sm font-medium text-text mb-2">会場</label>
           <select value={formData.venueId || ''} onChange={handleVenueChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]">
+            className="w-full px-3 py-2 border border-border-strong rounded-md focus:outline-none focus:ring-2 focus:ring-focus">
             <option value="">会場を選択してください</option>
             {venues.map(v => <option key={v.id} value={v.id}>{v.name} ({v.defaultMatchCount}試合)</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">メモ</label>
+          <label className="block text-sm font-medium text-text mb-2">メモ</label>
           <textarea value={formData.notes} onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
             rows="3" maxLength={1000} placeholder="練習の内容や特記事項など"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]" />
+            className="w-full px-3 py-2 border border-border-strong rounded-md focus:outline-none focus:ring-2 focus:ring-focus" />
         </div>
         <div className="flex justify-end space-x-4">
           <button type="button" onClick={() => navigate('/practice')}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">キャンセル</button>
+            className="px-6 py-2 border border-border-strong text-text rounded-lg hover:bg-bg">キャンセル</button>
           <button type="submit" disabled={loading}
-            className="px-6 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] disabled:bg-gray-400">
+            className="px-6 py-2 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover disabled:bg-surface-disabled disabled:text-text-disabled">
             {loading ? '保存中...' : '更新'}
           </button>
         </div>
@@ -268,39 +268,39 @@ const PracticeForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-32">
+    <div className="min-h-screen bg-bg pb-32">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors">
-            <ChevronLeft className="w-6 h-6 text-[#374151]" />
+            className="p-2 hover:bg-surface rounded-full transition-colors">
+            <ChevronLeft className="w-6 h-6 text-text" />
           </button>
-          <h1 className="text-lg font-semibold text-[#374151]">{monthStr}</h1>
+          <h1 className="text-lg font-semibold text-text">{monthStr}</h1>
           <button onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors">
-            <ChevronRight className="w-6 h-6 text-[#374151]" />
+            className="p-2 hover:bg-surface rounded-full transition-colors">
+            <ChevronRight className="w-6 h-6 text-text" />
           </button>
         </div>
       </div>
 
       <div className="pt-20 px-4">
         {/* 操作説明 */}
-        <p className="text-sm text-[#6b7280] mb-3 text-center">
+        <p className="text-sm text-text-muted mb-3 text-center">
           日付をタップして会場を選択してください
         </p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
+          <div className="mb-4 p-3 bg-status-danger-surface border border-status-danger/20 text-status-danger rounded-lg text-sm">{error}</div>
         )}
         {success && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>
+          <div className="mb-4 p-3 bg-status-success-surface border border-status-success/20 text-status-success rounded-lg text-sm">{success}</div>
         )}
 
         {/* カレンダー */}
-        <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
+        <div className="bg-surface shadow-md rounded-lg overflow-hidden">
           <table className="w-full border-collapse table-fixed">
-            <thead className="bg-[#d4ddd7]">
+            <thead className="bg-surface">
               <tr>
                 {['日', '月', '火', '水', '木', '金', '土'].map(d => (
                   <th key={d} className="py-3 text-center text-sm font-medium border">{d}</th>
@@ -316,21 +316,21 @@ const PracticeForm = () => {
                     const isExisting = dateStr ? existingDates.includes(dateStr) : false;
                     const today = isToday(day);
 
-                    let bgColor = 'bg-[#f9f6f2]';
+                    let bgColor = 'bg-surface';
                     let cursor = 'cursor-default';
-                    let borderColor = 'border-[#c5cec8]';
+                    let borderColor = 'border-border-subtle';
 
                     if (day) {
                       if (isExisting) {
-                        bgColor = 'bg-[#e8e3dc]';
+                        bgColor = 'bg-surface-disabled';
                         cursor = 'cursor-not-allowed';
                       } else if (entry) {
-                        bgColor = 'bg-[#dce5de]';
+                        bgColor = 'bg-surface';
                         cursor = 'cursor-pointer';
-                        borderColor = 'border-[#8a9e90]';
+                        borderColor = 'border-secondary';
                       } else {
                         cursor = 'cursor-pointer';
-                        bgColor = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
+                        bgColor = 'bg-surface hover:bg-surface';
                       }
                     }
 
@@ -342,14 +342,14 @@ const PracticeForm = () => {
                       >
                         {day && (
                           <div className="text-center flex flex-col items-center">
-                            <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                            <div className={`text-lg leading-tight ${today ? 'font-bold bg-primary text-text-inverse w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                               {day}
                             </div>
                             {isExisting && (
-                              <div className="mt-0.5 text-[10px] text-[#9ca3af] leading-tight">登録済</div>
+                              <div className="mt-0.5 text-[10px] text-text-placeholder leading-tight">登録済</div>
                             )}
                             {entry && (
-                              <div className="mt-0.5 text-[10px] text-[#4a6b5a] font-medium leading-tight">
+                              <div className="mt-0.5 text-[10px] text-secondary font-medium leading-tight">
                                 {abbreviateVenue(entry.venueName)}
                               </div>
                             )}
@@ -366,35 +366,35 @@ const PracticeForm = () => {
 
         {/* 選択済みリスト */}
         {entryCount > 0 && (
-          <div className="mt-4 bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-[#d4ddd7] text-sm font-semibold text-[#374151]">
+          <div className="mt-4 bg-bg rounded-lg shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-surface text-sm font-semibold text-text">
               選択中の練習日 ({entryCount}件)
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border-subtle">
               {Object.entries(entries)
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([dateStr, entry]) => (
                   <div key={dateStr} className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-[#374151]">
+                        <span className="text-sm font-medium text-text">
                           {new Date(dateStr + 'T00:00:00').toLocaleDateString('ja-JP', {
                             month: 'numeric', day: 'numeric', weekday: 'short'
                           })}
                         </span>
-                        <span className="text-xs text-[#6b7280] flex items-center gap-1">
+                        <span className="text-xs text-text-muted flex items-center gap-1">
                           <MapPin className="w-3 h-3" />{entry.venueName}
                         </span>
                       </div>
                       {entry.notes && (
-                        <div className="text-xs text-[#9ca3af] mt-0.5 flex items-center gap-1 truncate">
+                        <div className="text-xs text-text-placeholder mt-0.5 flex items-center gap-1 truncate">
                           <FileText className="w-3 h-3 flex-shrink-0" />{entry.notes}
                         </div>
                       )}
                     </div>
                     <button
                       onClick={() => handleRemoveEntry(dateStr)}
-                      className="ml-2 p-1.5 text-[#9ca3af] hover:text-red-500 transition-colors"
+                      className="ml-2 p-1.5 text-text-placeholder hover:text-red-500 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -407,12 +407,12 @@ const PracticeForm = () => {
 
       {/* 固定保存ボタン */}
       {entryCount > 0 && (
-        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-white border-t border-gray-200 shadow-lg"
+        <div className="fixed left-0 right-0 z-40 px-4 py-3 bg-bg border-t border-border-subtle shadow-lg"
           style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:opacity-50 font-medium"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 font-medium"
           >
             <Save className="w-5 h-5" />
             {saving ? '保存中...' : `${entryCount}件の練習日を登録する`}
@@ -424,16 +424,16 @@ const PracticeForm = () => {
       {editingDate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50"
           onClick={() => setEditingDate(null)}>
-          <div className="bg-white rounded-t-2xl w-full max-w-md pb-8 animate-slide-up"
+          <div className="bg-bg rounded-t-2xl w-full max-w-md pb-8 animate-slide-up"
             onClick={e => e.stopPropagation()}>
             {/* ヘッダー */}
-            <div className="px-6 pt-5 pb-3 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-lg font-bold text-[#374151]">
+            <div className="px-6 pt-5 pb-3 flex justify-between items-center border-b border-border-subtle">
+              <h3 className="text-lg font-bold text-text">
                 {new Date(editingDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                   month: 'long', day: 'numeric', weekday: 'short'
                 })}
               </h3>
-              <button onClick={() => setEditingDate(null)} className="text-[#6b7280] hover:text-[#374151]">
+              <button onClick={() => setEditingDate(null)} className="text-text-muted hover:text-text">
                 <X size={20} />
               </button>
             </div>
@@ -441,7 +441,7 @@ const PracticeForm = () => {
             <div className="px-6 pt-4 space-y-4">
               {/* 会場選択 */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">
+                <label className="block text-sm font-medium text-text mb-2">
                   会場 <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -452,12 +452,12 @@ const PracticeForm = () => {
                       onClick={() => setModalVenueId(venue.id)}
                       className={`px-3 py-3 rounded-lg text-sm font-medium transition-all border ${
                         modalVenueId === venue.id
-                          ? 'bg-[#4a6b5a] text-white border-[#4a6b5a] shadow-sm'
-                          : 'bg-white text-[#374151] border-gray-200 hover:border-[#8a9e90]'
+                          ? 'bg-primary text-text-inverse border-primary shadow-sm'
+                          : 'bg-bg text-text border-border-subtle hover:border-secondary'
                       }`}
                     >
                       <div>{venue.name}</div>
-                      <div className={`text-xs mt-0.5 ${modalVenueId === venue.id ? 'text-green-100' : 'text-[#9ca3af]'}`}>
+                      <div className={`text-xs mt-0.5 ${modalVenueId === venue.id ? 'text-green-100' : 'text-text-placeholder'}`}>
                         {venue.defaultMatchCount}試合
                       </div>
                     </button>
@@ -467,14 +467,14 @@ const PracticeForm = () => {
 
               {/* メモ */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">メモ</label>
+                <label className="block text-sm font-medium text-text mb-2">メモ</label>
                 <input
                   type="text"
                   value={modalNotes}
                   onChange={e => setModalNotes(e.target.value)}
                   maxLength={1000}
                   placeholder="任意"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent text-sm"
+                  className="w-full px-3 py-2.5 border border-border-subtle rounded-lg focus:outline-none focus:ring-2 focus:ring-focus focus:border-transparent text-sm"
                 />
               </div>
 
@@ -483,7 +483,7 @@ const PracticeForm = () => {
                 {entries[editingDate] && (
                   <button
                     onClick={() => handleRemoveEntry(editingDate)}
-                    className="px-4 py-3 text-red-500 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                    className="px-4 py-3 text-red-500 border border-red-300 rounded-lg hover:bg-status-danger-surface transition-colors"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -491,7 +491,7 @@ const PracticeForm = () => {
                 <button
                   onClick={handleModalConfirm}
                   disabled={!modalVenueId}
-                  className="flex-1 py-3 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                  className="flex-1 py-3 bg-primary text-text-inverse rounded-lg hover:bg-primary-hover transition-colors disabled:bg-surface-disabled disabled:text-text-disabled disabled:cursor-not-allowed font-medium"
                 >
                   {entries[editingDate] ? '更新する' : '追加する'}
                 </button>

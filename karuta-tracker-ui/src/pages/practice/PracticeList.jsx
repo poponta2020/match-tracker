@@ -27,15 +27,15 @@ const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
   return (
     <div
       ref={pickerRef}
-      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-[60] w-[240px] p-3"
+      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-bg border border-border-subtle rounded-lg shadow-lg z-[60] w-[240px] p-3"
     >
       {/* 年ナビゲーション */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={() => setViewYear(viewYear - 1)} className="p-1 hover:bg-gray-100 rounded">
+        <button onClick={() => setViewYear(viewYear - 1)} className="p-1 hover:bg-surface rounded">
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="font-semibold text-sm text-[#374151]">{viewYear}年</span>
-        <button onClick={() => setViewYear(viewYear + 1)} className="p-1 hover:bg-gray-100 rounded">
+        <span className="font-semibold text-sm text-text">{viewYear}年</span>
+        <button onClick={() => setViewYear(viewYear + 1)} className="p-1 hover:bg-surface rounded">
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -50,8 +50,8 @@ const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
               onClick={() => { onSelect(viewYear, month); onClose(); }}
               className={`py-2 text-sm rounded-lg transition-colors
                 ${isSelected
-                  ? 'bg-[#4a6b5a] text-white font-bold'
-                  : 'text-[#374151] hover:bg-[#eef2ef]'
+                  ? 'bg-primary text-text-inverse font-bold'
+                  : 'text-text hover:bg-surface'
                 }`}
             >
               {month}月
@@ -360,7 +360,7 @@ const PracticeList = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
+        <div className="text-text-muted">読み込み中...</div>
       </div>
     );
   }
@@ -377,18 +377,18 @@ const PracticeList = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+            className="p-2 hover:bg-surface rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#374151]" />
+            <ChevronLeft className="w-6 h-6 text-text" />
           </button>
           <div className="relative">
             <button
               onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
-              className="text-lg font-semibold text-[#374151]"
+              className="text-lg font-semibold text-text"
             >
               {monthStr}
             </button>
@@ -406,9 +406,9 @@ const PracticeList = () => {
           </div>
           <button
             onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+            className="p-2 hover:bg-surface rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-[#374151]" />
+            <ChevronRight className="w-6 h-6 text-text" />
           </button>
         </div>
       </div>
@@ -416,16 +416,16 @@ const PracticeList = () => {
       {/* コンテンツ（上部パディング追加） */}
       <div className="pt-20">
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="mb-4 p-4 bg-status-danger-surface border border-status-danger/20 text-status-danger rounded-lg">
           {error}
         </div>
       )}
 
 
       {/* カレンダー */}
-      <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
+      <div className="bg-surface shadow-md rounded-lg overflow-hidden">
         <table className="w-full border-collapse table-fixed">
-          <thead className="bg-[#d4ddd7]">
+          <thead className="bg-surface">
             <tr>
               {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
                 <th key={day} className="py-3 text-center text-sm font-medium border">
@@ -443,18 +443,18 @@ const PracticeList = () => {
                   const hasSession = !!session;
                   const participationStatus = session ? getMyParticipationStatus(session) : 'none';
 
-                  let bgColor = 'bg-[#f9f6f2]';
-                  let borderColor = 'border-[#c5cec8]';
+                  let bgColor = 'bg-surface';
+                  let borderColor = 'border-border-subtle';
                   let cursor = 'cursor-default';
                   const isMyParticipation = participationStatus !== 'none';
 
                   if (hasSession) {
                     cursor = 'cursor-pointer';
                     if (isMyParticipation) {
-                      bgColor = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
-                      borderColor = 'border-[#8a9e90]';
+                      bgColor = 'bg-surface hover:bg-surface';
+                      borderColor = 'border-secondary';
                     } else {
-                      bgColor = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
+                      bgColor = 'bg-surface hover:bg-surface';
                     }
                   }
 
@@ -466,16 +466,16 @@ const PracticeList = () => {
                     >
                       {day && (
                         <div className="text-center flex flex-col items-center">
-                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-primary text-text-inverse w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                             {day}
                           </div>
                           {session && session.venueName && (
-                            <div className="mt-0.5 text-[10px] text-[#6b7280] leading-tight">
+                            <div className="mt-0.5 text-[10px] text-text-muted leading-tight">
                               {abbreviateLocation(session.venueName)}
                             </div>
                           )}
                           {hasSession && !session?.venueName && (
-                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-[#4a6b5a]" />
+                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-primary" />
                           )}
                         </div>
                       )}
@@ -495,26 +495,26 @@ const PracticeList = () => {
           onClick={closeModal}
         >
           <div
-            className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
+            className="bg-surface rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* ヘッダー */}
             <div className="px-6 pt-5 pb-4 flex justify-between items-start">
               <div>
-                <h3 className="text-lg font-bold text-[#374151]">
+                <h3 className="text-lg font-bold text-text">
                   {formatDateForModal(selectedSession.sessionDate)}
                 </h3>
                 {selectedSession.venueName && (
-                  <p className="text-sm text-[#6b7280] mt-0.5">{selectedSession.venueName}</p>
+                  <p className="text-sm text-text-muted mt-0.5">{selectedSession.venueName}</p>
                 )}
               </div>
-              <button onClick={closeModal} className="text-[#6b7280] hover:text-[#374151] -mt-1">
+              <button onClick={closeModal} className="text-text-muted hover:text-text -mt-1">
                 <X size={20} />
               </button>
             </div>
 
             {/* 試合リスト */}
-            <div className="divide-y divide-[#d4ddd7]">
+            <div className="divide-y divide-border-subtle">
               {selectedSession.matchParticipants &&
               Object.keys(selectedSession.matchParticipants).length > 0 ? (
                 Object.entries(selectedSession.matchParticipants)
@@ -534,21 +534,21 @@ const PracticeList = () => {
 
                     return (
                       <div key={matchNum}>
-                        <div className={`px-6 py-3 flex items-center justify-between ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
+                        <div className={`px-6 py-3 flex items-center justify-between ${isMyMatch ? 'bg-surface' : ''}`}>
                           <button
                             onClick={() => toggleMatch(matchNum)}
                             className="flex-1 text-left flex items-center gap-3"
                           >
-                            <span className="text-sm font-semibold text-[#374151] w-16 flex-shrink-0">
+                            <span className="text-sm font-semibold text-text w-16 flex-shrink-0">
                               第{matchNum}試合
                             </span>
                             {timeRange && (
-                              <span className="text-xs text-[#6b7280]">{timeRange}</span>
+                              <span className="text-xs text-text-muted">{timeRange}</span>
                             )}
-                            <span className="text-xs text-[#6b7280] ml-auto mr-2">{count}名</span>
+                            <span className="text-xs text-text-muted ml-auto mr-2">{count}名</span>
                             <ChevronRight
                               size={14}
-                              className={`text-[#6b7280] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                              className={`text-text-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                             />
                           </button>
                           {isSuperAdmin(currentPlayer) && (
@@ -557,14 +557,14 @@ const PracticeList = () => {
                                 e.stopPropagation();
                                 handleEditMatchParticipants(parseInt(matchNum));
                               }}
-                              className="ml-2 px-2 py-1 text-xs text-[#4a6b5a] border border-[#4a6b5a] rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
+                              className="ml-2 px-2 py-1 text-xs text-secondary border border-secondary rounded hover:bg-primary hover:text-text-inverse transition-colors"
                             >
                               編集
                             </button>
                           )}
                         </div>
                         {isExpanded && (
-                          <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
+                          <div className={`px-6 pb-3 ${isMyMatch ? 'bg-surface' : ''}`}>
                             {participants.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {sortPlayersByRank(participants).map((p, idx) => {
@@ -577,15 +577,15 @@ const PracticeList = () => {
                                       kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
                                       className={`text-xs ${
                                         isMyself
-                                          ? 'bg-[#4a6b5a] text-white font-medium'
-                                          : 'text-[#374151] bg-white'
+                                          ? 'bg-primary text-text-inverse font-medium'
+                                          : 'text-text bg-bg'
                                       }`}
                                     />
                                   );
                                 })}
                               </div>
                             ) : (
-                              <div className="text-xs text-[#6b7280]">参加者なし</div>
+                              <div className="text-xs text-text-muted">参加者なし</div>
                             )}
                           </div>
                         )}
@@ -593,29 +593,29 @@ const PracticeList = () => {
                     );
                   })
               ) : (
-                <div className="px-6 py-4 text-sm text-[#6b7280]">試合データなし</div>
+                <div className="px-6 py-4 text-sm text-text-muted">試合データなし</div>
               )}
             </div>
 
             {selectedSession.remarks && (
-              <div className="px-6 py-3 border-t border-[#d4ddd7]">
-                <p className="text-sm text-[#6b7280]">{selectedSession.remarks}</p>
+              <div className="px-6 py-3 border-t border-border-subtle">
+                <p className="text-sm text-text-muted">{selectedSession.remarks}</p>
               </div>
             )}
 
             {/* ボタン */}
-            <div className="px-6 py-4 border-t border-[#d4ddd7] flex items-center gap-2">
+            <div className="px-6 py-4 border-t border-border-subtle flex items-center gap-2">
               {isPastDate(selectedSession.sessionDate) ? (
                 <button
                   onClick={() => navigate(`/matches/results/${selectedSession.id}?date=${selectedSession.sessionDate}`)}
-                  className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
+                  className="flex-1 py-2 text-sm font-medium text-secondary border border-secondary rounded-lg hover:bg-primary hover:text-text-inverse transition-colors whitespace-nowrap"
                 >
                   試合結果
                 </button>
               ) : (
                 <button
                   onClick={goToParticipation}
-                  className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
+                  className="flex-1 py-2 text-sm font-medium text-secondary border border-secondary rounded-lg hover:bg-primary hover:text-text-inverse transition-colors whitespace-nowrap"
                 >
                   参加登録
                 </button>
@@ -623,7 +623,7 @@ const PracticeList = () => {
               {isSuperAdmin() && (
                 <button
                   onClick={() => handleDelete(selectedSession.id)}
-                  className="flex-1 py-2 text-sm font-medium text-red-600 border border-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-colors whitespace-nowrap"
+                  className="flex-1 py-2 text-sm font-medium text-status-danger border border-red-400 rounded-lg hover:bg-red-600 hover:text-text-inverse transition-colors whitespace-nowrap"
                 >
                   削除
                 </button>
@@ -645,7 +645,7 @@ const PracticeList = () => {
       {/* フローティングアクションボタン (FAB) */}
       <button
         onClick={goToParticipation}
-        className="fixed right-4 z-20 bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+        className="fixed right-4 z-20 bg-primary text-text-inverse pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-primary-hover transition-all hover:shadow-xl flex items-center gap-2"
         style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <CalendarCheck className="w-5 h-5" />

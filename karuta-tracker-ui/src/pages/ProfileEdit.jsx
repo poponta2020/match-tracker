@@ -182,39 +182,39 @@ const ProfileEdit = () => {
   };
 
   const selectClass = (name) =>
-    `w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] transition-shadow bg-white appearance-none ${
-      validationErrors[name] ? 'border-red-400' : 'border-[#d4ddd7]'
+    `w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-1 focus:ring-focus focus:border-focus transition-shadow bg-bg appearance-none ${
+      validationErrors[name] ? 'border-status-danger' : 'border-border-strong'
     }`;
 
   const inputClass = (name) =>
-    `w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] transition-shadow ${
-      validationErrors[name] ? 'border-red-400' : 'border-[#d4ddd7]'
+    `w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-1 focus:ring-focus focus:border-focus transition-shadow ${
+      validationErrors[name] ? 'border-status-danger' : 'border-border-strong'
     }`;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-6">
+    <div className="min-h-screen bg-bg pb-6">
       {/* 固定ヘッダー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+      <div className="bg-surface border-b border-border-subtle shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           {!isSetup ? (
             <button
               onClick={() => navigate('/profile')}
-              className="flex items-center gap-1 text-sm text-[#374151] hover:text-[#1f2937]"
+              className="flex items-center gap-1 text-sm text-text hover:text-text-muted"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           ) : (
             <div className="w-5" />
           )}
-          <h1 className="text-lg font-semibold text-[#374151]">
+          <h1 className="text-lg font-semibold text-text">
             {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
           </h1>
           <div className="w-5" />
@@ -225,9 +225,9 @@ const ProfileEdit = () => {
       <div className="max-w-lg mx-auto px-4 pt-16">
         {/* 初期設定メッセージ */}
         {isSetup && (
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-            <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-blue-700">
+          <div className="mt-4 bg-status-info-surface border border-status-info/20 rounded-lg p-3 flex items-start gap-2">
+            <Info className="h-4 w-4 text-status-info flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-status-info">
               プロフィールを設定すると全機能が使えるようになります
             </p>
           </div>
@@ -235,34 +235,34 @@ const ProfileEdit = () => {
 
         {/* 成功・エラーメッセージ */}
         {success && (
-          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <p className="text-sm text-green-800">保存しました</p>
+          <div className="mt-4 bg-status-success-surface border border-status-success/20 rounded-lg p-3 flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-status-success" />
+            <p className="text-sm text-status-success">保存しました</p>
           </div>
         )}
         {error && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mt-4 bg-status-danger-surface border border-status-danger/20 rounded-lg p-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-status-danger" />
+            <p className="text-sm text-status-danger">{error}</p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-5">
           {/* 選手名（変更不可） */}
-          <div className="bg-[#f9f6f2] rounded-xl p-5 shadow-sm space-y-4">
+          <div className="bg-surface rounded-xl p-5 shadow-sm space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#6b7280] mb-1.5">選手名</label>
-              <div className="px-3 py-2.5 text-sm bg-[#e5ebe7] border border-[#d4ddd7] rounded-lg text-[#6b7280]">
+              <label className="block text-xs font-medium text-text-muted mb-1.5">選手名</label>
+              <div className="px-3 py-2.5 text-sm bg-surface-disabled border border-border-subtle rounded-lg text-text-disabled">
                 {currentPlayer?.name}
-                <span className="ml-1.5 text-xs text-[#9ca3af]">(変更不可)</span>
+                <span className="ml-1.5 text-xs text-text-placeholder">(変更不可)</span>
               </div>
             </div>
 
             {/* 基本情報：2列グリッド */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#6b7280] mb-1.5">
-                  性別 <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  性別 <span className="text-status-danger">*</span>
                 </label>
                 <select name="gender" value={formData.gender} onChange={handleChange} className={selectClass('gender')}>
                   <option value="">選択</option>
@@ -270,11 +270,11 @@ const ProfileEdit = () => {
                   <option value="女性">女性</option>
                   <option value="その他">その他</option>
                 </select>
-                {validationErrors.gender && <p className="mt-1 text-xs text-red-500">{validationErrors.gender}</p>}
+                {validationErrors.gender && <p className="mt-1 text-xs text-status-danger">{validationErrors.gender}</p>}
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#6b7280] mb-1.5">
-                  利き手 <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  利き手 <span className="text-status-danger">*</span>
                 </label>
                 <select name="dominantHand" value={formData.dominantHand} onChange={handleChange} className={selectClass('dominantHand')}>
                   <option value="">選択</option>
@@ -282,15 +282,15 @@ const ProfileEdit = () => {
                   <option value="左">左</option>
                   <option value="両">両</option>
                 </select>
-                {validationErrors.dominantHand && <p className="mt-1 text-xs text-red-500">{validationErrors.dominantHand}</p>}
+                {validationErrors.dominantHand && <p className="mt-1 text-xs text-status-danger">{validationErrors.dominantHand}</p>}
               </div>
             </div>
 
             {/* 競技情報：2列グリッド */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#6b7280] mb-1.5">
-                  級位 <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  級位 <span className="text-status-danger">*</span>
                 </label>
                 <select name="kyuRank" value={formData.kyuRank} onChange={handleChange} className={selectClass('kyuRank')}>
                   <option value="">選択</option>
@@ -300,11 +300,11 @@ const ProfileEdit = () => {
                   <option value="D級">D級</option>
                   <option value="E級">E級</option>
                 </select>
-                {validationErrors.kyuRank && <p className="mt-1 text-xs text-red-500">{validationErrors.kyuRank}</p>}
+                {validationErrors.kyuRank && <p className="mt-1 text-xs text-status-danger">{validationErrors.kyuRank}</p>}
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#6b7280] mb-1.5">
-                  段位 <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">
+                  段位 <span className="text-status-danger">*</span>
                 </label>
                 <select name="danRank" value={formData.danRank} onChange={handleChange} className={selectClass('danRank')}>
                   <option value="">選択</option>
@@ -318,13 +318,13 @@ const ProfileEdit = () => {
                   <option value="七段">七段</option>
                   <option value="八段">八段</option>
                 </select>
-                {validationErrors.danRank && <p className="mt-1 text-xs text-red-500">{validationErrors.danRank}</p>}
+                {validationErrors.danRank && <p className="mt-1 text-xs text-status-danger">{validationErrors.danRank}</p>}
               </div>
             </div>
 
             {/* 所属かるた会 */}
             <div>
-              <label className="block text-xs font-medium text-[#6b7280] mb-1.5">所属かるた会</label>
+              <label className="block text-xs font-medium text-text-muted mb-1.5">所属かるた会</label>
               <input
                 type="text"
                 name="karutaClub"
@@ -333,39 +333,39 @@ const ProfileEdit = () => {
                 placeholder="例: ○○かるた会"
                 className={inputClass('karutaClub')}
               />
-              {validationErrors.karutaClub && <p className="mt-1 text-xs text-red-500">{validationErrors.karutaClub}</p>}
+              {validationErrors.karutaClub && <p className="mt-1 text-xs text-status-danger">{validationErrors.karutaClub}</p>}
             </div>
 
             {/* 備考 */}
             <div>
-              <label className="block text-xs font-medium text-[#6b7280] mb-1.5">備考</label>
+              <label className="block text-xs font-medium text-text-muted mb-1.5">備考</label>
               <textarea
                 name="remarks"
                 value={formData.remarks}
                 onChange={handleChange}
                 rows={2}
                 placeholder="個人的なメモなど"
-                className="w-full px-3 py-2.5 text-sm border border-[#d4ddd7] rounded-lg focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a] resize-none"
+                className="w-full px-3 py-2.5 text-sm border border-border-strong rounded-lg focus:ring-1 focus:ring-focus focus:border-focus resize-none"
               />
             </div>
           </div>
 
           {/* パスワード変更（折りたたみ） */}
-          <div className="bg-[#f9f6f2] rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-surface rounded-xl shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => setShowPasswordSection(!showPasswordSection)}
-              className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-[#374151] hover:bg-[#f0ebe3] transition-colors"
+              className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-text hover:bg-bg transition-colors"
             >
               <span>パスワード変更</span>
-              <ChevronDown className={`w-4 h-4 text-[#6b7280] transition-transform ${showPasswordSection ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-text-muted transition-transform ${showPasswordSection ? 'rotate-180' : ''}`} />
             </button>
 
             {showPasswordSection && (
               <div className="px-5 pb-5 space-y-3">
-                <p className="text-xs text-[#9ca3af]">変更しない場合は空欄のままにしてください</p>
+                <p className="text-xs text-text-placeholder">変更しない場合は空欄のままにしてください</p>
                 <div>
-                  <label className="block text-xs font-medium text-[#6b7280] mb-1.5">現在のパスワード</label>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">現在のパスワード</label>
                   <div className="relative">
                     <input
                       type={showCurrentPassword ? 'text' : 'password'}
@@ -375,14 +375,14 @@ const ProfileEdit = () => {
                       className={`${inputClass('currentPassword')} pr-9`}
                     />
                     <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-placeholder hover:text-text-muted">
                       {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  {validationErrors.currentPassword && <p className="mt-1 text-xs text-red-500">{validationErrors.currentPassword}</p>}
+                  {validationErrors.currentPassword && <p className="mt-1 text-xs text-status-danger">{validationErrors.currentPassword}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#6b7280] mb-1.5">新しいパスワード</label>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">新しいパスワード</label>
                   <div className="relative">
                     <input
                       type={showNewPassword ? 'text' : 'password'}
@@ -393,14 +393,14 @@ const ProfileEdit = () => {
                       className={`${inputClass('newPassword')} pr-9`}
                     />
                     <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-placeholder hover:text-text-muted">
                       {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  {validationErrors.newPassword && <p className="mt-1 text-xs text-red-500">{validationErrors.newPassword}</p>}
+                  {validationErrors.newPassword && <p className="mt-1 text-xs text-status-danger">{validationErrors.newPassword}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#6b7280] mb-1.5">新しいパスワード（確認）</label>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">新しいパスワード（確認）</label>
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
@@ -411,11 +411,11 @@ const ProfileEdit = () => {
                       className={`${inputClass('confirmPassword')} pr-9`}
                     />
                     <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-placeholder hover:text-text-muted">
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  {validationErrors.confirmPassword && <p className="mt-1 text-xs text-red-500">{validationErrors.confirmPassword}</p>}
+                  {validationErrors.confirmPassword && <p className="mt-1 text-xs text-status-danger">{validationErrors.confirmPassword}</p>}
                 </div>
               </div>
             )}
@@ -428,7 +428,7 @@ const ProfileEdit = () => {
                 type="button"
                 onClick={() => navigate('/profile')}
                 disabled={saving}
-                className="flex-1 py-3 text-sm border border-[#d4ddd7] text-[#6b7280] rounded-xl hover:bg-[#e5ebe7] transition-colors disabled:opacity-50 font-medium"
+                className="flex-1 py-3 text-sm border border-border-subtle text-text-muted rounded-xl hover:bg-surface transition-colors disabled:opacity-50 font-medium"
               >
                 キャンセル
               </button>
@@ -436,11 +436,11 @@ const ProfileEdit = () => {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm bg-[#4a6b5a] text-white rounded-xl hover:bg-[#3d5a4c] transition-colors disabled:opacity-50 font-medium shadow-sm"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm bg-primary text-text-inverse rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 font-medium shadow-sm"
             >
               {saving ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-text-inverse"></div>
                   保存中...
                 </>
               ) : (

@@ -170,10 +170,10 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <div className="text-center py-20">
-                      <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                      <h2 className="text-2xl font-bold text-text mb-4">
                         統計ページ
                       </h2>
-                      <p className="text-gray-600">実装中...</p>
+                      <p className="text-text-muted">実装中...</p>
                     </div>
                   </Layout>
                 </PrivateRoute>
