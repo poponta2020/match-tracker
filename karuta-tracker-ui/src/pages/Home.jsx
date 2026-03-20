@@ -395,6 +395,17 @@ const Home = () => {
                     <span className="text-xs text-text-inverse/70">
                       {nextPractice.matchNumbers.join('、')}試合目に参加予定
                     </span>
+                  <ChevronsRight className="w-6 h-6 text-white/80" />
+                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/80 decoration-2">NEXT</h2>
+                  <span className="text-sm font-semibold text-white/90">
+                    {(() => {
+                      const d = new Date(nextPractice.sessionDate);
+                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                    })()}
+                  </span>
+                  {nextPractice.venueName && (
+                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
                   )}
                 </div>
                 {nextPractice.registered === false && (
@@ -442,6 +453,12 @@ const Home = () => {
                       <span className="text-xs text-text-muted">{nextPracticeParticipants.length}名</span>
                     </div>
 
+                {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                  <span className="text-sm text-[#374151]">{nextPractice.matchNumbers.join('、')}試合目に参加予定</span>
+                )}
+                {/* 参加者セクション */}
+                {nextPracticeParticipants.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
                     <div className="flex flex-wrap gap-1.5">
                       {sortPlayersByRank(nextPracticeParticipants).map((p) => (
                         <PlayerChip
