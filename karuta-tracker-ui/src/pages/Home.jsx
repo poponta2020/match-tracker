@@ -391,10 +391,15 @@ const Home = () => {
                 <div className="flex items-center gap-2">
                   <ChevronsRight className="w-6 h-6 text-white/80" />
                   <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/80 decoration-2">NEXT</h2>
-                  {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                    <span className="text-xs text-white/70">
-                      {nextPractice.matchNumbers.join('、')}試合目に参加予定
-                    </span>
+                  <span className="text-sm font-semibold text-white/90">
+                    {(() => {
+                      const d = new Date(nextPractice.sessionDate);
+                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                    })()}
+                  </span>
+                  {nextPractice.venueName && (
+                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
                   )}
                 </div>
                 {nextPractice.registered === false && (
@@ -407,41 +412,18 @@ const Home = () => {
             {/* ボディ */}
             <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
               <div className="space-y-2">
-                {!nextPractice.today && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-[#1A3654]" />
-                    <span className="font-semibold text-[#374151]">
-                      {(() => {
-                        const d = new Date(nextPractice.sessionDate);
-                        const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
-                        return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
-                      })()}
-                    </span>
-                  </div>
-                )}
                 {nextPractice.startTime && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#1A3654]" />
                     <span className="text-[#374151]">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
                   </div>
                 )}
-                {nextPractice.venueName && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#1A3654]" />
-                    <span className="text-[#374151]">{nextPractice.venueName}</span>
-                  </div>
+                {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                  <span className="text-sm text-[#374151]">{nextPractice.matchNumbers.join('、')}試合目に参加予定</span>
                 )}
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-[#6b7280]">
-                        <Users className="w-3.5 h-3.5" />
-                        参加者
-                      </span>
-                      <span className="text-xs text-[#6b7280]">{nextPracticeParticipants.length}名</span>
-                    </div>
-
                     <div className="flex flex-wrap gap-1.5">
                       {sortPlayersByRank(nextPracticeParticipants).map((p) => (
                         <PlayerChip
