@@ -850,13 +850,17 @@ public class PracticeSessionService {
     public List<ParticipationRateDto> getParticipationRateTop3(int year, int month) {
         log.debug("Calculating participation rate top3 for {}-{}", year, month);
 
-        // 1. その月の全セッションを取得
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        // 1. その月の今日以前のセッションのみ取得（未来の練習日は除外）
+        LocalDate today = LocalDate.now();
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month)
+                .stream()
+                .filter(s -> !s.getSessionDate().isAfter(today))
+                .collect(Collectors.toList());
         if (sessions.isEmpty()) {
             return List.of();
         }
 
-        // 2. 分母: 全セッションのtotalMatchesの合計
+        // 2. 分母: 今日以前のセッションのtotalMatchesの合計
         int totalScheduledMatches = sessions.stream()
                 .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0)
                 .sum();
