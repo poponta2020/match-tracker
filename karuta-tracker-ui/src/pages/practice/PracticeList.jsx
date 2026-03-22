@@ -495,7 +495,8 @@ const PracticeList = () => {
           onClick={closeModal}
         >
           <div
-            className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
+            className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden flex flex-col"
+          style={{ maxHeight: 'calc(100vh - 8rem - env(safe-area-inset-bottom, 0px))' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* ヘッダー */}
@@ -514,7 +515,7 @@ const PracticeList = () => {
             </div>
 
             {/* 試合リスト */}
-            <div className="divide-y divide-[#d4ddd7]">
+            <div className="divide-y divide-[#d4ddd7] overflow-y-auto flex-1">
               {selectedSession.matchParticipants &&
               Object.keys(selectedSession.matchParticipants).length > 0 ? (
                 Object.entries(selectedSession.matchParticipants)

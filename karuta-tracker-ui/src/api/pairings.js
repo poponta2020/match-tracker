@@ -23,8 +23,8 @@ export const pairingAPI = {
   create: (data) => apiClient.post('/match-pairings', data),
 
   // 対戦組み合わせを一括作成
-  createBatch: (date, matchNumber, pairings) =>
-    apiClient.post('/match-pairings/batch', pairings, {
+  createBatch: (date, matchNumber, pairings, waitingPlayerIds = []) =>
+    apiClient.post('/match-pairings/batch', { pairings, waitingPlayerIds }, {
       params: { date, matchNumber },
     }),
 

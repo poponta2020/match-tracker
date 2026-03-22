@@ -303,7 +303,8 @@ const PairingGenerator = () => {
         player2Id: p.player2Id,
       }));
 
-      await pairingAPI.createBatch(sessionDate, matchNumber, requests);
+      const waitingIds = waitingPlayers.map((p) => p.id);
+      await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
 
       // キャッシュとマップを更新
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);

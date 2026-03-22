@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { matchAPI, practiceAPI, calendarAPI } from '../api';
+import { practiceAPI, calendarAPI } from '../api';
 import {
   ArrowRight,
   ChevronsRight,
@@ -11,7 +11,6 @@ import {
   MapPin,
   Shuffle,
   Users,
-  Swords,
   Trophy,
   User,
   LogOut,
@@ -21,6 +20,7 @@ import {
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 import { sortPlayersByRank } from '../utils/playerSort';
 import PlayerChip from '../components/PlayerChip';
+import LoadingScreen from '../components/LoadingScreen';
 
 const Home = () => {
   const { currentPlayer, logout } = useAuth();
@@ -31,12 +31,11 @@ const Home = () => {
   const [slowLoading, setSlowLoading] = useState(false);
   const [nextPractice, setNextPractice] = useState(null);
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
-  const [monthlyPracticeCount, setMonthlyPracticeCount] = useState(0);
-  const [monthlyMatchCount, setMonthlyMatchCount] = useState(0);
   const [calSyncing, setCalSyncing] = useState(false);
   const [calSyncMessage, setCalSyncMessage] = useState(null);
   const [calSyncError, setCalSyncError] = useState(false);
   const [participationTop3, setParticipationTop3] = useState([]);
+  const [myParticipationRate, setMyParticipationRate] = useState(null);
 
   // モバイル判定（スタンドアロンPWA含む）
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -159,35 +158,44 @@ const Home = () => {
       const now = new Date();
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
-      const startOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const endOfMonth = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
       // 並列で全データ取得
       const [
         nextPracticeRes,
         participationsRes,
-        monthlyMatchesRes,
         top3Res,
       ] = await Promise.all([
         practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
         practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
-        matchAPI.getMatchCount(currentPlayer.id, startOfMonth, endOfMonth).catch(() => ({ data: 0 })),
         practiceAPI.getParticipationRateTop3(year, month).catch(() => ({ data: [] })),
       ]);
 
       // リクエストがキャンセルされた場合は状態更新をスキップ
       if (signal?.aborted) return;
 
-      // 今月の参加回数 = セッション数（マップのキー数）
-      const participationMap = participationsRes.data || {};
-      setMonthlyPracticeCount(Object.keys(participationMap).length);
-
-      // 今月の対戦数
-      setMonthlyMatchCount(typeof monthlyMatchesRes.data === 'number' ? monthlyMatchesRes.data : 0);
-
       // 参加率TOP3
-      setParticipationTop3(top3Res.data || []);
+      const top3 = top3Res.data || [];
+      setParticipationTop3(top3);
+
+      // 自分の参加率を計算
+      const myselfInTop3 = top3.find((p) => p.playerId === currentPlayer.id);
+      if (myselfInTop3) {
+        setMyParticipationRate(myselfInTop3);
+      } else if (top3.length > 0) {
+        // TOP3にいない場合：分母はTOP3データから取得、分子は自分の参加数
+        const totalScheduledMatches = top3[0].totalScheduledMatches;
+        const participationMap = participationsRes.data || {};
+        const participatedMatches = Object.keys(participationMap).length;
+        const rate = totalScheduledMatches > 0 ? participatedMatches / totalScheduledMatches : 0;
+        setMyParticipationRate({ participatedMatches, totalScheduledMatches, rate });
+      } else {
+        // TOP3データがない場合でも参加数が取れれば表示
+        const participationMap = participationsRes.data || {};
+        const participatedMatches = Object.keys(participationMap).length;
+        if (participatedMatches > 0) {
+          setMyParticipationRate({ participatedMatches, totalScheduledMatches: null, rate: null });
+        }
+      }
 
       // 次の練習情報（参加者リストも含まれている）
       if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
@@ -251,15 +259,10 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-96 gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
-        {slowLoading && (
-          <div className="text-center">
-            <p className="text-gray-600 font-medium">サーバーを起動中...</p>
-            <p className="text-sm text-gray-400 mt-1">初回アクセス時は少し時間がかかります（最大30秒）</p>
-          </div>
-        )}
-      </div>
+      <LoadingScreen
+        message={slowLoading ? 'サーバーを起動中...' : '読み込み中...'}
+        subMessage={slowLoading ? '初回アクセス時は少し時間がかかります（最大30秒）' : null}
+      />
     );
   }
 
@@ -371,7 +374,7 @@ const Home = () => {
           <div className="rounded-lg shadow-md overflow-hidden mb-4">
             {/* ヘッダー帯 */}
             {nextPractice.today ? (
-              <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
+              <div className="bg-[#1A3654] px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-white text-lg font-bold">TODAY</span>
                   <span className="text-sm font-semibold text-white/90">
@@ -396,11 +399,11 @@ const Home = () => {
                 )}
               </div>
             ) : (
-              <div className="bg-[#1A3654] px-5 py-3 flex items-center justify-between">
+              <div className="bg-[#f9f6f2] border-b border-[#1A3654]/20 px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ChevronsRight className="w-6 h-6 text-white/80" />
-                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/80 decoration-2">NEXT</h2>
-                  <span className="text-sm font-semibold text-white/90">
+                  <ChevronsRight className="w-6 h-6 text-[#1A3654]/70" />
+                  <h2 className="text-xl font-bold text-[#1A3654] tracking-wide underline underline-offset-2 decoration-[#1A3654]/60 decoration-2">NEXT</h2>
+                  <span className="text-sm font-semibold text-[#1A3654]">
                     {(() => {
                       const d = new Date(nextPractice.sessionDate);
                       const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
@@ -408,18 +411,18 @@ const Home = () => {
                     })()}
                   </span>
                   {nextPractice.venueName && (
-                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
+                    <span className="text-sm text-[#1A3654]/70">{nextPractice.venueName}</span>
                   )}
                 </div>
                 {nextPractice.registered === false && (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
+                  <Link to="/practice/participation" className="text-xs font-semibold text-[#1A3654]/70 hover:text-[#1A3654] flex items-center gap-0.5">
                     参加登録 <ArrowRight className="w-3 h-3" />
                   </Link>
                 )}
               </div>
             )}
             {/* ボディ */}
-            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
+            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#1A3654]/5' : 'bg-[#f9f6f2]'}`}>
               <div className="space-y-2">
                 {nextPractice.startTime && (
                   <div className="flex items-center gap-2">
@@ -460,28 +463,6 @@ const Home = () => {
           </div>
         )}
 
-        {/* 今月のアクティビティ */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
-            <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-[#1A3654]" />
-              <span className="text-xs text-[#6b7280]">{monthLabel}の参加</span>
-            </div>
-            <p className="text-2xl font-bold text-[#374151]">
-              {monthlyPracticeCount}<span className="text-sm font-normal text-[#6b7280] ml-1">回</span>
-            </p>
-          </div>
-          <div className="bg-[#f9f6f2] p-4 rounded-lg shadow-sm border-l-3 border-[#1A3654]">
-            <div className="flex items-center gap-2 mb-1">
-              <Swords className="w-4 h-4 text-[#1A3654]" />
-              <span className="text-xs text-[#6b7280]">{monthLabel}の対戦</span>
-            </div>
-            <p className="text-2xl font-bold text-[#374151]">
-              {monthlyMatchCount}<span className="text-sm font-normal text-[#6b7280] ml-1">試合</span>
-            </p>
-          </div>
-        </div>
-
         {/* 参加率TOP3 */}
         {participationTop3.length > 0 && (
           <div className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
@@ -515,6 +496,39 @@ const Home = () => {
                 );
               })}
             </div>
+            {/* 自分がTOP3にいない場合のみ自分の参加率を表示 */}
+            {myParticipationRate && !participationTop3.some((p) => p.playerId === currentPlayer?.id) && (
+              <>
+                <div className="border-t border-gray-200 mt-3 pt-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8ecef]">
+                      <User className="w-3 h-3 text-[#6b7280]" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-[#374151] truncate">{currentPlayer?.name}</span>
+                        {myParticipationRate.rate !== null && (
+                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{Math.round(myParticipationRate.rate * 100)}%</span>
+                        )}
+                      </div>
+                      {myParticipationRate.rate !== null && (
+                        <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
+                          <div
+                            className="bg-[#6b7280] h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.round(myParticipationRate.rate * 100)}%` }}
+                          />
+                        </div>
+                      )}
+                      <span className="text-xs text-[#6b7280] mt-0.5 block">
+                        {myParticipationRate.totalScheduledMatches !== null
+                          ? `${myParticipationRate.participatedMatches}/${myParticipationRate.totalScheduledMatches}試合`
+                          : `${myParticipationRate.participatedMatches}試合参加`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

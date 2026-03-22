@@ -881,10 +881,10 @@ public class PracticeSessionService {
         java.util.concurrent.CompletableFuture.allOf(participantsFuture, playersFuture).join();
 
         // 4. 選手ごとの参加試合数を集計（抜け番含む）
+        // matchNumber=nullは抜け番（対戦なしで参加）として1カウントする
         List<PracticeParticipant> allParticipants = participantsFuture.join();
         Map<Long, Integer> playerParticipationCount = new java.util.HashMap<>();
         for (PracticeParticipant pp : allParticipants) {
-            if (pp.getMatchNumber() == null) continue;
             playerParticipationCount.merge(pp.getPlayerId(), 1, Integer::sum);
         }
 

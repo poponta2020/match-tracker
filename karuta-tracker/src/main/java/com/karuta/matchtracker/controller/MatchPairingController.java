@@ -82,14 +82,15 @@ public class MatchPairingController {
     public ResponseEntity<List<MatchPairingDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
-            @RequestBody List<MatchPairingCreateRequest> requests) {
-        log.info("対戦組み合わせ一括作成: 日付={}, 試合番号={}, 件数={}",
-                 date, matchNumber, requests.size());
+            @RequestBody MatchPairingBatchRequest request) {
+        log.info("対戦組み合わせ一括作成: 日付={}, 試合番号={}, 件数={}, 待機者数={}",
+                 date, matchNumber, request.getPairings().size(),
+                 request.getWaitingPlayerIds() != null ? request.getWaitingPlayerIds().size() : 0);
 
         // TODO: UserDetailsからplayerIdを取得する実装が必要
         Long createdBy = 1L; // 仮のID
 
-        List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, requests, createdBy);
+        List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy);
         return ResponseEntity.ok(created);
     }
 

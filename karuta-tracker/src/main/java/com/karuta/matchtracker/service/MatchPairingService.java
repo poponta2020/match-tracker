@@ -4,9 +4,12 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,8 @@ public class MatchPairingService {
     private final MatchPairingRepository matchPairingRepository;
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
 
     /**
      * 指定日の対戦組み合わせを取得
@@ -93,7 +98,8 @@ public class MatchPairingService {
      */
     @Transactional
     public List<MatchPairingDto> createBatch(LocalDate sessionDate, Integer matchNumber,
-                                              List<MatchPairingCreateRequest> requests, Long createdBy) {
+                                              List<MatchPairingCreateRequest> requests,
+                                              List<Long> waitingPlayerIds, Long createdBy) {
         // 既存の組み合わせを削除
         matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
 
@@ -108,6 +114,28 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
 
         List<MatchPairing> saved = matchPairingRepository.saveAll(pairings);
+
+        // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
+        if (waitingPlayerIds != null && !waitingPlayerIds.isEmpty()) {
+            practiceSessionRepository.findBySessionDate(sessionDate).ifPresent(session -> {
+                // 既存の抜け番登録（matchNumber=null）を一旦削除してから再登録
+                List<PracticeParticipant> existingBye = practiceParticipantRepository
+                        .findBySessionId(session.getId()).stream()
+                        .filter(pp -> pp.getMatchNumber() == null)
+                        .collect(Collectors.toList());
+                practiceParticipantRepository.deleteAll(existingBye);
+
+                List<PracticeParticipant> byeParticipants = waitingPlayerIds.stream()
+                        .map(playerId -> PracticeParticipant.builder()
+                                .sessionId(session.getId())
+                                .playerId(playerId)
+                                .matchNumber(null)
+                                .build())
+                        .collect(Collectors.toList());
+                practiceParticipantRepository.saveAll(byeParticipants);
+            });
+        }
+
         return saved.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
