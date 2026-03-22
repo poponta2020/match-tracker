@@ -422,9 +422,10 @@ const PracticeForm = () => {
 
       {/* 会場選択モーダル */}
       {editingDate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50"
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-[60]"
           onClick={() => setEditingDate(null)}>
-          <div className="bg-white rounded-t-2xl w-full max-w-md pb-8 animate-slide-up"
+          <div className="bg-white rounded-t-2xl w-full max-w-md animate-slide-up"
+            style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem)' }}
             onClick={e => e.stopPropagation()}>
             {/* ヘッダー */}
             <div className="px-6 pt-5 pb-3 flex justify-between items-center border-b border-gray-100">
