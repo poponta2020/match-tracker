@@ -112,14 +112,9 @@ const PairingGenerator = () => {
     const matchParticipantEntries = session.matchParticipants?.[String(matchNum)] || [];
     const matchParticipantNames = matchParticipantEntries.map(p => typeof p === 'string' ? p : p.name);
     const sessionParticipants = session.participants || [];
-    if (matchParticipantNames.length > 0) {
-      // 名前ベースでフィルタ
-      const filtered = sessionParticipants.filter(p => matchParticipantNames.includes(p.name));
-      setParticipants(filtered);
-    } else {
-      // matchParticipantsが空の場合はセッション全体の参加者を使う（後方互換）
-      setParticipants(sessionParticipants);
-    }
+    // 試合番号ごとの登録参加者のみを表示（0人なら0人）
+    const filtered = sessionParticipants.filter(p => matchParticipantNames.includes(p.name));
+    setParticipants(filtered);
   }, []);
 
   // 日付変更時: セッション・参加者・全試合の組み合わせを一括取得
@@ -208,12 +203,11 @@ const PairingGenerator = () => {
     // この試合番号の参加者を算出（loadExistingPairingsToStateに渡す用）
     const getMatchParticipants = () => {
       if (!currentSession) return [];
-      const names = currentSession.matchParticipants?.[String(matchNumber)] || [];
+      const entries = currentSession.matchParticipants?.[String(matchNumber)] || [];
+      const names = entries.map(p => typeof p === 'string' ? p : p.name);
       const allParticipants = currentSession.participants || [];
-      if (names.length > 0) {
-        return allParticipants.filter(p => names.includes(p.name));
-      }
-      return allParticipants;
+      // 試合番号ごとの登録参加者のみを返す（0人なら空配列）
+      return allParticipants.filter(p => names.includes(p.name));
     };
 
     // 未保存ドラフトの試合に戻ってきた場合はドラフトを復元
