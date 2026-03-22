@@ -373,8 +373,17 @@ const Home = () => {
             {nextPractice.today ? (
               <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="bg-white text-[#374151] text-xs font-bold px-2 py-0.5 rounded-full">TODAY</span>
-                  <h2 className="text-base font-bold text-white">今日は練習日です</h2>
+                  <span className="text-white text-lg font-bold">TODAY</span>
+                  <span className="text-sm font-semibold text-white/90">
+                    {(() => {
+                      const d = new Date(nextPractice.sessionDate);
+                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                    })()}
+                  </span>
+                  {nextPractice.venueName && (
+                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
+                  )}
                 </div>
                 {nextPractice.registered === false ? (
                   <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
@@ -417,9 +426,6 @@ const Home = () => {
                     <Clock className="w-4 h-4 text-[#1A3654]" />
                     <span className="text-[#374151]">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
                   </div>
-                )}
-                {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                  <span className="text-sm text-[#374151]">{nextPractice.matchNumbers.join('、')}試合目に参加予定</span>
                 )}
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
