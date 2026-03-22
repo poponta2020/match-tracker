@@ -1,0 +1,16 @@
+{
+  "name": "わすらログ",
+  "short_name": "わすらログ",
+  "description": "かるた試合記録アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
