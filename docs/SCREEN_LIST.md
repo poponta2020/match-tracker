@@ -12,7 +12,7 @@
 |--------|------|
 | `AuthRoute` | 未認証→Landing、認証済→指定コンポーネントを表示 |
 | `PrivateRoute` | 認証必須。`kyuRank` 未設定の場合は `/profile/edit?setup=true` にリダイレクト |
-| `Layout` | 下部ナビゲーション付きの共通レイアウト |
+| `Layout` | ヘッダーバー（タイトル・通知ベル・プロフィール）+ 下部ナビゲーション付きの共通レイアウト |
 
 ---
 
@@ -32,7 +32,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 6 | `/`（認証時） | `Home.jsx` | ハンバーガーメニュー | ALL | ダッシュボード（次回練習・月間成績・参加率TOP3・Googleカレンダー連携） |
+| 6 | `/`（認証時） | `Home.jsx` | ハンバーガーメニュー、繰り上げオファーバナー | ALL | ダッシュボード（次回練習・参加率TOP3・繰り上げ通知・Googleカレンダー連携） |
 
 ---
 
@@ -57,7 +57,7 @@
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |
-| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス | ALL | 参加登録 |
+| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ | ALL | 参加登録（抽選済みセッションはステータス表示・当選キャンセル対応） |
 
 ---
 
@@ -91,21 +91,32 @@
 
 ---
 
-## 8. プロフィール
+## 8. 抽選・通知（lottery / notifications）
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 27 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
-| 28 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
+| 27 | `/lottery/results` | `LotteryResults.jsx` | 月ナビゲーション、当選/落選リスト | ALL | 月別抽選結果一覧 |
+| 28 | `/lottery/waitlist` | `WaitlistStatus.jsx` | ステータスバッジ、応答リンク | ALL | 自分のキャンセル待ち状況 |
+| 29 | `/lottery/offer-response` | `OfferResponse.jsx` | 参加/辞退ボタン | ALL | 繰り上げ参加の承認/辞退 |
+| 30 | `/notifications` | `NotificationList.jsx` | 通知カード、未読バッジ | ALL | 通知一覧（タップで関連画面に遷移） |
 
 ---
 
-## 9. その他
+## 9. プロフィール
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 31 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
+| 32 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
+
+---
+
+## 10. その他
 
 | # | パス | ページコンポーネント | 権限 | 説明 |
 |---|------|---------------------|------|------|
-| 29 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
-| 30 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
+| 33 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
+| 34 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
 
 ---
 
@@ -113,7 +124,7 @@
 
 | コンポーネント | ファイル | 用途 |
 |---------------|---------|------|
-| `Layout` | `components/Layout.jsx` | 下部ナビゲーション付き共通レイアウト |
+| `Layout` | `components/Layout.jsx` | ヘッダーバー（通知ベル・プロフィール）+ 下部ナビゲーション付き共通レイアウト |
 | `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック |
 | `AuthRoute` | `components/AuthRoute.jsx` | 認証状態による条件分岐レンダリング |
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
@@ -123,15 +134,23 @@
 
 ---
 
+## ヘッダーバー（Layout）
+
+| 要素 | 説明 |
+|------|------|
+| ページタイトル | 現在のパスに応じた画面タイトル |
+| 通知ベル | `/notifications` に遷移。未読数バッジ付き |
+| プロフィール | `/profile` に遷移 |
+
 ## 下部ナビゲーション（Layout）
 
 | アイコン | ラベル | 遷移先 |
 |---------|--------|--------|
-| 🏠 | ホーム | `/` |
-| ➕ | 追加 | `/matches/new` |
-| 📊 | 結果 | `/matches/results` |
-| 📅 | 練習 | `/practice` |
-| 📋 | 戦績 | `/matches` |
+| 🏠 | Home | `/` |
+| ➕ | Add | `/matches/new` |
+| ⚔️ | Match | `/matches/results` |
+| 📅 | Schedule | `/practice` |
+| 📊 | Record | `/matches` |
 
 ---
 
@@ -184,6 +203,12 @@ karuta-tracker-ui/src/
     │   ├── PracticeForm.jsx
     │   ├── PracticeDetail.jsx
     │   └── PracticeParticipation.jsx
+    ├── lottery/
+    │   ├── LotteryResults.jsx
+    │   ├── WaitlistStatus.jsx
+    │   └── OfferResponse.jsx
+    ├── notifications/
+    │   └── NotificationList.jsx
     ├── pairings/
     │   ├── PairingGenerator.jsx
     │   └── PairingSummary.jsx

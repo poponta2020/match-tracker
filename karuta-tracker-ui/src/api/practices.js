@@ -66,6 +66,12 @@ export const practiceAPI = {
       params: { year, month },
     }),
 
+  // 選手の参加状況を取得（抽選ステータス付き）
+  getPlayerParticipationStatus: (playerId, year, month) =>
+    apiClient.get(`/practice-sessions/participations/player/${playerId}/status`, {
+      params: { year, month },
+    }),
+
   // 試合別参加者を設定（管理者のみ）
   setMatchParticipants: (sessionId, matchNumber, playerIds) =>
     apiClient.put(`/practice-sessions/${sessionId}/matches/${matchNumber}/participants`, {

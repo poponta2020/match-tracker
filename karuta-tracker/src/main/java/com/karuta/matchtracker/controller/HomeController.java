@@ -3,6 +3,9 @@ package com.karuta.matchtracker.controller;
 import com.karuta.matchtracker.dto.HomeDto;
 import com.karuta.matchtracker.dto.NextParticipationDto;
 import com.karuta.matchtracker.dto.ParticipationRateDto;
+import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.repository.NotificationRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +27,8 @@ import java.util.List;
 public class HomeController {
 
     private final PracticeSessionService practiceSessionService;
+    private final NotificationRepository notificationRepository;
+    private final PracticeParticipantRepository participantRepository;
 
     @GetMapping
     public ResponseEntity<HomeDto> getHomeData(@RequestParam Long playerId) {
@@ -44,10 +49,19 @@ public class HomeController {
                 .findFirst()
                 .orElseGet(() -> practiceSessionService.getPlayerParticipationRate(playerId, year, month));
 
+        // 未読通知数
+        long unreadCount = notificationRepository.countByPlayerIdAndIsReadFalse(playerId);
+
+        // 未応答のオファーがあるか
+        boolean hasPendingOffer = participantRepository
+                .existsByPlayerIdAndStatus(playerId, ParticipantStatus.OFFERED);
+
         HomeDto dto = HomeDto.builder()
                 .nextPractice(nextPractice)
                 .participationTop3(top3)
                 .myParticipationRate(myRate)
+                .unreadNotificationCount(unreadCount)
+                .hasPendingOffer(hasPendingOffer)
                 .build();
 
         return ResponseEntity.ok(dto);

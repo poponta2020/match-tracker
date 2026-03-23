@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { practiceAPI } from '../../api';
-import { ChevronLeft, ChevronRight, Check, Save, AlertCircle } from 'lucide-react';
+import { practiceAPI, lotteryAPI } from '../../api';
+import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -13,8 +13,11 @@ const PracticeParticipation = () => {
   const [initialParticipations, setInitialParticipations] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cancelling, setCancelling] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
+  const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -28,9 +31,10 @@ const PracticeParticipation = () => {
       setError('');
 
       try {
-        const [sessionsRes, participationsRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes] = await Promise.all([
           practiceAPI.getByYearMonth(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
+          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
         ]);
 
         // セッションを日付昇順にソート
@@ -42,6 +46,11 @@ const PracticeParticipation = () => {
         const participationsData = participationsRes.data || {};
         setParticipations(participationsData);
         setInitialParticipations(JSON.parse(JSON.stringify(participationsData)));
+
+        // 抽選ステータス情報
+        const statusData = statusRes.data || {};
+        setParticipationStatuses(statusData.participations || {});
+        setLotteryExecuted(statusData.lotteryExecuted || {});
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError('データの取得に失敗しました');
@@ -69,6 +78,9 @@ const PracticeParticipation = () => {
 
   // チェックボックスの状態を切り替え
   const toggleMatch = (sessionId, matchNumber) => {
+    // 抽選済みセッションは変更不可
+    if (lotteryExecuted[sessionId]) return;
+
     const sessionParticipations = participations[sessionId] || [];
     const isChecked = sessionParticipations.includes(matchNumber);
 
@@ -85,9 +97,19 @@ const PracticeParticipation = () => {
     }
   };
 
-  // 変更があるかチェック
+  // 変更があるかチェック（抽選済みセッションの変更は除外）
   const hasChanges = () => {
-    return JSON.stringify(participations) !== JSON.stringify(initialParticipations);
+    // 抽選済みセッションを除いた参加情報を比較
+    const filterLottery = (data) => {
+      const filtered = {};
+      for (const [sid, matches] of Object.entries(data)) {
+        if (!lotteryExecuted[Number(sid)]) {
+          filtered[sid] = matches;
+        }
+      }
+      return filtered;
+    };
+    return JSON.stringify(filterLottery(participations)) !== JSON.stringify(filterLottery(initialParticipations));
   };
 
   // 保存処理
@@ -125,6 +147,47 @@ const PracticeParticipation = () => {
       setError('保存に失敗しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 抽選後の当選をキャンセル
+  const handleCancelParticipation = async (participantId, sessionId, matchNumber) => {
+    if (!currentPlayer?.id || !participantId) return;
+    if (!window.confirm('この試合の参加をキャンセルしますか？キャンセル待ちの次の方に通知されます。')) return;
+
+    setCancelling(`${sessionId}-${matchNumber}`);
+    setError('');
+    try {
+      await lotteryAPI.cancel(participantId);
+      setSuccess('参加をキャンセルしました');
+      // データをリロード
+      const [participationsRes, statusRes] = await Promise.all([
+        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
+        practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
+      ]);
+      const participationsData = participationsRes.data || {};
+      setParticipations(participationsData);
+      setInitialParticipations(JSON.parse(JSON.stringify(participationsData)));
+      setParticipationStatuses(statusRes.data?.participations || {});
+      setLotteryExecuted(statusRes.data?.lotteryExecuted || {});
+    } catch (err) {
+      console.error('キャンセルエラー:', err);
+      setError(err.response?.data?.message || 'キャンセルに失敗しました');
+    } finally {
+      setCancelling(null);
+    }
+  };
+
+  // 抽選ステータスのラベルとスタイルを取得
+  const getStatusInfo = (status) => {
+    switch (status) {
+      case 'WON': return { label: '当選', color: 'bg-green-100 text-green-800', canCancel: true };
+      case 'WAITLISTED': return { label: '待ち', color: 'bg-yellow-100 text-yellow-800', canCancel: false };
+      case 'OFFERED': return { label: '応答待', color: 'bg-blue-100 text-blue-800', canCancel: false };
+      case 'PENDING': return { label: '申込', color: 'bg-gray-100 text-gray-600', canCancel: false };
+      case 'DECLINED': return { label: '辞退', color: 'bg-gray-100 text-gray-400', canCancel: false };
+      case 'CANCELLED': return { label: '取消', color: 'bg-red-100 text-red-400', canCancel: false };
+      default: return { label: '−', color: 'bg-gray-100 text-gray-400', canCancel: false };
     }
   };
 
@@ -255,7 +318,7 @@ const PracticeParticipation = () => {
                           </span>
                         </td>
 
-                        {/* 試合チェックボックス */}
+                        {/* 試合チェックボックス or 抽選ステータス */}
                         {Array.from({ length: 7 }, (_, i) => i + 1).map(
                           (matchNumber) => {
                             const isAvailable = matchNumber <= matchCount;
@@ -263,26 +326,56 @@ const PracticeParticipation = () => {
                             const participantCount =
                               session.matchParticipantCounts?.[matchNumber] || 0;
 
+                            // 抽選済みセッションの場合はステータス表示
+                            const isLotteryDone = lotteryExecuted[session.id] === true;
+                            const statusList = participationStatuses[session.id] || [];
+                            const matchStatus = statusList.find(s => s.matchNumber === matchNumber);
+
                             return (
                               <td key={matchNumber} className="px-0 py-3 text-center">
                                 {isAvailable ? (
-                                  <div className="flex flex-col items-center gap-0.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() => toggleMatch(session.id, matchNumber)}
-                                      className="w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a]"
-                                      style={{ accentColor: '#4a6b5a' }}
-                                    />
-                                    <span
-                                      className={`text-[10px] px-1 rounded font-medium ${getParticipantBadgeColor(
-                                        participantCount,
-                                        session.capacity
-                                      )}`}
-                                    >
-                                      {participantCount}
-                                    </span>
-                                  </div>
+                                  isLotteryDone && matchStatus ? (
+                                    // 抽選済み: ステータス表示
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${getStatusInfo(matchStatus.status).color}`}>
+                                        {getStatusInfo(matchStatus.status).label}
+                                      </span>
+                                      {matchStatus.status === 'WAITLISTED' && matchStatus.waitlistNumber && (
+                                        <span className="text-[9px] text-gray-500">#{matchStatus.waitlistNumber}</span>
+                                      )}
+                                      {getStatusInfo(matchStatus.status).canCancel && (
+                                        <button
+                                          onClick={() => handleCancelParticipation(matchStatus.participantId, session.id, matchNumber)}
+                                          disabled={cancelling === `${session.id}-${matchNumber}`}
+                                          className="text-[9px] text-red-500 hover:text-red-700 disabled:opacity-50"
+                                        >
+                                          {cancelling === `${session.id}-${matchNumber}` ? '...' : '取消'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : isLotteryDone && !matchStatus ? (
+                                    // 抽選済みだが未登録の試合
+                                    <span className="text-gray-300">−</span>
+                                  ) : (
+                                    // 抽選前: チェックボックス
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleMatch(session.id, matchNumber)}
+                                        className="w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a]"
+                                        style={{ accentColor: '#4a6b5a' }}
+                                      />
+                                      <span
+                                        className={`text-[10px] px-1 rounded font-medium ${getParticipantBadgeColor(
+                                          participantCount,
+                                          session.capacity
+                                        )}`}
+                                      >
+                                        {participantCount}
+                                      </span>
+                                    </div>
+                                  )
                                 ) : (
                                   <span className="text-gray-300">-</span>
                                 )}

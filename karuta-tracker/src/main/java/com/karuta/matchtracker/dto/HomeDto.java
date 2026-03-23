@@ -19,4 +19,8 @@ public class HomeDto {
     private NextParticipationDto nextPractice;
     private List<ParticipationRateDto> participationTop3;
     private ParticipationRateDto myParticipationRate;
+
+    // 抽選関連
+    private Long unreadNotificationCount;
+    private Boolean hasPendingOffer;
 }

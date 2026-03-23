@@ -301,6 +301,19 @@ public class PracticeSessionController {
     }
 
     /**
+     * 選手の参加状況を取得（抽選ステータス付き）
+     */
+    @GetMapping("/participations/player/{playerId}/status")
+    public ResponseEntity<PlayerParticipationStatusDto> getPlayerParticipationStatus(
+            @PathVariable Long playerId,
+            @RequestParam int year,
+            @RequestParam int month) {
+        log.debug("GET /api/practice-sessions/participations/player/{}/status?year={}&month={}", playerId, year, month);
+        PlayerParticipationStatusDto status = practiceSessionService.getPlayerParticipationStatusByMonth(playerId, year, month);
+        return ResponseEntity.ok(status);
+    }
+
+    /**
      * 特定の試合の参加者を設定（管理者のみ）
      *
      * @param sessionId 練習日ID

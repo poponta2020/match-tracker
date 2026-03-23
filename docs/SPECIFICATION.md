@@ -1,6 +1,6 @@
 # かるた対戦記録管理システム — 仕様書
 
-> 最終更新: 2026-03-18
+> 最終更新: 2026-03-23
 > 本書はリバースエンジニアリングにより作成
 
 ---
@@ -35,6 +35,7 @@
 - **React Router v7** — ルーティング
 - **Recharts** — グラフ描画
 - **Lucide React** — アイコン
+- **Web Push API** — ブラウザプッシュ通知（VAPID認証）
 
 ---
 
@@ -86,6 +87,7 @@
 | セクション | 内容 |
 |---|---|
 | ナビゲーションバー | 選手名表示、ハンバーガーメニュー（プロフィール、管理メニュー、Googleカレンダー同期、ログアウト） |
+| 繰り上げオファーバナー | 未応答の繰り上げ参加通知がある場合に表示。タップで通知一覧に遷移 |
 | 次の練習 | 次回参加予定の練習日・時間・会場・参加試合番号。当日の場合は `TODAY` バッジ表示 |
 | 組み合わせ作成リンク | ADMIN以上のみ。次の練習日の組み合わせ作成画面へのショートカット |
 | 今月のアクティビティ | 当月の練習参加回数・対戦数をカード形式で表示 |
@@ -113,13 +115,19 @@
 
 #### 3.2.2 練習参加管理（PracticeParticipant）
 
-各選手の参加登録を試合番号単位で管理する。
+各選手の参加登録を試合番号単位で管理する。抽選システムのステータス管理も担う。
 
 | フィールド | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `sessionId` | Long | Yes | 練習日ID |
 | `playerId` | Long | Yes | 選手ID |
 | `matchNumber` | Integer | No | 参加する試合番号（1〜7）。NULLの場合は全試合参加 |
+| `status` | ParticipantStatus | Yes | 参加ステータス（デフォルト: `WON`）。`PENDING`/`WON`/`WAITLISTED`/`OFFERED`/`DECLINED`/`CANCELLED` |
+| `waitlistNumber` | Integer | No | キャンセル待ち番号（WAITLISTED時のみ） |
+| `lotteryId` | Long | No | 紐づく抽選実行ID |
+| `offeredAt` | LocalDateTime | No | 繰り上げ通知日時 |
+| `offerDeadline` | LocalDateTime | No | 繰り上げ応答期限 |
+| `respondedAt` | LocalDateTime | No | 繰り上げ応答日時 |
 
 一意制約: `(sessionId, playerId, matchNumber)`
 
@@ -129,6 +137,7 @@
 - 各練習日の各試合番号ごとに参加チェックを切り替え
 - 月をまたぐナビゲーション機能
 - 一括保存
+- **抽選済みセッション**: チェックボックスの代わりにステータスバッジ（当選/待ち/応答待 等）を表示。当選者は「取消」ボタンでキャンセル可能
 
 ### 3.3 対戦組み合わせ
 
@@ -260,7 +269,85 @@ SUPER_ADMIN のみ操作可能。
 | `startTime` | LocalTime | Yes | 開始時刻 |
 | `endTime` | LocalTime | Yes | 終了時刻 |
 
-### 3.7 選手プロフィール履歴
+### 3.7 練習参加抽選システム
+
+練習参加者が定員を超えた場合に抽選を行い、公平に参加者を決定するシステム。
+詳細な要件定義は [docs/requirements/lottery-system.md](requirements/lottery-system.md) を参照。
+
+#### 3.7.1 抽選の流れ
+
+1. **締め切り前**: 翌月分の練習に対し、プレイヤーは試合ごとに参加希望を登録（ステータス: `PENDING`）
+2. **自動抽選**: 前月末日0:00に `LotteryScheduler` が翌月全セッションの抽選を実行
+3. **結果確定**: 定員超過の試合では当選（`WON`）・キャンセル待ち（`WAITLISTED`、番号付き）に振り分け
+4. **キャンセル→繰り上げ**: 当選者がキャンセルするとキャンセル待ち1番に通知。応答期限内に承諾/辞退
+
+#### 3.7.2 抽選アルゴリズムの特徴
+
+- **連鎖落選**: 同セッション内で先行試合に落選した人は、後続の定員超過試合でも自動落選
+- **優先当選**: 同月内の別セッションで落選経験がある人は、次の抽選で当選が保証される
+- **応答期限**: min(通知から24時間, 練習日前日23:59) の早い方
+
+#### 3.7.3 抽選関連エンティティ
+
+**LotteryExecution（抽選実行履歴）:**
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `targetYear` / `targetMonth` | int | 対象年月 |
+| `sessionId` | Long | 対象セッションID（再抽選時） |
+| `executionType` | Enum | `AUTO` / `MANUAL` / `MANUAL_RELOTTERY` |
+| `status` | Enum | `SUCCESS` / `FAILED` / `PARTIAL` |
+| `executedAt` | LocalDateTime | 実行日時 |
+| `details` | Text | 処理詳細 |
+
+**Notification（アプリ内通知）:**
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `playerId` | Long | 通知先プレイヤー |
+| `type` | Enum | `LOTTERY_WON` / `LOTTERY_WAITLISTED` / `WAITLIST_OFFER` / `OFFER_EXPIRING` / `OFFER_EXPIRED` |
+| `title` / `message` | String | 通知内容 |
+| `referenceId` | Long | 参照先ID（参加者レコードID等） |
+| `isRead` | Boolean | 既読フラグ |
+
+**PushSubscription（Web Push購読）:**
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `playerId` | Long | プレイヤーID |
+| `endpoint` | String | Push APIエンドポイント |
+| `p256dhKey` / `authKey` | String | 暗号化キー |
+
+#### 3.7.4 抽選関連画面
+
+| パス | 画面 | 説明 |
+|---|---|---|
+| `/lottery/results` | 抽選結果確認 | 月別の全セッション・全試合の抽選結果一覧 |
+| `/lottery/waitlist` | キャンセル待ち状況 | 自分のキャンセル待ち一覧（番号・ステータス表示） |
+| `/lottery/offer-response` | 繰り上げ参加承認 | 「参加する」「参加しない」を選択 |
+| `/notifications` | 通知一覧 | 全通知の時系列表示（未読/既読管理、タップで遷移） |
+
+#### 3.7.5 スケジューラ
+
+| スケジューラ | タイミング | 処理 |
+|---|---|---|
+| `LotteryScheduler` | 毎日0:00（月末日のみ実行）| 翌月分の自動抽選。起動時にリトライチェック |
+| `OfferExpiryScheduler` | 5分間隔 | 応答期限切れのOFFERED → DECLINED遷移、次のキャンセル待ちへ通知 |
+
+#### 3.7.6 Densuke同期との整合性
+
+抽選済みセッションの参加者は伝助同期で変更されない。`DensukeImportService` は抽選実行済みセッションを検出するとスキップする。
+
+#### 3.7.7 共通レイアウトの変更
+
+`Layout.jsx` にヘッダーバーを追加:
+- ページタイトル表示
+- 通知ベルアイコン（未読バッジ付き）→ `/notifications` に遷移
+- プロフィールアイコン → `/profile` に遷移
+
+ナビゲーションメニューに「抽選結果」「キャンセル待ち」リンクを追加。
+
+### 3.8 選手プロフィール履歴
 
 段位・級位の変遷を履歴管理する。`valid_from` 〜 `valid_to` の期間で有効なプロフィールを判定。
 
@@ -383,6 +470,10 @@ SUPER_ADMIN のみ操作可能。
 | `/venues/new` | 会場作成 | SUPER_ADMIN | 新しい会場の登録 |
 | `/venues/edit/:id` | 会場編集 | SUPER_ADMIN | 会場情報の編集 |
 | `/statistics` | 統計 | ALL | **未実装** |
+| `/lottery/results` | 抽選結果 | ALL | 月別抽選結果一覧 |
+| `/lottery/waitlist` | キャンセル待ち | ALL | 自分のキャンセル待ち状況 |
+| `/lottery/offer-response` | 繰り上げ参加 | ALL | 繰り上げ承認/辞退 |
+| `/notifications` | 通知一覧 | ALL | 全通知の時系列表示 |
 
 ### 5.3 ナビゲーション構造
 
@@ -415,9 +506,14 @@ players ──< practice_participants (playerId)
 players ──< player_profiles (playerId)
 players ──< match_pairings (player1Id, player2Id)
 players ──< google_calendar_events (playerId)
+players ──< notifications (playerId)
+players ──< push_subscriptions (playerId)
 
 practice_sessions ──< practice_participants (sessionId)
 practice_sessions ──< google_calendar_events (sessionId)
+practice_sessions ──< lottery_executions (sessionId)
+
+practice_participants ──> lottery_executions (lotteryId)
 
 venues ──< practice_sessions (venueId)
 venues ──< venue_match_schedules (venueId)
@@ -505,6 +601,12 @@ venues ──< venue_match_schedules (venueId)
 | session_id | BIGINT | NOT NULL | 練習日ID |
 | player_id | BIGINT | NOT NULL | 選手ID |
 | match_number | INT | — | 試合番号（NULLは全試合） |
+| status | VARCHAR | NOT NULL, DEFAULT 'WON' | 参加ステータス（PENDING/WON/WAITLISTED/OFFERED/DECLINED/CANCELLED） |
+| waitlist_number | INT | — | キャンセル待ち番号 |
+| lottery_id | BIGINT | — | 抽選実行ID |
+| offered_at | TIMESTAMP | — | 繰り上げ通知日時 |
+| offer_deadline | TIMESTAMP | — | 繰り上げ応答期限 |
+| responded_at | TIMESTAMP | — | 繰り上げ応答日時 |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
@@ -568,6 +670,46 @@ venues ──< venue_match_schedules (venueId)
 | updated_at | TIMESTAMP | NOT NULL | — |
 
 一意制約: `(year, month)`
+
+#### lottery_executions
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| target_year | INT | NOT NULL | 対象年 |
+| target_month | INT | NOT NULL | 対象月 |
+| session_id | BIGINT | — | 対象セッションID（再抽選時） |
+| execution_type | VARCHAR | NOT NULL | AUTO/MANUAL/MANUAL_RELOTTERY |
+| executed_by | BIGINT | — | 実行者（自動はNULL） |
+| executed_at | TIMESTAMP | NOT NULL | 実行日時 |
+| status | VARCHAR | NOT NULL | SUCCESS/FAILED/PARTIAL |
+| details | TEXT | — | 処理詳細 |
+
+#### notifications
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| player_id | BIGINT | NOT NULL | 通知先プレイヤー |
+| type | VARCHAR | NOT NULL | LOTTERY_WON/LOTTERY_WAITLISTED/WAITLIST_OFFER/OFFER_EXPIRING/OFFER_EXPIRED |
+| title | VARCHAR | NOT NULL | 通知タイトル |
+| message | TEXT | — | 通知本文 |
+| reference_id | BIGINT | — | 参照先ID |
+| is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | 既読フラグ |
+| created_at | TIMESTAMP | NOT NULL | — |
+
+#### push_subscriptions
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| player_id | BIGINT | NOT NULL | プレイヤーID |
+| endpoint | TEXT | NOT NULL | Push APIエンドポイント |
+| p256dh_key | VARCHAR | — | 暗号化キー |
+| auth_key | VARCHAR | — | 認証キー |
+| user_agent | VARCHAR | — | ブラウザ情報 |
+| created_at | TIMESTAMP | NOT NULL | — |
+| updated_at | TIMESTAMP | NOT NULL | — |
 
 ---
 
@@ -647,6 +789,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/exists?date=` | ALL | 日付存在確認 |
 | GET | `/{id}/participants` | ALL | 参加者一覧 |
 | GET | `/participations/player/{id}?year=&month=` | ALL | 月別参加状況 |
+| GET | `/participations/player/{id}/status?year=&month=` | ALL | 月別参加状況（抽選ステータス付き） |
 | POST | `/` | SUPER_ADMIN | セッション作成 |
 | PUT | `/{id}` | SUPER_ADMIN | セッション更新 |
 | PUT | `/{id}/total-matches?totalMatches=` | SUPER_ADMIN | 試合数変更 |
@@ -693,7 +836,38 @@ venues ──< venue_match_schedules (venueId)
 |---|---|---|---|
 | POST | `/sync` | ALL | カレンダー同期実行 |
 
-### 7.10 ヘルスチェック
+### 7.10 抽選 (`/api/lottery`)
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| POST | `/execute` | SUPER_ADMIN | 手動抽選実行（年月指定） |
+| POST | `/re-execute/{sessionId}` | ADMIN+ | セッション再抽選 |
+| GET | `/results?year=&month=` | ALL | 月別抽選結果取得 |
+| GET | `/results/{sessionId}` | ALL | セッション別抽選結果 |
+| GET | `/my-results?year=&month=&playerId=` | ALL | 自分の抽選結果 |
+| POST | `/cancel` | ALL | 当選キャンセル（participantId指定） |
+| POST | `/respond-offer` | ALL | 繰り上げへの応答（participantId, accept） |
+| GET | `/waitlist-status?playerId=` | ALL | キャンセル待ち状況 |
+| PUT | `/admin/edit-participants` | ADMIN+ | 管理者による手動編集 |
+| GET | `/executions?year=&month=` | ALL | 抽選実行履歴 |
+
+### 7.11 通知 (`/api/notifications`)
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `/?playerId=` | ALL | 通知一覧取得 |
+| GET | `/unread-count?playerId=` | ALL | 未読通知数 |
+| PUT | `/{id}/read` | ALL | 通知既読化 |
+
+### 7.12 Push購読 (`/api/push-subscriptions`)
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `/vapid-public-key` | ALL | VAPID公開鍵取得 |
+| POST | `/subscribe` | ALL | Push購読登録 |
+| DELETE | `/unsubscribe` | ALL | Push購読解除 |
+
+### 7.13 ヘルスチェック
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -732,3 +906,7 @@ venues ──< venue_match_schedules (venueId)
 | 統計専用ページ (`/statistics`) | 未実装 | プレースホルダーのみ |
 | JWT認証 | 未実装 | 現在はダミートークン+ヘッダーベースの権限チェック |
 | 本アプリでの出欠管理完結 | 計画中 | 現在は伝助からの同期に依存。利用者の移行完了後に実装予定 |
+| Web Push通知のVAPID署名 | 完了 | `nl.martijndwars:web-push:5.1.1` + BouncyCastleによるRFC 8030準拠のVAPID署名付き実装 |
+| Service Worker | 未実装 | Push通知受信用。現在はアプリ内通知のみ |
+| 通知設定画面 | 未実装 | Push通知の許可/拒否設定UI |
+| 管理者用抽選管理画面 | 部分実装 | PracticeListモーダル内に再抽選ボタンあり。専用管理画面は未作成 |

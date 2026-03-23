@@ -36,6 +36,7 @@ const Home = () => {
   const [calSyncError, setCalSyncError] = useState(false);
   const [participationTop3, setParticipationTop3] = useState([]);
   const [myParticipationRate, setMyParticipationRate] = useState(null);
+  const [hasPendingOffer, setHasPendingOffer] = useState(false);
 
   // モバイル判定（スタンドアロンPWA含む）
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -169,6 +170,9 @@ const Home = () => {
       if (data.myParticipationRate) {
         setMyParticipationRate(data.myParticipationRate);
       }
+
+      // 繰り上げオファー
+      setHasPendingOffer(data.hasPendingOffer || false);
 
       // 次の練習情報（参加者リストも含まれている）
       if (data.nextPractice) {
@@ -342,6 +346,23 @@ const Home = () => {
             </button>
           </div>
         )}
+        {/* 繰り上げオファーバナー */}
+        {hasPendingOffer && (
+          <Link
+            to="/notifications"
+            className="block mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📩</span>
+              <div>
+                <div className="font-bold text-blue-800 text-sm">繰り上げ参加のお知らせ</div>
+                <div className="text-xs text-blue-600">練習に空きが出ました。通知を確認してください。</div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-blue-400 ml-auto" />
+            </div>
+          </Link>
+        )}
+
         {/* 次の練習 + 参加者（統合カード） */}
         {nextPractice && (
           <div className="rounded-lg shadow-md overflow-hidden mb-4">

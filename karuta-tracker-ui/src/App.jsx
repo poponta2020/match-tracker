@@ -28,6 +28,10 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Landing from './pages/Landing';
 import AuthRoute from './components/AuthRoute';
+import LotteryResults from './pages/lottery/LotteryResults';
+import WaitlistStatus from './pages/lottery/WaitlistStatus';
+import OfferResponse from './pages/lottery/OfferResponse';
+import NotificationList from './pages/notifications/NotificationList';
 
 function App() {
   return (
@@ -160,6 +164,46 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <PracticeParticipation />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/lottery/results"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <LotteryResults />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/lottery/waitlist"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <WaitlistStatus />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/lottery/offer-response"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <OfferResponse />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <NotificationList />
                   </Layout>
                 </PrivateRoute>
               }

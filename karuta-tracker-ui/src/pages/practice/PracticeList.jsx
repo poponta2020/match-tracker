@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { practiceAPI } from '../../api';
-import { isSuperAdmin } from '../../utils/auth';
-import { X, ChevronLeft, ChevronRight, CalendarCheck } from 'lucide-react';
+import { practiceAPI, lotteryAPI } from '../../api';
+import { isSuperAdmin, isAdmin } from '../../utils/auth';
+import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
@@ -357,6 +357,31 @@ const PracticeList = () => {
     return sessionDate < today;
   };
 
+  // 再抽選実行
+  const handleReLottery = async (sessionId) => {
+    if (!window.confirm('このセッションの再抽選を実行しますか？\n※繰り上げ当選者は維持されます')) return;
+    try {
+      await lotteryAPI.reExecute(sessionId);
+      // セッション詳細を再取得
+      const response = await practiceAPI.getById(sessionId);
+      setSelectedSession(response.data);
+    } catch (err) {
+      console.error('Re-lottery error:', err);
+      alert(err.response?.data?.message || '再抽選に失敗しました');
+    }
+  };
+
+  // 参加者のステータスバッジ
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'WON': return null; // 当選者はバッジなし（通常表示）
+      case 'WAITLISTED': return <span className="text-[9px] px-1 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold">待</span>;
+      case 'OFFERED': return <span className="text-[9px] px-1 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">応答待</span>;
+      case 'CANCELLED': return <span className="text-[9px] px-1 py-0.5 bg-red-100 text-red-400 rounded font-bold">取消</span>;
+      default: return null;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -571,17 +596,21 @@ const PracticeList = () => {
                                 {sortPlayersByRank(participants).map((p, idx) => {
                                   const pName = typeof p === 'string' ? p : p.name;
                                   const isMyself = pName === currentPlayer?.name;
+                                  const pStatus = typeof p === 'string' ? null : p.status;
                                   return (
-                                    <PlayerChip
-                                      key={idx}
-                                      name={pName}
-                                      kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
-                                      className={`text-xs ${
-                                        isMyself
-                                          ? 'bg-[#4a6b5a] text-white font-medium'
-                                          : 'text-[#374151] bg-white'
-                                      }`}
-                                    />
+                                    <span key={idx} className="inline-flex items-center gap-0.5">
+                                      <PlayerChip
+                                        name={pName}
+                                        kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                        className={`text-xs ${
+                                          isMyself
+                                            ? 'bg-[#4a6b5a] text-white font-medium'
+                                            : pStatus === 'WAITLISTED' ? 'text-[#374151] bg-yellow-50 border border-yellow-200'
+                                            : 'text-[#374151] bg-white'
+                                        }`}
+                                      />
+                                      {getStatusBadge(pStatus)}
+                                    </span>
                                   );
                                 })}
                               </div>
@@ -619,6 +648,15 @@ const PracticeList = () => {
                   className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   参加登録
+                </button>
+              )}
+              {isAdmin() && !isPastDate(selectedSession.sessionDate) && (
+                <button
+                  onClick={() => handleReLottery(selectedSession.id)}
+                  className="flex-1 py-2 text-sm font-medium text-orange-600 border border-orange-400 rounded-lg hover:bg-orange-600 hover:text-white transition-colors whitespace-nowrap flex items-center justify-center gap-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  再抽選
                 </button>
               )}
               {isSuperAdmin() && (

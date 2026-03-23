@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Player;
@@ -8,6 +9,8 @@ import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
+import com.karuta.matchtracker.entity.LotteryExecution;
+import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -22,8 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -41,6 +46,8 @@ public class PracticeSessionService {
     private final MatchRepository matchRepository;
     private final VenueRepository venueRepository;
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
+    private final LotteryExecutionRepository lotteryExecutionRepository;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -505,29 +512,34 @@ public class PracticeSessionService {
         // プレイヤーIDとPlayerのマップを作成
         Map<Long, Player> playerByIdMap = players.stream()
                 .collect(Collectors.toMap(Player::getId, p -> p, (existing, replacement) -> existing));
-        Map<Integer, List<Player>> matchParticipantPlayers = new java.util.HashMap<>();
+
+        // 参加者情報を試合番号ごとにグルーピング（ステータス情報も保持）
+        record ParticipantWithPlayer(PracticeParticipant participant, Player player) {}
+        Map<Integer, List<ParticipantWithPlayer>> matchParticipantPairs = new java.util.HashMap<>();
 
         for (PracticeParticipant participant : allParticipants) {
             if (participant.getMatchNumber() != null) {
                 matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
                 Player player = playerByIdMap.get(participant.getPlayerId());
                 if (player != null) {
-                    matchParticipantPlayers.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
-                            .add(player);
+                    matchParticipantPairs.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                            .add(new ParticipantWithPlayer(participant, player));
                 }
             }
         }
 
         // 級位→段位→名前順でソートしてParticipantInfoリストに変換
         Comparator<Player> playerComp = PlayerSortHelper.playerComparator();
-        for (Map.Entry<Integer, List<Player>> entry : matchParticipantPlayers.entrySet()) {
-            entry.getValue().sort(playerComp);
+        for (Map.Entry<Integer, List<ParticipantWithPlayer>> entry : matchParticipantPairs.entrySet()) {
+            entry.getValue().sort((a, b) -> playerComp.compare(a.player(), b.player()));
             matchParticipants.put(entry.getKey(),
                     entry.getValue().stream()
-                            .map(p -> PracticeSessionDto.MatchParticipantInfo.builder()
-                                    .name(p.getName())
-                                    .kyuRank(p.getKyuRank())
-                                    .role(p.getRole())
+                            .map(pp -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                    .name(pp.player().getName())
+                                    .kyuRank(pp.player().getKyuRank())
+                                    .role(pp.player().getRole())
+                                    .status(pp.participant().getStatus())
+                                    .waitlistNumber(pp.participant().getWaitlistNumber())
                                     .build())
                             .collect(Collectors.toList()));
         }
@@ -635,28 +647,31 @@ public class PracticeSessionService {
                         matchParticipants.put(i, new java.util.ArrayList<>());
                     }
 
-                    // プレイヤーを試合番号ごとに集計（全プレイヤーマップから）
-                    Map<Integer, List<Player>> matchPlayersList = new java.util.HashMap<>();
+                    // プレイヤーを試合番号ごとに集計（全プレイヤーマップから・ステータス情報保持）
+                    record PwP(PracticeParticipant participant, Player player) {}
+                    Map<Integer, List<PwP>> matchPlayersList = new java.util.HashMap<>();
                     for (PracticeParticipant participant : sessionParticipants) {
                         if (participant.getMatchNumber() != null) {
                             matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
                             Player player = playerMap.get(participant.getPlayerId());
                             if (player != null) {
                                 matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
-                                        .add(player);
+                                        .add(new PwP(participant, player));
                             }
                         }
                     }
 
                     // 級位→段位→名前順でソートしてParticipantInfoリストに変換
                     Comparator<Player> comp = PlayerSortHelper.playerComparator();
-                    for (Map.Entry<Integer, List<Player>> entry : matchPlayersList.entrySet()) {
-                        entry.getValue().sort(comp);
+                    for (Map.Entry<Integer, List<PwP>> entry : matchPlayersList.entrySet()) {
+                        entry.getValue().sort((a, b) -> comp.compare(a.player(), b.player()));
                         matchParticipants.put(entry.getKey(),
                                 entry.getValue().stream()
-                                        .map(p -> PracticeSessionDto.MatchParticipantInfo.builder()
-                                                .name(p.getName())
-                                                .kyuRank(p.getKyuRank())
+                                        .map(pp -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                                .name(pp.player().getName())
+                                                .kyuRank(pp.player().getKyuRank())
+                                                .status(pp.participant().getStatus())
+                                                .waitlistNumber(pp.participant().getWaitlistNumber())
                                                 .build())
                                         .collect(Collectors.toList()));
                     }
@@ -686,6 +701,9 @@ public class PracticeSessionService {
 
     /**
      * 選手の練習参加を一括登録（月単位）
+     *
+     * 締め切り前: 全削除→再挿入（ステータスはPENDING）
+     * 締め切り後: 抽選済み試合は変更不可。自由登録可能な試合のみ変更可能（ステータスはWON）
      */
     @Transactional
     public void registerParticipations(PracticeParticipationRequest request) {
@@ -697,12 +715,6 @@ public class PracticeSessionService {
         if (!playerRepository.existsById(request.getPlayerId())) {
             throw new ResourceNotFoundException("Player", request.getPlayerId());
         }
-
-        // その月の全セッションを取得
-        List<PracticeSessionDto> monthSessions = findSessionsByYearMonth(request.getYear(), request.getMonth());
-        List<Long> allMonthSessionIds = monthSessions.stream()
-                .map(PracticeSessionDto::getId)
-                .collect(Collectors.toList());
 
         // リクエストに含まれる各セッションが存在するか確認
         List<Long> requestSessionIds = request.getParticipations().stream()
@@ -717,35 +729,129 @@ public class PracticeSessionService {
             }
         }
 
+        if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth())) {
+            registerParticipationsBeforeDeadline(request);
+        } else {
+            registerParticipationsAfterDeadline(request);
+        }
+    }
+
+    /**
+     * 締め切り前の参加登録: 既存方式（全削除→再挿入、ステータスPENDING）
+     */
+    private void registerParticipationsBeforeDeadline(PracticeParticipationRequest request) {
+        // その月の全セッションを取得
+        List<PracticeSessionDto> monthSessions = findSessionsByYearMonth(request.getYear(), request.getMonth());
+        List<Long> allMonthSessionIds = monthSessions.stream()
+                .map(PracticeSessionDto::getId)
+                .collect(Collectors.toList());
+
         // その月の全セッションから該当選手の既存参加記録を削除
         if (!allMonthSessionIds.isEmpty()) {
-            log.debug("Deleting existing participations for player {} in sessions: {}",
-                    request.getPlayerId(), allMonthSessionIds);
-
-            // カスタム削除クエリを使用して一括削除
             practiceParticipantRepository.deleteByPlayerIdAndSessionIds(
                     request.getPlayerId(), allMonthSessionIds);
-
-            // 削除を確実にコミットするためにflush
             entityManager.flush();
-
-            log.debug("Successfully deleted existing participations for player {} in {}-{}",
-                    request.getPlayerId(), request.getYear(), request.getMonth());
         }
 
-        // 新しい参加記録を登録
+        // 新しい参加記録をPENDINGステータスで登録
         List<PracticeParticipant> participants = request.getParticipations().stream()
                 .map(participation -> PracticeParticipant.builder()
                         .sessionId(participation.getSessionId())
                         .playerId(request.getPlayerId())
                         .matchNumber(participation.getMatchNumber())
+                        .status(ParticipantStatus.PENDING)
                         .build())
                 .collect(Collectors.toList());
 
         practiceParticipantRepository.saveAll(participants);
 
-        log.info("Successfully registered {} participations for player {}",
+        log.info("Pre-deadline: registered {} participations (PENDING) for player {}",
                 participants.size(), request.getPlayerId());
+    }
+
+    /**
+     * 締め切り後の参加登録: 自由登録可能な試合のみ変更可能
+     * 自由登録条件: 定員未到達 AND キャンセル待ちなし
+     */
+    private void registerParticipationsAfterDeadline(PracticeParticipationRequest request) {
+        Long playerId = request.getPlayerId();
+
+        // リクエストされた参加情報をセッション・試合単位でグループ化
+        Set<String> requestedKeys = request.getParticipations().stream()
+                .map(p -> p.getSessionId() + "_" + p.getMatchNumber())
+                .collect(Collectors.toSet());
+
+        // 各セッションの情報を取得
+        List<Long> sessionIds = request.getParticipations().stream()
+                .map(PracticeParticipationRequest.SessionMatchParticipation::getSessionId)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, PracticeSession> sessionsMap = practiceSessionRepository.findAllById(sessionIds)
+                .stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
+
+        int registered = 0;
+        int skipped = 0;
+
+        for (PracticeParticipationRequest.SessionMatchParticipation participation : request.getParticipations()) {
+            Long sessionId = participation.getSessionId();
+            Integer matchNumber = participation.getMatchNumber();
+            PracticeSession session = sessionsMap.get(sessionId);
+
+            // 既に登録済みならスキップ
+            if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(
+                    sessionId, playerId, matchNumber)) {
+                skipped++;
+                continue;
+            }
+
+            // 自由登録の条件チェック
+            if (!isFreeRegistrationOpen(session, matchNumber)) {
+                log.warn("Post-deadline: free registration not available for session {} match {}",
+                        sessionId, matchNumber);
+                skipped++;
+                continue;
+            }
+
+            // WONステータスで登録
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .sessionId(sessionId)
+                    .playerId(playerId)
+                    .matchNumber(matchNumber)
+                    .status(ParticipantStatus.WON)
+                    .build();
+            practiceParticipantRepository.save(participant);
+            registered++;
+        }
+
+        log.info("Post-deadline: registered {} (skipped {}) participations for player {}",
+                registered, skipped, playerId);
+    }
+
+    /**
+     * 自由登録が可能かどうかを判定する
+     * 条件: 定員未到達 AND キャンセル待ちの人がいない
+     */
+    public boolean isFreeRegistrationOpen(PracticeSession session, Integer matchNumber) {
+        if (session == null) return false;
+
+        // 定員未設定の場合は常に自由登録可能
+        Integer capacity = session.getCapacity();
+        if (capacity == null) return true;
+
+        // 現在のWON参加者数をカウント
+        long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                session.getId(), matchNumber, ParticipantStatus.WON);
+
+        // 定員到達していたら不可
+        if (wonCount >= capacity) return false;
+
+        // キャンセル待ちが残っていたら不可
+        boolean hasWaitlisted = practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(
+                session.getId(), matchNumber, ParticipantStatus.WAITLISTED)
+                || practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(
+                session.getId(), matchNumber, ParticipantStatus.OFFERED);
+
+        return !hasWaitlisted;
     }
 
     /**
@@ -774,6 +880,57 @@ public class PracticeSessionService {
                         PracticeParticipant::getSessionId,
                         Collectors.mapping(PracticeParticipant::getMatchNumber, Collectors.toList())
                 ));
+    }
+
+    /**
+     * 選手の特定月の参加状況を取得（抽選ステータス付き）
+     */
+    public PlayerParticipationStatusDto getPlayerParticipationStatusByMonth(Long playerId, int year, int month) {
+        log.debug("Getting participation status for player {} in {}-{}", playerId, year, month);
+
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
+
+        if (sessionIds.isEmpty()) {
+            return PlayerParticipationStatusDto.builder()
+                    .participations(Map.of())
+                    .lotteryExecuted(Map.of())
+                    .build();
+        }
+
+        // 選手の参加記録を取得
+        List<PracticeParticipant> participations =
+                practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds);
+
+        // セッションごとにグルーピング
+        Map<Long, List<PlayerParticipationStatusDto.MatchParticipation>> participationMap = participations.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(
+                        PracticeParticipant::getSessionId,
+                        Collectors.mapping(p -> PlayerParticipationStatusDto.MatchParticipation.builder()
+                                .participantId(p.getId())
+                                .matchNumber(p.getMatchNumber())
+                                .status(p.getStatus() != null ? p.getStatus() : ParticipantStatus.WON)
+                                .waitlistNumber(p.getWaitlistNumber())
+                                .build(), Collectors.toList())
+                ));
+
+        // 抽選実行状況を取得
+        List<LotteryExecution> executions = lotteryExecutionRepository.findBySessionIdIn(sessionIds);
+        Map<Long, Boolean> lotteryMap = new HashMap<>();
+        for (Long sid : sessionIds) {
+            lotteryMap.put(sid, false);
+        }
+        for (LotteryExecution exec : executions) {
+            if (exec.getSessionId() != null) {
+                lotteryMap.put(exec.getSessionId(), true);
+            }
+        }
+
+        return PlayerParticipationStatusDto.builder()
+                .participations(participationMap)
+                .lotteryExecuted(lotteryMap)
+                .build();
     }
 
     /**

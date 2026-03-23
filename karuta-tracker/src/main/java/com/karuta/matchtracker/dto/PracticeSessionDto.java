@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.dto;
 
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeSession;
 import lombok.AllArgsConstructor;
@@ -43,6 +44,10 @@ public class PracticeSessionDto {
     private java.util.Map<Integer, List<MatchParticipantInfo>> matchParticipants;  // 試合番号ごとの参加者情報リスト
     private List<VenueMatchScheduleDto> venueSchedules;  // 会場の試合時間割
 
+    // 抽選関連フィールド
+    private Boolean lotteryExecuted;  // 抽選実行済みか
+    private java.util.Map<Integer, MatchLotteryInfo> matchLotteryInfo;  // 試合番号ごとの抽選情報
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -51,6 +56,21 @@ public class PracticeSessionDto {
         private String name;
         private Player.KyuRank kyuRank;
         private Player.Role role;
+        private ParticipantStatus status;
+        private Integer waitlistNumber;
+    }
+
+    /**
+     * 試合ごとの抽選情報
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class MatchLotteryInfo {
+        private int wonCount;          // 当選者数
+        private int waitlistedCount;   // キャンセル待ち人数
+        private boolean freeRegistrationOpen;  // 自由登録可能か
     }
 
     /**

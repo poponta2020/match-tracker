@@ -3,6 +3,7 @@ package com.karuta.matchtracker.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * 練習参加者エンティティ
@@ -50,6 +51,44 @@ public class PracticeParticipant {
      */
     @Column(name = "match_number")
     private Integer matchNumber;
+
+    /**
+     * 参加ステータス
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
+    private ParticipantStatus status = ParticipantStatus.WON;
+
+    /**
+     * キャンセル待ち番号（WAITLISTED時のみ）
+     */
+    @Column(name = "waitlist_number")
+    private Integer waitlistNumber;
+
+    /**
+     * 紐づく抽選実行ID
+     */
+    @Column(name = "lottery_id")
+    private Long lotteryId;
+
+    /**
+     * 繰り上げ通知日時
+     */
+    @Column(name = "offered_at")
+    private LocalDateTime offeredAt;
+
+    /**
+     * 繰り上げ応答期限
+     */
+    @Column(name = "offer_deadline")
+    private LocalDateTime offerDeadline;
+
+    /**
+     * 繰り上げ応答日時
+     */
+    @Column(name = "responded_at")
+    private LocalDateTime respondedAt;
 
     /**
      * 作成日時

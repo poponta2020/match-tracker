@@ -4,6 +4,7 @@ import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
+import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -29,6 +30,7 @@ public class DensukeImportService {
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerRepository playerRepository;
     private final VenueRepository venueRepository;
+    private final LotteryExecutionRepository lotteryExecutionRepository;
 
     /**
      * インポート結果
@@ -128,6 +130,14 @@ public class DensukeImportService {
                 log.info("Created practice session: {} venue={} totalMatches={}", entry.getDate(), venueName, totalMatches);
             } else {
                 session = sessionOpt.get();
+            }
+
+            // 抽選済みセッションはスキップ（参加者を変更しない）
+            if (lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(session.getId()).isPresent()) {
+                result.getDetails().add(String.format("%s 第%d試合: 抽選済みのためスキップ",
+                        entry.getDate(), entry.getMatchNumber()));
+                result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
+                continue;
             }
 
             // 既存の参加者を取得

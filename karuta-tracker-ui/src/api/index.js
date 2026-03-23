@@ -5,4 +5,6 @@ export { pairingAPI } from './pairings';
 export { venueAPI } from './venues';
 export { calendarAPI } from './calendar';
 export { homeAPI } from './home';
+export { lotteryAPI } from './lottery';
+export { notificationAPI } from './notifications';
 export { default as apiClient } from './client';

@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.repository;
 
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -8,7 +9,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 練習参加者リポジトリ
@@ -130,4 +133,67 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
            "ORDER BY ps.sessionDate ASC, pp.matchNumber ASC")
     List<PracticeParticipant> findUpcomingParticipations(@Param("playerId") Long playerId,
                                                          @Param("fromDate") LocalDate fromDate);
+
+    // ============================================================
+    // 抽選システム用クエリ
+    // ============================================================
+
+    /**
+     * 特定セッション・試合・ステータスの参加者を取得
+     */
+    List<PracticeParticipant> findBySessionIdAndMatchNumberAndStatus(
+            Long sessionId, Integer matchNumber, ParticipantStatus status);
+
+    /**
+     * 特定セッション・試合・ステータスの参加者数を取得
+     */
+    long countBySessionIdAndMatchNumberAndStatus(
+            Long sessionId, Integer matchNumber, ParticipantStatus status);
+
+    /**
+     * 特定セッション・試合のキャンセル待ちで最も若い番号の参加者を取得
+     */
+    Optional<PracticeParticipant> findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+            Long sessionId, Integer matchNumber, ParticipantStatus status);
+
+    /**
+     * 特定セッション・ステータスの参加者を取得
+     */
+    List<PracticeParticipant> findBySessionIdAndStatus(Long sessionId, ParticipantStatus status);
+
+    /**
+     * 特定選手に指定ステータスの参加記録が存在するか確認
+     */
+    boolean existsByPlayerIdAndStatus(Long playerId, ParticipantStatus status);
+
+    /**
+     * 特定セッションの特定ステータスの参加者が存在するか確認
+     */
+    boolean existsBySessionIdAndMatchNumberAndStatus(
+            Long sessionId, Integer matchNumber, ParticipantStatus status);
+
+    /**
+     * 応答期限が切れたOFFERED状態の参加者を取得
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.status = 'OFFERED' AND p.offerDeadline < :now")
+    List<PracticeParticipant> findExpiredOffers(@Param("now") LocalDateTime now);
+
+    /**
+     * 指定セッションの全参加者をステータスで取得（試合番号・キャンセル待ち番号順）
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId " +
+           "ORDER BY p.matchNumber ASC, p.status ASC, p.waitlistNumber ASC")
+    List<PracticeParticipant> findBySessionIdOrderByMatchAndStatus(@Param("sessionId") Long sessionId);
+
+    /**
+     * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
+     */
+    @Query("SELECT DISTINCT pp.playerId FROM PracticeParticipant pp " +
+           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month " +
+           "AND pp.status IN ('WAITLISTED', 'DECLINED') " +
+           "AND ps.id < :currentSessionId")
+    List<Long> findMonthlyLoserPlayerIds(@Param("year") int year,
+                                         @Param("month") int month,
+                                         @Param("currentSessionId") Long currentSessionId);
 }

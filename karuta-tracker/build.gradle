@@ -36,6 +36,10 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 	// Jsoup for HTML scraping (Densuke integration)
 	implementation 'org.jsoup:jsoup:1.17.2'
+	// Web Push notifications (VAPID署名付き)
+	implementation 'nl.martijndwars:web-push:5.1.1'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+
 	// Google Calendar API
 	implementation 'com.google.api-client:google-api-client:2.2.0'
 	implementation 'com.google.apis:google-api-services-calendar:v3-rev20231123-2.0.0'
