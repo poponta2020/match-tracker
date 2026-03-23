@@ -162,36 +162,24 @@ public class PracticeSessionService {
         LocalDate today = LocalDate.now();
         log.debug("Finding next participation for player {} from {}", playerId, today);
 
-        // 今日以降の参加レコードを日付順で一括取得
-        List<PracticeParticipant> allParticipations = practiceParticipantRepository
-                .findUpcomingParticipations(playerId, today);
-
-        PracticeSession nextSession = null;
-        List<Integer> matchNumbers = List.of();
-        boolean registered = false;
-
-        if (!allParticipations.isEmpty()) {
-            // 参加登録あり → 最も近い参加予定の練習日
-            Long nextSessionId = allParticipations.get(0).getSessionId();
-            nextSession = practiceSessionRepository.findById(nextSessionId).orElse(null);
-            matchNumbers = allParticipations.stream()
-                    .filter(p -> p.getSessionId().equals(nextSessionId))
-                    .map(PracticeParticipant::getMatchNumber)
-                    .filter(java.util.Objects::nonNull)
-                    .sorted()
-                    .toList();
-            registered = true;
+        // 直近の未来の練習日を取得（参加有無に関係なく）
+        List<PracticeSession> upcomingSessions = practiceSessionRepository.findUpcomingSessions(today);
+        if (upcomingSessions.isEmpty()) {
+            return null;
         }
+        PracticeSession nextSession = upcomingSessions.get(0);
 
-        if (nextSession == null) {
-            // 参加登録なし → 直近の未来の練習日を取得
-            List<PracticeSession> upcomingSessions = practiceSessionRepository.findUpcomingSessions(today);
-            if (upcomingSessions.isEmpty()) {
-                return null;
-            }
-            nextSession = upcomingSessions.get(0);
-            registered = false;
-        }
+        // そのセッションに自分が参加登録しているか確認
+        List<PracticeParticipant> myParticipations = practiceParticipantRepository
+                .findUpcomingParticipations(playerId, today).stream()
+                .filter(p -> p.getSessionId().equals(nextSession.getId()))
+                .toList();
+        boolean registered = !myParticipations.isEmpty();
+        List<Integer> matchNumbers = myParticipations.stream()
+                .map(PracticeParticipant::getMatchNumber)
+                .filter(java.util.Objects::nonNull)
+                .sorted()
+                .toList();
 
         // 会場名を取得
         String venueName = null;
