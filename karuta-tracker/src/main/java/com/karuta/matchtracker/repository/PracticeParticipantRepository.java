@@ -104,6 +104,16 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     void deleteBySessionIdAndPlayerIdAndMatchNumber(Long sessionId, Long playerId, Integer matchNumber);
 
     /**
+     * 特定の選手が特定月に参加したセッション数を取得（ホーム画面用・軽量）
+     */
+    @Query("SELECT COUNT(DISTINCT pp.sessionId) FROM PracticeParticipant pp " +
+           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE pp.playerId = :playerId AND YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month")
+    int countDistinctSessionsByPlayerAndMonth(@Param("playerId") Long playerId,
+                                              @Param("year") int year,
+                                              @Param("month") int month);
+
+    /**
      * 特定の選手の特定セッションリストの参加記録を削除
      */
     @Modifying

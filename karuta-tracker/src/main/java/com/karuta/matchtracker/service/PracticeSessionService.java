@@ -849,7 +849,26 @@ public class PracticeSessionService {
      */
     public List<ParticipationRateDto> getParticipationRateTop3(int year, int month) {
         log.debug("Calculating participation rate top3 for {}-{}", year, month);
+        List<ParticipationRateDto> allRates = computeAllParticipationRates(year, month);
+        return allRates.stream()
+                .sorted(Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
+                        .thenComparing(Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
+                .limit(3)
+                .collect(Collectors.toList());
+    }
 
+    /**
+     * 特定の選手の月別参加率を取得
+     */
+    public ParticipationRateDto getPlayerParticipationRate(Long playerId, int year, int month) {
+        List<ParticipationRateDto> allRates = computeAllParticipationRates(year, month);
+        return allRates.stream()
+                .filter(r -> r.getPlayerId().equals(playerId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<ParticipationRateDto> computeAllParticipationRates(int year, int month) {
         // 1. その月の今日以前のセッションのみ取得（未来の練習日は除外）
         LocalDate today = LocalDate.now();
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month)
@@ -881,14 +900,13 @@ public class PracticeSessionService {
         java.util.concurrent.CompletableFuture.allOf(participantsFuture, playersFuture).join();
 
         // 4. 選手ごとの参加試合数を集計（抜け番含む）
-        // matchNumber=nullは抜け番（対戦なしで参加）として1カウントする
         List<PracticeParticipant> allParticipants = participantsFuture.join();
         Map<Long, Integer> playerParticipationCount = new java.util.HashMap<>();
         for (PracticeParticipant pp : allParticipants) {
             playerParticipationCount.merge(pp.getPlayerId(), 1, Integer::sum);
         }
 
-        // 5. 選手名を取得してDTOに変換、TOP3を返す
+        // 5. 選手名を取得してDTOに変換
         Map<Long, String> playerNames = playersFuture.join().stream()
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
@@ -900,9 +918,6 @@ public class PracticeSessionService {
                         .totalScheduledMatches(totalScheduledMatches)
                         .rate((double) entry.getValue() / totalScheduledMatches)
                         .build())
-                .sorted(Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
-                        .thenComparing(Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
-                .limit(3)
                 .collect(Collectors.toList());
     }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { practiceAPI, calendarAPI } from '../api';
+import { homeAPI, calendarAPI } from '../api';
 import {
   ArrowRight,
   ChevronsRight,
@@ -155,53 +155,26 @@ const Home = () => {
   const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
     try {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-
-      // 並列で全データ取得
-      const [
-        nextPracticeRes,
-        participationsRes,
-        top3Res,
-      ] = await Promise.all([
-        practiceAPI.getNextParticipation(currentPlayer.id).catch(() => ({ data: null, status: 204 })),
-        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
-        practiceAPI.getParticipationRateTop3(year, month).catch(() => ({ data: [] })),
-      ]);
+      const res = await homeAPI.getData(currentPlayer.id);
 
       // リクエストがキャンセルされた場合は状態更新をスキップ
       if (signal?.aborted) return;
 
-      // 参加率TOP3
-      const top3 = top3Res.data || [];
-      setParticipationTop3(top3);
+      const data = res.data;
 
-      // 自分の参加率を計算
-      const myselfInTop3 = top3.find((p) => p.playerId === currentPlayer.id);
-      if (myselfInTop3) {
-        setMyParticipationRate(myselfInTop3);
-      } else if (top3.length > 0) {
-        // TOP3にいない場合：分母はTOP3データから取得、分子は自分の参加数
-        const totalScheduledMatches = top3[0].totalScheduledMatches;
-        const participationMap = participationsRes.data || {};
-        const participatedMatches = Object.keys(participationMap).length;
-        const rate = totalScheduledMatches > 0 ? participatedMatches / totalScheduledMatches : 0;
-        setMyParticipationRate({ participatedMatches, totalScheduledMatches, rate });
-      } else {
-        // TOP3データがない場合でも参加数が取れれば表示
-        const participationMap = participationsRes.data || {};
-        const participatedMatches = Object.keys(participationMap).length;
-        if (participatedMatches > 0) {
-          setMyParticipationRate({ participatedMatches, totalScheduledMatches: null, rate: null });
-        }
+      // 参加率TOP3
+      setParticipationTop3(data.participationTop3 || []);
+
+      // 自分の参加率
+      if (data.myParticipationRate) {
+        setMyParticipationRate(data.myParticipationRate);
       }
 
       // 次の練習情報（参加者リストも含まれている）
-      if (nextPracticeRes.status !== 204 && nextPracticeRes.data) {
-        setNextPractice(nextPracticeRes.data);
-        if (nextPracticeRes.data.participants) {
-          setNextPracticeParticipants(nextPracticeRes.data.participants);
+      if (data.nextPractice) {
+        setNextPractice(data.nextPractice);
+        if (data.nextPractice.participants) {
+          setNextPracticeParticipants(data.nextPractice.participants);
         }
       }
     } catch (error) {
