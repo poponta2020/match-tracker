@@ -5,6 +5,7 @@ import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { Save, AlertCircle, Pencil, X } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const BulkResultInput = () => {
   const { sessionId } = useParams();
@@ -302,14 +303,7 @@ const BulkResultInput = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a] mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error) {
@@ -338,12 +332,12 @@ const BulkResultInput = () => {
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-20">
       {/* 固定ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 + 対戦変更ボタン */}
           <div className="flex items-center justify-between py-3">
             <div className="w-10" />
-            <span className="text-lg font-semibold text-[#5f3a2d]">
+            <span className="text-lg font-semibold text-white">
               {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -358,8 +352,8 @@ const BulkResultInput = () => {
               }}
               className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
                 editMode
-                  ? 'bg-[#5f3a2d] text-white'
-                  : 'bg-white/60 text-[#5f3a2d] hover:bg-white/80'
+                  ? 'bg-white text-[#4a6b5a]'
+                  : 'bg-white/20 text-white hover:bg-white/30'
               }`}
             >
               {editMode ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
@@ -379,8 +373,8 @@ const BulkResultInput = () => {
                   }}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#5f3a2d] text-[#5f3a2d]'
-                      : 'border-transparent text-[#7a5f54] hover:text-[#5f3a2d] hover:border-[#a5927f]'
+                      ? 'border-white text-white'
+                      : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
                   }`}
                 >
                   {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}

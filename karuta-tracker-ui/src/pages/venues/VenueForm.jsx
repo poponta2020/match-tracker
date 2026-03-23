@@ -11,6 +11,7 @@ function VenueForm() {
   const [formData, setFormData] = useState({
     name: '',
     defaultMatchCount: 3,
+    capacity: '',
     schedules: [
       { matchNumber: 1, startTime: '13:00', endTime: '13:30' },
       { matchNumber: 2, startTime: '13:30', endTime: '14:00' },
@@ -43,6 +44,7 @@ function VenueForm() {
       setFormData({
         name: data.name,
         defaultMatchCount: data.defaultMatchCount,
+        capacity: data.capacity != null ? data.capacity : '',
         schedules,
       });
     } catch (err) {
@@ -54,6 +56,18 @@ function VenueForm() {
 
   const handleNameChange = (e) => {
     setFormData({ ...formData, name: e.target.value });
+  };
+
+  const handleCapacityChange = (e) => {
+    const value = e.target.value;
+    if (value === '') {
+      setFormData({ ...formData, capacity: '' });
+    } else {
+      const num = parseInt(value);
+      if (!isNaN(num) && num >= 0) {
+        setFormData({ ...formData, capacity: num });
+      }
+    }
   };
 
   const handleMatchCountChange = (e) => {
@@ -119,6 +133,11 @@ function VenueForm() {
       return false;
     }
 
+    if (formData.capacity !== '' && formData.capacity < 1) {
+      setError('定員は1以上で入力してください');
+      return false;
+    }
+
     for (const schedule of formData.schedules) {
       if (!schedule.startTime || !schedule.endTime) {
         setError(`第${schedule.matchNumber}試合の時刻を入力してください`);
@@ -149,6 +168,7 @@ function VenueForm() {
       const requestData = {
         name: formData.name.trim(),
         defaultMatchCount: formData.defaultMatchCount,
+        capacity: formData.capacity !== '' ? formData.capacity : null,
         schedules: formData.schedules.map((s) => ({
           matchNumber: s.matchNumber,
           startTime: `${s.startTime}:00`,
@@ -215,6 +235,19 @@ function VenueForm() {
               required
             />
             <small>1〜20の範囲で入力してください</small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="capacity">定員</label>
+            <input
+              type="number"
+              id="capacity"
+              value={formData.capacity}
+              onChange={handleCapacityChange}
+              min={1}
+              placeholder="未設定"
+            />
+            <small>参加可能な最大選手数（任意）</small>
           </div>
         </div>
 

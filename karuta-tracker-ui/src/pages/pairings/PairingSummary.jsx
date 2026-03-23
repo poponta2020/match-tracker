@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { Copy, Check, ArrowLeft, RefreshCw, Home } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 /**
  * 札番号は01〜99, 00(=100番)の100枚
@@ -192,12 +193,7 @@ const PairingSummary = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
-        <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (

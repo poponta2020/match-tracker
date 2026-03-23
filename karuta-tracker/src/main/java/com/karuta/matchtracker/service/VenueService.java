@@ -72,6 +72,7 @@ public class VenueService {
         Venue venue = Venue.builder()
                 .name(request.getName())
                 .defaultMatchCount(request.getDefaultMatchCount())
+                .capacity(request.getCapacity())
                 .build();
         venue = venueRepository.save(venue);
 
@@ -112,6 +113,7 @@ public class VenueService {
         // 会場情報を更新
         venue.setName(request.getName());
         venue.setDefaultMatchCount(request.getDefaultMatchCount());
+        venue.setCapacity(request.getCapacity());
         venue = venueRepository.save(venue);
 
         // 既存の試合時間割を削除

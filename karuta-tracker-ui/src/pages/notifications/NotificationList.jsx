@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationAPI } from '../../api/notifications';
+import LoadingScreen from '../../components/LoadingScreen';
 
 /**
  * 通知一覧画面
@@ -73,7 +74,7 @@ export default function NotificationList() {
       <h1 className="text-xl font-bold mb-4">通知</h1>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">読み込み中...</div>
+        <LoadingScreen />
       ) : notifications.length === 0 ? (
         <div className="text-center py-8 text-gray-500">通知はありません</div>
       ) : (

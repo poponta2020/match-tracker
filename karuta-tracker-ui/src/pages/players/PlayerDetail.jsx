@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
 import { ChevronLeft, Edit } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const PlayerDetail = () => {
   const { id } = useParams();
@@ -53,11 +54,7 @@ const PlayerDetail = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error || !player) {
@@ -91,18 +88,18 @@ const PlayerDetail = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={() => navigate('/players')}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#374151]" />
+            <ChevronLeft className="w-6 h-6 text-white" />
           </button>
-          <h1 className="text-lg font-semibold text-[#374151]">選手詳細</h1>
+          <h1 className="text-lg font-semibold text-white">選手詳細</h1>
           <button
             onClick={() => navigate(`/players/${id}/edit`)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white border border-white/60 rounded-lg hover:bg-white/20 transition-colors"
           >
             <Edit className="w-3.5 h-3.5" />
             編集

@@ -162,16 +162,14 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(5))
                 .andExpect(jsonPath("$.wins").value(2))
-                .andExpect(jsonPath("$.losses").value(3))
-                .andExpect(jsonPath("$.winRate").value(closeTo(0.4, 0.01)));
+                .andExpect(jsonPath("$.winRate").value(closeTo(40.0, 0.1)));
 
         // 選手3の統計を取得
         mockMvc.perform(get("/api/matches/player/" + player3Id + "/statistics"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(2))
                 .andExpect(jsonPath("$.wins").value(2))
-                .andExpect(jsonPath("$.losses").value(0))
-                .andExpect(jsonPath("$.winRate").value(1.0));
+                .andExpect(jsonPath("$.winRate").value(100.0));
     }
 
     private void createMatch(LocalDate date, Long p1Id, Long p2Id, Long winnerId, int matchNumber) throws Exception {

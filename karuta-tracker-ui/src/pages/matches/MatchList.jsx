@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI } from '../../api';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
+import LoadingScreen from '../../components/LoadingScreen';
 import {
   Trophy,
   Plus,
@@ -276,28 +277,24 @@ const MatchList = () => {
 
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="space-y-6 pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between">
             {/* 左: 名前 + 年月 */}
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-[#374151] truncate flex items-baseline gap-2">
+              <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
                 <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
                 {targetPlayerKyuRank && (
-                  <span className="text-sm font-normal text-[#6b7280]">{targetPlayerKyuRank}</span>
+                  <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank}</span>
                 )}
               </h1>
-              <p className="text-sm text-[#6b7280] mt-0.5">
+              <p className="text-sm text-white/70 mt-0.5">
                 {selectedYear && selectedMonth
                   ? `${selectedYear}年 ${selectedMonth}月`
                   : selectedYear
@@ -310,14 +307,14 @@ const MatchList = () => {
               {isOtherPlayer && (
                 <button
                   onClick={() => navigate('/matches')}
-                  className="text-xs text-[#4a6b5a] border border-[#4a6b5a] px-2 py-1 rounded hover:bg-[#4a6b5a] hover:text-white transition-colors"
+                  className="text-xs text-white border border-white/60 px-2 py-1 rounded hover:bg-white/20 transition-colors"
                 >
                   自分に戻す
                 </button>
               )}
               <button
                 onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
-                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-[#4a6b5a] text-white' : 'text-[#6b7280] hover:bg-[#c5cec8]'}`}
+                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-[#3d5a4c]'}`}
               >
                 <Search className="w-5 h-5" />
               </button>

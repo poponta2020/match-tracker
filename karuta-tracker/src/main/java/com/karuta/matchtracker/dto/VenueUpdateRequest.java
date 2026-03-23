@@ -28,6 +28,9 @@ public class VenueUpdateRequest {
     @Max(value = 20, message = "標準試合数は20以下で入力してください")
     private Integer defaultMatchCount;
 
+    @Min(value = 1, message = "定員は1以上で入力してください")
+    private Integer capacity;
+
     @Valid
     @NotNull(message = "試合時間割は必須です")
     @Size(min = 1, message = "試合時間割を少なくとも1つ設定してください")

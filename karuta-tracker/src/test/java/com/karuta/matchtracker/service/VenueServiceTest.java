@@ -347,6 +347,103 @@ class VenueServiceTest {
         verify(venueRepository, never()).save(any(Venue.class));
     }
 
+    // ===== capacity テスト =====
+
+    @Test
+    @DisplayName("定員付きで会場を作成できる")
+    void testCreateVenue_WithCapacity_CapacityIsSaved() {
+        // Given
+        VenueCreateRequest requestWithCapacity = VenueCreateRequest.builder()
+                .name("定員付き会場")
+                .defaultMatchCount(5)
+                .capacity(20)
+                .schedules(List.of(VenueCreateRequest.MatchScheduleRequest.builder()
+                        .matchNumber(1)
+                        .startTime(LocalTime.of(9, 0))
+                        .endTime(LocalTime.of(10, 30))
+                        .build()))
+                .build();
+
+        Venue savedVenue = Venue.builder()
+                .id(3L)
+                .name("定員付き会場")
+                .defaultMatchCount(5)
+                .capacity(20)
+                .build();
+
+        when(venueRepository.existsByName("定員付き会場")).thenReturn(false);
+        when(venueRepository.save(any(Venue.class))).thenReturn(savedVenue);
+        when(scheduleRepository.saveAll(anyList())).thenReturn(Collections.emptyList());
+        when(scheduleRepository.findByVenueIdOrderByMatchNumberAsc(3L)).thenReturn(Collections.emptyList());
+
+        // When
+        VenueDto result = venueService.createVenue(requestWithCapacity);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapacity()).isEqualTo(20);
+        verify(venueRepository).save(any(Venue.class));
+    }
+
+    @Test
+    @DisplayName("定員なしで会場を作成できる（nullの場合）")
+    void testCreateVenue_WithoutCapacity_CapacityIsNull() {
+        // Given
+        Venue savedVenue = Venue.builder()
+                .id(2L)
+                .name("大阪会場")
+                .defaultMatchCount(6)
+                .capacity(null)
+                .build();
+
+        when(venueRepository.existsByName("大阪会場")).thenReturn(false);
+        when(venueRepository.save(any(Venue.class))).thenReturn(savedVenue);
+        when(scheduleRepository.saveAll(anyList())).thenReturn(Collections.emptyList());
+        when(scheduleRepository.findByVenueIdOrderByMatchNumberAsc(2L)).thenReturn(Collections.emptyList());
+
+        // When
+        VenueDto result = venueService.createVenue(createRequest);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapacity()).isNull();
+    }
+
+    @Test
+    @DisplayName("会場の定員を更新できる")
+    void testUpdateVenue_WithCapacity_CapacityIsUpdated() {
+        // Given
+        VenueUpdateRequest requestWithCapacity = VenueUpdateRequest.builder()
+                .name("東京会場")
+                .defaultMatchCount(5)
+                .capacity(30)
+                .schedules(List.of(VenueUpdateRequest.MatchScheduleRequest.builder()
+                        .matchNumber(1)
+                        .startTime(LocalTime.of(9, 0))
+                        .endTime(LocalTime.of(10, 30))
+                        .build()))
+                .build();
+
+        Venue updatedVenue = Venue.builder()
+                .id(1L)
+                .name("東京会場")
+                .defaultMatchCount(5)
+                .capacity(30)
+                .build();
+
+        when(venueRepository.findById(1L)).thenReturn(Optional.of(testVenue));
+        when(venueRepository.findByName("東京会場")).thenReturn(Optional.of(testVenue));
+        when(venueRepository.save(any(Venue.class))).thenReturn(updatedVenue);
+        when(scheduleRepository.findByVenueIdOrderByMatchNumberAsc(1L)).thenReturn(Collections.emptyList());
+
+        // When
+        VenueDto result = venueService.updateVenue(1L, requestWithCapacity);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapacity()).isEqualTo(30);
+    }
+
     // ===== deleteVenue テスト =====
 
     @Test

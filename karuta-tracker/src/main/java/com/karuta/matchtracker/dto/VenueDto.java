@@ -21,6 +21,7 @@ public class VenueDto {
     private Long id;
     private String name;
     private Integer defaultMatchCount;
+    private Integer capacity;
     private List<VenueMatchScheduleDto> schedules;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -33,6 +34,7 @@ public class VenueDto {
                 .id(entity.getId())
                 .name(entity.getName())
                 .defaultMatchCount(entity.getDefaultMatchCount())
+                .capacity(entity.getCapacity())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

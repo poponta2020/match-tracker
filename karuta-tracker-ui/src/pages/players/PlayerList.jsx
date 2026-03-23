@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
 import { Search, UserPlus, ChevronRight } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const PlayerList = () => {
   const navigate = useNavigate();
@@ -65,22 +66,18 @@ const PlayerList = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="min-h-screen bg-[#f2ede6]">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-[#374151]">選手管理</h1>
+          <h1 className="text-lg font-semibold text-white">選手管理</h1>
           <button
             onClick={() => navigate('/register')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm font-medium"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white text-[#4a6b5a] rounded-lg hover:bg-white/90 transition-colors text-sm font-medium"
           >
             <UserPlus className="w-4 h-4" />
             新規登録

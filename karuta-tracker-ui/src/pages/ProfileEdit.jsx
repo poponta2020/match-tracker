@@ -5,6 +5,7 @@ import { playerAPI } from '../api';
 import {
   ArrowLeft, Save, AlertCircle, CheckCircle, Eye, EyeOff, Info, ChevronDown
 } from 'lucide-react';
+import LoadingScreen from '../components/LoadingScreen';
 
 const ProfileEdit = () => {
   const navigate = useNavigate();
@@ -192,29 +193,25 @@ const ProfileEdit = () => {
     }`;
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a]"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-6">
       {/* 固定ヘッダー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           {!isSetup ? (
             <button
               onClick={() => navigate('/profile')}
-              className="flex items-center gap-1 text-sm text-[#374151] hover:text-[#1f2937]"
+              className="flex items-center gap-1 text-sm text-white hover:text-white/80"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           ) : (
             <div className="w-5" />
           )}
-          <h1 className="text-lg font-semibold text-[#374151]">
+          <h1 className="text-lg font-semibold text-white">
             {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
           </h1>
           <div className="w-5" />

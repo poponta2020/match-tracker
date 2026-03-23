@@ -59,13 +59,17 @@ public class LotteryScheduler {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void retryOnStartup() {
-        LocalDate today = LocalDate.now();
-        int targetYear = today.getYear();
-        int targetMonth = today.getMonthValue();
+        try {
+            LocalDate today = LocalDate.now();
+            int targetYear = today.getYear();
+            int targetMonth = today.getMonthValue();
 
-        // 当月の抽選が実行済みかチェック
-        if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth)) {
-            executeLotteryIfNotDone(targetYear, targetMonth);
+            // 当月の抽選が実行済みかチェック
+            if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth)) {
+                executeLotteryIfNotDone(targetYear, targetMonth);
+            }
+        } catch (Exception e) {
+            log.error("Failed to execute startup lottery retry", e);
         }
     }
 

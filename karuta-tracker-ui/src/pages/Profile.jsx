@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
 import { Edit, AlertCircle } from 'lucide-react';
+import LoadingScreen from '../components/LoadingScreen';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -34,11 +35,7 @@ const Profile = () => {
   }, [currentPlayer, navigate]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error) {

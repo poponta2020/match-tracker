@@ -4,6 +4,7 @@ import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
@@ -293,14 +294,7 @@ const MatchResultsView = () => {
   };
 
   if (initialLoading || loading) {
-    return (
-      <div className="min-h-screen bg-[#f2ede6] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error) {
@@ -359,7 +353,7 @@ const MatchResultsView = () => {
     return (
       <div className="min-h-screen bg-[#f2ede6] pb-20">
         {/* ナビゲーションバー */}
-        <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between py-3">
               <button
@@ -367,8 +361,8 @@ const MatchResultsView = () => {
                 disabled={!hasPreviousDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasPreviousDate()
-                    ? 'hover:bg-[#c5cec8] text-[#374151]'
-                    : 'text-gray-300 cursor-not-allowed'
+                    ? 'hover:bg-[#3d5a4c] text-white'
+                    : 'text-white/30 cursor-not-allowed'
                 }`}
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -377,7 +371,7 @@ const MatchResultsView = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="text-lg font-semibold text-[#374151]"
+                  className="text-lg font-semibold text-white"
                 >
                   {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                     year: 'numeric',
@@ -404,8 +398,8 @@ const MatchResultsView = () => {
                 disabled={!hasNextDate()}
                 className={`p-2 rounded-full transition-colors ${
                   hasNextDate()
-                    ? 'hover:bg-[#c5cec8] text-[#374151]'
-                    : 'text-gray-300 cursor-not-allowed'
+                    ? 'hover:bg-[#3d5a4c] text-white'
+                    : 'text-white/30 cursor-not-allowed'
                 }`}
               >
                 <ChevronRight className="w-6 h-6" />
@@ -437,7 +431,7 @@ const MatchResultsView = () => {
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-20">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付選択 */}
           <div className="flex items-center justify-between py-3">
@@ -446,8 +440,8 @@ const MatchResultsView = () => {
               disabled={!hasPreviousDate()}
               className={`p-2 rounded-full transition-colors ${
                 hasPreviousDate()
-                  ? 'hover:bg-[#c5cec8] text-[#374151]'
-                  : 'text-gray-300 cursor-not-allowed'
+                  ? 'hover:bg-[#3d5a4c] text-white'
+                  : 'text-white/30 cursor-not-allowed'
               }`}
             >
               <ChevronLeft className="w-6 h-6" />
@@ -456,7 +450,7 @@ const MatchResultsView = () => {
             <div className="relative">
               <button
                 onClick={() => setShowDatePicker(!showDatePicker)}
-                className="text-lg font-semibold text-[#374151]"
+                className="text-lg font-semibold text-white"
               >
                 {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                   year: 'numeric',
@@ -500,8 +494,8 @@ const MatchResultsView = () => {
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
-                      ? 'border-[#374151] text-[#374151]'
-                      : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
+                      ? 'border-white text-white'
+                      : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
                   }`}
                 >
                   {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}

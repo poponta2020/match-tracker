@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { practiceAPI } from '../../api';
 import PlayerChip, { getKyuBorderColor } from '../../components/PlayerChip';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const PracticeDetail = () => {
   const navigate = useNavigate();
@@ -55,11 +56,7 @@ const PracticeDetail = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error || !session) {

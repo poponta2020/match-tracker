@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   AlertCircle,
 } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const MatchDetail = () => {
   const { id } = useParams();
@@ -50,11 +51,7 @@ const MatchDetail = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!match) {

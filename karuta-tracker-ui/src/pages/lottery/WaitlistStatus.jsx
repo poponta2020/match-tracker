@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import LoadingScreen from '../../components/LoadingScreen';
 
 /**
  * キャンセル待ち状況確認画面
@@ -39,7 +40,7 @@ export default function WaitlistStatus() {
       <h1 className="text-xl font-bold mb-4">キャンセル待ち状況</h1>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">読み込み中...</div>
+        <LoadingScreen />
       ) : entries.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           キャンセル待ちはありません

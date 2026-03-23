@@ -31,6 +31,12 @@ public class Venue {
     @Column(name = "default_match_count", nullable = false)
     private Integer defaultMatchCount;
 
+    /**
+     * 定員（参加可能な最大選手数）
+     */
+    @Column(name = "capacity")
+    private Integer capacity;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

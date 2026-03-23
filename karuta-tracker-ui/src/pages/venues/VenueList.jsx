@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import './VenueList.css';
+import LoadingScreen from '../../components/LoadingScreen';
 
 function VenueList() {
   const [venues, setVenues] = useState([]);
@@ -45,7 +46,7 @@ function VenueList() {
   };
 
   if (loading) {
-    return <div className="venue-list-container">読み込み中...</div>;
+    return <LoadingScreen />;
   }
 
   return (
@@ -98,6 +99,13 @@ function VenueList() {
                 <div className="venue-info">
                   <span className="info-label">標準試合数:</span>
                   <span className="info-value">{venue.defaultMatchCount}試合</span>
+                </div>
+
+                <div className="venue-info">
+                  <span className="info-label">定員:</span>
+                  <span className="info-value">
+                    {venue.capacity != null ? `${venue.capacity}人` : '未設定'}
+                  </span>
                 </div>
 
                 <div className="venue-schedules">

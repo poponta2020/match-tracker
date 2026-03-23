@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { homeAPI, calendarAPI } from '../api';
+import { notificationAPI } from '../api/notifications';
 import {
   ArrowRight,
   ChevronsRight,
@@ -16,6 +17,7 @@ import {
   LogOut,
   RefreshCw,
   X,
+  Bell,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 import { sortPlayersByRank } from '../utils/playerSort';
@@ -28,7 +30,6 @@ const Home = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [slowLoading, setSlowLoading] = useState(false);
   const [nextPractice, setNextPractice] = useState(null);
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
   const [calSyncing, setCalSyncing] = useState(false);
@@ -37,6 +38,7 @@ const Home = () => {
   const [participationTop3, setParticipationTop3] = useState([]);
   const [myParticipationRate, setMyParticipationRate] = useState(null);
   const [hasPendingOffer, setHasPendingOffer] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // モバイル判定（スタンドアロンPWA含む）
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -143,16 +145,6 @@ const Home = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 3秒以上ローディングが続いたらコールドスタートメッセージを表示
-  useEffect(() => {
-    if (loading) {
-      const timer = setTimeout(() => setSlowLoading(true), 3000);
-      return () => clearTimeout(timer);
-    } else {
-      setSlowLoading(false);
-    }
-  }, [loading]);
-
   const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
     try {
@@ -173,6 +165,11 @@ const Home = () => {
 
       // 繰り上げオファー
       setHasPendingOffer(data.hasPendingOffer || false);
+
+      // 未読通知数
+      notificationAPI.getUnreadCount(currentPlayer.id)
+        .then(r => { if (!signal?.aborted) setUnreadCount(r.data.count || 0); })
+        .catch(() => {});
 
       // 次の練習情報（参加者リストも含まれている）
       if (data.nextPractice) {
@@ -235,28 +232,32 @@ const Home = () => {
   const monthLabel = `${now.getMonth() + 1}月`;
 
   if (loading) {
-    return (
-      <LoadingScreen
-        message={slowLoading ? 'サーバーを起動中...' : '読み込み中...'}
-        subMessage={slowLoading ? '初回アクセス時は少し時間がかかります（最大30秒）' : null}
-      />
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="space-y-8">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-[#374151]">{currentPlayer?.name}</span>
+            <span className="text-lg font-semibold text-white">{currentPlayer?.name}</span>
           </div>
-          <div className="relative" ref={menuRef}>
+          <div className="flex items-center gap-1">
+            <Link to="/notifications" className="relative p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
+              <Bell className="w-5 h-5 text-white" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+            <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+              className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
             >
-              <Menu className="w-6 h-6 text-[#374151]" />
+              <Menu className="w-6 h-6 text-white" />
             </button>
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
@@ -324,6 +325,7 @@ const Home = () => {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>

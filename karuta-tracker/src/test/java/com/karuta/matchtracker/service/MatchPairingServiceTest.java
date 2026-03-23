@@ -9,6 +9,8 @@ import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,6 +44,12 @@ class MatchPairingServiceTest {
 
     @Mock
     private PlayerRepository playerRepository;
+
+    @Mock
+    private PracticeParticipantRepository practiceParticipantRepository;
+
+    @Mock
+    private PracticeSessionRepository practiceSessionRepository;
 
     @InjectMocks
     private MatchPairingService matchPairingService;
@@ -81,10 +89,9 @@ class MatchPairingServiceTest {
 
             when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
                     .thenReturn(pairings);
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
-            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
-            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2, player3, player4));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
 
             // When
             List<MatchPairingDto> result = matchPairingService.getByDate(sessionDate);
@@ -130,8 +137,9 @@ class MatchPairingServiceTest {
 
             when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
                     .thenReturn(Arrays.asList(pairing));
-            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
 
             // When
             List<MatchPairingDto> result = matchPairingService.getByDateAndMatchNumber(sessionDate, matchNumber);
@@ -252,7 +260,7 @@ class MatchPairingServiceTest {
             when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
 
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, createdBy);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy);
 
             // Then
             assertThat(result).hasSize(2);
@@ -279,7 +287,7 @@ class MatchPairingServiceTest {
             when(matchPairingRepository.saveAll(anyList())).thenReturn(Collections.emptyList());
 
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, createdBy);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy);
 
             // Then
             assertThat(result).isEmpty();
@@ -381,7 +389,7 @@ class MatchPairingServiceTest {
 
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1, player2, player3, player4));
-            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
@@ -410,7 +418,7 @@ class MatchPairingServiceTest {
 
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1, player2, player3));
-            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
@@ -439,7 +447,7 @@ class MatchPairingServiceTest {
 
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1));
-            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
@@ -468,7 +476,7 @@ class MatchPairingServiceTest {
 
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Collections.emptyList());
-            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());

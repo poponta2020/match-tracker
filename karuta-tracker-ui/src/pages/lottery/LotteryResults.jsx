@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import LoadingScreen from '../../components/LoadingScreen';
 
 /**
  * 抽選結果確認画面
@@ -68,7 +69,7 @@ export default function LotteryResults() {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-500">読み込み中...</div>
+        <LoadingScreen />
       ) : results.length === 0 ? (
         <div className="text-center py-8 text-gray-500">この月の抽選結果はありません</div>
       ) : (

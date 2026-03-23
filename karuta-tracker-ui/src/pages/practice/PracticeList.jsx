@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
 import { sortPlayersByRank } from '../../utils/playerSort';
+import LoadingScreen from '../../components/LoadingScreen';
 
 // 年月グリッドピッカー（ドロップダウン型）
 const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
@@ -383,11 +384,7 @@ const PracticeList = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   const calendar = generateCalendar();
@@ -402,18 +399,18 @@ const PracticeList = () => {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#374151]" />
+            <ChevronLeft className="w-6 h-6 text-white" />
           </button>
           <div className="relative">
             <button
               onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
-              className="text-lg font-semibold text-[#374151]"
+              className="text-lg font-semibold text-white"
             >
               {monthStr}
             </button>
@@ -431,9 +428,9 @@ const PracticeList = () => {
           </div>
           <button
             onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-[#374151]" />
+            <ChevronRight className="w-6 h-6 text-white" />
           </button>
         </div>
       </div>

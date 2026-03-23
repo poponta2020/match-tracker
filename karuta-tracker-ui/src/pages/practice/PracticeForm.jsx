@@ -83,7 +83,7 @@ const PracticeEditForm = ({ id }) => {
           <select value={formData.venueId || ''} onChange={handleVenueChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]">
             <option value="">会場を選択してください</option>
-            {venues.map(v => <option key={v.id} value={v.id}>{v.name} ({v.defaultMatchCount}試合)</option>)}
+            {venues.map(v => <option key={v.id} value={v.id}>{v.name} ({v.defaultMatchCount}試合{v.capacity != null ? ` / ${v.capacity}人` : ''})</option>)}
           </select>
         </div>
         <div>
@@ -207,6 +207,7 @@ const PracticeForm = () => {
         venueId: modalVenueId,
         venueName: venue?.name || '',
         totalMatches: venue?.defaultMatchCount || 7,
+        capacity: venue?.capacity || null,
         notes: modalNotes
       }
     }));
@@ -239,6 +240,7 @@ const PracticeForm = () => {
           sessionDate: dateStr,
           venueId: entry.venueId,
           totalMatches: entry.totalMatches,
+          capacity: entry.capacity || null,
           notes: entry.notes || null,
         });
       }
@@ -270,16 +272,16 @@ const PracticeForm = () => {
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-32">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors">
-            <ChevronLeft className="w-6 h-6 text-[#374151]" />
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
+            <ChevronLeft className="w-6 h-6 text-white" />
           </button>
-          <h1 className="text-lg font-semibold text-[#374151]">{monthStr}</h1>
+          <h1 className="text-lg font-semibold text-white">{monthStr}</h1>
           <button onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#c5cec8] rounded-full transition-colors">
-            <ChevronRight className="w-6 h-6 text-[#374151]" />
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
+            <ChevronRight className="w-6 h-6 text-white" />
           </button>
         </div>
       </div>
@@ -459,7 +461,7 @@ const PracticeForm = () => {
                     >
                       <div>{venue.name}</div>
                       <div className={`text-xs mt-0.5 ${modalVenueId === venue.id ? 'text-green-100' : 'text-[#9ca3af]'}`}>
-                        {venue.defaultMatchCount}試合
+                        {venue.defaultMatchCount}試合{venue.capacity != null ? ` / ${venue.capacity}人` : ''}
                       </div>
                     </button>
                   ))}

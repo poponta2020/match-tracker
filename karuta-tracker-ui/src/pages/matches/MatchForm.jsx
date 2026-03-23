@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
 import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -412,25 +413,18 @@ const MatchForm = () => {
 
   // 初期ローディング中
   if (initialLoading) {
-    return (
-      <div className="min-h-screen bg-[#f2ede6] pb-16 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4a6b5a] mx-auto"></div>
-          <p className="mt-4 text-gray-600">読み込み中...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
 
   return (
     <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">
       {/* ナビゲーションバー */}
-      <div className="bg-[#d4ddd7] border-b border-[#c5cec8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 */}
           <div className="flex items-center justify-center py-3">
-            <span className="text-lg font-semibold text-[#374151]">
+            <span className="text-lg font-semibold text-white">
               {new Date(formData.matchDate + 'T00:00:00').toLocaleDateString('ja-JP', {
                 year: 'numeric',
                 month: 'long',
@@ -453,8 +447,8 @@ const MatchForm = () => {
                   onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     formData.matchNumber === num
-                      ? 'border-[#374151] text-[#374151]'
-                      : 'border-transparent text-[#6b7280] hover:text-[#374151] hover:border-[#8a9e90]'
+                      ? 'border-white text-white'
+                      : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
                   }`}
                 >
                   第{num}試合

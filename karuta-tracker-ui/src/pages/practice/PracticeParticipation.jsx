@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -223,32 +224,28 @@ const PracticeParticipation = () => {
   const futureSessions = sessions.filter((s) => !isPastDate(s.sessionDate));
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#82655a]"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* 固定ナビゲーションバー */}
-      <div className="bg-[#e2d9d0] border-b border-[#d0c5b8] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={handlePrevMonth}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
           >
-            <ChevronLeft className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronLeft className="w-6 h-6 text-white" />
           </button>
-          <h1 className="text-lg font-semibold text-[#5f3a2d]">
+          <h1 className="text-lg font-semibold text-white">
             {year}年{month}月 参加登録
           </h1>
           <button
             onClick={handleNextMonth}
-            className="p-2 hover:bg-[#d0c5b8] rounded-full transition-colors"
+            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
           >
-            <ChevronRight className="w-6 h-6 text-[#5f3a2d]" />
+            <ChevronRight className="w-6 h-6 text-white" />
           </button>
         </div>
       </div>

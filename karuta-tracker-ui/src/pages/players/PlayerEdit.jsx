@@ -4,6 +4,7 @@ import { playerAPI } from '../../api/players';
 import apiClient from '../../api/client';
 import { User, Save, ArrowLeft, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { isSuperAdmin } from '../../utils/auth';
+import LoadingScreen from '../../components/LoadingScreen';
 
 const PlayerEdit = () => {
   const { id } = useParams();
@@ -188,11 +189,7 @@ const PlayerEdit = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-gray-600">読み込み中...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
