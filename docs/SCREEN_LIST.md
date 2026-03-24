@@ -120,6 +120,16 @@
 
 ---
 
+## 11. LINE通知設定
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 35 | `/settings/line` | `LineSettings.jsx` | QRコード表示、通知種別トグル | ALL | LINE通知設定（有効化/無効化、友だち追加案内、通知種別ON/OFF） |
+| 36 | `/admin/line/channels` | `LineChannelManagement.jsx` | ステータス統計、チャネル一覧テーブル、追加フォーム | SUPER_ADMIN | LINEチャネル管理 |
+| 37 | `/admin/line/schedule` | `LineScheduleSettings.jsx` | 通知種別トグル、送信日数入力 | SUPER_ADMIN | LINE通知スケジュール設定 |
+
+---
+
 ## 共通UIコンポーネント
 
 | コンポーネント | ファイル | 用途 |
@@ -164,6 +174,9 @@
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | SUPER_ADMIN |
 | Googleカレンダー連携 | （OAuth） | ALL |
+| LINE通知設定 | `/settings/line` | ALL |
+| LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
+| LINE通知スケジュール | `/admin/line/schedule` | SUPER_ADMIN |
 | ログアウト | — | ALL |
 
 ---
@@ -175,6 +188,8 @@ karuta-tracker-ui/src/
 ├── App.jsx                          # ルート定義
 ├── context/AuthContext.jsx          # 認証コンテキスト
 ├── utils/auth.js                    # 認証ユーティリティ
+├── api/
+│   └── line.js                      # LINE通知APIクライアント
 ├── components/
 │   ├── Layout.jsx
 │   ├── PrivateRoute.jsx
@@ -207,6 +222,10 @@ karuta-tracker-ui/src/
     │   ├── LotteryResults.jsx
     │   ├── WaitlistStatus.jsx
     │   └── OfferResponse.jsx
+    ├── line/
+    │   ├── LineSettings.jsx
+    │   ├── LineChannelManagement.jsx
+    │   └── LineScheduleSettings.jsx
     ├── notifications/
     │   └── NotificationList.jsx
     ├── pairings/

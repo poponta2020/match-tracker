@@ -32,6 +32,18 @@ import LotteryResults from './pages/lottery/LotteryResults';
 import WaitlistStatus from './pages/lottery/WaitlistStatus';
 import OfferResponse from './pages/lottery/OfferResponse';
 import NotificationList from './pages/notifications/NotificationList';
+import LineSettings from './pages/line/LineSettings';
+import LineChannelManagement from './pages/line/LineChannelManagement';
+import LineScheduleSettings from './pages/line/LineScheduleSettings';
+
+/**
+ * PrivateRoute + Layout の繰り返しを簡潔にするヘルパー
+ */
+const ProtectedPage = ({ children }) => (
+  <PrivateRoute>
+    <Layout>{children}</Layout>
+  </PrivateRoute>
+);
 
 function App() {
   return (
@@ -39,6 +51,7 @@ function App() {
       <Router>
         <AuthProvider>
           <Routes>
+            {/* 公開ページ */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -47,290 +60,59 @@ function App() {
               path="/"
               element={
                 <AuthRoute
-                  authenticated={
-                    <PrivateRoute>
-                      <Layout>
-                        <Home />
-                      </Layout>
-                    </PrivateRoute>
-                  }
+                  authenticated={<ProtectedPage><Home /></ProtectedPage>}
                   unauthenticated={<Landing />}
                 />
               }
             />
-            <Route
-              path="/matches"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <MatchList />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/matches/new"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <MatchForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/matches/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <MatchDetail />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/matches/:id/edit"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <MatchForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/matches/bulk-input/:sessionId"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <BulkResultInput />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/matches/results/:sessionId?"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <MatchResultsView />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/practice"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PracticeList />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/practice/new"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PracticeForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/practice/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PracticeDetail />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/practice/:id/edit"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PracticeForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/practice/participation"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PracticeParticipation />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/lottery/results"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <LotteryResults />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/lottery/waitlist"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <WaitlistStatus />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/lottery/offer-response"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <OfferResponse />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/notifications"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <NotificationList />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/statistics"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <div className="text-center py-20">
-                      <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                        統計ページ
-                      </h2>
-                      <p className="text-gray-600">実装中...</p>
-                    </div>
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/pairings"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PairingGenerator />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/pairings/summary"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PairingSummary />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/players"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PlayerList />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/players/new"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PlayerEdit />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/players/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PlayerDetail />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/players/:id/edit"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <PlayerEdit />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <Profile />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/profile/edit"
-              element={
-                <PrivateRoute>
-                  <ProfileEdit />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/venues"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <VenueList />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/venues/new"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <VenueForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/venues/edit/:id"
-              element={
-                <PrivateRoute>
-                  <Layout>
-                    <VenueForm />
-                  </Layout>
-                </PrivateRoute>
-              }
-            />
+
+            {/* 試合 */}
+            <Route path="/matches" element={<ProtectedPage><MatchList /></ProtectedPage>} />
+            <Route path="/matches/new" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
+            <Route path="/matches/:id" element={<ProtectedPage><MatchDetail /></ProtectedPage>} />
+            <Route path="/matches/:id/edit" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
+            <Route path="/matches/bulk-input/:sessionId" element={<ProtectedPage><BulkResultInput /></ProtectedPage>} />
+            <Route path="/matches/results/:sessionId?" element={<ProtectedPage><MatchResultsView /></ProtectedPage>} />
+
+            {/* 練習 */}
+            <Route path="/practice" element={<ProtectedPage><PracticeList /></ProtectedPage>} />
+            <Route path="/practice/new" element={<ProtectedPage><PracticeForm /></ProtectedPage>} />
+            <Route path="/practice/:id" element={<ProtectedPage><PracticeDetail /></ProtectedPage>} />
+            <Route path="/practice/:id/edit" element={<ProtectedPage><PracticeForm /></ProtectedPage>} />
+            <Route path="/practice/participation" element={<ProtectedPage><PracticeParticipation /></ProtectedPage>} />
+
+            {/* 抽選 */}
+            <Route path="/lottery/results" element={<ProtectedPage><LotteryResults /></ProtectedPage>} />
+            <Route path="/lottery/waitlist" element={<ProtectedPage><WaitlistStatus /></ProtectedPage>} />
+            <Route path="/lottery/offer-response" element={<ProtectedPage><OfferResponse /></ProtectedPage>} />
+
+            {/* 対戦組み合わせ */}
+            <Route path="/pairings" element={<ProtectedPage><PairingGenerator /></ProtectedPage>} />
+            <Route path="/pairings/summary" element={<ProtectedPage><PairingSummary /></ProtectedPage>} />
+
+            {/* 選手 */}
+            <Route path="/players" element={<ProtectedPage><PlayerList /></ProtectedPage>} />
+            <Route path="/players/new" element={<ProtectedPage><PlayerEdit /></ProtectedPage>} />
+            <Route path="/players/:id" element={<ProtectedPage><PlayerDetail /></ProtectedPage>} />
+            <Route path="/players/:id/edit" element={<ProtectedPage><PlayerEdit /></ProtectedPage>} />
+
+            {/* プロフィール */}
+            <Route path="/profile" element={<ProtectedPage><Profile /></ProtectedPage>} />
+            <Route path="/profile/edit" element={<PrivateRoute><ProfileEdit /></PrivateRoute>} />
+
+            {/* 会場 */}
+            <Route path="/venues" element={<ProtectedPage><VenueList /></ProtectedPage>} />
+            <Route path="/venues/new" element={<ProtectedPage><VenueForm /></ProtectedPage>} />
+            <Route path="/venues/edit/:id" element={<ProtectedPage><VenueForm /></ProtectedPage>} />
+
+            {/* 通知 */}
+            <Route path="/notifications" element={<ProtectedPage><NotificationList /></ProtectedPage>} />
+
+            {/* LINE通知設定 */}
+            <Route path="/settings/line" element={<ProtectedPage><LineSettings /></ProtectedPage>} />
+            <Route path="/admin/line/channels" element={<ProtectedPage><LineChannelManagement /></ProtectedPage>} />
+            <Route path="/admin/line/schedule" element={<ProtectedPage><LineScheduleSettings /></ProtectedPage>} />
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

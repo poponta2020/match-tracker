@@ -49,6 +49,7 @@
 - Jsoup 1.17.2（伝助HTMLスクレイピング）
 - Google Calendar API v3（カレンダー同期）
 - Web Push（nl.martijndwars:web-push:5.1.1 + Bouncy Castle）
+- **LINE Messaging API SDK** — LINE Bot SDK v9.14.0（Push API、Webhook、Postback）
 - Testcontainers（テスト用PostgreSQL）
 
 **フロントエンド**:
@@ -124,6 +125,10 @@ Entity Layer (JPA Entity)
                          多───1 [practice_sessions]
 [push_subscriptions] 多───1 [players]
 [densuke_urls]
+[line_channels] 1───多 [line_channel_assignments] 多───1 [players]
+[line_channels] 1───多 [line_message_log] 多───1 [players]
+[line_notification_preferences] 多───1 [players]
+[line_notification_schedule_settings]
 ```
 
 ### 3.2 テーブル定義
@@ -385,6 +390,95 @@ Entity Layer (JPA Entity)
 
 **制約**:
 - UNIQUE (year, month)
+
+---
+
+#### line_channels（LINEチャネル管理）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | チャネルID |
+| channel_name | VARCHAR(100) | | 管理用表示名 |
+| line_channel_id | VARCHAR(50) | NOT NULL | LINE発行のチャネルID |
+| channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（AES-256-GCM暗号化） |
+| channel_access_token | TEXT | NOT NULL | アクセストークン（AES-256-GCM暗号化） |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE' | AVAILABLE/ASSIGNED/LINKED/DISABLED |
+| friend_add_url | TEXT | | 友だち追加URL |
+| qr_code_url | TEXT | | QRコード画像URL |
+| monthly_message_count | INT | NOT NULL, DEFAULT 0 | 当月送信数 |
+| message_count_reset_at | DATETIME | | 送信数リセット日時 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**インデックス**:
+- `idx_line_channel_status` (status)
+
+---
+
+#### line_channel_assignments（チャネル割り当て）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 割り当てID |
+| line_channel_id | BIGINT | NOT NULL, FK(line_channels) | LINEチャネルID |
+| player_id | BIGINT | NOT NULL, FK(players) | プレイヤーID |
+| line_user_id | VARCHAR(50) | | LINE userId（follow時に取得） |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | PENDING/LINKED/UNLINKED/RECLAIMED |
+| assigned_at | DATETIME | NOT NULL | 割り当て日時 |
+| linked_at | DATETIME | | follow完了日時 |
+| unlinked_at | DATETIME | | 解除日時 |
+| reclaim_warned_at | DATETIME | | 回収警告通知日時 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+
+**インデックス**:
+- `idx_line_assignment_player` (player_id)
+- `idx_line_assignment_channel` (line_channel_id)
+- `idx_line_assignment_status` (status)
+
+---
+
+#### line_notification_preferences（LINE通知設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 設定ID |
+| player_id | BIGINT | NOT NULL, UNIQUE, FK(players) | プレイヤーID |
+| lottery_result | BOOLEAN | NOT NULL, DEFAULT TRUE | 抽選結果通知 |
+| waitlist_offer | BOOLEAN | NOT NULL, DEFAULT TRUE | キャンセル待ち連絡通知 |
+| offer_expired | BOOLEAN | NOT NULL, DEFAULT TRUE | オファー期限切れ通知 |
+| match_pairing | BOOLEAN | NOT NULL, DEFAULT TRUE | 対戦組み合わせ通知 |
+| practice_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加予定リマインダー通知 |
+| deadline_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 締め切りリマインダー通知 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+---
+
+#### line_notification_schedule_settings（LINE通知スケジュール設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 設定ID |
+| notification_type | VARCHAR(30) | NOT NULL, UNIQUE | 通知種別（PRACTICE_REMINDER/DEADLINE_REMINDER） |
+| enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効/無効 |
+| days_before | VARCHAR(50) | NOT NULL | 送信日数（JSON配列。例: "[3, 1]"） |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+| updated_by | BIGINT | | 最終更新者のplayer_id |
+
+---
+
+#### line_message_log（LINE送信ログ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ログID |
+| line_channel_id | BIGINT | NOT NULL, FK(line_channels) | LINEチャネルID |
+| player_id | BIGINT | NOT NULL, FK(players) | プレイヤーID |
+| notification_type | VARCHAR(30) | NOT NULL | 通知種別 |
+| message_content | TEXT | NOT NULL | 送信メッセージ内容 |
+| status | VARCHAR(20) | NOT NULL | SUCCESS/FAILED |
+| error_message | TEXT | | 失敗時のエラー内容 |
+| reference_id | BIGINT | | 関連先ID |
+| sent_at | DATETIME | NOT NULL | 送信日時 |
+
+**インデックス**:
+- `idx_line_log_channel` (line_channel_id)
+- `idx_line_log_player` (player_id)
+- `idx_line_log_type_sent` (notification_type, sent_at)
 
 ---
 
@@ -877,6 +971,38 @@ Entity Layer (JPA Entity)
 
 ---
 
+### 4.12 LINE通知 API
+
+#### ユーザー向け
+| メソッド | パス | 権限 | 説明 |
+|---------|------|------|------|
+| POST | `/api/line/enable` | ALL | LINE通知有効化（チャネル割り当て） |
+| DELETE | `/api/line/disable` | ALL | LINE通知無効化（チャネル解放） |
+| GET | `/api/line/status` | ALL | LINE連携状態取得 |
+| GET | `/api/line/preferences` | ALL | 通知設定取得 |
+| PUT | `/api/line/preferences` | ALL | 通知設定更新 |
+
+#### 管理者向け
+| メソッド | パス | 権限 | 説明 |
+|---------|------|------|------|
+| GET | `/api/admin/line/channels` | SUPER_ADMIN | チャネル一覧取得 |
+| POST | `/api/admin/line/channels` | SUPER_ADMIN | チャネル個別登録 |
+| POST | `/api/admin/line/channels/import` | SUPER_ADMIN | チャネル一括登録 |
+| PUT | `/api/admin/line/channels/{id}/disable` | SUPER_ADMIN | チャネル無効化 |
+| PUT | `/api/admin/line/channels/{id}/enable` | SUPER_ADMIN | チャネル有効化 |
+| PUT | `/api/admin/line/channels/{id}/release` | SUPER_ADMIN | チャネル強制割り当て解除 |
+| POST | `/api/admin/line/send/lottery-result` | ADMIN+ | 抽選結果LINE送信 |
+| POST | `/api/admin/line/send/match-pairing` | ADMIN+ | 対戦組み合わせLINE送信 |
+| GET | `/api/admin/line/schedule-settings` | SUPER_ADMIN | スケジュール設定取得 |
+| PUT | `/api/admin/line/schedule-settings` | SUPER_ADMIN | スケジュール設定更新 |
+
+#### Webhook
+| メソッド | パス | 権限 | 説明 |
+|---------|------|------|------|
+| POST | `/api/line/webhook/{channelId}` | PUBLIC | LINE Webhookエンドポイント |
+
+---
+
 ## 5. 画面設計
 
 ### 5.1 画面一覧
@@ -910,6 +1036,9 @@ Entity Layer (JPA Entity)
 | 通知一覧 | /notifications | 全員 | アプリ内通知一覧 |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
+| LINE通知設定 | /settings/line | 全員 | LINE通知設定（有効化/無効化、QRコード表示、通知種別ON/OFF） |
+| LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | LINEチャネル管理（統計・一覧・追加・無効化/有効化/解除） |
+| LINE通知スケジュール設定 | /admin/line/schedule | SUPER_ADMIN | LINE通知スケジュール設定（リマインダー送信タイミング） |
 
 ---
 

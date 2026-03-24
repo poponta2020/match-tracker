@@ -1,0 +1,87 @@
+package com.karuta.matchtracker.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.LocalDateTime;
+
+/**
+ * LINE通知設定エンティティ（ユーザーごとの通知種別ON/OFF）
+ */
+@Entity
+@Table(name = "line_notification_preferences", indexes = {
+    @Index(name = "idx_line_pref_player", columnList = "player_id", unique = true)
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class LineNotificationPreference {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    /** プレイヤーID（UNIQUE） */
+    @Column(name = "player_id", nullable = false, unique = true)
+    private Long playerId;
+
+    /** 抽選結果 */
+    @Column(name = "lottery_result", nullable = false)
+    @Builder.Default
+    private Boolean lotteryResult = true;
+
+    /** キャンセル待ち連絡 */
+    @Column(name = "waitlist_offer", nullable = false)
+    @Builder.Default
+    private Boolean waitlistOffer = true;
+
+    /** オファー期限切れ */
+    @Column(name = "offer_expired", nullable = false)
+    @Builder.Default
+    private Boolean offerExpired = true;
+
+    /** 対戦組み合わせ */
+    @Column(name = "match_pairing", nullable = false)
+    @Builder.Default
+    private Boolean matchPairing = true;
+
+    /** 参加予定リマインダー */
+    @Column(name = "practice_reminder", nullable = false)
+    @Builder.Default
+    private Boolean practiceReminder = true;
+
+    /** 締め切りリマインダー */
+    @Column(name = "deadline_reminder", nullable = false)
+    @Builder.Default
+    private Boolean deadlineReminder = true;
+
+    /** 更新日時 */
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 指定された通知種別がONかどうかを返す
+     */
+    public boolean isEnabled(LineNotificationType type) {
+        return switch (type) {
+            case LOTTERY_RESULT -> lotteryResult;
+            case WAITLIST_OFFER -> waitlistOffer;
+            case OFFER_EXPIRED -> offerExpired;
+            case MATCH_PAIRING -> matchPairing;
+            case PRACTICE_REMINDER -> practiceReminder;
+            case DEADLINE_REMINDER -> deadlineReminder;
+            case POSTBACK_RESPONSE -> true; // 常にON
+        };
+    }
+}

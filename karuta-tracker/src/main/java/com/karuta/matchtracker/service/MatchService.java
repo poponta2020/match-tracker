@@ -31,6 +31,10 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class MatchService {
 
+    static final String RESULT_WIN = "勝ち";
+    static final String RESULT_LOSE = "負け";
+    static final String RESULT_DRAW = "引き分け";
+
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
@@ -260,7 +264,7 @@ public class MatchService {
         // 総計を計算
         long totalMatches = filteredMatches.size();
         long totalWins = filteredMatches.stream()
-                .filter(m -> "勝ち".equals(m.getResult()))
+                .filter(m -> RESULT_WIN.equals(m.getResult()))
                 .count();
 
         com.karuta.matchtracker.dto.RankStatisticsDto totalStats =
@@ -287,7 +291,7 @@ public class MatchService {
 
             long rankTotal = rankMatches.size();
             long rankWins = rankMatches.stream()
-                    .filter(m -> "勝ち".equals(m.getResult()))
+                    .filter(m -> RESULT_WIN.equals(m.getResult()))
                     .count();
 
             byRankMap.put(rank, com.karuta.matchtracker.dto.RankStatisticsDto.create(rank, rankTotal, rankWins));
@@ -333,9 +337,9 @@ public class MatchService {
         Long loserId = null;
 
         // 結果に基づいて勝者を決定
-        if ("勝ち".equals(request.getResult())) {
+        if (RESULT_WIN.equals(request.getResult())) {
             winnerId = request.getPlayerId();
-        } else if ("負け".equals(request.getResult())) {
+        } else if (RESULT_LOSE.equals(request.getResult())) {
             winnerId = null; // 対戦相手が勝者だが、IDがないのでnull
         } else {
             winnerId = null; // 引き分け
@@ -447,9 +451,9 @@ public class MatchService {
 
         // 結果に基づいて勝者を決定
         Long winnerId;
-        if ("勝ち".equals(request.getResult())) {
+        if (RESULT_WIN.equals(request.getResult())) {
             winnerId = request.getPlayerId();
-        } else if ("負け".equals(request.getResult())) {
+        } else if (RESULT_LOSE.equals(request.getResult())) {
             winnerId = 0L; // 対戦相手が勝者
         } else {
             winnerId = 0L; // 引き分け
@@ -529,6 +533,33 @@ public class MatchService {
     }
 
     /**
+     * 試合リストから全選手IDを収集し、名前マップを構築する
+     */
+    private Map<Long, String> collectPlayerNames(List<Match> matches) {
+        List<Long> playerIds = matches.stream()
+                .flatMap(m -> List.of(m.getPlayer1Id(), m.getPlayer2Id()).stream())
+                .filter(id -> id != 0L)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> playerNames = new HashMap<>();
+        playerRepository.findAllById(playerIds).forEach(p -> playerNames.put(p.getId(), p.getName()));
+        return playerNames;
+    }
+
+    /**
+     * 試合の勝敗結果文字列を算出する
+     */
+    private String determineResult(Match match, Long viewingPlayerId) {
+        if (match.getWinnerId() == null || match.getWinnerId() == 0L) {
+            return RESULT_DRAW;
+        }
+        if (match.getWinnerId().equals(viewingPlayerId)) {
+            return RESULT_WIN;
+        }
+        return RESULT_LOSE;
+    }
+
+    /**
      * 試合リストに選手名を設定
      */
     private List<MatchDto> enrichMatchesWithPlayerNames(List<Match> matches) {
@@ -536,16 +567,7 @@ public class MatchService {
             return List.of();
         }
 
-        // 全選手IDを収集（0は除外）
-        List<Long> playerIds = matches.stream()
-                .flatMap(m -> List.of(m.getPlayer1Id(), m.getPlayer2Id()).stream())
-                .filter(id -> id != 0L)
-                .distinct()
-                .collect(Collectors.toList());
-
-        // 選手名のマップを作成
-        Map<Long, String> playerNames = new HashMap<>();
-        playerRepository.findAllById(playerIds).forEach(p -> playerNames.put(p.getId(), p.getName()));
+        Map<Long, String> playerNames = collectPlayerNames(matches);
 
         // DTOに変換して選手名を設定
         return matches.stream()
@@ -559,13 +581,13 @@ public class MatchService {
 
                         // 詳細試合の結果を設定
                         if (match.getWinnerId() == 0L) {
-                            dto.setResult("引き分け");
+                            dto.setResult(RESULT_DRAW);
                             dto.setWinnerName(null);  // 引き分けの場合は明示的にnull
                         } else if (match.getWinnerId().equals(match.getPlayer1Id())) {
-                            dto.setResult("勝ち");
+                            dto.setResult(RESULT_WIN);
                             dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         } else if (match.getWinnerId().equals(match.getPlayer2Id())) {
-                            dto.setResult("負け");
+                            dto.setResult(RESULT_LOSE);
                             dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         }
 
@@ -587,13 +609,13 @@ public class MatchService {
 
                         // 結果を計算
                         if (match.getWinnerId() == 0L) {
-                            dto.setResult("引き分け");
+                            dto.setResult(RESULT_DRAW);
                             dto.setWinnerName(null);  // 引き分けの場合は明示的にnull
                         } else if (match.getWinnerId().equals(registeredPlayerId)) {
-                            dto.setResult("勝ち");
+                            dto.setResult(RESULT_WIN);
                             dto.setWinnerName(playerNames.get(match.getWinnerId()));
                         } else {
-                            dto.setResult("負け");
+                            dto.setResult(RESULT_LOSE);
                             dto.setWinnerName(match.getOpponentName());  // 未登録選手が勝者の場合
                         }
                     }
@@ -624,61 +646,30 @@ public class MatchService {
             return List.of();
         }
 
-        // 全選手IDを収集（0は除外）
-        List<Long> playerIds = matches.stream()
-                .flatMap(m -> List.of(m.getPlayer1Id(), m.getPlayer2Id()).stream())
-                .filter(id -> id != 0L)
-                .distinct()
-                .collect(Collectors.toList());
+        Map<Long, String> playerNames = collectPlayerNames(matches);
 
-        // 選手名のマップを作成
-        Map<Long, String> playerNames = new HashMap<>();
-        playerRepository.findAllById(playerIds).forEach(p -> playerNames.put(p.getId(), p.getName()));
-
-        // DTOに変換して選手名を設定
         return matches.stream()
                 .map(match -> {
                     MatchDto dto = MatchDto.fromEntity(match);
 
-                    // 通常の試合（両選手がシステムに登録されている場合）
                     dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                     dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
-                    // winnerIdが0L（引き分け）の場合はnull、それ以外は選手名を設定
                     dto.setWinnerName(match.getWinnerId() == 0L ? null : playerNames.get(match.getWinnerId()));
 
-                    // 簡易試合（対戦相手が未登録の場合）
-                    if ((match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L) && match.getOpponentName() != null) {
-                        // 登録選手のIDを特定
-                        Long registeredPlayerId = match.getPlayer1Id() == 0L ? match.getPlayer2Id() : match.getPlayer1Id();
+                    boolean isSimpleMatch = (match.getPlayer1Id() == 0L || match.getPlayer2Id() == 0L)
+                            && match.getOpponentName() != null;
 
-                        // opponentNameは既にエンティティから設定されている
-
-                        // 結果を計算
-                        if (match.getWinnerId() == 0L) {
-                            dto.setResult("引き分け");
-                        } else if (match.getWinnerId().equals(registeredPlayerId)) {
-                            dto.setResult("勝ち");
-                        } else {
-                            dto.setResult("負け");
-                        }
+                    if (isSimpleMatch) {
+                        Long registeredPlayerId = match.getPlayer1Id() == 0L
+                                ? match.getPlayer2Id() : match.getPlayer1Id();
+                        dto.setResult(determineResult(match, registeredPlayerId));
                     } else {
-                        // 通常試合の場合、viewingPlayerIdの視点で情報を設定
-
-                        // 対戦相手名を設定
                         if (match.getPlayer1Id().equals(viewingPlayerId)) {
                             dto.setOpponentName(playerNames.get(match.getPlayer2Id()));
                         } else if (match.getPlayer2Id().equals(viewingPlayerId)) {
                             dto.setOpponentName(playerNames.get(match.getPlayer1Id()));
                         }
-
-                        // 結果を設定
-                        if (match.getWinnerId() == null || match.getWinnerId() == 0L) {
-                            dto.setResult("引き分け");
-                        } else if (match.getWinnerId().equals(viewingPlayerId)) {
-                            dto.setResult("勝ち");
-                        } else {
-                            dto.setResult("負け");
-                        }
+                        dto.setResult(determineResult(match, viewingPlayerId));
                     }
 
                     return dto;

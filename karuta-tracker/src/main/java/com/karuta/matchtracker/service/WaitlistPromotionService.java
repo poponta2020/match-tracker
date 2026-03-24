@@ -30,6 +30,7 @@ public class WaitlistPromotionService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final NotificationService notificationService;
+    private final LineNotificationService lineNotificationService;
 
     /**
      * 当選者が参加をキャンセルする
@@ -97,8 +98,15 @@ public class WaitlistPromotionService {
         log.info("Offered waitlist #{} (player {}) for session {} match {}. Deadline: {}",
                 next.getWaitlistNumber(), next.getPlayerId(), sessionId, matchNumber, deadline);
 
-        // 通知を送信
+        // アプリ内通知 + Web Push送信
         notificationService.createOfferNotification(next);
+
+        // LINE通知送信（ボタンテンプレート）
+        try {
+            lineNotificationService.sendWaitlistOfferTemplate(next);
+        } catch (Exception e) {
+            log.warn("Failed to send LINE waitlist offer for player {}: {}", next.getPlayerId(), e.getMessage());
+        }
     }
 
     /**
@@ -158,6 +166,13 @@ public class WaitlistPromotionService {
                 participant.getMatchNumber(), participant.getWaitlistNumber());
 
         notificationService.createOfferExpiredNotification(participant);
+
+        // LINE通知送信（オファー期限切れ）
+        try {
+            lineNotificationService.sendOfferExpiredNotification(participant);
+        } catch (Exception e) {
+            log.warn("Failed to send LINE offer expired for player {}: {}", participant.getPlayerId(), e.getMessage());
+        }
 
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));

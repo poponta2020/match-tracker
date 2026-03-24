@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,15 @@ class PracticeSessionControllerTest {
 
     @MockitoBean
     private PracticeSessionService practiceSessionService;
+
+    @MockitoBean
+    private PracticeParticipantService practiceParticipantService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.service.DensukeImportService densukeImportService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
 
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
