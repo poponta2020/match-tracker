@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
-import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { Save, AlertCircle, Pencil, X } from 'lucide-react';
@@ -46,14 +45,14 @@ const BulkResultInput = () => {
         setError(null);
 
         // 練習セッション情報取得
-        const sessionResponse = await apiClient.get(`/practice-sessions/${sessionId}`);
+        const sessionResponse = await practiceAPI.getById(sessionId);
         const sessionData = sessionResponse.data;
         setSession(sessionData);
 
         // 対戦ペアリングと既存試合結果と参加者を並列取得
         const [pairingsResponse, matchesResponse, participantsResponse] = await Promise.all([
           pairingAPI.getByDate(sessionData.sessionDate),
-          apiClient.get(`/matches?date=${sessionData.sessionDate}`),
+          matchAPI.getByDate(sessionData.sessionDate),
           practiceAPI.getParticipants(sessionId),
         ]);
         setPairings(pairingsResponse.data || []);

@@ -31,4 +31,7 @@ export const playerAPI = {
 
   // プロフィール更新
   updateProfile: (id, data) => apiClient.put(`/players/${id}/profile`, data),
+
+  // ロール更新
+  updateRole: (id, role) => apiClient.put(`/players/${id}/role?role=${role}`),
 };

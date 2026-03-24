@@ -2,9 +2,9 @@ import apiClient from './client';
 
 export const pairingAPI = {
   // 指定日の対戦組み合わせを取得
-  getByDate: (date) =>
+  getByDate: (date, params = {}) =>
     apiClient.get('/match-pairings/date', {
-      params: { date },
+      params: { date, ...params },
     }),
 
   // 指定日・試合番号の対戦組み合わせを取得

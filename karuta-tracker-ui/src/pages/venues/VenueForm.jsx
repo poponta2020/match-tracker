@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import apiClient from '../../api/client';
+import { venueAPI } from '../../api';
 import './VenueForm.css';
 
 function VenueForm() {
@@ -31,7 +31,7 @@ function VenueForm() {
   const fetchVenue = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/venues/${id}`);
+      const response = await venueAPI.getById(id);
       const data = response.data;
 
       // 時刻を "HH:MM" 形式に変換
@@ -177,9 +177,9 @@ function VenueForm() {
       };
 
       if (isEditMode) {
-        await apiClient.put(`/venues/${id}`, requestData);
+        await venueAPI.update(id, requestData);
       } else {
-        await apiClient.post('/venues', requestData);
+        await venueAPI.create(requestData);
       }
 
       navigate('/venues');
