@@ -95,7 +95,9 @@
       "Bash(timeout 10 psql -h dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com -U karuta -d karuta_tracker_b297 -c \"SELECT version\\(\\);\")",
       "Bash(./mvnw compile:*)",
       "Bash(git pull:*)",
-      "Bash(./gradlew dependencies:*)"
+      "Bash(./gradlew dependencies:*)",
+      "Bash(curl -s \"https://developers.line.biz/en/reference/messaging-api/#send-push-message\")",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
