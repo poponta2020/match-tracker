@@ -6,29 +6,21 @@ import { notificationAPI } from '../api/notifications';
 import {
   ArrowRight,
   ChevronsRight,
-  Menu,
   Calendar,
   Clock,
   MapPin,
-  Shuffle,
-  Users,
   Trophy,
-  User,
-  LogOut,
-  RefreshCw,
   X,
-  Bell,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 import { sortPlayersByRank } from '../utils/playerSort';
 import PlayerChip from '../components/PlayerChip';
 import LoadingScreen from '../components/LoadingScreen';
+import NavigationMenu from '../components/NavigationMenu';
 
 const Home = () => {
-  const { currentPlayer, logout } = useAuth();
+  const { currentPlayer } = useAuth();
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [nextPractice, setNextPractice] = useState(null);
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
@@ -134,17 +126,6 @@ const Home = () => {
     tokenClient.requestAccessToken();
   }, [currentPlayer, isMobile, executeSyncWithToken]);
 
-  // メニュー外クリックで閉じる
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
     try {
@@ -237,98 +218,11 @@ const Home = () => {
 
   return (
     <div className="space-y-8">
-      {/* ナビゲーションバー */}
-      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-white">{currentPlayer?.name}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Link to="/notifications" className="relative p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
-              <Bell className="w-5 h-5 text-white" />
-              {unreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </Link>
-            <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors"
-            >
-              <Menu className="w-6 h-6 text-white" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                <button
-                  onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
-                >
-                  <User className="w-4 h-4 text-[#6b7280]" />
-                  プロフィール
-                </button>
-                {isSuperAdmin() && (
-                  <>
-                    <div className="border-t border-gray-100 my-1" />
-                    <button
-                      onClick={() => { setMenuOpen(false); navigate('/players'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
-                    >
-                      <Users className="w-4 h-4 text-[#6b7280]" />
-                      選手管理
-                    </button>
-                    <button
-                      onClick={() => { setMenuOpen(false); navigate('/venues'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
-                    >
-                      <MapPin className="w-4 h-4 text-[#6b7280]" />
-                      会場管理
-                    </button>
-                    <button
-                      onClick={() => { setMenuOpen(false); navigate('/practice/new'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
-                    >
-                      <Calendar className="w-4 h-4 text-[#6b7280]" />
-                      練習日登録
-                    </button>
-                  </>
-                )}
-                {isAdmin() && (
-                  <>
-                    <div className="border-t border-gray-100 my-1" />
-                    <button
-                      onClick={() => { setMenuOpen(false); navigate('/pairings'); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
-                    >
-                      <Shuffle className="w-4 h-4 text-[#6b7280]" />
-                      組み合わせ作成
-                    </button>
-                  </>
-                )}
-                <div className="border-t border-gray-100 my-1" />
-                <button
-                  onClick={() => { setMenuOpen(false); handleCalendarSync(); }}
-                  disabled={calSyncing}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 text-[#6b7280] ${calSyncing ? 'animate-spin' : ''}`} />
-                  {calSyncing ? '同期中...' : 'Googleカレンダー同期'}
-                </button>
-                <div className="border-t border-gray-100 my-1" />
-                <button
-                  onClick={() => { setMenuOpen(false); logout(); navigate('/login'); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  ログアウト
-                </button>
-              </div>
-            )}
-          </div>
-          </div>
-        </div>
-      </div>
+      <NavigationMenu
+        unreadCount={unreadCount}
+        calSyncing={calSyncing}
+        onCalendarSync={handleCalendarSync}
+      />
 
       {/* コンテンツ */}
       <div className="pt-16">

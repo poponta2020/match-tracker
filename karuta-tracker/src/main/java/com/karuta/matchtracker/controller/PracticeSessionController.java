@@ -3,6 +3,7 @@ package com.karuta.matchtracker.controller;
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import java.util.Map;
 public class PracticeSessionController {
 
     private final PracticeSessionService practiceSessionService;
+    private final PracticeParticipantService practiceParticipantService;
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
     private final com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
 
@@ -125,7 +127,7 @@ public class PracticeSessionController {
             @RequestParam int year,
             @RequestParam int month) {
         log.debug("GET /api/practice-sessions/participation-rate-top3?year={}&month={}", year, month);
-        List<ParticipationRateDto> top3 = practiceSessionService.getParticipationRateTop3(year, month);
+        List<ParticipationRateDto> top3 = practiceParticipantService.getParticipationRateTop3(year, month);
         return ResponseEntity.ok(top3);
     }
 
@@ -196,7 +198,7 @@ public class PracticeSessionController {
     @GetMapping("/{id}/participants")
     public ResponseEntity<List<PlayerDto>> getParticipants(@PathVariable Long id) {
         log.debug("GET /api/practice-sessions/{}/participants - Getting participants", id);
-        List<PlayerDto> participants = practiceSessionService.getParticipants(id);
+        List<PlayerDto> participants = practiceParticipantService.getParticipants(id);
         return ResponseEntity.ok(participants);
     }
 
@@ -278,7 +280,7 @@ public class PracticeSessionController {
             @Valid @RequestBody PracticeParticipationRequest request) {
         log.info("POST /api/practice-sessions/participations - Registering participations for player {}",
                 request.getPlayerId());
-        practiceSessionService.registerParticipations(request);
+        practiceParticipantService.registerParticipations(request);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -296,7 +298,7 @@ public class PracticeSessionController {
             @RequestParam int year,
             @RequestParam int month) {
         log.debug("GET /api/practice-sessions/participations/player/{}?year={}&month={}", playerId, year, month);
-        Map<Long, List<Integer>> participations = practiceSessionService.getPlayerParticipationsByMonth(playerId, year, month);
+        Map<Long, List<Integer>> participations = practiceParticipantService.getPlayerParticipationsByMonth(playerId, year, month);
         return ResponseEntity.ok(participations);
     }
 
@@ -309,7 +311,7 @@ public class PracticeSessionController {
             @RequestParam int year,
             @RequestParam int month) {
         log.debug("GET /api/practice-sessions/participations/player/{}/status?year={}&month={}", playerId, year, month);
-        PlayerParticipationStatusDto status = practiceSessionService.getPlayerParticipationStatusByMonth(playerId, year, month);
+        PlayerParticipationStatusDto status = practiceParticipantService.getPlayerParticipationStatusByMonth(playerId, year, month);
         return ResponseEntity.ok(status);
     }
 
@@ -329,7 +331,7 @@ public class PracticeSessionController {
             @Valid @RequestBody MatchParticipantsRequest request) {
         log.info("PUT /api/practice-sessions/{}/matches/{}/participants - Setting participants",
                 sessionId, matchNumber);
-        practiceSessionService.setMatchParticipants(sessionId, matchNumber, request.getPlayerIds());
+        practiceParticipantService.setMatchParticipants(sessionId, matchNumber, request.getPlayerIds());
         return ResponseEntity.ok().build();
     }
 
@@ -349,7 +351,7 @@ public class PracticeSessionController {
             @PathVariable Long playerId) {
         log.info("POST /api/practice-sessions/date/{}/matches/{}/participants/{} - Adding participant to match",
                 date, matchNumber, playerId);
-        practiceSessionService.addParticipantToMatch(date, matchNumber, playerId);
+        practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId);
         // 更新後の練習セッション情報を返す
         PracticeSessionDto session = practiceSessionService.findByDate(date);
         return ResponseEntity.ok(session);
@@ -428,7 +430,7 @@ public class PracticeSessionController {
             @PathVariable Long playerId) {
         log.info("DELETE /api/practice-sessions/{}/matches/{}/participants/{} - Removing participant",
                 sessionId, matchNumber, playerId);
-        practiceSessionService.removeParticipantFromMatch(sessionId, matchNumber, playerId);
+        practiceParticipantService.removeParticipantFromMatch(sessionId, matchNumber, playerId);
         return ResponseEntity.noContent().build();
     }
 

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
-import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -153,8 +152,8 @@ const MatchResultsView = () => {
   const fetchDataForDate = async (date) => {
     const [sessionResponse, pairingsResponse, matchesResponse] = await Promise.all([
       practiceAPI.getByDate(date).catch(() => null),
-      apiClient.get('/match-pairings/date', { params: { date, light: true } }).catch(() => ({ data: [] })),
-      apiClient.get(`/matches?date=${date}`).catch(() => ({ data: [] })),
+      pairingAPI.getByDate(date, { light: true }).catch(() => ({ data: [] })),
+      matchAPI.getByDate(date).catch(() => ({ data: [] })),
     ]);
     return { sessionResponse, pairingsResponse, matchesResponse };
   };

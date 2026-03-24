@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../../api/client';
+import { venueAPI } from '../../api';
 import './VenueList.css';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -17,7 +17,7 @@ function VenueList() {
   const fetchVenues = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/venues');
+      const response = await venueAPI.getAll();
       setVenues(response.data);
     } catch (err) {
       setError(err.message);
@@ -32,7 +32,7 @@ function VenueList() {
     }
 
     try {
-      await apiClient.delete(`/venues/${id}`);
+      await venueAPI.delete(id);
 
       // 削除成功後、リストを再取得
       await fetchVenues();

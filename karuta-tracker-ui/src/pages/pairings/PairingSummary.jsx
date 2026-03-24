@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
+import { lineAPI } from '../../api/line';
 import { Copy, Check, ArrowLeft, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -133,6 +134,9 @@ const PairingSummary = () => {
   const [cardRules, setCardRules] = useState([]);
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
+  const [lineSending, setLineSending] = useState(false);
+  const [lineMessage, setLineMessage] = useState(null);
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -143,6 +147,7 @@ const PairingSummary = () => {
       try {
         const sessionRes = await practiceAPI.getByDate(date);
         const totalMatches = sessionRes.data?.totalMatches || 3;
+        if (sessionRes.data?.id) setSessionId(sessionRes.data.id);
 
         // 全試合の組み合わせを取得
         const promises = Array.from({ length: totalMatches }, (_, i) =>
@@ -183,6 +188,21 @@ const PairingSummary = () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
+    }
+  };
+
+  const handleLineSend = async () => {
+    if (!sessionId) return;
+    if (!window.confirm('対戦組み合わせをLINEで送信しますか？')) return;
+    setLineSending(true);
+    setLineMessage(null);
+    try {
+      await lineAPI.sendMatchPairing(sessionId);
+      setLineMessage({ type: 'success', text: 'LINE通知を送信しました' });
+    } catch (err) {
+      setLineMessage({ type: 'error', text: 'LINE通知の送信に失敗しました' });
+    } finally {
+      setLineSending(false);
     }
   };
 
@@ -244,6 +264,24 @@ const PairingSummary = () => {
           テキストは自由に編集できます。「札を再生成」で札ルールのみ再ランダムします。
         </p>
       </div>
+
+      {/* LINE通知送信 */}
+      {sessionId && (
+        <div>
+          {lineMessage && (
+            <div className={`mb-2 p-2 text-sm rounded-lg ${lineMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {lineMessage.text}
+            </div>
+          )}
+          <button
+            onClick={handleLineSend}
+            disabled={lineSending}
+            className="w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors font-medium"
+          >
+            {lineSending ? '送信中...' : 'LINE通知送信'}
+          </button>
+        </div>
+      )}
 
       <button
         onClick={() => navigate('/')}

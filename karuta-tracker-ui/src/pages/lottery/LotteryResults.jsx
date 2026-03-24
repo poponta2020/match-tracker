@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import { lineAPI } from '../../api/line';
+import { isAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
 
 /**
@@ -16,6 +18,8 @@ export default function LotteryResults() {
   });
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lineSending, setLineSending] = useState(false);
+  const [lineMessage, setLineMessage] = useState(null);
 
   useEffect(() => {
     fetchResults();
@@ -43,6 +47,20 @@ export default function LotteryResults() {
     });
   };
 
+  const handleLineSend = async () => {
+    if (!window.confirm(`${currentDate.year}年${currentDate.month}月の抽選結果をLINEで送信しますか？`)) return;
+    setLineSending(true);
+    setLineMessage(null);
+    try {
+      await lineAPI.sendLotteryResult(currentDate.year, currentDate.month);
+      setLineMessage({ type: 'success', text: 'LINE通知を送信しました' });
+    } catch (err) {
+      setLineMessage({ type: 'error', text: 'LINE通知の送信に失敗しました' });
+    } finally {
+      setLineSending(false);
+    }
+  };
+
   const getStatusBadge = (status, waitlistNumber) => {
     switch (status) {
       case 'WON': return <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-bold">当選</span>;
@@ -67,6 +85,24 @@ export default function LotteryResults() {
         <span className="text-lg font-semibold">{currentDate.year}年{currentDate.month}月</span>
         <button onClick={() => changeMonth(1)} className="p-2 rounded hover:bg-gray-100">&gt;</button>
       </div>
+
+      {/* 管理者: LINE送信ボタン */}
+      {isAdmin() && results.length > 0 && !loading && (
+        <div className="mb-4">
+          {lineMessage && (
+            <div className={`mb-2 p-2 text-sm rounded-lg ${lineMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {lineMessage.text}
+            </div>
+          )}
+          <button
+            onClick={handleLineSend}
+            disabled={lineSending}
+            className="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 disabled:opacity-50 text-sm font-medium"
+          >
+            {lineSending ? '送信中...' : 'LINE通知送信'}
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <LoadingScreen />

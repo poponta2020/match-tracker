@@ -3,8 +3,9 @@ package com.karuta.matchtracker.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalTime;
 
@@ -15,7 +16,8 @@ import java.time.LocalTime;
 @Table(name = "venue_match_schedules", uniqueConstraints = {
     @UniqueConstraint(name = "uk_venue_match", columnNames = {"venue_id", "match_number"})
 })
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
