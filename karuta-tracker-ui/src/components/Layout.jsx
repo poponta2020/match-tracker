@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home,
-  PlusSquare,
   Swords,
   Calendar,
   BarChart3,
@@ -13,7 +12,6 @@ const Layout = ({ children }) => {
   // ボトムナビゲーションの項目定義
   const bottomNavItems = [
     { name: 'Home', href: '/', icon: Home },
-    { name: 'Add', href: '/matches/new', icon: PlusSquare },
     { name: 'Match', href: '/matches/results', icon: Swords },
     { name: 'Schedule', href: '/practice', icon: Calendar },
     { name: 'Record', href: '/matches', icon: BarChart3 },
@@ -25,9 +23,6 @@ const Layout = ({ children }) => {
       return location.pathname === '/';
     }
     // 完全一致または特定のサブパスのみアクティブにする
-    if (href === '/matches/new') {
-      return location.pathname === '/matches/new';
-    }
     if (href === '/matches/results') {
       // /matches/results で始まる場合（/matches/results/:sessionId含む）
       return location.pathname.startsWith('/matches/results');

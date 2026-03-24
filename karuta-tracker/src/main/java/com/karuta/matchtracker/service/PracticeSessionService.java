@@ -493,7 +493,6 @@ public class PracticeSessionService {
                 .collect(Collectors.toList());
 
         dto.setParticipants(playerDtos);
-        dto.setParticipantCount(playerDtos.size());
 
         // その日の実施済み試合数を取得
         long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
@@ -501,6 +500,13 @@ public class PracticeSessionService {
 
         // 試合ごとの参加人数を集計
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionId(session.getId());
+
+        // 参加者数はキャンセル待ち・辞退・キャンセル済みを除外してカウント
+        dto.setParticipantCount((int) allParticipants.stream()
+                .filter(p -> p.getStatus() != ParticipantStatus.WAITLISTED && p.getStatus() != ParticipantStatus.DECLINED && p.getStatus() != ParticipantStatus.CANCELLED)
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .count());
         Map<Integer, Integer> matchCounts = new java.util.HashMap<>();
         Map<Integer, List<PracticeSessionDto.MatchParticipantInfo>> matchParticipants = new java.util.HashMap<>();
 
@@ -519,7 +525,11 @@ public class PracticeSessionService {
 
         for (PracticeParticipant participant : allParticipants) {
             if (participant.getMatchNumber() != null) {
-                matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                // キャンセル待ち・辞退・キャンセル済みは参加者数にカウントしない
+                ParticipantStatus status = participant.getStatus();
+                if (status != ParticipantStatus.WAITLISTED && status != ParticipantStatus.DECLINED && status != ParticipantStatus.CANCELLED) {
+                    matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                }
                 Player player = playerByIdMap.get(participant.getPlayerId());
                 if (player != null) {
                     matchParticipantPairs.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
@@ -629,7 +639,16 @@ public class PracticeSessionService {
                             .collect(Collectors.toList());
 
                     dto.setParticipants(playerDtos);
-                    dto.setParticipantCount(playerDtos.size());
+
+                    // 参加者数はキャンセル待ち・辞退・キャンセル済みを除外してカウント
+                    List<PracticeParticipant> sessionParts = allParticipants.stream()
+                            .filter(p -> p.getSessionId().equals(session.getId()))
+                            .collect(Collectors.toList());
+                    dto.setParticipantCount((int) sessionParts.stream()
+                            .filter(p -> p.getStatus() != ParticipantStatus.WAITLISTED && p.getStatus() != ParticipantStatus.DECLINED && p.getStatus() != ParticipantStatus.CANCELLED)
+                            .map(PracticeParticipant::getPlayerId)
+                            .distinct()
+                            .count());
 
                     // その日の実施済み試合数（事前一括取得済みのマップから参照）
                     long completedMatches = completedMatchesMap.getOrDefault(session.getSessionDate(), 0L);
@@ -652,7 +671,11 @@ public class PracticeSessionService {
                     Map<Integer, List<PwP>> matchPlayersList = new java.util.HashMap<>();
                     for (PracticeParticipant participant : sessionParticipants) {
                         if (participant.getMatchNumber() != null) {
-                            matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                            // キャンセル待ち・辞退・キャンセル済みは参加者数にカウントしない
+                            ParticipantStatus pStatus = participant.getStatus();
+                            if (pStatus != ParticipantStatus.WAITLISTED && pStatus != ParticipantStatus.DECLINED && pStatus != ParticipantStatus.CANCELLED) {
+                                matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                            }
                             Player player = playerMap.get(participant.getPlayerId());
                             if (player != null) {
                                 matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())

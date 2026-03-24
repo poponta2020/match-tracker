@@ -75,6 +75,7 @@ const PracticeList = () => {
   const [showModal, setShowModal] = useState(false);
   const [expandedMatches, setExpandedMatches] = useState({}); // アコーディオンの開閉状態
   const [myParticipations, setMyParticipations] = useState({}); // 自分の参加状況 {sessionId: [matchNumbers]}
+  const [myParticipationStatuses, setMyParticipationStatuses] = useState({}); // ステータス付き {sessionId: [{matchNumber, status, ...}]}
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [refreshing, setRefreshing] = useState(false); // データ更新中
@@ -105,14 +106,16 @@ const PracticeList = () => {
         const month = currentDate.getMonth() + 1;
 
         // 並列でデータ取得（軽量エンドポイント使用）
-        const [sessionsRes, participationsRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes] = await Promise.all([
           practiceAPI.getSessionSummaries(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
+          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
         ]);
 
         if (!cancelled) {
           setSessions(sessionsRes.data);
           setMyParticipations(participationsRes.data || {});
+          setMyParticipationStatuses(statusRes.data?.participations || {});
         }
       } catch (err) {
         if (!cancelled) {
@@ -157,11 +160,16 @@ const PracticeList = () => {
     try {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
-      const response = await practiceAPI.getPlayerParticipations(currentPlayer.id, year, month);
+      const [response, statusRes] = await Promise.all([
+        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
+        practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
+      ]);
       setMyParticipations(response.data || {});
+      setMyParticipationStatuses(statusRes.data?.participations || {});
     } catch (err) {
       console.error('Error fetching my participations:', err);
       setMyParticipations({});
+      setMyParticipationStatuses({});
     }
   };
 
@@ -221,14 +229,25 @@ const PracticeList = () => {
     return sessions.find((s) => s.sessionDate === dateStr);
   };
 
-  // 自分の参加状況を取得（全試合/部分参加/未参加）
+  // 自分の参加状況を取得（当選あり/全キャン待ち/未参加）
   const getMyParticipationStatus = (session) => {
     if (!session || !myParticipations[session.id]) return 'none';
     const myMatches = myParticipations[session.id];
-    const totalMatches = session.totalMatches || 7;
-    if (myMatches.length === totalMatches) return 'full';
-    if (myMatches.length > 0) return 'partial';
-    return 'none';
+    if (myMatches.length === 0) return 'none';
+
+    // ステータス付き情報がある場合、当選/キャン待ちを判定
+    const statuses = myParticipationStatuses[session.id];
+    if (statuses && statuses.length > 0) {
+      const hasWon = statuses.some(s =>
+        s.status === 'WON' || s.status === 'OFFERED' || s.status === 'PENDING'
+      );
+      if (hasWon) return 'confirmed';
+      const hasWaitlisted = statuses.some(s => s.status === 'WAITLISTED');
+      if (hasWaitlisted) return 'waitlisted';
+    }
+
+    // ステータス情報がなければ従来通り参加扱い
+    return 'confirmed';
   };
 
   // 今日かどうか判定
@@ -465,25 +484,27 @@ const PracticeList = () => {
                   const hasSession = !!session;
                   const participationStatus = session ? getMyParticipationStatus(session) : 'none';
 
-                  let bgColor = 'bg-[#f9f6f2]';
-                  let borderColor = 'border-[#c5cec8]';
-                  let cursor = 'cursor-default';
-                  const isMyParticipation = participationStatus !== 'none';
+                  const cursor = hasSession ? 'cursor-pointer' : 'cursor-default';
+                  let venueTextColor = 'text-[#6b7280]';
+                  let cellBorder = 'border border-[#c5cec8]';
+                  let cellBg = 'bg-[#f9f6f2]';
 
-                  if (hasSession) {
-                    cursor = 'cursor-pointer';
-                    if (isMyParticipation) {
-                      bgColor = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
-                      borderColor = 'border-[#8a9e90]';
-                    } else {
-                      bgColor = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
-                    }
+                  if (participationStatus === 'confirmed') {
+                    cellBorder = 'border-2 border-[#a3c4ad]';
+                    cellBg = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
+                    venueTextColor = 'text-[#4a6b5a]';
+                  } else if (participationStatus === 'waitlisted') {
+                    cellBorder = 'border-2 border-[#e8d48b]';
+                    cellBg = 'bg-[#fef9ed] hover:bg-[#fdf3d7]';
+                    venueTextColor = 'text-[#b8860b]';
+                  } else if (hasSession) {
+                    cellBg = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
                   }
 
                   return (
                     <td
                       key={dayIdx}
-                      className={`px-1 py-2 border ${bgColor} ${borderColor} ${cursor} align-top h-20 relative`}
+                      className={`px-1 py-2 ${cellBorder} ${cellBg} ${cursor} align-top h-20 relative`}
                       onClick={() => handleCellClick(day)}
                     >
                       {day && (
@@ -492,7 +513,7 @@ const PracticeList = () => {
                             {day}
                           </div>
                           {session && session.venueName && (
-                            <div className="mt-0.5 text-[10px] text-[#6b7280] leading-tight">
+                            <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight`}>
                               {abbreviateLocation(session.venueName)}
                             </div>
                           )}
@@ -544,7 +565,7 @@ const PracticeList = () => {
                   .sort(([a], [b]) => parseInt(a) - parseInt(b))
                   .map(([matchNum, participants]) => {
                     const isExpanded = expandedMatches[matchNum] !== false;
-                    const count = participants.length;
+                    const count = participants.filter(p => typeof p === 'string' || p.status !== 'WAITLISTED').length;
                     const myMatchNumbers = myParticipations[selectedSession.id] || [];
                     const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
 
@@ -588,30 +609,64 @@ const PracticeList = () => {
                         </div>
                         {isExpanded && (
                           <div className={`px-6 pb-3 ${isMyMatch ? 'bg-[#eef2ef]' : ''}`}>
-                            {participants.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {sortPlayersByRank(participants).map((p, idx) => {
-                                  const pName = typeof p === 'string' ? p : p.name;
-                                  const isMyself = pName === currentPlayer?.name;
-                                  const pStatus = typeof p === 'string' ? null : p.status;
-                                  return (
-                                    <span key={idx} className="inline-flex items-center gap-0.5">
-                                      <PlayerChip
-                                        name={pName}
-                                        kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
-                                        className={`text-xs ${
-                                          isMyself
-                                            ? 'bg-[#4a6b5a] text-white font-medium'
-                                            : pStatus === 'WAITLISTED' ? 'text-[#374151] bg-yellow-50 border border-yellow-200'
-                                            : 'text-[#374151] bg-white'
-                                        }`}
-                                      />
-                                      {getStatusBadge(pStatus)}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            ) : (
+                            {participants.length > 0 ? (() => {
+                              const wonList = participants.filter(p => {
+                                const s = typeof p === 'string' ? null : p.status;
+                                return s !== 'WAITLISTED';
+                              });
+                              const waitList = participants.filter(p => {
+                                const s = typeof p === 'string' ? null : p.status;
+                                return s === 'WAITLISTED';
+                              });
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {sortPlayersByRank(wonList).map((p, idx) => {
+                                      const pName = typeof p === 'string' ? p : p.name;
+                                      const isMyself = pName === currentPlayer?.name;
+                                      const pStatus = typeof p === 'string' ? null : p.status;
+                                      return (
+                                        <span key={idx} className="inline-flex items-center gap-0.5">
+                                          <PlayerChip
+                                            name={pName}
+                                            kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                            className={`text-xs ${
+                                              isMyself
+                                                ? 'bg-[#4a6b5a] text-white font-medium'
+                                                : 'text-[#374151] bg-white'
+                                            }`}
+                                          />
+                                          {getStatusBadge(pStatus)}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                  {waitList.length > 0 && (
+                                    <div>
+                                      <div className="text-[10px] text-[#9ca3af] mb-1">キャンセル待ち</div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {sortPlayersByRank(waitList).map((p, idx) => {
+                                          const pName = typeof p === 'string' ? p : p.name;
+                                          const isMyself = pName === currentPlayer?.name;
+                                          return (
+                                            <PlayerChip
+                                              key={idx}
+                                              name={pName}
+                                              kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                              className={`!px-1.5 !py-0.5 text-[10px] ${
+                                                isMyself
+                                                  ? 'bg-[#4a6b5a] text-white font-medium'
+                                                  : 'text-[#6b7280] bg-yellow-50 border-yellow-200'
+                                              }`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })() : (
                               <div className="text-xs text-[#6b7280]">参加者なし</div>
                             )}
                           </div>

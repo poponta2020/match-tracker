@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { matchAPI, pairingAPI, practiceAPI } from '../../api';
 import apiClient from '../../api/client';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 // カレンダーピッカーコンポーネント
@@ -585,6 +585,14 @@ const MatchResultsView = () => {
           </button>
         )}
       </div>
+
+      {/* FAB: 試合結果を追加 */}
+      <button
+        onClick={() => navigate('/matches/new')}
+        className="fixed right-5 bottom-20 w-14 h-14 bg-[#4a6b5a] text-white rounded-full shadow-lg hover:bg-[#3d5a4c] active:scale-95 transition-all flex items-center justify-center z-40"
+      >
+        <Plus className="w-7 h-7" />
+      </button>
     </div>
   );
 };
