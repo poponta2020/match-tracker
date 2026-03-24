@@ -26,6 +26,10 @@ import java.util.stream.Stream;
 @Slf4j
 public class MatchPairingService {
 
+    private static final int MATCH_HISTORY_DAYS = 90;
+    private static final double SAME_DAY_PENALTY_SCORE = -1000.0;
+    private static final double INTERVAL_BASE_SCORE = 100.0;
+
     private final MatchPairingRepository matchPairingRepository;
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
@@ -217,7 +221,7 @@ public class MatchPairingService {
     public List<AutoMatchingResult.MatchHistory> getPairRecentMatches(
             Long player1Id, Long player2Id, LocalDate sessionDate, Integer matchNumber) {
         List<Long> playerIds = List.of(player1Id, player2Id);
-        LocalDate startDate = sessionDate.minusDays(90);
+        LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
 
         // 過去の組み合わせ履歴
         Map<String, List<LocalDate>> historyMap = getPairingHistory(playerIds, startDate, sessionDate);
@@ -268,7 +272,7 @@ public class MatchPairingService {
                 .collect(Collectors.toMap(Player::getId, p -> p));
 
         // 過去30日の組み合わせ履歴を取得（MatchPairingテーブルから）
-        LocalDate startDate = sessionDate.minusDays(30);
+        LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
         Map<String, List<LocalDate>> matchHistoryMap = getPairingHistory(participantIds, startDate, sessionDate);
 
         // Matchテーブルからの対戦履歴もマージ
@@ -451,11 +455,10 @@ public class MatchPairingService {
 
         // 同日または未来の日付の場合は最低スコアを返す
         if (daysAgo <= 0) {
-            return -1000.0;  // 同日対戦は避けるべきなので非常に低いスコア
+            return SAME_DAY_PENALTY_SCORE;
         }
 
-        // 1日前: -100点, 2日前: -50点, 7日前: -14点, 14日前: -7点, 30日前: -3点
-        return -(100.0 / daysAgo);
+        return -(INTERVAL_BASE_SCORE / daysAgo);
     }
 
     /**
@@ -504,7 +507,7 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
 
         // 過去90日の組み合わせ履歴をMatchPairingテーブルから取得（当日より前の日付）
-        LocalDate startDate = sessionDate.minusDays(90);
+        LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
         Map<String, List<LocalDate>> pairingHistoryMap = getPairingHistory(playerIds, startDate, sessionDate);
 
         // 同日の組み合わせ履歴も取得（currentMatchNumberより前の試合番号のみ）
@@ -582,25 +585,10 @@ public class MatchPairingService {
     }
 
     /**
-     * エンティティをDTOに変換（個別取得版・後方互換）
+     * エンティティをDTOに変換（選手名を一括取得して変換）
      */
     private MatchPairingDto convertToDto(MatchPairing pairing) {
-        Player player1 = playerRepository.findById(pairing.getPlayer1Id()).orElse(null);
-        Player player2 = playerRepository.findById(pairing.getPlayer2Id()).orElse(null);
-        Player creator = playerRepository.findById(pairing.getCreatedBy()).orElse(null);
-
-        return MatchPairingDto.builder()
-                .id(pairing.getId())
-                .sessionDate(pairing.getSessionDate())
-                .matchNumber(pairing.getMatchNumber())
-                .player1Id(pairing.getPlayer1Id())
-                .player1Name(player1 != null ? player1.getName() : "Unknown")
-                .player2Id(pairing.getPlayer2Id())
-                .player2Name(player2 != null ? player2.getName() : "Unknown")
-                .createdBy(pairing.getCreatedBy())
-                .createdByName(creator != null ? creator.getName() : "Unknown")
-                .createdAt(pairing.getCreatedAt())
-                .updatedAt(pairing.getUpdatedAt())
-                .build();
+        Map<Long, String> playerNames = collectPlayerNames(List.of(pairing));
+        return convertToDtoWithCache(pairing, playerNames);
     }
 }
