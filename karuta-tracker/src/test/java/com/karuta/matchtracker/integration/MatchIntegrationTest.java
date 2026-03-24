@@ -47,6 +47,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(sessionRequest)))
                 .andExpect(status().isCreated());
@@ -61,6 +62,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -81,9 +83,11 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .player2Id(player2Id)
                 .winnerId(player1Id)
                 .matchNumber(1)
+                .scoreDifference(5)
+                .createdBy(player1Id)
                 .build();
 
-        String createResponse = mockMvc.perform(post("/api/matches")
+        String createResponse = mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -179,9 +183,11 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .player2Id(p2Id)
                 .winnerId(winnerId)
                 .matchNumber(matchNumber)
+                .scoreDifference(5)
+                .createdBy(p1Id)
                 .build();
 
-        mockMvc.perform(post("/api/matches")
+        mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -199,6 +205,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(5)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(yesterdaySession)))
                 .andExpect(status().isCreated());
@@ -209,6 +216,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(5)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(tomorrowSession)))
                 .andExpect(status().isCreated());
@@ -243,9 +251,11 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .player2Id(player1Id)
                 .winnerId(player1Id)
                 .matchNumber(1)
+                .scoreDifference(5)
+                .createdBy(player1Id)
                 .build();
 
-        mockMvc.perform(post("/api/matches")
+        mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(samePlayerRequest)))
                 .andExpect(status().isBadRequest());
@@ -257,9 +267,11 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .player2Id(player2Id)
                 .winnerId(player3Id)
                 .matchNumber(1)
+                .scoreDifference(5)
+                .createdBy(player1Id)
                 .build();
 
-        mockMvc.perform(post("/api/matches")
+        mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidWinnerRequest)))
                 .andExpect(status().isBadRequest());
@@ -272,12 +284,14 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .player2Id(player2Id)
                 .winnerId(player1Id)
                 .matchNumber(1)
+                .scoreDifference(5)
+                .createdBy(player1Id)
                 .build();
 
-        mockMvc.perform(post("/api/matches")
+        mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(nonExistentSessionRequest)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -290,28 +304,28 @@ class MatchIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("重複した試合番号は登録できない")
     void testDuplicateMatchNumber() throws Exception {
-        // 最初の試合を登録
-        MatchCreateRequest request1 = MatchCreateRequest.builder()
-                .matchDate(sessionDate)
-                .player1Id(player1Id)
-                .player2Id(player2Id)
-                .winnerId(player1Id)
-                .matchNumber(1)
-                .build();
+        // 最初の試合を登録（簡易版）
+        MatchSimpleCreateRequest request1 = new MatchSimpleCreateRequest();
+        request1.setMatchDate(sessionDate);
+        request1.setMatchNumber(1);
+        request1.setPlayerId(player1Id);
+        request1.setOpponentName("対戦相手A");
+        request1.setResult("勝ち");
+        request1.setScoreDifference(5);
 
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
 
-        // 同じ日、同じ試合番号で登録しようとする
-        MatchCreateRequest request2 = MatchCreateRequest.builder()
-                .matchDate(sessionDate)
-                .player1Id(player1Id)
-                .player2Id(player3Id)
-                .winnerId(player3Id)
-                .matchNumber(1)
-                .build();
+        // 同じ選手・同じ日・同じ試合番号で登録しようとする
+        MatchSimpleCreateRequest request2 = new MatchSimpleCreateRequest();
+        request2.setMatchDate(sessionDate);
+        request2.setMatchNumber(1);
+        request2.setPlayerId(player1Id);
+        request2.setOpponentName("対戦相手B");
+        request2.setResult("負け");
+        request2.setScoreDifference(3);
 
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)

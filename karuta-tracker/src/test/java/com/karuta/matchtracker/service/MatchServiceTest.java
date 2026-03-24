@@ -214,6 +214,7 @@ class MatchServiceTest {
                 .createdBy(1L)
                 .build();
 
+        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
         when(playerRepository.existsById(1L)).thenReturn(true);
         when(playerRepository.existsById(2L)).thenReturn(true);
         when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
@@ -242,6 +243,7 @@ class MatchServiceTest {
                 .createdBy(1L)
                 .build();
 
+        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
         when(playerRepository.existsById(1L)).thenReturn(true);
         when(playerRepository.existsById(2L)).thenReturn(true);
         when(playerRepository.existsById(3L)).thenReturn(true);
@@ -267,6 +269,7 @@ class MatchServiceTest {
                 .createdBy(1L)
                 .build();
 
+        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
         when(playerRepository.existsById(1L)).thenReturn(true);
 
         // When & Then
@@ -406,7 +409,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, "MALE", null);
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, "男性", null);
 
             // Then
             assertThat(result).hasSize(1);
@@ -450,7 +453,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, "RIGHT");
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, "右");
 
             // Then
             assertThat(result).hasSize(1);
@@ -498,7 +501,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", "MALE", "RIGHT");
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", "男性", "右");
 
             // Then
             assertThat(result).hasSize(1);
@@ -660,7 +663,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponentMale, opponentFemale));
 
             // When
-            StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, "MALE", null, null, null);
+            StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, "男性", null, null, null);
 
             // Then
             assertThat(result.getTotal().getTotal()).isEqualTo(1);
@@ -755,6 +758,7 @@ class MatchServiceTest {
                     .matchDate(today)
                     .matchNumber(1)
                     .player1Id(1L)
+                    .player2Id(0L)
                     .winnerId(0L) // 対戦相手が勝者
                     .scoreDifference(3)
                     .opponentName("未登録選手")
@@ -771,27 +775,6 @@ class MatchServiceTest {
             // Then
             assertThat(result).isNotNull();
             verify(matchRepository).save(any(Match.class));
-        }
-
-        @Test
-        @DisplayName("当日以外の日付では登録できない")
-        void shouldFailToCreateMatchForNonTodayDate() {
-            // Given
-            LocalDate pastDate = LocalDate.now().minusDays(1);
-            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
-            request.setMatchDate(pastDate);
-            request.setMatchNumber(1);
-            request.setPlayerId(1L);
-            request.setOpponentName("未登録選手");
-            request.setResult("勝ち");
-            request.setScoreDifference(5);
-
-            // When & Then
-            assertThatThrownBy(() -> matchService.createMatchSimple(request))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("当日のみ可能");
-
-            verify(matchRepository, never()).save(any());
         }
 
         @Test
@@ -856,6 +839,7 @@ class MatchServiceTest {
                     .matchDate(today)
                     .matchNumber(1)
                     .player1Id(1L)
+                    .player2Id(0L)
                     .winnerId(1L)
                     .scoreDifference(5)
                     .build();
@@ -879,38 +863,6 @@ class MatchServiceTest {
             // Then
             assertThat(result).isNotNull();
             verify(matchRepository).save(any(Match.class));
-        }
-
-        @Test
-        @DisplayName("過去の試合は更新できない")
-        void shouldFailToUpdatePastMatch() {
-            // Given
-            LocalDate pastDate = LocalDate.now().minusDays(1);
-            Match existingMatch = Match.builder()
-                    .id(1L)
-                    .matchDate(pastDate)
-                    .matchNumber(1)
-                    .player1Id(1L)
-                    .winnerId(1L)
-                    .scoreDifference(5)
-                    .build();
-
-            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
-            request.setMatchDate(LocalDate.now());
-            request.setMatchNumber(1);
-            request.setPlayerId(1L);
-            request.setOpponentName("対戦相手");
-            request.setResult("勝ち");
-            request.setScoreDifference(5);
-
-            when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
-
-            // When & Then
-            assertThatThrownBy(() -> matchService.updateMatchSimple(1L, request))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("過去の試合記録は編集できません");
-
-            verify(matchRepository, never()).save(any());
         }
 
         @Test

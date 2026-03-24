@@ -34,6 +34,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -72,12 +73,14 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 6. 総試合数を更新
         mockMvc.perform(put("/api/practice-sessions/" + sessionId + "/total-matches")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .param("totalMatches", "15"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(15));
 
         // 7. 練習日を削除
-        mockMvc.perform(delete("/api/practice-sessions/" + sessionId))
+        mockMvc.perform(delete("/api/practice-sessions/" + sessionId)
+                        .header("X-User-Role", "SUPER_ADMIN"))
                 .andExpect(status().isNoContent());
 
         // 8. 削除後は存在しない
@@ -99,12 +102,14 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 1回目は成功
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         // 2回目は失敗
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -125,6 +130,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/practice-sessions")
+                            .header("X-User-Role", "SUPER_ADMIN")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
@@ -165,6 +171,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(10)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -174,6 +181,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(8)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
@@ -185,6 +193,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(12)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request3)))
                 .andExpect(status().isCreated());
@@ -215,6 +224,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(10)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(pastRequest)))
                 .andExpect(status().isCreated());
@@ -225,6 +235,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(12)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(todayRequest)))
                 .andExpect(status().isCreated());
@@ -235,6 +246,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .totalMatches(15)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(futureRequest)))
                 .andExpect(status().isCreated());
@@ -258,6 +270,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -269,6 +282,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 負の値で更新しようとする
         mockMvc.perform(put("/api/practice-sessions/" + sessionId + "/total-matches")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .param("totalMatches", "-1"))
                 .andExpect(status().isBadRequest());
     }
@@ -294,6 +308,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())

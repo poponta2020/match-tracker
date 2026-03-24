@@ -5,7 +5,12 @@ import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +37,21 @@ class PracticeSessionServiceTest {
 
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
+
+    @Mock
+    private PracticeParticipantRepository practiceParticipantRepository;
+
+    @Mock
+    private PlayerRepository playerRepository;
+
+    @Mock
+    private MatchRepository matchRepository;
+
+    @Mock
+    private VenueRepository venueRepository;
+
+    @Mock
+    private VenueMatchScheduleRepository venueMatchScheduleRepository;
 
     @InjectMocks
     private PracticeSessionService practiceSessionService;
@@ -60,6 +80,8 @@ class PracticeSessionServiceTest {
                 .build();
         when(practiceSessionRepository.findAllOrderBySessionDateDesc())
                 .thenReturn(List.of(testSession, session2));
+        when(practiceParticipantRepository.findBySessionIdIn(any())).thenReturn(List.of());
+        when(matchRepository.countByMatchDateIn(any())).thenReturn(List.of());
 
         // When
         List<PracticeSessionDto> result = practiceSessionService.findAllSessions();
@@ -75,6 +97,8 @@ class PracticeSessionServiceTest {
     void testFindById() {
         // Given
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(testSession));
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
 
         // When
         PracticeSessionDto result = practiceSessionService.findById(1L);
@@ -140,6 +164,8 @@ class PracticeSessionServiceTest {
         int month = today.getMonthValue();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
                 .thenReturn(List.of(testSession));
+        when(practiceParticipantRepository.findBySessionIdIn(any())).thenReturn(List.of());
+        when(matchRepository.countByMatchDateIn(any())).thenReturn(List.of());
 
         // When
         List<PracticeSessionDto> result = practiceSessionService.findSessionsByYearMonth(year, month);
@@ -155,6 +181,8 @@ class PracticeSessionServiceTest {
         // Given
         when(practiceSessionRepository.findUpcomingSessions(today))
                 .thenReturn(List.of(testSession));
+        when(practiceParticipantRepository.findBySessionIdIn(any())).thenReturn(List.of());
+        when(matchRepository.countByMatchDateIn(any())).thenReturn(List.of());
 
         // When
         List<PracticeSessionDto> result = practiceSessionService.findUpcomingSessions(today);
@@ -188,6 +216,8 @@ class PracticeSessionServiceTest {
                 .build();
         when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(false);
         when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(testSession);
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
 
         // When
         PracticeSessionDto result = practiceSessionService.createSession(request, 1L);
@@ -259,6 +289,7 @@ class PracticeSessionServiceTest {
 
         // Then
         verify(practiceSessionRepository).existsById(1L);
+        verify(practiceParticipantRepository).deleteBySessionId(1L);
         verify(practiceSessionRepository).deleteById(1L);
     }
 

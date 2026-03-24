@@ -67,6 +67,25 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value("Player not found with name: TestPlayer"));
     }
 
+    // ===== DuplicateMatchException (409) =====
+
+    @Test
+    @DisplayName("DuplicateMatchExceptionは409 Conflictを返しexistingMatchIdを含む")
+    void testHandleDuplicateMatchException_Returns409WithExistingMatchId() throws Exception {
+        // Given
+        when(playerService.findById(1L))
+                .thenThrow(new DuplicateMatchException("この日の第1試合は既に登録されています", 42L));
+
+        // When & Then
+        mockMvc.perform(get("/api/players/1"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("この日の第1試合は既に登録されています"))
+                .andExpect(jsonPath("$.existingMatchId").value(42))
+                .andExpect(jsonPath("$.path").value("/api/players/1"));
+    }
+
     // ===== DuplicateResourceException (409) =====
 
     @Test
@@ -171,6 +190,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())
@@ -196,6 +216,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())

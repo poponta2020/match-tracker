@@ -36,7 +36,7 @@ public class PlayerProfile {
     /**
      * 所属かるた会
      */
-    @Column(name = "karuta_club", nullable = false, length = 200)
+    @Column(name = "karuta_club", length = 200)
     private String karutaClub;
 
     /**

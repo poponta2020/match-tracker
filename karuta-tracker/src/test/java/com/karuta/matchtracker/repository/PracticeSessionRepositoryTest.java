@@ -44,21 +44,29 @@ class PracticeSessionRepositoryTest {
         PracticeSession session1 = PracticeSession.builder()
                 .sessionDate(lastWeek)
                 .totalMatches(4)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         PracticeSession session2 = PracticeSession.builder()
                 .sessionDate(today)
                 .totalMatches(5)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         PracticeSession session3 = PracticeSession.builder()
                 .sessionDate(tomorrow)
                 .totalMatches(3)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         PracticeSession session4 = PracticeSession.builder()
                 .sessionDate(nextWeek)
                 .totalMatches(4)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         practiceSessionRepository.saveAll(List.of(session1, session2, session3, session4));
@@ -160,6 +168,8 @@ class PracticeSessionRepositoryTest {
         PracticeSession session = PracticeSession.builder()
                 .sessionDate(today.plusDays(20))
                 .totalMatches(6)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         // When
@@ -178,6 +188,8 @@ class PracticeSessionRepositoryTest {
         PracticeSession duplicate = PracticeSession.builder()
                 .sessionDate(today)  // 既に存在する日付
                 .totalMatches(10)
+                .createdBy(1L)
+                .updatedBy(1L)
                 .build();
 
         // When & Then

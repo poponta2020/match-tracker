@@ -39,7 +39,9 @@ class RoleCheckInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        when(request.getRequestURI()).thenReturn("/api/test");
+        // request.getRequestURI() はログ出力でのみ使用されるため、
+        // 必要なテストでのみlenientモードでモック
+        org.mockito.Mockito.lenient().when(request.getRequestURI()).thenReturn("/api/test");
     }
 
     // ===== 正常系テスト =====

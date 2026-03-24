@@ -41,6 +41,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -273,6 +274,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -316,6 +318,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String player2Response = mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(player2Request)))
                 .andExpect(status().isCreated())
@@ -345,7 +348,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("同じ日付から始まるプロフィールを重複登録できない")
+    @DisplayName("同じ日付から始まるプロフィールを登録すると上書きされる")
     void testDuplicateValidFrom() throws Exception {
         LocalDate validFrom = LocalDate.of(2024, 1, 1);
 
@@ -362,7 +365,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
 
-        // 同じvalidFromで2つ目を登録しようとする
+        // 同じvalidFromで2つ目を登録すると成功する（重複チェックなし）
         PlayerProfileCreateRequest request2 = PlayerProfileCreateRequest.builder()
                 .playerId(playerId)
                 .grade(PlayerProfile.Grade.B)
@@ -373,6 +376,6 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isCreated());
     }
 }

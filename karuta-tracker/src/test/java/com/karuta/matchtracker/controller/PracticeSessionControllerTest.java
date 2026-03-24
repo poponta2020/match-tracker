@@ -39,6 +39,15 @@ class PracticeSessionControllerTest {
     @MockitoBean
     private PracticeSessionService practiceSessionService;
 
+    @MockitoBean
+    private com.karuta.matchtracker.service.PracticeParticipantService practiceParticipantService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.service.DensukeImportService densukeImportService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
+
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
     private LocalDate today;
@@ -118,7 +127,7 @@ class PracticeSessionControllerTest {
     @DisplayName("GET /api/practice-sessions/date - 日付で練習日を取得できる")
     void testGetSessionByDate() throws Exception {
         // Given
-        when(practiceSessionService.findByDate(today)).thenReturn(testSessionDto);
+        when(practiceSessionService.findByDateWithParticipants(today)).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
@@ -127,7 +136,7 @@ class PracticeSessionControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(practiceSessionService).findByDate(today);
+        verify(practiceSessionService).findByDateWithParticipants(today);
     }
 
     @Test
@@ -214,6 +223,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -233,6 +243,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -255,6 +266,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .param("totalMatches", "15"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -273,6 +285,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .param("totalMatches", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -288,7 +301,8 @@ class PracticeSessionControllerTest {
         doNothing().when(practiceSessionService).deleteSession(1L);
 
         // When & Then
-        mockMvc.perform(delete("/api/practice-sessions/1"))
+        mockMvc.perform(delete("/api/practice-sessions/1")
+                        .header("X-User-Role", "SUPER_ADMIN"))
                 .andExpect(status().isNoContent());
 
         verify(practiceSessionService).deleteSession(1L);

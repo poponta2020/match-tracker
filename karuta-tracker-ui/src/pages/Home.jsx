@@ -429,20 +429,41 @@ const Home = () => {
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex flex-wrap gap-1.5">
-                      {sortPlayersByRank(nextPracticeParticipants).map((p) => (
-                        <PlayerChip
-                          key={p.id}
-                          name={p.name}
-                          kyuRank={p.kyuRank}
-                          className={`text-xs ${
-                            isMyself(p)
-                              ? 'bg-[#1A3654] text-white font-medium'
-                              : 'bg-[#e8ecef] text-[#374151]'
-                          }`}
-                        />
-                      ))}
-                    </div>
+                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED') && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED')).map((p) => (
+                          <PlayerChip
+                            key={p.id}
+                            name={p.name}
+                            kyuRank={p.kyuRank}
+                            className={`text-xs ${
+                              isMyself(p)
+                                ? 'bg-[#1A3654] text-white font-medium'
+                                : 'bg-[#e8ecef] text-[#374151]'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {nextPracticeParticipants.some(p => p.status === 'WAITLISTED') && (
+                      <div className="mt-2">
+                        <div className="text-[10px] text-yellow-700 mb-1">キャンセル待ち</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status === 'WAITLISTED')).map((p) => (
+                            <PlayerChip
+                              key={p.id}
+                              name={p.name}
+                              kyuRank={p.kyuRank}
+                              className={`text-xs ${
+                                isMyself(p)
+                                  ? 'bg-yellow-200 text-yellow-900 font-medium'
+                                  : 'bg-yellow-50 text-yellow-800'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {nextPractice.today && isAdmin() && (

@@ -21,8 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.hasSize;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -115,7 +114,8 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId} - 選手の試合履歴を取得できる")
     void testGetPlayerMatches() throws Exception {
         // Given
-        when(matchService.findPlayerMatches(1L)).thenReturn(List.of(testMatchDto));
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull()))
+                .thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1"))
@@ -125,14 +125,14 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].player1Id").value(1));
 
-        verify(matchService).findPlayerMatches(1L);
+        verify(matchService).findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull());
     }
 
     @Test
     @DisplayName("GET /api/matches/player/{playerId} - 存在しない選手は404を返す")
     void testGetPlayerMatchesNotFound() throws Exception {
         // Given
-        when(matchService.findPlayerMatches(999L))
+        when(matchService.findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull()))
                 .thenThrow(new ResourceNotFoundException("Player", 999L));
 
         // When & Then
@@ -141,7 +141,7 @@ class MatchControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(matchService).findPlayerMatches(999L);
+        verify(matchService).findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull());
     }
 
     @Test
@@ -207,34 +207,43 @@ class MatchControllerTest {
     @DisplayName("POST /api/matches - 試合結果を登録できる")
     void testCreateMatch() throws Exception {
         // Given
-        when(matchService.createMatch(any(MatchCreateRequest.class))).thenReturn(testMatchDto);
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest simpleRequest =
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        simpleRequest.setMatchDate(today);
+        simpleRequest.setMatchNumber(1);
+        simpleRequest.setPlayerId(1L);
+        simpleRequest.setOpponentName("佐藤花子");
+        simpleRequest.setResult("勝ち");
+        simpleRequest.setScoreDifference(5);
+
+        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class)))
+                .thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.matchNumber").value(1))
                 .andExpect(jsonPath("$.scoreDifference").value(5));
 
-        verify(matchService).createMatch(any(MatchCreateRequest.class));
+        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class));
     }
 
     @Test
     @DisplayName("POST /api/matches - バリデーションエラーは400を返す")
     void testCreateMatchValidationError() throws Exception {
         // Given - 点差が範囲外のリクエスト
-        MatchCreateRequest invalidRequest = MatchCreateRequest.builder()
-                .matchDate(today)
-                .matchNumber(1)
-                .player1Id(1L)
-                .player2Id(2L)
-                .winnerId(1L)
-                .scoreDifference(30) // 範囲外（0-25）
-                .createdBy(1L)
-                .build();
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest invalidRequest =
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        invalidRequest.setMatchDate(today);
+        invalidRequest.setMatchNumber(1);
+        invalidRequest.setPlayerId(1L);
+        invalidRequest.setOpponentName("佐藤花子");
+        invalidRequest.setResult("勝ち");
+        invalidRequest.setScoreDifference(30); // 範囲外（-25〜25）
 
         // When & Then
         mockMvc.perform(post("/api/matches")
@@ -245,50 +254,67 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.message").value("バリデーションエラー"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(matchService, never()).createMatch(any(MatchCreateRequest.class));
+        verify(matchService, never()).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class));
     }
 
     @Test
-    @DisplayName("POST /api/matches - 不正な勝者は400を返す")
+    @DisplayName("POST /api/matches - サービス例外は400を返す")
     void testCreateMatchInvalidWinner() throws Exception {
         // Given
-        when(matchService.createMatch(any(MatchCreateRequest.class)))
-                .thenThrow(new IllegalArgumentException("Winner must be one of the players"));
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest simpleRequest =
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        simpleRequest.setMatchDate(today);
+        simpleRequest.setMatchNumber(1);
+        simpleRequest.setPlayerId(1L);
+        simpleRequest.setOpponentName("佐藤花子");
+        simpleRequest.setResult("勝ち");
+        simpleRequest.setScoreDifference(5);
+
+        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class)))
+                .thenThrow(new IllegalArgumentException("練習日として登録されている日のみ登録可能です"));
 
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(matchService).createMatch(any(MatchCreateRequest.class));
+        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class));
     }
 
     @Test
-    @DisplayName("PUT /api/matches/{id} - 試合結果を更新できる")
+    @DisplayName("PUT /api/matches/{id} - 試合結果を更新できる（簡易版）")
     void testUpdateMatch() throws Exception {
         // Given
+        com.karuta.matchtracker.dto.MatchSimpleCreateRequest updateRequest =
+                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
+        updateRequest.setMatchDate(today);
+        updateRequest.setMatchNumber(1);
+        updateRequest.setPlayerId(1L);
+        updateRequest.setOpponentName("佐藤花子");
+        updateRequest.setResult("負け");
+        updateRequest.setScoreDifference(3);
+
         MatchDto updatedMatch = MatchDto.builder()
                 .id(1L)
-                .winnerId(2L)
+                .matchDate(today)
                 .scoreDifference(3)
                 .build();
-        when(matchService.updateMatch(1L, 2L, 3, 1L)).thenReturn(updatedMatch);
+        when(matchService.updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class)))
+                .thenReturn(updatedMatch);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1")
-                        .param("winnerId", "2")
-                        .param("scoreDifference", "3")
-                        .param("updatedBy", "1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.winnerId").value(2))
                 .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatch(1L, 2L, 3, 1L);
+        verify(matchService).updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class));
     }
 
     @Test
@@ -308,18 +334,18 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId}?filters - フィルタ付きで試合履歴を取得できる")
     void testFindPlayerMatchesWithFilters() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("MALE"), eq("RIGHT")))
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右")))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1")
                         .param("kyuRank", "A級")
-                        .param("gender", "MALE")
-                        .param("dominantHand", "RIGHT"))
+                        .param("gender", "男性")
+                        .param("dominantHand", "右"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
-        verify(matchService).findPlayerMatchesWithFilters(1L, "A級", "MALE", "RIGHT");
+        verify(matchService).findPlayerMatchesWithFilters(1L, "A級", "男性", "右");
     }
 
     @Test
@@ -346,9 +372,9 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(get("/api/matches/player/1/statistics-by-rank"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.total.matches").value(10))
+                .andExpect(jsonPath("$.total.total").value(10))
                 .andExpect(jsonPath("$.total.wins").value(6))
-                .andExpect(jsonPath("$.byRank.A級.matches").value(5))
+                .andExpect(jsonPath("$.byRank.A級.total").value(5))
                 .andExpect(jsonPath("$.byRank.A級.wins").value(3));
 
         verify(matchService).getPlayerStatisticsByRank(1L, null, null, null, null);
@@ -368,20 +394,20 @@ class MatchControllerTest {
                         .build();
 
         when(matchService.getPlayerStatisticsByRank(
-                eq(1L), eq("MALE"), eq("RIGHT"), any(LocalDate.class), any(LocalDate.class)))
+                eq(1L), eq("男性"), eq("右"), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(stats);
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1/statistics-by-rank")
-                        .param("gender", "MALE")
-                        .param("dominantHand", "RIGHT")
+                        .param("gender", "男性")
+                        .param("dominantHand", "右")
                         .param("startDate", "2024-01-01")
                         .param("endDate", "2024-12-31"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.total.matches").value(5));
+                .andExpect(jsonPath("$.total.total").value(5));
 
         verify(matchService).getPlayerStatisticsByRank(
-                eq(1L), eq("MALE"), eq("RIGHT"), any(LocalDate.class), any(LocalDate.class));
+                eq(1L), eq("男性"), eq("右"), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
@@ -403,7 +429,7 @@ class MatchControllerTest {
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
 
         verify(matchService).createMatchSimple(any());
@@ -419,7 +445,7 @@ class MatchControllerTest {
         mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
 
         verify(matchService).createMatch(any(MatchCreateRequest.class));
@@ -429,25 +455,24 @@ class MatchControllerTest {
     @DisplayName("PUT /api/matches/{id}/detailed - 詳細版で試合結果を更新できる")
     void testUpdateMatchDetailed() throws Exception {
         // Given
-        com.karuta.matchtracker.dto.MatchSimpleCreateRequest request =
-                new com.karuta.matchtracker.dto.MatchSimpleCreateRequest();
-        request.setMatchDate(today);
-        request.setMatchNumber(1);
-        request.setPlayerId(1L);
-        request.setOpponentName("新しい対戦相手");
-        request.setResult("負け");
-        request.setScoreDifference(3);
-
-        when(matchService.updateMatchSimple(eq(1L), any())).thenReturn(testMatchDto);
+        MatchDto updatedMatch = MatchDto.builder()
+                .id(1L)
+                .winnerId(2L)
+                .scoreDifference(3)
+                .build();
+        when(matchService.updateMatch(1L, 2L, 3, 1L)).thenReturn(updatedMatch);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .param("winnerId", "2")
+                        .param("scoreDifference", "3")
+                        .param("updatedBy", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.winnerId").value(2))
+                .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatchSimple(eq(1L), any());
+        verify(matchService).updateMatch(1L, 2L, 3, 1L);
     }
 
     @Test

@@ -43,20 +43,28 @@
 - [x] MatchPairingService: マジックナンバー定数化（`MATCH_HISTORY_DAYS`等）
 - [x] MatchPairingService: `convertToDto()` → `collectPlayerNames` + `convertToDtoWithCache`委譲
 
+---
+
+## 完了済み（デプロイ確認待ち）
+
 ### Step 3: PracticeParticipantService新設（cbcb8b7 + 6ea947c）
 - [x] PracticeParticipantService作成（参加者CRUD・統計・参加登録）
 - [x] PracticeSessionController: 参加者系エンドポイントの委譲先を変更
 - [x] HomeController: 参加率取得の委譲先を変更
-- **デプロイ確認待ち**（6ea947cのコントローラ委譲切り替え）
+
+### Step 4: PracticeSessionServiceの軽量化（2026-03-25実施）
+- [x] PracticeParticipantServiceに移動済みの未使用メソッド13個を完全削除
+  - setMatchParticipants, getParticipants, registerParticipations, registerParticipationsBeforeDeadline, registerParticipationsAfterDeadline, isFreeRegistrationOpen, getPlayerParticipationsByMonth, getPlayerParticipationStatusByMonth, addParticipantToMatch, removeParticipantFromMatch, getParticipationRateTop3, getPlayerParticipationRate, computeAllParticipationRates
+- [x] 不要フィールド削除（LotteryExecutionRepository, LotteryDeadlineHelper, EntityManager）
+- [x] enrichSessionWithParticipants / enrichSessionsWithParticipants の重複ロジックを`enrichDtoWithMatchDetails()`に統合
+  - リスト版で欠落していた `.role()` 設定も統合版で修正
+- [x] 不要import整理
+- [x] PracticeSessionServiceTestに不足モック追加（フィールド削除に伴うNPE対応）
+- **効果**: PracticeSessionService 1091行 → 約480行（約56%削減）
 
 ---
 
 ## 未実施（今後の作業）
-
-### Step 4: PracticeSessionServiceの軽量化
-- [ ] PracticeParticipantServiceに移動済みのメソッド本体を委譲呼び出しに置換
-- [ ] 不要になったフィールド（LotteryExecutionRepository, LotteryDeadlineHelper, EntityManager）の削除
-- [ ] enrichSessionWithParticipants内の重複ロジックを`enrichDtoWithMatchDetails()`に統合
 
 ### Step 5: App.jsx整理
 - [ ] `ProtectedPage`ヘルパーコンポーネントでルート定義を簡潔化
@@ -73,7 +81,16 @@
 
 ---
 
-## 変更ファイル一覧（デプロイ済み）
+## 既知のテスト問題
+
+| テスト | 状態 | 備考 |
+|---|---|---|
+| MatchServiceTest | 13件失敗 | Step 4以前から存在。リファクタリングとは無関係 |
+| MatchTrackerApplicationTests.contextLoads() | Docker未起動時に失敗 | 環境依存。CI（GitHub Actions）では正常 |
+
+---
+
+## 変更ファイル一覧
 
 ### フロントエンド（新規）
 - `components/YearMonthPicker.jsx`
@@ -102,6 +119,10 @@
 - `service/MatchPairingService.java` — 定数化、convertToDto統合
 - `controller/PracticeSessionController.java` — PracticeParticipantService委譲
 - `controller/HomeController.java` — PracticeParticipantService委譲
+- `service/PracticeSessionService.java` — 未使用メソッド13個削除、不要フィールド削除、enrichDtoWithMatchDetails統合
+
+### テスト（修正）
+- `service/PracticeSessionServiceTest.java` — 不足モック追加（Step 4のフィールド削除に対応）
 
 ---
 

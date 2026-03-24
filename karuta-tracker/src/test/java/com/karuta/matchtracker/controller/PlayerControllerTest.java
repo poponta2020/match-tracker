@@ -192,6 +192,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -216,6 +217,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -235,6 +237,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -274,7 +277,8 @@ class PlayerControllerTest {
         doNothing().when(playerService).deletePlayer(1L);
 
         // When & Then
-        mockMvc.perform(delete("/api/players/1"))
+        mockMvc.perform(delete("/api/players/1")
+                        .header("X-User-Role", "SUPER_ADMIN"))
                 .andExpect(status().isNoContent());
 
         verify(playerService).deletePlayer(1L);
@@ -293,6 +297,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/players/1/role")
+                        .header("X-User-Role", "SUPER_ADMIN")
                         .param("role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
