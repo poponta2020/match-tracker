@@ -5,12 +5,7 @@ import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.MatchRepository;
-import com.karuta.matchtracker.repository.PlayerRepository;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
-import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
-import com.karuta.matchtracker.repository.VenueRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,21 +32,6 @@ class PracticeSessionServiceTest {
 
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
-
-    @Mock
-    private PracticeParticipantRepository practiceParticipantRepository;
-
-    @Mock
-    private PlayerRepository playerRepository;
-
-    @Mock
-    private MatchRepository matchRepository;
-
-    @Mock
-    private VenueRepository venueRepository;
-
-    @Mock
-    private VenueMatchScheduleRepository venueMatchScheduleRepository;
 
     @InjectMocks
     private PracticeSessionService practiceSessionService;

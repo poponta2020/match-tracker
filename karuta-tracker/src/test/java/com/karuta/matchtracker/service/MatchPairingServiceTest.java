@@ -189,7 +189,8 @@ class MatchPairingServiceTest {
 
             MatchPairing savedPairing = createMatchPairing(1L, sessionDate, matchNumber, player1Id, player2Id);
             when(matchPairingRepository.save(any(MatchPairing.class))).thenReturn(savedPairing);
-            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
 
             // When
             MatchPairingDto result = matchPairingService.create(request, createdBy);
@@ -253,7 +254,10 @@ class MatchPairingServiceTest {
             );
 
             when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
-            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2, player3, player4));
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
+            when(playerRepository.findById(4L)).thenReturn(Optional.of(player4));
 
             // When
             List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy);
