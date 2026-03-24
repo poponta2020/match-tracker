@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
+import apiClient from '../../api/client';
 import { User, Save, ArrowLeft, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -169,7 +170,7 @@ const PlayerEdit = () => {
 
         // 3. ロールが変更されている場合は別APIで更新（スーパー管理者のみ）
         if (isSuperAdmin() && role !== originalRole) {
-          await playerAPI.updateRole(id, role);
+          await apiClient.put(`/players/${id}/role?role=${role}`);
         }
 
         navigate(`/players/${id}`);

@@ -4,11 +4,7 @@
       "Bash(pip3 install:*)",
       "WebFetch(domain:developers.line.biz)",
       "WebFetch(domain:github.com)",
-      "Bash(DB_URL=jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297 DB_USERNAME=karuta DB_PASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal ./gradlew bootRun)",
-      "Read(//home/poponta/match-tracker/karuta-tracker/**)",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.service.PracticeSessionServiceTest\")",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.service.PracticeSessionServiceTest\" --tests \"com.karuta.matchtracker.service.MatchPairingServiceTest\" --tests \"com.karuta.matchtracker.service.VenueServiceTest\" --tests \"com.karuta.matchtracker.service.PlayerServiceTest\" --tests \"com.karuta.matchtracker.service.PlayerProfileServiceTest\")",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.service.MatchPairingServiceTest.create*\" --info)"
+      "Bash(DB_URL=jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297 DB_USERNAME=karuta DB_PASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal ./gradlew bootRun)"
     ]
   }
 }

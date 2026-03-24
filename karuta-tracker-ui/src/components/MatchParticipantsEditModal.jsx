@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
-import { practiceAPI, playerAPI } from '../api';
+import { practiceAPI } from '../api';
+import apiClient from '../api/client';
 import { sortPlayersByRank } from '../utils/playerSort';
 import PlayerChip from './PlayerChip';
 
@@ -19,7 +20,7 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
   const fetchData = async () => {
     try {
       setLoading(true);
-      const playersResponse = await playerAPI.getAll();
+      const playersResponse = await apiClient.get('/players');
       setAllPlayers(playersResponse.data);
 
       if (session?.matchParticipants) {

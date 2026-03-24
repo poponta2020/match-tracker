@@ -6,7 +6,6 @@ import com.karuta.matchtracker.dto.ParticipationRateDto;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
-import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +27,6 @@ import java.util.List;
 public class HomeController {
 
     private final PracticeSessionService practiceSessionService;
-    private final PracticeParticipantService practiceParticipantService;
     private final NotificationRepository notificationRepository;
     private final PracticeParticipantRepository participantRepository;
 
@@ -43,13 +41,13 @@ public class HomeController {
         LocalDate now = LocalDate.now();
         int year = now.getYear();
         int month = now.getMonthValue();
-        List<ParticipationRateDto> top3 = practiceParticipantService.getParticipationRateTop3(year, month);
+        List<ParticipationRateDto> top3 = practiceSessionService.getParticipationRateTop3(year, month);
 
         // 自分の参加率: TOP3に含まれていればそこから取得、なければ個別に計算
         ParticipationRateDto myRate = top3.stream()
                 .filter(p -> p.getPlayerId().equals(playerId))
                 .findFirst()
-                .orElseGet(() -> practiceParticipantService.getPlayerParticipationRate(playerId, year, month));
+                .orElseGet(() -> practiceSessionService.getPlayerParticipationRate(playerId, year, month));
 
         // 未読通知数
         long unreadCount = notificationRepository.countByPlayerIdAndIsReadFalse(playerId);

@@ -97,10 +97,7 @@
       "Bash(git pull:*)",
       "Bash(./gradlew dependencies:*)",
       "Bash(curl -s \"https://developers.line.biz/en/reference/messaging-api/#send-push-message\")",
-      "WebSearch",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.controller.GlobalExceptionHandlerTest\" --info)",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.service.*\")",
-      "Bash(./gradlew cleanTest test --tests \"com.karuta.matchtracker.service.MatchServiceTest\" --info)"
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
