@@ -17,12 +17,12 @@ import java.util.Optional;
 @Repository
 public interface LineChannelAssignmentRepository extends JpaRepository<LineChannelAssignment, Long> {
 
-    /** プレイヤーのアクティブな割り当てを取得 */
-    @Query("SELECT a FROM LineChannelAssignment a WHERE a.playerId = :playerId AND a.status IN ('PENDING', 'LINKED')")
+    /** プレイヤーのアクティブな割り当てを取得（重複時は最新を返す） */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.playerId = :playerId AND a.status IN ('PENDING', 'LINKED') ORDER BY a.id DESC LIMIT 1")
     Optional<LineChannelAssignment> findActiveByPlayerId(@Param("playerId") Long playerId);
 
-    /** チャネルのアクティブな割り当てを取得 */
-    @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineChannelId = :channelId AND a.status IN ('PENDING', 'LINKED')")
+    /** チャネルのアクティブな割り当てを取得（重複時は最新を返す） */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineChannelId = :channelId AND a.status IN ('PENDING', 'LINKED') ORDER BY a.id DESC LIMIT 1")
     Optional<LineChannelAssignment> findActiveByChannelId(@Param("channelId") Long channelId);
 
     /** LINKED状態の割り当てをプレイヤーIDで取得 */
