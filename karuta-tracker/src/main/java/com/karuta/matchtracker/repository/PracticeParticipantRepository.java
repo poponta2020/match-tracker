@@ -186,6 +186,14 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findBySessionIdOrderByMatchAndStatus(@Param("sessionId") Long sessionId);
 
     /**
+     * 指定年月のセッション参加者を全取得（LINE通知一括送信用）
+     */
+    @Query("SELECT pp FROM PracticeParticipant pp " +
+           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month")
+    List<PracticeParticipant> findBySessionDateYearAndMonth(@Param("year") int year, @Param("month") int month);
+
+    /**
      * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
      */
     @Query("SELECT DISTINCT pp.playerId FROM PracticeParticipant pp " +

@@ -7,4 +7,5 @@ export { calendarAPI } from './calendar';
 export { homeAPI } from './home';
 export { lotteryAPI } from './lottery';
 export { notificationAPI } from './notifications';
+export { lineAPI } from './line';
 export { default as apiClient } from './client';

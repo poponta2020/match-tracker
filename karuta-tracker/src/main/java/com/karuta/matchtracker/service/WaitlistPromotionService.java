@@ -30,6 +30,7 @@ public class WaitlistPromotionService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final NotificationService notificationService;
+    private final LineNotificationService lineNotificationService;
 
     /**
      * 当選者が参加をキャンセルする
@@ -99,6 +100,9 @@ public class WaitlistPromotionService {
 
         // 通知を送信
         notificationService.createOfferNotification(next);
+
+        // LINE通知を送信
+        lineNotificationService.sendWaitlistOfferNotification(next);
     }
 
     /**
@@ -158,6 +162,9 @@ public class WaitlistPromotionService {
                 participant.getMatchNumber(), participant.getWaitlistNumber());
 
         notificationService.createOfferExpiredNotification(participant);
+
+        // LINE通知を送信
+        lineNotificationService.sendOfferExpiredNotification(participant);
 
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));

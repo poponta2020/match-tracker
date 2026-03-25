@@ -4,7 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Register from './pages/Register';
+import InviteRegister from './pages/InviteRegister';
 import Home from './pages/Home';
 import MatchList from './pages/matches/MatchList';
 import MatchForm from './pages/matches/MatchForm';
@@ -32,6 +32,9 @@ import LotteryResults from './pages/lottery/LotteryResults';
 import WaitlistStatus from './pages/lottery/WaitlistStatus';
 import OfferResponse from './pages/lottery/OfferResponse';
 import NotificationList from './pages/notifications/NotificationList';
+import LineSettings from './pages/line/LineSettings';
+import LineChannelAdmin from './pages/line/LineChannelAdmin';
+import LineScheduleAdmin from './pages/line/LineScheduleAdmin';
 
 const ProtectedPage = ({ children }) => (
   <PrivateRoute>
@@ -47,7 +50,7 @@ function App() {
           <Routes>
             {/* 公開ページ */}
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/register/:token" element={<InviteRegister />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
 
@@ -103,6 +106,11 @@ function App() {
 
             {/* 通知 */}
             <Route path="/notifications" element={<ProtectedPage><NotificationList /></ProtectedPage>} />
+
+            {/* LINE通知 */}
+            <Route path="/settings/line" element={<ProtectedPage><LineSettings /></ProtectedPage>} />
+            <Route path="/admin/line/channels" element={<ProtectedPage><LineChannelAdmin /></ProtectedPage>} />
+            <Route path="/admin/line/schedule" element={<ProtectedPage><LineScheduleAdmin /></ProtectedPage>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
