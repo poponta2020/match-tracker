@@ -64,16 +64,16 @@
 
 ---
 
-## 未実施（今後の作業）
+## 完了済み（デプロイ確認待ち）
 
-### Step 5: App.jsx整理
-- [ ] `ProtectedPage`ヘルパーコンポーネントでルート定義を簡潔化
-- [ ] ルートをカテゴリ別にグループ化
-- [ ] 未実装の`/statistics`プレースホルダー除去
+### Step 5: App.jsx整理（2026-03-25実施）
+- [x] `ProtectedPage`ヘルパーコンポーネントでルート定義を簡潔化（343行 → 96行）
+- [x] ルートをカテゴリ別にグループ化（公開/ホーム/試合/練習/抽選/組み合わせ/選手/プロフィール/会場/通知）
+- [x] 未実装の`/statistics`プレースホルダー除去
 
-### Step 6: Home.jsx分割
-- [ ] `NavigationMenu`コンポーネントをcomponents/に抽出
-- [ ] Home.jsxからナビゲーション関連のstate/ref/effectを除去
+### Step 6: Home.jsx分割（2026-03-25実施）
+- [x] `NavigationMenu`コンポーネントをcomponents/に抽出（ナビバー、メニュー開閉、Googleカレンダー同期ロジック）
+- [x] Home.jsxからナビゲーション関連のstate/ref/effectを除去（557行 → 280行）
 
 ### 見送り
 - **GlobalExceptionHandler**: 全APIに影響するため変更しない
@@ -94,6 +94,7 @@
 
 ### フロントエンド（新規）
 - `components/YearMonthPicker.jsx`
+- `components/NavigationMenu.jsx`
 - `hooks/useFetch.js`
 
 ### フロントエンド（修正）
@@ -107,6 +108,8 @@
 - `pages/players/PlayerEdit.jsx` — playerAPI.updateRole使用
 - `pages/matches/MatchResultsView.jsx` — APIラッパー使用
 - `pages/matches/BulkResultInput.jsx` — APIラッパー使用
+- `App.jsx` — ProtectedPageヘルパー導入、ルートグループ化、/statistics除去
+- `pages/Home.jsx` — NavigationMenu抽出
 
 ### バックエンド（新規）
 - `service/PracticeParticipantService.java`

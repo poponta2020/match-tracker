@@ -107,7 +107,9 @@
       "Bash(DOCKER_HOST=unix:///var/run/docker.sock ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\")",
       "Bash(DOCKER_API_VERSION=1.44 java -cp /tmp TestEnv)",
       "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\")",
-      "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\" --refresh-dependencies)"
+      "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\" --refresh-dependencies)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": [],
