@@ -43,7 +43,7 @@ public class LineWebhookController {
 
         // 署名検証
         if (signature == null || !lineMessagingService.verifySignature(channel.getChannelSecret(), body, signature)) {
-            log.warn("Invalid signature for channel: {}", lineChannelId);
+            log.warn("Invalid signature for channel: {}", channelId);
             return ResponseEntity.badRequest().body("Invalid signature");
         }
 
@@ -59,7 +59,7 @@ public class LineWebhookController {
                 processEvent(channel, event, type);
             }
         } catch (Exception e) {
-            log.error("Error processing webhook for channel {}: {}", lineChannelId, e.getMessage());
+            log.error("Error processing webhook for channel {}: {}", channelId, e.getMessage());
         }
 
         return ResponseEntity.ok("OK");
