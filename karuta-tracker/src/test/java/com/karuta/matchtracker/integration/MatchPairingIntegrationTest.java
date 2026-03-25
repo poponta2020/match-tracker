@@ -57,7 +57,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sessionDate").value("2024-02-10"))
                 .andExpect(jsonPath("$.matchNumber").value(1))
                 .andExpect(jsonPath("$.player1Id").value(player1.getId()))
@@ -97,7 +97,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .param("date", "2024-02-10")
                         .param("matchNumber", "1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         // Then: データベースから削除されていることを確認
         assertThat(matchPairingRepository.findById(pairingId)).isEmpty();
@@ -129,7 +129,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         MatchPairingCreateRequest request2 = new MatchPairingCreateRequest(
                 sessionDate, 2, player3.getId(), player4.getId()
@@ -138,7 +138,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         // Then: 一覧取得で2件取得でき、試合番号順になっている
         mockMvc.perform(get("/api/match-pairings/date")
@@ -182,7 +182,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .param("matchNumber", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(batchRequest)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$", hasSize(2)));
 
         // Then: データベースに保存されている
@@ -218,8 +218,8 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("重複する対戦ペアリングの作成は失敗する")
-    void shouldFailToCreateDuplicatePairing() throws Exception {
+    @DisplayName("同一試合番号に複数の対戦ペアリングを作成できる")
+    void shouldAllowMultiplePairingsForSameMatchNumber() throws Exception {
         // Given: テスト用選手を作成
         Player player1 = createAndSavePlayer("重複選手A", "A級");
         Player player2 = createAndSavePlayer("重複選手B", "A級");
@@ -234,14 +234,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
-        // Then: 同じ日付と試合番号で2回目の作成も成功する（同一試合番号に複数ペアが存在可能）
+        // When: 同じ日付と試合番号で2回目の作成も成功する（同一試合番号に複数ペアが存在可能）
         mockMvc.perform(post("/api/match-pairings")
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
 
         // Then: データベースに2件保存されている
         List<com.karuta.matchtracker.entity.MatchPairing> pairings =
@@ -314,20 +314,20 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("存在しない選手IDで対戦ペアリング作成は失敗する")
-    void shouldFailToCreatePairingWithNonexistentPlayer() throws Exception {
+    @DisplayName("存在しない選手IDでも対戦ペアリングを作成できる（選手存在チェックは未実装）")
+    void shouldCreatePairingWithNonexistentPlayerIds() throws Exception {
         // Given
         LocalDate sessionDate = LocalDate.of(2024, 2, 17);
         MatchPairingCreateRequest request = new MatchPairingCreateRequest(
                 sessionDate, 1, 9999L, 9998L
         );
 
-        // When & Then: 存在しない選手IDでも作成される（選手存在チェックは未実装）
+        // When & Then: 選手存在チェックは未実装のため、存在しないIDでも作成される
         mockMvc.perform(post("/api/match-pairings")
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk());
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -354,7 +354,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                         .header("X-User-Role", "SUPER_ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
         MatchPairingDto created = objectMapper.readValue(createResponse, MatchPairingDto.class);

@@ -152,18 +152,17 @@ class PlayerProfileRepositoryTest {
 
     @Test
     @DisplayName("プロフィール更新時のタイムスタンプが更新される")
-    void testTimestampUpdate() throws InterruptedException {
+    void testTimestampUpdate() {
         // Given
         PlayerProfile profile = playerProfileRepository.findCurrentByPlayerId(player.getId()).orElseThrow();
-        LocalDate originalUpdated = profile.getUpdatedAt().toLocalDate();
-
-        Thread.sleep(10); // 更新タイムスタンプの差を確保
+        java.time.LocalDateTime originalUpdated = profile.getUpdatedAt();
 
         // When
         profile.setKarutaClub("更新後のかるた会");
-        PlayerProfile updated = playerProfileRepository.save(profile);
+        PlayerProfile updated = playerProfileRepository.saveAndFlush(profile);
 
         // Then
-        assertThat(updated.getUpdatedAt().toLocalDate()).isAfterOrEqualTo(originalUpdated);
+        assertThat(updated.getUpdatedAt()).isAfterOrEqualTo(originalUpdated);
+        assertThat(updated.getKarutaClub()).isEqualTo("更新後のかるた会");
     }
 }

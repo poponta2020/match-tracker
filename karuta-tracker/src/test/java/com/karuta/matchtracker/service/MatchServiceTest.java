@@ -27,6 +27,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import org.mockito.ArgumentCaptor;
+
 /**
  * MatchServiceの単体テスト
  */
@@ -226,6 +228,8 @@ class MatchServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getPlayer1Name()).isEqualTo("山田太郎");
+        assertThat(result.getMatchDate()).isEqualTo(today);
+        assertThat(result.getMatchNumber()).isEqualTo(1);
         verify(matchRepository).save(any(Match.class));
     }
 
@@ -292,8 +296,12 @@ class MatchServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        verify(matchRepository).findById(1L);
-        verify(matchRepository).save(any(Match.class));
+        ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+        verify(matchRepository).save(captor.capture());
+        Match saved = captor.getValue();
+        assertThat(saved.getWinnerId()).isEqualTo(2L);
+        assertThat(saved.getScoreDifference()).isEqualTo(3);
+        assertThat(saved.getUpdatedBy()).isEqualTo(1L);
     }
 
     @Test
@@ -729,15 +737,21 @@ class MatchServiceTest {
 
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
             MatchDto result = matchService.createMatchSimple(request);
 
             // Then
-            assertThat(result).isNotNull();
-            verify(matchRepository).save(any(Match.class));
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L);
+            assertThat(saved.getPlayer2Id()).isEqualTo(0L);
+            assertThat(saved.getWinnerId()).isEqualTo(1L);
+            assertThat(saved.getOpponentName()).isEqualTo("未登録選手");
+            assertThat(saved.getScoreDifference()).isEqualTo(5);
         }
 
         @Test
@@ -753,28 +767,23 @@ class MatchServiceTest {
             request.setResult("負け");
             request.setScoreDifference(3);
 
-            Match savedMatch = Match.builder()
-                    .id(1L)
-                    .matchDate(today)
-                    .matchNumber(1)
-                    .player1Id(1L)
-                    .player2Id(0L)
-                    .winnerId(0L) // 対戦相手が勝者
-                    .scoreDifference(3)
-                    .opponentName("未登録選手")
-                    .build();
-
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(matchRepository.save(any(Match.class))).thenReturn(savedMatch);
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
             MatchDto result = matchService.createMatchSimple(request);
 
             // Then
-            assertThat(result).isNotNull();
-            verify(matchRepository).save(any(Match.class));
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L);
+            assertThat(saved.getPlayer2Id()).isEqualTo(0L);
+            assertThat(saved.getWinnerId()).isEqualTo(0L);
+            assertThat(saved.getOpponentName()).isEqualTo("未登録選手");
+            assertThat(saved.getScoreDifference()).isEqualTo(3);
         }
 
         @Test
@@ -854,15 +863,20 @@ class MatchServiceTest {
 
             when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
             when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
-            when(matchRepository.save(any(Match.class))).thenReturn(existingMatch);
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
             MatchDto result = matchService.updateMatchSimple(1L, request);
 
             // Then
-            assertThat(result).isNotNull();
-            verify(matchRepository).save(any(Match.class));
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getWinnerId()).isEqualTo(0L);
+            assertThat(saved.getOpponentName()).isEqualTo("新しい対戦相手");
+            assertThat(saved.getScoreDifference()).isEqualTo(3);
+            assertThat(saved.getUpdatedBy()).isEqualTo(1L);
         }
 
         @Test

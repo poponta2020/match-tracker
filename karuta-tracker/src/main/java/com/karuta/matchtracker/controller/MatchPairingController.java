@@ -7,6 +7,7 @@ import com.karuta.matchtracker.service.MatchPairingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -71,7 +72,7 @@ public class MatchPairingController {
         Long createdBy = 1L; // 仮のID
 
         MatchPairingDto created = matchPairingService.create(request, createdBy);
-        return ResponseEntity.ok(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     /**
@@ -91,7 +92,7 @@ public class MatchPairingController {
         Long createdBy = 1L; // 仮のID
 
         List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy);
-        return ResponseEntity.ok(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     /**
@@ -117,7 +118,7 @@ public class MatchPairingController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         log.info("対戦組み合わせ削除: ID={}", id);
         matchPairingService.delete(id);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -130,7 +131,7 @@ public class MatchPairingController {
             @RequestParam Integer matchNumber) {
         log.info("対戦組み合わせ削除: 日付={}, 試合番号={}", date, matchNumber);
         matchPairingService.deleteByDateAndMatchNumber(date, matchNumber);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     /**

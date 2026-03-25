@@ -238,7 +238,7 @@ class MatchPairingControllerTest {
                             .header("X-User-Role", "SUPER_ADMIN")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").value(1))
                     .andExpect(jsonPath("$.sessionDate").value("2024-01-15"))
                     .andExpect(jsonPath("$.matchNumber").value(1))
@@ -272,7 +272,7 @@ class MatchPairingControllerTest {
                             .header("X-User-Role", "ADMIN")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").value(1));
         }
 
@@ -407,7 +407,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(batchRequest)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$", hasSize(2)))
                     .andExpect(jsonPath("$[0].matchNumber").value(1))
                     .andExpect(jsonPath("$[1].matchNumber").value(2));
@@ -442,7 +442,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(batchRequest)))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isCreated());
         }
 
         @Test
@@ -490,7 +490,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(batchRequest)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$", hasSize(0)));
         }
     }
@@ -509,7 +509,7 @@ class MatchPairingControllerTest {
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
                             .header("X-User-Role", "SUPER_ADMIN"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
         }
@@ -524,7 +524,7 @@ class MatchPairingControllerTest {
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
                             .header("X-User-Role", "ADMIN"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
         }
@@ -561,7 +561,7 @@ class MatchPairingControllerTest {
                             .header("X-User-Role", "SUPER_ADMIN")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNoContent());
 
             verify(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
         }
@@ -579,7 +579,7 @@ class MatchPairingControllerTest {
                             .header("X-User-Role", "ADMIN")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isNoContent());
 
             verify(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
         }

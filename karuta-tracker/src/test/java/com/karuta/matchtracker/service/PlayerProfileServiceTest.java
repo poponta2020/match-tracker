@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 /**
  * PlayerProfileServiceの単体テスト
@@ -174,7 +175,17 @@ class PlayerProfileServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getGrade()).isEqualTo(PlayerProfile.Grade.B);
-        verify(playerProfileRepository, times(2)).save(any(PlayerProfile.class));
+        assertThat(result.getDan()).isEqualTo(PlayerProfile.Dan.二);
+
+        // 旧プロフィールのvalidToが設定され、新プロフィールが保存されることを検証
+        ArgumentCaptor<PlayerProfile> captor = ArgumentCaptor.forClass(PlayerProfile.class);
+        verify(playerProfileRepository, times(2)).save(captor.capture());
+        List<PlayerProfile> savedProfiles = captor.getAllValues();
+        // 1回目: 旧プロフィールのvalidTo更新
+        assertThat(savedProfiles.get(0).getValidTo()).isEqualTo(LocalDate.of(2024, 5, 31));
+        // 2回目: 新プロフィールの保存
+        assertThat(savedProfiles.get(1).getGrade()).isEqualTo(PlayerProfile.Grade.B);
+        assertThat(savedProfiles.get(1).getValidFrom()).isEqualTo(LocalDate.of(2024, 6, 1));
     }
 
     @Test
@@ -190,9 +201,11 @@ class PlayerProfileServiceTest {
         PlayerProfileDto result = playerProfileService.setValidTo(1L, validTo);
 
         // Then
-        assertThat(result).isNotNull();
+        ArgumentCaptor<PlayerProfile> captor = ArgumentCaptor.forClass(PlayerProfile.class);
+        verify(playerProfileRepository).save(captor.capture());
+        PlayerProfile saved = captor.getValue();
+        assertThat(saved.getValidTo()).isEqualTo(validTo);
         verify(playerProfileRepository).findById(1L);
-        verify(playerProfileRepository).save(any(PlayerProfile.class));
     }
 
     @Test

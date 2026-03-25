@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
 
 /**
  * PlayerServiceの単体テスト
@@ -225,9 +226,11 @@ class PlayerServiceTest {
         PlayerDto result = playerService.updatePlayer(1L, updateRequest);
 
         // Then
-        assertThat(result).isNotNull();
+        ArgumentCaptor<Player> captor = ArgumentCaptor.forClass(Player.class);
+        verify(playerRepository).save(captor.capture());
+        Player saved = captor.getValue();
+        assertThat(saved.getName()).isEqualTo("山田太郎（更新）");
         verify(playerRepository).findById(1L);
-        verify(playerRepository).save(any(Player.class));
     }
 
     @Test
@@ -259,8 +262,11 @@ class PlayerServiceTest {
         playerService.deletePlayer(1L);
 
         // Then
+        ArgumentCaptor<Player> captor = ArgumentCaptor.forClass(Player.class);
+        verify(playerRepository).save(captor.capture());
+        Player saved = captor.getValue();
+        assertThat(saved.getDeletedAt()).isNotNull();
         verify(playerRepository).findById(1L);
-        verify(playerRepository).save(any(Player.class));
     }
 
     @Test
@@ -289,9 +295,11 @@ class PlayerServiceTest {
         PlayerDto result = playerService.updateRole(1L, Player.Role.ADMIN);
 
         // Then
-        assertThat(result).isNotNull();
+        ArgumentCaptor<Player> captor = ArgumentCaptor.forClass(Player.class);
+        verify(playerRepository).save(captor.capture());
+        Player saved = captor.getValue();
+        assertThat(saved.getRole()).isEqualTo(Player.Role.ADMIN);
         verify(playerRepository).findById(1L);
-        verify(playerRepository).save(any(Player.class));
     }
 
     @Test

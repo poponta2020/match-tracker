@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * PracticeSessionRepositoryの結合テスト
@@ -193,12 +194,7 @@ class PracticeSessionRepositoryTest {
                 .build();
 
         // When & Then
-        try {
-            practiceSessionRepository.saveAndFlush(duplicate);
-            assertThat(false).as("UNIQUE制約違反の例外が発生すべき").isTrue();
-        } catch (Exception e) {
-            // UNIQUE制約違反で例外が発生することを確認
-            assertThat(e).isNotNull();
-        }
+        assertThatThrownBy(() -> practiceSessionRepository.saveAndFlush(duplicate))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 }

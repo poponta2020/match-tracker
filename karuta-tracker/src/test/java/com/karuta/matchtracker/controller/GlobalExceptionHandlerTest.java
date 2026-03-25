@@ -204,7 +204,7 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("複数のバリデーションエラーは全てdetailsに含まれる")
     void testValidationException_MultipleErrors_AllIncluded() throws Exception {
-        // Given - 複数のバリデーションエラーを含むリクエスト
+        // Given - 複数のバリデーションエラーを含むリクエスト（name空、password空）
         String invalidRequest = """
             {
                 "name": "",
@@ -223,7 +223,8 @@ class GlobalExceptionHandlerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("バリデーションエラー"))
-                .andExpect(jsonPath("$.details").isArray());
+                .andExpect(jsonPath("$.details").isArray())
+                .andExpect(jsonPath("$.details.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)));
     }
 
     // ===== Exception (500) =====

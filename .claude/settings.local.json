@@ -97,9 +97,22 @@
       "Bash(git pull:*)",
       "Bash(./gradlew dependencies:*)",
       "Bash(curl -s \"https://developers.line.biz/en/reference/messaging-api/#send-push-message\")",
-      "WebSearch"
+      "WebSearch",
+      "Bash(./gradlew bootJar -x test)",
+      "Bash(find /home/poponta/match-tracker -type f \\\\\\(-name *.test.* -o -name *.spec.* \\\\\\))",
+      "Bash(./mvnw test:*)",
+      "Bash(docker info:*)",
+      "Bash(docker run:*)",
+      "Read(//home/poponta/.docker/**)",
+      "Bash(DOCKER_HOST=unix:///var/run/docker.sock ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\")",
+      "Bash(DOCKER_API_VERSION=1.44 java -cp /tmp TestEnv)",
+      "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\")",
+      "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\" --refresh-dependencies)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/home/poponta"
+    ]
   }
 }
