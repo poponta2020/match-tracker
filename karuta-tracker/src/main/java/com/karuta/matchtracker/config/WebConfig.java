@@ -26,11 +26,18 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedHeaders("*")
                 .allowCredentials(true)
                 .maxAge(3600);
+
+        // LINE Webhookは外部サーバーからのリクエストなのでCORS制限なし
+        registry.addMapping("/api/line/webhook/**")
+                .allowedOrigins("*")
+                .allowedMethods("POST")
+                .allowedHeaders("*");
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(roleCheckInterceptor)
-                .addPathPatterns("/api/**");
+                .addPathPatterns("/api/**")
+                .excludePathPatterns("/api/line/webhook/**");
     }
 }
