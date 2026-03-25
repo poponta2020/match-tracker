@@ -14,6 +14,7 @@ import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
@@ -39,6 +40,7 @@ public class LotteryController {
 
     private final LotteryService lotteryService;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final LineNotificationService lineNotificationService;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
@@ -130,7 +132,17 @@ public class LotteryController {
      */
     @PostMapping("/respond-offer")
     public ResponseEntity<Map<String, String>> respondToOffer(@Valid @RequestBody OfferResponseRequest request) {
+        // 応答前にparticipant情報を取得（応答後はステータスが変わるため）
+        PracticeParticipant participant = practiceParticipantRepository.findById(request.getParticipantId())
+                .orElse(null);
+
         waitlistPromotionService.respondToOffer(request.getParticipantId(), request.getAccept());
+
+        // Webアプリから応答した場合、LINEに確認通知を送信
+        if (participant != null) {
+            lineNotificationService.sendOfferResponseConfirmation(participant, request.getAccept());
+        }
+
         return ResponseEntity.ok(Map.of("result", request.getAccept() ? "accepted" : "declined"));
     }
 

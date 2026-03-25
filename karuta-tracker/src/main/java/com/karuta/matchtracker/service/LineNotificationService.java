@@ -139,6 +139,21 @@ public class LineNotificationService {
     }
 
     /**
+     * 繰り上げオファー応答確認通知を送信する（Webアプリから応答した場合用）
+     */
+    public void sendOfferResponseConfirmation(PracticeParticipant participant, boolean accepted) {
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId()).orElse(null);
+        if (session == null) return;
+
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        String message = accepted
+            ? String.format("%sの練習 試合%dの繰り上げ参加を承諾しました。", dateStr, participant.getMatchNumber())
+            : String.format("%sの練習 試合%dの繰り上げ参加を辞退しました。", dateStr, participant.getMatchNumber());
+
+        sendToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);
+    }
+
+    /**
      * オファー期限切れ通知を送信する
      */
     public void sendOfferExpiredNotification(PracticeParticipant participant) {
