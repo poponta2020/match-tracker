@@ -28,16 +28,16 @@ public class LineWebhookController {
     private final LineLinkingService lineLinkingService;
     private final ObjectMapper objectMapper;
 
-    @PostMapping("/{lineChannelId}")
+    @PostMapping("/{channelId}")
     public ResponseEntity<String> handleWebhook(
-            @PathVariable String lineChannelId,
+            @PathVariable Long channelId,
             @RequestHeader(value = "x-line-signature", required = false) String signature,
             @RequestBody String body) {
 
-        // チャネル検索
-        LineChannel channel = lineChannelRepository.findByLineChannelId(lineChannelId).orElse(null);
+        // チャネル検索（DB内部ID）
+        LineChannel channel = lineChannelRepository.findById(channelId).orElse(null);
         if (channel == null) {
-            log.warn("Webhook received for unknown channel: {}", lineChannelId);
+            log.warn("Webhook received for unknown channel ID: {}", channelId);
             return ResponseEntity.badRequest().body("Unknown channel");
         }
 
