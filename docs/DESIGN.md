@@ -1,6 +1,6 @@
 # かるたトラッカー システム設計書
 
-最終更新日: 2026-03-23
+最終更新日: 2026-03-25
 
 ## 目次
 1. [システム概要](#1-システム概要)
@@ -34,6 +34,7 @@
 - 抽選機能（定員超過時の自動抽選・キャンセル待ち・繰り上げ）
 - アプリ内通知（抽選結果・繰り上げ連絡）
 - Web Push通知（VAPID認証）
+- LINE通知（LINE Messaging API連携・チャネル管理・ワンタイムコード紐付け）
 - Google Calendar連携（練習予定の同期）
 - 伝助連携（出欠情報スクレイピング）
 - 選手統計情報
@@ -385,6 +386,114 @@ Entity Layer (JPA Entity)
 
 **制約**:
 - UNIQUE (year, month)
+
+---
+
+#### line_channels（LINEチャネル情報）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| channel_name | VARCHAR(100) | | 管理用表示名 |
+| line_channel_id | VARCHAR(50) | NOT NULL, UNIQUE | LINE発行のチャネルID |
+| channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（暗号化保存） |
+| channel_access_token | TEXT | NOT NULL | アクセストークン（暗号化保存） |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE' | AVAILABLE / ASSIGNED / LINKED / DISABLED |
+| friend_add_url | TEXT | | 友だち追加URL |
+| monthly_message_count | INT | NOT NULL, DEFAULT 0 | 当月送信数 |
+| message_count_reset_at | DATETIME | | 送信数リセット日時 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**インデックス**:
+- `idx_line_channel_status` (status)
+- `idx_line_channel_line_id` (line_channel_id)
+
+---
+
+#### line_channel_assignments（LINEチャネル割り当て）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| line_channel_id | BIGINT | NOT NULL, FK → line_channels.id | LINEチャネルID |
+| player_id | BIGINT | NOT NULL, FK → players.id | プレイヤーID |
+| line_user_id | VARCHAR(50) | | follow時に取得するLINE userId |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | PENDING / LINKED / UNLINKED / RECLAIMED |
+| assigned_at | DATETIME | NOT NULL | 割り当て日時 |
+| linked_at | DATETIME | | LINKED化日時 |
+| unlinked_at | DATETIME | | 解除日時 |
+| reclaim_warned_at | DATETIME | | 回収警告通知日時 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+
+**インデックス**:
+- `idx_lca_channel` (line_channel_id)
+- `idx_lca_player` (player_id)
+- `idx_lca_status` (status)
+
+---
+
+#### line_linking_codes（ワンタイムコード）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| player_id | BIGINT | NOT NULL, FK → players.id | プレイヤーID |
+| line_channel_id | BIGINT | NOT NULL, FK → line_channels.id | LINEチャネルID |
+| code | VARCHAR(8) | NOT NULL, UNIQUE | 英数字8桁のワンタイムコード |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'ACTIVE' | ACTIVE / USED / EXPIRED / INVALIDATED |
+| attempt_count | INT | NOT NULL, DEFAULT 0 | 検証失敗回数（5回で無効化） |
+| expires_at | DATETIME | NOT NULL | 有効期限（発行から10分後） |
+| used_at | DATETIME | | 使用日時 |
+| created_at | DATETIME | NOT NULL | 発行日時 |
+
+**インデックス**:
+- `idx_llc_player` (player_id)
+- `idx_llc_code` (code)
+- `idx_llc_channel` (line_channel_id)
+
+---
+
+#### line_notification_preferences（LINE通知設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| player_id | BIGINT | NOT NULL, UNIQUE, FK → players.id | プレイヤーID |
+| lottery_result | BOOLEAN | NOT NULL, DEFAULT TRUE | 抽選結果 |
+| waitlist_offer | BOOLEAN | NOT NULL, DEFAULT TRUE | キャンセル待ち連絡 |
+| offer_expired | BOOLEAN | NOT NULL, DEFAULT TRUE | オファー期限切れ |
+| match_pairing | BOOLEAN | NOT NULL, DEFAULT TRUE | 対戦組み合わせ |
+| practice_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加予定リマインダー |
+| deadline_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 締め切りリマインダー |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+---
+
+#### line_notification_schedule_settings（スケジュール型通知設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| notification_type | VARCHAR(30) | NOT NULL, UNIQUE | PRACTICE_REMINDER / DEADLINE_REMINDER |
+| enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 有効/無効 |
+| days_before | VARCHAR(50) | NOT NULL | 送信日数（JSON配列。例: "[3, 1]"） |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+| updated_by | BIGINT | | 最終更新者のplayer_id |
+
+---
+
+#### line_message_log（LINE送信ログ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| line_channel_id | BIGINT | NOT NULL, FK → line_channels.id | LINEチャネルID |
+| player_id | BIGINT | NOT NULL, FK → players.id | プレイヤーID |
+| notification_type | VARCHAR(30) | NOT NULL | 通知種別 |
+| message_content | TEXT | NOT NULL | 送信メッセージ内容 |
+| status | VARCHAR(20) | NOT NULL | SUCCESS / FAILED / SKIPPED |
+| error_message | TEXT | | 失敗時のエラー内容 |
+| sent_at | DATETIME | NOT NULL | 送信日時 |
+
+**インデックス**:
+- `idx_lml_channel` (line_channel_id)
+- `idx_lml_player` (player_id)
+- `idx_lml_type_sent` (notification_type, sent_at)
 
 ---
 
@@ -877,6 +986,93 @@ Entity Layer (JPA Entity)
 
 ---
 
+### 4.13 LINE通知API
+
+#### POST /api/line/enable
+**説明**: LINE通知を有効化する（チャネル割り当て＋ワンタイムコード発行）
+**権限**: なし
+**リクエスト**: `{ "playerId": Long }`
+**レスポンス**: `{ "friendAddUrl": String, "linkingCode": String, "codeExpiresAt": String, "status": String }`
+
+#### DELETE /api/line/disable
+**説明**: LINE通知を無効化する（チャネル解放）
+**権限**: なし
+**リクエスト**: `{ "playerId": Long }`
+
+#### POST /api/line/reissue-code
+**説明**: ワンタイムコードを再発行する
+**権限**: なし
+**リクエスト**: `{ "playerId": Long }`
+**レスポンス**: `{ "linkingCode": String, "codeExpiresAt": String }`
+
+#### GET /api/line/status?playerId={playerId}
+**説明**: LINE連携状態を取得する
+**権限**: なし
+**レスポンス**: `{ "enabled": Boolean, "linked": Boolean, "friendAddUrl": String }`
+
+#### GET /api/line/preferences?playerId={playerId}
+**説明**: 通知種別ごとの設定を取得する
+**権限**: なし
+
+#### PUT /api/line/preferences
+**説明**: 通知種別ごとの設定を更新する
+**権限**: なし
+**リクエスト**: `LineNotificationPreferenceDto`
+
+#### POST /api/line/webhook/{lineChannelId}
+**説明**: LINEプラットフォームからのWebhookを受信する
+**認証**: x-line-signatureヘッダーによる署名検証
+**処理イベント**: follow（コード入力案内返信）、message（コード検証・紐付け）、unfollow（記録のみ）
+
+### 4.14 LINE管理者API
+
+#### GET /api/admin/line/channels
+**説明**: チャネル一覧を取得する
+**権限**: SUPER_ADMIN
+
+#### POST /api/admin/line/channels
+**説明**: チャネルを登録する（個別）
+**権限**: SUPER_ADMIN
+
+#### POST /api/admin/line/channels/import
+**説明**: チャネルを一括登録する（JSON配列）
+**権限**: SUPER_ADMIN
+
+#### PUT /api/admin/line/channels/{channelId}/disable
+**説明**: チャネルを無効化する
+**権限**: SUPER_ADMIN
+
+#### PUT /api/admin/line/channels/{channelId}/enable
+**説明**: チャネルを有効化する
+**権限**: SUPER_ADMIN
+
+#### DELETE /api/admin/line/channels/{channelId}/assignment
+**説明**: チャネルの強制割り当て解除
+**権限**: SUPER_ADMIN
+
+#### POST /api/admin/line/send/lottery-result
+**説明**: 抽選結果をLINE一括送信する
+**権限**: SUPER_ADMIN, ADMIN
+**リクエスト**: `{ "year": Integer, "month": Integer }`
+**レスポンス**: `{ "sentCount": Integer, "failedCount": Integer, "skippedCount": Integer }`
+
+#### POST /api/admin/line/send/match-pairing
+**説明**: 対戦組み合わせをLINE送信する
+**権限**: SUPER_ADMIN, ADMIN
+**リクエスト**: `{ "sessionId": Long }`
+**レスポンス**: `{ "sentCount": Integer, "failedCount": Integer, "skippedCount": Integer }`
+
+#### GET /api/admin/line/schedule-settings
+**説明**: スケジュール型通知の設定を取得する
+**権限**: SUPER_ADMIN, ADMIN
+
+#### PUT /api/admin/line/schedule-settings
+**説明**: スケジュール型通知の設定を更新する
+**権限**: SUPER_ADMIN, ADMIN
+**リクエスト**: `{ "notificationType": String, "enabled": Boolean, "daysBefore": [Integer] }`
+
+---
+
 ## 5. 画面設計
 
 ### 5.1 画面一覧
@@ -908,6 +1104,9 @@ Entity Layer (JPA Entity)
 | 繰り上げ応答 | /lottery/offer-response | 全員 | 繰り上げオファーへの応答 |
 | キャンセル待ち状況 | /lottery/waitlist-status | 全員 | キャンセル待ち一覧 |
 | 通知一覧 | /notifications | 全員 | アプリ内通知一覧 |
+| LINE通知設定 | /settings/line | 全員 | LINE連携の有効化/無効化、友だち追加URL・ワンタイムコード表示、通知種別ON/OFF |
+| LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | チャネル一覧・登録・無効化・強制解除 |
+| LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
 
@@ -1159,6 +1358,11 @@ Entity Layer (JPA Entity)
 | 通知 | 通知閲覧・既読 | ○ | ○ | ○ |
 | Google Calendar | 同期 | ○ | ○ | ○ |
 | Web Push | 購読管理 | ○ | ○ | ○ |
+| LINE通知 | LINE連携有効化/無効化 | ○ | ○ | ○ |
+| | 通知種別ON/OFF設定 | ○ | ○ | ○ |
+| | チャネル管理（登録・無効化・強制解除） | ○ | × | × |
+| | 抽選結果/組み合わせLINE一括送信 | ○ | ○ | × |
+| | スケジュール型通知設定 | ○ | ○ | × |
 
 ### 6.3 実装方法
 
@@ -1337,6 +1541,16 @@ Entity Layer (JPA Entity)
   - 試合一覧、選手一覧で大量データ対応
 
 ### 8.2 優先度: 中
+
+#### 実装済み（v2.1.0）
+- [x] **LINE通知機能**
+  - LINE Messaging API連携（Push/Reply API）
+  - チャネル管理（割り当て・回収・月次リセット）
+  - ワンタイムコードによるアカウント紐付け
+  - 6種別の通知（抽選結果・キャンセル待ち・オファー期限切れ・対戦組み合わせ・リマインダー2種）
+  - 管理者向け一括送信機能
+  - スケジューラ3種（リマインダー/チャネル回収/月次リセット）
+  - フロントエンド画面3種（設定/チャネル管理/スケジュール設定）
 
 #### 機能追加
 - [ ] **統計ページ拡充**

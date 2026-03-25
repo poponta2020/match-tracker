@@ -102,12 +102,22 @@
 
 ---
 
+## 8.5 LINE通知（line）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 31 | `/settings/line` | `LineSettings.jsx` | 連携状態表示、友だち追加ボタン、ワンタイムコード（コピーボタン付き）、通知種別トグル | ALL | LINE通知設定（有効化/無効化、コード発行、種別ON/OFF） |
+| 32 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
+| 33 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
+
+---
+
 ## 9. プロフィール
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 31 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
-| 32 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
+| 34 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
+| 35 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
 
 ---
 
@@ -115,8 +125,8 @@
 
 | # | パス | ページコンポーネント | 権限 | 説明 |
 |---|------|---------------------|------|------|
-| 33 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
-| 34 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
+| 36 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
+| 37 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
 
 ---
 
@@ -163,6 +173,9 @@
 | 選手管理 | `/players` | SUPER_ADMIN |
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | SUPER_ADMIN |
+| LINE通知設定 | `/settings/line` | ALL |
+| LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
+| LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
 | Googleカレンダー連携 | （OAuth） | ALL |
 | ログアウト | — | ALL |
 
@@ -182,6 +195,7 @@ karuta-tracker-ui/src/
 │   ├── FilterBottomSheet.jsx
 │   ├── PlayerChip.jsx
 │   ├── MatchParticipantsEditModal.jsx
+│   ├── NavigationMenu.jsx
 │   └── ErrorBoundary.jsx
 └── pages/
     ├── Home.jsx
@@ -207,6 +221,10 @@ karuta-tracker-ui/src/
     │   ├── LotteryResults.jsx
     │   ├── WaitlistStatus.jsx
     │   └── OfferResponse.jsx
+    ├── line/
+    │   ├── LineSettings.jsx
+    │   ├── LineChannelAdmin.jsx
+    │   └── LineScheduleAdmin.jsx
     ├── notifications/
     │   └── NotificationList.jsx
     ├── pairings/
