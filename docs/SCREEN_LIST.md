@@ -22,7 +22,7 @@
 |---|------|---------------------|---------------------|------|
 | 1 | `/`（未認証時） | `Landing.jsx` | — | ランディングページ（機能紹介・CTAボタン） |
 | 2 | `/login` | `Login.jsx` | — | ログイン画面 |
-| 3 | `/register` | `Register.jsx` | — | 新規登録画面 |
+| 3 | `/register/:token` | `InviteRegister.jsx` | — | 招待リンクによる新規登録画面（トークン検証付き） |
 | 4 | `/privacy` | `PrivacyPolicy.jsx` | — | プライバシーポリシー |
 | 5 | `/terms` | `TermsOfService.jsx` | — | 利用規約 |
 
@@ -74,7 +74,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 20 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ | SUPER_ADMIN | 選手一覧 |
+| 20 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用） | SUPER_ADMIN | 選手一覧 |
 | 21 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
 | 22 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
 | 23 | `/players/:id/edit` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手編集 |
@@ -200,7 +200,7 @@ karuta-tracker-ui/src/
 └── pages/
     ├── Home.jsx
     ├── Login.jsx
-    ├── Register.jsx
+    ├── InviteRegister.jsx
     ├── Landing.jsx
     ├── Profile.jsx
     ├── ProfileEdit.jsx

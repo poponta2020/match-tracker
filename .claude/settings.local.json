@@ -109,7 +109,9 @@
       "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\")",
       "Bash(DOCKER_API_VERSION=1.44 ./gradlew test --no-daemon --tests \"*PracticeSessionRepositoryTest.testFindBySessionDate\" --refresh-dependencies)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(find /home/poponta/match-tracker/karuta-tracker-ui/src -type f \\\\\\(-name *.vue -o -name *.tsx -o -name *.jsx -o -name *.ts -o -name *.js \\\\\\))",
+      "Bash(2)"
     ],
     "deny": [],
     "ask": [],

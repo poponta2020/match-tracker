@@ -27,7 +27,7 @@ const PlayerEdit = () => {
   const [role, setRole] = useState('PLAYER');
   const [originalRole, setOriginalRole] = useState('PLAYER');
 
-  // パスワード変更用の状態（スーパー管理者のみ）
+  // パスワード用の状態（新規作成時 + スーパー管理者の変更時）
   const [passwordData, setPasswordData] = useState({
     newPassword: '',
     confirmPassword: '',
@@ -130,8 +130,23 @@ const PlayerEdit = () => {
       return;
     }
 
-    // パスワード変更のバリデーション（スーパー管理者のみ）
-    if (isSuperAdmin() && id && (passwordData.newPassword || passwordData.confirmPassword)) {
+    // パスワードのバリデーション
+    if (!id) {
+      // 新規作成時: パスワード必須
+      if (!passwordData.newPassword) {
+        setPasswordError('パスワードは必須です');
+        return;
+      }
+      if (passwordData.newPassword.length < 8) {
+        setPasswordError('パスワードは8文字以上で入力してください');
+        return;
+      }
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        setPasswordError('パスワードが一致しません');
+        return;
+      }
+    } else if (isSuperAdmin() && (passwordData.newPassword || passwordData.confirmPassword)) {
+      // 編集時: スーパー管理者のパスワード変更
       if (passwordData.newPassword.length < 8) {
         setPasswordError('パスワードは8文字以上で入力してください');
         return;
@@ -174,8 +189,18 @@ const PlayerEdit = () => {
 
         navigate(`/players/${id}`);
       } else {
-        // === 新規選手の登録 ===
-        const response = await playerAPI.register(formData);
+        // === 新規選手の登録（管理者用） ===
+        const createData = {
+          name: formData.name,
+          password: passwordData.newPassword,
+          gender: formData.gender || null,
+          dominantHand: formData.dominantHand || null,
+          danRank: formData.danRank || null,
+          kyuRank: formData.kyuRank || null,
+          karutaClub: formData.karutaClub || null,
+          remarks: formData.remarks || null,
+        };
+        const response = await playerAPI.register(createData);
         navigate(`/players/${response.data.id}`);
       }
     } catch (err) {
@@ -363,6 +388,73 @@ const PlayerEdit = () => {
               placeholder="特記事項など..."
             />
           </div>
+
+          {/* パスワード設定セクション（新規作成時） */}
+          {!id && (
+            <div className="border-t border-gray-200 pt-6 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Lock className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold text-gray-900">パスワード設定</h2>
+                <span className="text-red-500 text-sm">*必須</span>
+              </div>
+
+              {passwordError && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-red-700 text-sm mb-4">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    パスワード
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      name="newPassword"
+                      value={passwordData.newPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="8文字以上"
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    パスワード（確認）
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={passwordData.confirmPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="もう一度入力"
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* パスワード変更セクション（スーパー管理者のみ、編集時のみ） */}
           {isSuperAdmin() && id && (

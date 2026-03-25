@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
-import { Search, UserPlus, ChevronRight } from 'lucide-react';
+import { inviteAPI } from '../../api/invite';
+import { useAuth } from '../../context/AuthContext';
+import { Search, UserPlus, ChevronRight, Link2, UserCheck, Copy, Check, X } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import LoadingScreen from '../../components/LoadingScreen';
 
 const PlayerList = () => {
   const navigate = useNavigate();
+  const { currentPlayer } = useAuth();
   const [players, setPlayers] = useState([]);
   const [filteredPlayers, setFilteredPlayers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [inviteMessage, setInviteMessage] = useState(null);
+  const [inviteGenerating, setInviteGenerating] = useState(null);
 
   useEffect(() => {
     fetchPlayers();
@@ -65,6 +70,23 @@ const PlayerList = () => {
     return `${Math.floor(diffMonths / 12)}年前`;
   };
 
+  const generateInviteLink = async (type) => {
+    setInviteGenerating(type);
+    setInviteMessage(null);
+    try {
+      const response = await inviteAPI.createToken(type, currentPlayer.id);
+      const url = `${window.location.origin}/register/${response.data.token}`;
+      await navigator.clipboard.writeText(url);
+      const label = type === 'MULTI_USE' ? 'グループ招待リンク' : '個人招待リンク';
+      setInviteMessage({ text: `${label}をコピーしました`, success: true });
+    } catch {
+      setInviteMessage({ text: '招待リンクの生成に失敗しました', success: false });
+    } finally {
+      setInviteGenerating(null);
+      setTimeout(() => setInviteMessage(null), 3000);
+    }
+  };
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -76,7 +98,7 @@ const PlayerList = () => {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">選手管理</h1>
           <button
-            onClick={() => navigate('/register')}
+            onClick={() => navigate('/players/new')}
             className="flex items-center gap-1.5 px-4 py-2 bg-white text-[#4a6b5a] rounded-lg hover:bg-white/90 transition-colors text-sm font-medium"
           >
             <UserPlus className="w-4 h-4" />
@@ -102,6 +124,41 @@ const PlayerList = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d4ddd7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent text-sm"
           />
+        </div>
+
+        {/* 招待リンク */}
+        <div className="mb-3 bg-white rounded-xl shadow-sm p-3">
+          <p className="text-xs text-[#6b7280] mb-2">招待リンクを発行してLINE等で共有</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateInviteLink('MULTI_USE')}
+              disabled={inviteGenerating}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] transition-colors text-xs font-medium disabled:opacity-50"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              {inviteGenerating === 'MULTI_USE' ? '生成中...' : 'グループ用'}
+            </button>
+            <button
+              onClick={() => generateInviteLink('SINGLE_USE')}
+              disabled={inviteGenerating}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] transition-colors text-xs font-medium disabled:opacity-50"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              {inviteGenerating === 'SINGLE_USE' ? '生成中...' : '個人用（1回限り）'}
+            </button>
+          </div>
+          {inviteMessage && (
+            <div className={`mt-2 flex items-center justify-between text-xs px-2 py-1.5 rounded ${
+              inviteMessage.success
+                ? 'bg-[#d4ddd7] text-[#374151]'
+                : 'bg-red-50 text-red-700'
+            }`}>
+              <span className="flex items-center gap-1">
+                {inviteMessage.success ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                {inviteMessage.text}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="text-xs text-[#6b7280] mb-3">

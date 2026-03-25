@@ -8,4 +8,5 @@ export { homeAPI } from './home';
 export { lotteryAPI } from './lottery';
 export { notificationAPI } from './notifications';
 export { lineAPI } from './line';
+export { inviteAPI } from './invite';
 export { default as apiClient } from './client';

@@ -125,6 +125,7 @@ Entity Layer (JPA Entity)
                          多───1 [practice_sessions]
 [push_subscriptions] 多───1 [players]
 [densuke_urls]
+[invite_tokens] 多───1 [players]  (created_by)
 ```
 
 ### 3.2 テーブル定義
@@ -497,6 +498,23 @@ Entity Layer (JPA Entity)
 
 ---
 
+#### invite_tokens（招待トークン）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| token | VARCHAR(36) | NOT NULL, UNIQUE | トークン文字列（UUID） |
+| type | ENUM | NOT NULL | MULTI_USE（グループ用）/ SINGLE_USE（個人用） |
+| expires_at | DATETIME | NOT NULL | 有効期限 |
+| used_at | DATETIME | | 使用日時（SINGLE_USEのみ） |
+| used_by | BIGINT | | 使用した選手ID（SINGLE_USEのみ） |
+| created_by | BIGINT | NOT NULL | 発行者の選手ID |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+
+**インデックス**:
+- `idx_invite_tokens_token` (token) UNIQUE
+
+---
+
 ## 4. API設計
 
 ### 4.1 共通仕様
@@ -602,6 +620,44 @@ Entity Layer (JPA Entity)
   "role": "ADMIN"
 }
 ```
+
+---
+
+### 4.2.1 招待トークンAPI (`/api/invite-tokens`)
+
+#### POST /api/invite-tokens?type={type}&createdBy={id}
+**説明**: 招待トークン生成
+**権限**: ADMIN+
+**パラメータ**: `type`（MULTI_USE / SINGLE_USE）, `createdBy`（発行者ID）
+**レスポンス**: `InviteTokenResponse`
+```json
+{
+  "token": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "MULTI_USE",
+  "expiresAt": "2026-03-28T12:00:00",
+  "createdAt": "2026-03-25T12:00:00"
+}
+```
+
+#### GET /api/invite-tokens/validate/{token}
+**説明**: トークン有効性検証
+**権限**: なし（公開）
+**レスポンス**: `InviteTokenResponse`（無効時は404またはエラー）
+
+#### POST /api/invite-tokens/register
+**説明**: 招待トークンを使った公開登録
+**権限**: なし（公開）
+**リクエスト**: `PublicRegisterRequest`
+```json
+{
+  "token": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "田中太郎",
+  "password": "password123",
+  "gender": "男性",
+  "dominantHand": "右"
+}
+```
+**レスポンス**: `PlayerDto`
 
 ---
 

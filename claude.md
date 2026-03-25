@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ドキュメント更新ルール
+
+**実装が完了したら、以下のドキュメントを必ず最新の状態に更新すること。**
+
+| ファイル | 内容 |
+|---------|------|
+| `docs/SPECIFICATION.md` | 仕様書 |
+| `docs/SCREEN_LIST.md` | 画面一覧 |
+| `docs/DESIGN.md` | 設計書 |
+
+- 新機能追加・既存機能の変更・画面の追加や変更があった場合、該当するドキュメントに漏れなく反映する
+- ドキュメントの更新は実装コードと同じコミットに含める
+
 ## プロジェクト概要
 
 競技かるたの対戦記録管理アプリ（Match Tracker）。Java Spring Boot バックエンド + React フロントエンドのモノレポ構成。
@@ -137,15 +150,4 @@ docker-compose -f docker-compose-dev.yml up   # PostgreSQL + アプリ起動
 
 ---
 
-## ドキュメント更新ルール
 
-**実装が完了したら、以下のドキュメントを必ず最新の状態に更新すること。**
-
-| ファイル | 内容 |
-|---------|------|
-| `docs/SPECIFICATION.md` | 仕様書 |
-| `docs/SCREEN_LIST.md` | 画面一覧 |
-| `docs/DESIGN.md` | 設計書 |
-
-- 新機能追加・既存機能の変更・画面の追加や変更があった場合、該当するドキュメントに漏れなく反映する
-- ドキュメントの更新は実装コードと同じコミットに含める
