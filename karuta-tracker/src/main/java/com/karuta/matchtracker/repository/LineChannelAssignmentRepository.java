@@ -28,6 +28,9 @@ public interface LineChannelAssignmentRepository extends JpaRepository<LineChann
     /** LINKED状態の割り当てをプレイヤーIDで取得 */
     Optional<LineChannelAssignment> findByPlayerIdAndStatus(Long playerId, AssignmentStatus status);
 
+    /** LINE userIdとステータスで割り当てを取得 */
+    Optional<LineChannelAssignment> findByLineUserIdAndStatus(String lineUserId, AssignmentStatus status);
+
     /** LINE連携済みの全プレイヤーIDリストを取得 */
     @Query("SELECT a.playerId FROM LineChannelAssignment a WHERE a.status = 'LINKED'")
     List<Long> findAllLinkedPlayerIds();

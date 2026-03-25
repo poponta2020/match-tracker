@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -39,7 +40,7 @@ public class LineNotificationService {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
 
     /**
-     * キャンセル待ち繰り上げ通知を送信する
+     * キャンセル待ち繰り上げ通知をFlex Messageで送信する
      */
     public void sendWaitlistOfferNotification(PracticeParticipant participant) {
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId()).orElse(null);
@@ -49,10 +50,92 @@ public class LineNotificationService {
         String deadlineStr = participant.getOfferDeadline() != null
             ? participant.getOfferDeadline().format(DateTimeFormatter.ofPattern("M/d HH:mm"))
             : "不明";
-        String message = String.format("%sの練習 試合%dに空きが出ました。参加しますか？（期限: %s）",
+        String altText = String.format("%sの練習 試合%dに空きが出ました。参加しますか？（期限: %s）",
             dateStr, participant.getMatchNumber(), deadlineStr);
 
-        sendToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);
+        Map<String, Object> flexContents = buildWaitlistOfferFlex(
+            dateStr, participant.getMatchNumber(), deadlineStr, participant.getId());
+
+        sendFlexToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, altText, flexContents);
+    }
+
+    /**
+     * キャンセル待ち繰り上げ用Flex Message（Bubble）を構築する
+     */
+    private Map<String, Object> buildWaitlistOfferFlex(String dateStr, int matchNumber,
+                                                        String deadlineStr, Long participantId) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "繰り上げ参加のお知らせ",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#27AE60",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", dateStr + "の練習",
+                    "weight", "bold", "size", "lg", "margin", "none"),
+                Map.of("type", "text", "text", "試合" + matchNumber + "に空きが出ました",
+                    "size", "md", "margin", "md", "color", "#333333"),
+                Map.of("type", "separator", "margin", "lg"),
+                Map.of("type", "box", "layout", "horizontal", "margin", "lg",
+                    "contents", List.of(
+                        Map.of("type", "text", "text", "応答期限",
+                            "size", "sm", "color", "#888888", "flex", 0),
+                        Map.of("type", "text", "text", deadlineStr,
+                            "size", "sm", "color", "#E74C3C", "weight", "bold",
+                            "align", "end")
+                    ))
+            ),
+            "paddingAll", "20px"
+        );
+
+        // フッター（参加する・辞退するボタン）
+        Map<String, Object> acceptButton = Map.of(
+            "type", "button",
+            "action", Map.of(
+                "type", "postback",
+                "label", "参加する",
+                "data", "action=waitlist_accept&participantId=" + participantId
+            ),
+            "style", "primary",
+            "color", "#27AE60",
+            "height", "sm"
+        );
+
+        Map<String, Object> declineButton = Map.of(
+            "type", "button",
+            "action", Map.of(
+                "type", "postback",
+                "label", "辞退する",
+                "data", "action=waitlist_decline&participantId=" + participantId
+            ),
+            "style", "secondary",
+            "height", "sm"
+        );
+
+        Map<String, Object> footer = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(acceptButton, declineButton),
+            "spacing", "sm",
+            "paddingAll", "15px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body,
+            "footer", footer
+        );
     }
 
     /**
@@ -179,6 +262,56 @@ public class LineNotificationService {
         pref.setDeadlineReminder(dto.isDeadlineReminder());
 
         lineNotificationPreferenceRepository.save(pref);
+    }
+
+    /**
+     * プレイヤーにFlex Messageを送信する
+     */
+    public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
+                                        String altText, Map<String, Object> flexContents) {
+        // LINKED状態の割り当てを取得
+        Optional<LineChannelAssignment> assignmentOpt =
+            lineChannelAssignmentRepository.findByPlayerIdAndStatus(playerId, AssignmentStatus.LINKED);
+        if (assignmentOpt.isEmpty()) {
+            return SendResult.SKIPPED;
+        }
+
+        LineChannelAssignment assignment = assignmentOpt.get();
+
+        // 通知設定チェック
+        if (!isNotificationEnabled(playerId, notificationType)) {
+            logMessage(assignment.getLineChannelId(), playerId, notificationType, altText,
+                MessageStatus.SKIPPED, "通知設定がOFF");
+            return SendResult.SKIPPED;
+        }
+
+        // チャネル取得
+        LineChannel channel = lineChannelRepository.findById(assignment.getLineChannelId()).orElse(null);
+        if (channel == null || channel.getStatus() != LineChannel.ChannelStatus.LINKED) {
+            return SendResult.SKIPPED;
+        }
+
+        // 月間送信上限チェック
+        if (channel.getMonthlyMessageCount() >= MONTHLY_MESSAGE_LIMIT) {
+            logMessage(channel.getId(), playerId, notificationType, altText,
+                MessageStatus.SKIPPED, "月間送信上限超過");
+            return SendResult.SKIPPED;
+        }
+
+        // LINE Push API送信（Flex Message）
+        boolean success = lineMessagingService.sendPushFlexMessage(
+            channel.getChannelAccessToken(), assignment.getLineUserId(), altText, flexContents);
+
+        if (success) {
+            channel.setMonthlyMessageCount(channel.getMonthlyMessageCount() + 1);
+            lineChannelRepository.save(channel);
+            logMessage(channel.getId(), playerId, notificationType, altText, MessageStatus.SUCCESS, null);
+            return SendResult.SUCCESS;
+        } else {
+            logMessage(channel.getId(), playerId, notificationType, altText,
+                MessageStatus.FAILED, "LINE API送信失敗");
+            return SendResult.FAILED;
+        }
     }
 
     /**

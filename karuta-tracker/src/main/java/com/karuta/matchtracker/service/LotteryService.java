@@ -144,6 +144,10 @@ public class LotteryService {
         StringBuilder matchDetails = new StringBuilder();
         boolean first = true;
 
+        // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
+        Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
+        int prevMatchNumber = -1;
+
         for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
             if (!first) matchDetails.append(", ");
             first = false;
@@ -151,9 +155,17 @@ public class LotteryService {
             int matchNumber = entry.getKey();
             List<PracticeParticipant> applicants = entry.getValue();
 
+            // 連続する試合番号の場合のみ前試合の順番を引き継ぐ
+            Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
+                    ? prevWaitlistOrder : Collections.emptyMap();
+            Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
+
             String detail = processMatch(session, matchNumber, applicants,
-                    sessionLosers, monthlyLosers, lotteryId);
+                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder);
             matchDetails.append(detail);
+
+            prevWaitlistOrder = currentWaitlistOrder;
+            prevMatchNumber = matchNumber;
         }
 
         return String.format("{\"sessionId\": %d, \"date\": \"%s\", \"matches\": [%s]}",
@@ -166,7 +178,9 @@ public class LotteryService {
     private String processMatch(PracticeSession session, int matchNumber,
                                 List<PracticeParticipant> applicants,
                                 Set<Long> sessionLosers, Set<Long> monthlyLosers,
-                                Long lotteryId) {
+                                Long lotteryId,
+                                Map<Long, Integer> previousMatchWaitlistOrder,
+                                Map<Long, Integer> currentMatchWaitlistOrder) {
 
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
@@ -258,13 +272,35 @@ public class LotteryService {
         allLosers.addAll(cascadeLosers);
         allLosers.addAll(lotteryLosers);
 
-        // ランダムにキャンセル待ち番号を割り当て
-        Collections.shuffle(allLosers);
-        for (int i = 0; i < allLosers.size(); i++) {
-            PracticeParticipant p = allLosers.get(i);
+        // キャンセル待ち番号を割り当て（連続試合では前試合の順番を引き継ぐ）
+        List<PracticeParticipant> withPrevOrder = new ArrayList<>();
+        List<PracticeParticipant> withoutPrevOrder = new ArrayList<>();
+
+        for (PracticeParticipant p : allLosers) {
+            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) {
+                withPrevOrder.add(p);
+            } else {
+                withoutPrevOrder.add(p);
+            }
+        }
+
+        // 前試合の順番を維持
+        withPrevOrder.sort(Comparator.comparingInt(p -> previousMatchWaitlistOrder.get(p.getPlayerId())));
+
+        // 新規落選者はランダム
+        Collections.shuffle(withoutPrevOrder);
+
+        // 結合して連番を付与
+        List<PracticeParticipant> orderedLosers = new ArrayList<>();
+        orderedLosers.addAll(withPrevOrder);
+        orderedLosers.addAll(withoutPrevOrder);
+
+        for (int i = 0; i < orderedLosers.size(); i++) {
+            PracticeParticipant p = orderedLosers.get(i);
             p.setStatus(ParticipantStatus.WAITLISTED);
             p.setWaitlistNumber(i + 1);
             p.setLotteryId(lotteryId);
+            currentMatchWaitlistOrder.put(p.getPlayerId(), i + 1);
         }
 
         // Step 5: 月内・セッション内の落選者リストを更新
@@ -372,6 +408,10 @@ public class LotteryService {
             // 一時的にcapacityを調整して再抽選
             Integer originalCapacity = session.getCapacity();
 
+            // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
+            Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
+            int prevMatchNumber = -1;
+
             for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
                 int matchNumber = entry.getKey();
                 long promotedInMatch = promotedCountByMatch.getOrDefault(matchNumber, 0L);
@@ -381,8 +421,16 @@ public class LotteryService {
                     session.setCapacity(originalCapacity - (int) promotedInMatch);
                 }
 
+                Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
+                        ? prevWaitlistOrder : Collections.emptyMap();
+                Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
+
                 processMatch(session, matchNumber, entry.getValue(),
-                        sessionLosers, monthlyLosers, execution.getId());
+                        sessionLosers, monthlyLosers, execution.getId(),
+                        inheritedOrder, currentWaitlistOrder);
+
+                prevWaitlistOrder = currentWaitlistOrder;
+                prevMatchNumber = matchNumber;
 
                 // 定員を戻す
                 session.setCapacity(originalCapacity);

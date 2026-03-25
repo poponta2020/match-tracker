@@ -1078,7 +1078,15 @@ Entity Layer (JPA Entity)
 #### POST /api/line/webhook/{lineChannelId}
 **説明**: LINEプラットフォームからのWebhookを受信する
 **認証**: x-line-signatureヘッダーによる署名検証
-**処理イベント**: follow（コード入力案内返信）、message（コード検証・紐付け）、unfollow（記録のみ）
+**処理イベント**: follow（コード入力案内返信）、message（コード検証・紐付け）、postback（繰り上げオファー応答）、unfollow（記録のみ）
+
+**postbackイベント処理フロー**:
+1. postbackデータをパース（`action=waitlist_accept&participantId=123`）
+2. LINE userId → LineChannelAssignment → playerId の紐付けを検証
+3. participantIdの所有者がpostback送信者と一致することを確認
+4. ステータスがOFFERED以外の場合は「処理済み」を返信
+5. `WaitlistPromotionService.respondToOffer()` を呼び出し
+6. 結果をReply APIで返信（承諾/辞退の確認メッセージ）
 
 ### 4.14 LINE管理者API
 
@@ -1566,9 +1574,9 @@ Entity Layer (JPA Entity)
    ↓
 2. キャンセル待ち1番を繰り上げ → status = OFFERED, offerDeadline設定
    ↓
-3. 繰り上げ通知（WAITLIST_OFFER）+ Web Push
+3. 繰り上げ通知（WAITLIST_OFFER）+ Web Push + LINE Flex Message（参加/辞退ボタン付き）
    ↓
-4. 繰り上げ者が応答:
+4. 繰り上げ者が応答（Webアプリ or LINEボタン、どちらからでも可）:
    - 承諾 → status = WON
    - 辞退/期限切れ → status = DECLINED → 次の待ち番号を繰り上げ
 ```
@@ -1607,6 +1615,8 @@ Entity Layer (JPA Entity)
   - 管理者向け一括送信機能
   - スケジューラ3種（リマインダー/チャネル回収/月次リセット）
   - フロントエンド画面3種（設定/チャネル管理/スケジュール設定）
+  - キャンセル待ち繰り上げ通知のFlex Message対応（参加/辞退ボタン付き）
+  - LINEからのpostback応答によるWebアプリ連携（LINE上で直接参加/辞退可能）
 
 #### 機能追加
 - [ ] **統計ページ拡充**

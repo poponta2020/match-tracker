@@ -24,9 +24,28 @@ public class LineMessagingService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     /**
-     * Push APIでメッセージを送信する
+     * Push APIでテキストメッセージを送信する
      */
     public boolean sendPushMessage(String channelAccessToken, String lineUserId, String messageText) {
+        Object[] messages = new Object[]{ Map.of("type", "text", "text", messageText) };
+        return sendPushMessages(channelAccessToken, lineUserId, messages);
+    }
+
+    /**
+     * Push APIでFlex Messageを送信する
+     */
+    public boolean sendPushFlexMessage(String channelAccessToken, String lineUserId,
+                                        String altText, Map<String, Object> contents) {
+        Object[] messages = new Object[]{
+            Map.of("type", "flex", "altText", altText, "contents", contents)
+        };
+        return sendPushMessages(channelAccessToken, lineUserId, messages);
+    }
+
+    /**
+     * Push APIでメッセージ配列を送信する（共通処理）
+     */
+    private boolean sendPushMessages(String channelAccessToken, String lineUserId, Object[] messages) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -34,9 +53,7 @@ public class LineMessagingService {
 
             Map<String, Object> body = Map.of(
                 "to", lineUserId,
-                "messages", new Object[]{
-                    Map.of("type", "text", "text", messageText)
-                }
+                "messages", messages
             );
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);

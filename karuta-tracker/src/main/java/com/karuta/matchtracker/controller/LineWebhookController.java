@@ -3,9 +3,14 @@ package com.karuta.matchtracker.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.entity.LineChannel;
+import com.karuta.matchtracker.entity.LineChannelAssignment;
+import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.service.LineLinkingService;
 import com.karuta.matchtracker.service.LineMessagingService;
+import com.karuta.matchtracker.service.WaitlistPromotionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -24,8 +29,11 @@ import org.springframework.web.bind.annotation.*;
 public class LineWebhookController {
 
     private final LineChannelRepository lineChannelRepository;
+    private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
     private final LineMessagingService lineMessagingService;
     private final LineLinkingService lineLinkingService;
+    private final WaitlistPromotionService waitlistPromotionService;
     private final ObjectMapper objectMapper;
 
     @PostMapping("/{channelId}")
@@ -69,6 +77,7 @@ public class LineWebhookController {
         switch (type) {
             case "follow" -> handleFollow(channel, event);
             case "message" -> handleMessage(channel, event);
+            case "postback" -> handlePostback(channel, event);
             case "unfollow" -> handleUnfollow(channel, event);
             default -> log.debug("Ignoring event type: {}", type);
         }
@@ -109,6 +118,103 @@ public class LineWebhookController {
 
         if (replyToken != null) {
             lineMessagingService.sendReplyMessage(channel.getChannelAccessToken(), replyToken, replyMessage);
+        }
+    }
+
+    private void handlePostback(LineChannel channel, JsonNode event) {
+        String data = event.path("postback").path("data").asText("");
+        String lineUserId = event.path("source").path("userId").asText();
+        String replyToken = event.has("replyToken") ? event.get("replyToken").asText() : null;
+
+        if (data.isEmpty()) {
+            log.warn("Empty postback data from userId {} on channel {}", lineUserId, channel.getLineChannelId());
+            return;
+        }
+
+        // postbackデータをパース（例: action=waitlist_accept&participantId=123）
+        java.util.Map<String, String> params = parsePostbackData(data);
+        String action = params.getOrDefault("action", "");
+        String participantIdStr = params.getOrDefault("participantId", "");
+
+        if (!action.startsWith("waitlist_") || participantIdStr.isEmpty()) {
+            log.debug("Ignoring non-waitlist postback: {}", data);
+            return;
+        }
+
+        Long participantId;
+        try {
+            participantId = Long.parseLong(participantIdStr);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid participantId in postback data: {}", data);
+            return;
+        }
+
+        // LINE userId → プレイヤーの紐付けを検証
+        java.util.Optional<LineChannelAssignment> assignmentOpt =
+            lineChannelAssignmentRepository.findByLineUserIdAndStatus(
+                lineUserId, LineChannelAssignment.AssignmentStatus.LINKED);
+        if (assignmentOpt.isEmpty()) {
+            log.warn("No linked assignment for lineUserId: {}", lineUserId);
+            sendReply(channel, replyToken, "LINE連携が見つかりません。アプリから操作してください。");
+            return;
+        }
+
+        Long playerId = assignmentOpt.get().getPlayerId();
+
+        // 参加者レコードを取得し、本人確認
+        java.util.Optional<PracticeParticipant> participantOpt =
+            practiceParticipantRepository.findById(participantId);
+        if (participantOpt.isEmpty() || !participantOpt.get().getPlayerId().equals(playerId)) {
+            log.warn("Participant {} not found or not owned by player {}", participantId, playerId);
+            sendReply(channel, replyToken, "操作対象が見つかりません。アプリから確認してください。");
+            return;
+        }
+
+        PracticeParticipant participant = participantOpt.get();
+
+        // 既にOFFERED以外のステータスなら処理済み
+        if (participant.getStatus() != com.karuta.matchtracker.entity.ParticipantStatus.OFFERED) {
+            log.info("Postback for participant {} but status is already {}", participantId, participant.getStatus());
+            sendReply(channel, replyToken, "この繰り上げオファーは既に処理済みです。");
+            return;
+        }
+
+        // 応答処理
+        boolean accept = "waitlist_accept".equals(action);
+        try {
+            waitlistPromotionService.respondToOffer(participantId, accept);
+            String replyMessage = accept
+                ? "参加を承諾しました！練習でお会いしましょう。"
+                : "辞退しました。次の方に通知します。";
+            sendReply(channel, replyToken, replyMessage);
+            log.info("Waitlist offer {} via LINE postback: player={}, participant={}",
+                accept ? "accepted" : "declined", playerId, participantId);
+        } catch (Exception e) {
+            log.error("Failed to process waitlist postback for participant {}: {}", participantId, e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+        }
+    }
+
+    /**
+     * postbackデータをキー=値ペアにパースする
+     */
+    private java.util.Map<String, String> parsePostbackData(String data) {
+        java.util.Map<String, String> params = new java.util.HashMap<>();
+        for (String pair : data.split("&")) {
+            String[] kv = pair.split("=", 2);
+            if (kv.length == 2) {
+                params.put(kv[0], kv[1]);
+            }
+        }
+        return params;
+    }
+
+    /**
+     * Reply APIで返信する（nullチェック付き）
+     */
+    private void sendReply(LineChannel channel, String replyToken, String message) {
+        if (replyToken != null) {
+            lineMessagingService.sendReplyMessage(channel.getChannelAccessToken(), replyToken, message);
         }
     }
 
