@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -59,10 +60,11 @@ public class ByeActivityController {
      * Service層でplayerId == userIdの検証を実施
      */
     @PostMapping
-    public ResponseEntity<ByeActivityDto> create(@Valid @RequestBody ByeActivityCreateRequest request) {
+    public ResponseEntity<ByeActivityDto> create(
+            @Valid @RequestBody ByeActivityCreateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("抜け番活動作成: {}", request);
-        // TODO: UserDetailsから取得。現在はリクエストのplayerIdをuserIdとして使用
-        Long userId = request.getPlayerId();
+        Long userId = (Long) httpRequest.getAttribute("currentUserId");
         ByeActivityDto created = byeActivityService.create(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -75,9 +77,10 @@ public class ByeActivityController {
     public ResponseEntity<List<ByeActivityDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
-            @Valid @RequestBody List<ByeActivityBatchItemRequest> items) {
+            @Valid @RequestBody List<ByeActivityBatchItemRequest> items,
+            HttpServletRequest httpRequest) {
         log.info("抜け番活動一括作成: date={}, matchNumber={}, count={}", date, matchNumber, items.size());
-        Long userId = 1L; // TODO: UserDetailsから取得
+        Long userId = (Long) httpRequest.getAttribute("currentUserId");
         List<ByeActivityDto> created = byeActivityService.createBatch(date, matchNumber, items, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -89,10 +92,10 @@ public class ByeActivityController {
     @PutMapping("/{id}")
     public ResponseEntity<ByeActivityDto> update(
             @PathVariable Long id,
-            @Valid @RequestBody ByeActivityUpdateRequest request) {
+            @Valid @RequestBody ByeActivityUpdateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("抜け番活動更新: id={}, type={}", id, request.getActivityType());
-        // TODO: UserDetailsから取得。現在は対象レコードのplayerIdをuserIdとして使用
-        Long userId = byeActivityService.getPlayerIdForActivity(id);
+        Long userId = (Long) httpRequest.getAttribute("currentUserId");
         ByeActivityDto updated = byeActivityService.update(id, request, userId);
         return ResponseEntity.ok(updated);
     }

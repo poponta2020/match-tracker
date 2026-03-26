@@ -195,6 +195,7 @@ const BulkResultInput = () => {
   const checkMissingScoreDiffs = () => {
     const missing = [];
     changedMatches.forEach(key => {
+      if (key.startsWith('bye-')) return; // 抜け番キーはスキップ
       const result = results[key];
       if (result.winnerId !== null && result.scoreDifference === null) {
         const [matchNumber, player1Id, player2Id] = key.split('-').map(Number);
@@ -313,6 +314,7 @@ const BulkResultInput = () => {
       const savePromises = [];
 
       for (const key of changedMatches) {
+        if (key.startsWith('bye-')) continue; // 抜け番キーは後続のループで処理
         const result = results[key];
         if (!result.winnerId) continue; // 勝者未選択はスキップ
 

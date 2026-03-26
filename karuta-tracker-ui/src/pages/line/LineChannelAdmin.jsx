@@ -90,7 +90,7 @@ const LineChannelAdmin = () => {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 space-y-4">
+    <div className="max-w-4xl mx-auto p-4 pt-16 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">LINEチャネル管理</h1>
         <button
@@ -143,25 +143,24 @@ const LineChannelAdmin = () => {
 
       {/* チャネル一覧 */}
       <div className="bg-white rounded-lg border overflow-hidden">
-        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="text-left px-4 py-2 text-gray-600">管理名</th>
-                <th className="text-left px-4 py-2 text-gray-600">ステータス</th>
-                <th className="text-left px-4 py-2 text-gray-600">割り当て</th>
-                <th className="text-right px-4 py-2 text-gray-600">月送信数</th>
-                <th className="text-right px-4 py-2 text-gray-600">操作</th>
+                <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">ID</th>
+                <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">ステータス</th>
+                <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">割り当て</th>
+                <th className="text-right px-2 py-2 text-gray-600 whitespace-nowrap">月送信数</th>
+                <th className="text-right px-2 py-2 text-gray-600 whitespace-nowrap">操作</th>
               </tr>
             </thead>
             <tbody>
               {channels.map((ch) => (
                 <tr key={ch.id} className="border-b last:border-b-0 hover:bg-gray-50">
-                  <td className="px-4 py-3">{ch.channelName || ch.lineChannelId}</td>
-                  <td className="px-4 py-3">{statusBadge(ch.status)}</td>
-                  <td className="px-4 py-3 text-gray-600">{ch.assignedPlayerName || '-'}</td>
-                  <td className="px-4 py-3 text-right">{ch.monthlyMessageCount}/200</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-3">{ch.channelName || ch.lineChannelId}</td>
+                  <td className="px-2 py-3">{statusBadge(ch.status)}</td>
+                  <td className="px-2 py-3 text-gray-600">{ch.assignedPlayerName || '-'}</td>
+                  <td className="px-2 py-3 text-right whitespace-nowrap">{ch.monthlyMessageCount}/200</td>
+                  <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       {ch.status === 'DISABLED' ? (
                         <button onClick={() => handleEnable(ch.id)} title="有効化"
@@ -193,7 +192,6 @@ const LineChannelAdmin = () => {
               )}
             </tbody>
           </table>
-        </div>
       </div>
     </div>
   );

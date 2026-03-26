@@ -186,10 +186,14 @@ const Home = () => {
                     <span className="text-sm text-[#1A3654]/70">{nextPractice.venueName}</span>
                   )}
                 </div>
-                {nextPractice.registered === false && (
+                {nextPractice.registered === false ? (
                   <Link to="/practice/participation" className="text-xs font-semibold text-[#1A3654]/70 hover:text-[#1A3654] flex items-center gap-0.5">
                     参加登録 <ArrowRight className="w-3 h-3" />
                   </Link>
+                ) : nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                  <span className="text-xs text-[#1A3654]/60">
+                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
+                  </span>
                 )}
               </div>
             )}

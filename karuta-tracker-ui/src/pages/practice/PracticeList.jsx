@@ -512,12 +512,12 @@ const PracticeList = () => {
       {/* モーダル */}
       {showModal && selectedSession && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 pb-16"
           onClick={closeModal}
         >
           <div
             className="bg-[#f9f6f2] rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden flex flex-col"
-          style={{ maxHeight: 'calc(100vh - 8rem - env(safe-area-inset-bottom, 0px))' }}
+          style={{ maxHeight: 'calc(100vh - 12rem - env(safe-area-inset-bottom, 0px))' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* ヘッダー */}
@@ -742,14 +742,16 @@ const PracticeList = () => {
         />
       )}
       {/* フローティングアクションボタン (FAB) */}
-      <div className="fixed right-4 z-20 flex flex-col gap-2" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="fixed left-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
         <button
           onClick={() => navigate('/practice/cancel')}
           className="bg-white text-red-600 border border-red-300 pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-red-50 transition-all hover:shadow-xl flex items-center gap-2"
         >
           <XCircle className="w-5 h-5" />
-          <span className="text-sm font-medium">キャンセル</span>
+          <span className="text-sm font-medium">登録キャンセル</span>
         </button>
+      </div>
+      <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
         <button
           onClick={goToParticipation}
           className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
