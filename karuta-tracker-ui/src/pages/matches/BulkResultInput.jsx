@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { matchAPI, pairingAPI, practiceAPI } from '../../api';
+import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { Save, AlertCircle, Pencil, X } from 'lucide-react';
+import { Save, AlertCircle, Pencil, X, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 const BulkResultInput = () => {
@@ -23,11 +23,42 @@ const BulkResultInput = () => {
   const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [missingScoreDiffs, setMissingScoreDiffs] = useState([]);
 
+  // 抜け番活動
+  const [byeActivities, setByeActivities] = useState({}); // `${matchNumber}-${playerId}` -> { activityType, freeText, id? }
+  const [byePlayers, setByePlayers] = useState({}); // matchNumber -> [{ id, name }]
+
   // 対戦変更モード
   const [editMode, setEditMode] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [selectingPairing, setSelectingPairing] = useState(null); // { pairingId, side: 'player1'|'player2' }
   const [updatingPairing, setUpdatingPairing] = useState(false);
+
+  const ACTIVITY_TYPES = [
+    { value: 'READING', label: '読み' },
+    { value: 'SOLO_PICK', label: '一人取り' },
+    { value: 'OBSERVING', label: '見学' },
+    { value: 'ASSIST_OBSERVING', label: '見学対応' },
+    { value: 'OTHER', label: 'その他' },
+  ];
+
+  // 抜け番選手の算出（共通関数）
+  const computeByePlayers = (sessionData, allPairings, allParticipants) => {
+    const totalMatches = sessionData?.totalMatches || 0;
+    const result = {};
+    for (let num = 1; num <= totalMatches; num++) {
+      const matchPairings = allPairings.filter(p => p.matchNumber === num);
+      const pairedIds = new Set();
+      matchPairings.forEach(p => { pairedIds.add(p.player1Id); pairedIds.add(p.player2Id); });
+      const matchPartEntries = sessionData.matchParticipants?.[String(num)] || [];
+      const matchPartNames = matchPartEntries.map(p => typeof p === 'string' ? p : p.name);
+      const bye = allParticipants
+        .filter(p => matchPartNames.includes(p.name) && !pairedIds.has(p.id));
+      if (bye.length > 0) {
+        result[num] = bye.map(p => ({ id: p.id, name: p.name }));
+      }
+    }
+    return result;
+  };
 
   // 権限チェック
   useEffect(() => {
@@ -49,14 +80,17 @@ const BulkResultInput = () => {
         const sessionData = sessionResponse.data;
         setSession(sessionData);
 
-        // 対戦ペアリングと既存試合結果と参加者を並列取得
-        const [pairingsResponse, matchesResponse, participantsResponse] = await Promise.all([
+        // 対戦ペアリングと既存試合結果と参加者と抜け番活動を並列取得
+        const [pairingsResponse, matchesResponse, participantsResponse, byeActivitiesResponse] = await Promise.all([
           pairingAPI.getByDate(sessionData.sessionDate),
           matchAPI.getByDate(sessionData.sessionDate),
           practiceAPI.getParticipants(sessionId),
+          byeActivityAPI.getByDate(sessionData.sessionDate).catch(() => ({ data: [] })),
         ]);
-        setPairings(pairingsResponse.data || []);
-        setParticipants(participantsResponse.data || []);
+        const allPairings = pairingsResponse.data || [];
+        setPairings(allPairings);
+        const allParticipants = participantsResponse.data || [];
+        setParticipants(allParticipants);
         const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
 
@@ -71,6 +105,21 @@ const BulkResultInput = () => {
           };
         });
         setResults(initialResults);
+
+        // 抜け番選手を算出（各試合番号ごと）
+        const newByePlayers = computeByePlayers(sessionData, allPairings, allParticipants);
+        setByePlayers(newByePlayers);
+
+        // 既存の抜け番活動を初期値として設定
+        const initialBye = {};
+        (byeActivitiesResponse.data || []).forEach(a => {
+          initialBye[`${a.matchNumber}-${a.playerId}`] = {
+            activityType: a.activityType,
+            freeText: a.freeText || '',
+            id: a.id,
+          };
+        });
+        setByeActivities(initialBye);
 
       } catch (err) {
         console.error('データ取得エラー:', err);
@@ -167,6 +216,25 @@ const BulkResultInput = () => {
     return missing;
   };
 
+  // 抜け番活動を設定
+  const setByeActivityType = (matchNumber, playerId, activityType) => {
+    const key = `${matchNumber}-${playerId}`;
+    setByeActivities(prev => ({
+      ...prev,
+      [key]: { ...prev[key], activityType, freeText: activityType !== 'OTHER' ? '' : (prev[key]?.freeText || '') },
+    }));
+    setChangedMatches(prev => new Set([...prev, `bye-${key}`]));
+  };
+
+  const setByeFreeText = (matchNumber, playerId, freeText) => {
+    const key = `${matchNumber}-${playerId}`;
+    setByeActivities(prev => ({
+      ...prev,
+      [key]: { ...prev[key], freeText },
+    }));
+    setChangedMatches(prev => new Set([...prev, `bye-${key}`]));
+  };
+
   // 対戦相手変更処理
   const handlePlayerChange = async (pairing, side, newPlayerId) => {
     try {
@@ -192,6 +260,11 @@ const BulkResultInput = () => {
       });
 
       setSelectingPairing(null);
+
+      // 抜け番を再計算（対戦変更でペア構成が変わるため）
+      const updatedPairings = pairings.map(p => p.id === pairing.id ? response.data : p);
+      const newByePlayers = computeByePlayers(session, updatedPairings, participants);
+      setByePlayers(newByePlayers);
     } catch (err) {
       console.error('対戦相手変更エラー:', err);
       setError(err.response?.data?.message || '対戦相手の変更に失敗しました');
@@ -287,7 +360,38 @@ const BulkResultInput = () => {
         }
       }
 
-      await Promise.all(savePromises);
+      // 抜け番活動の保存
+      const byePromises = [];
+      const byeMatchNumbers = new Set();
+      for (const key of changedMatches) {
+        if (!key.startsWith('bye-')) continue;
+        const byeKey = key.replace('bye-', '');
+        const [mn, pid] = byeKey.split('-').map(Number);
+        const activity = byeActivities[byeKey];
+        if (activity?.activityType) {
+          byeMatchNumbers.add(mn);
+        }
+      }
+      // 一括保存（試合番号ごとにbatch API呼び出し）
+      for (const mn of byeMatchNumbers) {
+        const items = [];
+        const matchByePlayers = byePlayers[mn] || [];
+        matchByePlayers.forEach(p => {
+          const activity = byeActivities[`${mn}-${p.id}`];
+          if (activity?.activityType) {
+            items.push({
+              playerId: p.id,
+              activityType: activity.activityType,
+              freeText: activity.activityType === 'OTHER' ? activity.freeText : null,
+            });
+          }
+        });
+        if (items.length > 0) {
+          byePromises.push(byeActivityAPI.createBatch(session.sessionDate, mn, items));
+        }
+      }
+
+      await Promise.all([...savePromises, ...byePromises]);
 
       // 保存成功後、試合結果詳細画面に遷移
       navigate(`/matches/results/${sessionId}`);
@@ -502,6 +606,45 @@ const BulkResultInput = () => {
             );
           })}
         </div>
+
+        {/* 抜け番セクション */}
+        {(byePlayers[currentMatchNumber] || []).length > 0 && !editMode && (
+          <div className="mt-6 pt-4 border-t border-[#e2d9d0]">
+            <p className="text-xs font-medium text-[#9b8a7e] mb-3">抜け番</p>
+            <div className="space-y-3">
+              {byePlayers[currentMatchNumber].map(player => {
+                const byeKey = `${currentMatchNumber}-${player.id}`;
+                const activity = byeActivities[byeKey] || {};
+                return (
+                  <div key={player.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-[#374151] min-w-[4rem]">{player.name}</span>
+                      <select
+                        value={activity.activityType || ''}
+                        onChange={(e) => setByeActivityType(currentMatchNumber, player.id, e.target.value)}
+                        className="flex-1 text-sm bg-white border border-[#d0c5b8] rounded px-2 py-1.5 focus:ring-0 focus:border-[#82655a]"
+                      >
+                        <option value="">活動を選択</option>
+                        {ACTIVITY_TYPES.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {activity.activityType === 'OTHER' && (
+                      <input
+                        type="text"
+                        value={activity.freeText || ''}
+                        onChange={(e) => setByeFreeText(currentMatchNumber, player.id, e.target.value)}
+                        placeholder="内容を入力..."
+                        className="mt-2 w-full text-sm bg-white border border-[#d0c5b8] rounded px-2 py-1.5 focus:ring-0 focus:border-[#82655a]"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 固定保存ボタン（変更がある場合のみ表示、編集モード中は非表示） */}

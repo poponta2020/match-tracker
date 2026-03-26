@@ -254,7 +254,32 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 日付セレクターで過去の練習日を選択（直近30日分の練習日を表示）
 - 試合番号ごとにタブ切り替え
 - 各ペアの結果（勝者・枚数差）を表示
+- 抜け番の選手と活動内容をバッジ形式で表示（活動記録がある場合）
 - 結果編集・一括入力画面へのリンク
+
+#### 3.4.4 抜け番活動記録
+
+奇数参加者の練習で対戦相手がいない選手（抜け番）の活動を試合番号ごとに記録する機能。
+
+**活動種別:**
+
+| Enum値 | 表示名 | 説明 |
+|--------|--------|------|
+| READING | 読み | 読み手として試合進行を担当 |
+| SOLO_PICK | 一人取り | 一人で札を取る練習 |
+| OBSERVING | 見学 | 他の選手の試合を見学 |
+| ASSIST_OBSERVING | 見学対応 | 見学者への説明・案内を担当 |
+| OTHER | その他 | 上記以外の活動（自由テキストで補足） |
+
+**入力方法:**
+- **本人入力（MatchForm）:** 抜け番の試合番号タブを選択すると、対戦入力フォームの代わりに活動種別選択UIが表示される
+- **管理者一括入力（BulkResultInput）:** ペアリング一覧の下に抜け番セクションが表示され、活動種別をドロップダウンで選択
+- **組み合わせ作成時（PairingGenerator）:** 待機選手に活動種別を選択して、ペアリング保存時に一括登録
+
+**ビジネスルール:**
+- 活動の入力は任意（未入力でもエラーにしない）
+- 「その他」選択時のみ自由テキスト入力欄が表示される
+- 同一試合・同一選手で1レコードのみ（ユニーク制約）
 
 ### 3.5 統計機能
 
@@ -605,6 +630,7 @@ players ──< matches (player1Id, player2Id, winnerId)
 players ──< practice_participants (playerId)
 players ──< player_profiles (playerId)
 players ──< match_pairings (player1Id, player2Id)
+players ──< bye_activities (playerId)
 players ──< google_calendar_events (playerId)
 players ──< notifications (playerId)
 players ──< push_subscriptions (playerId)
@@ -681,6 +707,24 @@ venues ──< venue_match_schedules (venueId)
 | created_by | BIGINT | NOT NULL | 作成者 |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
+
+#### bye_activities
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| session_date | DATE | NOT NULL | 練習日 |
+| match_number | INT | NOT NULL | 試合番号 |
+| player_id | BIGINT | NOT NULL, FK | 抜け番の選手 |
+| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER） |
+| free_text | VARCHAR(255) | — | 「その他」選択時の自由記述 |
+| created_by | BIGINT | NOT NULL | 登録者 |
+| updated_by | BIGINT | NOT NULL | 更新者 |
+| created_at | TIMESTAMP | NOT NULL | — |
+| updated_at | TIMESTAMP | NOT NULL | — |
+
+ユニーク制約: `(session_date, match_number, player_id)`
+インデックス: `idx_bye_activities_date`, `idx_bye_activities_date_match`, `idx_bye_activities_player`
 
 #### practice_sessions
 
@@ -976,7 +1020,18 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/{id}/detailed` | ALL | 詳細更新 |
 | DELETE | `/{id}` | ALL | 削除 |
 
-### 7.4 組み合わせ (`/api/match-pairings`)
+### 7.4 抜け番活動 (`/api/bye-activities`)
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `/?date=&matchNumber=` | ALL | 日付別取得（matchNumber指定時はその試合のみ） |
+| GET | `/player/{playerId}?type=` | ALL | 選手別活動履歴（type指定でフィルタ） |
+| POST | `/` | ALL | 作成（本人入力） |
+| POST | `/batch?date=&matchNumber=` | ADMIN+ | 一括作成（既存レコード削除後に再作成） |
+| PUT | `/{id}` | ALL | 更新 |
+| DELETE | `/{id}` | ADMIN+ | 削除 |
+
+### 7.5 組み合わせ (`/api/match-pairings`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -991,7 +1046,7 @@ venues ──< venue_match_schedules (venueId)
 | DELETE | `/{id}` | ALL | 単一削除 |
 | DELETE | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号の全削除 |
 
-### 7.5 練習日 (`/api/practice-sessions`)
+### 7.6 練習日 (`/api/practice-sessions`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1017,7 +1072,7 @@ venues ──< venue_match_schedules (venueId)
 | POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
 
-### 7.6 伝助連携 (`/api/practice-sessions`)
+### 7.7 伝助連携 (`/api/practice-sessions`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1027,7 +1082,7 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新 |
 | POST | `/sync-densuke` | ADMIN+ | 年月指定で伝助同期 |
 
-### 7.7 選手プロフィール (`/api/player-profiles`)
+### 7.8 選手プロフィール (`/api/player-profiles`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1038,7 +1093,7 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/{profileId}/valid-to?validTo=` | ALL | 有効終了日設定 |
 | DELETE | `/{profileId}` | ALL | プロフィール削除 |
 
-### 7.8 会場管理 (`/api/venues`)
+### 7.9 会場管理 (`/api/venues`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1048,13 +1103,13 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/{id}` | ALL | 会場更新 |
 | DELETE | `/{id}` | ALL | 会場削除 |
 
-### 7.9 Googleカレンダー (`/api/google-calendar`)
+### 7.10 Googleカレンダー (`/api/google-calendar`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
 | POST | `/sync` | ALL | カレンダー同期実行 |
 
-### 7.10 抽選 (`/api/lottery`)
+### 7.11 抽選 (`/api/lottery`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1069,7 +1124,7 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/admin/edit-participants` | ADMIN+ | 管理者による手動編集 |
 | GET | `/executions?year=&month=` | ALL | 抽選実行履歴 |
 
-### 7.11 通知 (`/api/notifications`)
+### 7.12 通知 (`/api/notifications`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1077,7 +1132,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/unread-count?playerId=` | ALL | 未読通知数 |
 | PUT | `/{id}/read` | ALL | 通知既読化 |
 
-### 7.12 Push購読 (`/api/push-subscriptions`)
+### 7.13 Push購読 (`/api/push-subscriptions`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1085,7 +1140,7 @@ venues ──< venue_match_schedules (venueId)
 | POST | `/subscribe` | ALL | Push購読登録 |
 | DELETE | `/unsubscribe` | ALL | Push購読解除 |
 
-### 7.13 LINE通知 (`/api/line`)
+### 7.14 LINE通知 (`/api/line`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1097,7 +1152,7 @@ venues ──< venue_match_schedules (venueId)
 | PUT | `/preferences` | ALL | 通知種別設定更新 |
 | POST | `/webhook/{lineChannelId}` | Public | LINEプラットフォームからのWebhook受信 |
 
-### 7.14 LINE管理 (`/api/admin/line`)
+### 7.15 LINE管理 (`/api/admin/line`)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
@@ -1112,7 +1167,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/schedule-settings` | ADMIN+ | スケジュール設定取得 |
 | PUT | `/schedule-settings` | ADMIN+ | スケジュール設定更新 |
 
-### 7.15 ヘルスチェック
+### 7.16 ヘルスチェック
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|

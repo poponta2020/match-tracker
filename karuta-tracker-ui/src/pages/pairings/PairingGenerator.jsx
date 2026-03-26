@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
+import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
@@ -32,6 +33,15 @@ const PairingGenerator = () => {
   const [cacheVersion, setCacheVersion] = useState(0); // キャッシュ更新トリガー
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 未保存の組み合わせがあるか
   const [isViewMode, setIsViewMode] = useState(false); // 既存組み合わせの閲覧モード
+  const [waitingActivities, setWaitingActivities] = useState({}); // playerId -> { activityType, freeText }
+
+  const ACTIVITY_TYPES = [
+    { value: 'READING', label: '読み' },
+    { value: 'SOLO_PICK', label: '一人取り' },
+    { value: 'OBSERVING', label: '見学' },
+    { value: 'ASSIST_OBSERVING', label: '見学対応' },
+    { value: 'OTHER', label: 'その他' },
+  ];
 
   // 各試合番号の組み合わせデータキャッシュ
   const pairingsCache = useRef({}); // matchNumber -> pairings array or null
@@ -305,6 +315,23 @@ const PairingGenerator = () => {
 
       const waitingIds = waitingPlayers.map((p) => p.id);
       await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
+
+      // 抜け番活動も保存（活動が選択されている場合のみ）
+      const byeItems = waitingPlayers
+        .filter(p => waitingActivities[p.id]?.activityType)
+        .map(p => ({
+          playerId: p.id,
+          activityType: waitingActivities[p.id].activityType,
+          freeText: waitingActivities[p.id].activityType === 'OTHER' ? waitingActivities[p.id].freeText : null,
+        }));
+      if (byeItems.length > 0) {
+        await byeActivityAPI.createBatch(sessionDate, matchNumber, byeItems).catch(err => {
+          console.warn('抜け番活動の保存に失敗:', err);
+        });
+      }
+
+      // 待機活動をリセット
+      setWaitingActivities({});
 
       // キャッシュとマップを更新
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
@@ -888,14 +915,40 @@ const PairingGenerator = () => {
               </div>
               {waitingPlayers.length > 0 ? (
                 <>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
-                      <PlayerChip
-                        key={player.id}
-                        name={player.name}
-                        kyuRank={player.kyuRank}
-                        className="text-sm bg-[#f9f6f2] text-[#374151]"
-                      />
+                      <div key={player.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                        <PlayerChip
+                          name={player.name}
+                          kyuRank={player.kyuRank}
+                          className="text-sm bg-[#f9f6f2] text-[#374151]"
+                        />
+                        <select
+                          value={waitingActivities[player.id]?.activityType || ''}
+                          onChange={(e) => setWaitingActivities(prev => ({
+                            ...prev,
+                            [player.id]: { ...prev[player.id], activityType: e.target.value, freeText: e.target.value !== 'OTHER' ? '' : (prev[player.id]?.freeText || '') },
+                          }))}
+                          className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 focus:ring-0 focus:border-[#4a6b5a]"
+                        >
+                          <option value="">活動を選択</option>
+                          {ACTIVITY_TYPES.map(t => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                        {waitingActivities[player.id]?.activityType === 'OTHER' && (
+                          <input
+                            type="text"
+                            value={waitingActivities[player.id]?.freeText || ''}
+                            onChange={(e) => setWaitingActivities(prev => ({
+                              ...prev,
+                              [player.id]: { ...prev[player.id], freeText: e.target.value },
+                            }))}
+                            placeholder="内容"
+                            className="w-24 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 focus:ring-0 focus:border-[#4a6b5a]"
+                          />
+                        )}
+                      </div>
                     ))}
                   </div>
                   <p className="text-xs text-gray-600 mt-2">

@@ -41,11 +41,11 @@
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
 | 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ） |
-| 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択 | ALL | 試合結果入力 |
+| 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、抜け番活動種別選択 | ALL | 試合結果入力（抜け番の場合は活動記録） |
 | 9 | `/matches/:id` | `MatchDetail.jsx` | — | ALL | 試合詳細表示 |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択 | ALL | 試合結果編集 |
-| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力 | ADMIN+ | 一括結果入力 |
-| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ | ADMIN+ | 試合結果一覧（管理者向け） |
+| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力 | ADMIN+ | 一括結果入力（抜け番の活動も含む） |
+| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示） |
 
 ---
 

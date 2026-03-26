@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { matchAPI, pairingAPI, practiceAPI } from '../../api';
+import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 // カレンダーピッカーコンポーネント
@@ -111,10 +111,19 @@ const MatchResultsView = () => {
   const [session, setSession] = useState(null);
   const [pairings, setPairings] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [byeActivitiesData, setByeActivitiesData] = useState([]); // 抜け番活動データ
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const ACTIVITY_ICONS = {
+    READING: BookOpen,
+    SOLO_PICK: User,
+    OBSERVING: Eye,
+    ASSIST_OBSERVING: UsersRound,
+    OTHER: MoreHorizontal,
+  };
 
   // 日付選択関連の状態
   const [selectedDate, setSelectedDate] = useState(null);
@@ -150,12 +159,13 @@ const MatchResultsView = () => {
 
   // 日付データの取得ヘルパー
   const fetchDataForDate = async (date) => {
-    const [sessionResponse, pairingsResponse, matchesResponse] = await Promise.all([
+    const [sessionResponse, pairingsResponse, matchesResponse, byeResponse] = await Promise.all([
       practiceAPI.getByDate(date).catch(() => null),
       pairingAPI.getByDate(date, { light: true }).catch(() => ({ data: [] })),
       matchAPI.getByDate(date).catch(() => ({ data: [] })),
+      byeActivityAPI.getByDate(date).catch(() => ({ data: [] })),
     ]);
-    return { sessionResponse, pairingsResponse, matchesResponse };
+    return { sessionResponse, pairingsResponse, matchesResponse, byeResponse };
   };
 
   const applyData = (data) => {
@@ -163,10 +173,12 @@ const MatchResultsView = () => {
       setSession(data.sessionResponse.data);
       setPairings(data.pairingsResponse.data || []);
       setMatches(data.matchesResponse.data || []);
+      setByeActivitiesData(data.byeResponse?.data || []);
     } else {
       setSession(null);
       setPairings([]);
       setMatches([]);
+      setByeActivitiesData([]);
     }
   };
 
@@ -565,13 +577,47 @@ const MatchResultsView = () => {
           })}
         </div>
 
-        {/* 抜けの選手 */}
-        {currentByePlayers.length > 0 && (
-          <div className="mt-4 px-3 py-2.5 bg-[#e5ebe7] rounded-lg flex items-center gap-2 text-sm text-[#6b7280]">
-            <span className="font-medium text-[#374151] flex-shrink-0">抜け:</span>
-            <span>{currentByePlayers.join('、')}</span>
-          </div>
-        )}
+        {/* 抜け番の選手と活動 */}
+        {(() => {
+          const matchByeActivities = byeActivitiesData.filter(a => a.matchNumber === currentMatchNumber);
+          // 活動記録のある抜け番 + 活動未記録の抜け番を統合
+          const byeWithActivities = matchByeActivities.map(a => ({
+            name: a.playerName,
+            activityType: a.activityType,
+            activityTypeDisplay: a.activityTypeDisplay,
+            freeText: a.freeText,
+          }));
+          const activityPlayerNames = new Set(matchByeActivities.map(a => a.playerName));
+          const byeWithoutActivities = currentByePlayers
+            .filter(name => !activityPlayerNames.has(name))
+            .map(name => ({ name, activityType: null, activityTypeDisplay: null, freeText: null }));
+          const allBye = [...byeWithActivities, ...byeWithoutActivities];
+
+          if (allBye.length === 0) return null;
+
+          return (
+            <div className="mt-4 bg-[#e5ebe7] rounded-lg p-3">
+              <p className="text-xs font-medium text-[#374151] mb-2">抜け番</p>
+              <div className="space-y-1.5">
+                {allBye.map((player, i) => {
+                  const Icon = player.activityType ? ACTIVITY_ICONS[player.activityType] : null;
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      {Icon && <Icon className="w-4 h-4 text-[#6b7280] flex-shrink-0" />}
+                      <span className="font-medium text-[#374151]">{player.name}</span>
+                      {player.activityTypeDisplay && (
+                        <span className="text-xs px-2 py-0.5 bg-white rounded-full text-[#6b7280]">
+                          {player.activityTypeDisplay}
+                          {player.freeText && `（${player.freeText}）`}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 管理者用：編集ボタン */}
         {(isAdmin() || isSuperAdmin()) && session && (

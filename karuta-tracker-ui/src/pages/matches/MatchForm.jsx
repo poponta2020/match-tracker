@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI, playerAPI, practiceAPI, pairingAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus } from 'lucide-react';
+import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI } from '../../api';
+import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 const MatchForm = () => {
@@ -39,12 +39,19 @@ const MatchForm = () => {
   const [showParticipationDialog, setShowParticipationDialog] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
+  // 抜け番活動関連
+  const [isByeMatch, setIsByeMatch] = useState(false);
+  const [byeActivityType, setByeActivityType] = useState('');
+  const [byeFreeText, setByeFreeText] = useState('');
+  const [existingByeActivity, setExistingByeActivity] = useState(null); // 既存の抜け番記録
+
   // 初期ロード完了フラグ（タブ切り替え時の重複API呼び出し防止用）
   const initialLoadDone = useRef(false);
   // 全試合データのキャッシュ（タブ即時切替用）
   const matchDataCache = useRef({});   // matchNumber -> { exists, data }
   const pairingCache = useRef({});     // matchNumber -> myPairing or null
   const allPairingsCache = useRef([]); // 全ペアリングデータ
+  const byeActivityCache = useRef({}); // matchNumber -> byeActivity or null（日付はformData.matchDateで固定のためキーに含めない）
 
   // useEffect 1: 選手一覧 + 今日の練習セッション取得
   useEffect(() => {
@@ -160,19 +167,34 @@ const MatchForm = () => {
           newPairingCache[num] = myPairing || null;
         });
 
-        // 全試合の既存記録を一括取得
-        const matchResults = await Promise.all(allMatchNumbers.map(num =>
-          matchAPI.getByPlayerDateAndMatchNumber(currentPlayer.id, formData.matchDate, num)
-            .then(res => ({ matchNumber: num, exists: true, data: res.data }))
-            .catch(() => ({ matchNumber: num, exists: false }))
-        ));
+        // 全試合の既存記録 + 抜け番活動を一括取得
+        const [matchResults, byeActivitiesRes] = await Promise.all([
+          Promise.all(allMatchNumbers.map(num =>
+            matchAPI.getByPlayerDateAndMatchNumber(currentPlayer.id, formData.matchDate, num)
+              .then(res => ({ matchNumber: num, exists: true, data: res.data }))
+              .catch(() => ({ matchNumber: num, exists: false }))
+          )),
+          byeActivityAPI.getByDate(formData.matchDate).catch(err => {
+            console.warn('抜け番活動の取得に失敗:', err);
+            return { data: [] };
+          }),
+        ]);
 
         // 既存記録をキャッシュ
         matchResults.forEach(r => { newMatchDataCache[r.matchNumber] = r; });
 
+        // 抜け番活動をキャッシュ
+        const newByeCache = {};
+        (byeActivitiesRes.data || []).forEach(a => {
+          if (a.playerId === currentPlayer.id) {
+            newByeCache[a.matchNumber] = a;
+          }
+        });
+
         // refにキャッシュ保存
         matchDataCache.current = newMatchDataCache;
         pairingCache.current = newPairingCache;
+        byeActivityCache.current = newByeCache;
 
         // デフォルト試合番号を決定
         // 未記録の試合を優先表示
@@ -194,14 +216,24 @@ const MatchForm = () => {
     fetchSessionDetails();
   }, [practiceSession, currentPlayer.id, currentPlayer.name, isEdit]);
 
+  // 活動種別の定義
+  const ACTIVITY_TYPES = [
+    { value: 'READING', label: '読み', icon: BookOpen },
+    { value: 'SOLO_PICK', label: '一人取り', icon: User },
+    { value: 'OBSERVING', label: '見学', icon: Eye },
+    { value: 'ASSIST_OBSERVING', label: '見学対応', icon: UsersRound },
+    { value: 'OTHER', label: 'その他', icon: MoreHorizontal },
+  ];
+
   // 試合番号のデータをstateに適用する共通関数
   const applyMatchData = (matchNumber, matchCache, pairCache) => {
     const existingResult = matchCache[matchNumber];
     if (existingResult && existingResult.exists) {
       const match = existingResult.data;
       setIsExistingMatch(true);
+      setIsByeMatch(false);
       setPairing(null);
-      // opponentIdをplayer1Id/player2Idから算出
+      setExistingByeActivity(null);
       const opponentId = match.player1Id === currentPlayer.id ? match.player2Id : match.player1Id;
       setFormData(prev => ({
         ...prev,
@@ -215,7 +247,34 @@ const MatchForm = () => {
     } else {
       setIsExistingMatch(false);
       const myPairing = pairCache[matchNumber];
-      if (myPairing) {
+
+      // 抜け番判定: 自分のペアリングがない + その試合に他のペアリングが存在する
+      const matchPairings = allPairingsCache.current.filter(p => p.matchNumber === matchNumber);
+      const isBye = !myPairing && matchPairings.length > 0;
+
+      if (isBye) {
+        setIsByeMatch(true);
+        setPairing(null);
+        // 既存の抜け番活動を読み込む
+        const existingBye = byeActivityCache.current[matchNumber];
+        if (existingBye) {
+          setExistingByeActivity(existingBye);
+          setByeActivityType(existingBye.activityType);
+          setByeFreeText(existingBye.freeText || '');
+        } else {
+          setExistingByeActivity(null);
+          setByeActivityType('');
+          setByeFreeText('');
+        }
+        setFormData(prev => ({
+          ...prev,
+          matchNumber: matchNumber,
+          opponentId: null,
+          opponentName: '',
+        }));
+      } else if (myPairing) {
+        setIsByeMatch(false);
+        setExistingByeActivity(null);
         setPairing(myPairing);
         const opponentId = myPairing.player1Id === currentPlayer.id
           ? myPairing.player2Id
@@ -233,6 +292,8 @@ const MatchForm = () => {
           notes: ''
         }));
       } else {
+        setIsByeMatch(false);
+        setExistingByeActivity(null);
         setPairing(null);
         setAvailablePlayers(getMatchPlayers(matchNumber));
         setFormData(prev => ({
@@ -321,6 +382,46 @@ const MatchForm = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleByeActivitySubmit = async () => {
+    if (!byeActivityType) {
+      setError('活動内容を選択してください');
+      return;
+    }
+    if (byeActivityType === 'OTHER' && !byeFreeText.trim()) {
+      setError('その他の場合は内容を入力してください');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = {
+        sessionDate: formData.matchDate,
+        matchNumber: parseInt(formData.matchNumber),
+        playerId: currentPlayer.id,
+        activityType: byeActivityType,
+        freeText: byeActivityType === 'OTHER' ? byeFreeText.trim() : null,
+      };
+
+      if (existingByeActivity) {
+        await byeActivityAPI.update(existingByeActivity.id, {
+          activityType: byeActivityType,
+          freeText: byeActivityType === 'OTHER' ? byeFreeText.trim() : null,
+        });
+      } else {
+        await byeActivityAPI.create(data);
+      }
+
+      navigate('/');
+    } catch (err) {
+      console.error('抜け番活動保存エラー:', err);
+      setError(err.response?.data?.message || '抜け番活動の保存に失敗しました');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -486,6 +587,79 @@ const MatchForm = () => {
           </div>
         </div>
       ) : (
+      isByeMatch && !isEdit ? (
+        <div className="h-full px-6 overflow-hidden pt-28 space-y-6">
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm font-medium text-yellow-800">この試合は抜け番です</p>
+          </div>
+
+          {existingByeActivity && (
+            <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-2 text-blue-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">入力済みです。保存で上書きされます。</span>
+            </div>
+          )}
+
+          <div>
+            <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-3">活動内容を選択してください</div>
+            <div className="space-y-2">
+              {ACTIVITY_TYPES.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setByeActivityType(value)}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all text-left ${
+                    byeActivityType === value
+                      ? 'bg-[#4a6b5a] text-white shadow-md'
+                      : 'bg-[#e5ebe7] text-[#374151] hover:bg-[#d5ddd8]'
+                  }`}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-medium">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {byeActivityType === 'OTHER' && (
+            <div>
+              <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">内容</div>
+              <input
+                type="text"
+                value={byeFreeText}
+                onChange={(e) => setByeFreeText(e.target.value)}
+                placeholder="活動内容を入力..."
+                className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151] placeholder-[#9ca3af]"
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-red-50 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleByeActivitySubmit}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 bg-[#1A3654] text-white py-4 rounded-2xl hover:bg-[#122740] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
+            >
+              {loading ? '保存中...' : existingByeActivity ? '更新する' : '登録する'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/matches')}
+              className="flex items-center justify-center px-5 py-4 rounded-2xl text-[#6b7280] hover:bg-[#e5ebe7] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} className="h-full px-6 overflow-hidden pt-28 space-y-6">
 
         {/* 既存試合の警告メッセージ */}
@@ -634,6 +808,7 @@ const MatchForm = () => {
           </div>
         )}
       </form>
+      )
       )}
 
       {/* 参加未登録ダイアログ */}

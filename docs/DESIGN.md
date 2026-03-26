@@ -267,6 +267,29 @@ Entity Layer (JPA Entity)
 
 ---
 
+#### bye_activities（抜け番活動記録）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| session_date | DATE | NOT NULL | 練習日 |
+| match_number | INT | NOT NULL | 試合番号 |
+| player_id | BIGINT | NOT NULL, FK | 抜け番の選手ID |
+| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER） |
+| free_text | VARCHAR(255) | | 「その他」選択時の自由記述 |
+| created_by | BIGINT | NOT NULL | 登録者ID |
+| updated_by | BIGINT | NOT NULL | 更新者ID |
+| created_at | TIMESTAMP | NOT NULL | 登録日時 |
+| updated_at | TIMESTAMP | NOT NULL | 更新日時 |
+
+**ユニーク制約**: `uk_bye_activities_unique (session_date, match_number, player_id)`
+
+**インデックス**:
+- `idx_bye_activities_date` (session_date)
+- `idx_bye_activities_date_match` (session_date, match_number)
+- `idx_bye_activities_player` (player_id)
+
+---
+
 #### player_profiles（選手情報履歴）
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
@@ -736,7 +759,57 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.4 練習日API
+### 4.4 抜け番活動API
+
+#### GET /api/bye-activities?date={date}&matchNumber={matchNumber}
+**説明**: 指定日の抜け番活動を取得（matchNumber指定時はその試合のみ）
+**権限**: なし
+**レスポンス**: `List<ByeActivityDto>`
+
+#### POST /api/bye-activities
+**説明**: 抜け番活動を作成（本人入力）
+**権限**: なし
+**リクエスト**: `ByeActivityCreateRequest`
+```json
+{
+  "sessionDate": "2026-03-24",
+  "matchNumber": 1,
+  "playerId": 5,
+  "activityType": "READING",
+  "freeText": null
+}
+```
+
+#### POST /api/bye-activities/batch?date={date}&matchNumber={matchNumber}
+**説明**: 抜け番活動を一括作成（既存レコード削除後に再作成）
+**権限**: ADMIN+
+**リクエスト**: `List<ByeActivityBatchItemRequest>`
+```json
+[
+  { "playerId": 5, "activityType": "READING", "freeText": null },
+  { "playerId": 8, "activityType": "OTHER", "freeText": "審判練習" }
+]
+```
+
+#### PUT /api/bye-activities/{id}
+**説明**: 抜け番活動を更新
+**権限**: なし
+**リクエスト**: `ByeActivityUpdateRequest`
+```json
+{ "activityType": "SOLO_PICK", "freeText": null }
+```
+
+#### GET /api/bye-activities/player/{playerId}?type={activityType}
+**説明**: 選手別の活動履歴（集計用）
+**権限**: なし
+
+#### DELETE /api/bye-activities/{id}
+**説明**: 抜け番活動を削除
+**権限**: ADMIN+
+
+---
+
+### 4.5 練習日API
 
 #### POST /api/practice-sessions
 **説明**: 練習日作成
@@ -805,7 +878,7 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.5 練習参加登録API
+### 4.6 練習参加登録API
 
 #### POST /api/practice-sessions/participations
 **説明**: 一括参加登録（月単位）
@@ -837,7 +910,7 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.6 対戦組み合わせAPI
+### 4.7 対戦組み合わせAPI
 
 #### POST /api/match-pairings/auto-match
 **説明**: 自動マッチング
@@ -892,7 +965,7 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.7 会場API
+### 4.8 会場API
 
 #### GET /api/venues
 **説明**: 全会場取得
@@ -930,7 +1003,7 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.8 抽選API
+### 4.9 抽選API
 
 #### POST /api/lottery/execute
 **説明**: 手動抽選実行（月単位）
@@ -1002,7 +1075,7 @@ Entity Layer (JPA Entity)
 
 ---
 
-### 4.9 通知API
+### 4.10 通知API
 
 #### GET /api/notifications?playerId={playerId}
 **説明**: 通知一覧取得
