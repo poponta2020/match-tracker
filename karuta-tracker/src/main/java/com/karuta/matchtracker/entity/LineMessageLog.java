@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -71,6 +72,6 @@ public class LineMessageLog {
 
     @PrePersist
     protected void onCreate() {
-        sentAt = LocalDateTime.now();
+        sentAt = JstDateTimeUtil.now();
     }
 }

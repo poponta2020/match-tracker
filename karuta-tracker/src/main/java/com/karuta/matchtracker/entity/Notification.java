@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -72,6 +73,6 @@ public class Notification {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = JstDateTimeUtil.now();
     }
 }

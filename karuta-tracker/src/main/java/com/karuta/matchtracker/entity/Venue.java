@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -45,12 +46,12 @@ public class Venue {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = JstDateTimeUtil.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 }

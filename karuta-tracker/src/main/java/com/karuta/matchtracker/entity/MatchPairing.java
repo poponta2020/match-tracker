@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 @Entity
@@ -45,12 +46,12 @@ public class MatchPairing {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = JstDateTimeUtil.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 }

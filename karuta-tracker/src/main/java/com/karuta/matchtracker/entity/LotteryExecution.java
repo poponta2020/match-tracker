@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -71,7 +72,7 @@ public class LotteryExecution {
     @PrePersist
     protected void onCreate() {
         if (executedAt == null) {
-            executedAt = LocalDateTime.now();
+            executedAt = JstDateTimeUtil.now();
         }
     }
 }

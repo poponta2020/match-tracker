@@ -3,6 +3,7 @@ package com.karuta.matchtracker.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -66,14 +67,14 @@ public class InviteToken {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = JstDateTimeUtil.now();
     }
 
     /**
      * トークンが有効かどうか判定
      */
     public boolean isValid() {
-        if (LocalDateTime.now().isAfter(expiresAt)) {
+        if (JstDateTimeUtil.now().isAfter(expiresAt)) {
             return false;
         }
         if (type == TokenType.SINGLE_USE && usedAt != null) {

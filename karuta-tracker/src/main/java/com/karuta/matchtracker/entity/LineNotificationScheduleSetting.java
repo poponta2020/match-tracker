@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -49,11 +50,11 @@ public class LineNotificationScheduleSetting {
 
     @PrePersist
     protected void onCreate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = JstDateTimeUtil.now();
     }
 }

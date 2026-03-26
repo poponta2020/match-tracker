@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -71,9 +72,9 @@ public class LineChannelAssignment {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = JstDateTimeUtil.now();
         if (assignedAt == null) {
-            assignedAt = LocalDateTime.now();
+            assignedAt = JstDateTimeUtil.now();
         }
     }
 }
