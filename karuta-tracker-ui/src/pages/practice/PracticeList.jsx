@@ -545,7 +545,7 @@ const PracticeList = () => {
                     const isExpanded = expandedMatches[matchNum] !== false;
                     const count = participants.filter(p => {
                       if (typeof p === 'string') return true;
-                      return p.status !== 'WAITLISTED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED';
+                      return p.status !== 'WAITLISTED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED' && p.status !== 'WAITLIST_DECLINED';
                     }).length;
                     const myMatchNumbers = myParticipations[selectedSession.id] || [];
                     const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
@@ -593,7 +593,7 @@ const PracticeList = () => {
                             {participants.length > 0 ? (() => {
                               const wonList = participants.filter(p => {
                                 const s = typeof p === 'string' ? null : p.status;
-                                return s !== 'WAITLISTED' && s !== 'CANCELLED' && s !== 'DECLINED';
+                                return s !== 'WAITLISTED' && s !== 'CANCELLED' && s !== 'DECLINED' && s !== 'WAITLIST_DECLINED';
                               });
                               const waitList = participants.filter(p => {
                                 const s = typeof p === 'string' ? null : p.status;

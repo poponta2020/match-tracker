@@ -209,9 +209,9 @@ const Home = () => {
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
-                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED') && (
+                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED') && (
                       <div className="flex flex-wrap gap-1.5">
-                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED')).map((p) => (
+                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED')).map((p) => (
                           <PlayerChip
                             key={p.id}
                             name={p.name}

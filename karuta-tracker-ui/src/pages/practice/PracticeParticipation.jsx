@@ -160,6 +160,7 @@ const PracticeParticipation = () => {
       case 'PENDING': return { label: '申込', color: 'bg-gray-100 text-gray-600', canCancel: false };
       case 'DECLINED': return { label: '辞退', color: 'bg-gray-100 text-gray-400', canCancel: false };
       case 'CANCELLED': return { label: '取消', color: 'bg-red-100 text-red-400', canCancel: false };
+      case 'WAITLIST_DECLINED': return { label: '待辞退', color: 'bg-gray-100 text-gray-400', canCancel: false };
       default: return { label: '−', color: 'bg-gray-100 text-gray-400', canCancel: false };
     }
   };

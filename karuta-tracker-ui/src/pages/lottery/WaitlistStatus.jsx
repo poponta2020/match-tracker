@@ -31,6 +31,7 @@ export default function WaitlistStatus() {
     switch (status) {
       case 'WAITLISTED': return { text: '待機中', color: 'bg-yellow-100 text-yellow-800' };
       case 'OFFERED': return { text: '応答待ち', color: 'bg-blue-100 text-blue-800' };
+      case 'WAITLIST_DECLINED': return { text: '辞退済み', color: 'bg-gray-100 text-gray-400' };
       default: return { text: status, color: 'bg-gray-100 text-gray-600' };
     }
   };
