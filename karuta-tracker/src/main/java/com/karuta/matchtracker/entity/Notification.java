@@ -59,9 +59,13 @@ public class Notification {
     private LocalDateTime createdAt;
 
     public enum NotificationType {
-        /** 抽選結果（当選） */
+        /** 抽選結果（当選）※廃止：既存データ参照用に残す */
         LOTTERY_WON,
-        /** 抽選結果（落選・キャンセル待ち） */
+        /** 抽選結果（全試合当選まとめ） */
+        LOTTERY_ALL_WON,
+        /** 抽選結果（落選以外は全当選まとめ） */
+        LOTTERY_REMAINING_WON,
+        /** 抽選結果（落選・キャンセル待ち）※セッション単位 */
         LOTTERY_WAITLISTED,
         /** キャンセル待ちからの繰り上げ連絡 */
         WAITLIST_OFFER,

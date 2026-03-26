@@ -15,5 +15,7 @@ public enum ParticipantStatus {
     /** 繰り上げ辞退（明示的辞退または応答期限切れ） */
     DECLINED,
     /** 当選後キャンセル */
-    CANCELLED
+    CANCELLED,
+    /** キャンセル待ち辞退 */
+    WAITLIST_DECLINED
 }
