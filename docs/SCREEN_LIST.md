@@ -96,10 +96,10 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 28 | `/lottery/results` | `LotteryResults.jsx` | 月ナビゲーション、当選/落選リスト | ALL | 月別抽選結果一覧 |
+| 28 | `/lottery/results` | `LotteryResults.jsx` | 月ナビゲーション、当選/落選リスト、キャンセル待ち辞退/復帰ボタン、WAITLIST_DECLINEDバッジ | ALL | 月別抽選結果一覧。自分のキャンセル待ちセッションに辞退/復帰ボタンあり |
 | 29 | `/lottery/waitlist` | `WaitlistStatus.jsx` | ステータスバッジ、応答リンク | ALL | 自分のキャンセル待ち状況 |
 | 30 | `/lottery/offer-response` | `OfferResponse.jsx` | オファー詳細（日付・会場・試合・期限）、参加/辞退ボタン、期限切れ表示、処理済み表示 | ALL | 繰り上げ参加の承認/辞退 |
-| 31 | `/notifications` | `NotificationList.jsx` | 通知カード、未読バッジ | ALL | 通知一覧（タップで関連画面に遷移） |
+| 31 | `/notifications` | `NotificationList.jsx` | 通知カード、未読バッジ、キャンセル待ち辞退ボタン | ALL | 通知一覧。LOTTERY_ALL_WON/LOTTERY_REMAINING_WON/LOTTERY_WAITLISTED対応。WAITLISTED通知にはインライン辞退ボタンあり |
 
 ---
 

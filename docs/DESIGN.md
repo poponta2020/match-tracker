@@ -236,6 +236,7 @@ Entity Layer (JPA Entity)
 - `OFFERED` - 繰り上げ通知済み（応答待ち）
 - `DECLINED` - 繰り上げ辞退（明示的辞退または応答期限切れ）
 - `CANCELLED` - 当選後キャンセル
+- `WAITLIST_DECLINED` - キャンセル待ち辞退
 
 ---
 
@@ -368,8 +369,10 @@ Entity Layer (JPA Entity)
 | created_at | DATETIME | NOT NULL | 作成日時 |
 
 **NotificationType列挙型**:
-- `LOTTERY_WON` - 抽選結果（当選）
-- `LOTTERY_WAITLISTED` - 抽選結果（落選・キャンセル待ち）
+- `LOTTERY_WON` - 抽選結果（当選）※廃止：既存データ参照用に残す
+- `LOTTERY_ALL_WON` - 抽選結果（全試合当選まとめ）
+- `LOTTERY_REMAINING_WON` - 抽選結果（落選以外は全当選まとめ）
+- `LOTTERY_WAITLISTED` - 抽選結果（落選・キャンセル待ち）※セッション単位にまとめ
 - `WAITLIST_OFFER` - キャンセル待ちからの繰り上げ連絡
 - `OFFER_EXPIRING` - 繰り上げ応答期限切れ警告
 - `OFFER_EXPIRED` - 繰り上げ応答期限切れ
@@ -1105,6 +1108,30 @@ Entity Layer (JPA Entity)
 **レスポンス**:
 ```json
 { "inAppCount": 24, "lineSent": 20, "lineFailed": 0, "lineSkipped": 4 }
+```
+
+#### POST /api/lottery/decline-waitlist
+**説明**: キャンセル待ち辞退（セッション単位）。辞退後、後続のキャンセル待ち番号を自動繰り上げ。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ）
+**リクエスト**:
+```json
+{ "sessionId": 100, "playerId": 10 }
+```
+**レスポンス**:
+```json
+{ "declinedCount": 2, "message": "2件のキャンセル待ちを辞退しました" }
+```
+
+#### POST /api/lottery/rejoin-waitlist
+**説明**: キャンセル待ち復帰（セッション単位）。復帰時のキャンセル待ち番号は最後尾。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ）
+**リクエスト**:
+```json
+{ "sessionId": 100, "playerId": 10 }
+```
+**レスポンス**:
+```json
+{ "rejoinedCount": 2, "message": "キャンセル待ちに復帰しました（2件）" }
 ```
 
 #### PUT /api/lottery/admin/edit-participants
