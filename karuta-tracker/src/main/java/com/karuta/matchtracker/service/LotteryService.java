@@ -2,16 +2,21 @@ package com.karuta.matchtracker.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.karuta.matchtracker.dto.LotteryResultDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +47,8 @@ public class LotteryService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
+    private final PlayerRepository playerRepository;
+    private final VenueRepository venueRepository;
     private final NotificationService notificationService;
     private final SystemSettingService systemSettingService;
     private final ObjectMapper objectMapper;
@@ -103,17 +110,6 @@ public class LotteryService {
             }
 
             execution.setDetails(toJson(new LotteryDetails(sessionDetails)));
-
-            // 抽選結果の通知を送信
-            for (PracticeSession session : sessions) {
-                List<PracticeParticipant> processed = practiceParticipantRepository
-                        .findBySessionId(session.getId())
-                        .stream()
-                        .filter(p -> p.getStatus() == ParticipantStatus.WON
-                                || p.getStatus() == ParticipantStatus.WAITLISTED)
-                        .collect(Collectors.toList());
-                notificationService.createLotteryResultNotifications(processed);
-            }
 
             log.info("Lottery completed for {}-{}: {} sessions processed", year, month, sessions.size());
 
@@ -477,6 +473,84 @@ public class LotteryService {
         }
 
         return lotteryExecutionRepository.save(execution);
+    }
+
+    /**
+     * セッションの抽選結果DTOを組み立てる
+     */
+    public LotteryResultDto buildLotteryResult(PracticeSession session) {
+        List<PracticeParticipant> participants = practiceParticipantRepository
+                .findBySessionIdOrderByMatchAndStatus(session.getId());
+
+        // プレイヤー情報をまとめて取得
+        Set<Long> playerIds = participants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .collect(Collectors.toSet());
+        Map<Long, Player> playersMap = playerRepository.findAllById(playerIds)
+                .stream().collect(Collectors.toMap(Player::getId, p -> p));
+
+        // 会場名を取得
+        String venueName = null;
+        if (session.getVenueId() != null) {
+            venueName = venueRepository.findById(session.getVenueId())
+                    .map(Venue::getName)
+                    .orElse(null);
+        }
+
+        // 試合番号でグループ化
+        Map<Integer, List<PracticeParticipant>> byMatch = participants.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber, TreeMap::new, Collectors.toList()));
+
+        Map<Integer, LotteryResultDto.MatchResult> matchResults = new TreeMap<>();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : Integer.MAX_VALUE;
+
+        for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
+            List<LotteryResultDto.ParticipantResult> winners = new ArrayList<>();
+            List<LotteryResultDto.ParticipantResult> waitlisted = new ArrayList<>();
+
+            for (PracticeParticipant p : entry.getValue()) {
+                Player player = playersMap.get(p.getPlayerId());
+                if (player == null) continue;
+
+                LotteryResultDto.ParticipantResult result = LotteryResultDto.ParticipantResult.builder()
+                        .playerId(p.getPlayerId())
+                        .playerName(player.getName())
+                        .kyuRank(player.getKyuRank())
+                        .danRank(player.getDanRank())
+                        .status(p.getStatus())
+                        .waitlistNumber(p.getWaitlistNumber())
+                        .build();
+
+                if (p.getStatus() == ParticipantStatus.WON) {
+                    winners.add(result);
+                } else if (p.getStatus() == ParticipantStatus.WAITLISTED
+                        || p.getStatus() == ParticipantStatus.OFFERED
+                        || p.getStatus() == ParticipantStatus.DECLINED) {
+                    waitlisted.add(result);
+                }
+            }
+
+            waitlisted.sort(Comparator.comparing(r -> r.getWaitlistNumber() != null ? r.getWaitlistNumber() : Integer.MAX_VALUE));
+
+            matchResults.put(entry.getKey(), LotteryResultDto.MatchResult.builder()
+                    .matchNumber(entry.getKey())
+                    .capacity(capacity)
+                    .lotteryRequired(entry.getValue().size() > capacity)
+                    .winners(winners)
+                    .waitlisted(waitlisted)
+                    .build());
+        }
+
+        return LotteryResultDto.builder()
+                .sessionId(session.getId())
+                .sessionDate(session.getSessionDate())
+                .venueName(venueName)
+                .startTime(session.getStartTime())
+                .endTime(session.getEndTime())
+                .capacity(session.getCapacity())
+                .matchResults(matchResults)
+                .build();
     }
 
     private String toJson(Object obj) {

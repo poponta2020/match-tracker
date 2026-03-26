@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
-import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
@@ -337,6 +337,26 @@ const PracticeList = () => {
     }
   };
 
+  // 抽選結果通知を送信
+  const handleNotifyResults = async () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth() + 1;
+    try {
+      // 送信済みチェック
+      const statusRes = await lotteryAPI.notifyStatus(year, month);
+      if (statusRes.data.sent) {
+        if (!window.confirm(`${year}年${month}月の抽選結果通知は既に送信済みです（${statusRes.data.sentCount}件）。再送信しますか？`)) {
+          return;
+        }
+      }
+      const result = await lotteryAPI.notifyResults(year, month);
+      alert(`通知送信完了\nアプリ内通知: ${result.data.inAppCount}件\nLINE送信: ${result.data.lineSent}件`);
+    } catch (err) {
+      console.error('Notify error:', err);
+      alert(err.response?.data?.message || '通知送信に失敗しました');
+    }
+  };
+
   // 参加者のステータスバッジ
   const getStatusBadge = (status) => {
     switch (status) {
@@ -402,6 +422,18 @@ const PracticeList = () => {
 
       {/* コンテンツ（上部パディング追加） */}
       <div className="pt-20">
+      {/* 管理者用: 抽選結果通知ボタン */}
+      {isAdmin() && (
+        <div className="mb-3 flex justify-end">
+          <button
+            onClick={handleNotifyResults}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
+          >
+            <Bell className="w-4 h-4" />
+            抽選結果を通知
+          </button>
+        </div>
+      )}
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}

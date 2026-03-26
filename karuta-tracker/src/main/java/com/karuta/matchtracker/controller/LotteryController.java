@@ -4,19 +4,19 @@ import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionType;
+import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
-import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryService;
-import com.karuta.matchtracker.service.PracticeSessionService;
+import com.karuta.matchtracker.service.NotificationService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -42,10 +42,11 @@ public class LotteryController {
     private final LotteryService lotteryService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final LineNotificationService lineNotificationService;
+    private final NotificationService notificationService;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
-    private final PlayerRepository playerRepository;
+    private final NotificationRepository notificationRepository;
 
     /**
      * 手動抽選実行
@@ -83,7 +84,7 @@ public class LotteryController {
         List<LotteryResultDto> results = new ArrayList<>();
 
         for (PracticeSession session : sessions) {
-            results.add(buildLotteryResult(session));
+            results.add(lotteryService.buildLotteryResult(session));
         }
 
         return ResponseEntity.ok(results);
@@ -96,7 +97,7 @@ public class LotteryController {
     public ResponseEntity<LotteryResultDto> getSessionLotteryResult(@PathVariable Long sessionId) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
-        return ResponseEntity.ok(buildLotteryResult(session));
+        return ResponseEntity.ok(lotteryService.buildLotteryResult(session));
     }
 
     /**
@@ -114,7 +115,7 @@ public class LotteryController {
             boolean involved = practiceParticipantRepository.existsBySessionIdAndPlayerId(
                     session.getId(), playerId);
             if (involved) {
-                results.add(buildLotteryResult(session));
+                results.add(lotteryService.buildLotteryResult(session));
             }
         }
 
@@ -238,6 +239,66 @@ public class LotteryController {
     }
 
     /**
+     * 抽選結果通知の送信済みチェック
+     */
+    @GetMapping("/notify-status")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> getNotifyStatus(
+            @RequestParam int year, @RequestParam int month) {
+
+        // 対象月のセッションに紐づく参加者IDを取得
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> participantIds = sessions.stream()
+                .flatMap(s -> practiceParticipantRepository.findBySessionId(s.getId()).stream())
+                .map(PracticeParticipant::getId)
+                .collect(Collectors.toList());
+
+        if (participantIds.isEmpty()) {
+            return ResponseEntity.ok(Map.of("sent", false, "sentCount", 0));
+        }
+
+        long sentCount = notificationRepository.countByReferenceIdInAndTypeIn(
+                participantIds,
+                List.of(NotificationType.LOTTERY_WON, NotificationType.LOTTERY_WAITLISTED));
+
+        return ResponseEntity.ok(Map.of("sent", sentCount > 0, "sentCount", sentCount));
+    }
+
+    /**
+     * 抽選結果通知の統合送信（アプリ内通知 + LINE通知）
+     */
+    @PostMapping("/notify-results")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> notifyResults(@RequestBody Map<String, Integer> body) {
+        int year = body.getOrDefault("year", 0);
+        int month = body.getOrDefault("month", 0);
+
+        // アプリ内通知を生成
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        int inAppCount = 0;
+        for (PracticeSession session : sessions) {
+            List<PracticeParticipant> processed = practiceParticipantRepository
+                    .findBySessionId(session.getId())
+                    .stream()
+                    .filter(p -> p.getStatus() == ParticipantStatus.WON
+                            || p.getStatus() == ParticipantStatus.WAITLISTED)
+                    .collect(Collectors.toList());
+            notificationService.createLotteryResultNotifications(processed);
+            inAppCount += processed.size();
+        }
+
+        // LINE通知を送信
+        var lineResult = lineNotificationService.sendLotteryResults(year, month);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("inAppCount", inAppCount);
+        result.put("lineSent", lineResult.getSentCount());
+        result.put("lineFailed", lineResult.getFailedCount());
+        result.put("lineSkipped", lineResult.getSkippedCount());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 抽選実行履歴取得
      */
     @GetMapping("/executions")
@@ -247,74 +308,4 @@ public class LotteryController {
                 lotteryExecutionRepository.findByTargetYearAndTargetMonth(year, month));
     }
 
-    // ============================================================
-    // Private helpers
-    // ============================================================
-
-    private LotteryResultDto buildLotteryResult(PracticeSession session) {
-        List<PracticeParticipant> participants = practiceParticipantRepository
-                .findBySessionIdOrderByMatchAndStatus(session.getId());
-
-        // プレイヤー情報をまとめて取得
-        Set<Long> playerIds = participants.stream()
-                .map(PracticeParticipant::getPlayerId)
-                .collect(Collectors.toSet());
-        Map<Long, Player> playersMap = playerRepository.findAllById(playerIds)
-                .stream().collect(Collectors.toMap(Player::getId, p -> p));
-
-        // 試合番号でグループ化
-        Map<Integer, List<PracticeParticipant>> byMatch = participants.stream()
-                .filter(p -> p.getMatchNumber() != null)
-                .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber, TreeMap::new, Collectors.toList()));
-
-        Map<Integer, LotteryResultDto.MatchResult> matchResults = new TreeMap<>();
-        int capacity = session.getCapacity() != null ? session.getCapacity() : Integer.MAX_VALUE;
-
-        for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
-            List<LotteryResultDto.ParticipantResult> winners = new ArrayList<>();
-            List<LotteryResultDto.ParticipantResult> waitlisted = new ArrayList<>();
-
-            for (PracticeParticipant p : entry.getValue()) {
-                Player player = playersMap.get(p.getPlayerId());
-                if (player == null) continue;
-
-                LotteryResultDto.ParticipantResult result = LotteryResultDto.ParticipantResult.builder()
-                        .playerId(p.getPlayerId())
-                        .playerName(player.getName())
-                        .kyuRank(player.getKyuRank())
-                        .danRank(player.getDanRank())
-                        .status(p.getStatus())
-                        .waitlistNumber(p.getWaitlistNumber())
-                        .build();
-
-                if (p.getStatus() == ParticipantStatus.WON) {
-                    winners.add(result);
-                } else if (p.getStatus() == ParticipantStatus.WAITLISTED
-                        || p.getStatus() == ParticipantStatus.OFFERED
-                        || p.getStatus() == ParticipantStatus.DECLINED) {
-                    waitlisted.add(result);
-                }
-            }
-
-            // キャンセル待ちは番号順にソート
-            waitlisted.sort(Comparator.comparing(r -> r.getWaitlistNumber() != null ? r.getWaitlistNumber() : Integer.MAX_VALUE));
-
-            matchResults.put(entry.getKey(), LotteryResultDto.MatchResult.builder()
-                    .matchNumber(entry.getKey())
-                    .capacity(capacity)
-                    .lotteryRequired(entry.getValue().size() > capacity)
-                    .winners(winners)
-                    .waitlisted(waitlisted)
-                    .build());
-        }
-
-        return LotteryResultDto.builder()
-                .sessionId(session.getId())
-                .sessionDate(session.getSessionDate())
-                .startTime(session.getStartTime())
-                .endTime(session.getEndTime())
-                .capacity(session.getCapacity())
-                .matchResults(matchResults)
-                .build();
-    }
 }

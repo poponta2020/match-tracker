@@ -44,4 +44,12 @@ export const lotteryAPI = {
   // 抽選実行履歴取得
   getExecutions: (year, month) =>
     apiClient.get('/lottery/executions', { params: { year, month } }),
+
+  // 抽選結果通知の送信済みチェック
+  notifyStatus: (year, month) =>
+    apiClient.get('/lottery/notify-status', { params: { year, month } }),
+
+  // 抽選結果通知の統合送信（アプリ内 + LINE）
+  notifyResults: (year, month) =>
+    apiClient.post('/lottery/notify-results', { year, month }),
 };

@@ -99,17 +99,6 @@ public class LineAdminController {
     }
 
     /**
-     * 抽選結果をLINE送信する
-     */
-    @PostMapping("/send/lottery-result")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<LineSendResultResponse> sendLotteryResult(@RequestBody Map<String, Integer> body) {
-        int year = body.getOrDefault("year", 0);
-        int month = body.getOrDefault("month", 0);
-        return ResponseEntity.ok(lineNotificationService.sendLotteryResults(year, month));
-    }
-
-    /**
      * 対戦組み合わせをLINE送信する
      */
     @PostMapping("/send/match-pairing")

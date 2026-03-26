@@ -51,10 +51,6 @@ export const lineAPI = {
   forceReleaseChannel: (channelId) =>
     apiClient.delete(`/admin/line/channels/${channelId}/assignment`),
 
-  // 抽選結果をLINE送信する
-  sendLotteryResult: (year, month) =>
-    apiClient.post('/admin/line/send/lottery-result', { year, month }),
-
   // 対戦組み合わせをLINE送信する
   sendMatchPairing: (sessionId) =>
     apiClient.post('/admin/line/send/match-pairing', { sessionId }),
