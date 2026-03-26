@@ -9,6 +9,7 @@ import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -114,15 +115,23 @@ public class NotificationService {
 
         String dateStr = session.getSessionDate().format(DATE_FORMAT);
 
+        String deadlineStr = participant.getOfferDeadline() != null
+                ? participant.getOfferDeadline().format(DateTimeFormatter.ofPattern("M/d HH:mm"))
+                : "不明";
+        String message = String.format("%sの練習 試合%dに空きが出ました。参加しますか？（期限: %s）",
+                dateStr, participant.getMatchNumber(), deadlineStr);
+
+        // 応答期限まで12時間未満の場合は注意文言を追加
+        if (participant.getOfferDeadline() != null
+                && java.time.Duration.between(JstDateTimeUtil.now(), participant.getOfferDeadline()).toHours() < 12) {
+            message += "\n※ 応答期限まで残りわずかです。お早めにご回答ください。";
+        }
+
         Notification notification = Notification.builder()
                 .playerId(participant.getPlayerId())
                 .type(NotificationType.WAITLIST_OFFER)
                 .title("繰り上げ参加のご連絡")
-                .message(String.format("%sの練習 試合%dに空きが出ました。参加しますか？（期限: %s）",
-                        dateStr, participant.getMatchNumber(),
-                        participant.getOfferDeadline() != null
-                                ? participant.getOfferDeadline().format(DateTimeFormatter.ofPattern("M/d HH:mm"))
-                                : "不明"))
+                .message(message)
                 .referenceType("PRACTICE_PARTICIPANT")
                 .referenceId(participant.getId())
                 .build();

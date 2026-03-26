@@ -7,6 +7,7 @@ import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.LineMessageLog.LineNotificationType;
 import com.karuta.matchtracker.entity.LineMessageLog.MessageStatus;
 import com.karuta.matchtracker.repository.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,8 +54,12 @@ public class LineNotificationService {
         String altText = String.format("%sの練習 試合%dに空きが出ました。参加しますか？（期限: %s）",
             dateStr, participant.getMatchNumber(), deadlineStr);
 
+        // 応答期限まで12時間未満の場合は緊急フラグ
+        boolean isUrgent = participant.getOfferDeadline() != null
+            && java.time.Duration.between(JstDateTimeUtil.now(), participant.getOfferDeadline()).toHours() < 12;
+
         Map<String, Object> flexContents = buildWaitlistOfferFlex(
-            dateStr, participant.getMatchNumber(), deadlineStr, participant.getId());
+            dateStr, participant.getMatchNumber(), deadlineStr, participant.getId(), isUrgent);
 
         sendFlexToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, altText, flexContents);
     }
@@ -63,7 +68,7 @@ public class LineNotificationService {
      * キャンセル待ち繰り上げ用Flex Message（Bubble）を構築する
      */
     private Map<String, Object> buildWaitlistOfferFlex(String dateStr, int matchNumber,
-                                                        String deadlineStr, Long participantId) {
+                                                        String deadlineStr, Long participantId, boolean isUrgent) {
         // ヘッダー
         Map<String, Object> header = Map.of(
             "type", "box",
@@ -77,24 +82,30 @@ public class LineNotificationService {
         );
 
         // ボディ
+        List<Object> bodyContents = new java.util.ArrayList<>(List.of(
+            Map.of("type", "text", "text", dateStr + "の練習",
+                "weight", "bold", "size", "lg", "margin", "none"),
+            Map.of("type", "text", "text", "試合" + matchNumber + "に空きが出ました",
+                "size", "md", "margin", "md", "color", "#333333"),
+            Map.of("type", "separator", "margin", "lg"),
+            Map.of("type", "box", "layout", "horizontal", "margin", "lg",
+                "contents", List.of(
+                    Map.of("type", "text", "text", "応答期限",
+                        "size", "sm", "color", "#888888", "flex", 0),
+                    Map.of("type", "text", "text", deadlineStr,
+                        "size", "sm", "color", "#E74C3C", "weight", "bold",
+                        "align", "end")
+                ))
+        ));
+        if (isUrgent) {
+            bodyContents.add(Map.of("type", "text",
+                "text", "※ 応答期限まで残りわずかです。お早めにご回答ください。",
+                "size", "xs", "color", "#E74C3C", "margin", "md", "wrap", true));
+        }
         Map<String, Object> body = Map.of(
             "type", "box",
             "layout", "vertical",
-            "contents", List.of(
-                Map.of("type", "text", "text", dateStr + "の練習",
-                    "weight", "bold", "size", "lg", "margin", "none"),
-                Map.of("type", "text", "text", "試合" + matchNumber + "に空きが出ました",
-                    "size", "md", "margin", "md", "color", "#333333"),
-                Map.of("type", "separator", "margin", "lg"),
-                Map.of("type", "box", "layout", "horizontal", "margin", "lg",
-                    "contents", List.of(
-                        Map.of("type", "text", "text", "応答期限",
-                            "size", "sm", "color", "#888888", "flex", 0),
-                        Map.of("type", "text", "text", deadlineStr,
-                            "size", "sm", "color", "#E74C3C", "weight", "bold",
-                            "align", "end")
-                    ))
-            ),
+            "contents", bodyContents,
             "paddingAll", "20px"
         );
 
