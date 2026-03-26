@@ -41,6 +41,7 @@ const MatchForm = () => {
 
   // 抜け番活動関連
   const [isByeMatch, setIsByeMatch] = useState(false);
+  const [manualByeMode, setManualByeMode] = useState(false); // 手動で抜け番モードに切り替えたか
   const [byeActivityType, setByeActivityType] = useState('');
   const [byeFreeText, setByeFreeText] = useState('');
   const [existingByeActivity, setExistingByeActivity] = useState(null); // 既存の抜け番記録
@@ -293,6 +294,7 @@ const MatchForm = () => {
         }));
       } else {
         setIsByeMatch(false);
+        setManualByeMode(false);
         setExistingByeActivity(null);
         setPairing(null);
         setAvailablePlayers(getMatchPlayers(matchNumber));
@@ -587,11 +589,26 @@ const MatchForm = () => {
           </div>
         </div>
       ) : (
-      isByeMatch && !isEdit ? (
+      (isByeMatch || manualByeMode) && !isEdit ? (
         <div className="h-full px-6 overflow-hidden pt-28 space-y-6">
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm font-medium text-yellow-800">この試合は抜け番です</p>
           </div>
+
+          {manualByeMode && !isByeMatch && (
+            <button
+              type="button"
+              onClick={() => {
+                setManualByeMode(false);
+                setByeActivityType('');
+                setByeFreeText('');
+                setExistingByeActivity(null);
+              }}
+              className="text-sm text-[#6b7280] underline underline-offset-2 hover:text-[#374151]"
+            >
+              通常入力に戻る
+            </button>
+          )}
 
           {existingByeActivity && (
             <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-2 text-blue-700">
@@ -718,6 +735,26 @@ const MatchForm = () => {
               </select>
             )}
           </div>
+        )}
+
+        {/* 抜け番として記録ボタン（ペアリング未作成 & 対戦相手未選択時） */}
+        {!isEdit && !isExistingMatch && !pairing && !formData.opponentId && practiceSession && (
+          <button
+            type="button"
+            onClick={() => {
+              setManualByeMode(true);
+              // 既存の抜け番活動を読み込む
+              const existingBye = byeActivityCache.current[formData.matchNumber];
+              if (existingBye) {
+                setExistingByeActivity(existingBye);
+                setByeActivityType(existingBye.activityType);
+                setByeFreeText(existingBye.freeText || '');
+              }
+            }}
+            className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-yellow-300 bg-yellow-50 text-yellow-700 text-sm font-medium hover:bg-yellow-100 transition-colors"
+          >
+            抜け番として記録する
+          </button>
         )}
 
         {/* 結果 */}

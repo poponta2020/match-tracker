@@ -38,7 +38,7 @@ status: completed
 - **対応Issue:** #20
 
 ### タスク5: MatchForm に手動抜け番切り替え機能を追加
-- [ ] 完了
+- [x] 完了
 - **概要:** ペアリング未作成の試合で「抜け番として記録」ボタンを表示し、手動で抜け番UIに切り替えられるようにする
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchForm.jsx` — `manualByeMode` state を追加。通常フォーム内に「抜け番として記録」ボタンを追加（ペアリング未作成時のみ表示）。抜け番UI内に「通常入力に戻る」ボタンを追加。表示条件を `(isByeMatch || manualByeMode) && !isEdit` に変更
