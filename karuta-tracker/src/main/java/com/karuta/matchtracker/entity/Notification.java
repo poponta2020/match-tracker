@@ -58,6 +58,10 @@ public class Notification {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** 論理削除日時 */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     public enum NotificationType {
         /** 抽選結果（当選）※廃止：既存データ参照用に残す */
         LOTTERY_WON,

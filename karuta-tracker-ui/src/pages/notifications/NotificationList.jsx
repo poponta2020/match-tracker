@@ -14,6 +14,7 @@ export default function NotificationList() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (currentPlayer?.id) fetchNotifications();
@@ -45,6 +46,20 @@ export default function NotificationList() {
 
     if (notification.type === 'WAITLIST_OFFER' && notification.referenceId) {
       navigate(`/lottery/offer-response?id=${notification.referenceId}`);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm('通知をすべて削除しますか？')) return;
+    setDeleting(true);
+    try {
+      await notificationAPI.deleteAll(currentPlayer.id);
+      setNotifications([]);
+    } catch (err) {
+      console.error('Failed to delete notifications:', err);
+      alert('削除に失敗しました');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -94,7 +109,17 @@ export default function NotificationList() {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-xl font-bold mb-4">通知</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">通知</h1>
+        {notifications.length > 0 && !loading && (
+          <button
+            onClick={handleDeleteAll}
+            disabled={deleting}
+            className="px-3 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50">
+            {deleting ? '削除中...' : 'すべて削除'}
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <LoadingScreen />

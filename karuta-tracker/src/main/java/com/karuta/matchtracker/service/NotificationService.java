@@ -38,7 +38,7 @@ public class NotificationService {
      */
     @Transactional(readOnly = true)
     public List<NotificationDto> getNotifications(Long playerId) {
-        return notificationRepository.findByPlayerIdOrderByCreatedAtDesc(playerId)
+        return notificationRepository.findByPlayerIdAndDeletedAtIsNullOrderByCreatedAtDesc(playerId)
                 .stream()
                 .map(NotificationDto::fromEntity)
                 .collect(Collectors.toList());
@@ -49,7 +49,7 @@ public class NotificationService {
      */
     @Transactional(readOnly = true)
     public long getUnreadCount(Long playerId) {
-        return notificationRepository.countByPlayerIdAndIsReadFalse(playerId);
+        return notificationRepository.countByPlayerIdAndIsReadFalseAndDeletedAtIsNull(playerId);
     }
 
     /**
@@ -61,6 +61,16 @@ public class NotificationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", notificationId));
         notification.setIsRead(true);
         notificationRepository.save(notification);
+    }
+
+    /**
+     * 指定プレイヤーの全通知を一括論理削除する
+     */
+    @Transactional
+    public int deleteAllByPlayerId(Long playerId) {
+        int count = notificationRepository.softDeleteAllByPlayerId(playerId, JstDateTimeUtil.now());
+        log.info("Soft-deleted {} notifications for player {}", count, playerId);
+        return count;
     }
 
     /**

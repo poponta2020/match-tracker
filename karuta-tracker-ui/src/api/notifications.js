@@ -13,6 +13,10 @@ export const notificationAPI = {
   markAsRead: (id) =>
     apiClient.put(`/notifications/${id}/read`),
 
+  // 通知を一括削除
+  deleteAll: (playerId) =>
+    apiClient.delete('/notifications', { params: { playerId } }),
+
   // Push購読登録
   subscribePush: (data) =>
     apiClient.post('/push-subscriptions', data),

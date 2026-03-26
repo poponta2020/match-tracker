@@ -47,4 +47,13 @@ public class NotificationController {
         notificationService.markAsRead(id);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * 通知を一括削除（論理削除）
+     */
+    @DeleteMapping
+    public ResponseEntity<Map<String, Integer>> deleteAll(@RequestParam Long playerId) {
+        int count = notificationService.deleteAllByPlayerId(playerId);
+        return ResponseEntity.ok(Map.of("deleted", count));
+    }
 }

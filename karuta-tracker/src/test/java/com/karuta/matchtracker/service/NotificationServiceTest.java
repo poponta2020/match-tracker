@@ -17,10 +17,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -128,6 +131,18 @@ class NotificationServiceTest {
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getType()).isEqualTo(NotificationType.LOTTERY_WAITLISTED);
         assertThat(saved.stream().noneMatch(n -> n.getType() == NotificationType.LOTTERY_REMAINING_WON)).isTrue();
+    }
+
+    @Test
+    @DisplayName("一括削除でsoftDeleteAllByPlayerIdが呼ばれる")
+    void deleteAllByPlayerId() {
+        when(notificationRepository.softDeleteAllByPlayerId(eq(10L), any(LocalDateTime.class)))
+                .thenReturn(5);
+
+        int count = service.deleteAllByPlayerId(10L);
+
+        assertThat(count).isEqualTo(5);
+        verify(notificationRepository).softDeleteAllByPlayerId(eq(10L), any(LocalDateTime.class));
     }
 
     @Test

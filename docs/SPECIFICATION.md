@@ -373,6 +373,7 @@ SUPER_ADMIN のみ操作可能。
 | `title` / `message` | String | 通知内容 |
 | `referenceId` | Long | 参照先ID（参加者レコードID等） |
 | `isRead` | Boolean | 既読フラグ |
+| `deletedAt` | LocalDateTime | 論理削除日時 |
 
 **PushSubscription（Web Push購読）:**
 
@@ -389,7 +390,7 @@ SUPER_ADMIN のみ操作可能。
 | `/lottery/results` | 抽選結果確認 | 月別の全セッション・全試合の抽選結果一覧 |
 | `/lottery/waitlist` | キャンセル待ち状況 | 自分のキャンセル待ち一覧（番号・ステータス表示） |
 | `/lottery/offer-response` | 繰り上げ参加承認 | セッション日付・会場・試合番号・応答期限を表示。期限切れ時はボタン無効化、処理済み時は結果表示 |
-| `/notifications` | 通知一覧 | 全通知の時系列表示（未読/既読管理、タップで遷移） |
+| `/notifications` | 通知一覧 | 全通知の時系列表示（未読/既読管理、一括削除、タップで遷移） |
 
 #### 3.7.5 スケジューラ
 
@@ -873,6 +874,7 @@ venues ──< venue_match_schedules (venueId)
 | reference_id | BIGINT | — | 参照先ID |
 | is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | 既読フラグ |
 | created_at | TIMESTAMP | NOT NULL | — |
+| deleted_at | TIMESTAMP | — | 論理削除日時 |
 
 #### push_subscriptions
 
@@ -1140,6 +1142,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/?playerId=` | ALL | 通知一覧取得 |
 | GET | `/unread-count?playerId=` | ALL | 未読通知数 |
 | PUT | `/{id}/read` | ALL | 通知既読化 |
+| DELETE | `/?playerId=` | ALL | 通知一括削除（論理削除） |
 
 ### 7.13 Push購読 (`/api/push-subscriptions`)
 

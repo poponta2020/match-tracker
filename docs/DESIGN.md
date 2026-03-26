@@ -367,6 +367,7 @@ Entity Layer (JPA Entity)
 | reference_id | BIGINT | | 参照先ID |
 | is_read | BOOLEAN | NOT NULL, DEFAULT false | 既読フラグ |
 | created_at | DATETIME | NOT NULL | 作成日時 |
+| deleted_at | DATETIME | | 論理削除日時 |
 
 **NotificationType列挙型**:
 - `LOTTERY_WON` - 抽選結果（当選）※廃止：既存データ参照用に残す
@@ -1160,6 +1161,11 @@ Entity Layer (JPA Entity)
 #### PUT /api/notifications/{id}/read
 **説明**: 通知を既読にする
 **権限**: なし
+
+#### DELETE /api/notifications?playerId={playerId}
+**説明**: 通知を一括削除（論理削除）
+**権限**: なし
+**レスポンス**: `{"deleted": 5}`
 
 ---
 

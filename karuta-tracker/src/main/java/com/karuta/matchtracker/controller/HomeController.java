@@ -54,7 +54,7 @@ public class HomeController {
                 .orElseGet(() -> practiceParticipantService.getPlayerParticipationRate(playerId, year, month));
 
         // 未読通知数
-        long unreadCount = notificationRepository.countByPlayerIdAndIsReadFalse(playerId);
+        long unreadCount = notificationRepository.countByPlayerIdAndIsReadFalseAndDeletedAtIsNull(playerId);
 
         // 未応答のオファーがあるか
         boolean hasPendingOffer = participantRepository
