@@ -33,6 +33,10 @@ export const lotteryAPI = {
   respondOffer: (participantId, accept) =>
     apiClient.post('/lottery/respond-offer', { participantId, accept }),
 
+  // 個別オファー詳細取得
+  getOfferDetail: (participantId) =>
+    apiClient.get(`/lottery/offer-detail/${participantId}`),
+
   // キャンセル待ち状況取得
   getWaitlistStatus: () =>
     apiClient.get('/lottery/waitlist-status'),

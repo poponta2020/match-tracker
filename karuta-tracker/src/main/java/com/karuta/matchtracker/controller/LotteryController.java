@@ -15,6 +15,7 @@ import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.NotificationService;
@@ -48,6 +49,7 @@ public class LotteryController {
     private final PracticeSessionRepository practiceSessionRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
+    private final VenueRepository venueRepository;
 
     /**
      * 手動抽選実行
@@ -187,6 +189,50 @@ public class LotteryController {
         }
 
         return ResponseEntity.ok(Map.of("result", request.getAccept() ? "accepted" : "declined"));
+    }
+
+    /**
+     * 個別オファー詳細取得
+     */
+    @GetMapping("/offer-detail/{participantId}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<WaitlistStatusDto.WaitlistEntry> getOfferDetail(
+            @PathVariable Long participantId, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+
+        PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
+
+        // PLAYER ロールは自分のレコードのみ
+        if (currentUserRole == Role.PLAYER && !participant.getPlayerId().equals(currentUserId)) {
+            throw new ForbiddenException("他の参加者のオファー情報は参照できません");
+        }
+
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+
+        String venueName = null;
+        if (session.getVenueId() != null) {
+            venueName = venueRepository.findById(session.getVenueId())
+                    .map(v -> v.getName())
+                    .orElse(null);
+        }
+
+        WaitlistStatusDto.WaitlistEntry entry = WaitlistStatusDto.WaitlistEntry.builder()
+                .participantId(participant.getId())
+                .sessionId(session.getId())
+                .sessionDate(session.getSessionDate())
+                .venueName(venueName)
+                .startTime(session.getStartTime())
+                .endTime(session.getEndTime())
+                .matchNumber(participant.getMatchNumber())
+                .waitlistNumber(participant.getWaitlistNumber())
+                .status(participant.getStatus())
+                .offerDeadline(participant.getOfferDeadline())
+                .build();
+
+        return ResponseEntity.ok(entry);
     }
 
     /**
