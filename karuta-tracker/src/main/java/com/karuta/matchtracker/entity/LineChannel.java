@@ -45,9 +45,9 @@ public class LineChannel {
     @Builder.Default
     private ChannelStatus status = ChannelStatus.AVAILABLE;
 
-    /** 友だち追加URL */
-    @Column(name = "friend_add_url", columnDefinition = "TEXT")
-    private String friendAddUrl;
+    /** ベーシックID（例: @111aaaaa） */
+    @Column(name = "basic_id", length = 30)
+    private String basicId;
 
     /** 当月送信数 */
     @Column(name = "monthly_message_count", nullable = false)

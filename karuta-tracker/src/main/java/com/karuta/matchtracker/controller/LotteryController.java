@@ -119,12 +119,22 @@ public class LotteryController {
     }
 
     /**
-     * 参加キャンセル
+     * 参加キャンセル（理由付き・複数対応）
      */
     @PostMapping("/cancel")
-    public ResponseEntity<Map<String, String>> cancelParticipation(@Valid @RequestBody CancelRequest request) {
-        ParticipantStatus status = waitlistPromotionService.cancelParticipation(request.getParticipantId());
-        return ResponseEntity.ok(Map.of("status", status.name()));
+    public ResponseEntity<Map<String, Object>> cancelParticipation(@Valid @RequestBody CancelRequest request) {
+        List<Long> ids = request.getEffectiveParticipantIds();
+        if (ids.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "参加者IDが指定されていません"));
+        }
+
+        List<String> results = new ArrayList<>();
+        for (Long pid : ids) {
+            ParticipantStatus status = waitlistPromotionService.cancelParticipation(
+                    pid, request.getCancelReason(), request.getCancelReasonDetail());
+            results.add(pid + ":" + status.name());
+        }
+        return ResponseEntity.ok(Map.of("status", "CANCELLED", "results", results));
     }
 
     /**

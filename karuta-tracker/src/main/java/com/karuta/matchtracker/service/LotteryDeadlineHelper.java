@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -9,24 +10,36 @@ import java.time.YearMonth;
 /**
  * 抽選締め切りに関するヘルパー
  *
- * 締め切り: 対象月の前月末日の0時
- * 例: 4月の練習 → 3月31日 00:00:00（= 3月30日の深夜）
+ * 締め切り: 対象月の初日から N日前の0時（Nはsystem_settingsで設定可能）
+ * デフォルト(N=0): 対象月の前月末日の0時
+ * 例: N=3, 4月の練習 → 3月29日 00:00:00
  */
 @Component
+@RequiredArgsConstructor
 public class LotteryDeadlineHelper {
+
+    private final SystemSettingService systemSettingService;
 
     /**
      * 指定年月の練習に対する締め切り日時を取得する
      *
      * @param year  対象年
      * @param month 対象月
-     * @return 締め切り日時（前月末日の0時）
+     * @return 締め切り日時
      */
     public LocalDateTime getDeadline(int year, int month) {
+        int daysBefore = systemSettingService.getLotteryDeadlineDaysBefore();
         YearMonth targetMonth = YearMonth.of(year, month);
-        YearMonth previousMonth = targetMonth.minusMonths(1);
-        LocalDate lastDayOfPreviousMonth = previousMonth.atEndOfMonth();
-        return lastDayOfPreviousMonth.atStartOfDay();
+        LocalDate firstDayOfMonth = targetMonth.atDay(1);
+        LocalDate deadlineDate = firstDayOfMonth.minusDays(daysBefore);
+
+        // daysBefore=0の場合は前月末日の0時（従来通りの動作）
+        if (daysBefore == 0) {
+            YearMonth previousMonth = targetMonth.minusMonths(1);
+            deadlineDate = previousMonth.atEndOfMonth();
+        }
+
+        return deadlineDate.atStartOfDay();
     }
 
     /**

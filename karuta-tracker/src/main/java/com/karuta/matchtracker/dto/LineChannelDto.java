@@ -15,6 +15,7 @@ public class LineChannelDto {
     private String channelName;
     private String lineChannelId;
     private String status;
+    private String basicId;
     private String friendAddUrl;
     private Integer monthlyMessageCount;
     private String assignedPlayerName;
@@ -26,7 +27,9 @@ public class LineChannelDto {
             .channelName(entity.getChannelName())
             .lineChannelId(entity.getLineChannelId())
             .status(entity.getStatus().name())
-            .friendAddUrl(entity.getFriendAddUrl())
+            .basicId(entity.getBasicId())
+            .friendAddUrl(entity.getBasicId() != null
+                ? "https://line.me/R/ti/p/" + entity.getBasicId() : null)
             .monthlyMessageCount(entity.getMonthlyMessageCount())
             .build();
     }

@@ -21,9 +21,13 @@ export const lotteryAPI = {
   getMyResults: (year, month, playerId) =>
     apiClient.get('/lottery/my-results', { params: { year, month, playerId } }),
 
-  // 参加キャンセル
-  cancel: (participantId) =>
-    apiClient.post('/lottery/cancel', { participantId }),
+  // 参加キャンセル（理由付き・複数対応）
+  cancel: (participantId, cancelReason, cancelReasonDetail) =>
+    apiClient.post('/lottery/cancel', { participantId, cancelReason, cancelReasonDetail }),
+
+  // 複数参加キャンセル（理由付き）
+  cancelMultiple: (participantIds, cancelReason, cancelReasonDetail) =>
+    apiClient.post('/lottery/cancel', { participantIds, cancelReason, cancelReasonDetail }),
 
   // 繰り上げオファーへの応答
   respondOffer: (participantId, accept) =>

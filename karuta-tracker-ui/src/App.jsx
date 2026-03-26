@@ -15,6 +15,7 @@ import PracticeList from './pages/practice/PracticeList';
 import PracticeForm from './pages/practice/PracticeForm';
 import PracticeDetail from './pages/practice/PracticeDetail';
 import PracticeParticipation from './pages/practice/PracticeParticipation';
+import PracticeCancelPage from './pages/practice/PracticeCancelPage';
 import PairingGenerator from './pages/pairings/PairingGenerator';
 import PairingSummary from './pages/pairings/PairingSummary';
 import PlayerList from './pages/players/PlayerList';
@@ -79,6 +80,7 @@ function App() {
             <Route path="/practice/:id" element={<ProtectedPage><PracticeDetail /></ProtectedPage>} />
             <Route path="/practice/:id/edit" element={<ProtectedPage><PracticeForm /></ProtectedPage>} />
             <Route path="/practice/participation" element={<ProtectedPage><PracticeParticipation /></ProtectedPage>} />
+            <Route path="/practice/cancel" element={<ProtectedPage><PracticeCancelPage /></ProtectedPage>} />
 
             {/* 抽選 */}
             <Route path="/lottery/results" element={<ProtectedPage><LotteryResults /></ProtectedPage>} />

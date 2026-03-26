@@ -33,13 +33,26 @@ public class WaitlistPromotionService {
     private final LineNotificationService lineNotificationService;
 
     /**
-     * 当選者が参加をキャンセルする
+     * 当選者が参加をキャンセルする（理由なし・後方互換）
      *
      * @param participantId 参加者レコードID
      * @return キャンセル後のステータス
      */
     @Transactional
     public ParticipantStatus cancelParticipation(Long participantId) {
+        return cancelParticipation(participantId, null, null);
+    }
+
+    /**
+     * 当選者が参加をキャンセルする（理由付き）
+     *
+     * @param participantId    参加者レコードID
+     * @param cancelReason     キャンセル理由コード
+     * @param cancelReasonDetail キャンセル理由詳細（その他の場合）
+     * @return キャンセル後のステータス
+     */
+    @Transactional
+    public ParticipantStatus cancelParticipation(Long participantId, String cancelReason, String cancelReasonDetail) {
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
 
@@ -52,10 +65,13 @@ public class WaitlistPromotionService {
 
         // ステータスをCANCELLEDに変更
         participant.setStatus(ParticipantStatus.CANCELLED);
+        participant.setCancelReason(cancelReason);
+        participant.setCancelReasonDetail(cancelReasonDetail);
+        participant.setCancelledAt(java.time.LocalDateTime.now());
         practiceParticipantRepository.save(participant);
 
-        log.info("Player {} cancelled participation in session {} match {}",
-                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
+        log.info("Player {} cancelled participation in session {} match {} (reason: {})",
+                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), cancelReason);
 
         // 当日キャンセルかどうかチェック
         if (lotteryDeadlineHelper.isToday(session.getSessionDate())) {

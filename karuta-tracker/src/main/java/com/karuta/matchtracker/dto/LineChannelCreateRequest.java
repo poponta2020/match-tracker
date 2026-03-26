@@ -21,5 +21,5 @@ public class LineChannelCreateRequest {
     @NotBlank(message = "アクセストークンは必須です")
     private String channelAccessToken;
 
-    private String friendAddUrl;
+    private String basicId;
 }

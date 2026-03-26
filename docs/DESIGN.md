@@ -107,7 +107,7 @@ Entity Layer (JPA Entity)
     │1
     │
     多
-[practice_participants] 多───1 [practice_sessions] 多───1 [venues]
+[practice_participants] 多───1 [practice_sessions] 多───1 [venues]    [system_settings]
     │                                                       │
     │多                                                     │1
     │                                                       │
@@ -213,6 +213,9 @@ Entity Layer (JPA Entity)
 | status | ENUM | NOT NULL, DEFAULT 'WON' | 参加ステータス（PENDING/WON/WAITLISTED/OFFERED/DECLINED/CANCELLED） |
 | waitlist_number | INT | | キャンセル待ち番号（WAITLISTED時のみ） |
 | lottery_id | BIGINT | | 紐づく抽選実行ID |
+| cancel_reason | VARCHAR(50) | | キャンセル理由コード（HEALTH/WORK_SCHOOL/FAMILY/TRANSPORT/OTHER） |
+| cancel_reason_detail | TEXT | | キャンセル理由詳細（OTHER時の自由記述） |
+| cancelled_at | DATETIME | | キャンセル日時 |
 | offered_at | DATETIME | | 繰り上げ通知日時 |
 | offer_deadline | DATETIME | | 繰り上げ応答期限 |
 | responded_at | DATETIME | | 繰り上げ応答日時 |
@@ -233,6 +236,20 @@ Entity Layer (JPA Entity)
 - `OFFERED` - 繰り上げ通知済み（応答待ち）
 - `DECLINED` - 繰り上げ辞退（明示的辞退または応答期限切れ）
 - `CANCELLED` - 当選後キャンセル
+
+---
+
+#### system_settings（システム設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 設定ID |
+| setting_key | VARCHAR(100) | NOT NULL, UNIQUE | 設定キー |
+| setting_value | VARCHAR(255) | NOT NULL | 設定値 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+| updated_by | BIGINT | | 更新者ID |
+
+**初期データ**:
+- `lottery_deadline_days_before` = `0`（締切日数：月初から何日前。0=前月末日の0時）
 
 ---
 
@@ -946,12 +963,15 @@ Entity Layer (JPA Entity)
 **権限**: なし
 
 #### POST /api/lottery/cancel
-**説明**: 参加キャンセル
+**説明**: 参加キャンセル（理由付き・複数対応）
 **権限**: なし
 **リクエスト**: `CancelRequest`
 ```json
 {
-  "participantId": 123
+  "participantId": 123,
+  "participantIds": [123, 456],
+  "cancelReason": "HEALTH",
+  "cancelReasonDetail": "（OTHERの場合のみ）"
 }
 ```
 
@@ -1134,6 +1154,31 @@ Entity Layer (JPA Entity)
 **説明**: スケジュール型通知の設定を更新する
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `{ "notificationType": String, "enabled": Boolean, "daysBefore": [Integer] }`
+
+### 4.15 システム設定API (`/api/system-settings`)
+
+#### GET /api/system-settings
+**説明**: 全設定取得
+**権限**: SUPER_ADMIN, ADMIN
+
+#### GET /api/system-settings/{key}
+**説明**: 設定値取得
+**権限**: なし
+
+#### PUT /api/system-settings/{key}
+**説明**: 設定値更新
+**権限**: SUPER_ADMIN, ADMIN
+**リクエスト**:
+```json
+{
+  "value": "3"
+}
+```
+
+**利用可能な設定キー**:
+| キー | 説明 | デフォルト値 |
+|------|------|-------------|
+| `lottery_deadline_days_before` | 締切日数（月初から何日前） | `0` |
 
 ---
 

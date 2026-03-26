@@ -57,7 +57,8 @@
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |
-| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ | ALL | 参加登録（抽選済みセッションはステータス表示・当選キャンセル対応） |
+| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ | ALL | 参加登録（抽選済みセッションはステータス表示のみ） |
+| 18 | `/practice/cancel` | `PracticeCancelPage.jsx` | キャンセル専用カレンダー、試合選択チェックボックス、キャンセル理由ラジオボタン | ALL | 参加キャンセル（WON登録日をハイライトしたカレンダー→試合選択→理由選択→確認ダイアログ） |
 
 ---
 
@@ -65,8 +66,8 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 18 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト、対戦履歴 | ADMIN+ | 組み合わせ作成 |
-| 19 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | ADMIN+ | 組み合わせ一覧表示 |
+| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト、対戦履歴 | ADMIN+ | 組み合わせ作成 |
+| 20 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | ADMIN+ | 組み合わせ一覧表示 |
 
 ---
 
@@ -74,10 +75,10 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 20 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用） | SUPER_ADMIN | 選手一覧 |
-| 21 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
-| 22 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
-| 23 | `/players/:id/edit` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手編集 |
+| 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用） | SUPER_ADMIN | 選手一覧 |
+| 22 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
+| 23 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
+| 24 | `/players/:id/edit` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手編集 |
 
 ---
 
@@ -85,9 +86,9 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 24 | `/venues` | `VenueList.jsx` | 検索、会場カード | SUPER_ADMIN | 会場一覧 |
-| 25 | `/venues/new` | `VenueForm.jsx` | — | SUPER_ADMIN | 会場新規作成 |
-| 26 | `/venues/edit/:id` | `VenueForm.jsx` | — | SUPER_ADMIN | 会場編集 |
+| 25 | `/venues` | `VenueList.jsx` | 検索、会場カード | SUPER_ADMIN | 会場一覧 |
+| 26 | `/venues/new` | `VenueForm.jsx` | — | SUPER_ADMIN | 会場新規作成 |
+| 27 | `/venues/edit/:id` | `VenueForm.jsx` | — | SUPER_ADMIN | 会場編集 |
 
 ---
 
@@ -95,10 +96,10 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 27 | `/lottery/results` | `LotteryResults.jsx` | 月ナビゲーション、当選/落選リスト | ALL | 月別抽選結果一覧 |
-| 28 | `/lottery/waitlist` | `WaitlistStatus.jsx` | ステータスバッジ、応答リンク | ALL | 自分のキャンセル待ち状況 |
-| 29 | `/lottery/offer-response` | `OfferResponse.jsx` | 参加/辞退ボタン | ALL | 繰り上げ参加の承認/辞退 |
-| 30 | `/notifications` | `NotificationList.jsx` | 通知カード、未読バッジ | ALL | 通知一覧（タップで関連画面に遷移） |
+| 28 | `/lottery/results` | `LotteryResults.jsx` | 月ナビゲーション、当選/落選リスト | ALL | 月別抽選結果一覧 |
+| 29 | `/lottery/waitlist` | `WaitlistStatus.jsx` | ステータスバッジ、応答リンク | ALL | 自分のキャンセル待ち状況 |
+| 30 | `/lottery/offer-response` | `OfferResponse.jsx` | 参加/辞退ボタン | ALL | 繰り上げ参加の承認/辞退 |
+| 31 | `/notifications` | `NotificationList.jsx` | 通知カード、未読バッジ | ALL | 通知一覧（タップで関連画面に遷移） |
 
 ---
 
@@ -106,9 +107,9 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 31 | `/settings/line` | `LineSettings.jsx` | 連携状態表示、友だち追加ボタン、ワンタイムコード（コピーボタン付き）、通知種別トグル | ALL | LINE通知設定（有効化/無効化、コード発行、種別ON/OFF） |
-| 32 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
-| 33 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
+| 32 | `/settings/line` | `LineSettings.jsx` | 連携状態表示、友だち追加ボタン、ワンタイムコード（コピーボタン付き）、通知種別トグル | ALL | LINE通知設定（有効化/無効化、コード発行、種別ON/OFF） |
+| 33 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
+| 34 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
 
 ---
 
@@ -116,8 +117,8 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 34 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
-| 35 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
+| 35 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
+| 36 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
 
 ---
 
@@ -125,8 +126,8 @@
 
 | # | パス | ページコンポーネント | 権限 | 説明 |
 |---|------|---------------------|------|------|
-| 36 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
-| 37 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
+| 37 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
+| 38 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
 
 ---
 
@@ -216,7 +217,8 @@ karuta-tracker-ui/src/
     │   ├── PracticeList.jsx
     │   ├── PracticeForm.jsx
     │   ├── PracticeDetail.jsx
-    │   └── PracticeParticipation.jsx
+    │   ├── PracticeParticipation.jsx
+    │   └── PracticeCancelPage.jsx
     ├── lottery/
     │   ├── LotteryResults.jsx
     │   ├── WaitlistStatus.jsx

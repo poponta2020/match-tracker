@@ -13,7 +13,7 @@ const LineChannelAdmin = () => {
     lineChannelId: '',
     channelSecret: '',
     channelAccessToken: '',
-    friendAddUrl: '',
+    basicId: '',
   });
 
   useEffect(() => {
@@ -37,7 +37,7 @@ const LineChannelAdmin = () => {
     try {
       await lineAPI.createChannel(form);
       setShowForm(false);
-      setForm({ channelName: '', lineChannelId: '', channelSecret: '', channelAccessToken: '', friendAddUrl: '' });
+      setForm({ channelName: '', lineChannelId: '', channelSecret: '', channelAccessToken: '', basicId: '' });
       await fetchChannels();
     } catch (err) {
       setError('チャネルの登録に失敗しました');
@@ -117,7 +117,7 @@ const LineChannelAdmin = () => {
             { key: 'lineChannelId', label: 'チャネルID', required: true },
             { key: 'channelSecret', label: 'チャネルシークレット', required: true },
             { key: 'channelAccessToken', label: 'アクセストークン', required: true },
-            { key: 'friendAddUrl', label: '友だち追加URL', required: false },
+            { key: 'basicId', label: 'ベーシックID（例: @111aaaaa）', required: false },
           ].map(({ key, label, required }) => (
             <div key={key}>
               <label className="block text-sm text-gray-600 mb-1">{label}{required && ' *'}</label>

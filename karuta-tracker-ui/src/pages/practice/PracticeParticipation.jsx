@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { practiceAPI, lotteryAPI } from '../../api';
+import { practiceAPI } from '../../api';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -14,7 +14,7 @@ const PracticeParticipation = () => {
   const [initialParticipations, setInitialParticipations] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [cancelling, setCancelling] = useState(null);
+  const [cancelling] = useState(null); // 未使用だがステータス表示で参照あり
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
@@ -148,34 +148,6 @@ const PracticeParticipation = () => {
       setError('保存に失敗しました');
     } finally {
       setSaving(false);
-    }
-  };
-
-  // 抽選後の当選をキャンセル
-  const handleCancelParticipation = async (participantId, sessionId, matchNumber) => {
-    if (!currentPlayer?.id || !participantId) return;
-    if (!window.confirm('この試合の参加をキャンセルしますか？キャンセル待ちの次の方に通知されます。')) return;
-
-    setCancelling(`${sessionId}-${matchNumber}`);
-    setError('');
-    try {
-      await lotteryAPI.cancel(participantId);
-      setSuccess('参加をキャンセルしました');
-      // データをリロード
-      const [participationsRes, statusRes] = await Promise.all([
-        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
-        practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
-      ]);
-      const participationsData = participationsRes.data || {};
-      setParticipations(participationsData);
-      setInitialParticipations(JSON.parse(JSON.stringify(participationsData)));
-      setParticipationStatuses(statusRes.data?.participations || {});
-      setLotteryExecuted(statusRes.data?.lotteryExecuted || {});
-    } catch (err) {
-      console.error('キャンセルエラー:', err);
-      setError(err.response?.data?.message || 'キャンセルに失敗しました');
-    } finally {
-      setCancelling(null);
     }
   };
 
@@ -339,15 +311,6 @@ const PracticeParticipation = () => {
                                       </span>
                                       {matchStatus.status === 'WAITLISTED' && matchStatus.waitlistNumber && (
                                         <span className="text-[9px] text-gray-500">#{matchStatus.waitlistNumber}</span>
-                                      )}
-                                      {getStatusInfo(matchStatus.status).canCancel && (
-                                        <button
-                                          onClick={() => handleCancelParticipation(matchStatus.participantId, session.id, matchNumber)}
-                                          disabled={cancelling === `${session.id}-${matchNumber}`}
-                                          className="text-[9px] text-red-500 hover:text-red-700 disabled:opacity-50"
-                                        >
-                                          {cancelling === `${session.id}-${matchNumber}` ? '...' : '取消'}
-                                        </button>
                                       )}
                                     </div>
                                   ) : isLotteryDone && !matchStatus ? (

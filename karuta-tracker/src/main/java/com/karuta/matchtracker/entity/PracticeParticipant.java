@@ -73,6 +73,24 @@ public class PracticeParticipant {
     private Long lotteryId;
 
     /**
+     * キャンセル理由コード
+     */
+    @Column(name = "cancel_reason", length = 50)
+    private String cancelReason;
+
+    /**
+     * キャンセル理由詳細（その他の場合）
+     */
+    @Column(name = "cancel_reason_detail", columnDefinition = "TEXT")
+    private String cancelReasonDetail;
+
+    /**
+     * キャンセル日時
+     */
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    /**
      * 繰り上げ通知日時
      */
     @Column(name = "offered_at")

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
-import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import PlayerChip from '../../components/PlayerChip';
@@ -511,7 +511,10 @@ const PracticeList = () => {
                   .sort(([a], [b]) => parseInt(a) - parseInt(b))
                   .map(([matchNum, participants]) => {
                     const isExpanded = expandedMatches[matchNum] !== false;
-                    const count = participants.filter(p => typeof p === 'string' || p.status !== 'WAITLISTED').length;
+                    const count = participants.filter(p => {
+                      if (typeof p === 'string') return true;
+                      return p.status !== 'WAITLISTED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED';
+                    }).length;
                     const myMatchNumbers = myParticipations[selectedSession.id] || [];
                     const isMyMatch = myMatchNumbers.includes(parseInt(matchNum));
 
@@ -558,11 +561,15 @@ const PracticeList = () => {
                             {participants.length > 0 ? (() => {
                               const wonList = participants.filter(p => {
                                 const s = typeof p === 'string' ? null : p.status;
-                                return s !== 'WAITLISTED';
+                                return s !== 'WAITLISTED' && s !== 'CANCELLED' && s !== 'DECLINED';
                               });
                               const waitList = participants.filter(p => {
                                 const s = typeof p === 'string' ? null : p.status;
                                 return s === 'WAITLISTED';
+                              });
+                              const cancelledList = participants.filter(p => {
+                                const s = typeof p === 'string' ? null : p.status;
+                                return s === 'CANCELLED';
                               });
                               return (
                                 <div className="space-y-2">
@@ -603,6 +610,29 @@ const PracticeList = () => {
                                                 isMyself
                                                   ? 'bg-[#4a6b5a] text-white font-medium'
                                                   : 'text-[#6b7280] bg-yellow-50 border-yellow-200'
+                                              }`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {cancelledList.length > 0 && (
+                                    <div>
+                                      <div className="text-[10px] text-[#9ca3af] mb-1">キャンセル済み</div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {sortPlayersByRank(cancelledList).map((p, idx) => {
+                                          const pName = typeof p === 'string' ? p : p.name;
+                                          const isMyself = pName === currentPlayer?.name;
+                                          return (
+                                            <PlayerChip
+                                              key={idx}
+                                              name={pName}
+                                              kyuRank={typeof p === 'string' ? undefined : p.kyuRank}
+                                              className={`!px-1.5 !py-0.5 text-[10px] ${
+                                                isMyself
+                                                  ? 'bg-red-200 text-red-800 font-medium'
+                                                  : 'text-[#6b7280] bg-red-50 border-red-200'
                                               }`}
                                             />
                                           );
@@ -680,14 +710,22 @@ const PracticeList = () => {
         />
       )}
       {/* フローティングアクションボタン (FAB) */}
-      <button
-        onClick={goToParticipation}
-        className="fixed right-4 z-20 bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
-        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <CalendarCheck className="w-5 h-5" />
-        <span className="text-sm font-medium">参加登録</span>
-      </button>
+      <div className="fixed right-4 z-20 flex flex-col gap-2" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
+        <button
+          onClick={() => navigate('/practice/cancel')}
+          className="bg-white text-red-600 border border-red-300 pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-red-50 transition-all hover:shadow-xl flex items-center gap-2"
+        >
+          <XCircle className="w-5 h-5" />
+          <span className="text-sm font-medium">キャンセル</span>
+        </button>
+        <button
+          onClick={goToParticipation}
+          className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+        >
+          <CalendarCheck className="w-5 h-5" />
+          <span className="text-sm font-medium">参加登録</span>
+        </button>
+      </div>
 
     </div>
     </div>

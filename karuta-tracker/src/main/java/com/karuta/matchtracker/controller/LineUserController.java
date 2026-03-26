@@ -49,8 +49,10 @@ public class LineUserController {
             LineChannel channel = lineChannelService.assignChannel(playerId);
             LineLinkingCode code = lineLinkingService.issueCode(playerId, channel.getId());
 
+            String friendAddUrl = channel.getBasicId() != null
+                ? "https://line.me/R/ti/p/" + channel.getBasicId() : null;
             return ResponseEntity.ok(LineEnableResponse.builder()
-                .friendAddUrl(channel.getFriendAddUrl())
+                .friendAddUrl(friendAddUrl)
                 .linkingCode(code.getCode())
                 .codeExpiresAt(code.getExpiresAt().format(ISO_FORMAT))
                 .status("ASSIGNED")
@@ -110,7 +112,8 @@ public class LineUserController {
 
         LineChannelAssignment assignment = assignmentOpt.get();
         String friendAddUrl = lineChannelRepository.findById(assignment.getLineChannelId())
-            .map(LineChannel::getFriendAddUrl).orElse(null);
+            .map(ch -> ch.getBasicId() != null ? "https://line.me/R/ti/p/" + ch.getBasicId() : null)
+            .orElse(null);
 
         return ResponseEntity.ok(LineStatusResponse.builder()
             .enabled(true)

@@ -156,7 +156,7 @@ public class LineChannelService {
             .lineChannelId(request.getLineChannelId())
             .channelSecret(request.getChannelSecret())
             .channelAccessToken(request.getChannelAccessToken())
-            .friendAddUrl(request.getFriendAddUrl())
+            .basicId(request.getBasicId())
             .build();
         return lineChannelRepository.save(channel);
     }
