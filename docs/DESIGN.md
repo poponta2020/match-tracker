@@ -87,9 +87,9 @@ Entity Layer (JPA Entity)
 
 ### 2.3 認証・認可
 **現在の実装**:
-- 簡易的なヘッダーベース認証（`X-User-Role`）
+- 簡易的なヘッダーベース認証（`X-User-Role`, `X-User-Id`）
 - パスワード平文比較
-- `@RequireRole` アノテーション + `RoleCheckInterceptor`
+- `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 
 **TODO**:
 - Spring Security + JWT導入
@@ -1031,13 +1031,13 @@ Entity Layer (JPA Entity)
 **説明**: セッション別抽選結果取得
 **権限**: なし
 
-#### GET /api/lottery/my-results?year={year}&month={month}&playerId={playerId}
-**説明**: 自分の抽選結果取得
-**権限**: なし
+#### GET /api/lottery/my-results?year={year}&month={month}
+**説明**: 自分の抽選結果取得（ログインユーザーの結果のみ）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### POST /api/lottery/cancel
-**説明**: 参加キャンセル（理由付き・複数対応）
-**権限**: なし
+**説明**: 参加キャンセル（理由付き・複数対応）。PLAYERは自分の参加のみキャンセル可能、ADMIN+は他人分も可。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 **リクエスト**: `CancelRequest`
 ```json
 {
@@ -1049,8 +1049,8 @@ Entity Layer (JPA Entity)
 ```
 
 #### POST /api/lottery/respond-offer
-**説明**: 繰り上げオファーへの応答
-**権限**: なし
+**説明**: 繰り上げオファーへの応答。PLAYERは自分のオファーのみ応答可能、ADMIN+は他人分も可。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 **リクエスト**: `OfferResponseRequest`
 ```json
 {
@@ -1059,10 +1059,30 @@ Entity Layer (JPA Entity)
 }
 ```
 
-#### GET /api/lottery/waitlist-status?playerId={playerId}
-**説明**: キャンセル待ち状況取得
-**権限**: なし
+#### GET /api/lottery/waitlist-status
+**説明**: キャンセル待ち状況取得（ログインユーザーの状況のみ）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 **レスポンス**: `WaitlistStatusDto`
+
+#### GET /api/lottery/notify-status?year={year}&month={month}
+**説明**: 抽選結果通知の送信済みチェック
+**権限**: SUPER_ADMIN, ADMIN
+**レスポンス**:
+```json
+{ "sent": true, "sentCount": 24 }
+```
+
+#### POST /api/lottery/notify-results
+**説明**: 抽選結果通知の統合送信（アプリ内通知 + LINE通知を一括送信）
+**権限**: SUPER_ADMIN, ADMIN
+**リクエスト**:
+```json
+{ "year": 2026, "month": 4 }
+```
+**レスポンス**:
+```json
+{ "inAppCount": 24, "lineSent": 20, "lineFailed": 0, "lineSkipped": 4 }
+```
 
 #### PUT /api/lottery/admin/edit-participants
 **説明**: 管理者による参加者手動編集
@@ -1207,11 +1227,8 @@ Entity Layer (JPA Entity)
 **説明**: チャネルの強制割り当て解除
 **権限**: SUPER_ADMIN
 
-#### POST /api/admin/line/send/lottery-result
-**説明**: 抽選結果をLINE一括送信する
-**権限**: SUPER_ADMIN, ADMIN
-**リクエスト**: `{ "year": Integer, "month": Integer }`
-**レスポンス**: `{ "sentCount": Integer, "failedCount": Integer, "skippedCount": Integer }`
+#### ~~POST /api/admin/line/send/lottery-result~~ （廃止）
+**説明**: `POST /api/lottery/notify-results` に統合。アプリ内通知とLINE通知を一括送信する。
 
 #### POST /api/admin/line/send/match-pairing
 **説明**: 対戦組み合わせをLINE送信する
@@ -1550,7 +1567,8 @@ Entity Layer (JPA Entity)
 
 **バックエンド**:
 - `@RequireRole` アノテーションをコントローラーメソッドに付与
-- `RoleCheckInterceptor` がリクエストヘッダー `X-User-Role` を検証
+- `RoleCheckInterceptor` がリクエストヘッダー `X-User-Role` と `X-User-Id` を検証
+- `@RequireRole` 付きエンドポイントでは `X-User-Id` 必須（リクエスト属性 `currentUserId` / `currentUserRole` にセット）
 - 権限不足の場合は `403 Forbidden`
 
 **フロントエンド**:
