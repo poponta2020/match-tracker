@@ -144,7 +144,13 @@ public class PracticeParticipantService {
                         .distinct().collect(Collectors.toList())
         ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
-        int registered = 0, skipped = 0;
+        // 抽選実行済みかチェック
+        boolean lotteryExecuted = lotteryExecutionRepository
+                .existsByTargetYearAndTargetMonthAndStatus(
+                        request.getYear(), request.getMonth(),
+                        LotteryExecution.ExecutionStatus.SUCCESS);
+
+        int registered = 0, waitlisted = 0, skipped = 0;
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
             Integer matchNumber = participation.getMatchNumber();
@@ -152,16 +158,28 @@ public class PracticeParticipantService {
             if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)) {
                 skipped++; continue;
             }
-            if (!isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
-                skipped++; continue;
-            }
 
-            practiceParticipantRepository.save(PracticeParticipant.builder()
-                    .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                    .status(ParticipantStatus.WON).build());
-            registered++;
+            if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
+                // 空きあり → WON
+                practiceParticipantRepository.save(PracticeParticipant.builder()
+                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
+                        .status(ParticipantStatus.WON).build());
+                registered++;
+            } else if (lotteryExecuted) {
+                // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
+                int maxNumber = practiceParticipantRepository
+                        .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
+                practiceParticipantRepository.save(PracticeParticipant.builder()
+                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
+                        .status(ParticipantStatus.WAITLISTED)
+                        .waitlistNumber(maxNumber + 1).build());
+                waitlisted++;
+            } else {
+                skipped++;
+            }
         }
-        log.info("Post-deadline: registered {} (skipped {}) for player {}", registered, skipped, playerId);
+        log.info("Post-deadline: registered {} won, {} waitlisted (skipped {}) for player {}",
+                registered, waitlisted, skipped, playerId);
     }
 
     public boolean isFreeRegistrationOpen(PracticeSession session, Integer matchNumber) {
