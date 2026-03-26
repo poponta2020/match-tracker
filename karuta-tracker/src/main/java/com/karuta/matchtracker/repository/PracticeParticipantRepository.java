@@ -200,7 +200,7 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
            "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
            "WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month " +
            "AND pp.status IN ('WAITLISTED', 'DECLINED') " +
-           "AND ps.id < :currentSessionId")
+           "AND ps.sessionDate < (SELECT ps2.sessionDate FROM PracticeSession ps2 WHERE ps2.id = :currentSessionId)")
     List<Long> findMonthlyLoserPlayerIds(@Param("year") int year,
                                          @Param("month") int month,
                                          @Param("currentSessionId") Long currentSessionId);

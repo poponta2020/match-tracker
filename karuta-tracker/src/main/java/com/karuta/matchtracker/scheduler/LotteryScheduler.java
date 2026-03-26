@@ -33,24 +33,18 @@ public class LotteryScheduler {
 
     /**
      * 毎日0:00にチェック
-     * 当日が月末日の場合、翌月分の抽選を実行
+     * 翌月分の抽選締め切りが過ぎていれば抽選を実行
      */
     @Scheduled(cron = "0 0 0 * * *")
     public void checkAndExecuteLottery() {
         LocalDate today = LocalDate.now();
-        YearMonth currentMonth = YearMonth.from(today);
-        LocalDate lastDayOfMonth = currentMonth.atEndOfMonth();
-
-        if (!today.equals(lastDayOfMonth)) {
-            return;
-        }
-
-        // 翌月分の抽選を実行
-        YearMonth nextMonth = currentMonth.plusMonths(1);
+        YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
         int targetYear = nextMonth.getYear();
         int targetMonth = nextMonth.getMonthValue();
 
-        executeLotteryIfNotDone(targetYear, targetMonth);
+        if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth)) {
+            executeLotteryIfNotDone(targetYear, targetMonth);
+        }
     }
 
     /**
