@@ -136,16 +136,8 @@ public class LineWebhookController {
         String action = params.getOrDefault("action", "");
         String participantIdStr = params.getOrDefault("participantId", "");
 
-        if (!action.startsWith("waitlist_") || participantIdStr.isEmpty()) {
+        if (!action.startsWith("waitlist_")) {
             log.debug("Ignoring non-waitlist postback: {}", data);
-            return;
-        }
-
-        Long participantId;
-        try {
-            participantId = Long.parseLong(participantIdStr);
-        } catch (NumberFormatException e) {
-            log.warn("Invalid participantId in postback data: {}", data);
             return;
         }
 
@@ -160,6 +152,26 @@ public class LineWebhookController {
         }
 
         Long playerId = assignmentOpt.get().getPlayerId();
+
+        // キャンセル待ちセッション辞退のpostback処理
+        if ("waitlist_decline_session".equals(action)) {
+            handleWaitlistDeclineSession(channel, replyToken, params, playerId);
+            return;
+        }
+
+        // 以下は繰り上げオファー関連のpostback処理
+        if (participantIdStr.isEmpty()) {
+            log.debug("Ignoring postback without participantId: {}", data);
+            return;
+        }
+
+        Long participantId;
+        try {
+            participantId = Long.parseLong(participantIdStr);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid participantId in postback data: {}", data);
+            return;
+        }
 
         // 参加者レコードを取得し、本人確認
         java.util.Optional<PracticeParticipant> participantOpt =
@@ -191,6 +203,33 @@ public class LineWebhookController {
                 accept ? "accepted" : "declined", playerId, participantId);
         } catch (Exception e) {
             log.error("Failed to process waitlist postback for participant {}: {}", participantId, e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+        }
+    }
+
+    /**
+     * キャンセル待ちセッション辞退のpostbackを処理する
+     */
+    private void handleWaitlistDeclineSession(LineChannel channel, String replyToken,
+                                               java.util.Map<String, String> params, Long playerId) {
+        String sessionIdStr = params.getOrDefault("sessionId", "");
+        if (sessionIdStr.isEmpty()) {
+            sendReply(channel, replyToken, "セッション情報が不正です。アプリから操作してください。");
+            return;
+        }
+
+        try {
+            Long sessionId = Long.parseLong(sessionIdStr);
+            int count = waitlistPromotionService.declineWaitlistBySession(sessionId, playerId);
+            sendReply(channel, replyToken,
+                String.format("キャンセル待ちを辞退しました（%d件）。", count));
+            log.info("Waitlist session decline via LINE postback: player={}, session={}, count={}",
+                playerId, sessionId, count);
+        } catch (IllegalStateException e) {
+            sendReply(channel, replyToken, "辞退対象のキャンセル待ちがありません。");
+        } catch (Exception e) {
+            log.error("Failed to decline waitlist via LINE postback: player={}, error={}",
+                playerId, e.getMessage());
             sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
         }
     }

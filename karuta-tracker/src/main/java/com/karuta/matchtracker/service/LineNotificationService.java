@@ -15,9 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * LINE通知オーケストレーションサービス
@@ -179,7 +178,12 @@ public class LineNotificationService {
     }
 
     /**
-     * 抽選結果をLINE一括送信する（管理者手動送信）
+     * 抽選結果をLINEまとめ送信する（管理者手動送信）
+     *
+     * プレイヤーごとにグルーピングし、以下のパターンで送信:
+     * - 全当選: テキスト1通
+     * - 一部落選: イントロテキスト + セッション別Flex + クロージングテキスト
+     * - 全落選: イントロテキスト + セッション別Flexのみ
      */
     @Transactional
     public LineSendResultResponse sendLotteryResults(int year, int month) {
@@ -188,34 +192,131 @@ public class LineNotificationService {
         List<PracticeParticipant> participants = practiceParticipantRepository
             .findBySessionDateYearAndMonth(year, month);
 
+        // セッション情報をキャッシュ
+        Map<Long, PracticeSession> sessionCache = new HashMap<>();
         for (PracticeParticipant p : participants) {
-            if (p.getStatus() != ParticipantStatus.WON && p.getStatus() != ParticipantStatus.WAITLISTED) {
-                continue;
-            }
+            sessionCache.computeIfAbsent(p.getSessionId(),
+                id -> practiceSessionRepository.findById(id).orElse(null));
+        }
 
-            PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
-            if (session == null) continue;
+        // WON/WAITLISTED のみ対象、プレイヤーごとにグルーピング
+        Map<Long, List<PracticeParticipant>> byPlayer = participants.stream()
+            .filter(p -> p.getStatus() == ParticipantStatus.WON || p.getStatus() == ParticipantStatus.WAITLISTED)
+            .collect(Collectors.groupingBy(PracticeParticipant::getPlayerId));
 
-            String dateStr = session.getSessionDate().format(DATE_FORMAT);
-            String message;
-            if (p.getStatus() == ParticipantStatus.WON) {
-                message = String.format("%sの練習 試合%dに当選しました", dateStr, p.getMatchNumber());
-            } else {
-                message = String.format("%sの練習 試合%d: キャンセル待ち%d番です",
-                    dateStr, p.getMatchNumber(), p.getWaitlistNumber());
-            }
+        for (Map.Entry<Long, List<PracticeParticipant>> entry : byPlayer.entrySet()) {
+            Long playerId = entry.getKey();
+            List<PracticeParticipant> playerParticipants = entry.getValue();
 
-            SendResult result = sendToPlayer(p.getPlayerId(), LineNotificationType.LOTTERY_RESULT, message);
-            switch (result) {
-                case SUCCESS -> sent++;
-                case FAILED -> failed++;
-                case SKIPPED -> skipped++;
+            List<PracticeParticipant> waitlisted = playerParticipants.stream()
+                .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED)
+                .collect(Collectors.toList());
+            boolean hasWon = playerParticipants.stream()
+                .anyMatch(p -> p.getStatus() == ParticipantStatus.WON);
+
+            if (waitlisted.isEmpty() && hasWon) {
+                // 全当選: テキスト1通
+                SendResult r = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                    "申し込んだ練習はすべて当選しました");
+                switch (r) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+            } else if (!waitlisted.isEmpty()) {
+                // イントロメッセージ
+                SendResult r1 = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                    "落選した試合があります");
+                switch (r1) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+
+                // セッション別Flex Message
+                Map<Long, List<PracticeParticipant>> waitlistedBySession = waitlisted.stream()
+                    .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
+
+                for (Map.Entry<Long, List<PracticeParticipant>> sessionEntry : waitlistedBySession.entrySet()) {
+                    PracticeSession session = sessionCache.get(sessionEntry.getKey());
+                    if (session == null) continue;
+
+                    String dateStr = session.getSessionDate().format(DATE_FORMAT);
+                    Map<String, Object> flex = buildLotteryWaitlistedFlex(
+                        dateStr, sessionEntry.getValue(), sessionEntry.getKey(), playerId);
+                    String altText = dateStr + "の練習: キャンセル待ち";
+
+                    SendResult r2 = sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
+                    switch (r2) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                }
+
+                // 当選分がある場合のみクロージング
+                if (hasWon) {
+                    SendResult r3 = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                        "上記以外の申し込みはすべて当選しています");
+                    switch (r3) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                }
             }
         }
 
         log.info("Lottery result LINE notifications: sent={}, failed={}, skipped={}", sent, failed, skipped);
         return LineSendResultResponse.builder()
             .sentCount(sent).failedCount(failed).skippedCount(skipped).build();
+    }
+
+    /**
+     * セッション単位のキャンセル待ちFlex Message（Bubble）を構築する
+     */
+    private Map<String, Object> buildLotteryWaitlistedFlex(String dateStr,
+                                                            List<PracticeParticipant> waitlistedInSession,
+                                                            Long sessionId, Long playerId) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "落選した試合のお知らせ",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#E74C3C",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        List<Object> bodyContents = new ArrayList<>();
+        bodyContents.add(Map.of("type", "text", "text", dateStr,
+            "weight", "bold", "size", "lg", "margin", "none"));
+
+        for (PracticeParticipant p : waitlistedInSession) {
+            bodyContents.add(Map.of("type", "text",
+                "text", String.format("試合%d: キャンセル待ち%d番", p.getMatchNumber(), p.getWaitlistNumber()),
+                "size", "md", "margin", "md", "color", "#333333"));
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        // フッター（辞退ボタンのみ）
+        Map<String, Object> declineButton = Map.of(
+            "type", "button",
+            "action", Map.of(
+                "type", "postback",
+                "label", "キャンセル待ちを辞退する",
+                "data", "action=waitlist_decline_session&sessionId=" + sessionId + "&playerId=" + playerId
+            ),
+            "style", "secondary",
+            "height", "sm"
+        );
+
+        Map<String, Object> footer = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(declineButton),
+            "paddingAll", "15px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body,
+            "footer", footer
+        );
     }
 
     /**
