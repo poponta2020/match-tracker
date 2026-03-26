@@ -7,10 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "bye_activities",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_bye_activities_unique",
-        columnNames = {"session_date", "match_number", "player_id"}))
+@Table(name = "bye_activities")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ByeActivity {
 
@@ -45,6 +42,13 @@ public class ByeActivity {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 
     @PrePersist
     protected void onCreate() {

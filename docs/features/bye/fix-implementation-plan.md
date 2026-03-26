@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #17
 
 ### タスク2: ByeActivity Entity に deletedAt フィールド追加
-- [ ] 完了
+- [x] 完了
 - **概要:** Entity に `deletedAt` フィールドと `isDeleted()` メソッドを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/ByeActivity.java` — `deletedAt` フィールド（`@Column(name = "deleted_at")`）と `isDeleted()` メソッドを追加
