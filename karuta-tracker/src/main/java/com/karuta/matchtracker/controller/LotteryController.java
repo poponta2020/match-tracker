@@ -402,7 +402,8 @@ public class LotteryController {
 
         long sentCount = notificationRepository.countByReferenceIdInAndTypeIn(
                 participantIds,
-                List.of(NotificationType.LOTTERY_WON, NotificationType.LOTTERY_WAITLISTED));
+                List.of(NotificationType.LOTTERY_WON, NotificationType.LOTTERY_WAITLISTED,
+                        NotificationType.LOTTERY_ALL_WON, NotificationType.LOTTERY_REMAINING_WON));
 
         return ResponseEntity.ok(Map.of("sent", sentCount > 0, "sentCount", sentCount));
     }
@@ -416,9 +417,9 @@ public class LotteryController {
         int year = body.getOrDefault("year", 0);
         int month = body.getOrDefault("month", 0);
 
-        // アプリ内通知を生成
+        // アプリ内通知を生成（全参加者をまとめて渡し、プレイヤーごとにグルーピング）
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
-        int inAppCount = 0;
+        List<PracticeParticipant> allParticipants = new ArrayList<>();
         for (PracticeSession session : sessions) {
             List<PracticeParticipant> processed = practiceParticipantRepository
                     .findBySessionId(session.getId())
@@ -426,9 +427,9 @@ public class LotteryController {
                     .filter(p -> p.getStatus() == ParticipantStatus.WON
                             || p.getStatus() == ParticipantStatus.WAITLISTED)
                     .collect(Collectors.toList());
-            notificationService.createLotteryResultNotifications(processed);
-            inAppCount += processed.size();
+            allParticipants.addAll(processed);
         }
+        int inAppCount = notificationService.createLotteryResultNotifications(allParticipants);
 
         // LINE通知を送信
         var lineResult = lineNotificationService.sendLotteryResults(year, month);

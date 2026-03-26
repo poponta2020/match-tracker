@@ -16,8 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -65,44 +64,94 @@ public class NotificationService {
     }
 
     /**
-     * 抽選結果通知を一括作成する
+     * 抽選結果通知をまとめて作成する（プレイヤーごとにグルーピング）
+     *
+     * - 全当選 → LOTTERY_ALL_WON 1レコード
+     * - 一部落選 → セッション別 LOTTERY_WAITLISTED + LOTTERY_REMAINING_WON 1レコード
+     * - 全落選 → セッション別 LOTTERY_WAITLISTED のみ
      */
     @Transactional
-    public void createLotteryResultNotifications(List<PracticeParticipant> participants) {
+    public int createLotteryResultNotifications(List<PracticeParticipant> participants) {
         List<Notification> notifications = new ArrayList<>();
 
+        // セッション情報をキャッシュ
+        Map<Long, PracticeSession> sessionCache = new HashMap<>();
         for (PracticeParticipant p : participants) {
-            PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
-            if (session == null) continue;
+            sessionCache.computeIfAbsent(p.getSessionId(),
+                    id -> practiceSessionRepository.findById(id).orElse(null));
+        }
 
-            String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        // プレイヤーごとにグルーピング
+        Map<Long, List<PracticeParticipant>> byPlayer = participants.stream()
+                .collect(Collectors.groupingBy(PracticeParticipant::getPlayerId));
 
-            if (p.getStatus() == ParticipantStatus.WON) {
+        for (Map.Entry<Long, List<PracticeParticipant>> entry : byPlayer.entrySet()) {
+            Long playerId = entry.getKey();
+            List<PracticeParticipant> playerParticipants = entry.getValue();
+
+            List<PracticeParticipant> won = playerParticipants.stream()
+                    .filter(p -> p.getStatus() == ParticipantStatus.WON)
+                    .collect(Collectors.toList());
+            List<PracticeParticipant> waitlisted = playerParticipants.stream()
+                    .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED)
+                    .collect(Collectors.toList());
+
+            if (waitlisted.isEmpty() && !won.isEmpty()) {
+                // 全当選
                 notifications.add(Notification.builder()
-                        .playerId(p.getPlayerId())
-                        .type(NotificationType.LOTTERY_WON)
-                        .title("抽選結果: 当選")
-                        .message(String.format("%sの練習 試合%dに当選しました", dateStr, p.getMatchNumber()))
-                        .referenceType("PRACTICE_PARTICIPANT")
-                        .referenceId(p.getId())
+                        .playerId(playerId)
+                        .type(NotificationType.LOTTERY_ALL_WON)
+                        .title("抽選結果: 全当選")
+                        .message("申し込んだ練習はすべて当選しました")
                         .build());
-            } else if (p.getStatus() == ParticipantStatus.WAITLISTED) {
-                notifications.add(Notification.builder()
-                        .playerId(p.getPlayerId())
-                        .type(NotificationType.LOTTERY_WAITLISTED)
-                        .title("抽選結果: キャンセル待ち")
-                        .message(String.format("%sの練習 試合%d: キャンセル待ち%d番です",
-                                dateStr, p.getMatchNumber(), p.getWaitlistNumber()))
-                        .referenceType("PRACTICE_PARTICIPANT")
-                        .referenceId(p.getId())
-                        .build());
+            } else if (!waitlisted.isEmpty()) {
+                // セッション別にキャンセル待ち通知を作成
+                Map<Long, List<PracticeParticipant>> waitlistedBySession = waitlisted.stream()
+                        .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
+
+                for (Map.Entry<Long, List<PracticeParticipant>> sessionEntry : waitlistedBySession.entrySet()) {
+                    PracticeSession session = sessionCache.get(sessionEntry.getKey());
+                    if (session == null) continue;
+
+                    String dateStr = session.getSessionDate().format(DATE_FORMAT);
+                    List<PracticeParticipant> sessionWaitlisted = sessionEntry.getValue();
+
+                    StringBuilder message = new StringBuilder(dateStr);
+                    for (PracticeParticipant p : sessionWaitlisted) {
+                        message.append(String.format("\n試合%d: キャンセル待ち%d番",
+                                p.getMatchNumber(), p.getWaitlistNumber()));
+                    }
+
+                    // referenceId にはセッションIDを設定（セッション単位の辞退操作と連携）
+                    notifications.add(Notification.builder()
+                            .playerId(playerId)
+                            .type(NotificationType.LOTTERY_WAITLISTED)
+                            .title("抽選結果: キャンセル待ち")
+                            .message(message.toString())
+                            .referenceType("PRACTICE_SESSION")
+                            .referenceId(sessionEntry.getKey())
+                            .build());
+                }
+
+                // 当選分がある場合のみ、まとめ通知を追加
+                if (!won.isEmpty()) {
+                    notifications.add(Notification.builder()
+                            .playerId(playerId)
+                            .type(NotificationType.LOTTERY_REMAINING_WON)
+                            .title("抽選結果: その他は当選")
+                            .message("上記以外の申し込みはすべて当選しています")
+                            .build());
+                }
             }
         }
 
         if (!notifications.isEmpty()) {
             notificationRepository.saveAll(notifications);
-            log.info("Created {} lottery result notifications", notifications.size());
+            log.info("Created {} consolidated lottery notifications for {} players",
+                    notifications.size(), byPlayer.size());
         }
+
+        return notifications.size();
     }
 
     /**
