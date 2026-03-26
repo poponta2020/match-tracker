@@ -18,6 +18,7 @@ import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryDeadlineHelper;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.NotificationService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
@@ -144,12 +145,18 @@ public class LotteryController {
             return ResponseEntity.badRequest().body(Map.of("error", "参加者IDが指定されていません"));
         }
 
-        // PLAYER ロールは自分の参加のみキャンセル可能
+        // PLAYER ロールは自分の参加のみキャンセル可能 + 過去日チェック
         if (currentUserRole == Role.PLAYER) {
             for (Long pid : ids) {
                 PracticeParticipant p = practiceParticipantRepository.findById(pid).orElse(null);
                 if (p != null && !p.getPlayerId().equals(currentUserId)) {
                     throw new ForbiddenException("他の参加者のキャンセルはできません");
+                }
+                if (p != null) {
+                    PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
+                    if (session != null && session.getSessionDate().isBefore(JstDateTimeUtil.today())) {
+                        throw new IllegalStateException("過去の練習のキャンセルはできません");
+                    }
                 }
             }
         }
