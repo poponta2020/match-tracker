@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #18
 
 ### タスク3: ByeActivityRepository の論理削除対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 全クエリメソッドに `deleted_at IS NULL` 条件を追加し、物理削除メソッドを論理削除メソッドに置換する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/ByeActivityRepository.java` — 全 find メソッドを `@Query` に変更して `AND b.deletedAt IS NULL` 追加。`deleteBySessionDateAndMatchNumber` を廃止し、`@Modifying @Query` で `softDeleteBySessionDateAndMatchNumber` を新規追加
