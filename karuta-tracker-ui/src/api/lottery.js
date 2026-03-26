@@ -18,8 +18,8 @@ export const lotteryAPI = {
     apiClient.get(`/lottery/results/${sessionId}`),
 
   // 自分の抽選結果取得
-  getMyResults: (year, month, playerId) =>
-    apiClient.get('/lottery/my-results', { params: { year, month, playerId } }),
+  getMyResults: (year, month) =>
+    apiClient.get('/lottery/my-results', { params: { year, month } }),
 
   // 参加キャンセル（理由付き・複数対応）
   cancel: (participantId, cancelReason, cancelReasonDetail) =>
@@ -34,8 +34,8 @@ export const lotteryAPI = {
     apiClient.post('/lottery/respond-offer', { participantId, accept }),
 
   // キャンセル待ち状況取得
-  getWaitlistStatus: (playerId) =>
-    apiClient.get('/lottery/waitlist-status', { params: { playerId } }),
+  getWaitlistStatus: () =>
+    apiClient.get('/lottery/waitlist-status'),
 
   // 管理者: 参加者手動編集
   editParticipants: (data) =>

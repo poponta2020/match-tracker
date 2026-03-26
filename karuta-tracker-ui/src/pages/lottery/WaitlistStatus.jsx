@@ -18,7 +18,7 @@ export default function WaitlistStatus() {
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const res = await lotteryAPI.getWaitlistStatus(currentPlayer.id);
+      const res = await lotteryAPI.getWaitlistStatus();
       setEntries(res.data.entries || []);
     } catch (err) {
       console.error('Failed to fetch waitlist status:', err);

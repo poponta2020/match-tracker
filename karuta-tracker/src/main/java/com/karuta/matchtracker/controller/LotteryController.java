@@ -9,6 +9,7 @@ import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.NotificationRepository;
@@ -104,16 +105,18 @@ public class LotteryController {
      * 自分の抽選結果取得
      */
     @GetMapping("/my-results")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryResultDto>> getMyLotteryResults(
-            @RequestParam int year, @RequestParam int month, @RequestParam Long playerId) {
+            @RequestParam int year, @RequestParam int month,
+            HttpServletRequest httpRequest) {
 
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
         List<LotteryResultDto> results = new ArrayList<>();
 
         for (PracticeSession session : sessions) {
-            // プレイヤーが関与しているセッションのみ
             boolean involved = practiceParticipantRepository.existsBySessionIdAndPlayerId(
-                    session.getId(), playerId);
+                    session.getId(), currentUserId);
             if (involved) {
                 results.add(lotteryService.buildLotteryResult(session));
             }
@@ -126,10 +129,25 @@ public class LotteryController {
      * 参加キャンセル（理由付き・複数対応）
      */
     @PostMapping("/cancel")
-    public ResponseEntity<Map<String, Object>> cancelParticipation(@Valid @RequestBody CancelRequest request) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Map<String, Object>> cancelParticipation(
+            @Valid @RequestBody CancelRequest request, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+
         List<Long> ids = request.getEffectiveParticipantIds();
         if (ids.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "参加者IDが指定されていません"));
+        }
+
+        // PLAYER ロールは自分の参加のみキャンセル可能
+        if (currentUserRole == Role.PLAYER) {
+            for (Long pid : ids) {
+                PracticeParticipant p = practiceParticipantRepository.findById(pid).orElse(null);
+                if (p != null && !p.getPlayerId().equals(currentUserId)) {
+                    throw new ForbiddenException("他の参加者のキャンセルはできません");
+                }
+            }
         }
 
         List<String> results = new ArrayList<>();
@@ -145,10 +163,21 @@ public class LotteryController {
      * 繰り上げオファーへの応答
      */
     @PostMapping("/respond-offer")
-    public ResponseEntity<Map<String, String>> respondToOffer(@Valid @RequestBody OfferResponseRequest request) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Map<String, String>> respondToOffer(
+            @Valid @RequestBody OfferResponseRequest request, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+
         // 応答前にparticipant情報を取得（応答後はステータスが変わるため）
         PracticeParticipant participant = practiceParticipantRepository.findById(request.getParticipantId())
                 .orElse(null);
+
+        // PLAYER ロールは自分のオファーのみ応答可能
+        if (currentUserRole == Role.PLAYER && participant != null
+                && !participant.getPlayerId().equals(currentUserId)) {
+            throw new ForbiddenException("他の参加者のオファーには応答できません");
+        }
 
         waitlistPromotionService.respondToOffer(request.getParticipantId(), request.getAccept());
 
@@ -164,8 +193,10 @@ public class LotteryController {
      * キャンセル待ち状況取得
      */
     @GetMapping("/waitlist-status")
-    public ResponseEntity<WaitlistStatusDto> getWaitlistStatus(@RequestParam Long playerId) {
-        List<PracticeParticipant> waitlisted = practiceParticipantRepository.findByPlayerId(playerId)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<WaitlistStatusDto> getWaitlistStatus(HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<PracticeParticipant> waitlisted = practiceParticipantRepository.findByPlayerId(currentUserId)
                 .stream()
                 .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED
                         || p.getStatus() == ParticipantStatus.OFFERED)
