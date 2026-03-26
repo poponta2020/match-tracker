@@ -17,6 +17,7 @@ import java.util.Arrays;
  *
  * @RequireRole アノテーションが付与されたメソッドに対して、
  * リクエストヘッダーから取得したユーザーのロールをチェックします。
+ * また、X-User-Id ヘッダーからユーザーIDを抽出し、リクエスト属性にセットします。
  */
 @Component
 @Slf4j
@@ -32,8 +33,9 @@ public class RoleCheckInterceptor implements HandlerInterceptor {
         HandlerMethod handlerMethod = (HandlerMethod) handler;
         RequireRole requireRole = handlerMethod.getMethodAnnotation(RequireRole.class);
 
-        // @RequireRole アノテーションがない場合はスキップ
+        // @RequireRole アノテーションがない場合はユーザーIDだけ設定してスキップ
         if (requireRole == null) {
+            extractAndSetUserId(request, false);
             return true;
         }
 
@@ -64,7 +66,41 @@ public class RoleCheckInterceptor implements HandlerInterceptor {
             throw new ForbiddenException("この操作を実行する権限がありません");
         }
 
+        // ロールをリクエスト属性にセット
+        request.setAttribute("currentUserRole", userRole);
+
+        // ユーザーIDの抽出・セット（@RequireRole 付きエンドポイントでは必須）
+        extractAndSetUserId(request, true);
+
         log.debug("User with role '{}' granted access to endpoint: {}", userRole, request.getRequestURI());
         return true;
+    }
+
+    /**
+     * X-User-Id ヘッダーからユーザーIDを抽出し、リクエスト属性にセットする。
+     *
+     * @param request HTTPリクエスト
+     * @param required trueの場合、ヘッダーが未設定・不正なら例外を投げる
+     */
+    private void extractAndSetUserId(HttpServletRequest request, boolean required) {
+        String userIdHeader = request.getHeader("X-User-Id");
+
+        if (userIdHeader == null || userIdHeader.isEmpty()) {
+            if (required) {
+                log.warn("No user ID found in request header for endpoint: {}", request.getRequestURI());
+                throw new ForbiddenException("認証が必要です");
+            }
+            return;
+        }
+
+        try {
+            Long userId = Long.parseLong(userIdHeader);
+            request.setAttribute("currentUserId", userId);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid user ID '{}' in request header for endpoint: {}", userIdHeader, request.getRequestURI());
+            if (required) {
+                throw new ForbiddenException("不正なユーザーID情報です");
+            }
+        }
     }
 }

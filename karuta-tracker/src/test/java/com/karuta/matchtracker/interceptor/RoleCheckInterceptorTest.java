@@ -66,6 +66,7 @@ class RoleCheckInterceptorTest {
         RequireRole requireRole = createRequireRoleAnnotation(Role.SUPER_ADMIN);
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
         when(request.getHeader("X-User-Role")).thenReturn("SUPER_ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn("1");
 
         // When
         boolean result = interceptor.preHandle(request, response, handlerMethod);
@@ -81,6 +82,7 @@ class RoleCheckInterceptorTest {
         RequireRole requireRole = createRequireRoleAnnotation(Role.ADMIN);
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
         when(request.getHeader("X-User-Role")).thenReturn("ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn("1");
 
         // When
         boolean result = interceptor.preHandle(request, response, handlerMethod);
@@ -96,6 +98,7 @@ class RoleCheckInterceptorTest {
         RequireRole requireRole = createRequireRoleAnnotation(Role.SUPER_ADMIN, Role.ADMIN);
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
         when(request.getHeader("X-User-Role")).thenReturn("ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn("1");
 
         // When
         boolean result = interceptor.preHandle(request, response, handlerMethod);
@@ -111,6 +114,66 @@ class RoleCheckInterceptorTest {
         RequireRole requireRole = createRequireRoleAnnotation(Role.SUPER_ADMIN, Role.ADMIN);
         when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
         when(request.getHeader("X-User-Role")).thenReturn("SUPER_ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn("1");
+
+        // When
+        boolean result = interceptor.preHandle(request, response, handlerMethod);
+
+        // Then
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("@RequireRole付きでX-User-Idヘッダがない場合はForbiddenExceptionが発生")
+    void testPreHandle_NoUserIdHeader_ThrowsForbidden() throws Exception {
+        // Given
+        RequireRole requireRole = createRequireRoleAnnotation(Role.ADMIN);
+        when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
+        when(request.getHeader("X-User-Role")).thenReturn("ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn(null);
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, handlerMethod))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage("認証が必要です");
+    }
+
+    @Test
+    @DisplayName("@RequireRole付きで不正なX-User-Idの場合はForbiddenExceptionが発生")
+    void testPreHandle_InvalidUserId_ThrowsForbidden() throws Exception {
+        // Given
+        RequireRole requireRole = createRequireRoleAnnotation(Role.ADMIN);
+        when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(requireRole);
+        when(request.getHeader("X-User-Role")).thenReturn("ADMIN");
+        when(request.getHeader("X-User-Id")).thenReturn("not-a-number");
+
+        // When & Then
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, handlerMethod))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage("不正なユーザーID情報です");
+    }
+
+    @Test
+    @DisplayName("@RequireRoleなしでX-User-Idがあればリクエスト属性にセットされる")
+    void testPreHandle_NoAnnotation_WithUserId_SetsAttribute() throws Exception {
+        // Given
+        when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(null);
+        when(request.getHeader("X-User-Id")).thenReturn("42");
+
+        // When
+        boolean result = interceptor.preHandle(request, response, handlerMethod);
+
+        // Then
+        assertThat(result).isTrue();
+        org.mockito.Mockito.verify(request).setAttribute("currentUserId", 42L);
+    }
+
+    @Test
+    @DisplayName("@RequireRoleなしでX-User-Idがなくてもエラーにならない")
+    void testPreHandle_NoAnnotation_WithoutUserId_NoError() throws Exception {
+        // Given
+        when(handlerMethod.getMethodAnnotation(RequireRole.class)).thenReturn(null);
+        when(request.getHeader("X-User-Id")).thenReturn(null);
 
         // When
         boolean result = interceptor.preHandle(request, response, handlerMethod);

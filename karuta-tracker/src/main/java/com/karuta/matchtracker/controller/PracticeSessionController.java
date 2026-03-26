@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -211,10 +212,10 @@ public class PracticeSessionController {
     @PostMapping
     @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PracticeSessionDto> createSession(
-            @Valid @RequestBody PracticeSessionCreateRequest request) {
+            @Valid @RequestBody PracticeSessionCreateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("POST /api/practice-sessions - Creating new practice session on {}", request.getSessionDate());
-        // TODO: 認証実装後は実際のユーザーIDを使用
-        Long currentUserId = 1L;  // 仮のユーザーID
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         PracticeSessionDto createdSession = practiceSessionService.createSession(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
     }
@@ -230,10 +231,10 @@ public class PracticeSessionController {
     @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PracticeSessionDto> updateSession(
             @PathVariable Long id,
-            @Valid @RequestBody PracticeSessionUpdateRequest request) {
+            @Valid @RequestBody PracticeSessionUpdateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("PUT /api/practice-sessions/{} - Updating practice session", id);
-        // TODO: 認証実装後は実際のユーザーIDを使用
-        Long currentUserId = 1L;  // 仮のユーザーID
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         PracticeSessionDto updatedSession = practiceSessionService.updateSession(id, request, currentUserId);
         return ResponseEntity.ok(updatedSession);
     }

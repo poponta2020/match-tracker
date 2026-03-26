@@ -25,6 +25,9 @@ apiClient.interceptors.request.use(
         if (player.role) {
           config.headers['X-User-Role'] = player.role;
         }
+        if (player.id) {
+          config.headers['X-User-Id'] = player.id;
+        }
       } catch (e) {
         console.error('Failed to parse currentPlayer from localStorage', e);
       }

@@ -18,6 +18,7 @@ import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,8 +52,9 @@ public class LotteryController {
      */
     @PostMapping("/execute")
     @RequireRole(Role.SUPER_ADMIN)
-    public ResponseEntity<LotteryExecution> executeLottery(@Valid @RequestBody LotteryExecutionRequest request) {
-        Long currentUserId = 1L; // TODO: 認証から取得
+    public ResponseEntity<LotteryExecution> executeLottery(@Valid @RequestBody LotteryExecutionRequest request,
+                                                              HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
                 request.getYear(), request.getMonth(), currentUserId, ExecutionType.MANUAL);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
@@ -63,8 +65,9 @@ public class LotteryController {
      */
     @PostMapping("/re-execute/{sessionId}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<LotteryExecution> reExecuteLottery(@PathVariable Long sessionId) {
-        Long currentUserId = 1L; // TODO: 認証から取得
+    public ResponseEntity<LotteryExecution> reExecuteLottery(@PathVariable Long sessionId,
+                                                                HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId);
         return ResponseEntity.ok(result);
     }

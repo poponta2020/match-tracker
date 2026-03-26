@@ -4,6 +4,7 @@ import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.SystemSetting;
 import com.karuta.matchtracker.service.SystemSettingService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -50,8 +51,9 @@ public class SystemSettingController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<SystemSetting> setValue(
             @PathVariable String key,
-            @RequestBody Map<String, String> body) {
-        Long currentUserId = 1L; // TODO: 認証から取得
+            @RequestBody Map<String, String> body,
+            HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         SystemSetting setting = systemSettingService.setValue(key, body.get("value"), currentUserId);
         return ResponseEntity.ok(setting);
     }
