@@ -116,7 +116,9 @@
       "Bash(find /home/poponta/match-tracker/karuta-tracker-ui/src -type f \\\\\\(-name *Line*.jsx -o -name *Line*.tsx -o -name *line*.js \\\\\\))",
       "Bash(gh issue:*)",
       "Read(//home/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker/service/**)",
-      "Read(//home/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker/repository/**)"
+      "Read(//home/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker/repository/**)",
+      "Bash(ls -la /c/Users/popon/match-tracker/database/*.sql)",
+      "Bash(find /c/Users/popon/match-tracker -name *.sql -type f -newer /c/Users/popon/match-tracker/database/phase1_schema.sql)"
     ],
     "deny": [],
     "ask": [],
