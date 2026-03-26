@@ -137,6 +137,12 @@ public class WaitlistPromotionService {
             throw new IllegalStateException("OFFERED状態のみ応答できます（現在: " + participant.getStatus() + "）");
         }
 
+        // 応答期限の超過チェック
+        if (participant.getOfferDeadline() != null
+                && JstDateTimeUtil.now().isAfter(participant.getOfferDeadline())) {
+            throw new IllegalStateException("応答期限が過ぎています");
+        }
+
         participant.setRespondedAt(JstDateTimeUtil.now());
 
         if (accept) {
