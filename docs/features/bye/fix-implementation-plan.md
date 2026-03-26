@@ -30,7 +30,7 @@ status: completed
 - **対応Issue:** #19
 
 ### タスク4: ByeActivityService の論理削除対応
-- [ ] 完了
+- [x] 完了
 - **概要:** Service 層の削除ロジックを論理削除に変更する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/ByeActivityService.java` — `delete()` を `deletedAt = now()` + `save()` に変更。`createBatch()` の `deleteBySessionDateAndMatchNumber` を `softDeleteBySessionDateAndMatchNumber` に変更。`getPlayerIdForActivity()` で論理削除済みを除外

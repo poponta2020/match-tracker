@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -103,9 +104,9 @@ public class ByeActivityService {
      */
     @Transactional
     public List<ByeActivityDto> createBatch(LocalDate date, Integer matchNumber, List<ByeActivityBatchItemRequest> items, Long userId) {
-        // 既存の同日同試合番号のレコードを削除してから再作成
-        byeActivityRepository.deleteBySessionDateAndMatchNumber(date, matchNumber);
-        byeActivityRepository.flush(); // 削除をDBに反映してからINSERT
+        // 既存の同日同試合番号のレコードを論理削除してから再作成
+        byeActivityRepository.softDeleteBySessionDateAndMatchNumber(date, matchNumber);
+        byeActivityRepository.flush(); // 論理削除をDBに反映してからINSERT
 
         List<ByeActivity> entities = items.stream()
                 .map(item -> {
@@ -157,14 +158,18 @@ public class ByeActivityService {
     @Transactional(readOnly = true)
     public Long getPlayerIdForActivity(Long id) {
         return byeActivityRepository.findById(id)
+                .filter(a -> !a.isDeleted())
                 .map(ByeActivity::getPlayerId)
                 .orElseThrow(() -> new IllegalArgumentException("抜け番活動記録が見つかりません: id=" + id));
     }
 
     @Transactional
     public void delete(Long id) {
-        byeActivityRepository.deleteById(id);
-        log.info("抜け番活動記録削除: id={}", id);
+        ByeActivity entity = byeActivityRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("抜け番活動記録が見つかりません: id=" + id));
+        entity.setDeletedAt(LocalDateTime.now());
+        byeActivityRepository.save(entity);
+        log.info("抜け番活動記録論理削除: id={}", id);
     }
 
     private Map<Long, String> collectPlayerNames(List<ByeActivity> activities) {
