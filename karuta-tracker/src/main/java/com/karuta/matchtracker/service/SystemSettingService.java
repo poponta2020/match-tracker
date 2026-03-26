@@ -17,6 +17,7 @@ import java.util.Optional;
 public class SystemSettingService {
 
     public static final String LOTTERY_DEADLINE_DAYS_BEFORE = "lottery_deadline_days_before";
+    public static final String LOTTERY_NORMAL_RESERVE_PERCENT = "lottery_normal_reserve_percent";
 
     private final SystemSettingRepository systemSettingRepository;
 
@@ -48,6 +49,13 @@ public class SystemSettingService {
      */
     public int getLotteryDeadlineDaysBefore() {
         return getIntValue(LOTTERY_DEADLINE_DAYS_BEFORE, 0);
+    }
+
+    /**
+     * 一般枠の最低保証割合を取得する（0〜100、デフォルト30%）
+     */
+    public int getLotteryNormalReservePercent() {
+        return getIntValue(LOTTERY_NORMAL_RESERVE_PERCENT, 30);
     }
 
     /**

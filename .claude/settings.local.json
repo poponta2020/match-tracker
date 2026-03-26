@@ -113,7 +113,8 @@
       "Bash(find /home/poponta/match-tracker/karuta-tracker-ui/src -type f \\\\\\(-name *.vue -o -name *.tsx -o -name *.jsx -o -name *.ts -o -name *.js \\\\\\))",
       "Bash(2)",
       "Bash(find /home/poponta/match-tracker -type f \\\\\\(-path *resources/db* -o -path *V*__*.sql \\\\\\))",
-      "Bash(find /home/poponta/match-tracker/karuta-tracker-ui/src -type f \\\\\\(-name *Line*.jsx -o -name *Line*.tsx -o -name *line*.js \\\\\\))"
+      "Bash(find /home/poponta/match-tracker/karuta-tracker-ui/src -type f \\\\\\(-name *Line*.jsx -o -name *Line*.tsx -o -name *line*.js \\\\\\))",
+      "Bash(gh issue:*)"
     ],
     "deny": [],
     "ask": [],
