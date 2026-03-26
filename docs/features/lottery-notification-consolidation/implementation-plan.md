@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: ステータス・通知タイプのEnum拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 新しいステータスと通知タイプをEnumに追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/ParticipantStatus.java` — `WAITLIST_DECLINED` を追加
@@ -15,7 +15,7 @@ status: completed
 - **対応Issue:** #33
 
 ### タスク2: キャンセル待ち辞退・復帰のバックエンドロジック
-- [ ] 完了
+- [x] 完了
 - **概要:** キャンセル待ち辞退（セッション単位）と復帰のサービスメソッド・APIエンドポイントを実装する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PracticeParticipantRepository.java` — 辞退・復帰・番号繰り上げ用のクエリメソッド追加
@@ -25,7 +25,7 @@ status: completed
 - **対応Issue:** #34
 
 ### タスク3: 通知まとめロジック（アプリ内通知）
-- [ ] 完了
+- [x] 完了
 - **概要:** `NotificationService.createLotteryResultNotifications()` をプレイヤーごとにグルーピングして通知を作成するロジックに改修する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/NotificationService.java` — `createLotteryResultNotifications()` の全面改修
@@ -38,7 +38,7 @@ status: completed
 - **対応Issue:** #35
 
 ### タスク4: 通知まとめロジック（LINE通知）
-- [ ] 完了
+- [x] 完了
 - **概要:** `LineNotificationService.sendLotteryResults()` をプレイヤーごとにグルーピングして送信するロジックに改修する。セッション別Flex Messageの新規ビルダーを追加。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java`
@@ -49,7 +49,7 @@ status: completed
 - **対応Issue:** #36
 
 ### タスク5: 締切後の新規キャンセル待ち登録
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選締切後に参加登録する際、定員超過ならキャンセル待ち（最後尾）、空きがあれば即当選として登録するロジックを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeParticipantService.java` — `registerParticipations()` に締切後分岐ロジック追加
@@ -59,7 +59,7 @@ status: completed
 - **対応Issue:** #37
 
 ### タスク6: フロントエンド - 通知一覧のグルーピング表示
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知一覧ページで抽選結果通知をグルーピング表示し、キャンセル待ち辞退ボタンを追加する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/notifications/NotificationList.jsx`
@@ -71,7 +71,7 @@ status: completed
 - **対応Issue:** #38
 
 ### タスク7: フロントエンド - 抽選結果ページの辞退/復帰ボタン
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選結果ページに辞退・復帰ボタンと新ステータスバッジを追加する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/lottery/LotteryResults.jsx`
@@ -83,7 +83,7 @@ status: completed
 - **対応Issue:** #39
 
 ### タスク8: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 新機能・改修箇所のユニットテストを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/WaitlistPromotionServiceTest.java` — 辞退・復帰・番号繰り上げのテスト
@@ -93,7 +93,7 @@ status: completed
 - **対応Issue:** #40
 
 ### タスク9: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** 仕様書・設計書・画面一覧を更新する（CLAUDE.mdのドキュメント更新ルールに従う）
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 通知まとめ・キャンセル待ち辞退機能の仕様追記
