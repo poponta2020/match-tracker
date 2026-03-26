@@ -17,6 +17,7 @@ import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
+import com.karuta.matchtracker.service.LotteryDeadlineHelper;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.NotificationService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
@@ -50,6 +51,7 @@ public class LotteryController {
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
     private final VenueRepository venueRepository;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
      * 手動抽選実行
@@ -294,11 +296,22 @@ public class LotteryController {
             for (AdminEditParticipantsRequest.StatusChange change : request.getStatusChanges()) {
                 PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
                         .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
+                ParticipantStatus oldStatus = p.getStatus();
                 p.setStatus(change.getNewStatus());
                 if (change.getWaitlistNumber() != null) {
                     p.setWaitlistNumber(change.getWaitlistNumber());
                 }
                 practiceParticipantRepository.save(p);
+
+                // WON → CANCELLED の場合、繰り上げフローを発動（当日は除く）
+                if (oldStatus == ParticipantStatus.WON && change.getNewStatus() == ParticipantStatus.CANCELLED) {
+                    PracticeSession session = practiceSessionRepository.findById(p.getSessionId())
+                            .orElse(null);
+                    if (session != null && !lotteryDeadlineHelper.isToday(session.getSessionDate())) {
+                        waitlistPromotionService.promoteNextWaitlisted(
+                                p.getSessionId(), p.getMatchNumber(), session.getSessionDate());
+                    }
+                }
             }
         }
 
