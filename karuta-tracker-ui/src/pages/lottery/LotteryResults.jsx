@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -9,7 +8,6 @@ import LoadingScreen from '../../components/LoadingScreen';
  */
 export default function LotteryResults() {
   const { currentPlayer } = useAuth();
-  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
