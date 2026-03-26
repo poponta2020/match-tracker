@@ -16,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -246,7 +248,7 @@ public class PracticeParticipantService {
     }
 
     private List<ParticipationRateDto> computeAllParticipationRates(int year, int month) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = JstDateTimeUtil.today();
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month).stream()
                 .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
         if (sessions.isEmpty()) return List.of();

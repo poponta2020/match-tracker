@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -88,7 +90,7 @@ public class LineChannelService {
 
         LineChannelAssignment assignment = assignmentOpt.get();
         assignment.setStatus(AssignmentStatus.UNLINKED);
-        assignment.setUnlinkedAt(LocalDateTime.now());
+        assignment.setUnlinkedAt(JstDateTimeUtil.now());
         assignment.setLineUserId(null);
         lineChannelAssignmentRepository.save(assignment);
 
@@ -115,7 +117,7 @@ public class LineChannelService {
         LineChannelAssignment assignment = assignmentOpt.get();
         assignment.setLineUserId(lineUserId);
         assignment.setStatus(AssignmentStatus.LINKED);
-        assignment.setLinkedAt(LocalDateTime.now());
+        assignment.setLinkedAt(JstDateTimeUtil.now());
         lineChannelAssignmentRepository.save(assignment);
 
         // チャネルステータスもLINKEDに
@@ -185,7 +187,7 @@ public class LineChannelService {
         lineChannelAssignmentRepository.findActiveByChannelId(channelId)
             .ifPresent(assignment -> {
                 assignment.setStatus(AssignmentStatus.RECLAIMED);
-                assignment.setUnlinkedAt(LocalDateTime.now());
+                assignment.setUnlinkedAt(JstDateTimeUtil.now());
                 lineChannelAssignmentRepository.save(assignment);
             });
 

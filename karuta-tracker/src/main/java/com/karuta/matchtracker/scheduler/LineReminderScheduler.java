@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -50,7 +52,7 @@ public class LineReminderScheduler {
         if (settingOpt.isEmpty() || !settingOpt.get().getEnabled()) return;
 
         List<Integer> daysBefore = parseDaysBefore(settingOpt.get().getDaysBefore());
-        LocalDate today = LocalDate.now();
+        LocalDate today = JstDateTimeUtil.today();
 
         for (int days : daysBefore) {
             LocalDate targetDate = today.plusDays(days);

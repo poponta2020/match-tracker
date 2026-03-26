@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -28,7 +30,7 @@ public class DensukeSyncScheduler {
      */
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
     public void syncDensuke() {
-        LocalDate now = LocalDate.now();
+        LocalDate now = JstDateTimeUtil.today();
 
         // 当月を同期
         syncForMonth(now.getYear(), now.getMonthValue());

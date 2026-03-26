@@ -25,6 +25,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -58,7 +60,7 @@ public class GoogleCalendarSyncService {
             Calendar calendarService = buildCalendarService(accessToken);
 
             // 1. 今日以降の、このプレイヤーが参加している練習セッションを取得
-            LocalDate today = LocalDate.now();
+            LocalDate today = JstDateTimeUtil.today();
             List<PracticeParticipant> participations =
                 practiceParticipantRepository.findUpcomingParticipations(playerId, today);
 
@@ -299,7 +301,7 @@ public class GoogleCalendarSyncService {
             LocalDateTime startLdt = LocalDateTime.of(date, eventStartTime);
             EventDateTime start = new EventDateTime()
                 .setDateTime(new com.google.api.client.util.DateTime(
-                    startLdt.atZone(ZoneId.of("Asia/Tokyo")).toInstant().toEpochMilli()))
+                    startLdt.atZone(JstDateTimeUtil.JST).toInstant().toEpochMilli()))
                 .setTimeZone("Asia/Tokyo");
             event.setStart(start);
 
@@ -307,7 +309,7 @@ public class GoogleCalendarSyncService {
             LocalDateTime endLdt = LocalDateTime.of(date, endTime);
             EventDateTime end = new EventDateTime()
                 .setDateTime(new com.google.api.client.util.DateTime(
-                    endLdt.atZone(ZoneId.of("Asia/Tokyo")).toInstant().toEpochMilli()))
+                    endLdt.atZone(JstDateTimeUtil.JST).toInstant().toEpochMilli()))
                 .setTimeZone("Asia/Tokyo");
             event.setEnd(end);
         } else {

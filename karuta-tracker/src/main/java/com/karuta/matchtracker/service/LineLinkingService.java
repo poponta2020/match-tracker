@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -46,7 +48,7 @@ public class LineLinkingService {
             .playerId(playerId)
             .lineChannelId(channelId)
             .code(code)
-            .expiresAt(LocalDateTime.now().plusMinutes(CODE_EXPIRY_MINUTES))
+            .expiresAt(JstDateTimeUtil.now().plusMinutes(CODE_EXPIRY_MINUTES))
             .build();
 
         lineLinkingCodeRepository.save(linkingCode);
@@ -89,7 +91,7 @@ public class LineLinkingService {
 
         // 成功 → line_user_id保存
         linkingCode.setStatus(CodeStatus.USED);
-        linkingCode.setUsedAt(LocalDateTime.now());
+        linkingCode.setUsedAt(JstDateTimeUtil.now());
         lineLinkingCodeRepository.save(linkingCode);
 
         // チャネルをLINKED状態にする

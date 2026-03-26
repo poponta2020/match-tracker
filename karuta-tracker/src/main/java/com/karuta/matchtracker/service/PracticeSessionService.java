@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
@@ -157,7 +159,7 @@ public class PracticeSessionService {
      */
     @Transactional(readOnly = true)
     public NextParticipationDto findNextParticipation(Long playerId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = JstDateTimeUtil.today();
         log.debug("Finding next participation for player {} from {}", playerId, today);
 
         // 直近の未来の練習日を取得（参加有無に関係なく）

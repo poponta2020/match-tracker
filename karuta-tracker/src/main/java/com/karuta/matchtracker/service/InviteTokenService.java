@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -52,7 +54,7 @@ public class InviteTokenService {
         InviteToken token = InviteToken.builder()
                 .token(UUID.randomUUID().toString())
                 .type(type)
-                .expiresAt(LocalDateTime.now().plusHours(expiryHours))
+                .expiresAt(JstDateTimeUtil.now().plusHours(expiryHours))
                 .createdBy(createdBy)
                 .build();
 
@@ -111,7 +113,7 @@ public class InviteTokenService {
 
         // SINGLE_USE トークンは使用済みにする
         if (inviteToken.getType() == TokenType.SINGLE_USE) {
-            inviteToken.setUsedAt(LocalDateTime.now());
+            inviteToken.setUsedAt(JstDateTimeUtil.now());
             inviteToken.setUsedBy(saved.getId());
             inviteTokenRepository.save(inviteToken);
         }

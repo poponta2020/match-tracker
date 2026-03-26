@@ -13,6 +13,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.time.YearMonth;
 
@@ -37,7 +39,7 @@ public class LotteryScheduler {
      */
     @Scheduled(cron = "0 0 0 * * *")
     public void checkAndExecuteLottery() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = JstDateTimeUtil.today();
         YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
         int targetYear = nextMonth.getYear();
         int targetMonth = nextMonth.getMonthValue();
@@ -54,7 +56,7 @@ public class LotteryScheduler {
     @EventListener(ApplicationReadyEvent.class)
     public void retryOnStartup() {
         try {
-            LocalDate today = LocalDate.now();
+            LocalDate today = JstDateTimeUtil.today();
             int targetYear = today.getYear();
             int targetMonth = today.getMonthValue();
 

@@ -5,6 +5,7 @@ import com.karuta.matchtracker.entity.ActivityType;
 import com.karuta.matchtracker.entity.ByeActivity;
 import com.karuta.matchtracker.repository.ByeActivityRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -167,7 +168,7 @@ public class ByeActivityService {
     public void delete(Long id) {
         ByeActivity entity = byeActivityRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("抜け番活動記録が見つかりません: id=" + id));
-        entity.setDeletedAt(LocalDateTime.now());
+        entity.setDeletedAt(JstDateTimeUtil.now());
         byeActivityRepository.save(entity);
         log.info("抜け番活動記録論理削除: id={}", id);
     }

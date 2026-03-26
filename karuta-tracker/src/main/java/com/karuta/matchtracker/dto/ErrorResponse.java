@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -36,7 +38,7 @@ public class ErrorResponse {
      * タイムスタンプ
      */
     @Builder.Default
-    private LocalDateTime timestamp = LocalDateTime.now();
+    private LocalDateTime timestamp = JstDateTimeUtil.now();
 
     /**
      * リクエストパス
@@ -55,6 +57,6 @@ public class ErrorResponse {
         this.message = message;
         this.status = status;
         this.path = path;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = JstDateTimeUtil.now();
     }
 }

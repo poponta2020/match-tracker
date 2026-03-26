@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.*;
@@ -57,7 +59,7 @@ public class DensukeImportService {
     @Transactional
     public ImportResult importFromDensuke(String url, LocalDate targetDate) throws IOException {
         // 年を推定
-        int year = targetDate != null ? targetDate.getYear() : LocalDate.now().getYear();
+        int year = targetDate != null ? targetDate.getYear() : JstDateTimeUtil.today().getYear();
 
         // スクレイピング
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);

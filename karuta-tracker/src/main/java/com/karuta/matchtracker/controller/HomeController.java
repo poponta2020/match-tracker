@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -40,7 +42,7 @@ public class HomeController {
         NextParticipationDto nextPractice = practiceSessionService.findNextParticipation(playerId);
 
         // 参加率TOP3 + 自分の参加率
-        LocalDate now = LocalDate.now();
+        LocalDate now = JstDateTimeUtil.today();
         int year = now.getYear();
         int month = now.getMonthValue();
         List<ParticipationRateDto> top3 = practiceParticipantService.getParticipationRateTop3(year, month);

@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,8 +40,8 @@ public class LineChannelReclaimScheduler {
     public void reclaimUnusedChannels() {
         log.info("LINE channel reclaim scheduler started");
 
-        LocalDateTime threshold = LocalDateTime.now().minusDays(INACTIVE_DAYS);
-        LocalDateTime graceDeadline = LocalDateTime.now().minusDays(GRACE_PERIOD_DAYS);
+        LocalDateTime threshold = JstDateTimeUtil.now().minusDays(INACTIVE_DAYS);
+        LocalDateTime graceDeadline = JstDateTimeUtil.now().minusDays(GRACE_PERIOD_DAYS);
 
         // 1. 猶予期間経過 → 回収
         List<LineChannelAssignment> expired = lineChannelAssignmentRepository
@@ -66,7 +68,7 @@ public class LineChannelReclaimScheduler {
 
     private void reclaimAssignment(LineChannelAssignment assignment) {
         assignment.setStatus(AssignmentStatus.RECLAIMED);
-        assignment.setUnlinkedAt(LocalDateTime.now());
+        assignment.setUnlinkedAt(JstDateTimeUtil.now());
         assignment.setLineUserId(null);
         lineChannelAssignmentRepository.save(assignment);
 
@@ -79,7 +81,7 @@ public class LineChannelReclaimScheduler {
     }
 
     private void warnPlayer(LineChannelAssignment assignment) {
-        assignment.setReclaimWarnedAt(LocalDateTime.now());
+        assignment.setReclaimWarnedAt(JstDateTimeUtil.now());
         lineChannelAssignmentRepository.save(assignment);
 
         // アプリ内通知で警告

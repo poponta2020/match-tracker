@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -52,7 +54,7 @@ public class PlayerProfileDto {
      * 現在有効なプロフィールかどうか
      */
     public boolean isCurrentlyValid() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = JstDateTimeUtil.today();
         return validFrom != null && !validFrom.isAfter(today) &&
                (validTo == null || !validTo.isBefore(today));
     }

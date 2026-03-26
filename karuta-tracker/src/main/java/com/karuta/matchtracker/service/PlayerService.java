@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -155,7 +157,7 @@ public class PlayerService {
             return;
         }
 
-        player.setDeletedAt(LocalDateTime.now());
+        player.setDeletedAt(JstDateTimeUtil.now());
         playerRepository.save(player);
 
         log.info("Successfully deleted player with id: {}", id);
@@ -201,7 +203,7 @@ public class PlayerService {
         boolean isFirstLogin = player.getLastLoginAt() == null;
 
         // 最終ログイン日時を更新
-        player.setLastLoginAt(LocalDateTime.now());
+        player.setLastLoginAt(JstDateTimeUtil.now());
         playerRepository.save(player);
 
         log.info("Successful login for user: {} (firstLogin: {})", request.getName(), isFirstLogin);
