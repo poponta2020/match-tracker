@@ -280,13 +280,15 @@ Entity Layer (JPA Entity)
 | updated_by | BIGINT | NOT NULL | 更新者ID |
 | created_at | TIMESTAMP | NOT NULL | 登録日時 |
 | updated_at | TIMESTAMP | NOT NULL | 更新日時 |
+| deleted_at | TIMESTAMP | NULL | 論理削除日時 |
 
-**ユニーク制約**: `uk_bye_activities_unique (session_date, match_number, player_id)`
+**ユニーク制約**: `uk_bye_activities_unique (session_date, match_number, player_id) WHERE deleted_at IS NULL`（部分ユニークインデックス）
 
 **インデックス**:
 - `idx_bye_activities_date` (session_date)
 - `idx_bye_activities_date_match` (session_date, match_number)
 - `idx_bye_activities_player` (player_id)
+- `idx_bye_activities_deleted_at` (deleted_at)
 
 ---
 
@@ -1799,6 +1801,8 @@ Entity Layer (JPA Entity)
 - `Player.deletedAt` により選手を論理削除
 - 削除済み選手は更新・ログイン不可
 - 過去の試合記録は保持（データ整合性）
+- `ByeActivity.deletedAt` により抜け番活動記録を論理削除
+- 一括作成時（`createBatch`）は既存レコードを論理削除してから再作成
 
 #### 試合ごと参加登録
 - `PracticeParticipant.matchNumber` により、各練習日の各試合ごとに参加登録可能

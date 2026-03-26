@@ -272,14 +272,15 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 | OTHER | その他 | 上記以外の活動（自由テキストで補足） |
 
 **入力方法:**
-- **本人入力（MatchForm）:** 抜け番の試合番号タブを選択すると、対戦入力フォームの代わりに活動種別選択UIが表示される
+- **本人入力（MatchForm）:** ペアリング作成済みの場合、抜け番の試合番号タブを選択すると自動で活動種別選択UIが表示される。ペアリング未作成の場合は「抜け番として記録する」ボタンから手動で切り替え可能
 - **管理者一括入力（BulkResultInput）:** ペアリング一覧の下に抜け番セクションが表示され、活動種別をドロップダウンで選択
 - **組み合わせ作成時（PairingGenerator）:** 待機選手に活動種別を選択して、ペアリング保存時に一括登録
 
 **ビジネスルール:**
 - 活動の入力は任意（未入力でもエラーにしない）
 - 「その他」選択時のみ自由テキスト入力欄が表示される
-- 同一試合・同一選手で1レコードのみ（ユニーク制約）
+- 同一試合・同一選手で1レコードのみ（部分ユニーク制約: `deleted_at IS NULL` のレコード間で適用）
+- 削除は論理削除（`deleted_at` にタイムスタンプを設定）
 
 ### 3.5 統計機能
 
@@ -724,9 +725,10 @@ venues ──< venue_match_schedules (venueId)
 | updated_by | BIGINT | NOT NULL | 更新者 |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
+| deleted_at | TIMESTAMP | NULL | 論理削除日時 |
 
-ユニーク制約: `(session_date, match_number, player_id)`
-インデックス: `idx_bye_activities_date`, `idx_bye_activities_date_match`, `idx_bye_activities_player`
+ユニーク制約: `(session_date, match_number, player_id) WHERE deleted_at IS NULL`（部分ユニークインデックス）
+インデックス: `idx_bye_activities_date`, `idx_bye_activities_date_match`, `idx_bye_activities_player`, `idx_bye_activities_deleted_at`
 
 #### practice_sessions
 
