@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationAPI } from '../../api/notifications';
+import { lotteryAPI } from '../../api/lottery';
 import LoadingScreen from '../../components/LoadingScreen';
 
 /**
@@ -12,6 +13,7 @@ export default function NotificationList() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(null);
 
   useEffect(() => {
     if (currentPlayer?.id) fetchNotifications();
@@ -30,7 +32,6 @@ export default function NotificationList() {
   };
 
   const handleClick = async (notification) => {
-    // 既読にする
     if (!notification.isRead) {
       try {
         await notificationAPI.markAsRead(notification.id);
@@ -42,15 +43,32 @@ export default function NotificationList() {
       }
     }
 
-    // 繰り上げ通知の場合は承認画面へ遷移
     if (notification.type === 'WAITLIST_OFFER' && notification.referenceId) {
       navigate(`/lottery/offer-response?id=${notification.referenceId}`);
+    }
+  };
+
+  const handleDeclineWaitlist = async (e, notification) => {
+    e.stopPropagation();
+    if (!confirm('キャンセル待ちを辞退しますか？')) return;
+
+    setProcessing(notification.id);
+    try {
+      await lotteryAPI.declineWaitlist(notification.referenceId, currentPlayer.id);
+      await fetchNotifications();
+    } catch (err) {
+      console.error('Failed to decline waitlist:', err);
+      alert('辞退処理に失敗しました');
+    } finally {
+      setProcessing(null);
     }
   };
 
   const getTypeIcon = (type) => {
     switch (type) {
       case 'LOTTERY_WON': return '✓';
+      case 'LOTTERY_ALL_WON': return '✓';
+      case 'LOTTERY_REMAINING_WON': return '✓';
       case 'LOTTERY_WAITLISTED': return '⏳';
       case 'WAITLIST_OFFER': return '📩';
       case 'OFFER_EXPIRING': return '⚠';
@@ -62,12 +80,17 @@ export default function NotificationList() {
   const getTypeBg = (type) => {
     switch (type) {
       case 'LOTTERY_WON': return 'border-l-green-500';
+      case 'LOTTERY_ALL_WON': return 'border-l-green-500';
+      case 'LOTTERY_REMAINING_WON': return 'border-l-green-500';
       case 'LOTTERY_WAITLISTED': return 'border-l-yellow-500';
       case 'WAITLIST_OFFER': return 'border-l-blue-500';
       case 'OFFER_EXPIRED': return 'border-l-red-500';
       default: return 'border-l-gray-300';
     }
   };
+
+  const isWaitlistedNotification = (n) =>
+    n.type === 'LOTTERY_WAITLISTED' && n.referenceType === 'PRACTICE_SESSION' && n.referenceId;
 
   return (
     <div className="max-w-2xl mx-auto p-4">
@@ -89,7 +112,15 @@ export default function NotificationList() {
                 <span className="text-lg">{getTypeIcon(n.type)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm">{n.title}</div>
-                  <div className="text-xs text-gray-600 mt-0.5">{n.message}</div>
+                  <div className="text-xs text-gray-600 mt-0.5 whitespace-pre-line">{n.message}</div>
+                  {isWaitlistedNotification(n) && (
+                    <button
+                      onClick={(e) => handleDeclineWaitlist(e, n)}
+                      disabled={processing === n.id}
+                      className="mt-2 px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded disabled:opacity-50">
+                      {processing === n.id ? '処理中...' : 'キャンセル待ちを辞退する'}
+                    </button>
+                  )}
                   <div className="text-xs text-gray-400 mt-1">
                     {new Date(n.createdAt).toLocaleString('ja-JP')}
                   </div>

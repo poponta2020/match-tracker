@@ -56,4 +56,12 @@ export const lotteryAPI = {
   // 抽選結果通知の統合送信（アプリ内 + LINE）
   notifyResults: (year, month) =>
     apiClient.post('/lottery/notify-results', { year, month }),
+
+  // キャンセル待ち辞退（セッション単位）
+  declineWaitlist: (sessionId, playerId) =>
+    apiClient.post('/lottery/decline-waitlist', { sessionId, playerId }),
+
+  // キャンセル待ち復帰（セッション単位）
+  rejoinWaitlist: (sessionId, playerId) =>
+    apiClient.post('/lottery/rejoin-waitlist', { sessionId, playerId }),
 };
