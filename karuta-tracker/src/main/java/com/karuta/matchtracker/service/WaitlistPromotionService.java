@@ -6,6 +6,7 @@ import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -67,7 +68,7 @@ public class WaitlistPromotionService {
         participant.setStatus(ParticipantStatus.CANCELLED);
         participant.setCancelReason(cancelReason);
         participant.setCancelReasonDetail(cancelReasonDetail);
-        participant.setCancelledAt(java.time.LocalDateTime.now());
+        participant.setCancelledAt(JstDateTimeUtil.now());
         practiceParticipantRepository.save(participant);
 
         log.info("Player {} cancelled participation in session {} match {} (reason: {})",
@@ -107,7 +108,7 @@ public class WaitlistPromotionService {
         LocalDateTime deadline = lotteryDeadlineHelper.calculateOfferDeadline(sessionDate);
 
         next.setStatus(ParticipantStatus.OFFERED);
-        next.setOfferedAt(LocalDateTime.now());
+        next.setOfferedAt(JstDateTimeUtil.now());
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
 
@@ -136,7 +137,7 @@ public class WaitlistPromotionService {
             throw new IllegalStateException("OFFERED状態のみ応答できます（現在: " + participant.getStatus() + "）");
         }
 
-        participant.setRespondedAt(LocalDateTime.now());
+        participant.setRespondedAt(JstDateTimeUtil.now());
 
         if (accept) {
             participant.setStatus(ParticipantStatus.WON);
@@ -170,7 +171,7 @@ public class WaitlistPromotionService {
         }
 
         participant.setStatus(ParticipantStatus.DECLINED);
-        participant.setRespondedAt(LocalDateTime.now());
+        participant.setRespondedAt(JstDateTimeUtil.now());
         practiceParticipantRepository.save(participant);
 
         log.info("Offer expired for player {} in session {} match {} (waitlist #{})",

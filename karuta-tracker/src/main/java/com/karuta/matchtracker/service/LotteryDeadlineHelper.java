@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -46,7 +47,7 @@ public class LotteryDeadlineHelper {
      * 指定年月の練習がまだ締め切り前かどうか
      */
     public boolean isBeforeDeadline(int year, int month) {
-        return LocalDateTime.now().isBefore(getDeadline(year, month));
+        return JstDateTimeUtil.now().isBefore(getDeadline(year, month));
     }
 
     /**
@@ -60,7 +61,7 @@ public class LotteryDeadlineHelper {
      * 指定日の練習が当日かどうか
      */
     public boolean isToday(LocalDate sessionDate) {
-        return sessionDate.equals(LocalDate.now());
+        return sessionDate.equals(JstDateTimeUtil.today());
     }
 
     /**
@@ -76,7 +77,7 @@ public class LotteryDeadlineHelper {
      * min(通知から24時間, 練習日前日の23:59)
      */
     public LocalDateTime calculateOfferDeadline(LocalDate sessionDate) {
-        LocalDateTime twentyFourHoursLater = LocalDateTime.now().plusHours(24);
+        LocalDateTime twentyFourHoursLater = JstDateTimeUtil.now().plusHours(24);
         LocalDateTime dayBeforePractice = sessionDate.minusDays(1).atTime(23, 59, 59);
         return twentyFourHoursLater.isBefore(dayBeforePractice) ? twentyFourHoursLater : dayBeforePractice;
     }

@@ -17,6 +17,7 @@ import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -79,7 +80,7 @@ public class LotteryService {
                 .targetMonth(month)
                 .executionType(type)
                 .executedBy(executedBy)
-                .executedAt(LocalDateTime.now())
+                .executedAt(JstDateTimeUtil.now())
                 .status(ExecutionStatus.SUCCESS)
                 .build();
 
@@ -366,7 +367,7 @@ public class LotteryService {
                 .executionType(ExecutionType.MANUAL_RELOTTERY)
                 .sessionId(sessionId)
                 .executedBy(executedBy)
-                .executedAt(LocalDateTime.now())
+                .executedAt(JstDateTimeUtil.now())
                 .status(ExecutionStatus.SUCCESS)
                 .build();
 

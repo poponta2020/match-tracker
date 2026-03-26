@@ -3,6 +3,7 @@ package com.karuta.matchtracker.scheduler;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,7 +29,7 @@ public class OfferExpiryScheduler {
     @Scheduled(fixedDelay = 300000, initialDelay = 60000) // 5分ごと、起動1分後に初回実行
     public void checkExpiredOffers() {
         List<PracticeParticipant> expired = practiceParticipantRepository
-                .findExpiredOffers(LocalDateTime.now());
+                .findExpiredOffers(JstDateTimeUtil.now());
 
         if (expired.isEmpty()) {
             return;
