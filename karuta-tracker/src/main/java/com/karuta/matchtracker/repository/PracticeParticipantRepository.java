@@ -194,6 +194,29 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findBySessionDateYearAndMonth(@Param("year") int year, @Param("month") int month);
 
     /**
+     * 特定セッション・プレイヤー・ステータスの参加者を取得
+     */
+    List<PracticeParticipant> findBySessionIdAndPlayerIdAndStatus(
+            Long sessionId, Long playerId, ParticipantStatus status);
+
+    /**
+     * 特定セッション・試合でキャンセル待ち番号が指定値より大きい参加者を取得（番号繰り上げ用）
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
+           "AND p.status = 'WAITLISTED' AND p.waitlistNumber > :waitlistNumber ORDER BY p.waitlistNumber ASC")
+    List<PracticeParticipant> findWaitlistedAfterNumber(@Param("sessionId") Long sessionId,
+                                                        @Param("matchNumber") Integer matchNumber,
+                                                        @Param("waitlistNumber") Integer waitlistNumber);
+
+    /**
+     * 特定セッション・試合のキャンセル待ち最大番号を取得
+     */
+    @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +
+           "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber AND p.status = 'WAITLISTED'")
+    Optional<Integer> findMaxWaitlistNumber(@Param("sessionId") Long sessionId,
+                                            @Param("matchNumber") Integer matchNumber);
+
+    /**
      * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
      */
     @Query("SELECT DISTINCT pp.playerId FROM PracticeParticipant pp " +

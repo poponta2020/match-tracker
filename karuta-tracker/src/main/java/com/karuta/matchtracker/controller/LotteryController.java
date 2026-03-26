@@ -280,6 +280,52 @@ public class LotteryController {
     }
 
     /**
+     * キャンセル待ち辞退（セッション単位）
+     */
+    @PostMapping("/decline-waitlist")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Map<String, Object>> declineWaitlist(
+            @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Long sessionId = body.get("sessionId");
+        Long playerId = body.get("playerId");
+
+        // PLAYERは自分のみ辞退可能
+        if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
+            throw new ForbiddenException("他の参加者のキャンセル待ちは辞退できません");
+        }
+
+        int count = waitlistPromotionService.declineWaitlistBySession(sessionId, playerId);
+        return ResponseEntity.ok(Map.of(
+                "declinedCount", count,
+                "message", count + "件のキャンセル待ちを辞退しました"));
+    }
+
+    /**
+     * キャンセル待ち復帰（セッション単位）
+     */
+    @PostMapping("/rejoin-waitlist")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Map<String, Object>> rejoinWaitlist(
+            @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Long sessionId = body.get("sessionId");
+        Long playerId = body.get("playerId");
+
+        // PLAYERは自分のみ復帰可能
+        if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
+            throw new ForbiddenException("他の参加者のキャンセル待ちは復帰できません");
+        }
+
+        int count = waitlistPromotionService.rejoinWaitlistBySession(sessionId, playerId);
+        return ResponseEntity.ok(Map.of(
+                "rejoinedCount", count,
+                "message", "キャンセル待ちに復帰しました（" + count + "件）"));
+    }
+
+    /**
      * 管理者による参加者手動編集
      */
     @PutMapping("/admin/edit-participants")

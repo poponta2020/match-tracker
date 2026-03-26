@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -164,6 +165,78 @@ public class WaitlistPromotionService {
         }
 
         practiceParticipantRepository.save(participant);
+    }
+
+    /**
+     * セッション単位でキャンセル待ちを辞退する
+     *
+     * @param sessionId セッションID
+     * @param playerId  プレイヤーID
+     * @return 辞退した件数
+     */
+    @Transactional
+    public int declineWaitlistBySession(Long sessionId, Long playerId) {
+        List<PracticeParticipant> waitlisted = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndStatus(sessionId, playerId, ParticipantStatus.WAITLISTED);
+
+        if (waitlisted.isEmpty()) {
+            throw new IllegalStateException("辞退対象のキャンセル待ちがありません");
+        }
+
+        for (PracticeParticipant p : waitlisted) {
+            Integer oldNumber = p.getWaitlistNumber();
+            p.setStatus(ParticipantStatus.WAITLIST_DECLINED);
+            p.setWaitlistNumber(null);
+            practiceParticipantRepository.save(p);
+
+            // 後続のキャンセル待ち番号を繰り上げ
+            if (oldNumber != null) {
+                List<PracticeParticipant> subsequent = practiceParticipantRepository
+                        .findWaitlistedAfterNumber(sessionId, p.getMatchNumber(), oldNumber);
+                for (PracticeParticipant s : subsequent) {
+                    s.setWaitlistNumber(s.getWaitlistNumber() - 1);
+                    practiceParticipantRepository.save(s);
+                }
+            }
+
+            log.info("Player {} declined waitlist for session {} match {} (was #{})",
+                    playerId, sessionId, p.getMatchNumber(), oldNumber);
+        }
+
+        return waitlisted.size();
+    }
+
+    /**
+     * セッション単位でキャンセル待ちに復帰する
+     *
+     * @param sessionId セッションID
+     * @param playerId  プレイヤーID
+     * @return 復帰した件数
+     */
+    @Transactional
+    public int rejoinWaitlistBySession(Long sessionId, Long playerId) {
+        List<PracticeParticipant> declined = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndStatus(sessionId, playerId, ParticipantStatus.WAITLIST_DECLINED);
+
+        if (declined.isEmpty()) {
+            throw new IllegalStateException("復帰対象がありません（WAITLIST_DECLINED状態のものがない）");
+        }
+
+        for (PracticeParticipant p : declined) {
+            // 該当試合の最後尾番号を取得
+            int maxNumber = practiceParticipantRepository
+                    .findMaxWaitlistNumber(sessionId, p.getMatchNumber())
+                    .orElse(0);
+
+            p.setStatus(ParticipantStatus.WAITLISTED);
+            p.setWaitlistNumber(maxNumber + 1);
+            practiceParticipantRepository.save(p);
+
+            log.info("Player {} rejoined waitlist for session {} match {} (new #{})",
+                    playerId, sessionId, p.getMatchNumber(), maxNumber + 1);
+        }
+
+        return declined.size();
     }
 
     /**
