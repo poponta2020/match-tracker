@@ -563,6 +563,8 @@ Entity Layer (JPA Entity)
 
 **ベースURL**: `http://localhost:8080/api`
 
+**タイムゾーン**: 全ての日時処理は `JstDateTimeUtil`（`util/JstDateTimeUtil.java`）を使用してJST（Asia/Tokyo）で統一。`LocalDate.now()` / `LocalDateTime.now()` は直接使用せず、`JstDateTimeUtil.today()` / `JstDateTimeUtil.now()` を使用する。
+
 **リクエストヘッダー**:
 - `Content-Type: application/json`
 - `X-User-Role: {SUPER_ADMIN|ADMIN|PLAYER}` (現在の簡易実装)
@@ -1038,7 +1040,7 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### POST /api/lottery/cancel
-**説明**: 参加キャンセル（理由付き・複数対応）。PLAYERは自分の参加のみキャンセル可能、ADMIN+は他人分も可。
+**説明**: 参加キャンセル（理由付き・複数対応）。PLAYERは自分の参加のみキャンセル可能かつ過去日のキャンセル不可、ADMIN+は他人分・過去日も可。
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 **リクエスト**: `CancelRequest`
 ```json
@@ -1051,13 +1053,32 @@ Entity Layer (JPA Entity)
 ```
 
 #### POST /api/lottery/respond-offer
-**説明**: 繰り上げオファーへの応答。PLAYERは自分のオファーのみ応答可能、ADMIN+は他人分も可。
+**説明**: 繰り上げオファーへの応答。PLAYERは自分のオファーのみ応答可能、ADMIN+は他人分も可。応答期限超過時はエラー。
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 **リクエスト**: `OfferResponseRequest`
 ```json
 {
   "participantId": 123,
   "accept": true
+}
+```
+
+#### GET /api/lottery/offer-detail/{participantId}
+**説明**: 個別オファー詳細取得。PLAYERは自分のレコードのみ参照可能、ADMIN+は全員参照可能。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
+**レスポンス**: `WaitlistStatusDto.WaitlistEntry`
+```json
+{
+  "participantId": 123,
+  "sessionId": 45,
+  "sessionDate": "2026-04-05",
+  "venueName": "市民館",
+  "startTime": "13:00",
+  "endTime": "17:00",
+  "matchNumber": 2,
+  "waitlistNumber": 1,
+  "status": "OFFERED",
+  "offerDeadline": "2026-04-04T23:59:59"
 }
 ```
 
@@ -1087,7 +1108,7 @@ Entity Layer (JPA Entity)
 ```
 
 #### PUT /api/lottery/admin/edit-participants
-**説明**: 管理者による参加者手動編集
+**説明**: 管理者による参加者手動編集。WON→CANCELLEDへのステータス変更時は繰り上げフローが自動発動（当日は除く）。
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `AdminEditParticipantsRequest`
 
