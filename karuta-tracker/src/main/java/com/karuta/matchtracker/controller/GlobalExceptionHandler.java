@@ -199,8 +199,10 @@ public class GlobalExceptionHandler {
 
         log.error("Unexpected error occurred", ex);
 
+        // デバッグ用: エラー詳細を含める
+        String message = "内部サーバーエラーが発生しました: " + ex.getClass().getSimpleName() + ": " + ex.getMessage();
         ErrorResponse errorResponse = new ErrorResponse(
-                "内部サーバーエラーが発生しました",
+                message,
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 request.getRequestURI()
         );

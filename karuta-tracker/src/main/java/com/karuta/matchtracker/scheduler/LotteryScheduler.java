@@ -52,17 +52,29 @@ public class LotteryScheduler {
     /**
      * アプリケーション起動時のリトライチェック
      * 未実行の抽選がないか確認し、あれば実行
+     *
+     * 当月分と翌月分の両方をチェックする。
+     * - 当月分: 前月末に実行されたはずの抽選が失敗していた場合のリトライ
+     * - 翌月分: 当日が締め切り後（月末等）で自動抽選が失敗していた場合のリトライ
      */
     @EventListener(ApplicationReadyEvent.class)
     public void retryOnStartup() {
         try {
             LocalDate today = JstDateTimeUtil.today();
-            int targetYear = today.getYear();
-            int targetMonth = today.getMonthValue();
 
-            // 当月の抽選が実行済みかチェック
-            if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth)) {
-                executeLotteryIfNotDone(targetYear, targetMonth);
+            // 当月分のチェック
+            int currentYear = today.getYear();
+            int currentMonth = today.getMonthValue();
+            if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth)) {
+                executeLotteryIfNotDone(currentYear, currentMonth);
+            }
+
+            // 翌月分のチェック（月末に自動抽選が失敗し同日中に再起動した場合に対応）
+            YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
+            int nextYear = nextMonth.getYear();
+            int nextMonthValue = nextMonth.getMonthValue();
+            if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue)) {
+                executeLotteryIfNotDone(nextYear, nextMonthValue);
             }
         } catch (Exception e) {
             log.error("Failed to execute startup lottery retry", e);

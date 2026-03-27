@@ -190,6 +190,12 @@ const PracticeList = () => {
       if (hasWon) return 'confirmed';
       const hasWaitlisted = statuses.some(s => s.status === 'WAITLISTED');
       if (hasWaitlisted) return 'waitlisted';
+      // 全てキャンセル・辞退済みの場合
+      const allCancelled = statuses.every(s =>
+        s.status === 'CANCELLED' || s.status === 'DECLINED' || s.status === 'WAITLIST_DECLINED'
+      );
+      if (allCancelled) return 'cancelled';
+      return 'none';
     }
 
     // ステータス情報がなければ従来通り参加扱い
@@ -475,8 +481,14 @@ const PracticeList = () => {
                     cellBorder = 'border-2 border-[#e8d48b]';
                     cellBg = 'bg-[#fef9ed] hover:bg-[#fdf3d7]';
                     venueTextColor = 'text-[#b8860b]';
+                  } else if (participationStatus === 'cancelled') {
+                    cellBorder = 'border-2 border-[#b0b5ba]';
+                    cellBg = 'bg-[#e5e7eb] hover:bg-[#d1d5db]';
+                    venueTextColor = 'text-[#9ca3af]';
                   } else if (hasSession) {
-                    cellBg = 'bg-[#f9f6f2] hover:bg-[#eef2ef]';
+                    cellBorder = 'border-2 border-[#b0b5ba]';
+                    cellBg = 'bg-[#e5e7eb] hover:bg-[#d1d5db]';
+                    venueTextColor = 'text-[#9ca3af]';
                   }
 
                   return (

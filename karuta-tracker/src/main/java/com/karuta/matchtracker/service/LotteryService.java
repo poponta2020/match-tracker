@@ -2,6 +2,7 @@ package com.karuta.matchtracker.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.karuta.matchtracker.dto.AdminEditParticipantsRequest;
 import com.karuta.matchtracker.dto.LotteryResultDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
@@ -52,6 +53,8 @@ public class LotteryService {
     private final VenueRepository venueRepository;
     private final NotificationService notificationService;
     private final SystemSettingService systemSettingService;
+    private final WaitlistPromotionService waitlistPromotionService;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final ObjectMapper objectMapper;
 
     // details JSON 用の内部レコード
@@ -552,6 +555,63 @@ public class LotteryService {
                 .capacity(session.getCapacity())
                 .matchResults(matchResults)
                 .build();
+    }
+
+    /**
+     * 管理者による参加者手動編集
+     *
+     * - 参加者追加
+     * - ステータス変更（WON→CANCELLEDの場合は繰り上げフローを発動）
+     * - キャンセル待ち順番変更
+     */
+    @Transactional
+    public void editParticipants(AdminEditParticipantsRequest request) {
+        // 参加者追加
+        if (request.getAdditions() != null) {
+            for (AdminEditParticipantsRequest.AddParticipant add : request.getAdditions()) {
+                PracticeParticipant participant = PracticeParticipant.builder()
+                        .sessionId(request.getSessionId())
+                        .playerId(add.getPlayerId())
+                        .matchNumber(request.getMatchNumber())
+                        .status(add.getStatus() != null ? add.getStatus() : ParticipantStatus.WON)
+                        .build();
+                practiceParticipantRepository.save(participant);
+            }
+        }
+
+        // ステータス変更
+        if (request.getStatusChanges() != null) {
+            for (AdminEditParticipantsRequest.StatusChange change : request.getStatusChanges()) {
+                PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
+                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
+                ParticipantStatus oldStatus = p.getStatus();
+                p.setStatus(change.getNewStatus());
+                if (change.getWaitlistNumber() != null) {
+                    p.setWaitlistNumber(change.getWaitlistNumber());
+                }
+                practiceParticipantRepository.save(p);
+
+                // WON → CANCELLED の場合、繰り上げフローを発動（当日は除く）
+                if (oldStatus == ParticipantStatus.WON && change.getNewStatus() == ParticipantStatus.CANCELLED) {
+                    PracticeSession session = practiceSessionRepository.findById(p.getSessionId())
+                            .orElse(null);
+                    if (session != null && !lotteryDeadlineHelper.isToday(session.getSessionDate())) {
+                        waitlistPromotionService.promoteNextWaitlisted(
+                                p.getSessionId(), p.getMatchNumber(), session.getSessionDate());
+                    }
+                }
+            }
+        }
+
+        // キャンセル待ち順番変更
+        if (request.getWaitlistReorders() != null) {
+            for (AdminEditParticipantsRequest.WaitlistReorder reorder : request.getWaitlistReorders()) {
+                PracticeParticipant p = practiceParticipantRepository.findById(reorder.getParticipantId())
+                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", reorder.getParticipantId()));
+                p.setWaitlistNumber(reorder.getNewWaitlistNumber());
+                practiceParticipantRepository.save(p);
+            }
+        }
     }
 
     private String toJson(Object obj) {

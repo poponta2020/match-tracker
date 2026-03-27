@@ -61,9 +61,25 @@ public class LotteryController {
     @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<LotteryExecution> executeLottery(@Valid @RequestBody LotteryExecutionRequest request,
                                                               HttpServletRequest httpRequest) {
+        int year = request.getYear();
+        int month = request.getMonth();
+
+        // 締め切り前チェック: 締め切り前に実行すると後から参加登録する人が漏れる
+        if (lotteryDeadlineHelper.isBeforeDeadline(year, month)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選はまだ締め切り前です。締め切り後に実行してください。", year, month));
+        }
+
+        // 重複チェック: 同一月に対して既に成功した抽選がある場合はエラー
+        if (lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                year, month, LotteryExecution.ExecutionStatus.SUCCESS)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選は既に実行済みです。再抽選が必要な場合はセッション単位で実行してください。", year, month));
+        }
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                request.getYear(), request.getMonth(), currentUserId, ExecutionType.MANUAL);
+                year, month, currentUserId, ExecutionType.MANUAL);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -83,6 +99,7 @@ public class LotteryController {
      * 月別抽選結果取得
      */
     @GetMapping("/results")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryResultDto>> getLotteryResults(
             @RequestParam int year, @RequestParam int month) {
 
@@ -100,6 +117,7 @@ public class LotteryController {
      * セッション別抽選結果取得
      */
     @GetMapping("/results/{sessionId}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<LotteryResultDto> getSessionLotteryResult(@PathVariable Long sessionId) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
@@ -331,53 +349,7 @@ public class LotteryController {
     @PutMapping("/admin/edit-participants")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> editParticipants(@Valid @RequestBody AdminEditParticipantsRequest request) {
-        // 参加者追加
-        if (request.getAdditions() != null) {
-            for (AdminEditParticipantsRequest.AddParticipant add : request.getAdditions()) {
-                PracticeParticipant participant = PracticeParticipant.builder()
-                        .sessionId(request.getSessionId())
-                        .playerId(add.getPlayerId())
-                        .matchNumber(request.getMatchNumber())
-                        .status(add.getStatus() != null ? add.getStatus() : ParticipantStatus.WON)
-                        .build();
-                practiceParticipantRepository.save(participant);
-            }
-        }
-
-        // ステータス変更
-        if (request.getStatusChanges() != null) {
-            for (AdminEditParticipantsRequest.StatusChange change : request.getStatusChanges()) {
-                PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
-                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
-                ParticipantStatus oldStatus = p.getStatus();
-                p.setStatus(change.getNewStatus());
-                if (change.getWaitlistNumber() != null) {
-                    p.setWaitlistNumber(change.getWaitlistNumber());
-                }
-                practiceParticipantRepository.save(p);
-
-                // WON → CANCELLED の場合、繰り上げフローを発動（当日は除く）
-                if (oldStatus == ParticipantStatus.WON && change.getNewStatus() == ParticipantStatus.CANCELLED) {
-                    PracticeSession session = practiceSessionRepository.findById(p.getSessionId())
-                            .orElse(null);
-                    if (session != null && !lotteryDeadlineHelper.isToday(session.getSessionDate())) {
-                        waitlistPromotionService.promoteNextWaitlisted(
-                                p.getSessionId(), p.getMatchNumber(), session.getSessionDate());
-                    }
-                }
-            }
-        }
-
-        // キャンセル待ち順番変更
-        if (request.getWaitlistReorders() != null) {
-            for (AdminEditParticipantsRequest.WaitlistReorder reorder : request.getWaitlistReorders()) {
-                PracticeParticipant p = practiceParticipantRepository.findById(reorder.getParticipantId())
-                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", reorder.getParticipantId()));
-                p.setWaitlistNumber(reorder.getNewWaitlistNumber());
-                practiceParticipantRepository.save(p);
-            }
-        }
-
+        lotteryService.editParticipants(request);
         return ResponseEntity.ok().build();
     }
 
@@ -389,12 +361,16 @@ public class LotteryController {
     public ResponseEntity<Map<String, Object>> getNotifyStatus(
             @RequestParam int year, @RequestParam int month) {
 
-        // 対象月のセッションに紐づく参加者IDを取得
+        // 対象月のセッションに紐づく参加者IDを一括取得（N+1対策）
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
-        List<Long> participantIds = sessions.stream()
-                .flatMap(s -> practiceParticipantRepository.findBySessionId(s.getId()).stream())
-                .map(PracticeParticipant::getId)
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
                 .collect(Collectors.toList());
+        List<Long> participantIds = sessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                        .map(PracticeParticipant::getId)
+                        .collect(Collectors.toList());
 
         if (participantIds.isEmpty()) {
             return ResponseEntity.ok(Map.of("sent", false, "sentCount", 0));
@@ -417,18 +393,17 @@ public class LotteryController {
         int year = body.getOrDefault("year", 0);
         int month = body.getOrDefault("month", 0);
 
-        // アプリ内通知を生成（全参加者をまとめて渡し、プレイヤーごとにグルーピング）
+        // アプリ内通知を生成（全参加者を一括取得してフィルタリング、N+1対策）
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
-        List<PracticeParticipant> allParticipants = new ArrayList<>();
-        for (PracticeSession session : sessions) {
-            List<PracticeParticipant> processed = practiceParticipantRepository
-                    .findBySessionId(session.getId())
-                    .stream()
-                    .filter(p -> p.getStatus() == ParticipantStatus.WON
-                            || p.getStatus() == ParticipantStatus.WAITLISTED)
-                    .collect(Collectors.toList());
-            allParticipants.addAll(processed);
-        }
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+        List<PracticeParticipant> allParticipants = sessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                        .filter(p -> p.getStatus() == ParticipantStatus.WON
+                                || p.getStatus() == ParticipantStatus.WAITLISTED)
+                        .collect(Collectors.toList());
         int inAppCount = notificationService.createLotteryResultNotifications(allParticipants);
 
         // LINE通知を送信
@@ -446,6 +421,7 @@ public class LotteryController {
      * 抽選実行履歴取得
      */
     @GetMapping("/executions")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryExecution>> getLotteryExecutions(
             @RequestParam int year, @RequestParam int month) {
         return ResponseEntity.ok(
