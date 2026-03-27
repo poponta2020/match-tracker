@@ -41,6 +41,7 @@ public class PlayerUpdateRequest {
         }
         if (password != null) {
             player.setPassword(password);  // 実際はハッシュ化が必要
+            player.setRequirePasswordChange(false);
         }
         if (gender != null) {
             player.setGender(gender);

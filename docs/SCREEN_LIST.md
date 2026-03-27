@@ -118,7 +118,15 @@
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
 | 35 | `/profile` | `Profile.jsx` | ロールバッジ | ALL | 自分のプロフィール表示 |
-| 36 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし） |
+| 36 | `/profile/edit` | `ProfileEdit.jsx` | パスワード変更セクション | ALL | プロフィール編集（※Layout なし）。`?changePassword=true` でパスワード変更強制モード |
+
+---
+
+## 9.5 伝助管理（densuke）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 37 | `/admin/densuke` | `DensukeManagement.jsx` | 月ナビゲーション、URL入力、同期結果表示、未登録者チェックリスト | ADMIN+ | 伝助URL管理、手動同期実行、未登録者の確認・一括登録 |
 
 ---
 
@@ -126,8 +134,8 @@
 
 | # | パス | ページコンポーネント | 権限 | 説明 |
 |---|------|---------------------|------|------|
-| 37 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
-| 38 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
+| 38 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
+| 39 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
 
 ---
 
@@ -177,6 +185,7 @@
 | LINE通知設定 | `/settings/line` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
+| 伝助管理 | `/admin/densuke` | ADMIN+ |
 | Googleカレンダー連携 | （OAuth） | ALL |
 | ログアウト | — | ALL |
 
@@ -223,6 +232,8 @@ karuta-tracker-ui/src/
     │   ├── LotteryResults.jsx
     │   ├── WaitlistStatus.jsx
     │   └── OfferResponse.jsx
+    ├── densuke/
+    │   └── DensukeManagement.jsx
     ├── line/
     │   ├── LineSettings.jsx
     │   ├── LineChannelAdmin.jsx

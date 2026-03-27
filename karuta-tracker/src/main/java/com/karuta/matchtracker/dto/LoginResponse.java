@@ -24,6 +24,7 @@ public class LoginResponse {
     private String karutaClub;
     private Player.Role role;
     private boolean firstLogin;
+    private boolean requirePasswordChange;
 
     /**
      * エンティティからレスポンスへ変換
@@ -42,6 +43,7 @@ public class LoginResponse {
                 .karutaClub(player.getKarutaClub())
                 .role(player.getRole())
                 .firstLogin(firstLogin)
+                .requirePasswordChange(Boolean.TRUE.equals(player.getRequirePasswordChange()))
                 .build();
     }
 }

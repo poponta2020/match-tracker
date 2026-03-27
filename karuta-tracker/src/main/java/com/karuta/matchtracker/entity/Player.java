@@ -88,6 +88,14 @@ public class Player {
     private Role role = Role.PLAYER;
 
     /**
+     * パスワード変更要求フラグ
+     * trueの場合、ログイン後にパスワード変更を強制する
+     */
+    @Column(name = "require_password_change", nullable = false)
+    @Builder.Default
+    private Boolean requirePasswordChange = false;
+
+    /**
      * 最終ログイン日時
      * NULLの場合は一度もログインしていない（初回ログイン）
      */

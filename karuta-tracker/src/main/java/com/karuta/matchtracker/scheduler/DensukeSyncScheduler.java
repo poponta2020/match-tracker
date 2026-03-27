@@ -47,7 +47,8 @@ public class DensukeSyncScheduler {
         }
 
         try {
-            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null);
+            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null,
+                    DensukeImportService.SYSTEM_USER_ID);
             if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0) {
                 log.info("Auto-sync {}/{}: {} sessions created, {} participants registered",
                         year, month, result.getCreatedSessionCount(), result.getRegisteredCount());

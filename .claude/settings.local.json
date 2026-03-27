@@ -125,7 +125,9 @@
       "Edit(/.claude/skills/define-feature/**)",
       "Edit(/.claude/skills/finalize/**)",
       "Edit(/.claude/skills/implement/**)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Edit(/.claude/skills/quickfix/**)",
+      "Read(//c/Users/popon/match-tracker/$HOME/.claude/**)"
     ],
     "deny": [],
     "ask": [],

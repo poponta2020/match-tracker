@@ -18,7 +18,9 @@ const Login = () => {
 
     try {
       const player = await login(name, password);
-      if (player.firstLogin) {
+      if (player.requirePasswordChange) {
+        navigate('/profile/edit?changePassword=true');
+      } else if (player.firstLogin) {
         navigate('/profile/edit?setup=true');
       } else {
         navigate('/');

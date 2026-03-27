@@ -143,6 +143,8 @@ Entity Layer (JPA Entity)
 | karuta_club | VARCHAR(200) | | 所属かるた会 |
 | remarks | TEXT | | 備考 |
 | role | ENUM | NOT NULL, DEFAULT 'PLAYER' | ロール（SUPER_ADMIN/ADMIN/PLAYER） |
+| require_password_change | BOOLEAN | NOT NULL, DEFAULT FALSE | パスワード変更要求フラグ |
+| last_login_at | DATETIME | | 最終ログイン日時 |
 | deleted_at | DATETIME | | 論理削除フラグ |
 | created_at | DATETIME | NOT NULL | 作成日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
@@ -626,7 +628,9 @@ Entity Layer (JPA Entity)
   "dominantHand": "右",
   "danRank": "三段",
   "kyuRank": "A級",
-  "karutaClub": "東京かるた会"
+  "karutaClub": "東京かるた会",
+  "firstLogin": false,
+  "requirePasswordChange": false
 }
 ```
 
@@ -1364,6 +1368,7 @@ Entity Layer (JPA Entity)
 | LINE通知設定 | /settings/line | 全員 | LINE連携の有効化/無効化、友だち追加URL・ワンタイムコード表示、通知種別ON/OFF |
 | LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | チャネル一覧・登録・無効化・強制解除 |
 | LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
+| 伝助管理 | /admin/densuke | ADMIN+ | 伝助URL管理、手動同期実行、未登録者の一括登録 |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
 

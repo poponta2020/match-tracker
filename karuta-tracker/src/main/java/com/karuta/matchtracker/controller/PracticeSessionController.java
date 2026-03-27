@@ -366,7 +366,8 @@ public class PracticeSessionController {
      */
     @PostMapping("/import-densuke")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<?> importFromDensuke(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> importFromDensuke(@RequestBody Map<String, String> request,
+                                                HttpServletRequest httpRequest) {
         String url = request.get("url");
         String targetDateStr = request.get("targetDate");
 
@@ -374,13 +375,14 @@ public class PracticeSessionController {
             return ResponseEntity.badRequest().body(Map.of("message", "URLを指定してください"));
         }
 
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         log.info("POST /api/practice-sessions/import-densuke - Importing from densuke: {}", url);
 
         try {
             LocalDate targetDate = targetDateStr != null && !targetDateStr.isBlank()
                     ? LocalDate.parse(targetDateStr)
                     : null;
-            var result = densukeImportService.importFromDensuke(url, targetDate);
+            var result = densukeImportService.importFromDensuke(url, targetDate, currentUserId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Densuke scraping failed", e);
@@ -394,7 +396,8 @@ public class PracticeSessionController {
      */
     @PostMapping("/register-and-sync-densuke")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<?> registerAndSyncDensuke(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<?> registerAndSyncDensuke(@RequestBody Map<String, Object> request,
+                                                     HttpServletRequest httpRequest) {
         @SuppressWarnings("unchecked")
         List<String> names = (List<String>) request.get("names");
         Integer year = (Integer) request.get("year");
@@ -404,6 +407,7 @@ public class PracticeSessionController {
             return ResponseEntity.badRequest().body(Map.of("message", "names, year, monthは必須です"));
         }
 
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
@@ -411,7 +415,7 @@ public class PracticeSessionController {
         }
 
         try {
-            var result = densukeImportService.registerAndSync(names, densukeUrl.get().getUrl(), null);
+            var result = densukeImportService.registerAndSync(names, densukeUrl.get().getUrl(), null, currentUserId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Register and sync failed", e);
@@ -476,7 +480,8 @@ public class PracticeSessionController {
      */
     @PostMapping("/sync-densuke")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<?> syncDensuke(@RequestBody Map<String, Integer> request) {
+    public ResponseEntity<?> syncDensuke(@RequestBody Map<String, Integer> request,
+                                         HttpServletRequest httpRequest) {
         Integer year = request.get("year");
         Integer month = request.get("month");
 
@@ -484,6 +489,7 @@ public class PracticeSessionController {
             return ResponseEntity.badRequest().body(Map.of("message", "yearとmonthは必須です"));
         }
 
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
@@ -493,7 +499,7 @@ public class PracticeSessionController {
         log.info("POST /api/practice-sessions/sync-densuke - Syncing {}/{} from {}", year, month, densukeUrl.get().getUrl());
 
         try {
-            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null);
+            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null, currentUserId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Densuke sync failed", e);

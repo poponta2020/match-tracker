@@ -11,13 +11,14 @@ const ProfileEdit = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSetup = searchParams.get('setup') === 'true';
+  const isChangePassword = searchParams.get('changePassword') === 'true';
   const { currentPlayer, login, updateCurrentPlayer } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
-  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [showPasswordSection, setShowPasswordSection] = useState(isChangePassword);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -107,7 +108,7 @@ const ProfileEdit = () => {
     if (!formData.kyuRank) errors.kyuRank = '級位を選択してください';
     if (!formData.danRank) errors.danRank = '段位を選択してください';
 
-    if (formData.newPassword || formData.confirmPassword) {
+    if (isChangePassword || formData.newPassword || formData.confirmPassword) {
       if (!formData.currentPassword) errors.currentPassword = '現在のパスワードを入力してください';
       if (!formData.newPassword) errors.newPassword = '新しいパスワードを入力してください';
       else if (formData.newPassword.length < 8) errors.newPassword = '8文字以上で入力してください';
@@ -172,7 +173,7 @@ const ProfileEdit = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        navigate(isSetup ? '/' : '/profile');
+        navigate((isSetup || isChangePassword) ? '/' : '/profile');
       }, 1000);
     } catch (err) {
       console.error('保存に失敗:', err);
@@ -201,7 +202,7 @@ const ProfileEdit = () => {
       {/* 固定ヘッダー */}
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          {!isSetup ? (
+          {!isSetup && !isChangePassword ? (
             <button
               onClick={() => navigate('/profile')}
               className="flex items-center gap-1 text-sm text-white hover:text-white/80"
@@ -212,7 +213,7 @@ const ProfileEdit = () => {
             <div className="w-5" />
           )}
           <h1 className="text-lg font-semibold text-white">
-            {isSetup ? 'プロフィール設定' : 'プロフィール編集'}
+            {isChangePassword ? 'パスワード変更' : isSetup ? 'プロフィール設定' : 'プロフィール編集'}
           </h1>
           <div className="w-5" />
         </div>
@@ -220,6 +221,16 @@ const ProfileEdit = () => {
 
       {/* コンテンツ */}
       <div className="max-w-lg mx-auto px-4 pt-16">
+        {/* パスワード変更強制メッセージ */}
+        {isChangePassword && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-700">
+              セキュリティのため、パスワードの変更が必要です。新しいパスワードを設定してください。
+            </p>
+          </div>
+        )}
+
         {/* 初期設定メッセージ */}
         {isSetup && (
           <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
@@ -420,7 +431,7 @@ const ProfileEdit = () => {
 
           {/* ボタン */}
           <div className="flex gap-3 pt-1 pb-2">
-            {!isSetup && (
+            {!isSetup && !isChangePassword && (
               <button
                 type="button"
                 onClick={() => navigate('/profile')}

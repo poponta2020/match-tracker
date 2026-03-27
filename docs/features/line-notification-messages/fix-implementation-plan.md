@@ -46,7 +46,7 @@ status: completed
 - **対応Issue:** #58
 
 ### タスク4: 参加予定リマインダーの日数ラベル改善（項目6）
-- [ ] 完了
+- [x] 完了
 - **概要:** リマインダーメッセージの日数ラベルを自然な日本語に改善する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/LineReminderScheduler.java`
