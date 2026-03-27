@@ -1,10 +1,13 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.Notification;
+import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
+import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -33,6 +36,7 @@ public class DensukeImportService {
     private final PlayerRepository playerRepository;
     private final VenueRepository venueRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
+    private final NotificationRepository notificationRepository;
 
     /**
      * インポート結果
@@ -49,15 +53,19 @@ public class DensukeImportService {
         private List<String> details = new ArrayList<>();         // 詳細ログ
     }
 
+    /** スケジューラー等、認証ユーザーがいない場合のシステムユーザーID */
+    public static final Long SYSTEM_USER_ID = 0L;
+
     /**
      * 伝助URLから参加者データをインポート
      *
      * @param url 伝助のURL
      * @param targetDate 特定の日付のみインポートする場合（nullなら全日付）
+     * @param createdBy 操作者のプレイヤーID（スケジューラーの場合はSYSTEM_USER_ID）
      * @return インポート結果
      */
     @Transactional
-    public ImportResult importFromDensuke(String url, LocalDate targetDate) throws IOException {
+    public ImportResult importFromDensuke(String url, LocalDate targetDate, Long createdBy) throws IOException {
         // 年を推定
         int year = targetDate != null ? targetDate.getYear() : JstDateTimeUtil.today().getYear();
 
@@ -121,8 +129,8 @@ public class DensukeImportService {
                         .sessionDate(entry.getDate())
                         .totalMatches(totalMatches)
                         .venueId(venueId)
-                        .createdBy(1L)
-                        .updatedBy(1L)
+                        .createdBy(createdBy)
+                        .updatedBy(createdBy)
                         .build();
                 session = practiceSessionRepository.save(session);
                 result.setCreatedSessionCount(result.getCreatedSessionCount() + 1);
@@ -206,6 +214,11 @@ public class DensukeImportService {
         result.setUnmatchedNames(new ArrayList<>(unmatchedNameSet));
         result.setUnmatchedVenues(new ArrayList<>(unmatchedVenueSet));
 
+        // 未登録者がいる場合、管理者に通知
+        if (!unmatchedNameSet.isEmpty()) {
+            notifyAdminsOfUnmatchedNames(new ArrayList<>(unmatchedNameSet));
+        }
+
         log.info("Densuke import completed: {} entries, {} sessions created, {} registered, {} skipped, {} unmatched names",
                 result.getTotalEntries(), result.getCreatedSessionCount(), result.getRegisteredCount(),
                 result.getSkippedCount(), result.getUnmatchedNames().size());
@@ -219,10 +232,11 @@ public class DensukeImportService {
      * @param names 登録する名前リスト
      * @param url 伝助URL（再同期用）
      * @param targetDate 対象日付（nullなら全日付）
+     * @param createdBy 操作者のプレイヤーID
      * @return 再同期のインポート結果
      */
     @Transactional
-    public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate) throws IOException {
+    public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate, Long createdBy) throws IOException {
         int created = 0;
         for (String name : names) {
             // 既存チェック
@@ -235,6 +249,7 @@ public class DensukeImportService {
                     .gender(Player.Gender.その他)
                     .dominantHand(Player.DominantHand.右)
                     .role(Player.Role.PLAYER)
+                    .requirePasswordChange(true)
                     .build();
             playerRepository.save(player);
             created++;
@@ -244,6 +259,60 @@ public class DensukeImportService {
         log.info("Registered {} new players, now re-syncing from densuke", created);
 
         // 再同期
-        return importFromDensuke(url, targetDate);
+        return importFromDensuke(url, targetDate, createdBy);
+    }
+
+    /**
+     * 未登録者名を管理者に通知する（同じ内容の通知が既にあればスキップ、顔ぶれが変わっていれば更新）
+     */
+    private void notifyAdminsOfUnmatchedNames(List<String> unmatchedNames) {
+        List<Player> admins = new ArrayList<>(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+        admins.addAll(playerRepository.findByRoleAndActive(Player.Role.ADMIN));
+
+        if (admins.isEmpty()) return;
+
+        String nameList = String.join("、", unmatchedNames);
+        String message = String.format("伝助に登録されている以下の名前がアプリに未登録です。\n%s\n\n伝助管理ページから一括登録できます。",
+                nameList);
+        String title = "伝助同期: 未登録者あり（" + unmatchedNames.size() + "名）";
+
+        List<Notification> toSave = new ArrayList<>();
+        int skipped = 0;
+        int updated = 0;
+
+        for (Player admin : admins) {
+            List<Notification> existing = notificationRepository.findByPlayerIdAndTypeAndDeletedAtIsNull(
+                    admin.getId(), NotificationType.DENSUKE_UNMATCHED_NAMES);
+
+            if (!existing.isEmpty()) {
+                // 最新の既存通知と比較
+                Notification latest = existing.get(0);
+                if (message.equals(latest.getMessage())) {
+                    // 同じ内容 → スキップ
+                    skipped++;
+                    continue;
+                }
+                // 顔ぶれが変わった → 既存を更新
+                latest.setTitle(title);
+                latest.setMessage(message);
+                latest.setIsRead(false);
+                toSave.add(latest);
+                updated++;
+            } else {
+                // 既存なし → 新規作成
+                toSave.add(Notification.builder()
+                        .playerId(admin.getId())
+                        .type(NotificationType.DENSUKE_UNMATCHED_NAMES)
+                        .title(title)
+                        .message(message)
+                        .build());
+            }
+        }
+
+        if (!toSave.isEmpty()) {
+            notificationRepository.saveAll(toSave);
+        }
+        log.info("Densuke unmatched names notification: {} new/updated, {} skipped (unchanged)",
+                toSave.size(), skipped);
     }
 }
