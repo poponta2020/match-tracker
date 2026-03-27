@@ -118,7 +118,14 @@
       "Read(//home/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker/service/**)",
       "Read(//home/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker/repository/**)",
       "Bash(ls -la /c/Users/popon/match-tracker/database/*.sql)",
-      "Bash(find /c/Users/popon/match-tracker -name *.sql -type f -newer /c/Users/popon/match-tracker/database/phase1_schema.sql)"
+      "Bash(find /c/Users/popon/match-tracker -name *.sql -type f -newer /c/Users/popon/match-tracker/database/phase1_schema.sql)",
+      "Bash(ls c:/Users/popon/.claude/skills/*/)",
+      "Edit(/.claude/skills/bug-report/**)",
+      "Edit(/.claude/skills/create-skill/**)",
+      "Edit(/.claude/skills/define-feature/**)",
+      "Edit(/.claude/skills/finalize/**)",
+      "Edit(/.claude/skills/implement/**)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": [],

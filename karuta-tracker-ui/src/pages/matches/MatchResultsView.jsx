@@ -597,13 +597,9 @@ const MatchResultsView = () => {
 
           return (
             <div className="mt-4 bg-[#e5ebe7] rounded-lg p-3">
-              <p className="text-xs font-medium text-[#374151] mb-2">抜け番</p>
               <div className="space-y-1.5">
-                {allBye.map((player, i) => {
-                  const Icon = player.activityType ? ACTIVITY_ICONS[player.activityType] : null;
-                  return (
+                {allBye.map((player, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      {Icon && <Icon className="w-4 h-4 text-[#6b7280] flex-shrink-0" />}
                       <span className="font-medium text-[#374151]">{player.name}</span>
                       {player.activityTypeDisplay && (
                         <span className="text-xs px-2 py-0.5 bg-white rounded-full text-[#6b7280]">
@@ -612,8 +608,7 @@ const MatchResultsView = () => {
                         </span>
                       )}
                     </div>
-                  );
-                })}
+                ))}
               </div>
             </div>
           );
