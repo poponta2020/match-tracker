@@ -76,14 +76,19 @@ const PlayerList = () => {
     try {
       const response = await inviteAPI.createToken(type, currentPlayer.id);
       const url = `${window.location.origin}/register/${response.data.token}`;
-      await navigator.clipboard.writeText(url);
       const label = type === 'MULTI_USE' ? 'グループ招待リンク' : '個人招待リンク';
-      setInviteMessage({ text: `${label}をコピーしました`, success: true });
+      try {
+        await navigator.clipboard.writeText(url);
+        setInviteMessage({ text: `${label}をコピーしました`, success: true });
+        setTimeout(() => setInviteMessage(null), 3000);
+      } catch {
+        setInviteMessage({ text: `${label}を生成しました（長押ししてコピーしてください）`, success: true, url });
+      }
     } catch {
       setInviteMessage({ text: '招待リンクの生成に失敗しました', success: false });
+      setTimeout(() => setInviteMessage(null), 3000);
     } finally {
       setInviteGenerating(null);
-      setTimeout(() => setInviteMessage(null), 3000);
     }
   };
 
@@ -148,7 +153,7 @@ const PlayerList = () => {
             </button>
           </div>
           {inviteMessage && (
-            <div className={`mt-2 flex items-center justify-between text-xs px-2 py-1.5 rounded ${
+            <div className={`mt-2 text-xs px-2 py-1.5 rounded ${
               inviteMessage.success
                 ? 'bg-[#d4ddd7] text-[#374151]'
                 : 'bg-red-50 text-red-700'
@@ -157,6 +162,15 @@ const PlayerList = () => {
                 {inviteMessage.success ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
                 {inviteMessage.text}
               </span>
+              {inviteMessage.url && (
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteMessage.url}
+                  onFocus={(e) => e.target.select()}
+                  className="mt-1.5 w-full px-2 py-1.5 bg-white border border-[#c5cfc9] rounded text-xs text-[#374151] select-all"
+                />
+              )}
             </div>
           )}
         </div>
