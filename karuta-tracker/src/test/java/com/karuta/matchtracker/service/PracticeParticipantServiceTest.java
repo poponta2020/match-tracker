@@ -18,6 +18,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.karuta.matchtracker.dto.PlayerParticipationStatusDto;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -118,6 +120,28 @@ class PracticeParticipantServiceTest {
         verify(practiceParticipantRepository).save(participantCaptor.capture());
         PracticeParticipant saved = participantCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+    }
+
+    @Test
+    @DisplayName("締切前の場合beforeDeadlineがtrueで返される")
+    void getPlayerParticipationStatus_beforeDeadline_returnsTrue() {
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(true);
+
+        PlayerParticipationStatusDto result = service.getPlayerParticipationStatusByMonth(10L, 2025, 4);
+
+        assertThat(result.getBeforeDeadline()).isTrue();
+    }
+
+    @Test
+    @DisplayName("締切後の場合beforeDeadlineがfalseで返される")
+    void getPlayerParticipationStatus_afterDeadline_returnsFalse() {
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(false);
+
+        PlayerParticipationStatusDto result = service.getPlayerParticipationStatusByMonth(10L, 2025, 4);
+
+        assertThat(result.getBeforeDeadline()).isFalse();
     }
 
     private PracticeParticipationRequest.SessionMatchParticipation createParticipation(Long sessionId, int matchNumber) {
