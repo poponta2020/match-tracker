@@ -392,102 +392,93 @@ public class LineNotificationService {
     }
 
     /**
-     * プレイヤーにFlex Messageを送信する
+     * 送信前の共通チェック結果を保持する内部クラス
      */
-    public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
-                                        String altText, Map<String, Object> flexContents) {
+    private record ResolvedChannel(LineChannelAssignment assignment, LineChannel channel) {}
+
+    /**
+     * 送信前の共通チェック（LINKED状態・通知設定・チャネル取得・月間上限）を実行する。
+     * チェックを通過した場合は ResolvedChannel を返し、通過しなかった場合は null を返す。
+     */
+    private ResolvedChannel resolveChannel(Long playerId, LineNotificationType notificationType, String messageForLog) {
         // LINKED状態の割り当てを取得
         Optional<LineChannelAssignment> assignmentOpt =
             lineChannelAssignmentRepository.findByPlayerIdAndStatus(playerId, AssignmentStatus.LINKED);
         if (assignmentOpt.isEmpty()) {
-            return SendResult.SKIPPED;
+            return null;
         }
 
         LineChannelAssignment assignment = assignmentOpt.get();
 
         // 通知設定チェック
         if (!isNotificationEnabled(playerId, notificationType)) {
-            logMessage(assignment.getLineChannelId(), playerId, notificationType, altText,
+            logMessage(assignment.getLineChannelId(), playerId, notificationType, messageForLog,
                 MessageStatus.SKIPPED, "通知設定がOFF");
-            return SendResult.SKIPPED;
+            return null;
         }
 
         // チャネル取得
         LineChannel channel = lineChannelRepository.findById(assignment.getLineChannelId()).orElse(null);
         if (channel == null || channel.getStatus() != LineChannel.ChannelStatus.LINKED) {
-            return SendResult.SKIPPED;
+            return null;
         }
 
         // 月間送信上限チェック
         if (channel.getMonthlyMessageCount() >= MONTHLY_MESSAGE_LIMIT) {
-            logMessage(channel.getId(), playerId, notificationType, altText,
+            logMessage(channel.getId(), playerId, notificationType, messageForLog,
                 MessageStatus.SKIPPED, "月間送信上限超過");
-            return SendResult.SKIPPED;
+            return null;
         }
 
-        // LINE Push API送信（Flex Message）
-        boolean success = lineMessagingService.sendPushFlexMessage(
-            channel.getChannelAccessToken(), assignment.getLineUserId(), altText, flexContents);
+        return new ResolvedChannel(assignment, channel);
+    }
 
+    /**
+     * 送信成功/失敗の後処理（カウント更新・ログ記録）を実行し、SendResultを返す。
+     */
+    private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
+                                         LineNotificationType notificationType, String messageForLog) {
         if (success) {
             channel.setMonthlyMessageCount(channel.getMonthlyMessageCount() + 1);
             lineChannelRepository.save(channel);
-            logMessage(channel.getId(), playerId, notificationType, altText, MessageStatus.SUCCESS, null);
+            logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null);
             return SendResult.SUCCESS;
         } else {
-            logMessage(channel.getId(), playerId, notificationType, altText,
+            logMessage(channel.getId(), playerId, notificationType, messageForLog,
                 MessageStatus.FAILED, "LINE API送信失敗");
             return SendResult.FAILED;
         }
     }
 
     /**
-     * プレイヤーにLINE通知を送信する（共通処理）
+     * プレイヤーにFlex Messageを送信する
+     */
+    public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
+                                        String altText, Map<String, Object> flexContents) {
+        ResolvedChannel resolved = resolveChannel(playerId, notificationType, altText);
+        if (resolved == null) {
+            return SendResult.SKIPPED;
+        }
+
+        boolean success = lineMessagingService.sendPushFlexMessage(
+            resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flexContents);
+
+        return handleSendResult(success, resolved.channel(), playerId, notificationType, altText);
+    }
+
+    /**
+     * プレイヤーにLINE通知を送信する
      */
     public SendResult sendToPlayer(Long playerId, LineNotificationType notificationType, String message) {
-        // LINKED状態の割り当てを取得
-        Optional<LineChannelAssignment> assignmentOpt =
-            lineChannelAssignmentRepository.findByPlayerIdAndStatus(playerId, AssignmentStatus.LINKED);
-        if (assignmentOpt.isEmpty()) {
+        ResolvedChannel resolved = resolveChannel(playerId, notificationType, message);
+        if (resolved == null) {
             return SendResult.SKIPPED;
         }
 
-        LineChannelAssignment assignment = assignmentOpt.get();
-
-        // 通知設定チェック
-        if (!isNotificationEnabled(playerId, notificationType)) {
-            logMessage(assignment.getLineChannelId(), playerId, notificationType, message,
-                MessageStatus.SKIPPED, "通知設定がOFF");
-            return SendResult.SKIPPED;
-        }
-
-        // チャネル取得
-        LineChannel channel = lineChannelRepository.findById(assignment.getLineChannelId()).orElse(null);
-        if (channel == null || channel.getStatus() != LineChannel.ChannelStatus.LINKED) {
-            return SendResult.SKIPPED;
-        }
-
-        // 月間送信上限チェック
-        if (channel.getMonthlyMessageCount() >= MONTHLY_MESSAGE_LIMIT) {
-            logMessage(channel.getId(), playerId, notificationType, message,
-                MessageStatus.SKIPPED, "月間送信上限超過");
-            return SendResult.SKIPPED;
-        }
-
-        // LINE Push API送信
         boolean success = lineMessagingService.sendPushMessage(
-            channel.getChannelAccessToken(), assignment.getLineUserId(), message);
+            resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), message);
 
-        if (success) {
-            channel.setMonthlyMessageCount(channel.getMonthlyMessageCount() + 1);
-            lineChannelRepository.save(channel);
-            logMessage(channel.getId(), playerId, notificationType, message, MessageStatus.SUCCESS, null);
-            return SendResult.SUCCESS;
-        } else {
-            logMessage(channel.getId(), playerId, notificationType, message,
-                MessageStatus.FAILED, "LINE API送信失敗");
-            return SendResult.FAILED;
-        }
+        return handleSendResult(success, resolved.channel(), playerId, notificationType, message);
     }
 
     private boolean isNotificationEnabled(Long playerId, LineNotificationType type) {
