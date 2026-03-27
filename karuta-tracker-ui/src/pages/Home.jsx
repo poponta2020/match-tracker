@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { homeAPI } from '../api';
-import { notificationAPI } from '../api/notifications';
 import {
   ArrowRight,
   ChevronsRight,
@@ -48,10 +47,8 @@ const Home = () => {
       // 繰り上げオファー
       setHasPendingOffer(data.hasPendingOffer || false);
 
-      // 未読通知数
-      notificationAPI.getUnreadCount(currentPlayer.id)
-        .then(r => { if (!signal?.aborted) setUnreadCount(r.data.count || 0); })
-        .catch(() => {});
+      // 未読通知数（HomeAPIのレスポンスから取得）
+      setUnreadCount(data.unreadNotificationCount || 0);
 
       // 次の練習情報（参加者リストも含まれている）
       if (data.nextPractice) {

@@ -88,6 +88,7 @@ export default function NotificationList() {
       case 'WAITLIST_OFFER': return '📩';
       case 'OFFER_EXPIRING': return '⚠';
       case 'OFFER_EXPIRED': return '✕';
+      case 'CHANNEL_RECLAIM_WARNING': return '⚠';
       default: return '📌';
     }
   };
@@ -100,6 +101,7 @@ export default function NotificationList() {
       case 'LOTTERY_WAITLISTED': return 'border-l-yellow-500';
       case 'WAITLIST_OFFER': return 'border-l-blue-500';
       case 'OFFER_EXPIRED': return 'border-l-red-500';
+      case 'CHANNEL_RECLAIM_WARNING': return 'border-l-orange-500';
       default: return 'border-l-gray-300';
     }
   };

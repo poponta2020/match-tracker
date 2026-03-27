@@ -76,7 +76,11 @@ public class Notification {
         /** 繰り上げ応答期限切れ警告 */
         OFFER_EXPIRING,
         /** 繰り上げ応答期限切れ */
-        OFFER_EXPIRED
+        OFFER_EXPIRED,
+        /** LINEチャネル回収警告 */
+        CHANNEL_RECLAIM_WARNING,
+        /** 伝助同期：未登録者あり（管理者向け） */
+        DENSUKE_UNMATCHED_NAMES
     }
 
     @PrePersist

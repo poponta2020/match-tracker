@@ -868,9 +868,10 @@ venues ──< venue_match_schedules (venueId)
 |---|---|---|---|
 | id | BIGINT | PK, AUTO | — |
 | player_id | BIGINT | NOT NULL | 通知先プレイヤー |
-| type | VARCHAR | NOT NULL | LOTTERY_WON/LOTTERY_WAITLISTED/WAITLIST_OFFER/OFFER_EXPIRING/OFFER_EXPIRED |
+| type | VARCHAR | NOT NULL | LOTTERY_WON/LOTTERY_ALL_WON/LOTTERY_REMAINING_WON/LOTTERY_WAITLISTED/WAITLIST_OFFER/OFFER_EXPIRING/OFFER_EXPIRED/CHANNEL_RECLAIM_WARNING/DENSUKE_UNMATCHED_NAMES |
 | title | VARCHAR | NOT NULL | 通知タイトル |
 | message | TEXT | — | 通知本文 |
+| reference_type | VARCHAR(50) | — | 参照先エンティティ種別（PRACTICE_SESSION/PRACTICE_PARTICIPANT） |
 | reference_id | BIGINT | — | 参照先ID |
 | is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | 既読フラグ |
 | created_at | TIMESTAMP | NOT NULL | — |
@@ -1139,10 +1140,10 @@ venues ──< venue_match_schedules (venueId)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/?playerId=` | ALL | 通知一覧取得 |
-| GET | `/unread-count?playerId=` | ALL | 未読通知数 |
-| PUT | `/{id}/read` | ALL | 通知既読化 |
-| DELETE | `/?playerId=` | ALL | 通知一括削除（論理削除） |
+| GET | `/?playerId=` | ALL | 通知一覧取得（PLAYERは自分のみ） |
+| GET | `/unread-count?playerId=` | ALL | 未読通知数（PLAYERは自分のみ） |
+| PUT | `/{id}/read` | ALL | 通知既読化（所有者チェックあり） |
+| DELETE | `/?playerId=` | ALL | 通知一括削除・論理削除（PLAYERは自分のみ） |
 
 ### 7.13 Push購読 (`/api/push-subscriptions`)
 

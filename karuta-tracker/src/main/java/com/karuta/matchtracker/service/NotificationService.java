@@ -53,12 +53,15 @@ public class NotificationService {
     }
 
     /**
-     * 通知を既読にする
+     * 通知を既読にする（所有者チェック付き）
      */
     @Transactional
-    public void markAsRead(Long notificationId) {
+    public void markAsRead(Long notificationId, Long currentUserId) {
         Notification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", notificationId));
+        if (currentUserId != null && !notification.getPlayerId().equals(currentUserId)) {
+            throw new com.karuta.matchtracker.exception.ForbiddenException("他のプレイヤーの通知は既読にできません");
+        }
         notification.setIsRead(true);
         notificationRepository.save(notification);
     }

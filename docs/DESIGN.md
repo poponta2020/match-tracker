@@ -377,6 +377,8 @@ Entity Layer (JPA Entity)
 - `WAITLIST_OFFER` - キャンセル待ちからの繰り上げ連絡
 - `OFFER_EXPIRING` - 繰り上げ応答期限切れ警告
 - `OFFER_EXPIRED` - 繰り上げ応答期限切れ
+- `CHANNEL_RECLAIM_WARNING` - LINEチャネル回収警告
+- `DENSUKE_UNMATCHED_NAMES` - 伝助同期：未登録者あり（管理者向け）
 
 **インデックス**:
 - `idx_notification_player` (player_id)

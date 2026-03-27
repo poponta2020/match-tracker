@@ -87,7 +87,7 @@ public class LineChannelReclaimScheduler {
         // アプリ内通知で警告
         notificationRepository.save(Notification.builder()
             .playerId(assignment.getPlayerId())
-            .type(Notification.NotificationType.OFFER_EXPIRING) // 既存の通知タイプを再利用
+            .type(Notification.NotificationType.CHANNEL_RECLAIM_WARNING)
             .title("LINE通知の割り当て解除予告")
             .message("LINE通知の割り当てが7日後に解除されます。継続利用する場合はアプリにログインしてください。")
             .build());

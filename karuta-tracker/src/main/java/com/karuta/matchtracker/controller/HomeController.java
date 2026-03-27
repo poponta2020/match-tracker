@@ -4,8 +4,8 @@ import com.karuta.matchtracker.dto.HomeDto;
 import com.karuta.matchtracker.dto.NextParticipationDto;
 import com.karuta.matchtracker.dto.ParticipationRateDto;
 import com.karuta.matchtracker.entity.ParticipantStatus;
-import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.service.NotificationService;
 import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +31,7 @@ public class HomeController {
 
     private final PracticeSessionService practiceSessionService;
     private final PracticeParticipantService practiceParticipantService;
-    private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
     private final PracticeParticipantRepository participantRepository;
 
     @GetMapping
@@ -54,7 +54,7 @@ public class HomeController {
                 .orElseGet(() -> practiceParticipantService.getPlayerParticipationRate(playerId, year, month));
 
         // 未読通知数
-        long unreadCount = notificationRepository.countByPlayerIdAndIsReadFalseAndDeletedAtIsNull(playerId);
+        long unreadCount = notificationService.getUnreadCount(playerId);
 
         // 未応答のオファーがあるか
         boolean hasPendingOffer = participantRepository
