@@ -281,23 +281,37 @@ public class DensukeImportService {
         int updated = 0;
 
         for (Player admin : admins) {
-            List<Notification> existing = notificationRepository.findByPlayerIdAndTypeAndDeletedAtIsNull(
+            // 削除済みも含めて過去の通知を検索（削除後の再送防止）
+            List<Notification> existing = notificationRepository.findByPlayerIdAndTypeOrderByCreatedAtDesc(
                     admin.getId(), NotificationType.DENSUKE_UNMATCHED_NAMES);
 
             if (!existing.isEmpty()) {
-                // 最新の既存通知と比較
+                // 最新の通知と比較（削除済み含む）
                 Notification latest = existing.get(0);
                 if (message.equals(latest.getMessage())) {
-                    // 同じ内容 → スキップ
+                    // 同じ内容 → スキップ（削除済みでも再送しない）
                     skipped++;
                     continue;
                 }
-                // 顔ぶれが変わった → 既存を更新
-                latest.setTitle(title);
-                latest.setMessage(message);
-                latest.setIsRead(false);
-                toSave.add(latest);
-                updated++;
+                // 顔ぶれが変わった → 未削除の通知があれば更新、なければ新規作成
+                Notification active = existing.stream()
+                        .filter(n -> n.getDeletedAt() == null)
+                        .findFirst()
+                        .orElse(null);
+                if (active != null) {
+                    active.setTitle(title);
+                    active.setMessage(message);
+                    active.setIsRead(false);
+                    toSave.add(active);
+                    updated++;
+                } else {
+                    toSave.add(Notification.builder()
+                            .playerId(admin.getId())
+                            .type(NotificationType.DENSUKE_UNMATCHED_NAMES)
+                            .title(title)
+                            .message(message)
+                            .build());
+                }
             } else {
                 // 既存なし → 新規作成
                 toSave.add(Notification.builder()

@@ -38,9 +38,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countByReferenceIdInAndTypeIn(List<Long> referenceIds, List<NotificationType> types);
 
     /**
-     * 指定プレイヤー・通知種別で未削除の通知を取得（重複チェック用）
+     * 指定プレイヤー・通知種別で通知を取得（削除済み含む、重複チェック用）
+     * 新しい順に返す
      */
-    List<Notification> findByPlayerIdAndTypeAndDeletedAtIsNull(Long playerId, NotificationType type);
+    List<Notification> findByPlayerIdAndTypeOrderByCreatedAtDesc(Long playerId, NotificationType type);
 
     /**
      * 指定プレイヤーの全通知を論理削除する
