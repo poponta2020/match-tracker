@@ -52,6 +52,13 @@ public class SystemSettingService {
     }
 
     /**
+     * 締め切りなしモードかどうか（-1の場合）
+     */
+    public boolean isNoDeadline() {
+        return getLotteryDeadlineDaysBefore() == -1;
+    }
+
+    /**
      * 一般枠の最低保証割合を取得する（0〜100、デフォルト30%）
      */
     public int getLotteryNormalReservePercent() {

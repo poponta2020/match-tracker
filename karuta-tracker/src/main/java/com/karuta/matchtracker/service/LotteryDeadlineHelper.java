@@ -13,6 +13,7 @@ import java.time.YearMonth;
  *
  * 締め切り: 対象月の初日から N日前の0時（Nはsystem_settingsで設定可能）
  * デフォルト(N=0): 対象月の前月末日の0時
+ * N=-1: 締め切りなし（常に締め切り前扱い）
  * 例: N=3, 4月の練習 → 3月29日 00:00:00
  */
 @Component
@@ -22,14 +23,26 @@ public class LotteryDeadlineHelper {
     private final SystemSettingService systemSettingService;
 
     /**
+     * 締め切りなしモードかどうか
+     */
+    public boolean isNoDeadline() {
+        return systemSettingService.isNoDeadline();
+    }
+
+    /**
      * 指定年月の練習に対する締め切り日時を取得する
      *
      * @param year  対象年
      * @param month 対象月
-     * @return 締め切り日時
+     * @return 締め切り日時（締め切りなしモードの場合は null）
      */
     public LocalDateTime getDeadline(int year, int month) {
         int daysBefore = systemSettingService.getLotteryDeadlineDaysBefore();
+
+        if (daysBefore == -1) {
+            return null;
+        }
+
         YearMonth targetMonth = YearMonth.of(year, month);
         LocalDate firstDayOfMonth = targetMonth.atDay(1);
         LocalDate deadlineDate = firstDayOfMonth.minusDays(daysBefore);
@@ -45,8 +58,12 @@ public class LotteryDeadlineHelper {
 
     /**
      * 指定年月の練習がまだ締め切り前かどうか
+     * 締め切りなしモードの場合は常に true
      */
     public boolean isBeforeDeadline(int year, int month) {
+        if (isNoDeadline()) {
+            return true;
+        }
         return JstDateTimeUtil.now().isBefore(getDeadline(year, month));
     }
 
