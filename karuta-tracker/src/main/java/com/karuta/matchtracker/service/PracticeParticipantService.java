@@ -208,7 +208,11 @@ public class PracticeParticipantService {
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         if (sessionIds.isEmpty()) {
-            return PlayerParticipationStatusDto.builder().participations(Map.of()).lotteryExecuted(Map.of()).build();
+            return PlayerParticipationStatusDto.builder()
+                    .participations(Map.of())
+                    .lotteryExecuted(Map.of())
+                    .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month))
+                    .build();
         }
 
         Map<Long, List<PlayerParticipationStatusDto.MatchParticipation>> participationMap =
@@ -226,7 +230,13 @@ public class PracticeParticipantService {
             if (exec.getSessionId() != null) lotteryMap.put(exec.getSessionId(), true);
         });
 
-        return PlayerParticipationStatusDto.builder().participations(participationMap).lotteryExecuted(lotteryMap).build();
+        boolean beforeDeadline = lotteryDeadlineHelper.isBeforeDeadline(year, month);
+
+        return PlayerParticipationStatusDto.builder()
+                .participations(participationMap)
+                .lotteryExecuted(lotteryMap)
+                .beforeDeadline(beforeDeadline)
+                .build();
     }
 
     @Transactional
