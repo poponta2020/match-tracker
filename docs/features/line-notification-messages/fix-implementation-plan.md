@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: SPECIFICATION.md の仕様書整備（項目1,2,5,7）
-- [ ] 完了
+- [x] 完了
 - **概要:** 仕様書の不整合・未記載を一括修正する
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md`
@@ -18,7 +18,7 @@ status: completed
 - **対応Issue:** #56
 
 ### タスク2: sendToPlayer / sendFlexToPlayer の共通処理抽出（項目3）
-- [ ] 完了
+- [x] 完了
 - **概要:** 両メソッドで重複している前処理（LINKED状態チェック・通知設定チェック・チャネル取得・月間上限チェック）を共通メソッドに抽出する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java`
@@ -29,7 +29,7 @@ status: completed
 - **対応Issue:** #57
 
 ### タスク3: LINE送信結果を人数ベースに変更（項目4）
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選結果LINE送信のカウントをメッセージ通数からプレイヤー人数に変更し、UIの表示も更新する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/LineSendResultResponse.java`

@@ -62,7 +62,7 @@ public class LineReminderScheduler {
             {
                 PracticeSession session = sessionOpt.get();
                 String dateStr = session.getSessionDate().format(DATE_FORMAT);
-                String dayLabel = days == 1 ? "明日" : days + "日後";
+                String dayLabel = days == 1 ? "明日" : days == 2 ? "明後日" : "";
                 String message = String.format("%s%sは練習日です。準備をお忘れなく！", dayLabel, dateStr);
 
                 // 当該セッションのWON参加者に送信
