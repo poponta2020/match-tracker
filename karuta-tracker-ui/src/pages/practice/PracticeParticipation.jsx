@@ -19,6 +19,7 @@ const PracticeParticipation = () => {
   const [success, setSuccess] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean
+  const [beforeDeadline, setBeforeDeadline] = useState(true);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -52,6 +53,7 @@ const PracticeParticipation = () => {
         const statusData = statusRes.data || {};
         setParticipationStatuses(statusData.participations || {});
         setLotteryExecuted(statusData.lotteryExecuted || {});
+        setBeforeDeadline(statusData.beforeDeadline !== false);
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError('データの取得に失敗しました');
@@ -77,10 +79,19 @@ const PracticeParticipation = () => {
     );
   };
 
+  // 締切後かつサーバーに保存済みの登録かどうか
+  const isLockedRegistration = (sessionId, matchNumber) => {
+    if (beforeDeadline) return false;
+    const initial = initialParticipations[sessionId] || [];
+    return initial.includes(matchNumber);
+  };
+
   // チェックボックスの状態を切り替え
   const toggleMatch = (sessionId, matchNumber) => {
     // 抽選済みセッションは変更不可
     if (lotteryExecuted[sessionId]) return;
+    // 締切後の既存登録はチェック外し不可
+    if (isLockedRegistration(sessionId, matchNumber)) return;
 
     const sessionParticipations = participations[sessionId] || [];
     const isChecked = sessionParticipations.includes(matchNumber);
@@ -324,7 +335,8 @@ const PracticeParticipation = () => {
                                         type="checkbox"
                                         checked={isChecked}
                                         onChange={() => toggleMatch(session.id, matchNumber)}
-                                        className="w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a]"
+                                        disabled={isLockedRegistration(session.id, matchNumber)}
+                                        className={`w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a] ${isLockedRegistration(session.id, matchNumber) ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         style={{ accentColor: '#4a6b5a' }}
                                       />
                                       <span
