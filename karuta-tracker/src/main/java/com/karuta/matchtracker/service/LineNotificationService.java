@@ -187,7 +187,7 @@ public class LineNotificationService {
      */
     @Transactional
     public LineSendResultResponse sendLotteryResults(int year, int month) {
-        int sent = 0, failed = 0, skipped = 0;
+        int sentPlayers = 0, failedPlayers = 0, skippedPlayers = 0;
 
         List<PracticeParticipant> participants = practiceParticipantRepository
             .findBySessionDateYearAndMonth(year, month);
@@ -214,16 +214,22 @@ public class LineNotificationService {
             boolean hasWon = playerParticipants.stream()
                 .anyMatch(p -> p.getStatus() == ParticipantStatus.WON);
 
+            // プレイヤー単位の送信結果を追跡（1通でも成功すればSUCCESS）
+            boolean anySuccess = false;
+            boolean anyFailed = false;
+
             if (waitlisted.isEmpty() && hasWon) {
                 // 全当選: テキスト1通
                 SendResult r = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
                     "申し込んだ練習はすべて当選しました");
-                switch (r) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                if (r == SendResult.SUCCESS) anySuccess = true;
+                else if (r == SendResult.FAILED) anyFailed = true;
             } else if (!waitlisted.isEmpty()) {
                 // イントロメッセージ
                 SendResult r1 = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
                     "落選した試合があります");
-                switch (r1) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                if (r1 == SendResult.SUCCESS) anySuccess = true;
+                else if (r1 == SendResult.FAILED) anyFailed = true;
 
                 // セッション別Flex Message
                 Map<Long, List<PracticeParticipant>> waitlistedBySession = waitlisted.stream()
@@ -239,21 +245,33 @@ public class LineNotificationService {
                     String altText = dateStr + "の練習: キャンセル待ち";
 
                     SendResult r2 = sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
-                    switch (r2) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                    if (r2 == SendResult.SUCCESS) anySuccess = true;
+                    else if (r2 == SendResult.FAILED) anyFailed = true;
                 }
 
                 // 当選分がある場合のみクロージング
                 if (hasWon) {
                     SendResult r3 = sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
                         "上記以外の申し込みはすべて当選しています");
-                    switch (r3) { case SUCCESS -> sent++; case FAILED -> failed++; case SKIPPED -> skipped++; }
+                    if (r3 == SendResult.SUCCESS) anySuccess = true;
+                    else if (r3 == SendResult.FAILED) anyFailed = true;
                 }
+            }
+
+            // プレイヤー単位でカウント（1通でも成功→sent、全失敗→failed、全スキップ→skipped）
+            if (anySuccess) {
+                sentPlayers++;
+            } else if (anyFailed) {
+                failedPlayers++;
+            } else {
+                skippedPlayers++;
             }
         }
 
-        log.info("Lottery result LINE notifications: sent={}, failed={}, skipped={}", sent, failed, skipped);
+        log.info("Lottery result LINE notifications: sentPlayers={}, failedPlayers={}, skippedPlayers={}",
+            sentPlayers, failedPlayers, skippedPlayers);
         return LineSendResultResponse.builder()
-            .sentCount(sent).failedCount(failed).skippedCount(skipped).build();
+            .sentPlayerCount(sentPlayers).failedPlayerCount(failedPlayers).skippedPlayerCount(skippedPlayers).build();
     }
 
     /**
@@ -355,7 +373,7 @@ public class LineNotificationService {
         log.info("Match pairing LINE notifications for session {}: sent={}, failed={}, skipped={}",
             sessionId, sent, failed, skipped);
         return LineSendResultResponse.builder()
-            .sentCount(sent).failedCount(failed).skippedCount(skipped).build();
+            .sentPlayerCount(sent).failedPlayerCount(failed).skippedPlayerCount(skipped).build();
     }
 
     /**

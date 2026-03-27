@@ -411,9 +411,9 @@ public class LotteryController {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("inAppCount", inAppCount);
-        result.put("lineSent", lineResult.getSentCount());
-        result.put("lineFailed", lineResult.getFailedCount());
-        result.put("lineSkipped", lineResult.getSkippedCount());
+        result.put("lineSent", lineResult.getSentPlayerCount());
+        result.put("lineFailed", lineResult.getFailedPlayerCount());
+        result.put("lineSkipped", lineResult.getSkippedPlayerCount());
         return ResponseEntity.ok(result);
     }
 

@@ -10,7 +10,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class LineSendResultResponse {
-    private int sentCount;
-    private int failedCount;
-    private int skippedCount;
+    private int sentPlayerCount;
+    private int failedPlayerCount;
+    private int skippedPlayerCount;
 }

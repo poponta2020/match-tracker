@@ -351,12 +351,12 @@ const PracticeList = () => {
       // 送信済みチェック
       const statusRes = await lotteryAPI.notifyStatus(year, month);
       if (statusRes.data.sent) {
-        if (!window.confirm(`${year}年${month}月の抽選結果通知は既に送信済みです（${statusRes.data.sentCount}件）。再送信しますか？`)) {
+        if (!window.confirm(`${year}年${month}月の抽選結果通知は既に送信済みです（${statusRes.data.sentCount}人）。再送信しますか？`)) {
           return;
         }
       }
       const result = await lotteryAPI.notifyResults(year, month);
-      alert(`通知送信完了\nアプリ内通知: ${result.data.inAppCount}件\nLINE送信: ${result.data.lineSent}件`);
+      alert(`通知送信完了\nアプリ内通知: ${result.data.inAppCount}件\nLINE送信: ${result.data.lineSent}人`);
     } catch (err) {
       console.error('Notify error:', err);
       alert(err.response?.data?.message || '通知送信に失敗しました');
