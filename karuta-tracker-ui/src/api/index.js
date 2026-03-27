@@ -10,4 +10,5 @@ export { notificationAPI } from './notifications';
 export { lineAPI } from './line';
 export { inviteAPI } from './invite';
 export { byeActivityAPI } from './byeActivities';
+export { systemSettingsAPI } from './systemSettings';
 export { default as apiClient } from './client';
