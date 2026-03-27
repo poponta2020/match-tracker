@@ -28,6 +28,11 @@ public class PlayerParticipationStatusDto {
      */
     private Map<Long, Boolean> lotteryExecuted;
 
+    /**
+     * 対象月が抽選締切前かどうか
+     */
+    private Boolean beforeDeadline;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
