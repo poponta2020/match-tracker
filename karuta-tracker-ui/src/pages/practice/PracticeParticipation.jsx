@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { practiceAPI } from '../../api';
+import { practiceAPI, systemSettingsAPI } from '../../api';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -20,6 +20,7 @@ const PracticeParticipation = () => {
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean
   const [beforeDeadline, setBeforeDeadline] = useState(true);
+  const [deadlineInfo, setDeadlineInfo] = useState(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -33,10 +34,11 @@ const PracticeParticipation = () => {
       setError('');
 
       try {
-        const [sessionsRes, participationsRes, statusRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes, deadlineRes] = await Promise.all([
           practiceAPI.getByYearMonth(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
           practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
+          systemSettingsAPI.getDeadline(year, month).catch(() => ({ data: null })),
         ]);
 
         // セッションを日付昇順にソート
@@ -54,6 +56,7 @@ const PracticeParticipation = () => {
         setParticipationStatuses(statusData.participations || {});
         setLotteryExecuted(statusData.lotteryExecuted || {});
         setBeforeDeadline(statusData.beforeDeadline !== false);
+        setDeadlineInfo(deadlineRes.data);
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError('データの取得に失敗しました');
@@ -250,6 +253,21 @@ const PracticeParticipation = () => {
             <p className="text-sm text-green-700">{success}</p>
           </div>
         )}
+
+        {/* 締め切り表示 */}
+        {deadlineInfo && !deadlineInfo.noDeadline && deadlineInfo.deadline && beforeDeadline && (() => {
+          const dl = new Date(deadlineInfo.deadline);
+          const now = new Date();
+          const diffDays = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays < 0) return null;
+          return (
+            <div className="mx-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800">
+                締め切り: {dl.getMonth() + 1}月{dl.getDate()}日（あと{diffDays}日）
+              </p>
+            </div>
+          );
+        })()}
 
         {/* 練習セッション一覧 */}
         {futureSessions.length === 0 ? (
