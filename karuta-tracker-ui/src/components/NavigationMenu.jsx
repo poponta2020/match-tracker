@@ -181,6 +181,11 @@ const NavigationMenu = ({ unreadCount }) => {
                       <MapPin className="w-4 h-4 text-[#6b7280]" />
                       会場管理
                     </button>
+                  </>
+                )}
+                {isAdmin() && (
+                  <>
+                    {!isSuperAdmin() && <div className="border-t border-gray-100 my-1" />}
                     <button
                       onClick={() => { setMenuOpen(false); navigate('/practice/new'); }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"

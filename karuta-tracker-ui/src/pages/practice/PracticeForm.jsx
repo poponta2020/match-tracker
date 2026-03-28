@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { practiceAPI, venueAPI } from '../../api';
-import { isSuperAdmin } from '../../utils/auth';
+import { isSuperAdmin, isAdmin, getCurrentPlayer } from '../../utils/auth';
+import { organizationAPI } from '../../api/organizations';
 import { ChevronLeft, ChevronRight, X, MapPin, Save, Trash2, FileText } from 'lucide-react';
 
 // ========== 編集用フォーム（既存） ==========
@@ -113,8 +114,8 @@ const PracticeForm = () => {
 
   // 権限チェック
   useEffect(() => {
-    if (!isSuperAdmin()) {
-      alert('この機能はスーパー管理者のみ利用できます');
+    if (!isAdmin()) {
+      alert('この機能は管理者のみ利用できます');
       navigate('/practice');
     }
   }, [navigate]);
@@ -133,6 +134,8 @@ const PracticeForm = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -140,12 +143,22 @@ const PracticeForm = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [venueRes, sessionsRes] = await Promise.all([
+        const [venueRes, sessionsRes, orgsRes] = await Promise.all([
           venueAPI.getAll(),
           practiceAPI.getSessionSummaries(year, month + 1),
+          organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
         setVenues(venueRes.data);
         setExistingDates((sessionsRes.data || []).map(s => s.sessionDate));
+        setOrganizations(orgsRes.data || []);
+
+        // SUPER_ADMINは団体選択、ADMINは自動設定
+        const player = getCurrentPlayer();
+        if (player?.adminOrganizationId) {
+          setSelectedOrgId(player.adminOrganizationId);
+        } else if (orgsRes.data?.length > 0) {
+          setSelectedOrgId(orgsRes.data[0].id);
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
       }
@@ -242,6 +255,7 @@ const PracticeForm = () => {
           totalMatches: entry.totalMatches,
           capacity: entry.capacity || null,
           notes: entry.notes || null,
+          organizationId: selectedOrgId,
         });
       }
       setSuccess(`${entryList.length}件の練習日を登録しました`);
@@ -406,6 +420,22 @@ const PracticeForm = () => {
           </div>
         )}
       </div>
+
+      {/* SUPER_ADMIN用: 団体選択 */}
+      {isSuperAdmin() && organizations.length > 1 && (
+        <div className="mt-4 p-4 bg-white rounded-lg shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 mb-2">登録先の団体</label>
+          <select
+            value={selectedOrgId || ''}
+            onChange={(e) => setSelectedOrgId(Number(e.target.value))}
+            className="w-full p-2.5 border border-gray-300 rounded-lg"
+          >
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* 固定保存ボタン */}
       {entryCount > 0 && (
