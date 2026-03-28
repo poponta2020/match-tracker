@@ -49,7 +49,7 @@ status: completed
 - **対応Issue:** #67
 
 ### タスク6: フロントエンド — ナビゲーションメニューに「システム設定」追加
-- [ ] 完了（未着手）
+- [x] 完了
 - **概要:** ハンバーガーメニューにADMIN以上向けの「システム設定」リンクを追加する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/components/NavigationMenu.jsx` — ADMIN以上向けメニュー項目追加（lucide-react の Settings アイコン使用）
