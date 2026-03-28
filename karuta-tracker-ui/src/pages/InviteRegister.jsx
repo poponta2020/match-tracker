@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { inviteAPI } from '../api/invite';
 import { playerAPI } from '../api/players';
+import { organizationAPI } from '../api/organizations';
 import { User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import LoadingScreen from '../components/LoadingScreen';
 
@@ -14,6 +15,7 @@ const InviteRegister = () => {
   const [validating, setValidating] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
   const [tokenInfo, setTokenInfo] = useState(null);
+  const [orgName, setOrgName] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -34,6 +36,15 @@ const InviteRegister = () => {
         const response = await inviteAPI.validateToken(token);
         setTokenInfo(response.data);
         setTokenValid(true);
+
+        // 団体名を取得
+        if (response.data?.organizationId) {
+          try {
+            const orgsRes = await organizationAPI.getAll();
+            const org = (orgsRes.data || []).find(o => o.id === response.data.organizationId);
+            if (org) setOrgName(org.name);
+          } catch { /* ignore */ }
+        }
       } catch {
         setTokenValid(false);
       } finally {
@@ -142,9 +153,11 @@ const InviteRegister = () => {
         <div className="bg-[#f9f6f2] rounded-lg shadow-md p-8">
           <h2 className="text-2xl font-bold text-[#374151] mb-2">選手登録</h2>
           <p className="text-[#6b7280] text-sm mb-6">
-            {tokenInfo?.type === 'SINGLE_USE'
-              ? 'あなた専用の招待リンクです'
-              : '招待リンクから登録'}
+            {orgName
+              ? `${orgName}の練習会への登録`
+              : tokenInfo?.type === 'SINGLE_USE'
+                ? 'あなた専用の招待リンクです'
+                : '招待リンクから登録'}
           </p>
 
           {error && (
