@@ -96,6 +96,13 @@ public class Player {
     private Boolean requirePasswordChange = false;
 
     /**
+     * ADMINの所属団体ID
+     * ADMINロールのプレイヤーのみ値が入る。PLAYER/SUPER_ADMINはNULL
+     */
+    @Column(name = "admin_organization_id")
+    private Long adminOrganizationId;
+
+    /**
      * 最終ログイン日時
      * NULLの場合は一度もログインしていない（初回ログイン）
      */
