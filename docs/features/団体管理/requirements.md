@@ -104,8 +104,15 @@ status: completed
 
 #### 通知
 - 団体ごとに分離。ユーザーが登録していない団体の通知は送信しない
+- **通知設定は団体別**: Webプッシュ・LINE通知ともに、種別ごとのON/OFFを団体単位で設定可能
+  - グローバルの有効/無効切り替えは団体横断で1つ
+  - 種別ごとのトグル（抽選結果、キャンセル待ち繰り上げ等）は団体別
+  - 1団体のみ登録の場合は団体名セクションを非表示にし、現行とほぼ同じ見た目
+  - わすらもち会は抽選がないため「抽選結果」トグルは非表示
+- **管理者向け通知（チャネル回収警告、伝助未登録者）**: ADMINは自団体の通知のみ、SUPER_ADMINは全団体
+- **デフォルト**: 新しい団体に登録した時、その団体の通知設定はデフォルト全ON
 - LINE通知は既存のユーザー単位のチャンネルから送信
-- **注意**: Webプッシュ通知の実装が別途進行中。通知部分の詳細要件は実装時に再ヒアリングする
+- Webプッシュ通知はブラウザのPush APIを使用
 
 #### システム設定
 - 団体ごとに独立した設定値を保持
@@ -163,6 +170,16 @@ status: completed
 - `organization_id` (BIGINT, FK → organizations.id, NOT NULL) を追加
 - トークン発行時に団体を紐づけ → 登録時の `player_organizations` 初期値に使用
 
+##### `push_notification_preferences` テーブル
+- `organization_id` (BIGINT, FK → organizations.id, NOT NULL) を追加
+- ユニーク制約を `(player_id)` → `(player_id, organization_id)` に変更
+- 団体ごとに独立した通知設定を保持
+
+##### `line_notification_preferences` テーブル
+- `organization_id` (BIGINT, FK → organizations.id, NOT NULL) を追加
+- ユニーク制約を `(player_id)` → `(player_id, organization_id)` に変更
+- 団体ごとに独立した通知設定を保持
+
 ### 4.2 API設計
 
 #### 新規エンドポイント
@@ -191,6 +208,7 @@ status: completed
 - **新規登録画面（InviteRegister）** — トークンの `organization_id` を取得し `player_organizations` 初期値に使用
 - **ADMIN管理画面** — 自団体スコープで自動フィルタ
 - **SUPER_ADMIN画面** — 練習日作成時に団体選択UIを追加
+- **通知設定画面（NotificationSettings）** — Webプッシュ・LINE通知の種別トグルを団体別に表示。1団体のみ登録の場合はセクションヘッダー非表示。わすらもち会は「抽選結果」トグル非表示
 
 ### 4.4 バックエンド設計
 
@@ -209,7 +227,11 @@ status: completed
 - `PracticeSessionService` — `organization_id` による自動フィルタ
 - `SystemSettingService` — `organization_id` を考慮した設定値取得・更新
 - `InviteTokenService` — `organization_id` の保持と登録時の `player_organizations` 作成
-- `LineNotificationService` — 送信対象を `player_organizations` でフィルタ
+- `LineNotificationService` — 送信対象を `player_organizations` でフィルタ、通知設定を団体別に参照
+- `NotificationService` — Webプッシュ送信時に団体別の通知設定を参照
+- `PushNotificationService` — 送信前に `player_organizations` でフィルタ
+- `LineNotificationPreference` (Entity) — `organization_id` 追加
+- `PushNotificationPreference` (Entity) — `organization_id` 追加
 - 認証インターセプター — ADMIN の団体スコープチェック
 
 ### 4.5 データ移行
@@ -219,6 +241,8 @@ status: completed
 3. 既存の全 `practice_sessions` → `organization_id` をわすらもち会に設定
 4. 既存の `system_settings` → `organization_id` をわすらもち会に設定（北大用は別途追加）
 5. 既存の `invite_tokens` → `organization_id` をわすらもち会に設定
+6. 既存の `push_notification_preferences` → `organization_id` をわすらもち会に設定
+7. 既存の `line_notification_preferences` → `organization_id` をわすらもち会に設定
 
 ## 5. 影響範囲
 
@@ -230,7 +254,7 @@ status: completed
 | `system_settings` | キー構造変更（`organization_id` 追加）。全設定値の取得・更新ロジック変更 |
 | `LotteryDeadlineHelper` / `LotteryService` | 団体別の締切タイプ分岐。わすらもち会は抽選なし、北大は既存ロジック維持 |
 | `PracticeParticipantService` | わすらもち会用の先着順ロジック追加。ステータス遷移が団体で異なる |
-| 通知系全般 | 送信対象の団体フィルタリング。※Webプッシュ実装時に再ヒアリング |
+| 通知系全般 | 送信対象の団体フィルタリング。Webプッシュ・LINE通知の設定テーブルに `organization_id` 追加 |
 | 認証・権限チェック | ADMINの団体スコープ制約追加。インターセプター改修 |
 
 ### 影響が小さい
@@ -258,4 +282,5 @@ status: completed
 | 会場（venues）は団体共有 | 同じ会場を両団体が使う実態に合致 |
 | わすらもち会は `PENDING` ステータス不使用 | 抽選がないため。空きあり→即`WON`、定員超過→即`WAITLISTED` |
 | 締め切りタイプを `organizations.deadline_type` で保持 | 団体固有のルールであり、練習日ごとに変わるものではない |
-| 通知部分の詳細は実装時に再ヒアリング | Webプッシュ通知の実装が別途進行中のため |
+| 通知設定を団体別にする | 片方の団体の通知だけOFFにしたいケースに対応。グローバルON/OFFは共通で種別トグルが団体別 |
+| 管理者通知もADMINは自団体のみ | ADMINは自団体の管理責任のみ。SUPER_ADMINは全団体の通知を受ける |

@@ -212,7 +212,7 @@ status: completed
 - **対応Issue:** #95
 
 ### タスク16: バックエンド — テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 団体管理に関する単体テスト・統合テストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/OrganizationServiceTest.java` — 新規作成
@@ -222,6 +222,73 @@ status: completed
   - 既存テストの修正（organization_id パラメータ追加対応）
 - **依存タスク:** タスク1〜10
 - **対応Issue:** #96
+
+### タスク17: DBスキーマ — 通知設定テーブルに organization_id 追加
+- [ ] 完了
+- **概要:** `push_notification_preferences` と `line_notification_preferences` に `organization_id` を追加し、団体ごとの通知設定を実現する。
+- **変更対象ファイル:**
+  - `database/migration_notification_org.sql` — 新規作成。DDL + データ移行SQL
+- **依存タスク:** タスク1
+- **実装詳細:**
+  1. `push_notification_preferences` に `organization_id` カラム追加
+  2. `line_notification_preferences` に `organization_id` カラム追加
+  3. ユニーク制約を `(player_id)` → `(player_id, organization_id)` に変更
+  4. データ移行: 既存レコード → organization_id をわすらもち会に設定
+- **対応Issue:** #97
+
+### タスク18: バックエンド — 通知設定の団体対応
+- [ ] 完了
+- **概要:** 通知設定のEntity・Repository・Serviceを団体対応に変更する。
+- **変更対象ファイル:**
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/PushNotificationPreference.java` — `organizationId` 追加、ユニーク制約変更
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineNotificationPreference.java` — `organizationId` 追加、ユニーク制約変更
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PushNotificationPreferenceRepository.java` — `findByPlayerIdAndOrganizationId` 追加
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/LineNotificationPreferenceRepository.java` — `findByPlayerIdAndOrganizationId` 追加
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/NotificationService.java` — `sendPushIfEnabled` を団体別設定参照に変更
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java` — 送信時に団体別設定を参照
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/PushSubscriptionController.java` — 設定取得・更新APIを団体対応
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/PushNotificationPreferenceDto.java` — `organizationId` 追加
+- **依存タスク:** タスク17
+- **実装詳細:**
+  - `sendPushIfEnabled(playerId, type, ...)` → セッションの `organizationId` から団体別設定を参照
+  - LINE通知送信時も同様に団体別設定を参照
+  - 管理者向け通知: ADMINは `admin_organization_id` の設定を参照、SUPER_ADMINは全団体
+  - 新団体登録時にデフォルト全ONの通知設定レコードを自動作成（`OrganizationService.updatePlayerOrganizations` で対応）
+- **対応Issue:** #98
+
+### タスク19: バックエンド — Webプッシュ送信の団体フィルタ
+- [ ] 完了
+- **概要:** Webプッシュ通知の送信時に `player_organizations` で対象ユーザーをフィルタする。
+- **変更対象ファイル:**
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/NotificationService.java` — `createAndPush` 呼び出し箇所で団体チェック追加
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` — 管理者向け通知の団体スコープ
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/LineChannelReclaimScheduler.java` — 管理者向け通知の団体スコープ
+- **依存タスク:** タスク17, タスク18
+- **対応Issue:** #99
+
+### タスク20: フロントエンド — 通知設定画面の団体別UI
+- [ ] 完了
+- **概要:** 通知設定画面（NotificationSettings）のWebプッシュ・LINE通知の種別トグルを団体別に表示する。
+- **変更対象ファイル:**
+  - `karuta-tracker-ui/src/pages/notifications/NotificationSettings.jsx` — 団体別セクションで種別トグルを表示
+  - `karuta-tracker-ui/src/api/notifications.js` — API呼び出しに organizationId 対応
+- **依存タスク:** タスク18
+- **実装詳細:**
+  - グローバルON/OFFは団体横断で1つ（既存のまま）
+  - 種別トグルが団体別セクションに分かれる
+  - 1団体のみ登録の場合はセクションヘッダー非表示（現行とほぼ同じ見た目）
+  - わすらもち会は「抽選結果」トグル非表示（SAME_DAYタイプは抽選なし）
+  - 管理者向けトグル（チャネル回収警告、伝助未登録者）はADMIN/SUPER_ADMINのみ表示
+- **対応Issue:** #100
+
+### タスク21: テスト — 通知団体対応
+- [ ] 完了
+- **概要:** 通知の団体対応に関するテストを追加・修正する。
+- **変更対象ファイル:**
+  - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/NotificationServiceTest.java` — 団体別設定のテスト追加
+  - 既存テストの修正（organization_id パラメータ追加対応）
+- **依存タスク:** タスク17〜19
+- **対応Issue:** #101
 
 ## 実装順序
 
@@ -241,3 +308,13 @@ status: completed
 14. **タスク14** — フロントエンド: 新規登録画面の団体対応（タスク9,11に依存）
 15. **タスク15** — フロントエンド: ADMIN管理画面の団体スコープ（タスク4,5,6,11に依存）
 16. **タスク16** — テスト（タスク1〜10に依存）
+
+---
+
+## 追加タスク（通知設定の団体対応）
+
+17. **タスク17** — DBスキーマ: 通知設定テーブルにorganization_id追加（タスク1に依存）
+18. **タスク18** — バックエンド: 通知設定の団体対応（タスク17に依存）
+19. **タスク19** — バックエンド: Webプッシュ送信の団体フィルタ（タスク17,18に依存）
+20. **タスク20** — フロントエンド: 通知設定画面の団体別UI（タスク18に依存）
+21. **タスク21** — テスト: 通知団体対応（タスク17〜19に依存）
