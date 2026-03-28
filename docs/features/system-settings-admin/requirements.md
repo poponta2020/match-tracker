@@ -1,7 +1,5 @@
 ---
-status: ヒアリング中
-completed_sections: [ユーザーストーリー, 機能要件]
-next_section: 技術設計
+status: completed
 ---
 # システム設定管理画面 要件定義書（ドラフト）
 
@@ -33,6 +31,7 @@ next_section: 技術設計
    - 日数のバリデーション: 0〜20 の整数
    - 内部的に「締め切りなし」は `-1` として保存
    - 締め切りプレビュー表示: 「来月の締め切り: ○月○日」
+   - 「締め切りなし」時はプレビューに「締め切りなし（いつでも登録変更可能）」と表示
 
 2. **一般枠の最低保証割合**（`lottery_normal_reserve_percent`）
    - 数値入力フィールド（%）
@@ -58,10 +57,65 @@ next_section: 技術設計
 - 「締め切りなし」モードの場合は何も表示しない
 
 ## 4. 技術設計
-（未着手）
+
+### 4.1 API設計
+
+#### 既存API（変更なし）
+- `GET /api/system-settings` — 全設定取得（ADMIN以上）
+- `PUT /api/system-settings/{key}` — 設定値更新（ADMIN以上）
+
+#### 新規API
+- `GET /api/lottery/deadline?year={year}&month={month}` — 締め切り日時取得（認証不要）
+  - レスポンス: `{ "deadline": "2026-03-29T00:00:00", "noDeadline": false }`
+  - 「締め切りなし」時: `{ "deadline": null, "noDeadline": true }`
+
+### 4.2 DB設計
+- テーブル変更なし
+- `system_settings` テーブルの `lottery_deadline_days_before` に `-1` を保存することで「締め切りなし」を表現
+
+### 4.3 フロントエンド設計
+- **新規** `pages/settings/SystemSettings.jsx` — 管理画面コンポーネント
+- **新規** `api/systemSettings.js` — APIクライアント
+- **変更** `components/NavigationMenu.jsx` — メニュー項目追加
+- **変更** `App.jsx` — ルーティング追加
+- **変更** `pages/practice/PracticeParticipation.jsx` — 締め切り表示追加
+
+### 4.4 バックエンド設計
+- **変更** `LotteryDeadlineHelper.java`
+  - `getDeadline()`: `-1` の場合は `null` を返す
+  - `isBeforeDeadline()`: `-1` の場合は常に `true`
+  - `isAfterDeadline()`: `-1` の場合は常に `false`
+  - `isNoDeadline()`: 新規メソッド追加
+- **変更** `LotteryController.java`
+  - 手動抽選の締め切り前チェック: 「締め切りなし」時はスキップ
+  - `GET /api/lottery/deadline` エンドポイント追加
+- **変更なし** `LotteryScheduler.java` — `isAfterDeadline()` が false を返すため自動的に対応
+- **変更なし** `PracticeParticipantService.java` — `isBeforeDeadline()` が true を返すため自動的に対応
 
 ## 5. 影響範囲
-（未着手）
+
+### 変更対象ファイル
+#### バックエンド
+| ファイル | 変更内容 |
+|---------|---------|
+| `LotteryDeadlineHelper.java` | `-1`対応（getDeadline で null、isBeforeDeadline で常に true） |
+| `LotteryController.java` | 手動抽選ガード調整 + 新規エンドポイント追加 |
+
+#### フロントエンド
+| ファイル | 変更内容 |
+|---------|---------|
+| `NavigationMenu.jsx` | 「システム設定」メニュー項目追加（ADMIN以上） |
+| `App.jsx` | `/admin/settings` ルーティング追加 |
+| `PracticeParticipation.jsx` | 締め切り日表示追加 |
+| **新規** `pages/settings/SystemSettings.jsx` | 管理画面 |
+| **新規** `api/systemSettings.js` | APIクライアント |
+
+### 既存機能への影響
+- `LotteryScheduler`: 「締め切りなし」モードでは自動抽選が走らない（意図通り）
+- `PracticeParticipantService`: 「締め切りなし」モードでは常に通常登録パス（意図通り）
+- 既存の締め切りあり運用（`daysBefore >= 0`）には影響なし
 
 ## 6. 設計判断の根拠
-（未着手）
+- **「締め切りなし」を `-1` で表現**: DB スキーマ変更不要。既存の `system_settings` テーブルをそのまま活用できる
+- **締め切り日時取得を専用エンドポイントに**: フロントエンドで日数→日付の変換ロジックを持つ必要がなく、「締め切りなし」の判定もバックエンドに集約できる
+- **管理画面を独立ページに**: 将来的に設定項目を追加しやすい構造

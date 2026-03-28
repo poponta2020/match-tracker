@@ -127,12 +127,22 @@
       "Edit(/.claude/skills/implement/**)",
       "Bash(git fetch:*)",
       "Edit(/.claude/skills/quickfix/**)",
-      "Read(//c/Users/popon/match-tracker/$HOME/.claude/**)"
+      "Read(//c/Users/popon/match-tracker/$HOME/.claude/**)",
+      "Bash(iconv -f UTF-16 -t UTF-8 /c/Users/popon/match-tracker/database/karuta_tracker_dump_20260107_180528.sql)",
+      "Read(//c/Users/popon/match-tracker/**)",
+      "Bash(find c:/Users/popon/match-tracker -type f -name *interceptor* -o -name *InviteToken* -o -name *PracticeSession* -o -name *SystemSetting*)",
+      "Bash(find /c/Users/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker -name *BaseEntity* -o -name *Base*)",
+      "Read(//c/Users/popon/match-tracker/karuta-tracker/**)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "/home/poponta"
+      "/home/poponta",
+      "C:\\Users\\popon\\.claude\\commands",
+      "c:\\Users\\popon\\match-tracker\\.claude",
+      "c:\\Users\\popon\\match-tracker\\docs\\features"
     ]
   }
 }

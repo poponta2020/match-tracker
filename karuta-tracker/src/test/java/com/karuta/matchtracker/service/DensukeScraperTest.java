@@ -78,4 +78,15 @@ class DensukeScraperTest {
         assertThat(entry.getParticipants()).isNotNull().isEmpty();
         assertThat(entry.getMaybeParticipants()).isNotNull().isEmpty();
     }
+
+    @Test
+    @DisplayName("stripLeadingEmoji: 名前の先頭の絵文字が除去される")
+    void testStripLeadingEmoji() {
+        assertThat(DensukeScraper.stripLeadingEmoji("🔰田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.stripLeadingEmoji("🌟鈴木")).isEqualTo("鈴木");
+        assertThat(DensukeScraper.stripLeadingEmoji("🔰🌟佐藤")).isEqualTo("佐藤");
+        assertThat(DensukeScraper.stripLeadingEmoji("田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.stripLeadingEmoji("")).isEqualTo("");
+        assertThat(DensukeScraper.stripLeadingEmoji(null)).isNull();
+    }
 }

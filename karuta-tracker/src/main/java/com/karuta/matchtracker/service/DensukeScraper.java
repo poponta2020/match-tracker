@@ -74,7 +74,7 @@ public class DensukeScraper {
         for (int i = 4; i < headerCells.size(); i++) {
             Element cell = headerCells.get(i);
             Element link = cell.selectFirst("a");
-            String name = link != null ? link.text().trim() : cell.text().trim();
+            String name = stripLeadingEmoji(link != null ? link.text() : cell.text());
             memberNames.add(name);
         }
         log.info("Found {} members in densuke", memberNames.size());
@@ -147,5 +147,26 @@ public class DensukeScraper {
 
         log.info("Scraped {} schedule entries from densuke", data.getEntries().size());
         return data;
+    }
+
+    /**
+     * 名前の先頭に付いている絵文字（Symbol カテゴリの文字）を除去する。
+     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木"
+     */
+    static String stripLeadingEmoji(String name) {
+        if (name == null || name.isEmpty()) return name;
+        int i = 0;
+        while (i < name.length()) {
+            int codePoint = name.codePointAt(i);
+            int type = Character.getType(codePoint);
+            if (type == Character.OTHER_SYMBOL
+                    || type == Character.MATH_SYMBOL
+                    || type == Character.MODIFIER_SYMBOL) {
+                i += Character.charCount(codePoint);
+            } else {
+                break;
+            }
+        }
+        return name.substring(i).trim();
     }
 }
