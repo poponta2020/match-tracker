@@ -24,6 +24,7 @@ const DensukeManagement = () => {
 
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [writeStatus, setWriteStatus] = useState(null);
 
   const [registering, setRegistering] = useState(false);
   const [selectedNames, setSelectedNames] = useState([]);
@@ -37,6 +38,16 @@ const DensukeManagement = () => {
       navigate('/');
     }
   }, [currentPlayer, navigate]);
+
+  // 書き込み状況取得
+  const fetchWriteStatus = useCallback(async () => {
+    try {
+      const res = await practiceAPI.getDensukeWriteStatus();
+      setWriteStatus(res.data);
+    } catch {
+      // エラー時はステータス表示をクリアしない
+    }
+  }, []);
 
   // 伝助URL取得
   const fetchUrl = useCallback(async () => {
@@ -62,7 +73,8 @@ const DensukeManagement = () => {
 
   useEffect(() => {
     fetchUrl();
-  }, [fetchUrl]);
+    fetchWriteStatus();
+  }, [fetchUrl, fetchWriteStatus]);
 
   // 月送り
   const changeMonth = (delta) => {
@@ -105,6 +117,7 @@ const DensukeManagement = () => {
     try {
       const res = await practiceAPI.syncDensuke(year, month);
       setSyncResult(res.data);
+      fetchWriteStatus();
       if (res.data.registeredCount > 0 || res.data.createdSessionCount > 0) {
         setSuccess(`同期完了: ${res.data.createdSessionCount}日作成、${res.data.registeredCount}名登録`);
       } else {
@@ -238,6 +251,47 @@ const DensukeManagement = () => {
             </>
           )}
         </div>
+
+        {/* 伝助への書き込み状況 */}
+        {writeStatus && (
+          <div className="mt-4 bg-[#f9f6f2] rounded-xl p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-[#374151] mb-3">伝助への書き込み状況</h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[#6b7280]">書き込み待ち</span>
+                <span className={`font-medium ${writeStatus.pendingCount > 0 ? 'text-amber-600' : 'text-[#374151]'}`}>
+                  {writeStatus.pendingCount}件
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#6b7280]">最終試行</span>
+                <span className="text-[#374151]">
+                  {writeStatus.lastAttemptAt
+                    ? new Date(writeStatus.lastAttemptAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+                    : '未実行'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#6b7280]">最終成功</span>
+                <span className="text-[#374151]">
+                  {writeStatus.lastSuccessAt
+                    ? new Date(writeStatus.lastSuccessAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+                    : 'なし'}
+                </span>
+              </div>
+            </div>
+            {writeStatus.errors?.length > 0 && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <h3 className="text-xs font-medium text-red-700 mb-1">エラー</h3>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {writeStatus.errors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-600">{err}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 同期結果 */}
         {syncResult && (

@@ -107,4 +107,8 @@ export const practiceAPI = {
     apiClient.get('/practice-sessions/participation-rate-top3', {
       params: { year, month },
     }),
+
+  // 伝助への書き込み状況を取得
+  getDensukeWriteStatus: () =>
+    apiClient.get('/practice-sessions/densuke-write-status'),
 };

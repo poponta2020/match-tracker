@@ -31,6 +31,7 @@ public class PracticeSessionController {
     private final PracticeSessionService practiceSessionService;
     private final PracticeParticipantService practiceParticipantService;
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
+    private final com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
     private final com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
 
     /**
@@ -531,5 +532,14 @@ public class PracticeSessionController {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(Map.of("message", "伝助との同期に失敗しました: " + e.getMessage()));
         }
+    }
+
+    /**
+     * 伝助への書き込み状況を取得
+     */
+    @GetMapping("/densuke-write-status")
+    @RequireRole({Role.ADMIN, Role.SUPER_ADMIN})
+    public ResponseEntity<DensukeWriteStatusDto> getDensukeWriteStatus() {
+        return ResponseEntity.ok(densukeWriteService.getStatus());
     }
 }
