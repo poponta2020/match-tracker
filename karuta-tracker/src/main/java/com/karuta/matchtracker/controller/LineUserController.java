@@ -126,7 +126,7 @@ public class LineUserController {
      * 通知設定を取得する
      */
     @GetMapping("/preferences")
-    public ResponseEntity<LineNotificationPreferenceDto> getPreferences(@RequestParam Long playerId) {
+    public ResponseEntity<java.util.List<LineNotificationPreferenceDto>> getPreferences(@RequestParam Long playerId) {
         return ResponseEntity.ok(lineNotificationService.getPreferences(playerId));
     }
 

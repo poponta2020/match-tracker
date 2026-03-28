@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "line_notification_preferences", indexes = {
     @Index(name = "idx_lnp_player", columnList = "player_id")
+}, uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"player_id", "organization_id"})
 })
 @Getter
 @Setter
@@ -23,9 +25,13 @@ public class LineNotificationPreference {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** プレイヤーID（UNIQUE） */
-    @Column(name = "player_id", nullable = false, unique = true)
+    /** プレイヤーID */
+    @Column(name = "player_id", nullable = false)
     private Long playerId;
+
+    /** 団体ID */
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     /** 抽選結果 */
     @Column(name = "lottery_result", nullable = false)

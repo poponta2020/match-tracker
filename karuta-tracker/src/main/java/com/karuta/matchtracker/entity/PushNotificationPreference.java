@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "push_notification_preferences", indexes = {
     @Index(name = "idx_pnp_player", columnList = "player_id")
+}, uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"player_id", "organization_id"})
 })
 @Getter
 @Setter
@@ -23,9 +25,13 @@ public class PushNotificationPreference {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** プレイヤーID（UNIQUE） */
-    @Column(name = "player_id", nullable = false, unique = true)
+    /** プレイヤーID */
+    @Column(name = "player_id", nullable = false)
     private Long playerId;
+
+    /** 団体ID */
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     /** Web Push全体のON/OFF */
     @Column(name = "enabled", nullable = false)

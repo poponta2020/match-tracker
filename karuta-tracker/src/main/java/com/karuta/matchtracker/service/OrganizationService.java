@@ -1,13 +1,13 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.OrganizationDto;
-import com.karuta.matchtracker.entity.Organization;
-import com.karuta.matchtracker.entity.Player;
-import com.karuta.matchtracker.entity.PlayerOrganization;
+import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
+import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +23,8 @@ public class OrganizationService {
     private final OrganizationRepository organizationRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final PlayerRepository playerRepository;
+    private final PushNotificationPreferenceRepository pushNotificationPreferenceRepository;
+    private final LineNotificationPreferenceRepository lineNotificationPreferenceRepository;
 
     /**
      * 団体一覧を取得
@@ -87,6 +89,7 @@ public class OrganizationService {
                         .organizationId(orgId)
                         .build();
                 playerOrganizationRepository.save(po);
+                createDefaultNotificationPreferences(playerId, orgId);
             }
         }
 
@@ -120,6 +123,27 @@ public class OrganizationService {
 
         player.setAdminOrganizationId(organizationId);
         playerRepository.save(player);
+    }
+
+    /**
+     * 団体追加時にデフォルト全ONの通知設定レコードを作成
+     */
+    private void createDefaultNotificationPreferences(Long playerId, Long organizationId) {
+        // Web Push通知設定
+        if (pushNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(playerId, organizationId).isEmpty()) {
+            pushNotificationPreferenceRepository.save(PushNotificationPreference.builder()
+                    .playerId(playerId)
+                    .organizationId(organizationId)
+                    .enabled(false)
+                    .build());
+        }
+        // LINE通知設定
+        if (lineNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(playerId, organizationId).isEmpty()) {
+            lineNotificationPreferenceRepository.save(LineNotificationPreference.builder()
+                    .playerId(playerId)
+                    .organizationId(organizationId)
+                    .build());
+        }
     }
 
     /**

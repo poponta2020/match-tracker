@@ -12,6 +12,7 @@ import lombok.*;
 @Builder
 public class PushNotificationPreferenceDto {
     private Long playerId;
+    private Long organizationId;
     private boolean enabled;
     private boolean lotteryResult;
     private boolean waitlistOffer;
@@ -23,6 +24,7 @@ public class PushNotificationPreferenceDto {
     public static PushNotificationPreferenceDto fromEntity(PushNotificationPreference entity) {
         return PushNotificationPreferenceDto.builder()
             .playerId(entity.getPlayerId())
+            .organizationId(entity.getOrganizationId())
             .enabled(entity.getEnabled())
             .lotteryResult(entity.getLotteryResult())
             .waitlistOffer(entity.getWaitlistOffer())

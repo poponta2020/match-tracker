@@ -243,6 +243,17 @@ public class NotificationService {
     public Notification createAndPush(Long playerId, NotificationType type,
                                        String title, String message,
                                        String referenceType, Long referenceId, String pushUrl) {
+        return createAndPush(playerId, type, title, message, referenceType, referenceId, pushUrl, null);
+    }
+
+    /**
+     * アプリ内通知を作成し、Web Push設定がONなら送信も行う共通メソッド（団体指定）
+     */
+    @Transactional
+    public Notification createAndPush(Long playerId, NotificationType type,
+                                       String title, String message,
+                                       String referenceType, Long referenceId, String pushUrl,
+                                       Long organizationId) {
         Notification notification = Notification.builder()
                 .playerId(playerId)
                 .type(type)
@@ -254,17 +265,32 @@ public class NotificationService {
 
         notificationRepository.save(notification);
 
-        sendPushIfEnabled(playerId, type, title, message, pushUrl);
+        sendPushIfEnabled(playerId, type, title, message, pushUrl, organizationId);
 
         return notification;
     }
 
     /**
-     * Web Push設定をチェックし、該当種別がONなら送信する
+     * Web Push設定をチェックし、該当種別がONなら送信する（団体指定）
      */
-    public void sendPushIfEnabled(Long playerId, NotificationType type, String title, String message, String url) {
-        PushNotificationPreference pref = pushNotificationPreferenceRepository
-                .findByPlayerId(playerId).orElse(null);
+    public void sendPushIfEnabled(Long playerId, NotificationType type, String title, String message, String url, Long organizationId) {
+        // 団体指定がある場合はその団体の設定を参照
+        PushNotificationPreference pref;
+        if (organizationId != null) {
+            pref = pushNotificationPreferenceRepository
+                    .findByPlayerIdAndOrganizationId(playerId, organizationId).orElse(null);
+        } else {
+            // 団体指定なしの場合はいずれかの団体でenabledかつ種別ONなら送信
+            List<PushNotificationPreference> prefs = pushNotificationPreferenceRepository.findByPlayerId(playerId);
+            pref = prefs.stream()
+                    .filter(p -> p.getEnabled() && isTypeEnabled(p, type))
+                    .findFirst().orElse(null);
+            if (pref != null) {
+                pushNotificationService.sendPush(playerId, title, message, url);
+                return;
+            }
+            return;
+        }
 
         if (pref == null || !pref.getEnabled()) {
             return;
@@ -275,6 +301,13 @@ public class NotificationService {
         }
 
         pushNotificationService.sendPush(playerId, title, message, url);
+    }
+
+    /**
+     * 後方互換用: organizationId なしの sendPushIfEnabled
+     */
+    public void sendPushIfEnabled(Long playerId, NotificationType type, String title, String message, String url) {
+        sendPushIfEnabled(playerId, type, title, message, url, null);
     }
 
     /**

@@ -12,6 +12,7 @@ import lombok.*;
 @Builder
 public class LineNotificationPreferenceDto {
     private Long playerId;
+    private Long organizationId;
     private boolean lotteryResult;
     private boolean waitlistOffer;
     private boolean offerExpired;
@@ -22,6 +23,7 @@ public class LineNotificationPreferenceDto {
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
             .playerId(entity.getPlayerId())
+            .organizationId(entity.getOrganizationId())
             .lotteryResult(entity.getLotteryResult())
             .waitlistOffer(entity.getWaitlistOffer())
             .offerExpired(entity.getOfferExpired())

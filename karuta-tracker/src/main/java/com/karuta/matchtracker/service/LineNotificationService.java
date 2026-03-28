@@ -392,14 +392,14 @@ public class LineNotificationService {
      * 通知設定を取得する
      */
     @Transactional(readOnly = true)
-    public LineNotificationPreferenceDto getPreferences(Long playerId) {
-        return lineNotificationPreferenceRepository.findByPlayerId(playerId)
-            .map(LineNotificationPreferenceDto::fromEntity)
-            .orElse(LineNotificationPreferenceDto.builder()
-                .playerId(playerId)
-                .lotteryResult(true).waitlistOffer(true).offerExpired(true)
-                .matchPairing(true).practiceReminder(true).deadlineReminder(true)
-                .build());
+    public List<LineNotificationPreferenceDto> getPreferences(Long playerId) {
+        List<LineNotificationPreference> prefs = lineNotificationPreferenceRepository.findByPlayerId(playerId);
+        if (prefs.isEmpty()) {
+            return List.of();
+        }
+        return prefs.stream()
+                .map(LineNotificationPreferenceDto::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
     }
 
     /**
@@ -408,8 +408,11 @@ public class LineNotificationService {
     @Transactional
     public void updatePreferences(LineNotificationPreferenceDto dto) {
         LineNotificationPreference pref = lineNotificationPreferenceRepository
-            .findByPlayerId(dto.getPlayerId())
-            .orElse(LineNotificationPreference.builder().playerId(dto.getPlayerId()).build());
+            .findByPlayerIdAndOrganizationId(dto.getPlayerId(), dto.getOrganizationId())
+            .orElse(LineNotificationPreference.builder()
+                    .playerId(dto.getPlayerId())
+                    .organizationId(dto.getOrganizationId())
+                    .build());
 
         pref.setLotteryResult(dto.isLotteryResult());
         pref.setWaitlistOffer(dto.isWaitlistOffer());
@@ -512,10 +515,14 @@ public class LineNotificationService {
     }
 
     private boolean isNotificationEnabled(Long playerId, LineNotificationType type) {
-        Optional<LineNotificationPreference> prefOpt = lineNotificationPreferenceRepository.findByPlayerId(playerId);
-        if (prefOpt.isEmpty()) return true; // デフォルト全ON
+        List<LineNotificationPreference> prefs = lineNotificationPreferenceRepository.findByPlayerId(playerId);
+        if (prefs.isEmpty()) return true; // デフォルト全ON
 
-        LineNotificationPreference pref = prefOpt.get();
+        // いずれかの団体で該当種別がONならtrue
+        return prefs.stream().anyMatch(pref -> isLineTypeEnabled(pref, type));
+    }
+
+    private boolean isLineTypeEnabled(LineNotificationPreference pref, LineNotificationType type) {
         return switch (type) {
             case LOTTERY_RESULT -> pref.getLotteryResult();
             case WAITLIST_OFFER -> pref.getWaitlistOffer();

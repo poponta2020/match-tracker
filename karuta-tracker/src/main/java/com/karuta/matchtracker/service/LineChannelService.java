@@ -11,6 +11,7 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class LineChannelService {
     private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
     private final LineNotificationPreferenceRepository lineNotificationPreferenceRepository;
     private final PlayerRepository playerRepository;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     /**
      * プレイヤーにチャネルを割り当てる
@@ -66,11 +68,18 @@ public class LineChannelService {
             .build();
         lineChannelAssignmentRepository.save(assignment);
 
-        // 通知設定レコードが無ければ作成（デフォルト全ON）
+        // 通知設定レコードが無ければ作成（デフォルト全ON、ユーザーの登録団体ごと）
         if (lineNotificationPreferenceRepository.findByPlayerId(playerId).isEmpty()) {
-            lineNotificationPreferenceRepository.save(
-                LineNotificationPreference.builder().playerId(playerId).build()
-            );
+            List<com.karuta.matchtracker.entity.PlayerOrganization> playerOrgs =
+                    playerOrganizationRepository.findByPlayerId(playerId);
+            for (var po : playerOrgs) {
+                lineNotificationPreferenceRepository.save(
+                    LineNotificationPreference.builder()
+                            .playerId(playerId)
+                            .organizationId(po.getOrganizationId())
+                            .build()
+                );
+            }
         }
 
         log.info("Assigned LINE channel {} to player {}", channel.getId(), playerId);

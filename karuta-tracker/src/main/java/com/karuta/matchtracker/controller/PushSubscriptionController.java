@@ -14,7 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Web Pushサブスクリプション管理コントローラ
@@ -78,26 +80,31 @@ public class PushSubscriptionController {
     }
 
     /**
-     * Web Push通知設定を取得
+     * Web Push通知設定を取得（全団体分）
      */
     @GetMapping("/preferences/{playerId}")
-    public ResponseEntity<PushNotificationPreferenceDto> getPreferences(@PathVariable Long playerId) {
-        PushNotificationPreferenceDto dto = pushNotificationPreferenceRepository.findByPlayerId(playerId)
+    public ResponseEntity<List<PushNotificationPreferenceDto>> getPreferences(@PathVariable Long playerId) {
+        List<PushNotificationPreference> prefs = pushNotificationPreferenceRepository.findByPlayerId(playerId);
+        if (prefs.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<PushNotificationPreferenceDto> dtos = prefs.stream()
                 .map(PushNotificationPreferenceDto::fromEntity)
-                .orElse(PushNotificationPreferenceDto.defaultForPlayer(playerId));
-        return ResponseEntity.ok(dto);
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     /**
-     * Web Push通知設定を更新
+     * Web Push通知設定を更新（団体指定）
      */
     @PutMapping("/preferences")
     public ResponseEntity<PushNotificationPreferenceDto> updatePreferences(
             @RequestBody PushNotificationPreferenceDto request) {
         PushNotificationPreference pref = pushNotificationPreferenceRepository
-                .findByPlayerId(request.getPlayerId())
+                .findByPlayerIdAndOrganizationId(request.getPlayerId(), request.getOrganizationId())
                 .orElseGet(() -> PushNotificationPreference.builder()
                         .playerId(request.getPlayerId())
+                        .organizationId(request.getOrganizationId())
                         .build());
 
         pref.setEnabled(request.isEnabled());
@@ -109,7 +116,7 @@ public class PushSubscriptionController {
         pref.setDensukeUnmatched(request.isDensukeUnmatched());
 
         pushNotificationPreferenceRepository.save(pref);
-        log.info("Updated push notification preferences for player {}", request.getPlayerId());
+        log.info("Updated push notification preferences for player {} org {}", request.getPlayerId(), request.getOrganizationId());
 
         return ResponseEntity.ok(PushNotificationPreferenceDto.fromEntity(pref));
     }

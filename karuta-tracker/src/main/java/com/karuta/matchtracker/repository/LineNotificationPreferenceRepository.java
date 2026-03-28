@@ -15,25 +15,28 @@ import java.util.Optional;
 @Repository
 public interface LineNotificationPreferenceRepository extends JpaRepository<LineNotificationPreference, Long> {
 
-    /** プレイヤーの通知設定を取得 */
-    Optional<LineNotificationPreference> findByPlayerId(Long playerId);
+    /** プレイヤーの通知設定を全団体分取得 */
+    List<LineNotificationPreference> findByPlayerId(Long playerId);
 
-    /** 指定通知種別がONのプレイヤーIDリストを取得 */
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.lotteryResult = true")
-    List<Long> findPlayerIdsWithLotteryResultEnabled();
+    /** プレイヤーの団体別通知設定を取得 */
+    Optional<LineNotificationPreference> findByPlayerIdAndOrganizationId(Long playerId, Long organizationId);
 
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.waitlistOffer = true")
-    List<Long> findPlayerIdsWithWaitlistOfferEnabled();
+    /** 指定通知種別がONのプレイヤーIDリストを取得（団体指定） */
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.lotteryResult = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithLotteryResultEnabled(@Param("orgId") Long organizationId);
 
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.offerExpired = true")
-    List<Long> findPlayerIdsWithOfferExpiredEnabled();
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.waitlistOffer = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithWaitlistOfferEnabled(@Param("orgId") Long organizationId);
 
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.matchPairing = true")
-    List<Long> findPlayerIdsWithMatchPairingEnabled();
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.offerExpired = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithOfferExpiredEnabled(@Param("orgId") Long organizationId);
 
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.practiceReminder = true")
-    List<Long> findPlayerIdsWithPracticeReminderEnabled();
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.matchPairing = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithMatchPairingEnabled(@Param("orgId") Long organizationId);
 
-    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.deadlineReminder = true")
-    List<Long> findPlayerIdsWithDeadlineReminderEnabled();
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.practiceReminder = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithPracticeReminderEnabled(@Param("orgId") Long organizationId);
+
+    @Query("SELECT p.playerId FROM LineNotificationPreference p WHERE p.deadlineReminder = true AND p.organizationId = :orgId")
+    List<Long> findPlayerIdsWithDeadlineReminderEnabled(@Param("orgId") Long organizationId);
 }
