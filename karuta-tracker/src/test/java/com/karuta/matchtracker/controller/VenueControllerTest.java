@@ -7,6 +7,7 @@ import com.karuta.matchtracker.dto.VenueMatchScheduleDto;
 import com.karuta.matchtracker.dto.VenueUpdateRequest;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.VenueService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +43,9 @@ class VenueControllerTest {
 
     @MockitoBean
     private VenueService venueService;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
 
     private VenueDto testVenueDto;
     private VenueCreateRequest createRequest;

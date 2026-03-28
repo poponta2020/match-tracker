@@ -54,7 +54,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 対戦ペアリングを作成
         String createResponse = mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -94,7 +94,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 日付と試合番号で削除
         mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", "2024-02-10")
                         .param("matchNumber", "1"))
                 .andExpect(status().isNoContent());
@@ -126,7 +126,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                 sessionDate, 1, player1.getId(), player2.getId()
         );
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -135,7 +135,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                 sessionDate, 2, player3.getId(), player4.getId()
         );
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
@@ -177,7 +177,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 一括作成（matchNumber=1の組み合わせを2ペア作成）
         mockMvc.perform(post("/api/match-pairings/batch")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", "2024-02-12")
                         .param("matchNumber", "1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -206,7 +206,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 同じ選手同士の対戦は400エラー
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -231,14 +231,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 1回目の作成は成功
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         // When: 同じ日付と試合番号で2回目の作成も成功する（同一試合番号に複数ペアが存在可能）
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -266,7 +266,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -300,7 +300,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -324,7 +324,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 選手存在チェックは未実装のため、存在しないIDでも作成される
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -344,14 +344,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: PLAYER権限では作成できない
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden());
 
         // Given: SUPER_ADMINで対戦ペアリングを作成
         String createResponse = mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -361,7 +361,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: PLAYER権限では削除できない
         mockMvc.perform(delete("/api/match-pairings/{id}", created.getId())
-                        .header("X-User-Role", "PLAYER"))
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
                 .andExpect(status().isForbidden());
 
         // Then: データベースには残っている

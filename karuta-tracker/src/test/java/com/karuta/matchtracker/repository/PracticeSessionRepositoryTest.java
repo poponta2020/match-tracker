@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.config.TestContainersConfig;
+import com.karuta.matchtracker.entity.DeadlineType;
+import com.karuta.matchtracker.entity.Organization;
 import com.karuta.matchtracker.entity.PracticeSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,6 +31,10 @@ class PracticeSessionRepositoryTest {
     @Autowired
     private PracticeSessionRepository practiceSessionRepository;
 
+    @Autowired
+    private OrganizationRepository organizationRepository;
+
+    private Long orgId;
     private LocalDate today;
     private LocalDate tomorrow;
     private LocalDate nextWeek;
@@ -36,15 +42,24 @@ class PracticeSessionRepositoryTest {
 
     @BeforeEach
     void setUp() {
+        practiceSessionRepository.deleteAll();
         today = LocalDate.now();
         tomorrow = today.plusDays(1);
         nextWeek = today.plusWeeks(1);
         lastWeek = today.minusWeeks(1);
 
+        // 団体データの準備
+        Organization org = organizationRepository.findByCode("wasura").orElseGet(() ->
+            organizationRepository.save(Organization.builder()
+                .code("wasura").name("わすらもち会").color("#22c55e").deadlineType(DeadlineType.SAME_DAY).build())
+        );
+        orgId = org.getId();
+
         // テストデータの準備
         PracticeSession session1 = PracticeSession.builder()
                 .sessionDate(lastWeek)
                 .totalMatches(4)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
@@ -52,6 +67,7 @@ class PracticeSessionRepositoryTest {
         PracticeSession session2 = PracticeSession.builder()
                 .sessionDate(today)
                 .totalMatches(5)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
@@ -59,6 +75,7 @@ class PracticeSessionRepositoryTest {
         PracticeSession session3 = PracticeSession.builder()
                 .sessionDate(tomorrow)
                 .totalMatches(3)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
@@ -66,6 +83,7 @@ class PracticeSessionRepositoryTest {
         PracticeSession session4 = PracticeSession.builder()
                 .sessionDate(nextWeek)
                 .totalMatches(4)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
@@ -169,6 +187,7 @@ class PracticeSessionRepositoryTest {
         PracticeSession session = PracticeSession.builder()
                 .sessionDate(today.plusDays(20))
                 .totalMatches(6)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
@@ -189,6 +208,7 @@ class PracticeSessionRepositoryTest {
         PracticeSession duplicate = PracticeSession.builder()
                 .sessionDate(today)  // 既に存在する日付
                 .totalMatches(10)
+                .organizationId(orgId)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();

@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.MatchCreateRequest;
 import com.karuta.matchtracker.dto.MatchDto;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.MatchService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +42,9 @@ class MatchControllerTest {
 
     @MockitoBean
     private MatchService matchService;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
 
     private MatchDto testMatchDto;
     private MatchCreateRequest createRequest;

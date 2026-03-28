@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,6 +40,9 @@ class MatchPairingControllerTest {
 
     @MockitoBean
     private MatchPairingService matchPairingService;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
 
     @Nested
     @DisplayName("GET /api/match-pairings/date")
@@ -235,7 +239,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -269,7 +273,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "ADMIN")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -327,7 +331,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -347,7 +351,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isConflict());
@@ -367,7 +371,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
@@ -402,7 +406,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -437,7 +441,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "ADMIN")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -485,7 +489,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -508,7 +512,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "SUPER_ADMIN"))
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                     .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
@@ -523,7 +527,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "ADMIN"))
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
                     .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
@@ -558,7 +562,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
@@ -576,7 +580,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "ADMIN")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
@@ -631,7 +635,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -668,7 +672,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "ADMIN")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -705,7 +709,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -746,7 +750,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());

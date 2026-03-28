@@ -53,6 +53,9 @@ class PracticeSessionServiceTest {
     @Mock
     private VenueMatchScheduleRepository venueMatchScheduleRepository;
 
+    @Mock
+    private OrganizationService organizationService;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 
@@ -213,6 +216,7 @@ class PracticeSessionServiceTest {
         PracticeSessionCreateRequest request = PracticeSessionCreateRequest.builder()
                 .sessionDate(today)
                 .totalMatches(12)
+                .organizationId(1L)
                 .build();
         when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(false);
         when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(testSession);
@@ -236,6 +240,7 @@ class PracticeSessionServiceTest {
         PracticeSessionCreateRequest request = PracticeSessionCreateRequest.builder()
                 .sessionDate(today)
                 .totalMatches(12)
+                .organizationId(1L)
                 .build();
         when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
 

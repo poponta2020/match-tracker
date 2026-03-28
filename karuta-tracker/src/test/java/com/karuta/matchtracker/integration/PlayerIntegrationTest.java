@@ -36,7 +36,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -75,7 +75,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 5. ロールを変更
         mockMvc.perform(put("/api/players/" + playerId + "/role")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("role", Player.Role.ADMIN.name()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
@@ -99,7 +99,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 9. 選手を削除（論理削除）
         mockMvc.perform(delete("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN"))
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 10. 削除後は全選手リストに含まれない
@@ -125,7 +125,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -139,7 +139,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict())
@@ -167,7 +167,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -190,7 +190,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/players")
-                            .header("X-User-Role", "SUPER_ADMIN")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
@@ -225,7 +225,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -237,7 +237,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 選手を削除
         mockMvc.perform(delete("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN"))
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 削除した選手を更新しようとする

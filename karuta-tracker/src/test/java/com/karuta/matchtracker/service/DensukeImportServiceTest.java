@@ -38,6 +38,7 @@ class DensukeImportServiceTest {
     @Mock private VenueRepository venueRepository;
     @Mock private LotteryExecutionRepository lotteryExecutionRepository;
     @Mock private NotificationRepository notificationRepository;
+    @Mock private NotificationService notificationService;
 
     @InjectMocks
     private DensukeImportService densukeImportService;

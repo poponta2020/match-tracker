@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.PracticeParticipationRequest;
+import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -48,10 +49,13 @@ class PracticeParticipantServiceTest {
     @Captor
     private ArgumentCaptor<PracticeParticipant> participantCaptor;
 
+    private static final Long ORG_ID = 1L;
+
     private PracticeSession createSession(Long id, Integer capacity) {
         PracticeSession s = new PracticeSession();
         s.setId(id);
         s.setCapacity(capacity);
+        s.setOrganizationId(ORG_ID);
         return s;
     }
 
@@ -61,12 +65,13 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(false);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
-        // 定員超過を模擬: WON数がcapacity以上
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(4L);
         when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
@@ -94,12 +99,13 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(false);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
-        // 空きあり
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
         when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
@@ -126,7 +132,7 @@ class PracticeParticipantServiceTest {
     @DisplayName("締切前の場合beforeDeadlineがtrueで返される")
     void getPlayerParticipationStatus_beforeDeadline_returnsTrue() {
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of());
-        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(true);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), isNull())).thenReturn(true);
 
         PlayerParticipationStatusDto result = service.getPlayerParticipationStatusByMonth(10L, 2025, 4);
 
@@ -137,7 +143,7 @@ class PracticeParticipantServiceTest {
     @DisplayName("締切後の場合beforeDeadlineがfalseで返される")
     void getPlayerParticipationStatus_afterDeadline_returnsFalse() {
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of());
-        when(lotteryDeadlineHelper.isBeforeDeadline(2025, 4)).thenReturn(false);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), isNull())).thenReturn(false);
 
         PlayerParticipationStatusDto result = service.getPlayerParticipationStatusByMonth(10L, 2025, 4);
 

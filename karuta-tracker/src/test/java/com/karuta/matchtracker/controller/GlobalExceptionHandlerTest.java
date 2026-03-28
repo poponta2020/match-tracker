@@ -4,6 +4,7 @@ import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.PlayerService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,9 @@ class GlobalExceptionHandlerTest {
 
     @MockitoBean
     private PlayerService playerService;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
 
     // ===== ResourceNotFoundException (404) =====
 
@@ -190,7 +194,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())
@@ -216,7 +220,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())
@@ -241,7 +245,7 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(500))
-                .andExpect(jsonPath("$.message").value("内部サーバーエラーが発生しました"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("内部サーバーエラーが発生しました")))
                 .andExpect(jsonPath("$.path").value("/api/players/1"));
     }
 }

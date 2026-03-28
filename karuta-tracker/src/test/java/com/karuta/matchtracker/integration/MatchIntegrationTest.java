@@ -44,10 +44,11 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         PracticeSessionCreateRequest sessionRequest = PracticeSessionCreateRequest.builder()
                 .sessionDate(sessionDate)
                 .totalMatches(10)
+                .organizationId(1L)
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(sessionRequest)))
                 .andExpect(status().isCreated());
@@ -62,7 +63,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -203,9 +204,10 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         PracticeSessionCreateRequest yesterdaySession = PracticeSessionCreateRequest.builder()
                 .sessionDate(yesterday)
                 .totalMatches(5)
+                .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(yesterdaySession)))
                 .andExpect(status().isCreated());
@@ -214,9 +216,10 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         PracticeSessionCreateRequest tomorrowSession = PracticeSessionCreateRequest.builder()
                 .sessionDate(tomorrow)
                 .totalMatches(5)
+                .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(tomorrowSession)))
                 .andExpect(status().isCreated());

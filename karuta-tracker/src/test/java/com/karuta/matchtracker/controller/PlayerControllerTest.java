@@ -7,6 +7,7 @@ import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.PlayerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,9 @@ class PlayerControllerTest {
 
     @MockitoBean
     private PlayerService playerService;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
 
     private PlayerDto testPlayerDto;
     private PlayerCreateRequest createRequest;
@@ -192,7 +196,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -217,7 +221,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -237,7 +241,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -278,7 +282,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/players/1")
-                        .header("X-User-Role", "SUPER_ADMIN"))
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         verify(playerService).deletePlayer(1L);
@@ -297,7 +301,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/players/1/role")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))

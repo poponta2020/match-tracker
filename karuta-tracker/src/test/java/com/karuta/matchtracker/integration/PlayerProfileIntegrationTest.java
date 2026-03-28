@@ -41,7 +41,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -274,7 +274,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -318,7 +318,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String player2Response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(player2Request)))
                 .andExpect(status().isCreated())

@@ -40,7 +40,18 @@ public abstract class BaseIntegrationTest {
     void cleanDatabase() {
         jdbcTemplate.execute(
             "TRUNCATE TABLE matches, player_profiles, practice_participants, practice_sessions, " +
-            "match_pairings, venue_match_schedules, venues, players RESTART IDENTITY CASCADE"
+            "match_pairings, venue_match_schedules, venues, player_organizations, players, organizations RESTART IDENTITY CASCADE"
+        );
+        // テスト用の団体データを挿入
+        jdbcTemplate.execute(
+            "INSERT INTO organizations (id, code, name, color, deadline_type, created_at, updated_at) " +
+            "VALUES (1, 'wasura', 'わすらもち会', '#22c55e', 'SAME_DAY', NOW(), NOW()) " +
+            "ON CONFLICT (id) DO NOTHING"
+        );
+        jdbcTemplate.execute(
+            "INSERT INTO organizations (id, code, name, color, deadline_type, created_at, updated_at) " +
+            "VALUES (2, 'hokudai', '北海道大学かるた会', '#ef4444', 'MONTHLY', NOW(), NOW()) " +
+            "ON CONFLICT (id) DO NOTHING"
         );
     }
 }

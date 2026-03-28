@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,12 @@ class PracticeSessionControllerTest {
 
     @MockitoBean
     private com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
+
+    @MockitoBean
+    private PlayerRepository playerRepository;
+
+    @MockitoBean
+    private com.karuta.matchtracker.service.OrganizationService organizationService;
 
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
@@ -223,7 +230,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -243,7 +250,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -266,7 +273,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("totalMatches", "15"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -285,7 +292,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("totalMatches", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -302,7 +309,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/practice-sessions/1")
-                        .header("X-User-Role", "SUPER_ADMIN"))
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         verify(practiceSessionService).deleteSession(1L);

@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DBスキーマ・マイグレーション作成
-- [ ] 完了
+- [x] 完了
 - **概要:** `organizations` テーブル、`player_organizations` テーブルの新規作成。既存テーブルへの `organization_id` カラム追加。初期データ挿入とデータ移行を含む。
 - **変更対象ファイル:**
   - `database/migration_organization.sql` — 新規作成。DDL + データ移行SQL
@@ -23,7 +23,7 @@ status: completed
 - **対応Issue:** #81
 
 ### タスク2: バックエンド — Organization エンティティ・リポジトリ・サービス・コントローラ
-- [ ] 完了
+- [x] 完了
 - **概要:** 団体の基盤となるバックエンドクラス群を新規作成する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/Organization.java` — 新規作成
@@ -44,7 +44,7 @@ status: completed
 - **対応Issue:** #82
 
 ### タスク3: バックエンド — Player エンティティに admin_organization_id 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** Player エンティティ・DTO に `adminOrganizationId` を追加し、ADMIN の団体紐づけを実現する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/Player.java` — `adminOrganizationId` フィールド追加
@@ -54,7 +54,7 @@ status: completed
 - **対応Issue:** #83
 
 ### タスク4: バックエンド — PracticeSession に organization_id 追加・自動フィルタ
-- [ ] 完了
+- [x] 完了
 - **概要:** 練習日に団体紐づけを追加し、ユーザーの参加団体に基づく自動フィルタを実装する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/PracticeSession.java` — `organizationId` フィールド追加
@@ -70,7 +70,7 @@ status: completed
 - **対応Issue:** #84
 
 ### タスク5: バックエンド — ADMIN 団体スコープの権限チェック
-- [ ] 完了
+- [x] 完了
 - **概要:** ADMIN が自団体以外の練習日を編集・削除できないようにスコープチェックを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/interceptor/RoleCheckInterceptor.java` — ADMIN の団体スコープ情報をリクエスト属性に追加
@@ -85,7 +85,7 @@ status: completed
 - **対応Issue:** #85
 
 ### タスク6: バックエンド — SystemSetting の団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** システム設定を団体ごとに独立させる。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/SystemSetting.java` — `organizationId` フィールド追加
@@ -100,7 +100,7 @@ status: completed
 - **対応Issue:** #86
 
 ### タスク7: バックエンド — LotteryDeadlineHelper の団体別分岐
-- [ ] 完了
+- [x] 完了
 - **概要:** 締切判定を団体の `deadline_type` に応じて分岐させる。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryDeadlineHelper.java` — 団体の deadline_type に応じた分岐ロジック追加
@@ -115,7 +115,7 @@ status: completed
 - **対応Issue:** #87
 
 ### タスク8: バックエンド — PracticeParticipantService のわすらもち会対応
-- [ ] 完了
+- [x] 完了
 - **概要:** わすらもち会の先着順ロジック（PENDING不使用、即WON/WAITLISTED）を実装する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeParticipantService.java` — 団体の deadline_type に応じた登録ロジック分岐
@@ -130,7 +130,7 @@ status: completed
 - **対応Issue:** #88
 
 ### タスク9: バックエンド — InviteToken の団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 招待トークンに団体を紐づけ、登録時に `player_organizations` の初期値を設定する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/InviteToken.java` — `organizationId` フィールド追加
@@ -145,7 +145,7 @@ status: completed
 - **対応Issue:** #89
 
 ### タスク10: バックエンド — 通知の団体フィルタ
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知送信時に対象ユーザーの参加団体でフィルタリングする。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java` — 送信前に `player_organizations` を確認してフィルタ
@@ -155,7 +155,7 @@ status: completed
 - **対応Issue:** #90
 
 ### タスク11: フロントエンド — 団体登録設定画面
-- [ ] 完了
+- [x] 完了
 - **概要:** ユーザーが参加する練習会を選択する設定画面を新規作成する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/settings/OrganizationSettings.jsx` — 新規作成。チェックボックスで参加練習会選択（最低1つ必須）
@@ -166,7 +166,7 @@ status: completed
 - **対応Issue:** #91
 
 ### タスク12: フロントエンド — カレンダーの団体色分け・練習日詳細の団体名表示
-- [ ] 完了
+- [x] 完了
 - **概要:** カレンダー上で練習日を団体の色で色分けし、詳細画面に団体名を表示する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/` — カレンダー表示コンポーネントで `organization.color` を使った色分け
@@ -175,7 +175,7 @@ status: completed
 - **対応Issue:** #92
 
 ### タスク13: フロントエンド — わすらもち会の12:00以降確認ダイアログ
-- [ ] 完了
+- [x] 完了
 - **概要:** わすらもち会の練習日に対し、当日12:00以降の参加登録・キャンセル時に確認ダイアログを表示する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/` — 参加登録・キャンセル処理の前に、団体と現在時刻をチェックしてダイアログ表示
@@ -187,7 +187,7 @@ status: completed
 - **対応Issue:** #93
 
 ### タスク14: フロントエンド — 新規登録画面の団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** InviteRegister 画面でトークンの団体情報を取得し、初期登録に反映する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/InviteRegister.jsx` — トークン検証レスポンスから `organizationId` を取得し、登録後の `player_organizations` 初期値に反映（バックエンド側で処理されるため、フロントは表示のみ調整）
@@ -197,7 +197,7 @@ status: completed
 - **対応Issue:** #94
 
 ### タスク15: フロントエンド — ADMIN管理画面の団体スコープ
-- [ ] 完了
+- [x] 完了
 - **概要:** ADMIN がログインした際、管理系画面を自団体スコープに制限する。SUPER_ADMIN の練習日作成時に団体選択UIを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/` — 練習日作成フォームに団体選択（SUPER_ADMIN のみ表示）
