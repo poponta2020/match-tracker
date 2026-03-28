@@ -62,6 +62,12 @@ public class InviteToken {
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 
+    /**
+     * 団体ID（登録時のplayer_organizations初期値に使用）
+     */
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

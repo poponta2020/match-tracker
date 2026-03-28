@@ -6,9 +6,11 @@ import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.entity.InviteToken;
 import com.karuta.matchtracker.entity.InviteToken.TokenType;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.InviteTokenRepository;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ public class InviteTokenService {
 
     private final InviteTokenRepository inviteTokenRepository;
     private final PlayerRepository playerRepository;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     /** グループ用トークンの有効期限（時間） */
     private static final int MULTI_USE_EXPIRY_HOURS = 72;
@@ -46,8 +49,8 @@ public class InviteTokenService {
      * @return 生成されたトークン情報
      */
     @Transactional
-    public InviteTokenResponse createToken(TokenType type, Long createdBy) {
-        log.info("Creating invite token: type={}, createdBy={}", type, createdBy);
+    public InviteTokenResponse createToken(TokenType type, Long createdBy, Long organizationId) {
+        log.info("Creating invite token: type={}, createdBy={}, organizationId={}", type, createdBy, organizationId);
 
         int expiryHours = type == TokenType.MULTI_USE ? MULTI_USE_EXPIRY_HOURS : SINGLE_USE_EXPIRY_HOURS;
 
@@ -56,6 +59,7 @@ public class InviteTokenService {
                 .type(type)
                 .expiresAt(JstDateTimeUtil.now().plusHours(expiryHours))
                 .createdBy(createdBy)
+                .organizationId(organizationId)
                 .build();
 
         InviteToken saved = inviteTokenRepository.save(token);
@@ -118,7 +122,13 @@ public class InviteTokenService {
             inviteTokenRepository.save(inviteToken);
         }
 
-        log.info("Successfully registered player with id: {} via invite token", saved.getId());
+        // トークンの団体にplayer_organizationsレコードを作成
+        playerOrganizationRepository.save(PlayerOrganization.builder()
+                .playerId(saved.getId())
+                .organizationId(inviteToken.getOrganizationId())
+                .build());
+
+        log.info("Successfully registered player with id: {} via invite token (org: {})", saved.getId(), inviteToken.getOrganizationId());
         return PlayerDto.fromEntity(saved);
     }
 }

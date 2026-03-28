@@ -19,6 +19,8 @@ public class InviteTokenResponse {
 
     private String token;
     private String type;
+    private Long organizationId;
+    private String organizationName;
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
 
@@ -27,6 +29,7 @@ public class InviteTokenResponse {
         return InviteTokenResponse.builder()
                 .token(entity.getToken())
                 .type(entity.getType().name())
+                .organizationId(entity.getOrganizationId())
                 .expiresAt(entity.getExpiresAt())
                 .createdAt(entity.getCreatedAt())
                 .build();

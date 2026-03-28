@@ -7,6 +7,7 @@ import com.karuta.matchtracker.dto.PublicRegisterRequest;
 import com.karuta.matchtracker.entity.InviteToken.TokenType;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.InviteTokenService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,9 +37,17 @@ public class InviteTokenController {
     @RequireRole({Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<InviteTokenResponse> createToken(
             @RequestParam TokenType type,
-            @RequestParam Long createdBy) {
-        log.info("POST /api/invite-tokens - Creating token: type={}, createdBy={}", type, createdBy);
-        InviteTokenResponse response = inviteTokenService.createToken(type, createdBy);
+            @RequestParam Long createdBy,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+
+        // ADMINは自動で自団体、SUPER_ADMINはパラメータ指定
+        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+
+        log.info("POST /api/invite-tokens - Creating token: type={}, createdBy={}, orgId={}", type, createdBy, targetOrgId);
+        InviteTokenResponse response = inviteTokenService.createToken(type, createdBy, targetOrgId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
