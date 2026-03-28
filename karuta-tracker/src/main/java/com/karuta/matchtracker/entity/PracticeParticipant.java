@@ -110,6 +110,15 @@ public class PracticeParticipant {
     private LocalDateTime respondedAt;
 
     /**
+     * アプリ側で変更されたかどうか（伝助への書き込み待ちフラグ）
+     * true: アプリ側が変更 → 伝助への書き込みが必要
+     * false: 伝助からの同期済み or 伝助への書き込み完了
+     */
+    @Column(name = "dirty", nullable = false)
+    @Builder.Default
+    private boolean dirty = true;
+
+    /**
      * 作成日時
      */
     @Column(name = "created_at", nullable = false, updatable = false)
