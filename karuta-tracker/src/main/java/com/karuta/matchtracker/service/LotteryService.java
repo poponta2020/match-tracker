@@ -193,6 +193,7 @@ public class LotteryService {
         if (capacity == null || totalApplicants <= capacity) {
             for (PracticeParticipant p : applicants) {
                 p.setStatus(ParticipantStatus.WON);
+                p.setDirty(true);
                 p.setLotteryId(lotteryId);
             }
             practiceParticipantRepository.saveAll(applicants);
@@ -290,6 +291,7 @@ public class LotteryService {
         // Step 3: ステータス更新 - 当選者
         for (PracticeParticipant p : winners) {
             p.setStatus(ParticipantStatus.WON);
+            p.setDirty(true);
             p.setLotteryId(lotteryId);
         }
 
@@ -324,6 +326,7 @@ public class LotteryService {
         for (int i = 0; i < orderedLosers.size(); i++) {
             PracticeParticipant p = orderedLosers.get(i);
             p.setStatus(ParticipantStatus.WAITLISTED);
+            p.setDirty(true);
             p.setWaitlistNumber(i + 1);
             p.setLotteryId(lotteryId);
             currentMatchWaitlistOrder.put(p.getPlayerId(), i + 1);
@@ -586,6 +589,7 @@ public class LotteryService {
                         .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
                 ParticipantStatus oldStatus = p.getStatus();
                 p.setStatus(change.getNewStatus());
+                p.setDirty(true);
                 if (change.getWaitlistNumber() != null) {
                     p.setWaitlistNumber(change.getWaitlistNumber());
                 }

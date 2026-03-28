@@ -67,6 +67,7 @@ public class WaitlistPromotionService {
 
         // ステータスをCANCELLEDに変更
         participant.setStatus(ParticipantStatus.CANCELLED);
+        participant.setDirty(true);
         participant.setCancelReason(cancelReason);
         participant.setCancelReasonDetail(cancelReasonDetail);
         participant.setCancelledAt(JstDateTimeUtil.now());
@@ -109,6 +110,7 @@ public class WaitlistPromotionService {
         LocalDateTime deadline = lotteryDeadlineHelper.calculateOfferDeadline(sessionDate);
 
         next.setStatus(ParticipantStatus.OFFERED);
+        next.setDirty(true);
         next.setOfferedAt(JstDateTimeUtil.now());
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
@@ -148,10 +150,12 @@ public class WaitlistPromotionService {
 
         if (accept) {
             participant.setStatus(ParticipantStatus.WON);
+            participant.setDirty(true);
             log.info("Player {} accepted offer for session {} match {}",
                     participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
         } else {
             participant.setStatus(ParticipantStatus.DECLINED);
+            participant.setDirty(true);
             practiceParticipantRepository.save(participant);
 
             log.info("Player {} declined offer for session {} match {}",
@@ -186,6 +190,7 @@ public class WaitlistPromotionService {
         for (PracticeParticipant p : waitlisted) {
             Integer oldNumber = p.getWaitlistNumber();
             p.setStatus(ParticipantStatus.WAITLIST_DECLINED);
+            p.setDirty(true);
             p.setWaitlistNumber(null);
             practiceParticipantRepository.save(p);
 
@@ -229,6 +234,7 @@ public class WaitlistPromotionService {
                     .orElse(0);
 
             p.setStatus(ParticipantStatus.WAITLISTED);
+            p.setDirty(true);
             p.setWaitlistNumber(maxNumber + 1);
             practiceParticipantRepository.save(p);
 
@@ -250,6 +256,7 @@ public class WaitlistPromotionService {
         }
 
         participant.setStatus(ParticipantStatus.DECLINED);
+        participant.setDirty(true);
         participant.setRespondedAt(JstDateTimeUtil.now());
         practiceParticipantRepository.save(participant);
 
