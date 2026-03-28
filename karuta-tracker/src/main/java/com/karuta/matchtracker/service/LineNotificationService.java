@@ -35,6 +35,7 @@ public class LineNotificationService {
     private final LineMessagingService lineMessagingService;
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
@@ -206,6 +207,17 @@ public class LineNotificationService {
 
         for (Map.Entry<Long, List<PracticeParticipant>> entry : byPlayer.entrySet()) {
             Long playerId = entry.getKey();
+
+            // プレイヤーがセッションの団体に登録しているか確認（団体フィルタ）
+            Long sessionOrgId = entry.getValue().stream()
+                    .map(p -> sessionCache.get(p.getSessionId()))
+                    .filter(java.util.Objects::nonNull)
+                    .map(PracticeSession::getOrganizationId)
+                    .findFirst().orElse(null);
+            if (sessionOrgId != null && !playerOrganizationRepository.existsByPlayerIdAndOrganizationId(playerId, sessionOrgId)) {
+                skippedPlayers++;
+                continue;
+            }
             List<PracticeParticipant> playerParticipants = entry.getValue();
 
             List<PracticeParticipant> waitlisted = playerParticipants.stream()
