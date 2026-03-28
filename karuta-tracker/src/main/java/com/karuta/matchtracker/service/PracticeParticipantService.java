@@ -109,7 +109,14 @@ public class PracticeParticipantService {
             }
         }
 
-        if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth())) {
+        // セッションからorganizationIdを取得して締切判定に使用
+        Long organizationId = null;
+        if (!requestSessionIds.isEmpty()) {
+            organizationId = practiceSessionRepository.findById(requestSessionIds.iterator().next())
+                    .map(PracticeSession::getOrganizationId).orElse(null);
+        }
+
+        if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), organizationId)) {
             registerBeforeDeadline(request);
         } else {
             registerAfterDeadline(request);
@@ -211,7 +218,7 @@ public class PracticeParticipantService {
             return PlayerParticipationStatusDto.builder()
                     .participations(Map.of())
                     .lotteryExecuted(Map.of())
-                    .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month))
+                    .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month, null))
                     .build();
         }
 
@@ -230,7 +237,9 @@ public class PracticeParticipantService {
             if (exec.getSessionId() != null) lotteryMap.put(exec.getSessionId(), true);
         });
 
-        boolean beforeDeadline = lotteryDeadlineHelper.isBeforeDeadline(year, month);
+        // セッションからorganizationIdを取得
+        Long orgId = sessions.isEmpty() ? null : sessions.get(0).getOrganizationId();
+        boolean beforeDeadline = lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId);
 
         return PlayerParticipationStatusDto.builder()
                 .participations(participationMap)

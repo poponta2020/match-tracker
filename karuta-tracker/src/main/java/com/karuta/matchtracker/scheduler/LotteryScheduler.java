@@ -44,7 +44,8 @@ public class LotteryScheduler {
         int targetYear = nextMonth.getYear();
         int targetMonth = nextMonth.getMonthValue();
 
-        if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth)) {
+        // TODO: タスク7で団体別に処理するよう改修
+        if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth, null)) {
             executeLotteryIfNotDone(targetYear, targetMonth);
         }
     }
@@ -65,7 +66,8 @@ public class LotteryScheduler {
             // 当月分のチェック
             int currentYear = today.getYear();
             int currentMonth = today.getMonthValue();
-            if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth)) {
+            // TODO: タスク7で団体別に処理するよう改修
+            if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth, null)) {
                 executeLotteryIfNotDone(currentYear, currentMonth);
             }
 
@@ -73,7 +75,7 @@ public class LotteryScheduler {
             YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
             int nextYear = nextMonth.getYear();
             int nextMonthValue = nextMonth.getMonthValue();
-            if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue)) {
+            if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue, null)) {
                 executeLotteryIfNotDone(nextYear, nextMonthValue);
             }
         } catch (Exception e) {

@@ -24,4 +24,6 @@ public class LotteryExecutionRequest {
     @Min(value = 1, message = "月は1以上である必要があります")
     @Max(value = 12, message = "月は12以下である必要があります")
     private Integer month;
+
+    private Long organizationId;
 }

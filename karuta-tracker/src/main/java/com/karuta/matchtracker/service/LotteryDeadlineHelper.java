@@ -25,8 +25,8 @@ public class LotteryDeadlineHelper {
     /**
      * 締め切りなしモードかどうか
      */
-    public boolean isNoDeadline() {
-        return systemSettingService.isNoDeadline();
+    public boolean isNoDeadline(Long organizationId) {
+        return systemSettingService.isNoDeadline(organizationId);
     }
 
     /**
@@ -36,8 +36,8 @@ public class LotteryDeadlineHelper {
      * @param month 対象月
      * @return 締め切り日時（締め切りなしモードの場合は null）
      */
-    public LocalDateTime getDeadline(int year, int month) {
-        int daysBefore = systemSettingService.getLotteryDeadlineDaysBefore();
+    public LocalDateTime getDeadline(int year, int month, Long organizationId) {
+        int daysBefore = systemSettingService.getLotteryDeadlineDaysBefore(organizationId);
 
         if (daysBefore == -1) {
             return null;
@@ -60,18 +60,18 @@ public class LotteryDeadlineHelper {
      * 指定年月の練習がまだ締め切り前かどうか
      * 締め切りなしモードの場合は常に true
      */
-    public boolean isBeforeDeadline(int year, int month) {
-        if (isNoDeadline()) {
+    public boolean isBeforeDeadline(int year, int month, Long organizationId) {
+        if (isNoDeadline(organizationId)) {
             return true;
         }
-        return JstDateTimeUtil.now().isBefore(getDeadline(year, month));
+        return JstDateTimeUtil.now().isBefore(getDeadline(year, month, organizationId));
     }
 
     /**
      * 指定年月の練習が締め切り後かどうか
      */
-    public boolean isAfterDeadline(int year, int month) {
-        return !isBeforeDeadline(year, month);
+    public boolean isAfterDeadline(int year, int month, Long organizationId) {
+        return !isBeforeDeadline(year, month, organizationId);
     }
 
     /**
@@ -85,8 +85,8 @@ public class LotteryDeadlineHelper {
      * 指定年月に対して、自動抽選が実行されるべきかどうかを判定する
      * （締め切りを過ぎている場合にtrue）
      */
-    public boolean shouldLotteryBeExecuted(int year, int month) {
-        return isAfterDeadline(year, month);
+    public boolean shouldLotteryBeExecuted(int year, int month, Long organizationId) {
+        return isAfterDeadline(year, month, organizationId);
     }
 
     /**

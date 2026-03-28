@@ -24,20 +24,32 @@ public class SystemSettingController {
     private final SystemSettingService systemSettingService;
 
     /**
-     * 全設定取得
+     * 団体ごとの設定取得
+     * ADMINは自団体のみ、SUPER_ADMINはorganizationIdを指定
      */
     @GetMapping
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<List<SystemSetting>> getAll() {
+    public ResponseEntity<List<SystemSetting>> getAll(
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+
+        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+        if (targetOrgId != null) {
+            return ResponseEntity.ok(systemSettingService.getAllByOrganization(targetOrgId));
+        }
         return ResponseEntity.ok(systemSettingService.getAll());
     }
 
     /**
-     * 設定値取得
+     * 設定値取得（団体指定）
      */
     @GetMapping("/{key}")
-    public ResponseEntity<Map<String, String>> getValue(@PathVariable String key) {
-        String value = systemSettingService.getValue(key).orElse(null);
+    public ResponseEntity<Map<String, String>> getValue(
+            @PathVariable String key,
+            @RequestParam(required = false) Long organizationId) {
+        String value = systemSettingService.getValue(key, organizationId).orElse(null);
         if (value == null) {
             return ResponseEntity.notFound().build();
         }
@@ -45,7 +57,8 @@ public class SystemSettingController {
     }
 
     /**
-     * 設定値更新
+     * 設定値更新（団体指定）
+     * ADMINは自団体のみ、SUPER_ADMINはorganizationIdを指定
      */
     @PutMapping("/{key}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
@@ -54,7 +67,15 @@ public class SystemSettingController {
             @RequestBody Map<String, String> body,
             HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        SystemSetting setting = systemSettingService.setValue(key, body.get("value"), currentUserId);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+
+        Long organizationId = body.get("organizationId") != null
+                ? Long.parseLong(body.get("organizationId"))
+                : null;
+        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+
+        SystemSetting setting = systemSettingService.setValue(key, body.get("value"), targetOrgId, currentUserId);
         return ResponseEntity.ok(setting);
     }
 }

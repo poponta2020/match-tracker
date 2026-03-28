@@ -60,9 +60,10 @@ public class LotteryController {
      */
     @GetMapping("/deadline")
     public ResponseEntity<Map<String, Object>> getDeadline(
-            @RequestParam int year, @RequestParam int month) {
-        boolean noDeadline = lotteryDeadlineHelper.isNoDeadline();
-        LocalDateTime deadline = noDeadline ? null : lotteryDeadlineHelper.getDeadline(year, month);
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId) {
+        boolean noDeadline = lotteryDeadlineHelper.isNoDeadline(organizationId);
+        LocalDateTime deadline = noDeadline ? null : lotteryDeadlineHelper.getDeadline(year, month, organizationId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deadline", deadline);
         result.put("noDeadline", noDeadline);
@@ -81,7 +82,8 @@ public class LotteryController {
 
         // 締め切り前チェック: 締め切り前に実行すると後から参加登録する人が漏れる
         // ただし「締め切りなし」モードの場合は管理者がいつでも手動実行可能
-        if (!lotteryDeadlineHelper.isNoDeadline() && lotteryDeadlineHelper.isBeforeDeadline(year, month)) {
+        Long orgId = request.getOrganizationId();
+        if (!lotteryDeadlineHelper.isNoDeadline(orgId) && lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId)) {
             throw new IllegalStateException(
                     String.format("%d年%d月の抽選はまだ締め切り前です。締め切り後に実行してください。", year, month));
         }
