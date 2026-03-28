@@ -28,4 +28,12 @@ export const notificationAPI = {
   // VAPID公開鍵取得
   getVapidPublicKey: () =>
     apiClient.get('/push-subscriptions/vapid-public-key'),
+
+  // Web Push通知設定取得
+  getPushPreferences: (playerId) =>
+    apiClient.get(`/push-notification-preferences/${playerId}`),
+
+  // Web Push通知設定更新
+  updatePushPreferences: (data) =>
+    apiClient.put('/push-notification-preferences', data),
 };
