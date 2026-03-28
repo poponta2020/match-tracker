@@ -6,9 +6,11 @@ import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.PushNotificationPreference;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final PushNotificationService pushNotificationService;
+    private final PushNotificationPreferenceRepository pushNotificationPreferenceRepository;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
 
@@ -231,5 +234,61 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
+    }
+
+    /**
+     * アプリ内通知を作成し、Web Push設定がONなら送信も行う共通メソッド
+     */
+    @Transactional
+    public Notification createAndPush(Long playerId, NotificationType type,
+                                       String title, String message,
+                                       String referenceType, Long referenceId, String pushUrl) {
+        Notification notification = Notification.builder()
+                .playerId(playerId)
+                .type(type)
+                .title(title)
+                .message(message)
+                .referenceType(referenceType)
+                .referenceId(referenceId)
+                .build();
+
+        notificationRepository.save(notification);
+
+        sendPushIfEnabled(playerId, type, title, message, pushUrl);
+
+        return notification;
+    }
+
+    /**
+     * Web Push設定をチェックし、該当種別がONなら送信する
+     */
+    public void sendPushIfEnabled(Long playerId, NotificationType type, String title, String message, String url) {
+        PushNotificationPreference pref = pushNotificationPreferenceRepository
+                .findByPlayerId(playerId).orElse(null);
+
+        if (pref == null || !pref.getEnabled()) {
+            return;
+        }
+
+        if (!isTypeEnabled(pref, type)) {
+            return;
+        }
+
+        pushNotificationService.sendPush(playerId, title, message, url);
+    }
+
+    /**
+     * NotificationType に対応する設定カラムがONかどうかを判定する
+     */
+    private boolean isTypeEnabled(PushNotificationPreference pref, NotificationType type) {
+        return switch (type) {
+            case LOTTERY_ALL_WON, LOTTERY_REMAINING_WON, LOTTERY_WAITLISTED -> pref.getLotteryResult();
+            case WAITLIST_OFFER -> pref.getWaitlistOffer();
+            case OFFER_EXPIRING -> pref.getOfferExpiring();
+            case OFFER_EXPIRED -> pref.getOfferExpired();
+            case CHANNEL_RECLAIM_WARNING -> pref.getChannelReclaimWarning();
+            case DENSUKE_UNMATCHED_NAMES -> pref.getDensukeUnmatched();
+            default -> false;
+        };
     }
 }

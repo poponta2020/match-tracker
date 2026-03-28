@@ -31,9 +31,9 @@ export const notificationAPI = {
 
   // Web Push通知設定取得
   getPushPreferences: (playerId) =>
-    apiClient.get(`/push-notification-preferences/${playerId}`),
+    apiClient.get(`/push-subscriptions/preferences/${playerId}`),
 
   // Web Push通知設定更新
   updatePushPreferences: (data) =>
-    apiClient.put('/push-notification-preferences', data),
+    apiClient.put('/push-subscriptions/preferences', data),
 };
