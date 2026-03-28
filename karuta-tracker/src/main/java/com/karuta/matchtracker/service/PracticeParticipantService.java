@@ -70,6 +70,7 @@ public class PracticeParticipantService {
                             .sessionId(sessionId)
                             .playerId(playerId)
                             .matchNumber(matchNumber)
+                            .dirty(true)
                             .build())
                     .toList();
             practiceParticipantRepository.saveAll(participants);
@@ -161,7 +162,7 @@ public class PracticeParticipantService {
             if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WON).build());
+                        .status(ParticipantStatus.WON).dirty(true).build());
                 registered++;
             } else {
                 int maxNumber = practiceParticipantRepository
@@ -169,7 +170,7 @@ public class PracticeParticipantService {
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
                         .status(ParticipantStatus.WAITLISTED)
-                        .waitlistNumber(maxNumber + 1).build());
+                        .waitlistNumber(maxNumber + 1).dirty(true).build());
                 waitlisted++;
             }
         }
@@ -189,7 +190,7 @@ public class PracticeParticipantService {
         List<PracticeParticipant> participants = request.getParticipations().stream()
                 .map(p -> PracticeParticipant.builder()
                         .sessionId(p.getSessionId()).playerId(request.getPlayerId())
-                        .matchNumber(p.getMatchNumber()).status(ParticipantStatus.PENDING).build())
+                        .matchNumber(p.getMatchNumber()).status(ParticipantStatus.PENDING).dirty(true).build())
                 .collect(Collectors.toList());
         practiceParticipantRepository.saveAll(participants);
 
@@ -223,7 +224,7 @@ public class PracticeParticipantService {
                 // 空きあり → WON
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WON).build());
+                        .status(ParticipantStatus.WON).dirty(true).build());
                 registered++;
             } else if (lotteryExecuted) {
                 // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
@@ -232,7 +233,7 @@ public class PracticeParticipantService {
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
                         .status(ParticipantStatus.WAITLISTED)
-                        .waitlistNumber(maxNumber + 1).build());
+                        .waitlistNumber(maxNumber + 1).dirty(true).build());
                 waitlisted++;
             } else {
                 skipped++;
@@ -315,7 +316,7 @@ public class PracticeParticipantService {
             return;
         }
         practiceParticipantRepository.save(PracticeParticipant.builder()
-                .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber).build());
+                .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber).dirty(true).build());
     }
 
     @Transactional
