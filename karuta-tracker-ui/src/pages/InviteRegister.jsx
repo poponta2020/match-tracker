@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { inviteAPI } from '../api/invite';
-import { playerAPI } from '../api/players';
 import { organizationAPI } from '../api/organizations';
 import { User, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import LoadingScreen from '../components/LoadingScreen';

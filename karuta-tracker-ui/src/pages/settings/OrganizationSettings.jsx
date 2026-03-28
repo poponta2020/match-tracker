@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { organizationAPI } from '../../api/organizations';
-import { getCurrentPlayer, setCurrentPlayer } from '../../utils/auth';
+import { getCurrentPlayer } from '../../utils/auth';
 import { Building2, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 

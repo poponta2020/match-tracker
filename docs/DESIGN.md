@@ -123,6 +123,12 @@ Entity Layer (JPA Entity)
 [notifications] 多───1 [players]
 [google_calendar_events] 多───1 [players]
                          多───1 [practice_sessions]
+[organizations] 1───多 [player_organizations] 多───1 [players]
+               1───多 [practice_sessions]
+               1───多 [system_settings]
+               1───多 [invite_tokens]
+               1───多 [push_notification_preferences]
+               1───多 [line_notification_preferences]
 [push_subscriptions] 多───1 [players]
 [push_notification_preferences] 多───1 [players]
 [densuke_urls]
@@ -145,6 +151,7 @@ Entity Layer (JPA Entity)
 | remarks | TEXT | | 備考 |
 | role | ENUM | NOT NULL, DEFAULT 'PLAYER' | ロール（SUPER_ADMIN/ADMIN/PLAYER） |
 | require_password_change | BOOLEAN | NOT NULL, DEFAULT FALSE | パスワード変更要求フラグ |
+| admin_organization_id | BIGINT | FK → organizations.id | ADMINの所属団体ID（PLAYER/SUPER_ADMINはNULL） |
 | last_login_at | DATETIME | | 最終ログイン日時 |
 | deleted_at | DATETIME | | 論理削除フラグ |
 | created_at | DATETIME | NOT NULL | 作成日時 |
@@ -153,6 +160,31 @@ Entity Layer (JPA Entity)
 **インデックス**:
 - `idx_name_active` (name, deleted_at)
 - `idx_deleted_at` (deleted_at)
+
+---
+
+#### organizations（団体マスタ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 団体ID |
+| code | VARCHAR(50) | NOT NULL, UNIQUE | 団体コード（wasura, hokudai） |
+| name | VARCHAR(200) | NOT NULL | 団体名 |
+| color | VARCHAR(10) | NOT NULL | テーマカラー（例: #22c55e） |
+| deadline_type | VARCHAR(20) | NOT NULL | 締め切りタイプ（SAME_DAY / MONTHLY） |
+| created_at | TIMESTAMP | NOT NULL | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | 更新日時 |
+
+---
+
+#### player_organizations（ユーザー×団体紐づけ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| player_id | BIGINT | NOT NULL | 選手ID |
+| organization_id | BIGINT | NOT NULL | 団体ID |
+| created_at | TIMESTAMP | NOT NULL | 作成日時 |
+
+**ユニーク制約**: (player_id, organization_id)
 
 ---
 
@@ -624,6 +656,31 @@ Entity Layer (JPA Entity)
 - 404: Not Found
 - 409: Conflict
 - 500: Internal Server Error
+
+---
+
+### 4.1.1 団体API (`/api/organizations`)
+
+#### GET /api/organizations
+- **権限**: なし
+- **説明**: 団体一覧を取得
+- **レスポンス**: `[{ id, code, name, color, deadlineType }]`
+
+#### GET /api/organizations/players/{playerId}
+- **権限**: なし
+- **説明**: ユーザーの参加団体一覧を取得
+- **レスポンス**: `[{ id, code, name, color, deadlineType }]`
+
+#### PUT /api/organizations/players/{playerId}
+- **権限**: なし
+- **説明**: ユーザーの参加団体を更新（最低1つ必須）
+- **リクエスト**: `{ organizationIds: [1, 2] }`
+- **レスポンス**: 更新後の団体一覧
+
+#### PUT /api/organizations/admin/{playerId}
+- **権限**: SUPER_ADMIN
+- **説明**: ADMINの団体紐づけを変更
+- **リクエスト**: `{ organizationId: 1 }`
 
 ---
 

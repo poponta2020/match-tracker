@@ -119,6 +119,12 @@
 |---|------|---------------------|---------------------|------|------|
 | 38 | `/admin/settings` | `SystemSettings.jsx` | 締め切り日数入力（「締め切りなし」チェックボックス付き）、一般枠割合入力、プレビュー表示、確認ダイアログ | ADMIN+ | システム設定管理（抽選締め切り日数・一般枠保証割合の確認・変更） |
 
+## 8.7 団体設定（organizations）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 39 | `/settings/organizations` | `OrganizationSettings.jsx` | 団体チェックボックス（色ドット付き）、最低1つ必須バリデーション | ALL | 参加する練習会の選択（わすらもち会 / 北海道大学かるた会） |
+
 ---
 
 ## 9. プロフィール
@@ -189,7 +195,8 @@
 | 組み合わせ作成 | `/pairings` | ADMIN+ |
 | 選手管理 | `/players` | SUPER_ADMIN |
 | 会場管理 | `/venues` | SUPER_ADMIN |
-| 練習日程作成 | `/practice/new` | SUPER_ADMIN |
+| 練習日程作成 | `/practice/new` | ADMIN+ |
+| 参加練習会 | `/settings/organizations` | ALL |
 | 通知設定 | `/settings/notifications` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
@@ -258,7 +265,8 @@ karuta-tracker-ui/src/
     │   ├── PlayerDetail.jsx
     │   └── PlayerEdit.jsx
     ├── settings/
-    │   └── SystemSettings.jsx
+    │   ├── SystemSettings.jsx
+    │   └── OrganizationSettings.jsx
     └── venues/
         ├── VenueList.jsx
         └── VenueForm.jsx

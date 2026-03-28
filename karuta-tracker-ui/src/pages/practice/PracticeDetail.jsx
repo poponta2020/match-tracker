@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { practiceAPI } from '../../api';
+import { organizationAPI } from '../../api/organizations';
 import PlayerChip, { getKyuBorderColor } from '../../components/PlayerChip';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -11,6 +12,7 @@ const PracticeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [orgMap, setOrgMap] = useState({});
 
   useEffect(() => {
     fetchSession();
@@ -19,8 +21,14 @@ const PracticeDetail = () => {
   const fetchSession = async () => {
     try {
       setLoading(true);
-      const response = await practiceAPI.getById(id);
+      const [response, orgsRes] = await Promise.all([
+        practiceAPI.getById(id),
+        organizationAPI.getAll().catch(() => ({ data: [] })),
+      ]);
       setSession(response.data);
+      const map = {};
+      (orgsRes.data || []).forEach(o => { map[o.id] = o; });
+      setOrgMap(map);
     } catch (err) {
       setError('練習記録の取得に失敗しました');
       console.error('Error fetching session:', err);
@@ -107,6 +115,15 @@ const PracticeDetail = () => {
               <dt className="text-sm font-medium text-gray-500">会場</dt>
               <dd className="mt-1 text-lg text-gray-900">{session.venueName || '-'}</dd>
             </div>
+            {orgMap[session.organizationId] && (
+            <div>
+              <dt className="text-sm font-medium text-gray-500">練習会</dt>
+              <dd className="mt-1 text-lg text-gray-900 flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: orgMap[session.organizationId].color }} />
+                {orgMap[session.organizationId].name}
+              </dd>
+            </div>
+            )}
             <div>
               <dt className="text-sm font-medium text-gray-500">参加者数</dt>
               <dd className="mt-1 text-lg text-gray-900">{session.participantCount || 0}名</dd>

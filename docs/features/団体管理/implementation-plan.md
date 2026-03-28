@@ -282,7 +282,7 @@ status: completed
 - **対応Issue:** #100
 
 ### タスク21: テスト — 通知団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知の団体対応に関するテストを追加・修正する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/NotificationServiceTest.java` — 団体別設定のテスト追加
