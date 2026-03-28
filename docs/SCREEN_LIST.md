@@ -103,11 +103,11 @@
 
 ---
 
-## 8.5 LINE通知（line）
+## 8.5 通知設定（notifications / line）
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 32 | `/settings/line` | `LineSettings.jsx` | 連携状態表示、友だち追加ボタン、ワンタイムコード（コピーボタン付き）、通知種別トグル | ALL | LINE通知設定（有効化/無効化、コード発行、種別ON/OFF） |
+| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル） | ALL | 統合通知設定（Web Push + LINE） |
 | 33 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
 | 34 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
 
@@ -190,7 +190,7 @@
 | 選手管理 | `/players` | SUPER_ADMIN |
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | SUPER_ADMIN |
-| LINE通知設定 | `/settings/line` | ALL |
+| 通知設定 | `/settings/notifications` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
 | 伝助管理 | `/admin/densuke` | ADMIN+ |
@@ -248,7 +248,8 @@ karuta-tracker-ui/src/
     │   ├── LineChannelAdmin.jsx
     │   └── LineScheduleAdmin.jsx
     ├── notifications/
-    │   └── NotificationList.jsx
+    │   ├── NotificationList.jsx
+    │   └── NotificationSettings.jsx
     ├── pairings/
     │   ├── PairingGenerator.jsx
     │   └── PairingSummary.jsx

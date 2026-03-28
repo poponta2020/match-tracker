@@ -139,7 +139,7 @@ const NotificationSettings = () => {
       await notificationAPI.updatePushPreferences(updated);
       setPushPreferences(updated);
       setSuccessMessage('Web Push通知を無効にしました');
-    } catch (err) {
+    } catch {
       setError('Web Push通知の無効化に失敗しました');
     } finally {
       setPushActionLoading(false);
@@ -151,7 +151,7 @@ const NotificationSettings = () => {
     setPushPreferences(updated);
     try {
       await notificationAPI.updatePushPreferences({ ...updated, playerId });
-    } catch (err) {
+    } catch {
       setPushPreferences(pushPreferences);
       setError('設定の更新に失敗しました');
     }
@@ -187,7 +187,7 @@ const NotificationSettings = () => {
       setFriendAddUrl(null);
       await fetchData();
       setSuccessMessage('LINE通知を無効にしました。');
-    } catch (err) {
+    } catch {
       setError('LINE通知の無効化に失敗しました');
     } finally {
       setLineActionLoading(false);
@@ -222,7 +222,7 @@ const NotificationSettings = () => {
     setLinePreferences(updated);
     try {
       await lineAPI.updatePreferences({ ...updated, playerId });
-    } catch (err) {
+    } catch {
       setLinePreferences(linePreferences);
       setError('設定の更新に失敗しました');
     }

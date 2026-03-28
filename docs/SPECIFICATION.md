@@ -385,6 +385,19 @@ SUPER_ADMIN のみ操作可能。
 | `endpoint` | String | Push APIエンドポイント |
 | `p256dhKey` / `authKey` | String | 暗号化キー |
 
+**PushNotificationPreference（Web Push通知設定）:**
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `playerId` | Long | プレイヤーID（UNIQUE） |
+| `enabled` | Boolean | Web Push全体のON/OFF |
+| `lotteryResult` | Boolean | 抽選結果（LOTTERY_ALL_WON/REMAINING_WON/WAITLISTEDをまとめて制御） |
+| `waitlistOffer` | Boolean | キャンセル待ち繰り上げ |
+| `offerExpiring` | Boolean | 繰り上げ期限切れ警告 |
+| `offerExpired` | Boolean | 繰り上げ期限切れ |
+| `channelReclaimWarning` | Boolean | LINEチャネル回収警告 |
+| `densukeUnmatched` | Boolean | 伝助未登録者 |
+
 #### 3.7.4 抽選関連画面
 
 | パス | 画面 | 説明 |
@@ -682,6 +695,7 @@ players ──< bye_activities (playerId)
 players ──< google_calendar_events (playerId)
 players ──< notifications (playerId)
 players ──< push_subscriptions (playerId)
+players ──< push_notification_preferences (playerId)
 players ──< line_channel_assignments (playerId)
 players ──< line_linking_codes (playerId)
 players ──< line_notification_preferences (playerId)
@@ -928,6 +942,22 @@ venues ──< venue_match_schedules (venueId)
 | p256dh_key | VARCHAR | — | 暗号化キー |
 | auth_key | VARCHAR | — | 認証キー |
 | user_agent | VARCHAR | — | ブラウザ情報 |
+| created_at | TIMESTAMP | NOT NULL | — |
+| updated_at | TIMESTAMP | NOT NULL | — |
+
+#### push_notification_preferences
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| player_id | BIGINT | NOT NULL, UNIQUE | プレイヤーID |
+| enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Web Push全体のON/OFF |
+| lottery_result | BOOLEAN | NOT NULL, DEFAULT TRUE | 抽選結果 |
+| waitlist_offer | BOOLEAN | NOT NULL, DEFAULT TRUE | 繰り上げ連絡 |
+| offer_expiring | BOOLEAN | NOT NULL, DEFAULT TRUE | 期限切れ警告 |
+| offer_expired | BOOLEAN | NOT NULL, DEFAULT TRUE | 期限切れ |
+| channel_reclaim_warning | BOOLEAN | NOT NULL, DEFAULT TRUE | LINE回収警告 |
+| densuke_unmatched | BOOLEAN | NOT NULL, DEFAULT TRUE | 伝助未登録者 |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
@@ -1191,8 +1221,10 @@ venues ──< venue_match_schedules (venueId)
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
 | GET | `/vapid-public-key` | ALL | VAPID公開鍵取得 |
-| POST | `/subscribe` | ALL | Push購読登録 |
-| DELETE | `/unsubscribe` | ALL | Push購読解除 |
+| POST | `/` | ALL | Push購読登録 |
+| DELETE | `/` | ALL | Push購読解除 |
+| GET | `/preferences/{playerId}` | ALL | Web Push通知設定取得 |
+| PUT | `/preferences` | ALL | Web Push通知設定更新 |
 
 ### 7.14 LINE通知 (`/api/line`)
 
@@ -1262,6 +1294,6 @@ venues ──< venue_match_schedules (venueId)
 | JWT認証 | 未実装 | 現在はダミートークン+ヘッダーベースの権限チェック |
 | 本アプリでの出欠管理完結 | 計画中 | 現在は伝助からの同期に依存。利用者の移行完了後に実装予定 |
 | Web Push通知のVAPID署名 | 完了 | `nl.martijndwars:web-push:5.1.1` + BouncyCastleによるRFC 8030準拠のVAPID署名付き実装 |
-| Service Worker | 未実装 | Push通知受信用。現在はアプリ内通知のみ |
-| 通知設定画面 | 未実装 | Push通知の許可/拒否設定UI |
+| Service Worker | 完了 | `public/sw.js` — Push通知受信・表示・クリック時画面遷移を処理 |
+| 通知設定画面 | 完了 | `/settings/notifications` — Web Push通知（有効化/無効化・種別ON/OFF）とLINE通知設定を統合した画面 |
 | 管理者用抽選管理画面 | 部分実装 | PracticeListモーダル内に再抽選ボタンあり。専用管理画面は未作成 |

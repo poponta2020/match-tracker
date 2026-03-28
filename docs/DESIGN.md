@@ -124,6 +124,7 @@ Entity Layer (JPA Entity)
 [google_calendar_events] 多───1 [players]
                          多───1 [practice_sessions]
 [push_subscriptions] 多───1 [players]
+[push_notification_preferences] 多───1 [players]
 [densuke_urls]
 [invite_tokens] 多───1 [players]  (created_by)
 ```
@@ -422,6 +423,26 @@ Entity Layer (JPA Entity)
 
 **インデックス**:
 - `idx_push_player` (player_id)
+
+---
+
+#### push_notification_preferences（Web Push通知設定）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| player_id | BIGINT | NOT NULL, FK, UNIQUE | プレイヤーID |
+| enabled | BOOLEAN | NOT NULL, DEFAULT FALSE | Web Push全体のON/OFF |
+| lottery_result | BOOLEAN | NOT NULL, DEFAULT TRUE | 抽選結果 |
+| waitlist_offer | BOOLEAN | NOT NULL, DEFAULT TRUE | 繰り上げ連絡 |
+| offer_expiring | BOOLEAN | NOT NULL, DEFAULT TRUE | 期限切れ警告 |
+| offer_expired | BOOLEAN | NOT NULL, DEFAULT TRUE | 期限切れ |
+| channel_reclaim_warning | BOOLEAN | NOT NULL, DEFAULT TRUE | LINE回収警告 |
+| densuke_unmatched | BOOLEAN | NOT NULL, DEFAULT TRUE | 伝助未登録者 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**インデックス**:
+- `idx_pnp_player` (player_id)
 
 ---
 
@@ -1226,6 +1247,40 @@ Entity Layer (JPA Entity)
 #### DELETE /api/push-subscriptions?playerId={playerId}&endpoint={endpoint}
 **説明**: Push購読を解除
 **権限**: なし
+
+#### GET /api/push-subscriptions/preferences/{playerId}
+**説明**: Web Push通知設定を取得（レコードなしの場合はデフォルト値を返す）
+**権限**: なし
+**レスポンス**:
+```json
+{
+  "playerId": 1,
+  "enabled": true,
+  "lotteryResult": true,
+  "waitlistOffer": true,
+  "offerExpiring": true,
+  "offerExpired": true,
+  "channelReclaimWarning": true,
+  "densukeUnmatched": true
+}
+```
+
+#### PUT /api/push-subscriptions/preferences
+**説明**: Web Push通知設定を更新（レコードがなければ新規作成）
+**権限**: なし
+**リクエスト**: `PushNotificationPreferenceDto`
+```json
+{
+  "playerId": 1,
+  "enabled": true,
+  "lotteryResult": true,
+  "waitlistOffer": false,
+  "offerExpiring": true,
+  "offerExpired": true,
+  "channelReclaimWarning": true,
+  "densukeUnmatched": true
+}
+```
 
 ---
 
