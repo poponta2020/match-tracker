@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
+import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
 import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -26,6 +27,7 @@ const PracticeList = () => {
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [refreshing, setRefreshing] = useState(false); // データ更新中
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
+  const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
@@ -52,16 +54,20 @@ const PracticeList = () => {
         const month = currentDate.getMonth() + 1;
 
         // 並列でデータ取得（軽量エンドポイント使用）
-        const [sessionsRes, participationsRes, statusRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes, orgsRes] = await Promise.all([
           practiceAPI.getSessionSummaries(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
           practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
+          organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
 
         if (!cancelled) {
           setSessions(sessionsRes.data);
           setMyParticipations(participationsRes.data || {});
           setMyParticipationStatuses(statusRes.data?.participations || {});
+          const map = {};
+          (orgsRes.data || []).forEach(o => { map[o.id] = o; });
+          setOrgMap(map);
         }
       } catch (err) {
         if (!cancelled) {
@@ -503,12 +509,19 @@ const PracticeList = () => {
                             {day}
                           </div>
                           {session && session.venueName && (
-                            <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight`}>
+                            <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight flex items-center justify-center gap-0.5`}>
+                              <span
+                                className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: orgMap[session.organizationId]?.color || '#4a6b5a' }}
+                              />
                               {abbreviateLocation(session.venueName)}
                             </div>
                           )}
                           {hasSession && !session?.venueName && (
-                            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-[#4a6b5a]" />
+                            <div
+                              className="mt-1 w-1.5 h-1.5 rounded-full"
+                              style={{ backgroundColor: orgMap[session.organizationId]?.color || '#4a6b5a' }}
+                            />
                           )}
                         </div>
                       )}
@@ -540,6 +553,15 @@ const PracticeList = () => {
                 </h3>
                 {selectedSession.venueName && (
                   <p className="text-sm text-[#6b7280] mt-0.5">{selectedSession.venueName}</p>
+                )}
+                {orgMap[selectedSession.organizationId] && (
+                  <p className="text-xs mt-0.5 flex items-center gap-1">
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{ backgroundColor: orgMap[selectedSession.organizationId].color }}
+                    />
+                    <span className="text-[#9ca3af]">{orgMap[selectedSession.organizationId].name}</span>
+                  </p>
                 )}
               </div>
               <button onClick={closeModal} className="text-[#6b7280] hover:text-[#374151] -mt-1">
