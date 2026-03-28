@@ -1,9 +1,12 @@
 package com.karuta.matchtracker.scheduler;
 
+import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionType;
+import com.karuta.matchtracker.entity.Organization;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
+import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.service.LotteryDeadlineHelper;
 import com.karuta.matchtracker.service.LotteryService;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +24,7 @@ import java.time.YearMonth;
 /**
  * 抽選自動実行スケジューラ
  *
- * - 毎日0時にチェックし、当日が月末日なら翌月分の抽選を実行
- * - アプリケーション起動時に未実行の抽選がないかチェック（リトライ機構）
+ * MONTHLYタイプの団体のみ対象（SAME_DAYタイプは抽選なし）
  */
 @Slf4j
 @Component
@@ -32,11 +34,8 @@ public class LotteryScheduler {
     private final LotteryService lotteryService;
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final OrganizationRepository organizationRepository;
 
-    /**
-     * 毎日0:00にチェック
-     * 翌月分の抽選締め切りが過ぎていれば抽選を実行
-     */
     @Scheduled(cron = "0 0 0 * * *")
     public void checkAndExecuteLottery() {
         LocalDate today = JstDateTimeUtil.today();
@@ -44,48 +43,42 @@ public class LotteryScheduler {
         int targetYear = nextMonth.getYear();
         int targetMonth = nextMonth.getMonthValue();
 
-        // TODO: タスク7で団体別に処理するよう改修
-        if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth, null)) {
-            executeLotteryIfNotDone(targetYear, targetMonth);
+        // MONTHLYタイプの団体のみ抽選チェック
+        for (Organization org : organizationRepository.findAll()) {
+            if (org.getDeadlineType() != DeadlineType.MONTHLY) continue;
+
+            if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth, org.getId())) {
+                executeLotteryIfNotDone(targetYear, targetMonth);
+            }
         }
     }
 
-    /**
-     * アプリケーション起動時のリトライチェック
-     * 未実行の抽選がないか確認し、あれば実行
-     *
-     * 当月分と翌月分の両方をチェックする。
-     * - 当月分: 前月末に実行されたはずの抽選が失敗していた場合のリトライ
-     * - 翌月分: 当日が締め切り後（月末等）で自動抽選が失敗していた場合のリトライ
-     */
     @EventListener(ApplicationReadyEvent.class)
     public void retryOnStartup() {
         try {
             LocalDate today = JstDateTimeUtil.today();
 
-            // 当月分のチェック
-            int currentYear = today.getYear();
-            int currentMonth = today.getMonthValue();
-            // TODO: タスク7で団体別に処理するよう改修
-            if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth, null)) {
-                executeLotteryIfNotDone(currentYear, currentMonth);
-            }
+            for (Organization org : organizationRepository.findAll()) {
+                if (org.getDeadlineType() != DeadlineType.MONTHLY) continue;
 
-            // 翌月分のチェック（月末に自動抽選が失敗し同日中に再起動した場合に対応）
-            YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
-            int nextYear = nextMonth.getYear();
-            int nextMonthValue = nextMonth.getMonthValue();
-            if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue, null)) {
-                executeLotteryIfNotDone(nextYear, nextMonthValue);
+                int currentYear = today.getYear();
+                int currentMonth = today.getMonthValue();
+                if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth, org.getId())) {
+                    executeLotteryIfNotDone(currentYear, currentMonth);
+                }
+
+                YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
+                int nextYear = nextMonth.getYear();
+                int nextMonthValue = nextMonth.getMonthValue();
+                if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue, org.getId())) {
+                    executeLotteryIfNotDone(nextYear, nextMonthValue);
+                }
             }
         } catch (Exception e) {
             log.error("Failed to execute startup lottery retry", e);
         }
     }
 
-    /**
-     * 指定年月の抽選が未実行の場合のみ実行
-     */
     private void executeLotteryIfNotDone(int year, int month) {
         boolean alreadyExecuted = lotteryExecutionRepository
                 .existsByTargetYearAndTargetMonthAndStatus(year, month, ExecutionStatus.SUCCESS);

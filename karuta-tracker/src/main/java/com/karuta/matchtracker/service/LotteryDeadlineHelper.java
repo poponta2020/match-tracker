@@ -1,5 +1,8 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.DeadlineType;
+import com.karuta.matchtracker.entity.Organization;
+import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -11,30 +14,31 @@ import java.time.YearMonth;
 /**
  * 抽選締め切りに関するヘルパー
  *
- * 締め切り: 対象月の初日から N日前の0時（Nはsystem_settingsで設定可能）
- * デフォルト(N=0): 対象月の前月末日の0時
- * N=-1: 締め切りなし（常に締め切り前扱い）
- * 例: N=3, 4月の練習 → 3月29日 00:00:00
+ * MONTHLY（北大かるた会）:
+ *   締め切り: 対象月の初日から N日前の0時（Nはsystem_settingsで設定可能）
+ *   デフォルト(N=0): 対象月の前月末日の0時
+ *   N=-1: 締め切りなし（常に締め切り前扱い）
+ *
+ * SAME_DAY（わすらもち会）:
+ *   締め切り: 練習当日12:00
+ *   抽選なし（先着順）
  */
 @Component
 @RequiredArgsConstructor
 public class LotteryDeadlineHelper {
 
     private final SystemSettingService systemSettingService;
+    private final OrganizationRepository organizationRepository;
 
     /**
-     * 締め切りなしモードかどうか
+     * 締め切りなしモードかどうか（MONTHLYタイプのみ有効）
      */
     public boolean isNoDeadline(Long organizationId) {
         return systemSettingService.isNoDeadline(organizationId);
     }
 
     /**
-     * 指定年月の練習に対する締め切り日時を取得する
-     *
-     * @param year  対象年
-     * @param month 対象月
-     * @return 締め切り日時（締め切りなしモードの場合は null）
+     * 指定年月の練習に対する締め切り日時を取得する（MONTHLYタイプ用）
      */
     public LocalDateTime getDeadline(int year, int month, Long organizationId) {
         int daysBefore = systemSettingService.getLotteryDeadlineDaysBefore(organizationId);
@@ -47,7 +51,6 @@ public class LotteryDeadlineHelper {
         LocalDate firstDayOfMonth = targetMonth.atDay(1);
         LocalDate deadlineDate = firstDayOfMonth.minusDays(daysBefore);
 
-        // daysBefore=0の場合は前月末日の0時（従来通りの動作）
         if (daysBefore == 0) {
             YearMonth previousMonth = targetMonth.minusMonths(1);
             deadlineDate = previousMonth.atEndOfMonth();
@@ -57,7 +60,21 @@ public class LotteryDeadlineHelper {
     }
 
     /**
-     * 指定年月の練習がまだ締め切り前かどうか
+     * SAME_DAYタイプの締め切り日時を取得する（練習当日12:00）
+     */
+    public LocalDateTime getSameDayDeadline(LocalDate sessionDate) {
+        return sessionDate.atTime(12, 0);
+    }
+
+    /**
+     * 指定の練習日がSAME_DAYタイプの締め切り前かどうか
+     */
+    public boolean isBeforeSameDayDeadline(LocalDate sessionDate) {
+        return JstDateTimeUtil.now().isBefore(getSameDayDeadline(sessionDate));
+    }
+
+    /**
+     * 指定年月の練習がまだ締め切り前かどうか（MONTHLYタイプ用）
      * 締め切りなしモードの場合は常に true
      */
     public boolean isBeforeDeadline(int year, int month, Long organizationId) {
@@ -83,9 +100,15 @@ public class LotteryDeadlineHelper {
 
     /**
      * 指定年月に対して、自動抽選が実行されるべきかどうかを判定する
-     * （締め切りを過ぎている場合にtrue）
+     * SAME_DAYタイプの団体は抽選なしのため常にfalse
      */
     public boolean shouldLotteryBeExecuted(int year, int month, Long organizationId) {
+        if (organizationId != null) {
+            Organization org = organizationRepository.findById(organizationId).orElse(null);
+            if (org != null && org.getDeadlineType() == DeadlineType.SAME_DAY) {
+                return false;
+            }
+        }
         return isAfterDeadline(year, month, organizationId);
     }
 
@@ -97,5 +120,15 @@ public class LotteryDeadlineHelper {
         LocalDateTime twentyFourHoursLater = JstDateTimeUtil.now().plusHours(24);
         LocalDateTime dayBeforePractice = sessionDate.minusDays(1).atTime(23, 59, 59);
         return twentyFourHoursLater.isBefore(dayBeforePractice) ? twentyFourHoursLater : dayBeforePractice;
+    }
+
+    /**
+     * 団体のDeadlineTypeを取得する
+     */
+    public DeadlineType getDeadlineType(Long organizationId) {
+        if (organizationId == null) return DeadlineType.MONTHLY;
+        return organizationRepository.findById(organizationId)
+                .map(Organization::getDeadlineType)
+                .orElse(DeadlineType.MONTHLY);
     }
 }

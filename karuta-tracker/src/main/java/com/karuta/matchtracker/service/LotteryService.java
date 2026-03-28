@@ -245,9 +245,8 @@ public class LotteryService {
             log.debug("Match {}: {} priority, {} normal applicants",
                     matchNumber, priorityApplicants.size(), normalApplicants.size());
 
-            // 一般枠の最低保証を計算
-            // TODO: タスク7でorganizationIdを正式に渡すよう改修
-            int normalReservePercent = systemSettingService.getLotteryNormalReservePercent(null);
+            // 一般枠の最低保証を計算（セッションのorganizationIdを使用）
+            int normalReservePercent = systemSettingService.getLotteryNormalReservePercent(session.getOrganizationId());
             int normalReserve = 0;
             if (normalReservePercent > 0 && !normalApplicants.isEmpty() && !priorityApplicants.isEmpty()) {
                 normalReserve = Math.max(1, (int) Math.ceil(capacity * normalReservePercent / 100.0));
