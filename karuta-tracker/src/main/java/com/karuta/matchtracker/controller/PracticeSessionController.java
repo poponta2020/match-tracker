@@ -471,6 +471,7 @@ public class PracticeSessionController {
      * 指定年月の伝助URLを取得
      */
     @GetMapping("/densuke-url")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<?> getDensukeUrl(@RequestParam int year, @RequestParam int month) {
         var url = densukeUrlRepository.findByYearAndMonth(year, month);
         return url.map(ResponseEntity::ok)
