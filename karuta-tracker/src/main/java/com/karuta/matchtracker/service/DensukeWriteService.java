@@ -40,6 +40,10 @@ public class DensukeWriteService {
     private final PlayerRepository playerRepository;
 
     // メモリ上の状態（スケジューラーから参照）
+    // 注意: シングルインスタンス運用を前提としている。
+    // スケールアウト（複数インスタンス）時は各インスタンスが独立した状態を持ち、
+    // フロントエンドに表示される書き込み状況が不正確になる。
+    // その場合は DB または Redis へ永続化する必要がある。
     private volatile LocalDateTime lastAttemptAt;
     private volatile LocalDateTime lastSuccessAt;
     private volatile List<String> lastErrors = new ArrayList<>();
@@ -372,6 +376,17 @@ public class DensukeWriteService {
     /**
      * フォームの行構造を解析し、日付×試合番号 → join-id の対応を densuke_row_ids に保存する。
      * 伝助の編集フォームでは、テーブルの各行が日程×試合番号に対応する。
+     *
+     * <p><b>前提条件（HTML構造への依存）:</b><br>
+     * このメソッドは「伝助の編集フォームに含まれる {@code join-{id}} の出現順序」と
+     * 「アプリ側の日付×試合番号の昇順」が一致することを前提としている。
+     *
+     * <p><b>HTML構造変更時のリスク:</b><br>
+     * 伝助側の HTML 構造（テーブルレイアウト・input name の命名規則等）が変更された場合、
+     * join-id の対応付けが無言でズレる可能性がある。その場合、書き込みは
+     * {@code joinIds.size() < schedule.size()} のチェックを通過しつつも誤ったIDに
+     * 書き込む、あるいは全スキップになる。障害発生時はまず伝助の編集フォームのHTMLを
+     * 直接確認すること。
      */
     private void parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
                                      Document formDoc, Map<String, String> joinInputs) {
