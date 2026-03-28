@@ -1019,8 +1019,20 @@ Entity Layer (JPA Entity)
 
 ### 4.9 抽選API
 
+#### GET /api/lottery/deadline?year={year}&month={month}
+**説明**: 指定年月の締め切り日時を取得（一般ユーザーの締め切り表示用）
+**権限**: 認証不要
+**レスポンス**:
+```json
+{
+  "deadline": "2026-03-29T00:00:00",
+  "noDeadline": false
+}
+```
+締め切りなしモード時: `{ "deadline": null, "noDeadline": true }`
+
 #### POST /api/lottery/execute
-**説明**: 手動抽選実行（月単位）
+**説明**: 手動抽選実行（月単位）。「締め切りなし」モード時は締め切り前チェックをスキップ
 **権限**: SUPER_ADMIN
 **リクエスト**: `LotteryExecutionRequest`
 ```json

@@ -57,7 +57,7 @@
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |
-| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ | ALL | 参加登録（抽選済みセッションはステータス表示のみ） |
+| 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ、締め切り表示 | ALL | 参加登録（抽選済みセッションはステータス表示のみ）。締め切り前は「締め切り: ○月○日（あと○日）」を表示（締め切り後・締め切りなし時は非表示） |
 | 18 | `/practice/cancel` | `PracticeCancelPage.jsx` | キャンセル専用カレンダー、試合選択チェックボックス、キャンセル理由ラジオボタン | ALL | 参加キャンセル（WON登録日をハイライトしたカレンダー→試合選択→理由選択→確認ダイアログ） |
 
 ---
@@ -113,6 +113,14 @@
 
 ---
 
+## 8.6 システム設定（settings）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 38 | `/admin/settings` | `SystemSettings.jsx` | 締め切り日数入力（「締め切りなし」チェックボックス付き）、一般枠割合入力、プレビュー表示、確認ダイアログ | ADMIN+ | システム設定管理（抽選締め切り日数・一般枠保証割合の確認・変更） |
+
+---
+
 ## 9. プロフィール
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
@@ -134,8 +142,8 @@
 
 | # | パス | ページコンポーネント | 権限 | 説明 |
 |---|------|---------------------|------|------|
-| 38 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
-| 39 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
+| 39 | `/statistics` | （スタブ: `div`） | ALL | 統計画面（未実装: "実装中..."） |
+| 40 | `*`（存在しないパス） | `Navigate` → `/` | — | 404リダイレクト |
 
 ---
 
@@ -186,6 +194,7 @@
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
 | 伝助管理 | `/admin/densuke` | ADMIN+ |
+| システム設定 | `/admin/settings` | ADMIN+ |
 | Googleカレンダー連携 | （OAuth） | ALL |
 | ログアウト | — | ALL |
 
@@ -247,6 +256,8 @@ karuta-tracker-ui/src/
     │   ├── PlayerList.jsx
     │   ├── PlayerDetail.jsx
     │   └── PlayerEdit.jsx
+    ├── settings/
+    │   └── SystemSettings.jsx
     └── venues/
         ├── VenueList.jsx
         └── VenueForm.jsx
