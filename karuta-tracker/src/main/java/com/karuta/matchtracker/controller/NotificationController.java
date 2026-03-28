@@ -77,7 +77,7 @@ public class NotificationController {
      * PLAYERロールの場合、自分のplayerIdのみアクセス可能か検証する
      */
     private void validatePlayerAccess(Long playerId, HttpServletRequest httpRequest) {
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
             throw new ForbiddenException("他のプレイヤーの通知にはアクセスできません");

@@ -174,7 +174,7 @@ public class LotteryController {
     public ResponseEntity<Map<String, Object>> cancelParticipation(
             @Valid @RequestBody CancelRequest request, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
 
         List<Long> ids = request.getEffectiveParticipantIds();
         if (ids.isEmpty()) {
@@ -214,7 +214,7 @@ public class LotteryController {
     public ResponseEntity<Map<String, String>> respondToOffer(
             @Valid @RequestBody OfferResponseRequest request, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
 
         // 応答前にparticipant情報を取得（応答後はステータスが変わるため）
         PracticeParticipant participant = practiceParticipantRepository.findById(request.getParticipantId())
@@ -244,7 +244,7 @@ public class LotteryController {
     public ResponseEntity<WaitlistStatusDto.WaitlistEntry> getOfferDetail(
             @PathVariable Long participantId, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
 
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
@@ -323,7 +323,7 @@ public class LotteryController {
     public ResponseEntity<Map<String, Object>> declineWaitlist(
             @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
         Long sessionId = body.get("sessionId");
         Long playerId = body.get("playerId");
 
@@ -346,7 +346,7 @@ public class LotteryController {
     public ResponseEntity<Map<String, Object>> rejoinWaitlist(
             @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = (Role) httpRequest.getAttribute("currentUserRole");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
         Long sessionId = body.get("sessionId");
         Long playerId = body.get("playerId");
 
