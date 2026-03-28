@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Settings,
   ClipboardList,
+  Building2,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 
@@ -202,6 +203,13 @@ const NavigationMenu = ({ unreadCount }) => {
                   </>
                 )}
                 <div className="border-t border-gray-100 my-1" />
+                <button
+                  onClick={() => { setMenuOpen(false); navigate('/settings/organizations'); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
+                >
+                  <Building2 className="w-4 h-4 text-[#6b7280]" />
+                  参加練習会
+                </button>
                 <button
                   onClick={() => { setMenuOpen(false); navigate('/settings/notifications'); }}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f0f4f1] transition-colors"
