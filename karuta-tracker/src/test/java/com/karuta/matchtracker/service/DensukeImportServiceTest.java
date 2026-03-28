@@ -217,8 +217,9 @@ class DensukeImportServiceTest {
 
         PracticeSession session = PracticeSession.builder().id(1L)
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+        // dirty=false: 伝助から同期済みのため、伝助から消えたら削除される
         PracticeParticipant existingParticipant = PracticeParticipant.builder()
-                .id(50L).sessionId(1L).playerId(2L).matchNumber(1).build();
+                .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(false).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
@@ -333,5 +334,98 @@ class DensukeImportServiceTest {
     @DisplayName("SYSTEM_USER_IDが0Lとして定義されている")
     void testSystemUserIdConstant() {
         assertThat(DensukeImportService.SYSTEM_USER_ID).isEqualTo(0L);
+    }
+
+    // ----------------------------------------------------------------
+    // dirty フラグ関連テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("dirty=trueの参加者は伝助から消えても削除されない")
+    void testImportDoesNotRemoveDirtyParticipants() throws IOException {
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(LocalDate.of(2026, 4, 1));
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // 鈴木は伝助にいない
+        data.getEntries().add(entry);
+
+        PracticeSession session = PracticeSession.builder().id(1L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+        // 鈴木: dirty=true（アプリ側で変更済み）
+        PracticeParticipant dirtyParticipant = PracticeParticipant.builder()
+                .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(true).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
+                .thenReturn(Optional.empty());
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
+                .thenReturn(List.of(dirtyParticipant));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+
+        assertThat(result.getRemovedCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).delete(dirtyParticipant);
+    }
+
+    @Test
+    @DisplayName("dirty=falseの参加者は伝助から消えた場合に削除される")
+    void testImportRemovesNonDirtyAbsentParticipants() throws IOException {
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(LocalDate.of(2026, 4, 1));
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // 鈴木は伝助にいない
+        data.getEntries().add(entry);
+
+        PracticeSession session = PracticeSession.builder().id(1L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+        // 鈴木: dirty=false（伝助から同期済み）
+        PracticeParticipant cleanParticipant = PracticeParticipant.builder()
+                .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(false).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
+                .thenReturn(Optional.empty());
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
+                .thenReturn(List.of(cleanParticipant));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+
+        assertThat(result.getRemovedCount()).isEqualTo(1);
+        verify(practiceParticipantRepository).delete(cleanParticipant);
+    }
+
+    @Test
+    @DisplayName("伝助から追加された参加者はdirty=falseで登録される")
+    void testImportSetsCleanFlagForDensukeAddedParticipants() throws IOException {
+        DensukeData data = createSampleData();
+
+        PracticeSession session = PracticeSession.builder().id(1L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
+                .thenReturn(Optional.empty());
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L);
+
+        ArgumentCaptor<PracticeParticipant> captor =
+                ArgumentCaptor.forClass(PracticeParticipant.class);
+        verify(practiceParticipantRepository, times(2)).save(captor.capture());
+
+        captor.getAllValues().forEach(p ->
+                assertThat(p.isDirty()).as("伝助追加参加者はdirty=false").isFalse());
     }
 }

@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -138,7 +139,7 @@ public class DensukeWriteService {
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
         // 各（URL, プレイヤー）の書き込み
-        for (Map.Entry<Long, Map<Long, List<PracticeParticipant>>> urlEntry : grouped.entrySet()) {
+        for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
             DensukeUrl densukeUrl = urlById.get(urlId);
             List<PracticeSession> urlSessions = sessionsByUrlId.get(urlId);
@@ -150,7 +151,7 @@ public class DensukeWriteService {
                 continue;
             }
 
-            for (Map.Entry<Long, List<PracticeParticipant>>> playerEntry : urlEntry.getValue().entrySet()) {
+            for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
