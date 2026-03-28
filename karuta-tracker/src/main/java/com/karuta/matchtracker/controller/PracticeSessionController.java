@@ -525,6 +525,9 @@ public class PracticeSessionController {
 
         log.info("POST /api/practice-sessions/sync-densuke - Syncing {}/{} from {}", year, month, densukeUrl.get().getUrl());
 
+        // 書き込みフェーズ（アプリ→伝助）: dirty な参加者を伝助に反映してから読み取る
+        densukeWriteService.writeToDensuke();
+
         try {
             var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null, currentUserId);
             return ResponseEntity.ok(result);
