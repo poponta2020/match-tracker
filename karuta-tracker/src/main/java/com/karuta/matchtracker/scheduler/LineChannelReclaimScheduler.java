@@ -6,7 +6,7 @@ import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.Notification;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
-import com.karuta.matchtracker.repository.NotificationRepository;
+import com.karuta.matchtracker.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,7 +30,7 @@ public class LineChannelReclaimScheduler {
 
     private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
     private final LineChannelRepository lineChannelRepository;
-    private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
 
     private static final int INACTIVE_DAYS = 90;
     private static final int GRACE_PERIOD_DAYS = 7;
@@ -84,12 +84,13 @@ public class LineChannelReclaimScheduler {
         assignment.setReclaimWarnedAt(JstDateTimeUtil.now());
         lineChannelAssignmentRepository.save(assignment);
 
-        // アプリ内通知で警告
-        notificationRepository.save(Notification.builder()
-            .playerId(assignment.getPlayerId())
-            .type(Notification.NotificationType.CHANNEL_RECLAIM_WARNING)
-            .title("LINE通知の割り当て解除予告")
-            .message("LINE通知の割り当てが7日後に解除されます。継続利用する場合はアプリにログインしてください。")
-            .build());
+        // アプリ内通知 + Web Push送信
+        notificationService.createAndPush(
+            assignment.getPlayerId(),
+            Notification.NotificationType.CHANNEL_RECLAIM_WARNING,
+            "LINE通知の割り当て解除予告",
+            "LINE通知の割り当てが7日後に解除されます。継続利用する場合はアプリにログインしてください。",
+            null, null,
+            "/settings/notifications");
     }
 }

@@ -37,6 +37,7 @@ public class DensukeImportService {
     private final VenueRepository venueRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
 
     /**
      * インポート結果
@@ -325,6 +326,12 @@ public class DensukeImportService {
 
         if (!toSave.isEmpty()) {
             notificationRepository.saveAll(toSave);
+
+            // Web Push送信（新規・更新された通知のみ）
+            for (Notification n : toSave) {
+                notificationService.sendPushIfEnabled(
+                        n.getPlayerId(), n.getType(), n.getTitle(), n.getMessage(), "/admin/densuke");
+            }
         }
         log.info("Densuke unmatched names notification: {} new/updated, {} skipped (unchanged)",
                 toSave.size(), skipped);

@@ -165,6 +165,16 @@ public class NotificationService {
             notificationRepository.saveAll(notifications);
             log.info("Created {} consolidated lottery notifications for {} players",
                     notifications.size(), byPlayer.size());
+
+            // Web Push送信（プレイヤーごとにまとめて1通）
+            for (Map.Entry<Long, List<PracticeParticipant>> entry2 : byPlayer.entrySet()) {
+                Long pid = entry2.getKey();
+                // 該当プレイヤーの最初の通知のタイトル・メッセージで送信
+                notifications.stream()
+                        .filter(n -> n.getPlayerId().equals(pid))
+                        .findFirst()
+                        .ifPresent(n -> sendPushIfEnabled(pid, n.getType(), n.getTitle(), n.getMessage(), "/practice"));
+            }
         }
 
         return notifications.size();
@@ -192,25 +202,17 @@ public class NotificationService {
             message += "\n※ 応答期限まで残りわずかです。お早めにご回答ください。";
         }
 
-        Notification notification = Notification.builder()
-                .playerId(participant.getPlayerId())
-                .type(NotificationType.WAITLIST_OFFER)
-                .title("繰り上げ参加のご連絡")
-                .message(message)
-                .referenceType("PRACTICE_PARTICIPANT")
-                .referenceId(participant.getId())
-                .build();
+        createAndPush(
+                participant.getPlayerId(),
+                NotificationType.WAITLIST_OFFER,
+                "繰り上げ参加のご連絡",
+                message,
+                "PRACTICE_PARTICIPANT",
+                participant.getId(),
+                "/notifications");
 
-        notificationRepository.save(notification);
         log.info("Created offer notification for player {} (session {} match {})",
                 participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
-
-        // Web Push送信
-        pushNotificationService.sendPush(
-                participant.getPlayerId(),
-                notification.getTitle(),
-                notification.getMessage(),
-                "/lottery/offer-response?id=" + participant.getId());
     }
 
     /**
@@ -223,17 +225,15 @@ public class NotificationService {
 
         String dateStr = session.getSessionDate().format(DATE_FORMAT);
 
-        Notification notification = Notification.builder()
-                .playerId(participant.getPlayerId())
-                .type(NotificationType.OFFER_EXPIRED)
-                .title("繰り上げ参加の期限切れ")
-                .message(String.format("%sの練習 試合%dの繰り上げ参加の期限が切れました",
-                        dateStr, participant.getMatchNumber()))
-                .referenceType("PRACTICE_PARTICIPANT")
-                .referenceId(participant.getId())
-                .build();
-
-        notificationRepository.save(notification);
+        createAndPush(
+                participant.getPlayerId(),
+                NotificationType.OFFER_EXPIRED,
+                "繰り上げ参加の期限切れ",
+                String.format("%sの練習 試合%dの繰り上げ参加の期限が切れました",
+                        dateStr, participant.getMatchNumber()),
+                "PRACTICE_PARTICIPANT",
+                participant.getId(),
+                "/notifications");
     }
 
     /**
