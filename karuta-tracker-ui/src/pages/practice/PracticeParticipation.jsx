@@ -15,7 +15,6 @@ const PracticeParticipation = () => {
   const [initialParticipations, setInitialParticipations] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [cancelling] = useState(null); // 未使用だがステータス表示で参照あり
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]

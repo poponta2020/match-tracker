@@ -388,6 +388,7 @@ SUPER_ADMIN のみ操作可能。
 4. **キャンセル→繰り上げ**: 当選者がキャンセル専用ページから理由付きでキャンセルするとキャンセル待ち1番に通知。応答期限内に承諾/辞退。PLAYERロールは過去の練習日のキャンセル不可（ADMIN+はデータ修正目的で可能）
 5. **キャンセル待ち辞退**: キャンセル待ち中のプレイヤーはセッション単位でキャンセル待ちを辞退可能（`WAITLISTED`→`WAITLIST_DECLINED`）。辞退時に後続のキャンセル待ち番号は自動繰り上げ。辞退後の復帰も可能（最後尾番号が付与される）
 6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、定員超過なら`WAITLISTED`（最後尾）、空きがあれば即`WON`で登録
+7. **締切後の登録解除禁止**: 締切後は参加登録画面から既存登録のチェックを外すことができない（チェックボックスが disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）から行う。未登録試合への追加登録は締切後でも可能
 
 #### 3.7.2 抽選アルゴリズムの特徴
 
@@ -564,6 +565,7 @@ SUPER_ADMIN のみ操作可能。
 - 対象: Unicode の `OTHER_SYMBOL`・`MATH_SYMBOL`・`MODIFIER_SYMBOL` カテゴリに属する文字
 - 除去後の名前でアプリ内プレイヤーと突合し、未登録の場合も絵文字なしの名前で登録される
 - 既存DBに絵文字付きで登録されているプレイヤーは変更されない（再登録は不要）
+- **除去対象外の例外**: バリエーションセレクター（U+FE0F / U+FE0E）や ZWJ（U+200D）は除去対象カテゴリに含まれないため除去されない。例えば `❤️田中`（`❤` + U+FE0F）の場合、`❤`（`OTHER_SYMBOL`）は除去されるが U+FE0F が先頭に残存し、プレイヤー突合が失敗する可能性がある。実用上この種の絵文字が名前先頭に使われることは極めてまれであるため、現仕様では対処しない
 
 ### 4.2 Google カレンダー同期
 
@@ -1201,7 +1203,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/exists?date=` | ALL | 日付存在確認 |
 | GET | `/{id}/participants` | ALL | 参加者一覧 |
 | GET | `/participations/player/{id}?year=&month=` | ALL | 月別参加状況 |
-| GET | `/participations/player/{id}/status?year=&month=` | ALL | 月別参加状況（抽選ステータス付き） |
+| GET | `/participations/player/{id}/status?year=&month=` | ALL | 月別参加状況（抽選ステータス付き）。レスポンスに `beforeDeadline: boolean`（締切前かどうか）を含む。フロントエンドはこの値を使って締切後の既存登録チェックボックスを disabled 化する |
 | POST | `/` | SUPER_ADMIN | セッション作成 |
 | PUT | `/{id}` | SUPER_ADMIN | セッション更新 |
 | PUT | `/{id}/total-matches?totalMatches=` | SUPER_ADMIN | 試合数変更 |

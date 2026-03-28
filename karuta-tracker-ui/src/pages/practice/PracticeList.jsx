@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
@@ -25,7 +25,6 @@ const PracticeList = () => {
   const [myParticipationStatuses, setMyParticipationStatuses] = useState({}); // ステータス付き {sessionId: [{matchNumber, status, ...}]}
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
-  const [refreshing, setRefreshing] = useState(false); // データ更新中
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
   const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
 
@@ -103,25 +102,6 @@ const PracticeList = () => {
       console.error('Error fetching practice sessions:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchMyParticipations = async () => {
-    if (!currentPlayer?.id) return;
-
-    try {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      const [response, statusRes] = await Promise.all([
-        practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
-        practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
-      ]);
-      setMyParticipations(response.data || {});
-      setMyParticipationStatuses(statusRes.data?.participations || {});
-    } catch (err) {
-      console.error('Error fetching my participations:', err);
-      setMyParticipations({});
-      setMyParticipationStatuses({});
     }
   };
 
@@ -314,16 +294,6 @@ const PracticeList = () => {
       day: 'numeric',
       weekday: 'short',
     });
-  };
-
-  // データ更新（DBの最新状態を再取得）
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await Promise.all([fetchSessions(), fetchMyParticipations()]);
-    } finally {
-      setRefreshing(false);
-    }
   };
 
   // 過去の日付かどうか判定
