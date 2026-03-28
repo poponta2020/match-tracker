@@ -166,14 +166,20 @@ public class NotificationService {
             log.info("Created {} consolidated lottery notifications for {} players",
                     notifications.size(), byPlayer.size());
 
-            // Web Push送信（プレイヤーごとにまとめて1通）
+            // Web Push送信（プレイヤーごとにまとめて1通、セッションのorganizationIdを使用）
             for (Map.Entry<Long, List<PracticeParticipant>> entry2 : byPlayer.entrySet()) {
                 Long pid = entry2.getKey();
+                // セッションのorganizationIdを取得
+                Long orgId = entry2.getValue().stream()
+                        .map(p -> sessionCache.get(p.getSessionId()))
+                        .filter(java.util.Objects::nonNull)
+                        .map(PracticeSession::getOrganizationId)
+                        .findFirst().orElse(null);
                 // 該当プレイヤーの最初の通知のタイトル・メッセージで送信
                 notifications.stream()
                         .filter(n -> n.getPlayerId().equals(pid))
                         .findFirst()
-                        .ifPresent(n -> sendPushIfEnabled(pid, n.getType(), n.getTitle(), n.getMessage(), "/practice"));
+                        .ifPresent(n -> sendPushIfEnabled(pid, n.getType(), n.getTitle(), n.getMessage(), "/practice", orgId));
             }
         }
 
@@ -209,7 +215,8 @@ public class NotificationService {
                 message,
                 "PRACTICE_PARTICIPANT",
                 participant.getId(),
-                "/notifications");
+                "/notifications",
+                session.getOrganizationId());
 
         log.info("Created offer notification for player {} (session {} match {})",
                 participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
@@ -233,7 +240,8 @@ public class NotificationService {
                         dateStr, participant.getMatchNumber()),
                 "PRACTICE_PARTICIPANT",
                 participant.getId(),
-                "/notifications");
+                "/notifications",
+                session.getOrganizationId());
     }
 
     /**
