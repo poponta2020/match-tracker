@@ -7,7 +7,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DBマイグレーション
-- [ ] 完了
+- [x] 完了
 - **概要:** 新規テーブル2件の作成と、`practice_participants` への `dirty` カラム追加
 - **変更対象ファイル:**
   - `database/` 配下に新規SQLファイル追加（3ファイル）
@@ -20,7 +20,7 @@ status: completed
 ---
 
 ### タスク2: Entity・Repository の追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 新規テーブル2件に対応するEntityとRepositoryを作成。既存の `PracticeParticipant` に `dirty` フィールドを追加
 - **変更対象ファイル:**
   - `entity/DensukeMemberMapping.java` — 新規作成（id, densukeUrlId, playerId, densukeMemberId, createdAt）
@@ -34,7 +34,7 @@ status: completed
 ---
 
 ### タスク3: PracticeParticipantService への dirty フラグ設定
-- [ ] 完了
+- [x] 完了
 - **概要:** 選手・管理者がアプリ側で操作した際に `dirty=true` を設定する。対象は参加登録・キャンセル・ステータス変更の全操作
 - **変更対象ファイル:**
   - `service/PracticeParticipantService.java` — 参加登録・削除・ステータス変更の各メソッドで `dirty=true` を設定
@@ -44,7 +44,7 @@ status: completed
 ---
 
 ### タスク4: DensukeImportService の dirty フラグ対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助→アプリの削除判定に dirty フラグ条件を追加。`dirty=true` の参加者は削除しない。伝助から追加した参加者は `dirty=false` で保存
 - **変更対象ファイル:**
   - `service/DensukeImportService.java`
@@ -56,7 +56,7 @@ status: completed
 ---
 
 ### タスク5: DensukeWriteService の新規作成
-- [ ] 完了
+- [x] 完了
 - **概要:** アプリ→伝助への書き込みを担うサービス。dirty=true の参加者を対象に、伝助へのHTTPリクエストで出欠を書き込む
 - **変更対象ファイル:**
   - `service/DensukeWriteService.java` — 新規作成。処理フロー：
@@ -76,7 +76,7 @@ status: completed
 ---
 
 ### タスク6: DensukeSyncScheduler の処理順変更
-- [ ] 完了
+- [x] 完了
 - **概要:** スケジューラーに DensukeWriteService を組み込み、「①書き込み→②読み取り」の順序で実行するよう変更
 - **変更対象ファイル:**
   - `scheduler/DensukeSyncScheduler.java`
@@ -88,7 +88,7 @@ status: completed
 ---
 
 ### タスク7: API エンドポイント追加と管理画面への表示
-- [ ] 完了
+- [x] 完了
 - **概要:** 書き込み状況を返すエンドポイントを追加し、DensukeManagement.jsx に表示する
 - **変更対象ファイル:**
   - `controller/PracticeSessionController.java` — `GET /api/practice-sessions/densuke-write-status` を追加（ADMIN以上）
@@ -102,7 +102,7 @@ status: completed
 ---
 
 ### タスク8: テスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 各新規クラスと変更クラスのテストを追加
 - **変更対象ファイル:**
   - `test/.../service/DensukeWriteServiceTest.java` — 新規作成
