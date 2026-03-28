@@ -2059,7 +2059,10 @@ Entity Layer (JPA Entity)
   - **伝助→アプリ**: JsoupによるHTMLスクレイピングで出欠情報を取得
 - 月単位でURL管理（`densuke_urls`テーブル）
 - メンバーID・行IDをキャッシュテーブル（`densuke_member_mappings`, `densuke_row_ids`）に保存
-- スケジューラーは ① 書き込み → ② 読み取り の順で実行
+- スケジューラー・手動同期ともに ① 書き込み → ② 読み取り の順で実行
+- **セキュリティ**: `PUT /densuke-url` は `https://densuke.biz/` ドメインのみ受付（SSRF対策）
+- **認証**: `GET /densuke-url` は PLAYER 以上の認証が必要（未認証アクセス不可）
+- **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（毎分スケジューラーのDB負荷軽減）
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し

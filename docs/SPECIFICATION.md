@@ -1280,9 +1280,9 @@ venues ──< venue_match_schedules (venueId)
 |---|---|---|---|
 | POST | `/import-densuke` | ADMIN+ | 伝助URLからインポート |
 | POST | `/register-and-sync-densuke` | ADMIN+ | 未登録者一括登録+再同期 |
-| GET | `/densuke-url?year=&month=` | ALL | 伝助URL取得 |
-| PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新 |
-| POST | `/sync-densuke` | ADMIN+ | 年月指定で伝助同期 |
+| GET | `/densuke-url?year=&month=` | PLAYER+ | 伝助URL取得（認証必須） |
+| PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新（`https://densuke.biz/` ドメインのみ受付） |
+| POST | `/sync-densuke` | ADMIN+ | 年月指定で伝助同期（書き込み→読み取りの順に実行） |
 | GET | `/densuke-write-status` | ADMIN+ | アプリ→伝助 書き込み状況取得（最終実行日時・最終成功日時・エラー・書き込み待ち件数） |
 
 ### 7.8 選手プロフィール (`/api/player-profiles`)

@@ -35,6 +35,7 @@ class DensukeImportServiceTest {
     @Mock private PracticeSessionRepository practiceSessionRepository;
     @Mock private PracticeParticipantRepository practiceParticipantRepository;
     @Mock private PlayerRepository playerRepository;
+    @Mock private PlayerService playerService;
     @Mock private VenueRepository venueRepository;
     @Mock private LotteryExecutionRepository lotteryExecutionRepository;
     @Mock private NotificationRepository notificationRepository;
@@ -74,7 +75,7 @@ class DensukeImportServiceTest {
     void testImportCreatesSessionAndRegistersParticipants() throws IOException {
         DensukeData data = createSampleData();
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(List.of(
                 Venue.builder().id(100L).name("すずらん").build()));
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
@@ -109,7 +110,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(existingSession));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(99L))
@@ -131,7 +132,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -154,7 +155,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -182,7 +183,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -222,7 +223,7 @@ class DensukeImportServiceTest {
                 .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(false).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -243,7 +244,7 @@ class DensukeImportServiceTest {
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerRepository.findByNameAndActive("新人")).thenReturn(Optional.empty());
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
@@ -288,7 +289,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(LocalDate.of(2026, 4, 1)))
                 .thenReturn(Optional.of(session));
@@ -311,7 +312,7 @@ class DensukeImportServiceTest {
         DensukeData data = createSampleData();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
@@ -357,7 +358,7 @@ class DensukeImportServiceTest {
                 .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(true).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -388,7 +389,7 @@ class DensukeImportServiceTest {
                 .id(50L).sessionId(1L).playerId(2L).matchNumber(1).dirty(false).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
@@ -411,7 +412,7 @@ class DensukeImportServiceTest {
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerRepository.findAll()).thenReturn(List.of(player1, player2));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
