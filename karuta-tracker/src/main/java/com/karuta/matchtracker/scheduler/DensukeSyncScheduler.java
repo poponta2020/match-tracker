@@ -3,6 +3,7 @@ package com.karuta.matchtracker.scheduler;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.service.DensukeImportService;
+import com.karuta.matchtracker.service.DensukeWriteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,19 +24,25 @@ import java.util.Optional;
 public class DensukeSyncScheduler {
 
     private final DensukeImportService densukeImportService;
+    private final DensukeWriteService densukeWriteService;
     private final DensukeUrlRepository densukeUrlRepository;
 
     /**
-     * 毎分実行：当月＋翌月の伝助URLから参加者データを自動同期
+     * 毎分実行：① アプリ→伝助（書き込み）→ ② 伝助→アプリ（読み取り）の順で同期
      */
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
     public void syncDensuke() {
+        // ① アプリ→伝助: dirty=true の参加者を書き込む
+        try {
+            densukeWriteService.writeToDensuke();
+        } catch (Exception e) {
+            log.warn("Densuke write failed: {}", e.getMessage());
+        }
+
         LocalDate now = JstDateTimeUtil.today();
 
-        // 当月を同期
+        // ② 伝助→アプリ: 当月・翌月を読み取り
         syncForMonth(now.getYear(), now.getMonthValue());
-
-        // 翌月を同期
         LocalDate nextMonth = now.plusMonths(1);
         syncForMonth(nextMonth.getYear(), nextMonth.getMonthValue());
     }
