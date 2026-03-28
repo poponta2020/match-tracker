@@ -69,7 +69,7 @@ status: completed
 - **対応Issue:** #78
 
 ### タスク8: テスト・動作確認
-- [ ] 完了
+- [x] 完了
 - **概要:** バックエンドのユニットテスト追加と、全体の動作確認を行う。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/NotificationServiceTest.java` — createAndPush()のテスト追加（設定ONの場合にWeb Push送信されること、設定OFFの場合にスキップされること、設定レコードなしの場合のデフォルト動作）
