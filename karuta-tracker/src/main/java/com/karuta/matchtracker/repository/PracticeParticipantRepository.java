@@ -200,6 +200,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Long playerId, ParticipantStatus status);
 
     /**
+     * 指定セッション群のdirty=trueの参加者を取得（伝助書き込み対象）
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId IN :sessionIds AND p.dirty = true")
+    List<PracticeParticipant> findDirtyBySessionIds(@Param("sessionIds") List<Long> sessionIds);
+
+    /**
      * 特定セッション・試合でキャンセル待ち番号が指定値より大きい参加者を取得（番号繰り上げ用）
      */
     @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
