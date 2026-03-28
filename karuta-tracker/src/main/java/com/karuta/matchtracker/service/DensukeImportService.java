@@ -34,6 +34,7 @@ public class DensukeImportService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerRepository playerRepository;
+    private final PlayerService playerService;
     private final VenueRepository venueRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
@@ -73,8 +74,8 @@ public class DensukeImportService {
         // スクレイピング
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);
 
-        // 全選手の名前→IDマップ、ID→名前マップ
-        Map<String, Long> playerNameMap = playerRepository.findAll().stream()
+        // 全選手の名前→IDマップ、ID→名前マップ（60秒キャッシュ付き）
+        Map<String, Long> playerNameMap = playerService.findAllPlayersRaw().stream()
                 .filter(p -> p.getDeletedAt() == null)
                 .collect(Collectors.toMap(Player::getName, Player::getId, (a, b) -> a));
         Map<Long, String> playerIdMap = playerNameMap.entrySet().stream()

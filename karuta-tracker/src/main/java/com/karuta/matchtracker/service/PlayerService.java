@@ -11,6 +11,8 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,6 +87,16 @@ public class PlayerService {
     }
 
     /**
+     * 全選手をキャッシュ付きで取得（60秒 TTL）。
+     * DensukeImportService のスケジューラーから毎分呼ばれるため、DBアクセスを抑制する。
+     * プレイヤーの作成・更新・削除時に自動的にキャッシュが破棄される。
+     */
+    @Cacheable("players")
+    public List<Player> findAllPlayersRaw() {
+        return playerRepository.findAll();
+    }
+
+    /**
      * アクティブな選手数を取得
      */
     public long countActivePlayers() {
@@ -96,6 +108,7 @@ public class PlayerService {
      * 選手を新規登録
      */
     @Transactional
+    @CacheEvict(value = "players", allEntries = true)
     public PlayerDto createPlayer(PlayerCreateRequest request) {
         log.info("Creating new player: {}", request.getName());
 
@@ -116,6 +129,7 @@ public class PlayerService {
      * 選手情報を更新
      */
     @Transactional
+    @CacheEvict(value = "players", allEntries = true)
     public PlayerDto updatePlayer(Long id, PlayerUpdateRequest request) {
         log.info("Updating player with id: {}", id);
 
@@ -146,6 +160,7 @@ public class PlayerService {
      * 選手を論理削除
      */
     @Transactional
+    @CacheEvict(value = "players", allEntries = true)
     public void deletePlayer(Long id) {
         log.info("Deleting player with id: {}", id);
 
@@ -167,6 +182,7 @@ public class PlayerService {
      * 選手のロールを変更（管理者用）
      */
     @Transactional
+    @CacheEvict(value = "players", allEntries = true)
     public PlayerDto updateRole(Long id, Player.Role newRole) {
         log.info("Updating role for player id: {} to {}", id, newRole);
 
