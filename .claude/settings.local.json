@@ -134,7 +134,8 @@
       "Bash(find /c/Users/popon/match-tracker/karuta-tracker/src/main/java/com/karuta/matchtracker -name *BaseEntity* -o -name *Base*)",
       "Read(//c/Users/popon/match-tracker/karuta-tracker/**)",
       "Bash(for f:*)",
-      "Bash(do echo:*)"
+      "Bash(do echo:*)",
+      "Bash(head -10 grep -n \"handleRefresh\\\\|refreshing\" \"c:/Users/popon/match-tracker/karuta-tracker-ui/src/pages/practice/PracticeList.jsx\")"
     ],
     "deny": [],
     "ask": [],
