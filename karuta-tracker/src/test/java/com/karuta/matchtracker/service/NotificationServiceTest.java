@@ -5,8 +5,10 @@ import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.PushNotificationPreference;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,8 @@ class NotificationServiceTest {
     private PracticeSessionRepository practiceSessionRepository;
     @Mock
     private PushNotificationService pushNotificationService;
+    @Mock
+    private PushNotificationPreferenceRepository pushNotificationPreferenceRepository;
 
     @InjectMocks
     private NotificationService service;
@@ -143,6 +147,94 @@ class NotificationServiceTest {
 
         assertThat(count).isEqualTo(5);
         verify(notificationRepository).softDeleteAllByPlayerId(eq(10L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("createAndPush: 設定ONの場合Web Push送信される")
+    void createAndPush_enabledSendsPush() {
+        PushNotificationPreference pref = PushNotificationPreference.builder()
+                .playerId(10L).enabled(true).lotteryResult(true)
+                .waitlistOffer(true).offerExpiring(true).offerExpired(true)
+                .channelReclaimWarning(true).densukeUnmatched(true).build();
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
+                "テスト", "メッセージ", null, null, "/notifications");
+
+        verify(notificationRepository).save(any(Notification.class));
+        verify(pushNotificationService).sendPush(eq(10L), eq("テスト"), eq("メッセージ"), eq("/notifications"));
+    }
+
+    @Test
+    @DisplayName("createAndPush: 設定OFFの場合Web Push送信されない")
+    void createAndPush_disabledSkipsPush() {
+        PushNotificationPreference pref = PushNotificationPreference.builder()
+                .playerId(10L).enabled(true).lotteryResult(true)
+                .waitlistOffer(false).offerExpiring(true).offerExpired(true)
+                .channelReclaimWarning(true).densukeUnmatched(true).build();
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
+                "テスト", "メッセージ", null, null, "/notifications");
+
+        verify(notificationRepository).save(any(Notification.class));
+        verify(pushNotificationService, never()).sendPush(anyLong(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("createAndPush: enabled=falseの場合Web Push送信されない")
+    void createAndPush_globalDisabledSkipsPush() {
+        PushNotificationPreference pref = PushNotificationPreference.builder()
+                .playerId(10L).enabled(false).lotteryResult(true)
+                .waitlistOffer(true).offerExpiring(true).offerExpired(true)
+                .channelReclaimWarning(true).densukeUnmatched(true).build();
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
+                "テスト", "メッセージ", null, null, "/notifications");
+
+        verify(notificationRepository).save(any(Notification.class));
+        verify(pushNotificationService, never()).sendPush(anyLong(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("createAndPush: 設定レコードなしの場合Web Push送信されない")
+    void createAndPush_noPreferenceSkipsPush() {
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.empty());
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.createAndPush(10L, NotificationType.LOTTERY_ALL_WON,
+                "テスト", "メッセージ", null, null, "/practice");
+
+        verify(notificationRepository).save(any(Notification.class));
+        verify(pushNotificationService, never()).sendPush(anyLong(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("createAndPush: 抽選結果3種はlotteryResultでまとめて判定される")
+    void createAndPush_lotteryTypesShareSetting() {
+        PushNotificationPreference pref = PushNotificationPreference.builder()
+                .playerId(10L).enabled(true).lotteryResult(false)
+                .waitlistOffer(true).offerExpiring(true).offerExpired(true)
+                .channelReclaimWarning(true).densukeUnmatched(true).build();
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
+
+        // LOTTERY_ALL_WON
+        service.createAndPush(10L, NotificationType.LOTTERY_ALL_WON,
+                "テスト", "メッセージ", null, null, "/practice");
+        // LOTTERY_WAITLISTED
+        service.createAndPush(10L, NotificationType.LOTTERY_WAITLISTED,
+                "テスト", "メッセージ", null, null, "/practice");
+        // LOTTERY_REMAINING_WON
+        service.createAndPush(10L, NotificationType.LOTTERY_REMAINING_WON,
+                "テスト", "メッセージ", null, null, "/practice");
+
+        verify(notificationRepository, times(3)).save(any(Notification.class));
+        verify(pushNotificationService, never()).sendPush(anyLong(), anyString(), anyString(), anyString());
     }
 
     @Test
