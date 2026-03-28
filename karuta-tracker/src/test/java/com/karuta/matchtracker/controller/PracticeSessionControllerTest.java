@@ -55,6 +55,9 @@ class PracticeSessionControllerTest {
     @MockitoBean
     private com.karuta.matchtracker.service.OrganizationService organizationService;
 
+    @MockitoBean
+    private com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
+
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
     private LocalDate today;

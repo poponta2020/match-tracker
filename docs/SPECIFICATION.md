@@ -187,6 +187,7 @@
 | `offeredAt` | LocalDateTime | No | 繰り上げ通知日時 |
 | `offerDeadline` | LocalDateTime | No | 繰り上げ応答期限 |
 | `respondedAt` | LocalDateTime | No | 繰り上げ応答日時 |
+| `dirty` | Boolean | Yes, DEFAULT TRUE | アプリ側で操作済みフラグ（trueの場合、伝助への書き戻し対象） |
 
 一意制約: `(sessionId, playerId, matchNumber)`
 
@@ -525,7 +526,7 @@ SUPER_ADMIN のみ操作可能。
 
 #### 4.1.1 概要
 
-伝助はかるた会の出欠調整に広く使われている外部Webサービス。現在は伝助が出欠管理の主体であり、本アプリに参加者データを同期する形で運用している。将来的には本アプリ側で出欠管理を完結させる予定。
+伝助はかるた会の出欠調整に広く使われている外部Webサービス。本アプリと伝助の双方向同期を実現しており、アプリ側で登録・変更した出欠情報を自動的に伝助へ書き戻す。
 
 #### 4.1.2 仕組み
 
@@ -534,7 +535,7 @@ SUPER_ADMIN のみ操作可能。
 3. **データ取り込み**:
    - 練習セッションが存在しない日付は自動作成
    - 参加者名をアプリの選手名と突合し、一致すれば参加登録
-   - 伝助から消えた参加者は自動的にDBからも削除
+   - 伝助から消えた参加者は `dirty=false`（伝助側から追加された）場合のみDBから削除。`dirty=true`（アプリ側で操作済み）の場合はスキップ
    - 未登録の名前は `unmatchedNames` としてレスポンスに含め、一括登録→再同期のフローを提供
    - 未登録者が検出された場合、ADMIN以上の全管理者にアプリ内通知（`DENSUKE_UNMATCHED_NAMES`）を送信
 4. **操作者記録**: `importFromDensuke` は `createdBy` パラメータで操作者を記録。スケジューラー実行時は `SYSTEM_USER_ID=0L` を使用
@@ -544,7 +545,41 @@ SUPER_ADMIN のみ操作可能。
 `DensukeSyncScheduler` がバックグラウンドで動作:
 - **間隔**: 60秒ごと（初回は30秒後に開始）
 - **対象**: 当月 + 翌月のURL
-- **処理**: 登録済みURLがあれば自動的にスクレイピング→同期を実行
+- **処理順序**: ① `DensukeWriteService.writeToDensuke()`（アプリ→伝助への書き込み）→ ② `DensukeImportService`（伝助→アプリへの読み取り）
+  - 書き込みを先に行うことで、アプリ側の変更が伝助に反映された後に読み取りが実行される
+
+#### 4.1.6 アプリ→伝助への書き込み（DensukeWriteService）
+
+アプリ側で操作した出欠情報を伝助へ反映する機能。`dirty` フラグで変更を追跡する。
+
+**dirty フラグ:**
+- `practice_participants.dirty = true`: アプリ側で操作された（書き込み対象）
+- `practice_participants.dirty = false`: 伝助から取り込まれた（書き込みスキップ）
+- 新規参加登録・ステータス変更（`PracticeParticipantService`, `WaitlistPromotionService`, `LotteryService`）で `dirty=true` を設定
+- 伝助からの取り込み時（`DensukeImportService`）は `dirty=false` で保存
+
+**書き込み処理フロー:**
+1. `dirty=true` の参加者を取得（当月・翌月でDensuke URLが登録されているセッションのみ）
+2. プレイヤー×URLでグループ化
+3. 各グループに対して：
+   a. `densuke_member_id` を取得（未キャッシュの場合は伝助に `POST insert` でメンバー登録し、`densuke_member_mappings` に保存）
+   b. `join-{id}` フィールドIDを取得（未キャッシュの場合は伝助の編集フォームをパースし `densuke_row_ids` に保存）
+   c. ステータスに応じた値（3=○/2=△/1=×/0=未入力）を決定
+   d. 伝助の `POST regist` で全セッション分の出欠を一括送信
+   e. 成功したら `dirty=false` に更新、失敗はエラーリストに記録
+4. 書き込み状況（最終実行日時・最終成功日時・エラー・書き込み待ち件数）を `DensukeWriteStatusDto` で保持
+
+**ステータスマッピング:**
+| ParticipantStatus | 伝助値 | 表示 |
+|---|---|---|
+| PENDING / WON | 3 | ○（参加） |
+| WAITLISTED / OFFERED | 2 | △（未定） |
+| CANCELLED / DECLINED / WAITLIST_DECLINED | 1 | ×（不参加） |
+| （未登録） | 0 | 空欄 |
+
+**キャッシュテーブル:**
+- `densuke_member_mappings`: プレイヤー×URLごとの伝助メンバーID（`mi` パラメータ）をキャッシュ
+- `densuke_row_ids`: URL×日付×試合番号ごとの `join-{id}` フィールドIDをキャッシュ
 
 #### 4.1.4 スクレイピング詳細
 
@@ -885,10 +920,36 @@ venues ──< venue_match_schedules (venueId)
 | offered_at | TIMESTAMP | — | 繰り上げ通知日時 |
 | offer_deadline | TIMESTAMP | — | 繰り上げ応答期限 |
 | responded_at | TIMESTAMP | — | 繰り上げ応答日時 |
+| dirty | BOOLEAN | NOT NULL, DEFAULT TRUE | アプリ側操作済みフラグ（伝助への書き戻し対象判定） |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
 一意制約: `uk_session_player_match(session_id, player_id, match_number)`
+
+#### densuke_member_mappings
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| densuke_url_id | BIGINT | NOT NULL | 伝助URL ID（FK: densuke_urls.id） |
+| player_id | BIGINT | NOT NULL | 選手ID（FK: players.id） |
+| densuke_member_id | VARCHAR(50) | NOT NULL | 伝助メンバーID（`mi` パラメータ値） |
+| created_at | TIMESTAMP | NOT NULL | — |
+
+一意制約: `(densuke_url_id, player_id)`
+
+#### densuke_row_ids
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| densuke_url_id | BIGINT | NOT NULL | 伝助URL ID（FK: densuke_urls.id） |
+| densuke_row_id | VARCHAR(50) | NOT NULL | `join-{id}` フィールドのID値 |
+| session_date | DATE | NOT NULL | 対象日付 |
+| match_number | INT | NOT NULL | 対象試合番号 |
+| created_at | TIMESTAMP | NOT NULL | — |
+
+一意制約: `(densuke_url_id, session_date, match_number)`
 
 #### system_settings
 
@@ -1222,6 +1283,7 @@ venues ──< venue_match_schedules (venueId)
 | GET | `/densuke-url?year=&month=` | ALL | 伝助URL取得 |
 | PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新 |
 | POST | `/sync-densuke` | ADMIN+ | 年月指定で伝助同期 |
+| GET | `/densuke-write-status` | ADMIN+ | アプリ→伝助 書き込み状況取得（最終実行日時・最終成功日時・エラー・書き込み待ち件数） |
 
 ### 7.8 選手プロフィール (`/api/player-profiles`)
 

@@ -254,6 +254,7 @@ Entity Layer (JPA Entity)
 | offered_at | DATETIME | | 繰り上げ通知日時 |
 | offer_deadline | DATETIME | | 繰り上げ応答期限 |
 | responded_at | DATETIME | | 繰り上げ応答日時 |
+| dirty | BOOLEAN | NOT NULL, DEFAULT TRUE | アプリ側操作済みフラグ。true=伝助への書き戻し対象、false=伝助から取り込み済み |
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
@@ -490,6 +491,35 @@ Entity Layer (JPA Entity)
 
 **制約**:
 - UNIQUE (year, month)
+
+---
+
+#### densuke_member_mappings（伝助メンバーIDキャッシュ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| densuke_url_id | BIGINT | NOT NULL, FK | 伝助URL ID（densuke_urls.id） |
+| player_id | BIGINT | NOT NULL, FK | 選手ID（players.id） |
+| densuke_member_id | VARCHAR(50) | NOT NULL | 伝助メンバーID（`mi` パラメータ値） |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+
+**制約**:
+- UNIQUE (densuke_url_id, player_id)
+
+---
+
+#### densuke_row_ids（伝助行IDキャッシュ）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| densuke_url_id | BIGINT | NOT NULL, FK | 伝助URL ID（densuke_urls.id） |
+| densuke_row_id | VARCHAR(50) | NOT NULL | `join-{id}` フィールドのID値 |
+| session_date | DATE | NOT NULL | 対象日付 |
+| match_number | INT | NOT NULL | 対象試合番号 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+
+**制約**:
+- UNIQUE (densuke_url_id, session_date, match_number)
 
 ---
 
@@ -2024,9 +2054,12 @@ Entity Layer (JPA Entity)
 - アプリ内通知 + Web Push で即座に通知
 
 #### 伝助連携
-- 伝助（出欠管理ツール）のURLをスクレイピングして出欠情報を取得
-- JsoupによるHTMLパース
+- 伝助（出欠管理ツール）との双方向同期
+  - **アプリ→伝助**: `DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
+  - **伝助→アプリ**: JsoupによるHTMLスクレイピングで出欠情報を取得
 - 月単位でURL管理（`densuke_urls`テーブル）
+- メンバーID・行IDをキャッシュテーブル（`densuke_member_mappings`, `densuke_row_ids`）に保存
+- スケジューラーは ① 書き込み → ② 読み取り の順で実行
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し
