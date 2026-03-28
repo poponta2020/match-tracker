@@ -33,7 +33,7 @@ import LotteryResults from './pages/lottery/LotteryResults';
 import WaitlistStatus from './pages/lottery/WaitlistStatus';
 import OfferResponse from './pages/lottery/OfferResponse';
 import NotificationList from './pages/notifications/NotificationList';
-import LineSettings from './pages/line/LineSettings';
+import NotificationSettings from './pages/notifications/NotificationSettings';
 import LineChannelAdmin from './pages/line/LineChannelAdmin';
 import LineScheduleAdmin from './pages/line/LineScheduleAdmin';
 import DensukeManagement from './pages/densuke/DensukeManagement';
@@ -117,8 +117,8 @@ function App() {
             {/* システム設定 */}
             <Route path="/admin/settings" element={<ProtectedPage><SystemSettings /></ProtectedPage>} />
 
-            {/* LINE通知 */}
-            <Route path="/settings/line" element={<ProtectedPage><LineSettings /></ProtectedPage>} />
+            {/* 通知設定 */}
+            <Route path="/settings/notifications" element={<ProtectedPage><NotificationSettings /></ProtectedPage>} />
             <Route path="/admin/line/channels" element={<ProtectedPage><LineChannelAdmin /></ProtectedPage>} />
             <Route path="/admin/line/schedule" element={<ProtectedPage><LineScheduleAdmin /></ProtectedPage>} />
 
