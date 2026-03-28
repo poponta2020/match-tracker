@@ -168,14 +168,19 @@ public class DensukeImportService {
             }
 
             // 伝助から消えた参加者を自動削除（DBにいるが伝助にいない）
+            // dirty=true の参加者はアプリ側で変更済みのため削除しない（次サイクルで書き込まれる）
             for (Long existingId : existingPlayerIds) {
                 if (!densukePlayerIds.contains(existingId)) {
                     String playerName = playerIdMap.get(existingId);
-                    // DBから参加者を削除
                     existingParticipants.stream()
                             .filter(p -> p.getPlayerId().equals(existingId))
                             .findFirst()
                             .ifPresent(p -> {
+                                if (p.isDirty()) {
+                                    log.info("Skipping auto-remove for dirty participant: {} from session {} match {}",
+                                            playerName, entry.getDate(), entry.getMatchNumber());
+                                    return;
+                                }
                                 practiceParticipantRepository.delete(p);
                                 result.setRemovedCount(result.getRemovedCount() + 1);
                                 log.info("Auto-removed participant: {} from session {} match {}",
@@ -202,6 +207,7 @@ public class DensukeImportService {
                         .sessionId(session.getId())
                         .playerId(playerId)
                         .matchNumber(entry.getMatchNumber())
+                        .dirty(false)
                         .build();
                 practiceParticipantRepository.save(participant);
                 result.setRegisteredCount(result.getRegisteredCount() + 1);
