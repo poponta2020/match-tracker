@@ -109,18 +109,71 @@ public class PracticeParticipantService {
             }
         }
 
-        // セッションからorganizationIdを取得して締切判定に使用
+        // セッションからorganizationIdとDeadlineTypeを取得
         Long organizationId = null;
         if (!requestSessionIds.isEmpty()) {
             organizationId = practiceSessionRepository.findById(requestSessionIds.iterator().next())
                     .map(PracticeSession::getOrganizationId).orElse(null);
         }
 
-        if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), organizationId)) {
+        com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
+
+        if (deadlineType == com.karuta.matchtracker.entity.DeadlineType.SAME_DAY) {
+            // わすらもち会: 抽選なし、常に先着順（即WON/WAITLISTED）
+            registerSameDay(request);
+        } else if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), organizationId)) {
+            // 北大: 締切前はPENDING
             registerBeforeDeadline(request);
         } else {
+            // 北大: 締切後はWON/WAITLISTED
             registerAfterDeadline(request);
         }
+    }
+
+    /**
+     * SAME_DAYタイプ（わすらもち会）の参加登録
+     * 抽選なし・先着順: 空きあり→即WON、定員超過→即WAITLISTED
+     */
+    private void registerSameDay(PracticeParticipationRequest request) {
+        Long playerId = request.getPlayerId();
+
+        // 対象月の全セッションIDを取得して既存登録を削除（月単位の一括更新）
+        List<Long> allMonthSessionIds = practiceSessionRepository
+                .findByYearAndMonth(request.getYear(), request.getMonth()).stream()
+                .map(PracticeSession::getId).collect(Collectors.toList());
+
+        if (!allMonthSessionIds.isEmpty()) {
+            practiceParticipantRepository.deleteByPlayerIdAndSessionIds(playerId, allMonthSessionIds);
+            practiceParticipantRepository.flush();
+        }
+
+        Map<Long, PracticeSession> sessionsMap = practiceSessionRepository.findAllById(
+                request.getParticipations().stream()
+                        .map(PracticeParticipationRequest.SessionMatchParticipation::getSessionId)
+                        .distinct().collect(Collectors.toList())
+        ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
+
+        int registered = 0, waitlisted = 0;
+        for (var participation : request.getParticipations()) {
+            Long sessionId = participation.getSessionId();
+            Integer matchNumber = participation.getMatchNumber();
+
+            if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
+                practiceParticipantRepository.save(PracticeParticipant.builder()
+                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
+                        .status(ParticipantStatus.WON).build());
+                registered++;
+            } else {
+                int maxNumber = practiceParticipantRepository
+                        .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
+                practiceParticipantRepository.save(PracticeParticipant.builder()
+                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
+                        .status(ParticipantStatus.WAITLISTED)
+                        .waitlistNumber(maxNumber + 1).build());
+                waitlisted++;
+            }
+        }
+        log.info("SAME_DAY: registered {} won, {} waitlisted for player {}", registered, waitlisted, playerId);
     }
 
     private void registerBeforeDeadline(PracticeParticipationRequest request) {
