@@ -98,9 +98,16 @@ public class PracticeSessionController {
     @GetMapping("/year-month")
     public ResponseEntity<List<PracticeSessionDto>> getSessionsByYearMonth(
             @RequestParam int year,
-            @RequestParam int month) {
+            @RequestParam int month,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/practice-sessions/year-month?year={}&month={}", year, month);
-        List<PracticeSessionDto> sessions = practiceSessionService.findSessionsByYearMonth(year, month);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<PracticeSessionDto> sessions;
+        if (currentUserId != null) {
+            sessions = practiceSessionService.findSessionsByYearMonthAndPlayer(year, month, currentUserId);
+        } else {
+            sessions = practiceSessionService.findSessionsByYearMonth(year, month);
+        }
         return ResponseEntity.ok(sessions);
     }
 
@@ -110,9 +117,11 @@ public class PracticeSessionController {
     @GetMapping("/year-month/summary")
     public ResponseEntity<List<PracticeSessionDto>> getSessionSummariesByYearMonth(
             @RequestParam int year,
-            @RequestParam int month) {
+            @RequestParam int month,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/practice-sessions/year-month/summary?year={}&month={}", year, month);
-        List<PracticeSessionDto> sessions = practiceSessionService.findSessionSummariesByYearMonth(year, month);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<PracticeSessionDto> sessions = practiceSessionService.findSessionSummariesByYearMonth(year, month, currentUserId);
         return ResponseEntity.ok(sessions);
     }
 
@@ -210,12 +219,20 @@ public class PracticeSessionController {
      * @return 登録された練習日情報
      */
     @PostMapping
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<PracticeSessionDto> createSession(
             @Valid @RequestBody PracticeSessionCreateRequest request,
             HttpServletRequest httpRequest) {
         log.info("POST /api/practice-sessions - Creating new practice session on {}", request.getSessionDate());
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        String currentUserRole = (String) httpRequest.getAttribute("currentUserRole");
+
+        // ADMIN は自団体の organizationId を自動設定
+        if ("ADMIN".equals(currentUserRole) && request.getOrganizationId() == null) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            request.setOrganizationId(adminOrgId);
+        }
+
         PracticeSessionDto createdSession = practiceSessionService.createSession(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdSession);
     }
@@ -228,7 +245,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PutMapping("/{id}")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<PracticeSessionDto> updateSession(
             @PathVariable Long id,
             @Valid @RequestBody PracticeSessionUpdateRequest request,
@@ -247,7 +264,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PutMapping("/{id}/total-matches")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<PracticeSessionDto> updateTotalMatches(
             @PathVariable Long id,
             @RequestParam Integer totalMatches) {
@@ -263,7 +280,7 @@ public class PracticeSessionController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{id}")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
         log.info("DELETE /api/practice-sessions/{} - Deleting practice session", id);
         practiceSessionService.deleteSession(id);
@@ -325,7 +342,7 @@ public class PracticeSessionController {
      * @return 成功レスポンス
      */
     @PutMapping("/{sessionId}/matches/{matchNumber}/participants")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> setMatchParticipants(
             @PathVariable Long sessionId,
             @PathVariable Integer matchNumber,

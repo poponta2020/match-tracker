@@ -70,6 +70,12 @@ public class PracticeSession {
     private Integer capacity;
 
     /**
+     * 所属団体ID
+     */
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
+
+    /**
      * 作成者のID
      */
     @Column(name = "created_by", nullable = false)

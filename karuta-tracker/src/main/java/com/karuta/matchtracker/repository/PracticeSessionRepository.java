@@ -72,6 +72,23 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
      */
     boolean existsBySessionDate(LocalDate sessionDate);
 
+    // === 団体フィルタ付きクエリ ===
+
+    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds ORDER BY ps.sessionDate DESC")
+    List<PracticeSession> findByOrganizationIdInOrderBySessionDateDesc(@Param("orgIds") List<Long> orgIds);
+
+    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month ORDER BY ps.sessionDate ASC")
+    List<PracticeSession> findByOrganizationIdInAndYearAndMonth(@Param("orgIds") List<Long> orgIds, @Param("year") int year, @Param("month") int month);
+
+    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate ASC")
+    List<PracticeSession> findUpcomingSessionsByOrganizationIdIn(@Param("orgIds") List<Long> orgIds, @Param("date") LocalDate date);
+
+    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate BETWEEN :startDate AND :endDate ORDER BY ps.sessionDate ASC")
+    List<PracticeSession> findByOrganizationIdInAndDateRange(@Param("orgIds") List<Long> orgIds, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate DESC")
+    List<LocalDate> findSessionDatesByOrganizationIdIn(@Param("orgIds") List<Long> orgIds, @Param("date") LocalDate date);
+
     /**
      * 指定日以降の練習日の日付リストのみ取得（降順）
      *

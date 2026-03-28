@@ -31,6 +31,7 @@ public class PracticeSessionDto {
     private LocalTime startTime;
     private LocalTime endTime;
     private Integer capacity;
+    private Long organizationId;
     private Long createdBy;
     private Long updatedBy;
     private LocalDateTime createdAt;
@@ -89,6 +90,7 @@ public class PracticeSessionDto {
                 .startTime(session.getStartTime())
                 .endTime(session.getEndTime())
                 .capacity(session.getCapacity())
+                .organizationId(session.getOrganizationId())
                 .createdBy(session.getCreatedBy())
                 .updatedBy(session.getUpdatedBy())
                 .createdAt(session.getCreatedAt())

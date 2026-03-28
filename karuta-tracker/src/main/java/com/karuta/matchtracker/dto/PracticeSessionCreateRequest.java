@@ -41,4 +41,7 @@ public class PracticeSessionCreateRequest {
     private Integer capacity;
 
     private List<Long> participantIds;
+
+    /** SUPER_ADMINが練習日作成時に団体を指定（ADMINは自動設定） */
+    private Long organizationId;
 }

@@ -44,6 +44,7 @@ public class PracticeSessionService {
     private final MatchRepository matchRepository;
     private final VenueRepository venueRepository;
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
+    private final OrganizationService organizationService;
 
     /**
      * 全ての練習日を取得（降順）
@@ -51,6 +52,16 @@ public class PracticeSessionService {
     public List<PracticeSessionDto> findAllSessions() {
         log.debug("Finding all practice sessions");
         List<PracticeSession> sessions = practiceSessionRepository.findAllOrderBySessionDateDesc();
+        return enrichSessionsWithParticipants(sessions);
+    }
+
+    /**
+     * ユーザーの参加団体に基づいて練習日を取得（降順）
+     */
+    public List<PracticeSessionDto> findAllSessionsByPlayer(Long playerId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+        if (orgIds.isEmpty()) return List.of();
+        List<PracticeSession> sessions = practiceSessionRepository.findByOrganizationIdInOrderBySessionDateDesc(orgIds);
         return enrichSessionsWithParticipants(sessions);
     }
 
@@ -106,14 +117,32 @@ public class PracticeSessionService {
     }
 
     /**
+     * ユーザーの参加団体に基づいて特定の年月の練習日を取得
+     */
+    public List<PracticeSessionDto> findSessionsByYearMonthAndPlayer(int year, int month, Long playerId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+        if (orgIds.isEmpty()) return List.of();
+        YearMonth yearMonth = YearMonth.of(year, month);
+        List<PracticeSession> sessions = practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(orgIds, yearMonth.getYear(), yearMonth.getMonthValue());
+        return enrichSessionsWithParticipants(sessions);
+    }
+
+    /**
      * 特定の年月の練習日サマリーを取得（カレンダー表示用・軽量）
      * 参加者詳細情報なし、会場名のみ付与
      */
     @Transactional(readOnly = true)
-    public List<PracticeSessionDto> findSessionSummariesByYearMonth(int year, int month) {
+    public List<PracticeSessionDto> findSessionSummariesByYearMonth(int year, int month, Long playerId) {
         log.debug("Finding practice session summaries for {}-{}", year, month);
         YearMonth yearMonth = YearMonth.of(year, month);
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(yearMonth.getYear(), yearMonth.getMonthValue());
+        List<PracticeSession> sessions;
+        if (playerId != null) {
+            List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+            if (orgIds.isEmpty()) return List.of();
+            sessions = practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(orgIds, yearMonth.getYear(), yearMonth.getMonthValue());
+        } else {
+            sessions = practiceSessionRepository.findByYearAndMonth(yearMonth.getYear(), yearMonth.getMonthValue());
+        }
 
         // 会場名だけ付与（参加者のenrichmentはスキップ）
         List<Long> venueIds = sessions.stream()
@@ -142,6 +171,16 @@ public class PracticeSessionService {
     public List<PracticeSessionDto> findUpcomingSessions(LocalDate fromDate) {
         log.debug("Finding upcoming practice sessions from {}", fromDate);
         List<PracticeSession> sessions = practiceSessionRepository.findUpcomingSessions(fromDate);
+        return enrichSessionsWithParticipants(sessions);
+    }
+
+    /**
+     * ユーザーの参加団体に基づいて指定日以降の練習日を取得
+     */
+    public List<PracticeSessionDto> findUpcomingSessionsByPlayer(LocalDate fromDate, Long playerId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+        if (orgIds.isEmpty()) return List.of();
+        List<PracticeSession> sessions = practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(orgIds, fromDate);
         return enrichSessionsWithParticipants(sessions);
     }
 
@@ -260,6 +299,12 @@ public class PracticeSessionService {
             }
         }
 
+        // organizationId の決定
+        Long organizationId = request.getOrganizationId();
+        if (organizationId == null) {
+            throw new IllegalArgumentException("団体IDは必須です");
+        }
+
         // 練習セッションを保存
         PracticeSession session = PracticeSession.builder()
                 .sessionDate(request.getSessionDate())
@@ -269,6 +314,7 @@ public class PracticeSessionService {
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .capacity(request.getCapacity())
+                .organizationId(organizationId)
                 .createdBy(currentUserId)
                 .updatedBy(currentUserId)
                 .build();
