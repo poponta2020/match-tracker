@@ -6,6 +6,7 @@ import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
@@ -377,6 +378,8 @@ public class PracticeSessionService {
         PracticeSession session = practiceSessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", id));
 
+        // ADMIN スコープチェックは呼び出し元で実施（Controller → checkAdminScope）
+
         // 日付変更時の重複チェック
         if (!session.getSessionDate().equals(request.getSessionDate()) &&
                 practiceSessionRepository.existsBySessionDate(request.getSessionDate())) {
@@ -447,6 +450,21 @@ public class PracticeSessionService {
         practiceSessionRepository.deleteById(id);
 
         log.info("Successfully deleted practice session with id: {}", id);
+    }
+
+    /**
+     * ADMINが自団体の練習日のみ操作可能かチェック
+     * SUPER_ADMINの場合はスキップ
+     */
+    public void checkAdminScope(Long sessionId, String role, Long adminOrganizationId) {
+        if (!"ADMIN".equals(role)) return; // SUPER_ADMIN等はスキップ
+
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        if (adminOrganizationId == null || !adminOrganizationId.equals(session.getOrganizationId())) {
+            throw new ForbiddenException("他団体の練習日は編集できません");
+        }
     }
 
     /**

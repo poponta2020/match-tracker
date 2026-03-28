@@ -1,10 +1,13 @@
 package com.karuta.matchtracker.interceptor;
 
 import com.karuta.matchtracker.annotation.RequireRole;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
@@ -21,7 +24,10 @@ import java.util.Arrays;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class RoleCheckInterceptor implements HandlerInterceptor {
+
+    private final PlayerRepository playerRepository;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -67,10 +73,20 @@ public class RoleCheckInterceptor implements HandlerInterceptor {
         }
 
         // ロールをリクエスト属性にセット
-        request.setAttribute("currentUserRole", userRole);
+        request.setAttribute("currentUserRole", userRole.name());
 
         // ユーザーIDの抽出・セット（@RequireRole 付きエンドポイントでは必須）
         extractAndSetUserId(request, true);
+
+        // ADMINの場合、adminOrganizationId をリクエスト属性にセット
+        if (userRole == Role.ADMIN) {
+            Long userId = (Long) request.getAttribute("currentUserId");
+            if (userId != null) {
+                playerRepository.findById(userId).ifPresent(player -> {
+                    request.setAttribute("adminOrganizationId", player.getAdminOrganizationId());
+                });
+            }
+        }
 
         log.debug("User with role '{}' granted access to endpoint: {}", userRole, request.getRequestURI());
         return true;

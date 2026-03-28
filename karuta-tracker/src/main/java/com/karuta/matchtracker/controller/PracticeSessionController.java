@@ -251,6 +251,10 @@ public class PracticeSessionController {
             @Valid @RequestBody PracticeSessionUpdateRequest request,
             HttpServletRequest httpRequest) {
         log.info("PUT /api/practice-sessions/{} - Updating practice session", id);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(id, role, adminOrgId);
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         PracticeSessionDto updatedSession = practiceSessionService.updateSession(id, request, currentUserId);
         return ResponseEntity.ok(updatedSession);
@@ -281,8 +285,12 @@ public class PracticeSessionController {
      */
     @DeleteMapping("/{id}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteSession(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.info("DELETE /api/practice-sessions/{} - Deleting practice session", id);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(id, role, adminOrgId);
+
         practiceSessionService.deleteSession(id);
         return ResponseEntity.noContent().build();
     }
