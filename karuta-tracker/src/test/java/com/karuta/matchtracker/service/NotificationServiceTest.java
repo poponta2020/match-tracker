@@ -51,6 +51,7 @@ class NotificationServiceTest {
         PracticeSession s = new PracticeSession();
         s.setId(id);
         s.setSessionDate(date);
+        s.setOrganizationId(1L);
         return s;
     }
 
@@ -156,7 +157,7 @@ class NotificationServiceTest {
                 .playerId(10L).enabled(true).lotteryResult(true)
                 .waitlistOffer(true).offerExpiring(true).offerExpired(true)
                 .channelReclaimWarning(true).densukeUnmatched(true).build();
-        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(List.of(pref));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
 
         service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
@@ -173,7 +174,7 @@ class NotificationServiceTest {
                 .playerId(10L).enabled(true).lotteryResult(true)
                 .waitlistOffer(false).offerExpiring(true).offerExpired(true)
                 .channelReclaimWarning(true).densukeUnmatched(true).build();
-        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(List.of(pref));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
 
         service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
@@ -190,7 +191,7 @@ class NotificationServiceTest {
                 .playerId(10L).enabled(false).lotteryResult(true)
                 .waitlistOffer(true).offerExpiring(true).offerExpired(true)
                 .channelReclaimWarning(true).densukeUnmatched(true).build();
-        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(List.of(pref));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
 
         service.createAndPush(10L, NotificationType.WAITLIST_OFFER,
@@ -203,7 +204,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("createAndPush: 設定レコードなしの場合Web Push送信されない")
     void createAndPush_noPreferenceSkipsPush() {
-        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.empty());
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(List.of());
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
 
         service.createAndPush(10L, NotificationType.LOTTERY_ALL_WON,
@@ -220,7 +221,7 @@ class NotificationServiceTest {
                 .playerId(10L).enabled(true).lotteryResult(false)
                 .waitlistOffer(true).offerExpiring(true).offerExpired(true)
                 .channelReclaimWarning(true).densukeUnmatched(true).build();
-        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(Optional.of(pref));
+        when(pushNotificationPreferenceRepository.findByPlayerId(10L)).thenReturn(List.of(pref));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(i -> i.getArgument(0));
 
         // LOTTERY_ALL_WON

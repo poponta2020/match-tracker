@@ -224,7 +224,7 @@ status: completed
 - **対応Issue:** #96
 
 ### タスク17: DBスキーマ — 通知設定テーブルに organization_id 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `push_notification_preferences` と `line_notification_preferences` に `organization_id` を追加し、団体ごとの通知設定を実現する。
 - **変更対象ファイル:**
   - `database/migration_notification_org.sql` — 新規作成。DDL + データ移行SQL
@@ -237,7 +237,7 @@ status: completed
 - **対応Issue:** #97
 
 ### タスク18: バックエンド — 通知設定の団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知設定のEntity・Repository・Serviceを団体対応に変更する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/PushNotificationPreference.java` — `organizationId` 追加、ユニーク制約変更
@@ -257,7 +257,7 @@ status: completed
 - **対応Issue:** #98
 
 ### タスク19: バックエンド — Webプッシュ送信の団体フィルタ
-- [ ] 完了
+- [x] 完了
 - **概要:** Webプッシュ通知の送信時に `player_organizations` で対象ユーザーをフィルタする。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/NotificationService.java` — `createAndPush` 呼び出し箇所で団体チェック追加
@@ -267,7 +267,7 @@ status: completed
 - **対応Issue:** #99
 
 ### タスク20: フロントエンド — 通知設定画面の団体別UI
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知設定画面（NotificationSettings）のWebプッシュ・LINE通知の種別トグルを団体別に表示する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/notifications/NotificationSettings.jsx` — 団体別セクションで種別トグルを表示
