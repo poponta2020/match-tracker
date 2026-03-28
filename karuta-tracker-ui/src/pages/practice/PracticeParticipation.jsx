@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, systemSettingsAPI } from '../../api';
+import { organizationAPI } from '../../api/organizations';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
@@ -21,6 +22,8 @@ const PracticeParticipation = () => {
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean
   const [beforeDeadline, setBeforeDeadline] = useState(true);
   const [deadlineInfo, setDeadlineInfo] = useState(null);
+  const [orgMap, setOrgMap] = useState({});
+  const [showSameDayConfirm, setShowSameDayConfirm] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -34,11 +37,12 @@ const PracticeParticipation = () => {
       setError('');
 
       try {
-        const [sessionsRes, participationsRes, statusRes, deadlineRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes, deadlineRes, orgsRes] = await Promise.all([
           practiceAPI.getByYearMonth(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
           practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
           systemSettingsAPI.getDeadline(year, month).catch(() => ({ data: null })),
+          organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
 
         // セッションを日付昇順にソート
@@ -57,6 +61,11 @@ const PracticeParticipation = () => {
         setLotteryExecuted(statusData.lotteryExecuted || {});
         setBeforeDeadline(statusData.beforeDeadline !== false);
         setDeadlineInfo(deadlineRes.data);
+
+        // 団体マップ
+        const map = {};
+        (orgsRes.data || []).forEach(o => { map[o.id] = o; });
+        setOrgMap(map);
       } catch (err) {
         console.error('データ取得エラー:', err);
         setError('データの取得に失敗しました');
@@ -127,9 +136,29 @@ const PracticeParticipation = () => {
     return JSON.stringify(filterLottery(participations)) !== JSON.stringify(filterLottery(initialParticipations));
   };
 
+  // SAME_DAYタイプの当日12:00以降チェック
+  const needsSameDayConfirm = () => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const isAfterNoon = now.getHours() >= 12;
+
+    return sessions.some(session => {
+      const org = orgMap[session.organizationId];
+      if (!org || org.deadlineType !== 'SAME_DAY') return false;
+      return session.sessionDate === todayStr && isAfterNoon;
+    });
+  };
+
   // 保存処理
   const handleSave = async () => {
     if (!currentPlayer?.id) return;
+
+    // SAME_DAYタイプの当日12:00以降の場合は確認ダイアログ
+    if (needsSameDayConfirm() && !showSameDayConfirm) {
+      setShowSameDayConfirm(true);
+      return;
+    }
+    setShowSameDayConfirm(false);
 
     setSaving(true);
     setError('');
@@ -395,6 +424,37 @@ const PracticeParticipation = () => {
             <Save className="w-5 h-5" />
             {saving ? '保存中...' : '保存する'}
           </button>
+        </div>
+      )}
+
+      {/* SAME_DAY 12:00以降の確認ダイアログ */}
+      {showSameDayConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-gray-800 mb-2">確認</h3>
+                <p className="text-sm text-gray-600">
+                  12時以降の参加登録・キャンセルは管理者への連絡が必須です。連絡しましたか？
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSameDayConfirm(false)}
+                className="flex-1 py-2.5 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                いいえ
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                はい
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
