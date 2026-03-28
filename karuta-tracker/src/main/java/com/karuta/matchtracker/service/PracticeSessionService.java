@@ -10,6 +10,8 @@ import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
+import com.karuta.matchtracker.entity.DensukeUrl;
+import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -46,6 +48,7 @@ public class PracticeSessionService {
     private final VenueRepository venueRepository;
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
     private final OrganizationService organizationService;
+    private final DensukeUrlRepository densukeUrlRepository;
 
     /**
      * 全ての練習日を取得（降順）
@@ -673,5 +676,22 @@ public class PracticeSessionService {
 
         dto.setMatchParticipantCounts(matchCounts);
         dto.setMatchParticipants(matchParticipants);
+    }
+
+    // ========== 伝助URL管理 ==========
+
+    public java.util.Optional<DensukeUrl> getDensukeUrl(int year, int month) {
+        return densukeUrlRepository.findByYearAndMonth(year, month);
+    }
+
+    @Transactional
+    public DensukeUrl saveDensukeUrl(int year, int month, String url) {
+        if (!url.startsWith("https://densuke.biz/")) {
+            throw new IllegalArgumentException("伝助のURL（https://densuke.biz/）のみ登録できます");
+        }
+        DensukeUrl entity = densukeUrlRepository.findByYearAndMonth(year, month)
+                .orElse(DensukeUrl.builder().year(year).month(month).build());
+        entity.setUrl(url);
+        return densukeUrlRepository.save(entity);
     }
 }

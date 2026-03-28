@@ -32,7 +32,6 @@ public class PracticeSessionController {
     private final PracticeParticipantService practiceParticipantService;
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
     private final com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
-    private final com.karuta.matchtracker.repository.DensukeUrlRepository densukeUrlRepository;
 
     /**
      * 全ての練習日を取得
@@ -434,7 +433,7 @@ public class PracticeSessionController {
         }
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
+        var densukeUrl = practiceSessionService.getDensukeUrl(year, month);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
                     year + "年" + month + "月の伝助URLが登録されていません"));
@@ -473,7 +472,7 @@ public class PracticeSessionController {
     @GetMapping("/densuke-url")
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<?> getDensukeUrl(@RequestParam int year, @RequestParam int month) {
-        var url = densukeUrlRepository.findByYearAndMonth(year, month);
+        var url = practiceSessionService.getDensukeUrl(year, month);
         return url.map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
     }
@@ -492,14 +491,12 @@ public class PracticeSessionController {
             return ResponseEntity.badRequest().body(Map.of("message", "year, month, urlは必須です"));
         }
 
-        var entity = densukeUrlRepository.findByYearAndMonth(year, month)
-                .orElse(com.karuta.matchtracker.entity.DensukeUrl.builder()
-                        .year(year)
-                        .month(month)
-                        .build());
-        entity.setUrl(url);
-        densukeUrlRepository.save(entity);
-        return ResponseEntity.ok(entity);
+        try {
+            var entity = practiceSessionService.saveDensukeUrl(year, month, url);
+            return ResponseEntity.ok(entity);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     /**
@@ -517,7 +514,7 @@ public class PracticeSessionController {
         }
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        var densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
+        var densukeUrl = practiceSessionService.getDensukeUrl(year, month);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
                     year + "年" + month + "月の伝助URLが登録されていません"));
