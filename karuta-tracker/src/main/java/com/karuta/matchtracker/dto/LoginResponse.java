@@ -23,6 +23,7 @@ public class LoginResponse {
     private Player.KyuRank kyuRank;
     private String karutaClub;
     private Player.Role role;
+    private Long adminOrganizationId;
     private boolean firstLogin;
     private boolean requirePasswordChange;
 
@@ -42,6 +43,7 @@ public class LoginResponse {
                 .kyuRank(player.getKyuRank())
                 .karutaClub(player.getKarutaClub())
                 .role(player.getRole())
+                .adminOrganizationId(player.getAdminOrganizationId())
                 .firstLogin(firstLogin)
                 .requirePasswordChange(Boolean.TRUE.equals(player.getRequirePasswordChange()))
                 .build();
