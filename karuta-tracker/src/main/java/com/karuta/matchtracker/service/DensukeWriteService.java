@@ -10,7 +10,6 @@ import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +27,13 @@ import java.util.stream.Collectors;
  *
  * dirty=true の参加者を対象に、伝助へ出欠を書き込む。
  * 書き込み成功後に dirty=false に更新する。
+ *
+ * 伝助の書き込みフロー（3段階）:
+ * ① メンバー追加: POST insert?cd={code} (id, membername)
+ * ② 編集画面取得: POST list?cd={code} (id, mi) → join-{dateId} を取得
+ * ③ 出欠登録:    POST regist?cd={code} (id, mi, ai=u2, membername, join-{dateId}, membercomment)
+ *
+ * Cookie管理が必要: GET list 時に発行される {cd}LST Cookie を後続リクエストに付与する。
  */
 @Service
 @Slf4j
@@ -41,7 +47,6 @@ public class DensukeWriteService {
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final PlayerRepository playerRepository;
 
-    // javascript:memberdata(ID) 形式から mi を抽出する正規表現
     private static final Pattern MEMBERDATA_PATTERN = Pattern.compile("memberdata\\((\\d+)\\)");
 
     // メモリ上の状態（スケジューラーから参照）
@@ -131,7 +136,6 @@ public class DensukeWriteService {
                 .collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
         // dirty 参加者をプレイヤー×URLでグループ化
-        // Map<urlId, Map<playerId, List<PracticeParticipant>>>
         Map<Long, Map<Long, List<PracticeParticipant>>> grouped = new LinkedHashMap<>();
         for (PracticeParticipant p : dirtyParticipants) {
             Long urlId = sessionToUrlId.get(p.getSessionId());
@@ -147,7 +151,7 @@ public class DensukeWriteService {
         Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
-        // 各（URL, プレイヤー）の書き込み
+        // 各 URL の書き込み
         for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
             DensukeUrl densukeUrl = urlById.get(urlId);
@@ -160,6 +164,32 @@ public class DensukeWriteService {
                 continue;
             }
 
+            // ① リストページを1回取得: Cookie・ページID・メンバーマップを得る
+            Map<String, String> cookies;
+            String pageId;
+            Map<String, String> memberNameToMi;
+            try {
+                Connection.Response listResponse = Jsoup.connect(base + "list?cd=" + cd)
+                        .userAgent("Mozilla/5.0")
+                        .timeout(10000)
+                        .execute();
+                cookies = listResponse.cookies();
+                Document listDoc = listResponse.parse();
+                pageId = extractPageId(listDoc);
+                memberNameToMi = extractAllMemberMappings(listDoc);
+                log.info("Densuke list fetched: cd={}, pageId={}, {} members found", cd, pageId, memberNameToMi.size());
+            } catch (IOException e) {
+                log.warn("Failed to fetch densuke list page for cd={}: {}", cd, e.getMessage());
+                errors.add("伝助リストページ取得失敗: " + e.getMessage());
+                continue;
+            }
+
+            if (pageId == null) {
+                errors.add("伝助ページID取得失敗: cd=" + cd);
+                continue;
+            }
+
+            // ② 各プレイヤーの書き込み
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -167,7 +197,8 @@ public class DensukeWriteService {
 
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
-                            participants, urlSessions, sessionMap, base, cd, errors);
+                            participants, urlSessions, sessionMap,
+                            base, cd, cookies, pageId, memberNameToMi, errors);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     errors.add("選手[" + playerName + "]: " + e.getMessage());
@@ -185,13 +216,30 @@ public class DensukeWriteService {
             List<PracticeSession> urlSessions,
             Map<Long, PracticeSession> sessionMap,
             String base, String cd,
+            Map<String, String> cookies, String pageId,
+            Map<String, String> memberNameToMi,
             List<String> errors) throws IOException {
 
-        // a. densuke_member_id を取得（なければ INSERT）
+        String strippedName = DensukeScraper.stripLeadingEmoji(playerName);
+
+        // a. densuke_member_id を取得
         String mi = densukeMemberMappingRepository
                 .findByDensukeUrlIdAndPlayerId(urlId, playerId)
                 .map(DensukeMemberMapping::getDensukeMemberId)
-                .orElseGet(() -> findOrInsertMember(urlId, playerId, playerName, base, cd, errors));
+                .orElse(null);
+
+        if (mi == null) {
+            // リストページのメンバーマップから探す
+            mi = memberNameToMi.get(strippedName);
+            if (mi != null) {
+                saveMemberMapping(urlId, playerId, mi, playerName);
+            }
+        }
+
+        if (mi == null) {
+            // メンバーを新規追加
+            mi = insertMember(urlId, playerId, strippedName, base, cd, cookies, pageId, errors);
+        }
 
         if (mi == null) {
             errors.add("選手[" + playerName + "]: メンバーIDの取得に失敗");
@@ -199,7 +247,7 @@ public class DensukeWriteService {
         }
 
         // b. densuke_row_ids を取得（なければ編集フォームをフェッチして保存）
-        ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, errors);
+        ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors);
 
         // c. 当該URLの全セッション×このプレイヤーのステータスを取得
         List<Long> urlSessionIds = urlSessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
@@ -210,9 +258,13 @@ public class DensukeWriteService {
                         p -> p.getSessionId() + "_" + p.getMatchNumber(),
                         p -> p, (a, b) -> a));
 
-        // d. join-{id} ごとに値を決定して POST regist
+        // d. regist フォームデータを構築
         Map<String, String> formData = new LinkedHashMap<>();
+        formData.put("id", pageId);
         formData.put("mi", mi);
+        formData.put("ai", "u2");
+        formData.put("membername", strippedName);
+        formData.put("membercomment", "");
 
         for (PracticeSession session : urlSessions) {
             for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
@@ -229,17 +281,19 @@ public class DensukeWriteService {
             }
         }
 
-        if (formData.size() <= 1) {
+        if (formData.size() <= 5) {
             // join-{id} が一つも見つからない場合はスキップ
             log.debug("No row IDs found for player {} / urlId {}, skipping regist", playerName, urlId);
             return;
         }
 
-        // e. POST regist
+        // e. POST regist（Cookie 付き）
         Connection.Response response = Jsoup.connect(base + "regist?cd=" + cd)
                 .data(formData)
+                .cookies(cookies)
                 .method(Connection.Method.POST)
                 .userAgent("Mozilla/5.0")
+                .referrer(base + "list?cd=" + cd)
                 .timeout(10000)
                 .execute();
 
@@ -257,52 +311,57 @@ public class DensukeWriteService {
     }
 
     /**
-     * 伝助のリスト画面から既存メンバーの mi を探す。
-     * 見つからない場合はメンバーを追加してから再度探す。
-     * 取得した mi は densuke_member_mappings に保存する。
+     * 伝助にメンバーを新規追加し、302リダイレクトから mi を取得する。
      */
-    private String findOrInsertMember(Long urlId, Long playerId, String playerName,
-                                       String base, String cd, List<String> errors) {
+    private String insertMember(Long urlId, Long playerId, String memberName,
+                                 String base, String cd,
+                                 Map<String, String> cookies, String pageId,
+                                 List<String> errors) {
         try {
-            // まずリスト画面から既存メンバーの mi を探す
-            Document listDoc = Jsoup.connect(base + "list?cd=" + cd)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(10000)
-                    .get();
-
-            String mi = findMiByName(listDoc, playerName);
-            if (mi != null) {
-                saveMemberMapping(urlId, playerId, mi, playerName);
-                return mi;
-            }
-
-            // 見つからない場合、メンバーを追加
-            log.info("Member not found on densuke, inserting: {}", playerName);
-            Jsoup.connect(base + "insert?cd=" + cd)
-                    .data("name", playerName)
+            log.info("Inserting new member to densuke: {}", memberName);
+            Connection.Response insertResponse = Jsoup.connect(base + "insert?cd=" + cd)
+                    .data("id", pageId)
+                    .data("membername", memberName)
+                    .cookies(cookies)
                     .method(Connection.Method.POST)
                     .userAgent("Mozilla/5.0")
+                    .referrer(base + "list?cd=" + cd)
+                    .followRedirects(false)
                     .timeout(10000)
                     .execute();
 
-            // 追加後、再度リスト画面から mi を探す
-            listDoc = Jsoup.connect(base + "list?cd=" + cd)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(10000)
-                    .get();
-
-            mi = findMiByName(listDoc, playerName);
-            if (mi == null) {
-                log.warn("Could not find mi for player {} after insert", playerName);
-                return null;
+            // 302 リダイレクトの Location ヘッダーから ii パラメータで mi を取得
+            String location = insertResponse.header("Location");
+            if (location != null) {
+                String mi = extractQueryParam(location, "ii");
+                if (mi != null) {
+                    saveMemberMapping(urlId, playerId, mi, memberName);
+                    return mi;
+                }
+                log.warn("Insert redirect has no ii param: {}", location);
             }
 
-            saveMemberMapping(urlId, playerId, mi, playerName);
-            return mi;
+            // フォールバック: リストページを再取得して名前で検索
+            log.info("Falling back to list page search after insert for: {}", memberName);
+            Connection.Response listResponse = Jsoup.connect(base + "list?cd=" + cd)
+                    .cookies(cookies)
+                    .userAgent("Mozilla/5.0")
+                    .timeout(10000)
+                    .execute();
+            Document listDoc = listResponse.parse();
+            Map<String, String> memberMap = extractAllMemberMappings(listDoc);
+            String mi = memberMap.get(memberName);
+            if (mi != null) {
+                saveMemberMapping(urlId, playerId, mi, memberName);
+                return mi;
+            }
+
+            log.warn("Could not find mi for player {} after insert", memberName);
+            return null;
 
         } catch (IOException e) {
-            log.warn("Failed to find or insert densuke member {}: {}", playerName, e.getMessage());
-            errors.add("選手[" + playerName + "]: メンバー追加失敗 - " + e.getMessage());
+            log.warn("Failed to insert densuke member {}: {}", memberName, e.getMessage());
+            errors.add("選手[" + memberName + "]: メンバー追加失敗 - " + e.getMessage());
             return null;
         }
     }
@@ -317,29 +376,40 @@ public class DensukeWriteService {
     }
 
     /**
-     * リスト画面の ヘッダー行から playerName に対応する mi を探す。
+     * リスト画面のヘッダー行から全メンバーの名前→mi マッピングを構築する。
+     * 名前は絵文字を除去した状態で格納する。
      */
-    private String findMiByName(Document doc, String playerName) {
+    private Map<String, String> extractAllMemberMappings(Document doc) {
+        Map<String, String> result = new LinkedHashMap<>();
         Element table = doc.selectFirst("table.listtbl");
-        if (table == null) return null;
+        if (table == null) return result;
         Element headerRow = table.selectFirst("tr");
-        if (headerRow == null) return null;
+        if (headerRow == null) return result;
 
         for (Element cell : headerRow.select("td")) {
             Element link = cell.selectFirst("a");
             if (link == null) continue;
             String name = DensukeScraper.stripLeadingEmoji(link.text().trim());
-            if (playerName.equals(name)) {
-                String href = link.attr("href");
-                // javascript:memberdata(ID) 形式から mi を抽出
-                Matcher m = MEMBERDATA_PATTERN.matcher(href);
-                if (m.find()) {
-                    return m.group(1);
-                }
-                // フォールバック: URL クエリパラメータ形式
-                return extractQueryParam(href, "mi");
+            if (name.isEmpty()) continue;
+
+            String href = link.attr("href");
+            Matcher m = MEMBERDATA_PATTERN.matcher(href);
+            if (m.find()) {
+                result.put(name, m.group(1));
             }
         }
+        return result;
+    }
+
+    /**
+     * リスト画面の hidden input name="id" からページ固有IDを取得する。
+     */
+    private String extractPageId(Document doc) {
+        Element idInput = doc.selectFirst("input[name=id]");
+        if (idInput != null) {
+            return idInput.attr("value");
+        }
+        log.warn("Could not find hidden 'id' input in densuke list page");
         return null;
     }
 
@@ -348,7 +418,9 @@ public class DensukeWriteService {
      */
     private void ensureRowIds(Long urlId, List<PracticeSession> sessions,
                                Map<Long, PracticeSession> sessionMap,
-                               String base, String cd, String mi, List<String> errors) throws IOException {
+                               String base, String cd, String mi,
+                               Map<String, String> cookies, String pageId,
+                               List<String> errors) throws IOException {
         // 既にDBにある row_ids
         Set<String> existingKeys = densukeRowIdRepository.findByDensukeUrlId(urlId).stream()
                 .map(r -> r.getSessionDate() + "_" + r.getMatchNumber())
@@ -368,27 +440,24 @@ public class DensukeWriteService {
 
         if (!hasNew) return;
 
-        // 編集フォームを取得して join-{id} を抽出
+        // 編集フォームを取得して join-{id} を抽出（Cookie・id 付き）
         Document formDoc = Jsoup.connect(base + "list?cd=" + cd)
+                .data("id", pageId)
                 .data("mi", mi)
+                .cookies(cookies)
                 .method(Connection.Method.POST)
                 .userAgent("Mozilla/5.0")
+                .referrer(base + "list?cd=" + cd)
                 .timeout(10000)
                 .execute()
                 .parse();
 
-        // join-XXXXXX という name を持つ input/select を探す
-        // 伝助のフォームは input[name^=join-] または hidden field で行IDを持つ
         Map<String, String> joinInputs = extractJoinInputs(formDoc);
-
-        // 日付×試合番号と join-{id} の対応を推測する
-        // フォームの行構造を解析して session_date + match_number → join-id を取得
         parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs);
     }
 
     /**
      * 編集フォームから join-{id} のマップを抽出する。
-     * key: フィールド名 ("join-XXXXX")、value: 現在の値
      */
     private Map<String, String> extractJoinInputs(Document doc) {
         Map<String, String> result = new LinkedHashMap<>();
@@ -418,22 +487,15 @@ public class DensukeWriteService {
      */
     private void parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
                                      Document formDoc, Map<String, String> joinInputs) {
-        // join-{id} は伝助内部のID。フォームのテーブル行を順番に走査し、
-        // join-{id} の出現順を日程×試合番号の順序と対応させる。
         Element table = formDoc.selectFirst("table.listtbl");
         if (table == null || joinInputs.isEmpty()) {
             log.warn("Could not find listtbl or join inputs in densuke edit form");
             return;
         }
 
-        // 日程×試合番号リスト（DensukeScraper と同じ順序）を構築
         List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions);
-
-        // join-{id} のリスト（出現順）
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
-        // 日程×試合番号の数と join-{id} の数が合う場合に対応付け
-        // 1人のプレイヤーの編集フォームには全日程分の join-{id} が含まれる
         if (joinIds.size() < schedule.size()) {
             log.warn("Join ID count ({}) less than schedule count ({}), skipping row ID save",
                     joinIds.size(), schedule.size());
@@ -443,7 +505,7 @@ public class DensukeWriteService {
         List<DensukeRowId> toSave = new ArrayList<>();
         for (int i = 0; i < schedule.size(); i++) {
             Map.Entry<LocalDate, Integer> entry = schedule.get(i);
-            String rawJoinKey = joinIds.get(i); // "join-XXXXX"
+            String rawJoinKey = joinIds.get(i);
             String rowId = rawJoinKey.substring("join-".length());
 
             Optional<DensukeRowId> existing = densukeRowIdRepository
@@ -465,9 +527,6 @@ public class DensukeWriteService {
         }
     }
 
-    /**
-     * セッションリストから日付×試合番号の順序付きリストを構築する（DensukeScraper の解析順に合わせる）。
-     */
     private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions) {
         List<Map.Entry<LocalDate, Integer>> list = new ArrayList<>();
         List<PracticeSession> sorted = sessions.stream()
@@ -481,9 +540,6 @@ public class DensukeWriteService {
         return list;
     }
 
-    /**
-     * ParticipantStatus → 伝助の join 値に変換する。
-     */
     private int toJoinValue(ParticipantStatus status) {
         if (status == null) return 0;
         return switch (status) {
@@ -493,18 +549,10 @@ public class DensukeWriteService {
         };
     }
 
-    /**
-     * URL から cd パラメータを抽出する。
-     * 例: "https://densuke.biz/list?cd=XXXXXXXXXX" → "XXXXXXXXXX"
-     */
     static String extractCd(String url) {
         return extractQueryParam(url, "cd");
     }
 
-    /**
-     * URL のベース部分を抽出する。
-     * 例: "https://densuke.biz/list?cd=XXXXXXXXXX" → "https://densuke.biz/"
-     */
     static String extractBase(String url) {
         try {
             URI uri = new URI(url);
