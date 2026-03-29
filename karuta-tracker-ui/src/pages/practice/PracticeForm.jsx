@@ -63,7 +63,6 @@ const PracticeEditForm = ({ id }) => {
       navigate('/practice');
     } catch (err) {
       setError(err.response?.data?.message || '保存に失敗しました');
-    } finally {
       setLoading(false);
     }
   };
@@ -263,7 +262,6 @@ const PracticeForm = () => {
     } catch (err) {
       console.error('Error saving:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
-    } finally {
       setSaving(false);
     }
   };

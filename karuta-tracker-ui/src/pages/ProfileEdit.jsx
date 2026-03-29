@@ -178,7 +178,6 @@ const ProfileEdit = () => {
     } catch (err) {
       console.error('保存に失敗:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
-    } finally {
       setSaving(false);
     }
   };

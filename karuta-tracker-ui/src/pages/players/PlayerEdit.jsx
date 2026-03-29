@@ -207,7 +207,6 @@ const PlayerEdit = () => {
       console.error('Failed to save player:', err);
       const errorMessage = err.response?.data?.message || err.response?.data?.error || '';
       setError(id ? `選手情報の更新に失敗しました: ${errorMessage}` : `選手の登録に失敗しました: ${errorMessage}`);
-    } finally {
       setSubmitting(false);
     }
   };

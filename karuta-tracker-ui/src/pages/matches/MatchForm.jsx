@@ -421,7 +421,6 @@ const MatchForm = () => {
     } catch (err) {
       console.error('抜け番活動保存エラー:', err);
       setError(err.response?.data?.message || '抜け番活動の保存に失敗しました');
-    } finally {
       setLoading(false);
     }
   };
@@ -509,7 +508,6 @@ const MatchForm = () => {
             `試合記録の${isEdit ? '更新' : '登録'}に失敗しました`
         );
       }
-    } finally {
       setLoading(false);
     }
   };

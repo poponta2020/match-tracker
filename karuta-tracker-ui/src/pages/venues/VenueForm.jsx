@@ -185,7 +185,6 @@ function VenueForm() {
       navigate('/venues');
     } catch (err) {
       setError(err.message);
-    } finally {
       setLoading(false);
     }
   };

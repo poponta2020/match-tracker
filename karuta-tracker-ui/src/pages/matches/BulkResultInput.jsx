@@ -401,7 +401,6 @@ const BulkResultInput = () => {
     } catch (err) {
       console.error('保存エラー:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
-    } finally {
       setSaving(false);
       setShowWarningDialog(false);
     }
