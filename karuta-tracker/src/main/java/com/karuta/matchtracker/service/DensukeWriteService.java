@@ -19,6 +19,8 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +40,9 @@ public class DensukeWriteService {
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final PlayerRepository playerRepository;
+
+    // javascript:memberdata(ID) 形式から mi を抽出する正規表現
+    private static final Pattern MEMBERDATA_PATTERN = Pattern.compile("memberdata\\((\\d+)\\)");
 
     // メモリ上の状態（スケジューラーから参照）
     // 注意: シングルインスタンス運用を前提としている。
@@ -186,7 +191,7 @@ public class DensukeWriteService {
         String mi = densukeMemberMappingRepository
                 .findByDensukeUrlIdAndPlayerId(urlId, playerId)
                 .map(DensukeMemberMapping::getDensukeMemberId)
-                .orElseGet(() -> insertMember(urlId, playerId, playerName, base, cd, errors));
+                .orElseGet(() -> findOrInsertMember(urlId, playerId, playerName, base, cd, errors));
 
         if (mi == null) {
             errors.add("選手[" + playerName + "]: メンバーIDの取得に失敗");
@@ -252,13 +257,27 @@ public class DensukeWriteService {
     }
 
     /**
-     * 伝助に新規メンバーを追加し、mi を返す。
-     * 追加後、リスト画面から mi を探して densuke_member_mappings に保存する。
+     * 伝助のリスト画面から既存メンバーの mi を探す。
+     * 見つからない場合はメンバーを追加してから再度探す。
+     * 取得した mi は densuke_member_mappings に保存する。
      */
-    private String insertMember(Long urlId, Long playerId, String playerName,
-                                 String base, String cd, List<String> errors) {
+    private String findOrInsertMember(Long urlId, Long playerId, String playerName,
+                                       String base, String cd, List<String> errors) {
         try {
-            // POST insert
+            // まずリスト画面から既存メンバーの mi を探す
+            Document listDoc = Jsoup.connect(base + "list?cd=" + cd)
+                    .userAgent("Mozilla/5.0")
+                    .timeout(10000)
+                    .get();
+
+            String mi = findMiByName(listDoc, playerName);
+            if (mi != null) {
+                saveMemberMapping(urlId, playerId, mi, playerName);
+                return mi;
+            }
+
+            // 見つからない場合、メンバーを追加
+            log.info("Member not found on densuke, inserting: {}", playerName);
             Jsoup.connect(base + "insert?cd=" + cd)
                     .data("name", playerName)
                     .method(Connection.Method.POST)
@@ -266,32 +285,35 @@ public class DensukeWriteService {
                     .timeout(10000)
                     .execute();
 
-            // INSERT 後、リスト画面から mi を探す
-            Document listDoc = Jsoup.connect(base + "list?cd=" + cd)
+            // 追加後、再度リスト画面から mi を探す
+            listDoc = Jsoup.connect(base + "list?cd=" + cd)
                     .userAgent("Mozilla/5.0")
                     .timeout(10000)
                     .get();
 
-            String mi = findMiByName(listDoc, playerName);
+            mi = findMiByName(listDoc, playerName);
             if (mi == null) {
                 log.warn("Could not find mi for player {} after insert", playerName);
                 return null;
             }
 
-            // densuke_member_mappings に保存
-            densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
-                    .densukeUrlId(urlId)
-                    .playerId(playerId)
-                    .densukeMemberId(mi)
-                    .build());
-            log.info("Inserted densuke member: player={}, mi={}", playerName, mi);
+            saveMemberMapping(urlId, playerId, mi, playerName);
             return mi;
 
         } catch (IOException e) {
-            log.warn("Failed to insert densuke member {}: {}", playerName, e.getMessage());
+            log.warn("Failed to find or insert densuke member {}: {}", playerName, e.getMessage());
             errors.add("選手[" + playerName + "]: メンバー追加失敗 - " + e.getMessage());
             return null;
         }
+    }
+
+    private void saveMemberMapping(Long urlId, Long playerId, String mi, String playerName) {
+        densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
+                .densukeUrlId(urlId)
+                .playerId(playerId)
+                .densukeMemberId(mi)
+                .build());
+        log.info("Mapped densuke member: player={}, mi={}", playerName, mi);
     }
 
     /**
@@ -309,6 +331,12 @@ public class DensukeWriteService {
             String name = DensukeScraper.stripLeadingEmoji(link.text().trim());
             if (playerName.equals(name)) {
                 String href = link.attr("href");
+                // javascript:memberdata(ID) 形式から mi を抽出
+                Matcher m = MEMBERDATA_PATTERN.matcher(href);
+                if (m.find()) {
+                    return m.group(1);
+                }
+                // フォールバック: URL クエリパラメータ形式
                 return extractQueryParam(href, "mi");
             }
         }
