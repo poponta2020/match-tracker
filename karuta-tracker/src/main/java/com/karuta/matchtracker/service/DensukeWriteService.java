@@ -506,13 +506,13 @@ public class DensukeWriteService {
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
         if (joinIds.size() != schedule.size()) {
-            log.warn("Join ID count ({}) differs from schedule count ({}), mapping {} entries",
-                    joinIds.size(), schedule.size(), Math.min(joinIds.size(), schedule.size()));
+            log.warn("Join ID count ({}) differs from schedule count ({}), skipping row ID save to avoid misalignment",
+                    joinIds.size(), schedule.size());
+            return;
         }
 
-        int mapCount = Math.min(joinIds.size(), schedule.size());
         List<DensukeRowId> toSave = new ArrayList<>();
-        for (int i = 0; i < mapCount; i++) {
+        for (int i = 0; i < schedule.size(); i++) {
             Map.Entry<LocalDate, Integer> entry = schedule.get(i);
             String rawJoinKey = joinIds.get(i);
             String rowId = rawJoinKey.substring("join-".length());
