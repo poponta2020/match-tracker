@@ -258,13 +258,16 @@ public class DensukeWriteService {
                         p -> p.getSessionId() + "_" + p.getMatchNumber(),
                         p -> p, (a, b) -> a));
 
-        // d. regist フォームデータを構築
+        // d. regist フォームデータを構築（row ID のあるセッション×試合のみ）
         Map<String, String> formData = new LinkedHashMap<>();
         formData.put("id", pageId);
         formData.put("mi", mi);
         formData.put("ai", "u2");
         formData.put("membername", strippedName);
         formData.put("membercomment", "");
+
+        // regist に含まれるセッション×試合番号を記録（dirty 解除の対象判定用）
+        Set<String> writtenSessionMatchKeys = new HashSet<>();
 
         for (PracticeSession session : urlSessions) {
             for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
@@ -278,11 +281,11 @@ public class DensukeWriteService {
                 PracticeParticipant pp = bySessionAndMatch.get(key);
                 int value = pp != null ? toJoinValue(pp.getStatus()) : 0;
                 formData.put(joinKey, String.valueOf(value));
+                writtenSessionMatchKeys.add(key);
             }
         }
 
         if (formData.size() <= 5) {
-            // join-{id} が一つも見つからない場合はスキップ
             log.debug("No row IDs found for player {} / urlId {}, skipping regist", playerName, urlId);
             return;
         }
@@ -302,12 +305,18 @@ public class DensukeWriteService {
             return;
         }
 
-        // f. 成功 → dirty=false に更新
-        for (PracticeParticipant p : dirtyParticipants) {
+        // f. 成功 → regist に含まれた参加者のみ dirty=false に更新
+        List<PracticeParticipant> writtenParticipants = dirtyParticipants.stream()
+                .filter(p -> writtenSessionMatchKeys.contains(p.getSessionId() + "_" + p.getMatchNumber()))
+                .collect(Collectors.toList());
+        for (PracticeParticipant p : writtenParticipants) {
             p.setDirty(false);
         }
-        practiceParticipantRepository.saveAll(dirtyParticipants);
-        log.info("Written to densuke: player={}, urlId={}, {} entries", playerName, urlId, dirtyParticipants.size());
+        practiceParticipantRepository.saveAll(writtenParticipants);
+
+        int skippedCount = dirtyParticipants.size() - writtenParticipants.size();
+        log.info("Written to densuke: player={}, urlId={}, {} written, {} skipped (no row ID)",
+                playerName, urlId, writtenParticipants.size(), skippedCount);
     }
 
     /**
@@ -496,14 +505,14 @@ public class DensukeWriteService {
         List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions);
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
-        if (joinIds.size() < schedule.size()) {
-            log.warn("Join ID count ({}) less than schedule count ({}), skipping row ID save",
-                    joinIds.size(), schedule.size());
-            return;
+        if (joinIds.size() != schedule.size()) {
+            log.warn("Join ID count ({}) differs from schedule count ({}), mapping {} entries",
+                    joinIds.size(), schedule.size(), Math.min(joinIds.size(), schedule.size()));
         }
 
+        int mapCount = Math.min(joinIds.size(), schedule.size());
         List<DensukeRowId> toSave = new ArrayList<>();
-        for (int i = 0; i < schedule.size(); i++) {
+        for (int i = 0; i < mapCount; i++) {
             Map.Entry<LocalDate, Integer> entry = schedule.get(i);
             String rawJoinKey = joinIds.get(i);
             String rowId = rawJoinKey.substring("join-".length());
