@@ -204,6 +204,13 @@ public class DensukeImportService {
                     continue; // 既に登録済み、スキップ
                 }
 
+                // DB側でも重複チェック（同一トランザクション内での重複挿入を防止）
+                if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(
+                        session.getId(), playerId, entry.getMatchNumber())) {
+                    existingPlayerIds.add(playerId);
+                    continue;
+                }
+
                 PracticeParticipant participant = PracticeParticipant.builder()
                         .sessionId(session.getId())
                         .playerId(playerId)
@@ -211,6 +218,7 @@ public class DensukeImportService {
                         .dirty(false)
                         .build();
                 practiceParticipantRepository.save(participant);
+                existingPlayerIds.add(playerId);
                 result.setRegisteredCount(result.getRegisteredCount() + 1);
                 matchRegistered++;
             }

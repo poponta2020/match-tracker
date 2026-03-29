@@ -291,6 +291,7 @@ public class DensukeWriteService {
         }
 
         // e. POST regist（Cookie 付き）
+        log.debug("Regist form data for {}: {}", playerName, formData);
         Connection.Response response = Jsoup.connect(base + "regist?cd=" + cd)
                 .data(formData)
                 .cookies(cookies)
@@ -300,6 +301,7 @@ public class DensukeWriteService {
                 .timeout(10000)
                 .execute();
 
+        log.info("Regist response for {}: status={}, url={}", playerName, response.statusCode(), response.url());
         if (response.statusCode() >= 400) {
             errors.add("選手[" + playerName + "]: regist HTTP " + response.statusCode());
             return;
