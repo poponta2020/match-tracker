@@ -702,12 +702,12 @@ Entity Layer (JPA Entity)
 - **レスポンス**: `[{ id, code, name, color, deadlineType }]`
 
 #### GET /api/organizations/players/{playerId}
-- **権限**: なし
+- **権限**: 本人またはSUPER_ADMIN（`currentUserId` と `playerId` の一致チェック）
 - **説明**: ユーザーの参加団体一覧を取得
 - **レスポンス**: `[{ id, code, name, color, deadlineType }]`
 
 #### PUT /api/organizations/players/{playerId}
-- **権限**: なし
+- **権限**: 本人またはSUPER_ADMIN（`currentUserId` と `playerId` の一致チェック）
 - **説明**: ユーザーの参加団体を更新（最低1つ必須）
 - **リクエスト**: `{ organizationIds: [1, 2] }`
 - **レスポンス**: 更新後の団体一覧

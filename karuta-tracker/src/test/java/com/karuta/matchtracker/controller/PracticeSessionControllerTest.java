@@ -79,29 +79,6 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions - 全練習日を取得できる")
-    void testGetAllSessions() throws Exception {
-        // Given
-        PracticeSessionDto session2 = PracticeSessionDto.builder()
-                .id(2L)
-                .sessionDate(today.minusDays(1))
-                .totalMatches(8)
-                .build();
-        when(practiceSessionService.findAllSessions()).thenReturn(List.of(testSessionDto, session2));
-
-        // When & Then
-        mockMvc.perform(get("/api/practice-sessions"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].totalMatches").value(10));
-
-        verify(practiceSessionService).findAllSessions();
-    }
-
-    @Test
     @DisplayName("GET /api/practice-sessions/{id} - IDで練習日を取得できる")
     void testGetSessionById() throws Exception {
         // Given
@@ -150,27 +127,6 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions/range - 期間内の練習日を取得できる")
-    void testGetSessionsInRange() throws Exception {
-        // Given
-        LocalDate startDate = today.minusDays(7);
-        LocalDate endDate = today;
-        when(practiceSessionService.findSessionsInRange(startDate, endDate))
-                .thenReturn(List.of(testSessionDto));
-
-        // When & Then
-        mockMvc.perform(get("/api/practice-sessions/range")
-                        .param("startDate", startDate.toString())
-                        .param("endDate", endDate.toString()))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(1));
-
-        verify(practiceSessionService).findSessionsInRange(startDate, endDate);
-    }
-
-    @Test
     @DisplayName("GET /api/practice-sessions/year-month - 年月別で練習日を取得できる")
     void testGetSessionsByYearMonth() throws Exception {
         // Given
@@ -189,23 +145,6 @@ class PracticeSessionControllerTest {
                 .andExpect(jsonPath("$.length()").value(1));
 
         verify(practiceSessionService).findSessionsByYearMonth(year, month);
-    }
-
-    @Test
-    @DisplayName("GET /api/practice-sessions/upcoming - 今後の練習日を取得できる")
-    void testGetUpcomingSessions() throws Exception {
-        // Given
-        when(practiceSessionService.findUpcomingSessions(today)).thenReturn(List.of(testSessionDto));
-
-        // When & Then
-        mockMvc.perform(get("/api/practice-sessions/upcoming")
-                        .param("fromDate", today.toString()))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(1));
-
-        verify(practiceSessionService).findUpcomingSessions(today);
     }
 
     @Test

@@ -73,29 +73,6 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    @DisplayName("全ての練習日を取得できる")
-    void testFindAllSessions() {
-        // Given
-        PracticeSession session2 = PracticeSession.builder()
-                .id(2L)
-                .sessionDate(today.minusDays(1))
-                .totalMatches(8)
-                .build();
-        when(practiceSessionRepository.findAllOrderBySessionDateDesc())
-                .thenReturn(List.of(testSession, session2));
-        when(practiceParticipantRepository.findBySessionIdIn(any())).thenReturn(List.of());
-        when(matchRepository.countByMatchDateIn(any())).thenReturn(List.of());
-
-        // When
-        List<PracticeSessionDto> result = practiceSessionService.findAllSessions();
-
-        // Then
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).getSessionDate()).isEqualTo(today);
-        verify(practiceSessionRepository).findAllOrderBySessionDateDesc();
-    }
-
-    @Test
     @DisplayName("IDで練習日を取得できる")
     void testFindById() {
         // Given
@@ -143,23 +120,6 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    @DisplayName("期間内の練習日を取得できる")
-    void testFindSessionsInRange() {
-        // Given
-        LocalDate startDate = today.minusDays(7);
-        LocalDate endDate = today;
-        when(practiceSessionRepository.findByDateRange(startDate, endDate))
-                .thenReturn(List.of(testSession));
-
-        // When
-        List<PracticeSessionDto> result = practiceSessionService.findSessionsInRange(startDate, endDate);
-
-        // Then
-        assertThat(result).hasSize(1);
-        verify(practiceSessionRepository).findByDateRange(startDate, endDate);
-    }
-
-    @Test
     @DisplayName("特定の年月の練習日を取得できる")
     void testFindSessionsByYearMonth() {
         // Given
@@ -176,23 +136,6 @@ class PracticeSessionServiceTest {
         // Then
         assertThat(result).hasSize(1);
         verify(practiceSessionRepository).findByYearAndMonth(year, month);
-    }
-
-    @Test
-    @DisplayName("指定日以降の練習日を取得できる")
-    void testFindUpcomingSessions() {
-        // Given
-        when(practiceSessionRepository.findUpcomingSessions(today))
-                .thenReturn(List.of(testSession));
-        when(practiceParticipantRepository.findBySessionIdIn(any())).thenReturn(List.of());
-        when(matchRepository.countByMatchDateIn(any())).thenReturn(List.of());
-
-        // When
-        List<PracticeSessionDto> result = practiceSessionService.findUpcomingSessions(today);
-
-        // Then
-        assertThat(result).hasSize(1);
-        verify(practiceSessionRepository).findUpcomingSessions(today);
     }
 
     @Test

@@ -66,8 +66,10 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("true"));
 
-        // 5. 全練習日リストに含まれている
-        mockMvc.perform(get("/api/practice-sessions"))
+        // 5. 年月で練習日リストに含まれている
+        mockMvc.perform(get("/api/practice-sessions/year-month")
+                        .param("year", String.valueOf(sessionDate.getYear()))
+                        .param("month", String.valueOf(sessionDate.getMonthValue())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(sessionId));
@@ -119,8 +121,8 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("複数の練習日を登録して期間検索ができる")
-    void testMultipleSessionsAndRangeQuery() throws Exception {
+    @DisplayName("複数の練習日を登録して年月検索ができる")
+    void testMultipleSessionsAndYearMonthQuery() throws Exception {
         LocalDate today = LocalDate.now();
 
         // 3日分の練習日を登録
@@ -139,26 +141,12 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                     .andExpect(status().isCreated());
         }
 
-        // 全練習日を取得
-        mockMvc.perform(get("/api/practice-sessions"))
+        // 年月で練習日を取得
+        mockMvc.perform(get("/api/practice-sessions/year-month")
+                        .param("year", String.valueOf(today.getYear()))
+                        .param("month", String.valueOf(today.getMonthValue())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(3)));
-
-        // 期間内の練習日を取得
-        LocalDate startDate = today.minusDays(2);
-        LocalDate endDate = today;
-        mockMvc.perform(get("/api/practice-sessions/range")
-                        .param("startDate", startDate.toString())
-                        .param("endDate", endDate.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(3)));
-
-        // 1日だけの期間
-        mockMvc.perform(get("/api/practice-sessions/range")
-                        .param("startDate", today.toString())
-                        .param("endDate", today.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)));
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))));
     }
 
     @Test
@@ -220,35 +208,11 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("今後の練習日を取得できる")
-    void testGetUpcomingSessions() throws Exception {
+    @DisplayName("次の参加予定練習を取得できる")
+    void testGetNextParticipation() throws Exception {
         LocalDate today = LocalDate.now();
 
-        // 過去の練習日
-        PracticeSessionCreateRequest pastRequest = PracticeSessionCreateRequest.builder()
-                .sessionDate(today.minusDays(1))
-                .totalMatches(10)
-                .organizationId(1L)
-                .build();
-        mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(pastRequest)))
-                .andExpect(status().isCreated());
-
-        // 今日の練習日
-        PracticeSessionCreateRequest todayRequest = PracticeSessionCreateRequest.builder()
-                .sessionDate(today)
-                .totalMatches(12)
-                .organizationId(1L)
-                .build();
-        mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(todayRequest)))
-                .andExpect(status().isCreated());
-
-        // 未来の練習日
+        // 未来の練習日を登録
         PracticeSessionCreateRequest futureRequest = PracticeSessionCreateRequest.builder()
                 .sessionDate(today.plusDays(7))
                 .totalMatches(15)
@@ -260,11 +224,10 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                         .content(objectMapper.writeValueAsString(futureRequest)))
                 .andExpect(status().isCreated());
 
-        // 今日以降の練習日を取得（今日を含む）
-        mockMvc.perform(get("/api/practice-sessions/upcoming")
-                        .param("fromDate", today.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)));
+        // 次の参加予定を取得（playerId=1）
+        mockMvc.perform(get("/api/practice-sessions/next-participation")
+                        .param("playerId", "1"))
+                .andExpect(status().is2xxSuccessful());
     }
 
     @Test

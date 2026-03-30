@@ -128,35 +128,6 @@ class PracticeSessionRepositoryTest {
     }
 
     @Test
-    @DisplayName("指定日以降の練習日を取得できる")
-    void testFindUpcomingSessions() {
-        // When
-        List<PracticeSession> upcomingSessions = practiceSessionRepository
-                .findUpcomingSessions(today);
-
-        // Then
-        assertThat(upcomingSessions).hasSize(3);
-        assertThat(upcomingSessions)
-                .extracting(PracticeSession::getSessionDate)
-                .containsExactly(today, tomorrow, nextWeek);
-    }
-
-    @Test
-    @DisplayName("全ての練習日を取得できる（降順）")
-    void testFindAllOrderBySessionDateDesc() {
-        // When
-        List<PracticeSession> allSessions = practiceSessionRepository
-                .findAllOrderBySessionDateDesc();
-
-        // Then
-        assertThat(allSessions).hasSize(4);
-        assertThat(allSessions.get(0).getSessionDate()).isEqualTo(nextWeek);
-        assertThat(allSessions.get(1).getSessionDate()).isEqualTo(tomorrow);
-        assertThat(allSessions.get(2).getSessionDate()).isEqualTo(today);
-        assertThat(allSessions.get(3).getSessionDate()).isEqualTo(lastWeek);
-    }
-
-    @Test
     @DisplayName("特定の年月の練習日を取得できる")
     void testFindByYearAndMonth() {
         // When

@@ -112,6 +112,7 @@
 - ユーザーは設定画面（`/settings/organizations`）から参加する練習会を選択する
 - 最低1つは必須。「所属」ではなく「参加する練習会を選ぶ」概念
 - 登録していない団体の練習日・通知は表示されない
+- 参加団体の取得・変更APIは本人またはSUPER_ADMINのみ実行可能（他人の参加団体は操作不可）
 
 #### 3.0.3 締め切りルール
 
@@ -1258,15 +1259,12 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/` | ALL | 全セッション取得 |
 | GET | `/{id}` | ALL | ID指定で取得 |
 | GET | `/date?date=` | ALL | 日付指定で取得（参加者込み） |
-| GET | `/range?startDate=&endDate=` | ALL | 期間指定取得 |
-| GET | `/year-month?year=&month=` | ALL | 年月指定取得 |
-| GET | `/year-month/summary?year=&month=` | ALL | 年月サマリー（軽量） |
-| GET | `/upcoming?fromDate=` | ALL | 今後のセッション |
-| GET | `/next-participation?playerId=` | ALL | 次の参加予定 |
-| GET | `/dates?fromDate=` | ALL | 日付一覧（軽量） |
+| GET | `/year-month?year=&month=` | ALL | 年月指定取得（ログインユーザーの参加団体でフィルタ） |
+| GET | `/year-month/summary?year=&month=` | ALL | 年月サマリー（軽量・参加団体フィルタ） |
+| GET | `/next-participation?playerId=` | ALL | 次の参加予定（参加団体フィルタ） |
+| GET | `/dates?fromDate=` | ALL | 日付一覧（軽量・参加団体フィルタ） |
 | GET | `/exists?date=` | ALL | 日付存在確認 |
 | GET | `/{id}/participants` | ALL | 参加者一覧 |
 | GET | `/participations/player/{id}?year=&month=` | ALL | 月別参加状況 |
