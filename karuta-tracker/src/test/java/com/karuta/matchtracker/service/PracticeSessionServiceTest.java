@@ -218,7 +218,7 @@ class PracticeSessionServiceTest {
                 .totalMatches(12)
                 .organizationId(1L)
                 .build();
-        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(false);
+        when(practiceSessionRepository.existsBySessionDateAndOrganizationId(today, 1L)).thenReturn(false);
         when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(testSession);
         when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
         when(matchRepository.countByMatchDate(today)).thenReturn(0L);
@@ -229,7 +229,7 @@ class PracticeSessionServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getSessionDate()).isEqualTo(today);
-        verify(practiceSessionRepository).existsBySessionDate(today);
+        verify(practiceSessionRepository).existsBySessionDateAndOrganizationId(today, 1L);
         verify(practiceSessionRepository).save(any(PracticeSession.class));
     }
 
@@ -242,14 +242,14 @@ class PracticeSessionServiceTest {
                 .totalMatches(12)
                 .organizationId(1L)
                 .build();
-        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+        when(practiceSessionRepository.existsBySessionDateAndOrganizationId(today, 1L)).thenReturn(true);
 
         // When & Then
         assertThatThrownBy(() -> practiceSessionService.createSession(request, 1L))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("PracticeSession")
                 .hasMessageContaining(today.toString());
-        verify(practiceSessionRepository).existsBySessionDate(today);
+        verify(practiceSessionRepository).existsBySessionDateAndOrganizationId(today, 1L);
         verify(practiceSessionRepository, never()).save(any(PracticeSession.class));
     }
 

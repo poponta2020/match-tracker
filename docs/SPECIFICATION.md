@@ -83,7 +83,7 @@
 | `gender` | Enum | Yes | `男性` / `女性` / `その他` |
 | `dominantHand` | Enum | Yes | `右` / `左` / `両` |
 | `danRank` | Enum | No | `無段`〜`八段` |
-| `kyuRank` | Enum | No | `E級`〜`A級` |
+| `kyuRank` | Enum | No | `E級`〜`A級`。未設定（NULL）の場合、画面上では「初心者」と表示 |
 | `karutaClub` | String(200) | No | 所属かるた会 |
 | `remarks` | Text | No | 備考 |
 | `role` | Enum | Yes | デフォルト `PLAYER` |
