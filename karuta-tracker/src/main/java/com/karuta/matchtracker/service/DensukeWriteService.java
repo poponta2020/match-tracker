@@ -18,6 +18,7 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -49,22 +50,19 @@ public class DensukeWriteService {
 
     private static final Pattern MEMBERDATA_PATTERN = Pattern.compile("memberdata\\((\\d+)\\)");
 
-    // メモリ上の状態（スケジューラーから参照）
+    // 団体別ステータス管理（メモリ上）
     // 注意: シングルインスタンス運用を前提としている。
-    // スケールアウト（複数インスタンス）時は各インスタンスが独立した状態を持ち、
-    // フロントエンドに表示される書き込み状況が不正確になる。
-    // その場合は DB または Redis へ永続化する必要がある。
-    private volatile LocalDateTime lastAttemptAt;
-    private volatile LocalDateTime lastSuccessAt;
-    private volatile List<String> lastErrors = new ArrayList<>();
-    private volatile int lastPendingCount = 0;
+    private final Map<Long, LocalDateTime> lastAttemptAtByOrg = new ConcurrentHashMap<>();
+    private final Map<Long, LocalDateTime> lastSuccessAtByOrg = new ConcurrentHashMap<>();
+    private final Map<Long, List<String>> lastErrorsByOrg = new ConcurrentHashMap<>();
+    private final Map<Long, Integer> lastPendingCountByOrg = new ConcurrentHashMap<>();
 
-    public DensukeWriteStatusDto getStatus() {
+    public DensukeWriteStatusDto getStatus(Long organizationId) {
         return DensukeWriteStatusDto.builder()
-                .lastAttemptAt(lastAttemptAt)
-                .lastSuccessAt(lastSuccessAt)
-                .errors(new ArrayList<>(lastErrors))
-                .pendingCount(lastPendingCount)
+                .lastAttemptAt(lastAttemptAtByOrg.get(organizationId))
+                .lastSuccessAt(lastSuccessAtByOrg.get(organizationId))
+                .errors(new ArrayList<>(lastErrorsByOrg.getOrDefault(organizationId, List.of())))
+                .pendingCount(lastPendingCountByOrg.getOrDefault(organizationId, 0))
                 .build();
     }
 
@@ -73,29 +71,35 @@ public class DensukeWriteService {
      */
     @Transactional
     public void writeToDensuke() {
-        lastAttemptAt = JstDateTimeUtil.now();
-        List<String> errors = new ArrayList<>();
-
-        // 当月・翌月の DensukeUrl を取得
+        // 当月・翌月の全団体の DensukeUrl を取得
         LocalDate now = JstDateTimeUtil.today();
         List<DensukeUrl> urls = new ArrayList<>();
-        densukeUrlRepository.findByYearAndMonth(now.getYear(), now.getMonthValue()).ifPresent(urls::add);
+        urls.addAll(densukeUrlRepository.findByYearAndMonth(now.getYear(), now.getMonthValue()));
         LocalDate next = now.plusMonths(1);
-        densukeUrlRepository.findByYearAndMonth(next.getYear(), next.getMonthValue()).ifPresent(urls::add);
+        urls.addAll(densukeUrlRepository.findByYearAndMonth(next.getYear(), next.getMonthValue()));
+
+        // 団体IDごとにグループ化してステータスを管理
+        Map<Long, List<DensukeUrl>> urlsByOrg = urls.stream()
+                .collect(Collectors.groupingBy(DensukeUrl::getOrganizationId));
+
+        // 登録されている全団体のステータスを更新
+        for (Long orgId : urlsByOrg.keySet()) {
+            lastAttemptAtByOrg.put(orgId, JstDateTimeUtil.now());
+        }
 
         if (urls.isEmpty()) {
-            lastPendingCount = 0;
-            lastErrors = errors;
             return;
         }
 
-        // URL ごとに、その月のセッションを取得
+        List<String> errors = new ArrayList<>();
+
+        // URL ごとに、その団体のセッションを取得
         Map<Long, DensukeUrl> urlById = urls.stream()
                 .collect(Collectors.toMap(DensukeUrl::getId, u -> u));
         Map<Long, List<PracticeSession>> sessionsByUrlId = new LinkedHashMap<>();
         for (DensukeUrl url : urls) {
             List<PracticeSession> sessions = practiceSessionRepository
-                    .findByYearAndMonth(url.getYear(), url.getMonth());
+                    .findByYearAndMonthAndOrganizationId(url.getYear(), url.getMonth(), url.getOrganizationId());
             sessionsByUrlId.put(url.getId(), sessions);
         }
 
@@ -106,19 +110,23 @@ public class DensukeWriteService {
                 .collect(Collectors.toList());
 
         if (allSessionIds.isEmpty()) {
-            lastPendingCount = 0;
-            lastErrors = errors;
+            for (Long orgId : urlsByOrg.keySet()) {
+                lastPendingCountByOrg.put(orgId, 0);
+                lastErrorsByOrg.put(orgId, List.of());
+            }
             return;
         }
 
         // dirty=true の参加者を取得
         List<PracticeParticipant> dirtyParticipants =
                 practiceParticipantRepository.findDirtyBySessionIds(allSessionIds);
-        lastPendingCount = dirtyParticipants.size();
 
         if (dirtyParticipants.isEmpty()) {
-            lastErrors = errors;
-            if (errors.isEmpty()) lastSuccessAt = JstDateTimeUtil.now();
+            for (Long orgId : urlsByOrg.keySet()) {
+                lastPendingCountByOrg.put(orgId, 0);
+                lastErrorsByOrg.put(orgId, List.of());
+                lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
+            }
             return;
         }
 
@@ -206,8 +214,26 @@ public class DensukeWriteService {
             }
         }
 
-        lastErrors = errors;
-        if (errors.isEmpty()) lastSuccessAt = JstDateTimeUtil.now();
+        // 団体別にステータスを更新
+        // URL → 団体のマッピングを使って、団体別にエラーとpending countを集計
+        Map<Long, List<String>> errorsByOrg = new HashMap<>();
+        Map<Long, Integer> pendingByOrg = new HashMap<>();
+        for (var urlEntry : grouped.entrySet()) {
+            Long urlId = urlEntry.getKey();
+            DensukeUrl densukeUrl = urlById.get(urlId);
+            Long orgId = densukeUrl.getOrganizationId();
+            // errors はURL単位で分離できないため、全体のエラーを団体にマップ
+            errorsByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
+            pendingByOrg.merge(orgId, urlEntry.getValue().values().stream()
+                    .mapToInt(List::size).sum(), Integer::sum);
+        }
+        for (Long orgId : urlsByOrg.keySet()) {
+            lastErrorsByOrg.put(orgId, errorsByOrg.getOrDefault(orgId, List.of()));
+            lastPendingCountByOrg.put(orgId, pendingByOrg.getOrDefault(orgId, 0));
+            if (errors.isEmpty()) {
+                lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
+            }
+        }
     }
 
     private void writePlayerToDensuke(

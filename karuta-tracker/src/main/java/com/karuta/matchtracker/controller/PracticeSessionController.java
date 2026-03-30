@@ -395,19 +395,21 @@ public class PracticeSessionController {
                                                 HttpServletRequest httpRequest) {
         String url = request.get("url");
         String targetDateStr = request.get("targetDate");
+        String orgIdStr = request.get("organizationId");
+        Long organizationId = orgIdStr != null ? Long.valueOf(orgIdStr) : null;
 
         if (url == null || url.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "URLを指定してください"));
         }
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        log.info("POST /api/practice-sessions/import-densuke - Importing from densuke: {}", url);
+        log.info("POST /api/practice-sessions/import-densuke - Importing from densuke: {} (orgId={})", url, organizationId);
 
         try {
             LocalDate targetDate = targetDateStr != null && !targetDateStr.isBlank()
                     ? LocalDate.parse(targetDateStr)
                     : null;
-            var result = densukeImportService.importFromDensuke(url, targetDate, currentUserId);
+            var result = densukeImportService.importFromDensuke(url, targetDate, currentUserId, organizationId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Densuke scraping failed", e);
@@ -432,15 +434,19 @@ public class PracticeSessionController {
             return ResponseEntity.badRequest().body(Map.of("message", "names, year, monthは必須です"));
         }
 
+        Integer orgIdInt = (Integer) request.get("organizationId");
+        Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        var densukeUrl = practiceSessionService.getDensukeUrl(year, month);
+        var densukeUrl = practiceSessionService.getDensukeUrl(year, month, organizationId);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
                     year + "年" + month + "月の伝助URLが登録されていません"));
         }
 
         try {
-            var result = densukeImportService.registerAndSync(names, densukeUrl.get().getUrl(), null, currentUserId);
+            var result = densukeImportService.registerAndSync(
+                    names, densukeUrl.get().getUrl(), null, currentUserId, organizationId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Register and sync failed", e);
@@ -471,8 +477,9 @@ public class PracticeSessionController {
      */
     @GetMapping("/densuke-url")
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
-    public ResponseEntity<?> getDensukeUrl(@RequestParam int year, @RequestParam int month) {
-        var url = practiceSessionService.getDensukeUrl(year, month);
+    public ResponseEntity<?> getDensukeUrl(@RequestParam int year, @RequestParam int month,
+                                             @RequestParam Long organizationId) {
+        var url = practiceSessionService.getDensukeUrl(year, month, organizationId);
         return url.map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
     }
@@ -482,17 +489,28 @@ public class PracticeSessionController {
      */
     @PutMapping("/densuke-url")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<?> saveDensukeUrl(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<?> saveDensukeUrl(@RequestBody Map<String, Object> request,
+                                              HttpServletRequest httpRequest) {
         Integer year = (Integer) request.get("year");
         Integer month = (Integer) request.get("month");
         String url = (String) request.get("url");
+        Integer orgIdInt = (Integer) request.get("organizationId");
+        Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
 
-        if (year == null || month == null || url == null || url.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "year, month, urlは必須です"));
+        if (year == null || month == null || url == null || url.isBlank() || organizationId == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "year, month, url, organizationIdは必須です"));
+        }
+
+        // ADMIN権限チェック: 自団体のみ操作可能
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role) && !organizationId.equals(adminOrgId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "他団体の伝助URLは編集できません"));
         }
 
         try {
-            var entity = practiceSessionService.saveDensukeUrl(year, month, url);
+            var entity = practiceSessionService.saveDensukeUrl(year, month, url, organizationId);
             return ResponseEntity.ok(entity);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -508,25 +526,37 @@ public class PracticeSessionController {
                                          HttpServletRequest httpRequest) {
         Integer year = request.get("year");
         Integer month = request.get("month");
+        Integer orgIdInt = request.get("organizationId");
+        Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
 
-        if (year == null || month == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "yearとmonthは必須です"));
+        if (year == null || month == null || organizationId == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "year, month, organizationIdは必須です"));
+        }
+
+        // ADMIN権限チェック
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role) && !organizationId.equals(adminOrgId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "他団体の伝助は同期できません"));
         }
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        var densukeUrl = practiceSessionService.getDensukeUrl(year, month);
+        var densukeUrl = practiceSessionService.getDensukeUrl(year, month, organizationId);
         if (densukeUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message",
                     year + "年" + month + "月の伝助URLが登録されていません"));
         }
 
-        log.info("POST /api/practice-sessions/sync-densuke - Syncing {}/{} from {}", year, month, densukeUrl.get().getUrl());
+        log.info("POST /api/practice-sessions/sync-densuke - Syncing {}/{} (orgId={}) from {}",
+                year, month, organizationId, densukeUrl.get().getUrl());
 
         // 書き込みフェーズ（アプリ→伝助）: dirty な参加者を伝助に反映してから読み取る
         densukeWriteService.writeToDensuke();
 
         try {
-            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null, currentUserId);
+            var result = densukeImportService.importFromDensuke(
+                    densukeUrl.get().getUrl(), null, currentUserId, organizationId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Densuke sync failed", e);
@@ -540,7 +570,8 @@ public class PracticeSessionController {
      */
     @GetMapping("/densuke-write-status")
     @RequireRole({Role.ADMIN, Role.SUPER_ADMIN})
-    public ResponseEntity<DensukeWriteStatusDto> getDensukeWriteStatus() {
-        return ResponseEntity.ok(densukeWriteService.getStatus());
+    public ResponseEntity<DensukeWriteStatusDto> getDensukeWriteStatus(
+            @RequestParam Long organizationId) {
+        return ResponseEntity.ok(densukeWriteService.getStatus(organizationId));
     }
 }

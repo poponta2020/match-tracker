@@ -12,11 +12,11 @@ import org.springframework.stereotype.Component;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
-import java.util.Optional;
+import java.util.List;
 
 /**
  * 伝助との自動同期スケジューラー
- * 毎分実行し、当月＋翌月の伝助URLからデータを同期する
+ * 毎分実行し、当月＋翌月の全団体の伝助URLからデータを同期する
  */
 @Slf4j
 @Component
@@ -32,7 +32,7 @@ public class DensukeSyncScheduler {
      */
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
     public void syncDensuke() {
-        // ① アプリ→伝助: dirty=true の参加者を書き込む
+        // ① アプリ→伝助: dirty=true の参加者を書き込む（全団体分を処理）
         try {
             densukeWriteService.writeToDensuke();
         } catch (Exception e) {
@@ -41,27 +41,29 @@ public class DensukeSyncScheduler {
 
         LocalDate now = JstDateTimeUtil.today();
 
-        // ② 伝助→アプリ: 当月・翌月を読み取り
+        // ② 伝助→アプリ: 当月・翌月の全団体のURLを読み取り
         syncForMonth(now.getYear(), now.getMonthValue());
         LocalDate nextMonth = now.plusMonths(1);
         syncForMonth(nextMonth.getYear(), nextMonth.getMonthValue());
     }
 
     private void syncForMonth(int year, int month) {
-        Optional<DensukeUrl> densukeUrl = densukeUrlRepository.findByYearAndMonth(year, month);
-        if (densukeUrl.isEmpty()) {
-            return;
-        }
-
-        try {
-            var result = densukeImportService.importFromDensuke(densukeUrl.get().getUrl(), null,
-                    DensukeImportService.SYSTEM_USER_ID);
-            if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0) {
-                log.info("Auto-sync {}/{}: {} sessions created, {} participants registered",
-                        year, month, result.getCreatedSessionCount(), result.getRegisteredCount());
+        List<DensukeUrl> densukeUrls = densukeUrlRepository.findByYearAndMonth(year, month);
+        for (DensukeUrl densukeUrl : densukeUrls) {
+            try {
+                var result = densukeImportService.importFromDensuke(
+                        densukeUrl.getUrl(), null,
+                        DensukeImportService.SYSTEM_USER_ID,
+                        densukeUrl.getOrganizationId());
+                if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0) {
+                    log.info("Auto-sync {}/{} (orgId={}): {} sessions created, {} participants registered",
+                            year, month, densukeUrl.getOrganizationId(),
+                            result.getCreatedSessionCount(), result.getRegisteredCount());
+                }
+            } catch (Exception e) {
+                log.warn("Auto-sync failed for {}/{} (orgId={}): {}",
+                        year, month, densukeUrl.getOrganizationId(), e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Auto-sync failed for {}/{}: {}", year, month, e.getMessage());
         }
     }
 }

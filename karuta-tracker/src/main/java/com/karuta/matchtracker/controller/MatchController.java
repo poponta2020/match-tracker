@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.MatchDto;
 import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.service.MatchService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,8 @@ import java.util.List;
 public class MatchController {
 
     private final MatchService matchService;
+    private final com.karuta.matchtracker.service.OrganizationService organizationService;
+    private final com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
 
     /**
      * 日付別の試合結果を取得
@@ -35,8 +38,13 @@ public class MatchController {
      */
     @GetMapping
     public ResponseEntity<List<MatchDto>> getMatchesByDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/matches?date={} - Getting matches by date", date);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
+            return ResponseEntity.ok(List.of());
+        }
         List<MatchDto> matches = matchService.findMatchesByDate(date);
         return ResponseEntity.ok(matches);
     }
@@ -272,5 +280,15 @@ public class MatchController {
         log.info("DELETE /api/matches/{} - Deleting match", id);
         matchService.deleteMatch(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {
+        java.util.List<Long> orgIds = organizationService.getPlayerOrganizationIds(userId);
+        if (orgIds.isEmpty()) return true;
+        java.util.List<com.karuta.matchtracker.entity.PracticeSession> sessions =
+                practiceSessionRepository.findByDateRange(date, date);
+        if (sessions.isEmpty()) return true;
+        return sessions.stream().anyMatch(s ->
+                s.getOrganizationId() == null || orgIds.contains(s.getOrganizationId()));
     }
 }

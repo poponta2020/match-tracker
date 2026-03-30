@@ -97,7 +97,7 @@ public class LotteryController {
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                year, month, currentUserId, ExecutionType.MANUAL);
+                year, month, currentUserId, ExecutionType.MANUAL, orgId);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -377,10 +377,13 @@ public class LotteryController {
     @GetMapping("/notify-status")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Map<String, Object>> getNotifyStatus(
-            @RequestParam int year, @RequestParam int month) {
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId) {
 
         // 対象月のセッションに紐づく参加者IDを一括取得（N+1対策）
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<PracticeSession> sessions = organizationId != null
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
@@ -410,9 +413,13 @@ public class LotteryController {
     public ResponseEntity<Map<String, Object>> notifyResults(@RequestBody Map<String, Integer> body) {
         int year = body.getOrDefault("year", 0);
         int month = body.getOrDefault("month", 0);
+        Integer orgIdInt = body.get("organizationId");
+        Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
 
         // アプリ内通知を生成（全参加者を一括取得してフィルタリング、N+1対策）
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<PracticeSession> sessions = organizationId != null
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());

@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -22,6 +24,8 @@ import java.util.List;
 public class MatchPairingController {
 
     private final MatchPairingService matchPairingService;
+    private final com.karuta.matchtracker.service.OrganizationService organizationService;
+    private final com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
 
     /**
      * 指定日の対戦組み合わせを取得
@@ -29,8 +33,13 @@ public class MatchPairingController {
     @GetMapping("/date")
     public ResponseEntity<List<MatchPairingDto>> getByDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false, defaultValue = "false") boolean light) {
+            @RequestParam(required = false, defaultValue = "false") boolean light,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ取得: 日付={}, light={}", date, light);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
+            return ResponseEntity.ok(List.of());
+        }
         List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light);
         return ResponseEntity.ok(pairings);
     }
@@ -41,8 +50,13 @@ public class MatchPairingController {
     @GetMapping("/date-and-match")
     public ResponseEntity<List<MatchPairingDto>> getByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam Integer matchNumber) {
+            @RequestParam Integer matchNumber,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ取得: 日付={}, 試合番号={}", date, matchNumber);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
+            return ResponseEntity.ok(List.of());
+        }
         List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber);
         return ResponseEntity.ok(pairings);
     }
@@ -157,5 +171,15 @@ public class MatchPairingController {
         log.info("自動マッチング実行: {}", request);
         AutoMatchingResult result = matchPairingService.autoMatch(request);
         return ResponseEntity.ok(result);
+    }
+
+    private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(userId);
+        if (orgIds.isEmpty()) return true;
+        List<com.karuta.matchtracker.entity.PracticeSession> sessions =
+                practiceSessionRepository.findByDateRange(date, date);
+        if (sessions.isEmpty()) return true;
+        return sessions.stream().anyMatch(s ->
+                s.getOrganizationId() == null || orgIds.contains(s.getOrganizationId()));
     }
 }
