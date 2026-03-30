@@ -106,33 +106,69 @@ const NotificationSettings = () => {
   // === Web Push ハンドラー ===
 
   const handleEnablePush = async () => {
+    setPushActionLoading(true);
+    setError(null);
     try {
-      setPushActionLoading(true);
-      setError(null);
+      // Step 1: ブラウザの通知許可
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setBrowserBlocked(true);
         setError('ブラウザの設定から通知を許可してください');
         return;
       }
-      const keyRes = await notificationAPI.getVapidPublicKey();
-      const vapidPublicKey = keyRes.data.publicKey;
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-      });
-      const subJson = subscription.toJSON();
-      await notificationAPI.subscribePush({
-        playerId,
-        endpoint: subJson.endpoint,
-        p256dhKey: subJson.keys.p256dh,
-        authKey: subJson.keys.auth,
-        userAgent: navigator.userAgent,
-      });
 
-      // 全団体の設定をONに
+      // Step 2: VAPID公開鍵を取得
+      let vapidPublicKey;
+      try {
+        const keyRes = await notificationAPI.getVapidPublicKey();
+        vapidPublicKey = keyRes.data.publicKey;
+      } catch (err) {
+        console.error('VAPID鍵取得エラー:', err);
+        setError('サーバーとの通信に失敗しました。時間をおいて再度お試しください。');
+        return;
+      }
+
+      // Step 3: Service Worker登録
+      let registration;
+      try {
+        registration = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+      } catch (err) {
+        console.error('Service Worker登録エラー:', err);
+        setError('Service Workerの登録に失敗しました。ページを再読み込みしてお試しください。');
+        return;
+      }
+
+      // Step 4: Push購読を作成
+      let subscription;
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+      } catch (err) {
+        console.error('Push購読エラー:', err);
+        setError('Push通知の購読に失敗しました。ブラウザが対応しているか確認してください。');
+        return;
+      }
+
+      // Step 5: バックエンドに購読情報を送信
+      try {
+        const subJson = subscription.toJSON();
+        await notificationAPI.subscribePush({
+          playerId,
+          endpoint: subJson.endpoint,
+          p256dhKey: subJson.keys.p256dh,
+          authKey: subJson.keys.auth,
+          userAgent: navigator.userAgent,
+        });
+      } catch (err) {
+        console.error('購読情報送信エラー:', err);
+        setError('サーバーへの登録に失敗しました。時間をおいて再度お試しください。');
+        return;
+      }
+
+      // Step 6: 全団体の設定をONに
       const newMap = { ...pushPrefsMap };
       for (const orgId of playerOrgIds) {
         const pref = newMap[orgId] || { playerId, organizationId: orgId };
@@ -145,7 +181,7 @@ const NotificationSettings = () => {
       setSuccessMessage('Web Push通知を有効にしました');
     } catch (err) {
       console.error('Web Push有効化に失敗:', err);
-      setError('Web Push通知の有効化に失敗しました');
+      setError('Web Push通知の有効化に失敗しました。時間をおいて再度お試しください。');
     } finally {
       setPushActionLoading(false);
     }
