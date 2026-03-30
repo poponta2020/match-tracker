@@ -146,7 +146,9 @@
       "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
       "Bash(gh auth:*)",
       "Bash(npx eslint:*)",
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh label:*)"
     ],
     "deny": [],
     "ask": [],
