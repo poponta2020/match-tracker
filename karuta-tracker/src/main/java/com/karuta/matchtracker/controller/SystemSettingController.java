@@ -4,6 +4,7 @@ import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.SystemSetting;
 import com.karuta.matchtracker.service.SystemSettingService;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +36,11 @@ public class SystemSettingController {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
 
+        // ADMINは自団体に強制（明示的に他団体が指定された場合は拒否）
+        if (organizationId != null) {
+            AdminScopeValidator.validateScope(role, adminOrgId, organizationId,
+                    "他団体のシステム設定は参照できません");
+        }
         Long targetOrgId = "ADMIN".equals(role) ? adminOrgId
                 : (organizationId != null ? organizationId : adminOrgId);
         if (targetOrgId != null) {
@@ -74,6 +80,11 @@ public class SystemSettingController {
         Long organizationId = body.get("organizationId") != null
                 ? Long.parseLong(body.get("organizationId"))
                 : null;
+        // ADMINは自団体に強制（明示的に他団体が指定された場合は拒否）
+        if (organizationId != null) {
+            AdminScopeValidator.validateScope(role, adminOrgId, organizationId,
+                    "他団体のシステム設定は更新できません");
+        }
         Long targetOrgId = "ADMIN".equals(role) ? adminOrgId
                 : (organizationId != null ? organizationId : adminOrgId);
 
