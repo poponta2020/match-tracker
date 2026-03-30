@@ -199,11 +199,6 @@ const PracticeList = () => {
     );
   };
 
-  // 団体のアンダーライン色（DBの color フィールドを使用）
-  const getOrgUnderlineColor = (organizationId) => {
-    return orgMap[organizationId]?.color;
-  };
-
   // 月を変更
   const changeMonth = (offset) => {
     const newDate = new Date(currentDate);
@@ -446,26 +441,15 @@ const PracticeList = () => {
                     : 'none';
 
                   const cursor = hasSession ? 'cursor-pointer' : 'cursor-default';
-                  let venueTextColor = 'text-[#6b7280]';
                   let cellBorder = 'border border-[#c5cec8]';
                   let cellBg = 'bg-[#f9f6f2]';
 
                   if (bestStatus === 'confirmed') {
                     cellBorder = 'border-2 border-[#a3c4ad]';
                     cellBg = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
-                    venueTextColor = 'text-[#4a6b5a]';
                   } else if (bestStatus === 'waitlisted') {
                     cellBorder = 'border-2 border-[#e8d48b]';
                     cellBg = 'bg-[#fef9ed] hover:bg-[#fdf3d7]';
-                    venueTextColor = 'text-[#b8860b]';
-                  } else if (bestStatus === 'cancelled') {
-                    cellBorder = 'border-2 border-[#b0b5ba]';
-                    cellBg = 'bg-[#e5e7eb] hover:bg-[#d1d5db]';
-                    venueTextColor = 'text-[#9ca3af]';
-                  } else if (hasSession) {
-                    cellBorder = 'border-2 border-[#b0b5ba]';
-                    cellBg = 'bg-[#e5e7eb] hover:bg-[#d1d5db]';
-                    venueTextColor = 'text-[#9ca3af]';
                   }
 
                   return (
@@ -476,19 +460,21 @@ const PracticeList = () => {
                     >
                       {day && (
                         <div className="text-center flex flex-col items-center">
-                          <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                          <div className={`text-sm leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-6 h-6 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                             {day}
                           </div>
                           {daySessions.map((session) => session.venueName && (() => {
-                            const underlineColor = getOrgUnderlineColor(session.organizationId);
+                            const orgName = orgMap[session.organizationId]?.name;
+                            const venueStyle = orgName === 'わすらもち会'
+                              ? { color: '#2d5a3f', fontWeight: 'bold' }
+                              : orgName === '北大かるた会'
+                                ? { color: '#8b2252', fontWeight: 'bold' }
+                                : { color: '#6b7280' };
                             const parts = session.venueName.split('・');
                             return (
-                              <div key={session.id} className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight text-center`}>
+                              <div key={session.id} className="mt-0.5 text-[10px] leading-tight text-center" style={venueStyle}>
                                 {parts.map((part, i) => (
-                                  <div
-                                    key={i}
-                                    style={underlineColor ? { textDecoration: 'underline', textDecorationColor: underlineColor, textUnderlineOffset: '2px', textDecorationThickness: '2px' } : undefined}
-                                  >
+                                  <div key={i}>
                                     {part}
                                   </div>
                                 ))}
