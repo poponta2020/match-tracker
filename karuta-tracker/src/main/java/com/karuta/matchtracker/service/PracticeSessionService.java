@@ -156,8 +156,12 @@ public class PracticeSessionService {
         LocalDate today = JstDateTimeUtil.today();
         log.debug("Finding next participation for player {} from {}", playerId, today);
 
-        // 直近の未来の練習日を取得（参加有無に関係なく）
-        List<PracticeSession> upcomingSessions = practiceSessionRepository.findUpcomingSessions(today);
+        // ユーザーの参加団体に基づいて直近の未来の練習日を取得
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+        if (orgIds.isEmpty()) {
+            return null;
+        }
+        List<PracticeSession> upcomingSessions = practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(orgIds, today);
         if (upcomingSessions.isEmpty()) {
             return null;
         }

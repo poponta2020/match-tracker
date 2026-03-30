@@ -34,12 +34,6 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
                                            @Param("endDate") LocalDate endDate);
 
     /**
-     * 指定日以降の練習日を取得（日付の昇順）
-     */
-    @Query("SELECT ps FROM PracticeSession ps WHERE ps.sessionDate >= :date ORDER BY ps.sessionDate ASC")
-    List<PracticeSession> findUpcomingSessions(@Param("date") LocalDate date);
-
-    /**
      * 特定の年月の練習日を取得
      *
      * @param year 年
