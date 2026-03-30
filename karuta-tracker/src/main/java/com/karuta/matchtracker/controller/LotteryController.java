@@ -18,6 +18,7 @@ import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryDeadlineHelper;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import com.karuta.matchtracker.service.LotteryService;
 import com.karuta.matchtracker.service.NotificationService;
@@ -108,6 +109,10 @@ public class LotteryController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LotteryExecution> reExecuteLottery(@PathVariable Long sessionId,
                                                                 HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        validateAdminScopeBySessionId(sessionId, role, adminOrgId);
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId);
         return ResponseEntity.ok(result);
@@ -366,7 +371,12 @@ public class LotteryController {
      */
     @PutMapping("/admin/edit-participants")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<Void> editParticipants(@Valid @RequestBody AdminEditParticipantsRequest request) {
+    public ResponseEntity<Void> editParticipants(@Valid @RequestBody AdminEditParticipantsRequest request,
+                                                     HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        validateAdminScopeBySessionId(request.getSessionId(), role, adminOrgId);
+
         lotteryService.editParticipants(request);
         return ResponseEntity.ok().build();
     }
@@ -378,7 +388,15 @@ public class LotteryController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Map<String, Object>> getNotifyStatus(
             @RequestParam int year, @RequestParam int month,
-            @RequestParam(required = false) Long organizationId) {
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            organizationId = adminOrgId;
+        }
 
         // 対象月のセッションに紐づく参加者IDを一括取得（N+1対策）
         List<PracticeSession> sessions = organizationId != null
@@ -410,11 +428,19 @@ public class LotteryController {
      */
     @PostMapping("/notify-results")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<Map<String, Object>> notifyResults(@RequestBody Map<String, Integer> body) {
+    public ResponseEntity<Map<String, Object>> notifyResults(@RequestBody Map<String, Integer> body,
+                                                                HttpServletRequest httpRequest) {
         int year = body.getOrDefault("year", 0);
         int month = body.getOrDefault("month", 0);
         Integer orgIdInt = body.get("organizationId");
         Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            organizationId = adminOrgId;
+        }
 
         // アプリ内通知を生成（全参加者を一括取得してフィルタリング、N+1対策）
         List<PracticeSession> sessions = organizationId != null
@@ -451,6 +477,18 @@ public class LotteryController {
             @RequestParam int year, @RequestParam int month) {
         return ResponseEntity.ok(
                 lotteryExecutionRepository.findByTargetYearAndTargetMonth(year, month));
+    }
+
+    /**
+     * ADMINスコープ検証（sessionIdベース）
+     */
+    private void validateAdminScopeBySessionId(Long sessionId, String role, Long adminOrgId) {
+        if (!"ADMIN".equals(role)) return;
+
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+        AdminScopeValidator.validateScope(role, adminOrgId, session.getOrganizationId(),
+                "他団体の抽選は操作できません");
     }
 
 }
