@@ -34,18 +34,6 @@ public class PracticeSessionController {
     private final com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
 
     /**
-     * 全ての練習日を取得
-     *
-     * @return 練習日リスト
-     */
-    @GetMapping
-    public ResponseEntity<List<PracticeSessionDto>> getAllSessions() {
-        log.debug("GET /api/practice-sessions - Getting all practice sessions");
-        List<PracticeSessionDto> sessions = practiceSessionService.findAllSessions();
-        return ResponseEntity.ok(sessions);
-    }
-
-    /**
      * IDで練習日を取得
      *
      * @param id 練習日ID
@@ -70,22 +58,6 @@ public class PracticeSessionController {
         log.debug("GET /api/practice-sessions/date?date={} - Getting practice session by date", date);
         PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date);
         return ResponseEntity.ok(session);
-    }
-
-    /**
-     * 期間内の練習日を取得
-     *
-     * @param startDate 開始日
-     * @param endDate 終了日
-     * @return 練習日リスト
-     */
-    @GetMapping("/range")
-    public ResponseEntity<List<PracticeSessionDto>> getSessionsInRange(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        log.debug("GET /api/practice-sessions/range?startDate={}&endDate={}", startDate, endDate);
-        List<PracticeSessionDto> sessions = practiceSessionService.findSessionsInRange(startDate, endDate);
-        return ResponseEntity.ok(sessions);
     }
 
     /**
@@ -139,20 +111,6 @@ public class PracticeSessionController {
         log.debug("GET /api/practice-sessions/participation-rate-top3?year={}&month={}", year, month);
         List<ParticipationRateDto> top3 = practiceParticipantService.getParticipationRateTop3(year, month);
         return ResponseEntity.ok(top3);
-    }
-
-    /**
-     * 指定日以降の練習日を取得
-     *
-     * @param fromDate 基準日
-     * @return 練習日リスト
-     */
-    @GetMapping("/upcoming")
-    public ResponseEntity<List<PracticeSessionDto>> getUpcomingSessions(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate) {
-        log.debug("GET /api/practice-sessions/upcoming?fromDate={}", fromDate);
-        List<PracticeSessionDto> sessions = practiceSessionService.findUpcomingSessions(fromDate);
-        return ResponseEntity.ok(sessions);
     }
 
     /**

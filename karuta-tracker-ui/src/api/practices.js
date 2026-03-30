@@ -1,9 +1,6 @@
 import apiClient from './client';
 
 export const practiceAPI = {
-  // 練習記録一覧取得
-  getAll: () => apiClient.get('/practice-sessions'),
-
   // 練習記録詳細取得
   getById: (id) => apiClient.get(`/practice-sessions/${id}`),
 
@@ -41,12 +38,6 @@ export const practiceAPI = {
   // 選手の練習参加を一括登録
   registerParticipations: (data) =>
     apiClient.post('/practice-sessions/participations', data),
-
-  // 指定日以降の練習セッションを取得（エンリッチメントなし・高速）
-  getUpcoming: (fromDate) =>
-    apiClient.get('/practice-sessions/upcoming', {
-      params: { fromDate },
-    }),
 
   // 次の参加予定練習を取得（ホーム画面用・軽量）
   getNextParticipation: (playerId) =>

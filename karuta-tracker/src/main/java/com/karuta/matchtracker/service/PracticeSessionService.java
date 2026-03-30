@@ -51,25 +51,6 @@ public class PracticeSessionService {
     private final DensukeUrlRepository densukeUrlRepository;
 
     /**
-     * 全ての練習日を取得（降順）
-     */
-    public List<PracticeSessionDto> findAllSessions() {
-        log.debug("Finding all practice sessions");
-        List<PracticeSession> sessions = practiceSessionRepository.findAllOrderBySessionDateDesc();
-        return enrichSessionsWithParticipants(sessions);
-    }
-
-    /**
-     * ユーザーの参加団体に基づいて練習日を取得（降順）
-     */
-    public List<PracticeSessionDto> findAllSessionsByPlayer(Long playerId) {
-        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
-        if (orgIds.isEmpty()) return List.of();
-        List<PracticeSession> sessions = practiceSessionRepository.findByOrganizationIdInOrderBySessionDateDesc(orgIds);
-        return enrichSessionsWithParticipants(sessions);
-    }
-
-    /**
      * IDで練習日を取得
      */
     public PracticeSessionDto findById(Long id) {
@@ -97,17 +78,6 @@ public class PracticeSessionService {
         PracticeSession session = practiceSessionRepository.findBySessionDate(date)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
         return enrichSessionWithParticipants(session);
-    }
-
-    /**
-     * 期間内の練習日を取得
-     */
-    public List<PracticeSessionDto> findSessionsInRange(LocalDate startDate, LocalDate endDate) {
-        log.debug("Finding practice sessions between {} and {}", startDate, endDate);
-        return practiceSessionRepository.findByDateRange(startDate, endDate)
-                .stream()
-                .map(PracticeSessionDto::fromEntity)
-                .collect(Collectors.toList());
     }
 
     /**
@@ -167,25 +137,6 @@ public class PracticeSessionService {
             }
             return dto;
         }).collect(Collectors.toList());
-    }
-
-    /**
-     * 指定日以降の練習日を取得
-     */
-    public List<PracticeSessionDto> findUpcomingSessions(LocalDate fromDate) {
-        log.debug("Finding upcoming practice sessions from {}", fromDate);
-        List<PracticeSession> sessions = practiceSessionRepository.findUpcomingSessions(fromDate);
-        return enrichSessionsWithParticipants(sessions);
-    }
-
-    /**
-     * ユーザーの参加団体に基づいて指定日以降の練習日を取得
-     */
-    public List<PracticeSessionDto> findUpcomingSessionsByPlayer(LocalDate fromDate, Long playerId) {
-        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
-        if (orgIds.isEmpty()) return List.of();
-        List<PracticeSession> sessions = practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(orgIds, fromDate);
-        return enrichSessionsWithParticipants(sessions);
     }
 
     /**
