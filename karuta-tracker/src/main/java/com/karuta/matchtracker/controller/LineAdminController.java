@@ -9,7 +9,12 @@ import com.karuta.matchtracker.entity.LineNotificationScheduleSetting.ScheduleNo
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.repository.LineNotificationScheduleSettingRepository;
 import com.karuta.matchtracker.service.LineChannelService;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
+import com.karuta.matchtracker.util.AdminScopeValidator;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +39,7 @@ public class LineAdminController {
     private final LineNotificationService lineNotificationService;
     private final LineNotificationScheduleSettingRepository scheduleSettingRepository;
     private final ObjectMapper objectMapper;
+    private final PracticeSessionRepository practiceSessionRepository;
 
     /**
      * チャネル一覧を取得する
@@ -103,8 +109,19 @@ public class LineAdminController {
      */
     @PostMapping("/send/match-pairing")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<LineSendResultResponse> sendMatchPairing(@RequestBody Map<String, Long> body) {
+    public ResponseEntity<LineSendResultResponse> sendMatchPairing(@RequestBody Map<String, Long> body,
+                                                                      HttpServletRequest httpRequest) {
         Long sessionId = body.get("sessionId");
+
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            PracticeSession session = practiceSessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+            AdminScopeValidator.validateScope(role, adminOrgId, session.getOrganizationId(),
+                    "他団体の組み合わせはLINE送信できません");
+        }
+
         return ResponseEntity.ok(lineNotificationService.sendMatchPairings(sessionId));
     }
 
