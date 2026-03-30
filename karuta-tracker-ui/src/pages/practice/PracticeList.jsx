@@ -199,14 +199,12 @@ const PracticeList = () => {
     );
   };
 
-  // 場所名を省略（4文字まではそのまま表示）
-  const abbreviateLocation = (location) => {
-    if (!location) return '';
-    if (location.length <= 4) return location;
-    if (location.includes('市民館')) return '市民館';
-    if (location.includes('公民館')) return '公民館';
-    if (location.includes('体育館')) return '体育館';
-    return location.substring(0, 4);
+  // 団体コードに応じたアンダーライン色
+  const getOrgUnderlineColor = (organizationId) => {
+    const code = orgMap[organizationId]?.code;
+    if (code === 'wasura') return '#2d5a3d';
+    if (code === 'hokudai') return '#8b2252';
+    return undefined;
   };
 
   // 月を変更
@@ -478,21 +476,22 @@ const PracticeList = () => {
                           <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                             {day}
                           </div>
-                          {session && session.venueName && (
-                            <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight flex items-center justify-center gap-0.5`}>
-                              <span
-                                className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: orgMap[session.organizationId]?.color || '#4a6b5a' }}
-                              />
-                              {abbreviateLocation(session.venueName)}
-                            </div>
-                          )}
-                          {hasSession && !session?.venueName && (
-                            <div
-                              className="mt-1 w-1.5 h-1.5 rounded-full"
-                              style={{ backgroundColor: orgMap[session.organizationId]?.color || '#4a6b5a' }}
-                            />
-                          )}
+                          {session && session.venueName && (() => {
+                            const underlineColor = getOrgUnderlineColor(session.organizationId);
+                            const parts = session.venueName.split('・');
+                            return (
+                              <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight text-center`}>
+                                {parts.map((part, i) => (
+                                  <div
+                                    key={i}
+                                    style={underlineColor ? { textDecoration: 'underline', textDecorationColor: underlineColor, textUnderlineOffset: '2px', textDecorationThickness: '2px' } : undefined}
+                                  >
+                                    {part}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </td>
