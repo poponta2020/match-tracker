@@ -199,12 +199,9 @@ const PracticeList = () => {
     );
   };
 
-  // 団体コードに応じたアンダーライン色
+  // 団体のアンダーライン色（DBの color フィールドを使用）
   const getOrgUnderlineColor = (organizationId) => {
-    const code = orgMap[organizationId]?.code;
-    if (code === 'wasura') return '#2d5a3d';
-    if (code === 'hokudai') return '#8b2252';
-    return undefined;
+    return orgMap[organizationId]?.color;
   };
 
   // 月を変更
