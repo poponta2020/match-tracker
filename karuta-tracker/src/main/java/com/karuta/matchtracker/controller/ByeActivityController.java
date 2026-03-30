@@ -4,6 +4,11 @@ import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.ActivityType;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.entity.ByeActivity;
+import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.ByeActivityRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.ByeActivityService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +30,8 @@ import java.util.List;
 public class ByeActivityController {
 
     private final ByeActivityService byeActivityService;
+    private final ByeActivityRepository byeActivityRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
 
     /**
      * 指定日の抜け番活動を取得（matchNumber指定時はその試合のみ）
@@ -80,6 +87,7 @@ public class ByeActivityController {
             @Valid @RequestBody List<ByeActivityBatchItemRequest> items,
             HttpServletRequest httpRequest) {
         log.info("抜け番活動一括作成: date={}, matchNumber={}, count={}", date, matchNumber, items.size());
+        validateAdminScopeByDate(date, httpRequest);
         Long userId = (Long) httpRequest.getAttribute("currentUserId");
         List<ByeActivityDto> created = byeActivityService.createBatch(date, matchNumber, items, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -105,9 +113,27 @@ public class ByeActivityController {
      */
     @DeleteMapping("/{id}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.info("抜け番活動削除: id={}", id);
+        ByeActivity activity = byeActivityRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("ByeActivity", id));
+        validateAdminScopeByDate(activity.getSessionDate(), httpRequest);
         byeActivityService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * ADMINスコープ検証（日付ベース）
+     */
+    private void validateAdminScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if (!"ADMIN".equals(role)) return;
+
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if (adminOrgId == null) {
+            throw new ForbiddenException("他団体の抜け番活動は操作できません");
+        }
+        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
+                .orElseThrow(() -> new ForbiddenException("他団体の抜け番活動は操作できません"));
     }
 }
