@@ -61,8 +61,8 @@ public class DensukeSyncScheduler {
                             result.getCreatedSessionCount(), result.getRegisteredCount());
                 }
             } catch (Exception e) {
-                log.warn("Auto-sync failed for {}/{} (orgId={}): {}",
-                        year, month, densukeUrl.getOrganizationId(), e.getMessage());
+                log.error("Auto-sync failed for {}/{} (orgId={})",
+                        year, month, densukeUrl.getOrganizationId(), e);
             }
         }
     }
