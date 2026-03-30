@@ -79,7 +79,7 @@ const PlayerDetail = () => {
   const items = [
     { label: '性別', value: getGenderLabel(player.gender) },
     { label: '利き手', value: getDominantHandLabel(player.dominantHand) },
-    { label: '級位', value: player.kyuRank },
+    { label: '級位', value: player.kyuRank || '初心者' },
     { label: '段位', value: player.danRank },
     { label: '所属かるた会', value: player.karutaClub },
     { label: '備考', value: player.remarks },

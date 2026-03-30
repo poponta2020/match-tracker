@@ -304,7 +304,7 @@ const PlayerEdit = () => {
                 onChange={handleKyuRankChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="">未設定</option>
+                <option value="">初心者</option>
                 <option value="E級">E級</option>
                 <option value="D級">D級</option>
                 <option value="C級">C級</option>

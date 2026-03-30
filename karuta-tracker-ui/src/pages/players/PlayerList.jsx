@@ -203,11 +203,9 @@ const PlayerList = () => {
                       <span className="font-semibold text-[#374151] truncate">
                         {player.name}
                       </span>
-                      {player.kyuRank && (
-                        <span className="flex-shrink-0 text-xs text-[#6b7280] bg-[#f0f4f1] px-1.5 py-0.5 rounded">
-                          {player.kyuRank}
-                        </span>
-                      )}
+                      <span className="flex-shrink-0 text-xs text-[#6b7280] bg-[#f0f4f1] px-1.5 py-0.5 rounded">
+                        {player.kyuRank || '初心者'}
+                      </span>
                       {role && (
                         <span className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${role.color}`}>
                           {role.label}

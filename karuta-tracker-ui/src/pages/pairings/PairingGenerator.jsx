@@ -1041,7 +1041,7 @@ const PairingGenerator = () => {
                 <option value="">選手を選択してください</option>
                 {availablePlayers.map((player) => (
                   <option key={player.id} value={player.id}>
-                    {player.name} ({player.kyuRank || player.danRank || '未設定'})
+                    {player.name} ({player.kyuRank || player.danRank || '初心者'})
                   </option>
                 ))}
               </select>
