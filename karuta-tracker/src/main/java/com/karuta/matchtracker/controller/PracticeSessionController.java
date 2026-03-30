@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -185,10 +186,15 @@ public class PracticeSessionController {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         String currentUserRole = (String) httpRequest.getAttribute("currentUserRole");
 
-        // ADMIN は自団体の organizationId を自動設定
-        if ("ADMIN".equals(currentUserRole) && request.getOrganizationId() == null) {
+        // ADMIN は自団体の organizationId を自動設定 / 他団体指定を禁止
+        if ("ADMIN".equals(currentUserRole)) {
             Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-            request.setOrganizationId(adminOrgId);
+            if (request.getOrganizationId() == null) {
+                request.setOrganizationId(adminOrgId);
+            } else {
+                AdminScopeValidator.validateScope(currentUserRole, adminOrgId, request.getOrganizationId(),
+                        "他団体の練習日は作成できません");
+            }
         }
 
         PracticeSessionDto createdSession = practiceSessionService.createSession(request, currentUserId);
