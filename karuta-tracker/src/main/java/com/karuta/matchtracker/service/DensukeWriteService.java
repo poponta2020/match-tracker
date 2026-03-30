@@ -163,6 +163,10 @@ public class DensukeWriteService {
         for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
             DensukeUrl densukeUrl = urlById.get(urlId);
+            if (densukeUrl == null) {
+                errors.add("伝助URL取得失敗: urlId=" + urlId);
+                continue;
+            }
             List<PracticeSession> urlSessions = sessionsByUrlId.get(urlId);
             String urlStr = densukeUrl.getUrl();
             String cd = extractCd(urlStr);
@@ -221,6 +225,9 @@ public class DensukeWriteService {
         for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
             DensukeUrl densukeUrl = urlById.get(urlId);
+            if (densukeUrl == null) {
+                continue;
+            }
             Long orgId = densukeUrl.getOrganizationId();
             // errors はURL単位で分離できないため、全体のエラーを団体にマップ
             errorsByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
