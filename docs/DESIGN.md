@@ -90,6 +90,8 @@ Entity Layer (JPA Entity)
 - 簡易的なヘッダーベース認証（`X-User-Role`, `X-User-Id`）
 - パスワード平文比較
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
+- `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
+- フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 
 **TODO**:
 - Spring Security + JWT導入
@@ -1792,11 +1794,14 @@ Entity Layer (JPA Entity)
 - `RoleCheckInterceptor` がリクエストヘッダー `X-User-Role` と `X-User-Id` を検証
 - `@RequireRole` 付きエンドポイントでは `X-User-Id` 必須（リクエスト属性 `currentUserId` / `currentUserRole` にセット）
 - 権限不足の場合は `403 Forbidden`
+- ADMIN時は `RoleCheckInterceptor` が `adminOrganizationId` をリクエスト属性にセット
+- `AdminScopeValidator.validateScope()` でADMINの団体スコープを統一的に検証（練習日・組み合わせ・抽選・LINE送信・抜け番・伝助・システム設定）
 
 **フロントエンド**:
 - `AuthContext` で `currentPlayer.role` を管理
 - Axiosインターセプターで全リクエストに `X-User-Role` ヘッダー追加
 - `isSuperAdmin()`, `isAdmin()` などのヘルパー関数で条件付き表示
+- `RoleRoute` コンポーネントで管理者専用ルートを保護（`/admin/*`, `/players/*`, `/practice/new` 等）
 
 ---
 
