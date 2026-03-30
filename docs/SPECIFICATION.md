@@ -160,11 +160,11 @@
 
 #### 3.2.1 練習日（PracticeSession）
 
-1日の練習を表すエンティティ。1日に1つのセッションが対応する（日付に一意制約）。
+1日の練習を表すエンティティ。同じ日付でも団体が異なれば別セッションとして登録可能（`sessionDate` + `organizationId` の複合一意制約）。
 
 | フィールド | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `sessionDate` | LocalDate | Yes | 練習日（一意） |
+| `sessionDate` | LocalDate | Yes | 練習日（団体IDとの複合一意） |
 | `totalMatches` | Integer | Yes | その日の試合数 |
 | `venueId` | Long | No | 会場ID |
 | `notes` | Text | No | 備考 |
@@ -889,18 +889,20 @@ venues ──< venue_match_schedules (venueId)
 | カラム | 型 | 制約 | 説明 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO | — |
-| session_date | DATE | NOT NULL, UNIQUE | 練習日 |
+| session_date | DATE | NOT NULL | 練習日 |
 | total_matches | INT | NOT NULL | 試合数 |
 | venue_id | BIGINT | — | 会場ID |
 | notes | TEXT | — | 備考 |
 | start_time | TIME | — | 開始時刻 |
 | end_time | TIME | — | 終了時刻 |
 | capacity | INT | — | 定員 |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | — |
 | updated_by | BIGINT | NOT NULL | — |
 | created_at | TIMESTAMP | NOT NULL | — |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
+ユニーク制約: `uk_session_date_organization (session_date, organization_id)`
 インデックス: `idx_session_date`
 
 #### practice_participants

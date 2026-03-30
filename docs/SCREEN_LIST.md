@@ -53,7 +53,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal` | ALL | 練習日程一覧（月別カレンダー表示）。ADMIN+は「抽選結果を通知」ボタンでアプリ内+LINE通知を一括送信可能 |
+| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal` | ALL | 練習日程一覧（月別カレンダー表示）。同一日に複数団体のセッションがある場合はカレンダーセルに団体ごとに表示。ADMIN+は「抽選結果を通知」ボタンでアプリ内+LINE通知を一括送信可能 |
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |

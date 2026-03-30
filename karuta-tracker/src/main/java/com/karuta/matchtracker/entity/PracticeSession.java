@@ -15,6 +15,8 @@ import java.time.LocalTime;
 @Entity
 @Table(name = "practice_sessions", indexes = {
     @Index(name = "idx_session_date", columnList = "session_date")
+}, uniqueConstraints = {
+    @UniqueConstraint(name = "uk_session_date_organization", columnNames = {"session_date", "organization_id"})
 })
 @Getter
 @Setter
@@ -30,7 +32,7 @@ public class PracticeSession {
     /**
      * 練習日
      */
-    @Column(name = "session_date", nullable = false, unique = true)
+    @Column(name = "session_date", nullable = false)
     private LocalDate sessionDate;
 
     /**

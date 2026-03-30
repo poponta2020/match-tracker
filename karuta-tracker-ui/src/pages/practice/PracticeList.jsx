@@ -152,13 +152,13 @@ const PracticeList = () => {
     return calendar;
   };
 
-  // 指定日の練習セッションを取得
-  const getSessionForDate = (day) => {
-    if (!day) return null;
+  // 指定日の練習セッションを取得（同日に複数団体のセッションがある場合に対応）
+  const getSessionsForDate = (day) => {
+    if (!day) return [];
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return sessions.find((s) => s.sessionDate === dateStr);
+    return sessions.filter((s) => s.sessionDate === dateStr);
   };
 
   // 自分の参加状況を取得（当選あり/全キャン待ち/未参加）
@@ -214,10 +214,10 @@ const PracticeList = () => {
     setCurrentDate(newDate);
   };
 
-  // セルクリック
-  const handleCellClick = async (day) => {
+  // セルクリック（同日に複数セッションがある場合は最初のセッションを表示）
+  const handleCellClick = async (day, sessionOverride) => {
     if (!day) return;
-    const session = getSessionForDate(day);
+    const session = sessionOverride || getSessionsForDate(day)[0];
     if (session) {
       try {
         // 個別に詳細取得（試合別参加者を含むエンリッチメント済みデータ）
@@ -437,25 +437,31 @@ const PracticeList = () => {
             {calendar.map((week, weekIdx) => (
               <tr key={weekIdx}>
                 {week.map((day, dayIdx) => {
-                  const session = getSessionForDate(day);
+                  const daySessions = getSessionsForDate(day);
                   const today = isToday(day);
-                  const hasSession = !!session;
-                  const participationStatus = session ? getMyParticipationStatus(session) : 'none';
+                  const hasSession = daySessions.length > 0;
+
+                  // セルの背景色は、いずれかのセッションで最も「参加度の高い」ステータスに基づく
+                  const participationStatuses = daySessions.map(s => getMyParticipationStatus(s));
+                  const bestStatus = participationStatuses.includes('confirmed') ? 'confirmed'
+                    : participationStatuses.includes('waitlisted') ? 'waitlisted'
+                    : participationStatuses.includes('cancelled') ? 'cancelled'
+                    : 'none';
 
                   const cursor = hasSession ? 'cursor-pointer' : 'cursor-default';
                   let venueTextColor = 'text-[#6b7280]';
                   let cellBorder = 'border border-[#c5cec8]';
                   let cellBg = 'bg-[#f9f6f2]';
 
-                  if (participationStatus === 'confirmed') {
+                  if (bestStatus === 'confirmed') {
                     cellBorder = 'border-2 border-[#a3c4ad]';
                     cellBg = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
                     venueTextColor = 'text-[#4a6b5a]';
-                  } else if (participationStatus === 'waitlisted') {
+                  } else if (bestStatus === 'waitlisted') {
                     cellBorder = 'border-2 border-[#e8d48b]';
                     cellBg = 'bg-[#fef9ed] hover:bg-[#fdf3d7]';
                     venueTextColor = 'text-[#b8860b]';
-                  } else if (participationStatus === 'cancelled') {
+                  } else if (bestStatus === 'cancelled') {
                     cellBorder = 'border-2 border-[#b0b5ba]';
                     cellBg = 'bg-[#e5e7eb] hover:bg-[#d1d5db]';
                     venueTextColor = 'text-[#9ca3af]';
@@ -476,11 +482,11 @@ const PracticeList = () => {
                           <div className={`text-lg leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto' : ''}`}>
                             {day}
                           </div>
-                          {session && session.venueName && (() => {
+                          {daySessions.map((session) => session.venueName && (() => {
                             const underlineColor = getOrgUnderlineColor(session.organizationId);
                             const parts = session.venueName.split('・');
                             return (
-                              <div className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight text-center`}>
+                              <div key={session.id} className={`mt-0.5 text-[10px] ${venueTextColor} leading-tight text-center`}>
                                 {parts.map((part, i) => (
                                   <div
                                     key={i}
@@ -491,7 +497,7 @@ const PracticeList = () => {
                                 ))}
                               </div>
                             );
-                          })()}
+                          })())}
                         </div>
                       )}
                     </td>

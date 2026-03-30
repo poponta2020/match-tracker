@@ -221,17 +221,21 @@ Entity Layer (JPA Entity)
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT | PK, AUTO_INCREMENT | 練習日ID |
-| session_date | DATE | NOT NULL, UNIQUE | 練習日 |
+| session_date | DATE | NOT NULL | 練習日 |
 | total_matches | INT | NOT NULL | 予定試合数 |
 | venue_id | BIGINT | FK | 会場ID（venuesテーブル参照） |
 | notes | TEXT | | メモ・備考 |
 | start_time | TIME | | 開始時刻 |
 | end_time | TIME | | 終了時刻 |
 | capacity | INT | | 定員（抽選判定に使用） |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE (session_date, organization_id)
 
 **インデックス**:
 - `idx_session_date` (session_date)

@@ -290,8 +290,14 @@ public class PracticeSessionService {
         log.info("Creating new practice session on {} with {} participants",
                 request.getSessionDate(), participantIds.size());
 
-        // 日付の重複チェック
-        if (practiceSessionRepository.existsBySessionDate(request.getSessionDate())) {
+        // organizationId の決定
+        Long organizationId = request.getOrganizationId();
+        if (organizationId == null) {
+            throw new IllegalArgumentException("団体IDは必須です");
+        }
+
+        // 同一団体・同一日付の重複チェック
+        if (practiceSessionRepository.existsBySessionDateAndOrganizationId(request.getSessionDate(), organizationId)) {
             throw new DuplicateResourceException("PracticeSession", "sessionDate", request.getSessionDate());
         }
 
@@ -301,12 +307,6 @@ public class PracticeSessionService {
             if (participants.size() != participantIds.size()) {
                 throw new ResourceNotFoundException("Some players not found");
             }
-        }
-
-        // organizationId の決定
-        Long organizationId = request.getOrganizationId();
-        if (organizationId == null) {
-            throw new IllegalArgumentException("団体IDは必須です");
         }
 
         // 練習セッションを保存
@@ -383,9 +383,9 @@ public class PracticeSessionService {
 
         // ADMIN スコープチェックは呼び出し元で実施（Controller → checkAdminScope）
 
-        // 日付変更時の重複チェック
+        // 日付変更時の同一団体・同一日付の重複チェック
         if (!session.getSessionDate().equals(request.getSessionDate()) &&
-                practiceSessionRepository.existsBySessionDate(request.getSessionDate())) {
+                practiceSessionRepository.existsBySessionDateAndOrganizationId(request.getSessionDate(), session.getOrganizationId())) {
             throw new DuplicateResourceException("PracticeSession", "sessionDate", request.getSessionDate());
         }
 

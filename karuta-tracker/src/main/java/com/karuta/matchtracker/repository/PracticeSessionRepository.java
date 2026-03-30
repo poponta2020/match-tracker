@@ -72,6 +72,8 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
      */
     boolean existsBySessionDate(LocalDate sessionDate);
 
+    boolean existsBySessionDateAndOrganizationId(LocalDate sessionDate, Long organizationId);
+
     Optional<PracticeSession> findBySessionDateAndOrganizationId(LocalDate sessionDate, Long organizationId);
 
     @Query("SELECT ps FROM PracticeSession ps WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month AND ps.organizationId = :organizationId ORDER BY ps.sessionDate ASC")
