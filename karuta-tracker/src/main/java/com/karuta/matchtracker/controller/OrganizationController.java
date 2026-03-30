@@ -2,6 +2,7 @@ package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.OrganizationDto;
+import com.karuta.matchtracker.dto.UpdatePlayerOrganizationsRequest;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.OrganizationService;
@@ -46,11 +47,10 @@ public class OrganizationController {
     @PutMapping("/players/{playerId}")
     public ResponseEntity<List<OrganizationDto>> updatePlayerOrganizations(
             @PathVariable Long playerId,
-            @RequestBody Map<String, List<Long>> request,
+            @RequestBody UpdatePlayerOrganizationsRequest request,
             HttpServletRequest httpRequest) {
         checkPlayerAccess(playerId, httpRequest);
-        List<Long> organizationIds = request.get("organizationIds");
-        return ResponseEntity.ok(organizationService.updatePlayerOrganizations(playerId, organizationIds));
+        return ResponseEntity.ok(organizationService.updatePlayerOrganizations(playerId, request.getOrganizationIds()));
     }
 
     /**
