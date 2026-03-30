@@ -3,7 +3,11 @@ package com.karuta.matchtracker.controller;
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -26,6 +30,7 @@ public class MatchPairingController {
     private final MatchPairingService matchPairingService;
     private final com.karuta.matchtracker.service.OrganizationService organizationService;
     private final com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
+    private final MatchPairingRepository matchPairingRepository;
 
     /**
      * 指定日の対戦組み合わせを取得
@@ -79,8 +84,10 @@ public class MatchPairingController {
     @PostMapping
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<MatchPairingDto> create(
-            @RequestBody MatchPairingCreateRequest request) {
+            @RequestBody MatchPairingCreateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ作成: {}", request);
+        validateAdminScopeByDate(request.getSessionDate(), httpRequest);
 
         // TODO: UserDetailsからplayerIdを取得する実装が必要
         Long createdBy = 1L; // 仮のID
@@ -97,10 +104,12 @@ public class MatchPairingController {
     public ResponseEntity<List<MatchPairingDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
-            @RequestBody MatchPairingBatchRequest request) {
+            @RequestBody MatchPairingBatchRequest request,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ一括作成: 日付={}, 試合番号={}, 件数={}, 待機者数={}",
                  date, matchNumber, request.getPairings().size(),
                  request.getWaitingPlayerIds() != null ? request.getWaitingPlayerIds().size() : 0);
+        validateAdminScopeByDate(date, httpRequest);
 
         // TODO: UserDetailsからplayerIdを取得する実装が必要
         Long createdBy = 1L; // 仮のID
@@ -117,8 +126,10 @@ public class MatchPairingController {
     public ResponseEntity<MatchPairingDto> updatePlayer(
             @PathVariable Long id,
             @RequestParam Long newPlayerId,
-            @RequestParam String side) {
+            @RequestParam String side,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ選手変更: ID={}, newPlayerId={}, side={}", id, newPlayerId, side);
+        validateAdminScopeByPairingId(id, httpRequest);
         Long updatedBy = 1L; // TODO: UserDetailsから取得
         MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy);
         return ResponseEntity.ok(updated);
@@ -129,8 +140,9 @@ public class MatchPairingController {
      */
     @DeleteMapping("/{id}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ削除: ID={}", id);
+        validateAdminScopeByPairingId(id, httpRequest);
         matchPairingService.delete(id);
         return ResponseEntity.noContent().build();
     }
@@ -142,8 +154,10 @@ public class MatchPairingController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> deleteByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam Integer matchNumber) {
+            @RequestParam Integer matchNumber,
+            HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ削除: 日付={}, 試合番号={}", date, matchNumber);
+        validateAdminScopeByDate(date, httpRequest);
         matchPairingService.deleteByDateAndMatchNumber(date, matchNumber);
         return ResponseEntity.noContent().build();
     }
@@ -167,10 +181,40 @@ public class MatchPairingController {
      */
     @PostMapping("/auto-match")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<AutoMatchingResult> autoMatch(@RequestBody AutoMatchingRequest request) {
+    public ResponseEntity<AutoMatchingResult> autoMatch(
+            @RequestBody AutoMatchingRequest request,
+            HttpServletRequest httpRequest) {
         log.info("自動マッチング実行: {}", request);
+        validateAdminScopeByDate(request.getSessionDate(), httpRequest);
         AutoMatchingResult result = matchPairingService.autoMatch(request);
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * ADMINスコープ検証（日付ベース）
+     */
+    private void validateAdminScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if (!"ADMIN".equals(role)) return;
+
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if (adminOrgId == null) {
+            throw new ForbiddenException("他団体の組み合わせは操作できません");
+        }
+        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
+                .orElseThrow(() -> new ForbiddenException("他団体の組み合わせは操作できません"));
+    }
+
+    /**
+     * ADMINスコープ検証（MatchPairing IDベース）
+     */
+    private void validateAdminScopeByPairingId(Long pairingId, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if (!"ADMIN".equals(role)) return;
+
+        var pairing = matchPairingRepository.findById(pairingId)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
+        validateAdminScopeByDate(pairing.getSessionDate(), httpRequest);
     }
 
     private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {
