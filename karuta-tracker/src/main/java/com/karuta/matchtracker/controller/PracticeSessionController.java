@@ -482,10 +482,7 @@ public class PracticeSessionController {
         // ADMIN権限チェック: 自団体のみ操作可能
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        if ("ADMIN".equals(role) && !organizationId.equals(adminOrgId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "他団体の伝助URLは編集できません"));
-        }
+        AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の伝助URLは編集できません");
 
         try {
             var entity = practiceSessionService.saveDensukeUrl(year, month, url, organizationId);
@@ -514,10 +511,7 @@ public class PracticeSessionController {
         // ADMIN権限チェック
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        if ("ADMIN".equals(role) && !organizationId.equals(adminOrgId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "他団体の伝助は同期できません"));
-        }
+        AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の伝助は同期できません");
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         var densukeUrl = practiceSessionService.getDensukeUrl(year, month, organizationId);

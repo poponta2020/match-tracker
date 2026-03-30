@@ -8,6 +8,7 @@ import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.entity.DensukeUrl;
@@ -421,14 +422,13 @@ public class PracticeSessionService {
      * SUPER_ADMINの場合はスキップ
      */
     public void checkAdminScope(Long sessionId, String role, Long adminOrganizationId) {
-        if (!"ADMIN".equals(role)) return; // SUPER_ADMIN等はスキップ
+        if (!"ADMIN".equals(role)) return;
 
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
-        if (adminOrganizationId == null || !adminOrganizationId.equals(session.getOrganizationId())) {
-            throw new ForbiddenException("他団体の練習日は編集できません");
-        }
+        AdminScopeValidator.validateScope(role, adminOrganizationId, session.getOrganizationId(),
+                "他団体の練習日は編集できません");
     }
 
     /**
@@ -437,10 +437,6 @@ public class PracticeSessionService {
      */
     public void checkAdminScopeByDate(LocalDate date, String role, Long adminOrganizationId) {
         if (!"ADMIN".equals(role)) return;
-
-        if (adminOrganizationId == null) {
-            throw new ForbiddenException("他団体の練習日は編集できません");
-        }
 
         practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrganizationId)
                 .orElseThrow(() -> new ForbiddenException("他団体の練習日は編集できません"));
