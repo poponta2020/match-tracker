@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
@@ -105,6 +105,7 @@ const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, o
 const MatchResultsView = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get('date');
 
@@ -182,8 +183,12 @@ const MatchResultsView = () => {
     }
   };
 
-  // 初回：当月＋前月の練習日 + 今日のデータを並列取得
+  // 初回 or 再遷移時：当月＋前月の練習日 + 今日のデータを並列取得
   useEffect(() => {
+    // 再遷移時はstateをリセットして再フェッチ
+    initialFetchDone.current = false;
+    lastFetchedDate.current = null;
+
     const fetchInitial = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
@@ -231,7 +236,7 @@ const MatchResultsView = () => {
     };
 
     fetchInitial();
-  }, [sessionId, dateParam]);
+  }, [sessionId, dateParam, location.key]);
 
   // 日付変更時のデータ取得（ユーザー操作による変更のみ）
   useEffect(() => {

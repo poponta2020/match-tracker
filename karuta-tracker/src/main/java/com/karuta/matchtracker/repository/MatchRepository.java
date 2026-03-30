@@ -146,6 +146,18 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     List<Match> findByCreatedByOrUpdatedBy(@Param("playerId") Long playerId);
 
     /**
+     * 日付・試合番号・両選手で完全一致する試合を検索（upsert用）
+     * player1Id < player2Id が保証されている前提
+     */
+    @Query("SELECT m FROM Match m WHERE m.matchDate = :matchDate AND m.matchNumber = :matchNumber " +
+           "AND m.player1Id = :player1Id AND m.player2Id = :player2Id")
+    java.util.Optional<Match> findByMatchDateAndMatchNumberAndPlayers(
+            @Param("matchDate") LocalDate matchDate,
+            @Param("matchNumber") Integer matchNumber,
+            @Param("player1Id") Long player1Id,
+            @Param("player2Id") Long player2Id);
+
+    /**
      * 特定の選手の同日同試合番号の試合が存在するか確認
      *
      * @param playerId 選手ID

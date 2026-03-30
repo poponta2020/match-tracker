@@ -312,6 +312,7 @@ const BulkResultInput = () => {
       setError(null);
 
       const savePromises = [];
+      const saveKeys = []; // 各promiseに対応するキーを記録
 
       for (const key of changedMatches) {
         if (key.startsWith('bye-')) continue; // 抜け番キーは後続のループで処理
@@ -357,9 +358,10 @@ const BulkResultInput = () => {
             )
           );
         } else {
-          // 新規作成（詳細版）
+          // 新規作成（詳細版） - バックエンドがupsertするため重複しない
           savePromises.push(matchAPI.createDetailed(matchData));
         }
+        saveKeys.push(key);
       }
 
       // 抜け番活動の保存
@@ -393,7 +395,21 @@ const BulkResultInput = () => {
         }
       }
 
-      await Promise.all([...savePromises, ...byePromises]);
+      const allPromises = await Promise.all([...savePromises, ...byePromises]);
+
+      // 保存結果からmatchIdをstateに反映（ブラウザバック時の重複防止）
+      const matchResponses = allPromises.slice(0, saveKeys.length);
+      setResults(prev => {
+        const updated = { ...prev };
+        matchResponses.forEach((res, i) => {
+          const key = saveKeys[i];
+          if (res?.data?.id && updated[key]) {
+            updated[key] = { ...updated[key], matchId: res.data.id };
+          }
+        });
+        return updated;
+      });
+      setChangedMatches(new Set());
 
       // 保存成功後、試合結果詳細画面に遷移
       navigate(`/matches/results/${sessionId}`);

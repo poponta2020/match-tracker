@@ -399,14 +399,30 @@ public class MatchService {
             throw new IllegalArgumentException("Player cannot play against themselves");
         }
 
-        Match match = request.toEntity();
+        // player1Id < player2Idに正規化
+        Long smallerId = Math.min(request.getPlayer1Id(), request.getPlayer2Id());
+        Long largerId = Math.max(request.getPlayer1Id(), request.getPlayer2Id());
 
-        // 対戦時の級位を記録
-        setPlayerKyuRanks(match);
+        // 既存の試合を検索（upsert: 同日・同試合番号・同ペアが存在すれば更新）
+        var existing = matchRepository.findByMatchDateAndMatchNumberAndPlayers(
+                request.getMatchDate(), request.getMatchNumber(), smallerId, largerId);
 
-        Match saved = matchRepository.save(match);
+        Match saved;
+        if (existing.isPresent()) {
+            Match match = existing.get();
+            match.setWinnerId(request.getWinnerId());
+            match.setScoreDifference(request.getScoreDifference());
+            match.setUpdatedBy(request.getCreatedBy());
+            setPlayerKyuRanks(match);
+            saved = matchRepository.save(match);
+            log.info("Upsert: updated existing match with id: {}", saved.getId());
+        } else {
+            Match match = request.toEntity();
+            setPlayerKyuRanks(match);
+            saved = matchRepository.save(match);
+            log.info("Upsert: created new match with id: {}", saved.getId());
+        }
 
-        log.info("Successfully created match with id: {}", saved.getId());
         return enrichMatchWithPlayerNames(saved);
     }
 
