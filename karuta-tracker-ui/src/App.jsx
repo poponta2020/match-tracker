@@ -39,6 +39,7 @@ import LineScheduleAdmin from './pages/line/LineScheduleAdmin';
 import DensukeManagement from './pages/densuke/DensukeManagement';
 import SystemSettings from './pages/settings/SystemSettings';
 import OrganizationSettings from './pages/settings/OrganizationSettings';
+import SettingsPage from './pages/SettingsPage';
 
 const ProtectedPage = ({ children }) => (
   <PrivateRoute>
@@ -119,6 +120,7 @@ function App() {
             <Route path="/admin/settings" element={<ProtectedPage><SystemSettings /></ProtectedPage>} />
 
             {/* 設定 */}
+            <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
             <Route path="/settings/organizations" element={<ProtectedPage><OrganizationSettings /></ProtectedPage>} />
             <Route path="/settings/notifications" element={<ProtectedPage><NotificationSettings /></ProtectedPage>} />
             <Route path="/admin/line/channels" element={<ProtectedPage><LineChannelAdmin /></ProtectedPage>} />
