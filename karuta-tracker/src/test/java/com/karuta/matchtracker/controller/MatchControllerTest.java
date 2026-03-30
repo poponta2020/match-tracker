@@ -46,6 +46,12 @@ class MatchControllerTest {
     @MockitoBean
     private PlayerRepository playerRepository;
 
+    @MockitoBean
+    private com.karuta.matchtracker.service.OrganizationService organizationService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
+
     private MatchDto testMatchDto;
     private MatchCreateRequest createRequest;
     private LocalDate today;

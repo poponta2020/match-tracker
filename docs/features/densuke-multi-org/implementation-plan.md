@@ -82,7 +82,7 @@ status: completed
 - **対応Issue:** #137
 
 ### タスク10: フロントエンド APIクライアント変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助関連API呼び出しに `organizationId` パラメータを追加。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/practices.js` — `getDensukeUrl`, `saveDensukeUrl`, `syncDensuke`, `registerAndSyncDensuke`, `getDensukeWriteStatus` に `organizationId` パラメータ追加
@@ -90,7 +90,7 @@ status: completed
 - **対応Issue:** #138
 
 ### タスク11: フロントエンド 伝助管理画面の団体対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助管理画面を団体別にURL入力・同期・ステータス表示するUIに変更。ADMINは自団体のみ、SUPER_ADMINは全団体表示。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/densuke/DensukeManagement.jsx` — 管理可能団体リストを取得、団体ごとにURL入力欄・同期ボタン・ステータスブロックを並べて表示、各API呼び出しに `organizationId` 付与
@@ -98,7 +98,7 @@ status: completed
 - **対応Issue:** #139
 
 ### タスク12: フロントエンド 対戦・結果画面の団体フィルタ対応
-- [ ] 完了
+- [x] 完了
 - **概要:** バックエンド側で団体フィルタが適用されるため、フロントエンド側は主にAPIレスポンスの変更に対応。同日に複数団体のセッションがある場合の表示を確認・調整。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx` — 必要に応じてUI調整

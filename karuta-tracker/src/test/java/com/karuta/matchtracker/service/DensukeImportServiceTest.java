@@ -55,6 +55,7 @@ class DensukeImportServiceTest {
         player2 = Player.builder().id(2L).name("鈴木").role(Player.Role.PLAYER)
                 .gender(Player.Gender.女性).dominantHand(Player.DominantHand.右).build();
         adminPlayer = Player.builder().id(10L).name("管理者").role(Player.Role.ADMIN)
+                .adminOrganizationId(1L)
                 .gender(Player.Gender.男性).dominantHand(Player.DominantHand.右).build();
     }
 
@@ -78,7 +79,7 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(List.of(
                 Venue.builder().id(100L).name("すずらん").build()));
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
             PracticeSession s = inv.getArgument(0);
             s.setId(1L);
@@ -89,7 +90,7 @@ class DensukeImportServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getTotalEntries()).isEqualTo(1);
         assertThat(result.getCreatedSessionCount()).isEqualTo(1);
@@ -112,13 +113,13 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(existingSession));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(existingSession));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(99L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(99L, 1))
                 .thenReturn(Collections.emptyList());
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getCreatedSessionCount()).isEqualTo(0);
         verify(practiceSessionRepository, never()).save(any());
@@ -134,11 +135,11 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.of(LotteryExecution.builder().id(1L).build()));
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getSkippedCount()).isEqualTo(2);
         assertThat(result.getRegisteredCount()).isEqualTo(0);
@@ -157,7 +158,7 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
@@ -167,7 +168,7 @@ class DensukeImportServiceTest {
         when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(Collections.emptyList());
         when(playerRepository.findByRoleAndActive(Player.Role.ADMIN)).thenReturn(List.of(adminPlayer));
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getUnmatchedNames()).containsExactly("未登録者");
         assertThat(result.getSkippedCount()).isEqualTo(1);
@@ -185,7 +186,7 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
@@ -193,7 +194,7 @@ class DensukeImportServiceTest {
         when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(Collections.emptyList());
         when(playerRepository.findByRoleAndActive(Player.Role.ADMIN)).thenReturn(List.of(adminPlayer));
 
-        densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
@@ -225,13 +226,13 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(existingParticipant));
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getRemovedCount()).isEqualTo(1);
         verify(practiceParticipantRepository).delete(existingParticipant);
@@ -246,7 +247,7 @@ class DensukeImportServiceTest {
         when(playerRepository.findByNameAndActive("新人")).thenReturn(Optional.empty());
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
             PracticeSession s = inv.getArgument(0);
             s.setId(1L);
@@ -257,7 +258,7 @@ class DensukeImportServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
-        densukeImportService.registerAndSync(List.of("新人"), "http://example.com", null, 10L);
+        densukeImportService.registerAndSync(List.of("新人"), "http://example.com", null, 10L, 1L);
 
         ArgumentCaptor<Player> playerCaptor = ArgumentCaptor.forClass(Player.class);
         verify(playerRepository).save(playerCaptor.capture());
@@ -291,7 +292,7 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(LocalDate.of(2026, 4, 1)))
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 4, 1)), eq(1L)))
                 .thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
@@ -299,11 +300,11 @@ class DensukeImportServiceTest {
                 .thenReturn(Collections.emptyList());
 
         ImportResult result = densukeImportService.importFromDensuke(
-                "http://example.com", LocalDate.of(2026, 4, 1), 10L);
+                "http://example.com", LocalDate.of(2026, 4, 1), 10L, 1L);
 
         // 4/1だけが処理され、4/8はスキップされる
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(practiceSessionRepository, never()).findBySessionDate(LocalDate.of(2026, 4, 8));
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 4, 8)), eq(1L));
     }
 
     @Test
@@ -314,7 +315,7 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.empty());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
             PracticeSession s = inv.getArgument(0);
             s.setId(1L);
@@ -325,7 +326,7 @@ class DensukeImportServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
-        densukeImportService.importFromDensuke("http://example.com", null, 42L);
+        densukeImportService.importFromDensuke("http://example.com", null, 42L, 1L);
 
         verify(practiceSessionRepository).save(argThat(session ->
                 session.getCreatedBy().equals(42L) && session.getUpdatedBy().equals(42L)));
@@ -360,13 +361,13 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(dirtyParticipant));
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getRemovedCount()).isEqualTo(0);
         verify(practiceParticipantRepository, never()).delete(dirtyParticipant);
@@ -391,13 +392,13 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(cleanParticipant));
 
-        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         assertThat(result.getRemovedCount()).isEqualTo(1);
         verify(practiceParticipantRepository).delete(cleanParticipant);
@@ -414,13 +415,13 @@ class DensukeImportServiceTest {
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
-        when(practiceSessionRepository.findBySessionDate(any())).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
         when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
                 .thenReturn(Optional.empty());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(Collections.emptyList());
 
-        densukeImportService.importFromDensuke("http://example.com", null, 10L);
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
         ArgumentCaptor<PracticeParticipant> captor =
                 ArgumentCaptor.forClass(PracticeParticipant.class);

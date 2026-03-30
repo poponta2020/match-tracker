@@ -46,7 +46,7 @@ class DensukeWriteServiceTest {
     @Test
     @DisplayName("初期状態のgetStatusはnull値を返す")
     void testGetStatusInitial() {
-        DensukeWriteStatusDto status = densukeWriteService.getStatus();
+        DensukeWriteStatusDto status = densukeWriteService.getStatus(1L);
 
         assertThat(status.getLastAttemptAt()).isNull();
         assertThat(status.getLastSuccessAt()).isNull();
@@ -62,7 +62,7 @@ class DensukeWriteServiceTest {
     @DisplayName("DensukeURLが未設定の場合はdirtyクエリを実行しない")
     void testWriteToDensuke_noUrl_skipsAll() {
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
-                .thenReturn(Optional.empty());
+                .thenReturn(List.of());
 
         densukeWriteService.writeToDensuke();
 
@@ -73,11 +73,11 @@ class DensukeWriteServiceTest {
     @DisplayName("DensukeURLが未設定の場合はpendingCountが0になる")
     void testWriteToDensuke_noUrl_pendingCountZero() {
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
-                .thenReturn(Optional.empty());
+                .thenReturn(List.of());
 
         densukeWriteService.writeToDensuke();
 
-        assertThat(densukeWriteService.getStatus().getPendingCount()).isEqualTo(0);
+        assertThat(densukeWriteService.getStatus(1L).getPendingCount()).isEqualTo(0);
     }
 
     // ----------------------------------------------------------------
@@ -88,19 +88,19 @@ class DensukeWriteServiceTest {
     @DisplayName("dirty=trueの参加者がいない場合は何も書き込まない")
     void testWriteToDensuke_noDirtyParticipants_skipsWrite() {
         DensukeUrl url = DensukeUrl.builder()
-                .id(1L).year(2026).month(4)
+                .id(1L).year(2026).month(4).organizationId(1L)
                 .url("https://densuke.biz/list?cd=test123").build();
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
-                    if (y == 2026 && m == 4) return Optional.of(url);
-                    return Optional.empty();
+                    if (y == 2026 && m == 4) return List.of(url);
+                    return List.of();
                 });
 
         PracticeSession session = PracticeSession.builder()
                 .id(10L).sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
-        when(practiceSessionRepository.findByYearAndMonth(anyInt(), anyInt()))
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), eq(1L)))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
@@ -114,7 +114,7 @@ class DensukeWriteServiceTest {
         densukeWriteService.writeToDensuke();
 
         verify(densukeMemberMappingRepository, never()).findByDensukeUrlIdAndPlayerId(any(), any());
-        assertThat(densukeWriteService.getStatus().getPendingCount()).isEqualTo(0);
+        assertThat(densukeWriteService.getStatus(1L).getPendingCount()).isEqualTo(0);
     }
 
     // ----------------------------------------------------------------
