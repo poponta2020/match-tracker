@@ -352,7 +352,8 @@ public class DensukeImportService {
                 Long orgId = admins.stream()
                         .filter(a -> a.getId().equals(n.getPlayerId()))
                         .map(Player::getAdminOrganizationId)
-                        .findFirst().orElse(null);
+                        .filter(Objects::nonNull)
+                        .findFirst().orElse(organizationId);
                 notificationService.sendPushIfEnabled(
                         n.getPlayerId(), n.getType(), n.getTitle(), n.getMessage(), "/admin/densuke", orgId);
             }
