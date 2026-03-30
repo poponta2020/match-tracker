@@ -23,7 +23,7 @@ status: completed
 - **対応Issue:** #130
 
 ### タスク3: バックエンド サービス変更 — PracticeSessionService
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助URL CRUD メソッドに `organizationId` パラメータを追加し、ADMIN権限チェックを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeSessionService.java` — `getDensukeUrl()`, `saveDensukeUrl()` に `organizationId` パラメータ追加、ADMIN権限チェック
@@ -31,7 +31,7 @@ status: completed
 - **対応Issue:** #131
 
 ### タスク4: バックエンド サービス変更 — DensukeImportService
-- [ ] 完了
+- [x] 完了
 - **概要:** インポート処理を団体別に実行するよう変更。セッション作成時に `organizationId` を設定。未登録者通知を団体別ADMINに限定。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` — `importFromDensuke()` に `organizationId` パラメータ追加、セッション作成時に `organizationId` 設定、`notifyAdminsOfUnmatchedNames()` に `organizationId` パラメータ追加しADMINフィルタ
@@ -39,7 +39,7 @@ status: completed
 - **対応Issue:** #132
 
 ### タスク5: バックエンド サービス変更 — DensukeWriteService
-- [ ] 完了
+- [x] 完了
 - **概要:** 書き込み処理を団体別に実行するよう変更。ステータス取得も団体別に対応。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeWriteService.java` — `writeToDensuke()` で全団体のURLを取得してループ処理、`getStatus()` に `organizationId` パラメータ追加
@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #133
 
 ### タスク6: バックエンド スケジューラー変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 自動同期スケジューラーを全団体の伝助URLをループ処理するよう変更。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/DensukeSyncScheduler.java` — `syncForMonth()` を全団体分ループ実行に変更
@@ -55,7 +55,7 @@ status: completed
 - **対応Issue:** #134
 
 ### タスク7: バックエンド コントローラー変更 — 伝助API
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助関連APIエンドポイントに `organizationId` パラメータを追加し、ADMIN権限チェックを実装。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/PracticeSessionController.java` — `getDensukeUrl`, `saveDensukeUrl`, `syncDensuke`, `getDensukeWriteStatus`, `importFromDensuke`, `registerAndSyncDensuke` に `organizationId` パラメータ追加、ADMIN権限チェック
@@ -63,7 +63,7 @@ status: completed
 - **対応Issue:** #135
 
 ### タスク8: バックエンド 抽選処理の団体フィルタ修正
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選実行時に団体別にセッションを取得するよう修正。抽選結果通知も団体別にフィルタ。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryService.java` — `executeLottery()` 内のセッション取得を団体別にフィルタ
@@ -73,7 +73,7 @@ status: completed
 - **対応Issue:** #136
 
 ### タスク9: バックエンド 対戦・結果の団体フィルタ追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 対戦組み合わせ・結果取得APIにユーザーの所属団体フィルタを追加。同じ日に両団体の練習がある場合に、所属団体のセッションのみ返すようにする。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/MatchPairingController.java` — `getByDate()`, `getByDateAndMatchNumber()` にユーザー所属団体フィルタ追加
