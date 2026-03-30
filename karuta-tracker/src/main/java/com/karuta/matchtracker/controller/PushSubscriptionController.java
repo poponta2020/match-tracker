@@ -1,12 +1,16 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.PushNotificationPreferenceDto;
 import com.karuta.matchtracker.dto.PushSubscriptionRequest;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.PushNotificationPreference;
 import com.karuta.matchtracker.entity.PushSubscription;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.PushSubscriptionRepository;
 import com.karuta.matchtracker.service.PushNotificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +53,11 @@ public class PushSubscriptionController {
      * Push購読を登録
      */
     @PostMapping
-    public ResponseEntity<Void> subscribe(@Valid @RequestBody PushSubscriptionRequest request) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Void> subscribe(@Valid @RequestBody PushSubscriptionRequest request,
+                                          HttpServletRequest httpRequest) {
+        validatePlayerAccess(request.getPlayerId(), httpRequest);
+
         // 既存の同一エンドポイントがあればスキップ
         if (pushSubscriptionRepository.existsByEndpoint(request.getEndpoint())) {
             return ResponseEntity.ok().build();
@@ -73,7 +81,10 @@ public class PushSubscriptionController {
      * Push購読を解除
      */
     @DeleteMapping
-    public ResponseEntity<Void> unsubscribe(@RequestParam Long playerId, @RequestParam String endpoint) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Void> unsubscribe(@RequestParam Long playerId, @RequestParam String endpoint,
+                                            HttpServletRequest httpRequest) {
+        validatePlayerAccess(playerId, httpRequest);
         pushSubscriptionRepository.deleteByPlayerIdAndEndpoint(playerId, endpoint);
         log.info("Push subscription removed for player {}", playerId);
         return ResponseEntity.noContent().build();
@@ -83,7 +94,10 @@ public class PushSubscriptionController {
      * Web Push通知設定を取得（全団体分）
      */
     @GetMapping("/preferences/{playerId}")
-    public ResponseEntity<List<PushNotificationPreferenceDto>> getPreferences(@PathVariable Long playerId) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<List<PushNotificationPreferenceDto>> getPreferences(
+            @PathVariable Long playerId, HttpServletRequest httpRequest) {
+        validatePlayerAccess(playerId, httpRequest);
         List<PushNotificationPreference> prefs = pushNotificationPreferenceRepository.findByPlayerId(playerId);
         if (prefs.isEmpty()) {
             return ResponseEntity.ok(List.of());
@@ -98,8 +112,10 @@ public class PushSubscriptionController {
      * Web Push通知設定を更新（団体指定）
      */
     @PutMapping("/preferences")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<PushNotificationPreferenceDto> updatePreferences(
-            @RequestBody PushNotificationPreferenceDto request) {
+            @RequestBody PushNotificationPreferenceDto request, HttpServletRequest httpRequest) {
+        validatePlayerAccess(request.getPlayerId(), httpRequest);
         PushNotificationPreference pref = pushNotificationPreferenceRepository
                 .findByPlayerIdAndOrganizationId(request.getPlayerId(), request.getOrganizationId())
                 .orElseGet(() -> PushNotificationPreference.builder()
@@ -119,5 +135,16 @@ public class PushSubscriptionController {
         log.info("Updated push notification preferences for player {} org {}", request.getPlayerId(), request.getOrganizationId());
 
         return ResponseEntity.ok(PushNotificationPreferenceDto.fromEntity(pref));
+    }
+
+    /**
+     * PLAYERロールの場合、自分のplayerIdのみアクセス可能か検証する
+     */
+    private void validatePlayerAccess(Long playerId, HttpServletRequest httpRequest) {
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
+            throw new ForbiddenException("他のプレイヤーのPush設定にはアクセスできません");
+        }
     }
 }

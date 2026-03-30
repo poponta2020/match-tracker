@@ -44,6 +44,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     List<Notification> findByPlayerIdAndTypeOrderByCreatedAtDesc(Long playerId, NotificationType type);
 
     /**
+     * 指定された参照IDと通知種別で通知が存在するか確認（重複送信防止用）
+     */
+    boolean existsByReferenceIdAndType(Long referenceId, NotificationType type);
+
+    /**
      * 指定プレイヤーの全通知を論理削除する
      */
     @Modifying

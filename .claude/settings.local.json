@@ -144,7 +144,9 @@
       "Bash(tar xzf:*)",
       "Bash(cp /tmp/gh_2.89.0_linux_amd64/bin/gh ~/.local/bin/gh)",
       "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(npx eslint:*)",
+      "Bash(mvn compile:*)"
     ],
     "deny": [],
     "ask": [],
