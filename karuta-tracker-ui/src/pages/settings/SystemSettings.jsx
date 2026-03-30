@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { systemSettingsAPI } from '../../api';
 import { Settings, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { useAuth } from '../../context/AuthContext';
 
 const SystemSettings = () => {
+  const { currentPlayer } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -72,9 +74,10 @@ const SystemSettings = () => {
     setSuccess(null);
     try {
       const deadlineValue = noDeadline ? '-1' : String(deadlineDays);
+      const orgId = currentPlayer?.adminOrganizationId;
       await Promise.all([
-        systemSettingsAPI.update('lottery_deadline_days_before', deadlineValue),
-        systemSettingsAPI.update('lottery_normal_reserve_percent', String(reservePercent)),
+        systemSettingsAPI.update('lottery_deadline_days_before', deadlineValue, orgId),
+        systemSettingsAPI.update('lottery_normal_reserve_percent', String(reservePercent), orgId),
       ]);
       setSuccess('保存しました');
       setTimeout(() => setSuccess(null), 3000);
