@@ -344,9 +344,13 @@ public class PracticeSessionController {
     public ResponseEntity<PracticeSessionDto> addParticipantToMatch(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @PathVariable Integer matchNumber,
-            @PathVariable Long playerId) {
+            @PathVariable Long playerId,
+            HttpServletRequest httpRequest) {
         log.info("POST /api/practice-sessions/date/{}/matches/{}/participants/{} - Adding participant to match",
                 date, matchNumber, playerId);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScopeByDate(date, role, adminOrgId);
         practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId);
         // 更新後の練習セッション情報を返す
         PracticeSessionDto session = practiceSessionService.findByDate(date);
@@ -433,9 +437,13 @@ public class PracticeSessionController {
     public ResponseEntity<Void> removeParticipantFromMatch(
             @PathVariable Long sessionId,
             @PathVariable Integer matchNumber,
-            @PathVariable Long playerId) {
+            @PathVariable Long playerId,
+            HttpServletRequest httpRequest) {
         log.info("DELETE /api/practice-sessions/{}/matches/{}/participants/{} - Removing participant",
                 sessionId, matchNumber, playerId);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(sessionId, role, adminOrgId);
         practiceParticipantService.removeParticipantFromMatch(sessionId, matchNumber, playerId);
         return ResponseEntity.noContent().build();
     }

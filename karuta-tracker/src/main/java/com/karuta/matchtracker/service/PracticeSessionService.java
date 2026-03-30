@@ -432,6 +432,21 @@ public class PracticeSessionService {
     }
 
     /**
+     * ADMINが自団体の練習日のみ操作可能かチェック（日付ベース）
+     * SUPER_ADMINの場合はスキップ
+     */
+    public void checkAdminScopeByDate(LocalDate date, String role, Long adminOrganizationId) {
+        if (!"ADMIN".equals(role)) return;
+
+        if (adminOrganizationId == null) {
+            throw new ForbiddenException("他団体の練習日は編集できません");
+        }
+
+        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrganizationId)
+                .orElseThrow(() -> new ForbiddenException("他団体の練習日は編集できません"));
+    }
+
+    /**
      * 練習セッションに参加者情報を付与（単一）
      */
     private PracticeSessionDto enrichSessionWithParticipants(PracticeSession session) {
