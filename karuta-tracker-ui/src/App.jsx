@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
+import RoleRoute from './components/RoleRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import InviteRegister from './pages/InviteRegister';
@@ -47,6 +48,14 @@ const ProtectedPage = ({ children }) => (
   </PrivateRoute>
 );
 
+const RoleProtectedPage = ({ requiredRole, children }) => (
+  <PrivateRoute>
+    <RoleRoute requiredRole={requiredRole}>
+      <Layout>{children}</Layout>
+    </RoleRoute>
+  </PrivateRoute>
+);
+
 function App() {
   return (
     <ErrorBoundary>
@@ -75,14 +84,14 @@ function App() {
             <Route path="/matches/new" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
             <Route path="/matches/:id" element={<ProtectedPage><MatchDetail /></ProtectedPage>} />
             <Route path="/matches/:id/edit" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
-            <Route path="/matches/bulk-input/:sessionId" element={<ProtectedPage><BulkResultInput /></ProtectedPage>} />
+            <Route path="/matches/bulk-input/:sessionId" element={<RoleProtectedPage requiredRole="ADMIN"><BulkResultInput /></RoleProtectedPage>} />
             <Route path="/matches/results/:sessionId?" element={<ProtectedPage><MatchResultsView /></ProtectedPage>} />
 
             {/* 練習 */}
             <Route path="/practice" element={<ProtectedPage><PracticeList /></ProtectedPage>} />
-            <Route path="/practice/new" element={<ProtectedPage><PracticeForm /></ProtectedPage>} />
+            <Route path="/practice/new" element={<RoleProtectedPage requiredRole="ADMIN"><PracticeForm /></RoleProtectedPage>} />
             <Route path="/practice/:id" element={<ProtectedPage><PracticeDetail /></ProtectedPage>} />
-            <Route path="/practice/:id/edit" element={<ProtectedPage><PracticeForm /></ProtectedPage>} />
+            <Route path="/practice/:id/edit" element={<RoleProtectedPage requiredRole="ADMIN"><PracticeForm /></RoleProtectedPage>} />
             <Route path="/practice/participation" element={<ProtectedPage><PracticeParticipation /></ProtectedPage>} />
             <Route path="/practice/cancel" element={<ProtectedPage><PracticeCancelPage /></ProtectedPage>} />
 
@@ -92,39 +101,39 @@ function App() {
             <Route path="/lottery/offer-response" element={<ProtectedPage><OfferResponse /></ProtectedPage>} />
 
             {/* 組み合わせ */}
-            <Route path="/pairings" element={<ProtectedPage><PairingGenerator /></ProtectedPage>} />
-            <Route path="/pairings/summary" element={<ProtectedPage><PairingSummary /></ProtectedPage>} />
+            <Route path="/pairings" element={<RoleProtectedPage requiredRole="ADMIN"><PairingGenerator /></RoleProtectedPage>} />
+            <Route path="/pairings/summary" element={<RoleProtectedPage requiredRole="ADMIN"><PairingSummary /></RoleProtectedPage>} />
 
             {/* 選手 */}
-            <Route path="/players" element={<ProtectedPage><PlayerList /></ProtectedPage>} />
-            <Route path="/players/new" element={<ProtectedPage><PlayerEdit /></ProtectedPage>} />
+            <Route path="/players" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerList /></RoleProtectedPage>} />
+            <Route path="/players/new" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerEdit /></RoleProtectedPage>} />
             <Route path="/players/:id" element={<ProtectedPage><PlayerDetail /></ProtectedPage>} />
-            <Route path="/players/:id/edit" element={<ProtectedPage><PlayerEdit /></ProtectedPage>} />
+            <Route path="/players/:id/edit" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerEdit /></RoleProtectedPage>} />
 
             {/* プロフィール */}
             <Route path="/profile" element={<ProtectedPage><Profile /></ProtectedPage>} />
             <Route path="/profile/edit" element={<PrivateRoute><ProfileEdit /></PrivateRoute>} />
 
             {/* 会場 */}
-            <Route path="/venues" element={<ProtectedPage><VenueList /></ProtectedPage>} />
-            <Route path="/venues/new" element={<ProtectedPage><VenueForm /></ProtectedPage>} />
-            <Route path="/venues/edit/:id" element={<ProtectedPage><VenueForm /></ProtectedPage>} />
+            <Route path="/venues" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><VenueList /></RoleProtectedPage>} />
+            <Route path="/venues/new" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><VenueForm /></RoleProtectedPage>} />
+            <Route path="/venues/edit/:id" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><VenueForm /></RoleProtectedPage>} />
 
             {/* 通知 */}
             <Route path="/notifications" element={<ProtectedPage><NotificationList /></ProtectedPage>} />
 
             {/* 伝助管理 */}
-            <Route path="/admin/densuke" element={<ProtectedPage><DensukeManagement /></ProtectedPage>} />
+            <Route path="/admin/densuke" element={<RoleProtectedPage requiredRole="ADMIN"><DensukeManagement /></RoleProtectedPage>} />
 
             {/* システム設定 */}
-            <Route path="/admin/settings" element={<ProtectedPage><SystemSettings /></ProtectedPage>} />
+            <Route path="/admin/settings" element={<RoleProtectedPage requiredRole="ADMIN"><SystemSettings /></RoleProtectedPage>} />
 
             {/* 設定 */}
             <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
             <Route path="/settings/organizations" element={<ProtectedPage><OrganizationSettings /></ProtectedPage>} />
             <Route path="/settings/notifications" element={<ProtectedPage><NotificationSettings /></ProtectedPage>} />
-            <Route path="/admin/line/channels" element={<ProtectedPage><LineChannelAdmin /></ProtectedPage>} />
-            <Route path="/admin/line/schedule" element={<ProtectedPage><LineScheduleAdmin /></ProtectedPage>} />
+            <Route path="/admin/line/channels" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><LineChannelAdmin /></RoleProtectedPage>} />
+            <Route path="/admin/line/schedule" element={<RoleProtectedPage requiredRole="ADMIN"><LineScheduleAdmin /></RoleProtectedPage>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
