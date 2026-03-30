@@ -142,6 +142,22 @@ public class DensukeImportService {
                 log.info("Created practice session: {} venue={} totalMatches={}", entry.getDate(), venueName, totalMatches);
             } else {
                 session = sessionOpt.get();
+
+                // 会場が未設定の既存セッションに伝助の会場を補完
+                if (session.getVenueId() == null) {
+                    String venueName = venueByDate.get(entry.getDate());
+                    if (venueName != null) {
+                        Venue venue = venueNameMap.get(venueName);
+                        if (venue != null) {
+                            session.setVenueId(venue.getId());
+                            practiceSessionRepository.save(session);
+                            result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
+                            log.info("Updated venue for existing session: {} venue={}", entry.getDate(), venueName);
+                        } else {
+                            unmatchedVenueSet.add(venueName);
+                        }
+                    }
+                }
             }
 
             // 抽選済みセッションはスキップ（参加者を変更しない）

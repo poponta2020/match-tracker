@@ -73,7 +73,8 @@ public class SystemSettingController {
         Long organizationId = body.get("organizationId") != null
                 ? Long.parseLong(body.get("organizationId"))
                 : null;
-        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId
+                : (organizationId != null ? organizationId : adminOrgId);
 
         SystemSetting setting = systemSettingService.setValue(key, body.get("value"), targetOrgId, currentUserId);
         return ResponseEntity.ok(setting);
