@@ -138,9 +138,11 @@ public class PracticeSessionController {
      */
     @GetMapping("/dates")
     public ResponseEntity<List<LocalDate>> getSessionDates(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/practice-sessions/dates?fromDate={}", fromDate);
-        List<LocalDate> dates = practiceSessionService.findSessionDates(fromDate);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<LocalDate> dates = practiceSessionService.findSessionDates(fromDate, currentUserId);
         return ResponseEntity.ok(dates);
     }
 
@@ -318,9 +320,13 @@ public class PracticeSessionController {
     public ResponseEntity<Void> setMatchParticipants(
             @PathVariable Long sessionId,
             @PathVariable Integer matchNumber,
-            @Valid @RequestBody MatchParticipantsRequest request) {
+            @Valid @RequestBody MatchParticipantsRequest request,
+            HttpServletRequest httpRequest) {
         log.info("PUT /api/practice-sessions/{}/matches/{}/participants - Setting participants",
                 sessionId, matchNumber);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(sessionId, role, adminOrgId);
         practiceParticipantService.setMatchParticipants(sessionId, matchNumber, request.getPlayerIds());
         return ResponseEntity.ok().build();
     }

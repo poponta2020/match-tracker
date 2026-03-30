@@ -141,10 +141,16 @@ public class PracticeSessionService {
 
     /**
      * 指定日以降の練習日の日付リストのみ取得（軽量）
+     * playerId が指定された場合はユーザーの参加団体でフィルタする
      */
     @Transactional(readOnly = true)
-    public List<LocalDate> findSessionDates(LocalDate fromDate) {
-        log.debug("Finding session dates from {}", fromDate);
+    public List<LocalDate> findSessionDates(LocalDate fromDate, Long playerId) {
+        log.debug("Finding session dates from {} for player {}", fromDate, playerId);
+        if (playerId != null) {
+            List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+            if (orgIds.isEmpty()) return List.of();
+            return practiceSessionRepository.findSessionDatesByOrganizationIdIn(orgIds, fromDate);
+        }
         return practiceSessionRepository.findSessionDates(fromDate);
     }
 
