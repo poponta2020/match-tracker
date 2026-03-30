@@ -44,7 +44,7 @@ public class DensukeScraper {
     // 試合番号パターン: "1試合目" or "2試合目"
     private static final Pattern MATCH_PATTERN = Pattern.compile("(\\d+)試合目");
     // 会場名パターン: 日付の後、試合番号or時間の前の文字列 例: "4/1(水)すずらん 1試合目 17:20~"
-    private static final Pattern VENUE_PATTERN = Pattern.compile("\\([^)]+\\)(.+?)\\s+\\d+試合目");
+    private static final Pattern VENUE_PATTERN = Pattern.compile("\\([^)]+\\)(.+?)[\\s\u3000]+\\d+試合目");
 
     /**
      * 伝助URLからデータをスクレイピング

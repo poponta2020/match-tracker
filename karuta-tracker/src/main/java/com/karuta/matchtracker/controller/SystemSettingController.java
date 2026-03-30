@@ -35,7 +35,8 @@ public class SystemSettingController {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
 
-        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+        Long targetOrgId = "ADMIN".equals(role) ? adminOrgId
+                : (organizationId != null ? organizationId : adminOrgId);
         if (targetOrgId != null) {
             return ResponseEntity.ok(systemSettingService.getAllByOrganization(targetOrgId));
         }
@@ -75,6 +76,10 @@ public class SystemSettingController {
                 : null;
         Long targetOrgId = "ADMIN".equals(role) ? adminOrgId
                 : (organizationId != null ? organizationId : adminOrgId);
+
+        if (targetOrgId == null) {
+            return ResponseEntity.badRequest().build();
+        }
 
         SystemSetting setting = systemSettingService.setValue(key, body.get("value"), targetOrgId, currentUserId);
         return ResponseEntity.ok(setting);

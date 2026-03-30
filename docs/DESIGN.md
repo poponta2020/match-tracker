@@ -131,7 +131,7 @@ Entity Layer (JPA Entity)
                1───多 [line_notification_preferences]
 [push_subscriptions] 多───1 [players]
 [push_notification_preferences] 多───1 [players]
-[densuke_urls]
+[densuke_urls] 多───1 [organizations]
 [invite_tokens] 多───1 [players]  (created_by)
 ```
 
@@ -486,11 +486,12 @@ Entity Layer (JPA Entity)
 | year | INT | NOT NULL | 対象年 |
 | month | INT | NOT NULL | 対象月 |
 | url | VARCHAR(500) | NOT NULL | 伝助URL |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_at | DATETIME | NOT NULL | 作成日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 **制約**:
-- UNIQUE (year, month)
+- UNIQUE (year, month, organization_id)
 
 ---
 
@@ -1522,7 +1523,7 @@ Entity Layer (JPA Entity)
 | LINE通知設定 | /settings/line | 全員 | LINE連携の有効化/無効化、友だち追加URL・ワンタイムコード表示、通知種別ON/OFF |
 | LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | チャネル一覧・登録・無効化・強制解除 |
 | LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
-| 伝助管理 | /admin/densuke | ADMIN+ | 伝助URL管理、手動同期実行、未登録者の一括登録 |
+| 伝助管理 | /admin/densuke | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者一括登録（ADMINは自団体のみ、SUPER_ADMINは全団体） |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
 
@@ -2057,11 +2058,13 @@ Entity Layer (JPA Entity)
 - 伝助（出欠管理ツール）との双方向同期
   - **アプリ→伝助**: `DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
   - **伝助→アプリ**: JsoupによるHTMLスクレイピングで出欠情報を取得
-- 月単位でURL管理（`densuke_urls`テーブル）
+- 団体×月単位でURL管理（`densuke_urls`テーブル、`organization_id` でマルチ団体対応）
 - メンバーID・行IDをキャッシュテーブル（`densuke_member_mappings`, `densuke_row_ids`）に保存
-- スケジューラー・手動同期ともに ① 書き込み → ② 読み取り の順で実行
+- スケジューラー・手動同期ともに ① 書き込み → ② 読み取り の順で実行。全団体のURLをループ処理
 - **セキュリティ**: `PUT /densuke-url` は `https://densuke.biz/` ドメインのみ受付（SSRF対策）
 - **認証**: `GET /densuke-url` は PLAYER 以上の認証が必要（未認証アクセス不可）
+- **権限**: ADMINは自団体の伝助URLのみ操作可能。SUPER_ADMINは全団体操作可能
+- **未登録者通知**: ADMINは自団体の未登録者のみ通知。SUPER_ADMINは全団体分を通知
 - **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（毎分スケジューラーのDB負荷軽減）
 
 #### Google Calendar連携

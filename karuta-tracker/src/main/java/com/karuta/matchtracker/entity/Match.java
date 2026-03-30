@@ -13,13 +13,18 @@ import java.time.LocalDateTime;
  * player1_id < player2_id の制約をアプリケーション層で保証します。
  */
 @Entity
-@Table(name = "matches", indexes = {
-    @Index(name = "idx_matches_date", columnList = "match_date"),
-    @Index(name = "idx_matches_date_player1", columnList = "match_date, player1_id"),
-    @Index(name = "idx_matches_date_player2", columnList = "match_date, player2_id"),
-    @Index(name = "idx_matches_winner", columnList = "winner_id"),
-    @Index(name = "idx_matches_date_match_number", columnList = "match_date, match_number")
-})
+@Table(name = "matches",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_matches_date_number_players",
+            columnNames = {"match_date", "match_number", "player1_id", "player2_id"})
+    },
+    indexes = {
+        @Index(name = "idx_matches_date", columnList = "match_date"),
+        @Index(name = "idx_matches_date_player1", columnList = "match_date, player1_id"),
+        @Index(name = "idx_matches_date_player2", columnList = "match_date, player2_id"),
+        @Index(name = "idx_matches_winner", columnList = "winner_id"),
+        @Index(name = "idx_matches_date_match_number", columnList = "match_date, match_number")
+    })
 @Getter
 @Setter
 @NoArgsConstructor

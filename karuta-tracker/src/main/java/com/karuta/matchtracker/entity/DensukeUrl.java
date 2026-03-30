@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "densuke_urls", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"year", "month"})
+    @UniqueConstraint(name = "densuke_urls_year_month_org_key", columnNames = {"year", "month", "organization_id"})
 })
 @Data
 @NoArgsConstructor
@@ -35,6 +35,9 @@ public class DensukeUrl {
 
     @Column(nullable = false, length = 500)
     private String url;
+
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

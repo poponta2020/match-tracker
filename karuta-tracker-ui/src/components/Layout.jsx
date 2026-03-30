@@ -4,6 +4,7 @@ import {
   Swords,
   Calendar,
   BarChart3,
+  Settings,
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -15,6 +16,7 @@ const Layout = ({ children }) => {
     { name: 'Match', href: '/matches/results', icon: Swords },
     { name: 'Schedule', href: '/practice', icon: Calendar },
     { name: 'Record', href: '/matches', icon: BarChart3 },
+    { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
   // ボトムナビゲーションのアクティブ判定（パスの前方一致も考慮）
@@ -32,6 +34,9 @@ const Layout = ({ children }) => {
       return location.pathname.startsWith('/matches') &&
              location.pathname !== '/matches/new' &&
              !location.pathname.startsWith('/matches/results');
+    }
+    if (href === '/settings') {
+      return location.pathname === '/settings';
     }
     return location.pathname.startsWith(href);
   };

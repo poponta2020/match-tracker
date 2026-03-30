@@ -223,6 +223,34 @@ public class NotificationService {
     }
 
     /**
+     * 繰り上げ期限切れ警告通知を作成する
+     */
+    @Transactional
+    public void createOfferExpiringNotification(PracticeParticipant participant) {
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId()).orElse(null);
+        if (session == null) return;
+
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        String deadlineStr = participant.getOfferDeadline() != null
+                ? participant.getOfferDeadline().format(DateTimeFormatter.ofPattern("M/d HH:mm"))
+                : "不明";
+
+        createAndPush(
+                participant.getPlayerId(),
+                NotificationType.OFFER_EXPIRING,
+                "繰り上げ参加の期限が迫っています",
+                String.format("%sの練習 試合%dの繰り上げ参加の応答期限が%sです。お早めにご回答ください。",
+                        dateStr, participant.getMatchNumber(), deadlineStr),
+                "PRACTICE_PARTICIPANT",
+                participant.getId(),
+                "/notifications",
+                session.getOrganizationId());
+
+        log.info("Created offer expiring notification for player {} (session {} match {}, deadline: {})",
+                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), deadlineStr);
+    }
+
+    /**
      * 期限切れ通知を作成する
      */
     @Transactional

@@ -82,21 +82,21 @@ export const practiceAPI = {
   addParticipantToMatch: (date, matchNumber, playerId) =>
     apiClient.post(`/practice-sessions/date/${date}/matches/${matchNumber}/participants/${playerId}`),
 
-  // 伝助URL取得（月別）
-  getDensukeUrl: (year, month) =>
-    apiClient.get('/practice-sessions/densuke-url', { params: { year, month } }),
+  // 伝助URL取得（月別・団体別）
+  getDensukeUrl: (year, month, organizationId) =>
+    apiClient.get('/practice-sessions/densuke-url', { params: { year, month, organizationId } }),
 
   // 伝助URL登録/更新
-  saveDensukeUrl: (year, month, url) =>
-    apiClient.put('/practice-sessions/densuke-url', { year, month, url }),
+  saveDensukeUrl: (year, month, url, organizationId) =>
+    apiClient.put('/practice-sessions/densuke-url', { year, month, url, organizationId }),
 
-  // 伝助同期（月指定）
-  syncDensuke: (year, month) =>
-    apiClient.post('/practice-sessions/sync-densuke', { year, month }),
+  // 伝助同期（月・団体指定）
+  syncDensuke: (year, month, organizationId) =>
+    apiClient.post('/practice-sessions/sync-densuke', { year, month, organizationId }),
 
   // 未登録者を一括登録して再同期
-  registerAndSyncDensuke: (names, year, month) =>
-    apiClient.post('/practice-sessions/register-and-sync-densuke', { names, year, month }),
+  registerAndSyncDensuke: (names, year, month, organizationId) =>
+    apiClient.post('/practice-sessions/register-and-sync-densuke', { names, year, month, organizationId }),
 
   // 特定の試合から参加者を削除
   removeParticipantFromMatch: (sessionId, matchNumber, playerId) =>
@@ -108,7 +108,7 @@ export const practiceAPI = {
       params: { year, month },
     }),
 
-  // 伝助への書き込み状況を取得
-  getDensukeWriteStatus: () =>
-    apiClient.get('/practice-sessions/densuke-write-status'),
+  // 伝助への書き込み状況を取得（団体別）
+  getDensukeWriteStatus: (organizationId) =>
+    apiClient.get('/practice-sessions/densuke-write-status', { params: { organizationId } }),
 };

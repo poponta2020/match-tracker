@@ -179,6 +179,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findExpiredOffers(@Param("now") LocalDateTime now);
 
     /**
+     * 応答期限が間近（now〜deadline間）のOFFERED状態の参加者を取得
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.status = 'OFFERED' AND p.offerDeadline >= :now AND p.offerDeadline <= :deadline")
+    List<PracticeParticipant> findExpiringOffers(@Param("now") LocalDateTime now, @Param("deadline") LocalDateTime deadline);
+
+    /**
      * 指定セッションの全参加者をステータスで取得（試合番号・キャンセル待ち番号順）
      */
     @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId " +

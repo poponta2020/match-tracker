@@ -48,7 +48,7 @@ public class LotteryScheduler {
             if (org.getDeadlineType() != DeadlineType.MONTHLY) continue;
 
             if (lotteryDeadlineHelper.isAfterDeadline(targetYear, targetMonth, org.getId())) {
-                executeLotteryIfNotDone(targetYear, targetMonth);
+                executeLotteryIfNotDone(targetYear, targetMonth, org.getId());
             }
         }
     }
@@ -64,14 +64,14 @@ public class LotteryScheduler {
                 int currentYear = today.getYear();
                 int currentMonth = today.getMonthValue();
                 if (lotteryDeadlineHelper.isAfterDeadline(currentYear, currentMonth, org.getId())) {
-                    executeLotteryIfNotDone(currentYear, currentMonth);
+                    executeLotteryIfNotDone(currentYear, currentMonth, org.getId());
                 }
 
                 YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
                 int nextYear = nextMonth.getYear();
                 int nextMonthValue = nextMonth.getMonthValue();
                 if (lotteryDeadlineHelper.isAfterDeadline(nextYear, nextMonthValue, org.getId())) {
-                    executeLotteryIfNotDone(nextYear, nextMonthValue);
+                    executeLotteryIfNotDone(nextYear, nextMonthValue, org.getId());
                 }
             }
         } catch (Exception e) {
@@ -79,7 +79,7 @@ public class LotteryScheduler {
         }
     }
 
-    private void executeLotteryIfNotDone(int year, int month) {
+    private void executeLotteryIfNotDone(int year, int month, Long organizationId) {
         boolean alreadyExecuted = lotteryExecutionRepository
                 .existsByTargetYearAndTargetMonthAndStatus(year, month, ExecutionStatus.SUCCESS);
 
@@ -88,8 +88,8 @@ public class LotteryScheduler {
             return;
         }
 
-        log.info("Executing lottery for {}-{}", year, month);
-        LotteryExecution result = lotteryService.executeLottery(year, month, null, ExecutionType.AUTO);
+        log.info("Executing lottery for {}-{} (orgId={})", year, month, organizationId);
+        LotteryExecution result = lotteryService.executeLottery(year, month, null, ExecutionType.AUTO, organizationId);
 
         if (result.getStatus() == ExecutionStatus.SUCCESS) {
             log.info("Lottery for {}-{} completed successfully", year, month);

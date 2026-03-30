@@ -75,7 +75,7 @@ public class LotteryService {
      * @return 抽選実行履歴
      */
     @Transactional
-    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type) {
+    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type, Long organizationId) {
         log.info("Starting lottery for {}-{} (type: {})", year, month, type);
 
         LotteryExecution execution = LotteryExecution.builder()
@@ -91,10 +91,15 @@ public class LotteryService {
         lotteryExecutionRepository.save(execution);
 
         try {
-            // 対象月の全セッションを日付昇順で取得
-            List<PracticeSession> sessions = practiceSessionRepository
-                    .findByYearAndMonth(year, month)
-                    .stream()
+            // 対象月のセッションを日付昇順で取得（団体フィルタ付き）
+            List<PracticeSession> sessions;
+            if (organizationId != null) {
+                sessions = practiceSessionRepository
+                        .findByYearAndMonthAndOrganizationId(year, month, organizationId);
+            } else {
+                sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+            }
+            sessions = sessions.stream()
                     .sorted(Comparator.comparing(PracticeSession::getSessionDate))
                     .collect(Collectors.toList());
 

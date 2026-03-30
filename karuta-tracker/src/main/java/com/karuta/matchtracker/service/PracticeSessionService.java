@@ -680,17 +680,17 @@ public class PracticeSessionService {
 
     // ========== 伝助URL管理 ==========
 
-    public java.util.Optional<DensukeUrl> getDensukeUrl(int year, int month) {
-        return densukeUrlRepository.findByYearAndMonth(year, month);
+    public java.util.Optional<DensukeUrl> getDensukeUrl(int year, int month, Long organizationId) {
+        return densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId);
     }
 
     @Transactional
-    public DensukeUrl saveDensukeUrl(int year, int month, String url) {
+    public DensukeUrl saveDensukeUrl(int year, int month, String url, Long organizationId) {
         if (!url.startsWith("https://densuke.biz/")) {
             throw new IllegalArgumentException("伝助のURL（https://densuke.biz/）のみ登録できます");
         }
-        DensukeUrl entity = densukeUrlRepository.findByYearAndMonth(year, month)
-                .orElse(DensukeUrl.builder().year(year).month(month).build());
+        DensukeUrl entity = densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                .orElse(DensukeUrl.builder().year(year).month(month).organizationId(organizationId).build());
         entity.setUrl(url);
         return densukeUrlRepository.save(entity);
     }

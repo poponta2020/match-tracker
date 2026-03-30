@@ -44,6 +44,12 @@ class MatchPairingControllerTest {
     @MockitoBean
     private PlayerRepository playerRepository;
 
+    @MockitoBean
+    private com.karuta.matchtracker.service.OrganizationService organizationService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
+
     @Nested
     @DisplayName("GET /api/match-pairings/date")
     class GetByDateTests {
