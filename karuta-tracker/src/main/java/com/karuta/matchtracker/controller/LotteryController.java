@@ -561,7 +561,7 @@ public class LotteryController {
     }
 
     /**
-     * 抽選結果確定
+     * 抽選結果確定（抽選実行 + DB保存 + 伝助書き戻し）
      */
     @PostMapping("/confirm")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
@@ -578,8 +578,26 @@ public class LotteryController {
             orgId = adminOrgId;
         }
 
-        LotteryExecution result = lotteryService.confirmLottery(
-                request.getYear(), request.getMonth(), currentUserId, orgId);
+        int year = request.getYear();
+        int month = request.getMonth();
+
+        // 締め切り前チェック
+        if (!lotteryDeadlineHelper.isNoDeadline(orgId) && lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選はまだ締め切り前です。", year, month));
+        }
+
+        // 重複チェック: 既に確定済みの場合はエラー
+        if (lotteryService.isLotteryConfirmed(year, month, orgId)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選は既に確定済みです。", year, month));
+        }
+
+        // 抽選を実行してDBに保存
+        lotteryService.executeLottery(year, month, currentUserId, ExecutionType.MANUAL, orgId);
+
+        // 確定処理（confirmedAt/confirmedBy設定 + 伝助書き戻し）
+        LotteryExecution result = lotteryService.confirmLottery(year, month, currentUserId, orgId);
         return ResponseEntity.ok(result);
     }
 

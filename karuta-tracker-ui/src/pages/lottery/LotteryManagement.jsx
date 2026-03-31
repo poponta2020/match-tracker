@@ -12,6 +12,12 @@ import { ArrowLeft, Settings, Play, Check, Bell, BellRing } from 'lucide-react';
  * - preview: プレビュー表示中（確定ボタン表示）
  * - confirmed: 確定済み（通知送信ボタン表示）
  */
+const formatRank = (p) => {
+  if (p.danRank) return p.danRank;
+  if (p.kyuRank) return p.kyuRank;
+  return '';
+};
+
 export default function LotteryManagement() {
   const { currentPlayer } = useAuth();
   const navigate = useNavigate();
@@ -215,7 +221,7 @@ export default function LotteryManagement() {
                         <div className="flex flex-wrap gap-1">
                           {match.winners.map((p) => (
                             <span key={p.playerId} className="px-2 py-0.5 rounded text-xs bg-green-50 text-green-800 border border-green-200">
-                              {p.playerName}
+                              {p.playerName}{formatRank(p) && <span className="ml-0.5 text-[10px] text-green-600">({formatRank(p)})</span>}
                             </span>
                           ))}
                         </div>
@@ -229,7 +235,7 @@ export default function LotteryManagement() {
                         <div className="flex flex-wrap gap-1">
                           {match.waitlisted.map((p) => (
                             <span key={p.playerId} className="px-2 py-0.5 rounded text-xs bg-yellow-50 text-yellow-800 border border-yellow-200">
-                              {p.waitlistNumber}. {p.playerName}
+                              {p.waitlistNumber}. {p.playerName}{formatRank(p) && <span className="ml-0.5 text-[10px] text-yellow-600">({formatRank(p)})</span>}
                             </span>
                           ))}
                         </div>
