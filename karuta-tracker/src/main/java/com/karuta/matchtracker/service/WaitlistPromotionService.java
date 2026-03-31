@@ -36,6 +36,43 @@ public class WaitlistPromotionService {
     private final DensukeSyncService densukeSyncService;
 
     /**
+     * WON → WAITLISTED（最後尾）に降格し、空いたWON枠の繰り上げフローを発動する。
+     * 伝助で○→△に変更された場合（3-B2）に使用。
+     *
+     * @param participantId 参加者レコードID
+     */
+    @Transactional
+    public void demoteToWaitlist(Long participantId) {
+        PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
+
+        if (participant.getStatus() != ParticipantStatus.WON) {
+            throw new IllegalStateException("WON状態のみ降格できます（現在: " + participant.getStatus() + "）");
+        }
+
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+
+        // 最後尾のキャンセル待ち番号を取得
+        int maxNumber = practiceParticipantRepository
+                .findMaxWaitlistNumber(participant.getSessionId(), participant.getMatchNumber())
+                .orElse(0);
+
+        // WON → WAITLISTED（最後尾）
+        participant.setStatus(ParticipantStatus.WAITLISTED);
+        participant.setDirty(true);
+        participant.setWaitlistNumber(maxNumber + 1);
+        practiceParticipantRepository.save(participant);
+
+        log.info("Demoted player {} from WON to WAITLISTED #{} for session {} match {}",
+                participant.getPlayerId(), maxNumber + 1, participant.getSessionId(), participant.getMatchNumber());
+
+        // WON枠が空いたので繰り上げフローを発動
+        promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+        densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
      * 当選者が参加をキャンセルする（理由なし・後方互換）
      *
      * @param participantId 参加者レコードID

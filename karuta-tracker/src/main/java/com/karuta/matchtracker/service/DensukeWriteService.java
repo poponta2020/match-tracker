@@ -243,6 +243,109 @@ public class DensukeWriteService {
         }
     }
 
+    /**
+     * 抽選確定時の一括書き戻し。
+     * 伝助マッピングがある全プレイヤーについて、dirty に関係なく書き戻す。
+     * 完了後に対象レコードの dirty=false に更新する。
+     */
+    @Transactional
+    public void writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
+        log.info("Starting bulk write-back for lottery confirmation: orgId={}, {}-{}", organizationId, year, month);
+
+        List<DensukeUrl> urls = densukeUrlRepository.findByYearAndMonth(year, month).stream()
+                .filter(u -> u.getOrganizationId().equals(organizationId))
+                .collect(Collectors.toList());
+
+        if (urls.isEmpty()) {
+            log.info("No densuke URLs found for orgId={}, {}-{}", organizationId, year, month);
+            return;
+        }
+
+        List<String> errors = new ArrayList<>();
+
+        for (DensukeUrl densukeUrl : urls) {
+            Long urlId = densukeUrl.getId();
+            String urlStr = densukeUrl.getUrl();
+            String cd = extractCd(urlStr);
+            String base = extractBase(urlStr);
+            if (cd == null || base == null) {
+                log.warn("URL parse error for bulk write-back: {}", urlStr);
+                continue;
+            }
+
+            List<PracticeSession> sessions = practiceSessionRepository
+                    .findByYearAndMonthAndOrganizationId(year, month, organizationId);
+            if (sessions.isEmpty()) continue;
+
+            Map<Long, PracticeSession> sessionMap = sessions.stream()
+                    .collect(Collectors.toMap(PracticeSession::getId, s -> s));
+            List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
+
+            // 全マッピング済みプレイヤーを取得
+            List<DensukeMemberMapping> mappings = densukeMemberMappingRepository.findByDensukeUrlId(urlId);
+            if (mappings.isEmpty()) {
+                log.info("No member mappings for urlId={}", urlId);
+                continue;
+            }
+
+            // リストページを取得
+            Map<String, String> cookies;
+            String pageId;
+            Map<String, String> memberNameToMi;
+            try {
+                Connection.Response listResponse = Jsoup.connect(base + "list?cd=" + cd)
+                        .userAgent("Mozilla/5.0").timeout(10000).execute();
+                cookies = listResponse.cookies();
+                Document listDoc = listResponse.parse();
+                pageId = extractPageId(listDoc);
+                memberNameToMi = extractAllMemberMappings(listDoc);
+            } catch (IOException e) {
+                log.warn("Failed to fetch densuke list page for bulk write-back: {}", e.getMessage());
+                continue;
+            }
+
+            if (pageId == null) continue;
+
+            // プレイヤー名マップ
+            Set<Long> playerIds = mappings.stream()
+                    .map(DensukeMemberMapping::getPlayerId).collect(Collectors.toSet());
+            Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
+                    .collect(Collectors.toMap(Player::getId, Player::getName));
+
+            // 各プレイヤーを書き込み（dirty フィルタなし）
+            for (DensukeMemberMapping mapping : mappings) {
+                Long playerId = mapping.getPlayerId();
+                String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
+                List<PracticeParticipant> allParticipants =
+                        practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds);
+
+                try {
+                    writePlayerToDensuke(urlId, playerId, playerName,
+                            allParticipants, sessions, sessionMap,
+                            base, cd, cookies, pageId, memberNameToMi, errors);
+                } catch (Exception e) {
+                    log.warn("Bulk write-back failed for player {}: {}", playerName, e.getMessage());
+                    errors.add("一括書き戻し[" + playerName + "]: " + e.getMessage());
+                }
+            }
+
+            // 全レコードの dirty=false に更新
+            List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
+            for (PracticeParticipant p : allParticipants) {
+                if (p.isDirty()) {
+                    p.setDirty(false);
+                }
+            }
+            practiceParticipantRepository.saveAll(allParticipants);
+        }
+
+        if (!errors.isEmpty()) {
+            log.warn("Bulk write-back completed with {} errors", errors.size());
+        } else {
+            log.info("Bulk write-back completed successfully for orgId={}, {}-{}", organizationId, year, month);
+        }
+    }
+
     private void writePlayerToDensuke(
             Long urlId, Long playerId, String playerName,
             List<PracticeParticipant> dirtyParticipants,
@@ -312,7 +415,7 @@ public class DensukeWriteService {
                 String joinKey = "join-" + rowIdOpt.get().getDensukeRowId();
                 String key = session.getId() + "_" + matchNum;
                 PracticeParticipant pp = bySessionAndMatch.get(key);
-                int value = pp != null ? toJoinValue(pp.getStatus()) : 0;
+                int value = toJoinValue(pp != null ? pp.getStatus() : null);
                 formData.put(joinKey, String.valueOf(value));
                 writtenSessionMatchKeys.add(key);
             }
@@ -585,7 +688,7 @@ public class DensukeWriteService {
     }
 
     private int toJoinValue(ParticipantStatus status) {
-        if (status == null) return 0;
+        if (status == null) return 1; // ×（未登録者は不参加扱い）
         return switch (status) {
             case PENDING, WON -> 3;       // ○
             case WAITLISTED, OFFERED -> 2; // △

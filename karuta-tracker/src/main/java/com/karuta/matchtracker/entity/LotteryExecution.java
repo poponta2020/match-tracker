@@ -57,6 +57,14 @@ public class LotteryExecution {
     @Column(name = "details", columnDefinition = "TEXT")
     private String details;
 
+    /** 確定日時（null = 未確定） */
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
+
+    /** 確定者のプレイヤーID（null = 未確定） */
+    @Column(name = "confirmed_by")
+    private Long confirmedBy;
+
     public enum ExecutionType {
         AUTO,
         MANUAL,

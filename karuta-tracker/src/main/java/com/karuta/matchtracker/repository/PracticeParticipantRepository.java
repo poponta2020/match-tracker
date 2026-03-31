@@ -125,6 +125,40 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                        @Param("sessionIds") List<Long> sessionIds);
 
     /**
+     * 特定の選手の特定セッションリストの参加記録を論理削除（CANCELLED + dirty=true）
+     */
+    @Modifying
+    @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
+           "p.cancelledAt = :now " +
+           "WHERE p.playerId = :playerId AND p.sessionId IN :sessionIds " +
+           "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
+    int softDeleteByPlayerIdAndSessionIds(@Param("playerId") Long playerId,
+                                          @Param("sessionIds") List<Long> sessionIds,
+                                          @Param("now") LocalDateTime now);
+
+    /**
+     * 特定セッションの特定試合の全参加者を論理削除（CANCELLED + dirty=true）
+     */
+    @Modifying
+    @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
+           "p.cancelledAt = :now " +
+           "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
+           "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
+    int softDeleteBySessionIdAndMatchNumber(@Param("sessionId") Long sessionId,
+                                            @Param("matchNumber") Integer matchNumber,
+                                            @Param("now") LocalDateTime now);
+
+    /**
+     * 特定の選手が特定セッション・試合にアクティブな参加記録を持つか確認（CANCELLED等を除外）
+     */
+    @Query("SELECT COUNT(p) > 0 FROM PracticeParticipant p " +
+           "WHERE p.sessionId = :sessionId AND p.playerId = :playerId AND p.matchNumber = :matchNumber " +
+           "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
+    boolean existsActiveBySessionIdAndPlayerIdAndMatchNumber(@Param("sessionId") Long sessionId,
+                                                              @Param("playerId") Long playerId,
+                                                              @Param("matchNumber") Integer matchNumber);
+
+    /**
      * 指定日以降で特定の選手が参加登録しているセッションの試合番号を、日付昇順で取得
      */
     @Query("SELECT pp FROM PracticeParticipant pp " +

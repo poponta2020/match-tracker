@@ -66,7 +66,7 @@ public class PracticeParticipantService {
             }
         }
 
-        practiceParticipantRepository.deleteBySessionIdAndMatchNumber(sessionId, matchNumber);
+        practiceParticipantRepository.softDeleteBySessionIdAndMatchNumber(sessionId, matchNumber, JstDateTimeUtil.now());
         practiceParticipantRepository.flush();
 
         if (playerIds != null && !playerIds.isEmpty()) {
@@ -151,7 +151,8 @@ public class PracticeParticipantService {
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
         if (!allMonthSessionIds.isEmpty()) {
-            practiceParticipantRepository.deleteByPlayerIdAndSessionIds(playerId, allMonthSessionIds);
+            practiceParticipantRepository.softDeleteByPlayerIdAndSessionIds(
+                    playerId, allMonthSessionIds, JstDateTimeUtil.now());
             practiceParticipantRepository.flush();
         }
 
@@ -190,7 +191,8 @@ public class PracticeParticipantService {
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
         if (!allMonthSessionIds.isEmpty()) {
-            practiceParticipantRepository.deleteByPlayerIdAndSessionIds(request.getPlayerId(), allMonthSessionIds);
+            practiceParticipantRepository.softDeleteByPlayerIdAndSessionIds(
+                    request.getPlayerId(), allMonthSessionIds, JstDateTimeUtil.now());
             practiceParticipantRepository.flush();
         }
 
@@ -223,7 +225,7 @@ public class PracticeParticipantService {
             Long sessionId = participation.getSessionId();
             Integer matchNumber = participation.getMatchNumber();
 
-            if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)) {
+            if (practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)) {
                 skipped++; continue;
             }
 

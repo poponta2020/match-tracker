@@ -24,6 +24,7 @@ public class DensukeScraper {
     @Data
     public static class DensukeData {
         private List<ScheduleEntry> entries = new ArrayList<>();
+        private List<String> memberNames = new ArrayList<>();
     }
 
     /**
@@ -81,6 +82,7 @@ public class DensukeScraper {
 
         // 2行目以降: 日程データ
         DensukeData data = new DensukeData();
+        data.setMemberNames(memberNames);
         LocalDate currentDate = null;
         String currentVenue = null;
 
