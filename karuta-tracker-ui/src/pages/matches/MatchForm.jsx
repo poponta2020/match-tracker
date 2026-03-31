@@ -22,7 +22,8 @@ const MatchForm = () => {
     result: '勝ち',
     scoreDifference: 0,
     matchNumber: initialData.matchNumber || 1,
-    notes: '',
+    personalNotes: '',
+    otetsukiCount: null,
   });
 
   const [players, setPlayers] = useState([]);
@@ -121,7 +122,8 @@ const MatchForm = () => {
             result: match.result,
             scoreDifference: match.scoreDifference,
             matchNumber: match.matchNumber,
-            notes: match.notes || '',
+            personalNotes: match.myPersonalNotes || '',
+            otetsukiCount: match.myOtetsukiCount ?? null,
           });
           setInitialLoading(false);
         }
@@ -243,7 +245,8 @@ const MatchForm = () => {
         opponentId: opponentId || null,
         result: match.result,
         scoreDifference: Number(match.scoreDifference),
-        notes: match.notes || ''
+        personalNotes: match.myPersonalNotes || '',
+        otetsukiCount: match.myOtetsukiCount ?? null,
       }));
     } else {
       setIsExistingMatch(false);
@@ -290,7 +293,8 @@ const MatchForm = () => {
           opponentName: opponentName,
           result: '勝ち',
           scoreDifference: 0,
-          notes: ''
+          personalNotes: '',
+          otetsukiCount: null,
         }));
       } else {
         setIsByeMatch(false);
@@ -305,7 +309,8 @@ const MatchForm = () => {
           opponentName: '',
           result: '勝ち',
           scoreDifference: 0,
-          notes: ''
+          personalNotes: '',
+          otetsukiCount: null,
         }));
       }
     }
@@ -443,6 +448,7 @@ const MatchForm = () => {
           playerId: currentPlayer.id,
           scoreDifference: parseInt(formData.scoreDifference),
           matchNumber: parseInt(formData.matchNumber),
+          personalNotes: formData.personalNotes || null,
         };
         await matchAPI.update(id, submitData);
         navigate('/matches');
@@ -459,7 +465,8 @@ const MatchForm = () => {
             player2Id: player2Id,
             winnerId: winnerId,
             scoreDifference: parseInt(formData.scoreDifference),
-            notes: formData.notes,
+            personalNotes: formData.personalNotes || null,
+            otetsukiCount: formData.otetsukiCount,
             createdBy: currentPlayer.id,
             updatedBy: currentPlayer.id
           };
@@ -491,6 +498,7 @@ const MatchForm = () => {
               playerId: currentPlayer.id,
               scoreDifference: parseInt(formData.scoreDifference),
               matchNumber: parseInt(formData.matchNumber),
+              personalNotes: formData.personalNotes || null,
             };
 
             await matchAPI.update(existingMatchId, submitData);
@@ -798,12 +806,33 @@ const MatchForm = () => {
           </select>
         </div>
 
+        {/* お手付き回数 */}
+        <div>
+          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">お手付き回数</div>
+          <select
+            name="otetsukiCount"
+            value={formData.otetsukiCount ?? ''}
+            onChange={(e) => setFormData(prev => ({
+              ...prev,
+              otetsukiCount: e.target.value === '' ? null : parseInt(e.target.value)
+            }))}
+            className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
+          >
+            <option value="">未入力</option>
+            {Array.from({ length: 21 }, (_, i) => i).map((num) => (
+              <option key={num} value={num}>
+                {num} 回
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* メモ */}
         <div>
           <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">メモ</div>
           <textarea
-            name="notes"
-            value={formData.notes}
+            name="personalNotes"
+            value={formData.personalNotes}
             onChange={handleChange}
             rows="2"
             placeholder="試合の感想、反省点など..."

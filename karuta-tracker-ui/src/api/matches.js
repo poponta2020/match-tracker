@@ -17,9 +17,9 @@ export const matchAPI = {
   update: (id, data) => apiClient.put(`/matches/${id}`, data),
 
   // 試合記録更新（詳細版）
-  updateDetailed: (id, winnerId, scoreDifference, updatedBy) =>
+  updateDetailed: (id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount) =>
     apiClient.put(`/matches/${id}/detailed`, null, {
-      params: { winnerId, scoreDifference, updatedBy },
+      params: { winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount },
     }),
 
   // 試合記録削除
