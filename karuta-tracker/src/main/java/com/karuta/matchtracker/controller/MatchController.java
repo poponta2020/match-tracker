@@ -45,7 +45,7 @@ public class MatchController {
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        List<MatchDto> matches = matchService.findMatchesByDate(date);
+        List<MatchDto> matches = matchService.findMatchesByDate(date, currentUserId);
         return ResponseEntity.ok(matches);
     }
 
@@ -70,9 +70,10 @@ public class MatchController {
      * @return 試合結果
      */
     @GetMapping("/{id}")
-    public ResponseEntity<MatchDto> getMatchById(@PathVariable Long id) {
+    public ResponseEntity<MatchDto> getMatchById(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/{} - Getting match by id", id);
-        MatchDto match = matchService.findById(id);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto match = matchService.findById(id, currentUserId);
         return ResponseEntity.ok(match);
     }
 
@@ -88,10 +89,12 @@ public class MatchController {
     public ResponseEntity<MatchDto> getMatchByPlayerDateAndMatchNumber(
             @PathVariable Long playerId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate matchDate,
-            @PathVariable Integer matchNumber) {
+            @PathVariable Integer matchNumber,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/player/{}/date/{}/match/{} - Getting match by player, date, and match number",
                 playerId, matchDate, matchNumber);
-        MatchDto match = matchService.findByPlayerDateAndMatchNumber(playerId, matchDate, matchNumber);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto match = matchService.findByPlayerDateAndMatchNumber(playerId, matchDate, matchNumber, currentUserId);
         if (match == null) {
             return ResponseEntity.notFound().build();
         }
@@ -113,10 +116,12 @@ public class MatchController {
             @RequestParam(required = false) String kyuRank,
             @RequestParam(required = false) String gender,
             @RequestParam(required = false) String dominantHand,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(required = false) Integer limit,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/player/{} - Getting player matches with filters: kyuRank={}, gender={}, dominantHand={}, limit={}",
                 playerId, kyuRank, gender, dominantHand, limit);
-        List<MatchDto> matches = matchService.findPlayerMatchesWithFilters(playerId, kyuRank, gender, dominantHand);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<MatchDto> matches = matchService.findPlayerMatchesWithFilters(playerId, kyuRank, gender, dominantHand, currentUserId);
         if (limit != null && limit > 0 && matches.size() > limit) {
             matches = matches.subList(0, limit);
         }
@@ -135,9 +140,11 @@ public class MatchController {
     public ResponseEntity<List<MatchDto>> getPlayerMatchesInPeriod(
             @PathVariable Long playerId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/player/{}/period?startDate={}&endDate={}", playerId, startDate, endDate);
-        List<MatchDto> matches = matchService.findPlayerMatchesInPeriod(playerId, startDate, endDate);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<MatchDto> matches = matchService.findPlayerMatchesInPeriod(playerId, startDate, endDate, currentUserId);
         return ResponseEntity.ok(matches);
     }
 
@@ -164,9 +171,11 @@ public class MatchController {
     @GetMapping("/between")
     public ResponseEntity<List<MatchDto>> getMatchesBetweenPlayers(
             @RequestParam Long player1Id,
-            @RequestParam Long player2Id) {
+            @RequestParam Long player2Id,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/between?player1Id={}&player2Id={}", player1Id, player2Id);
-        List<MatchDto> matches = matchService.findMatchesBetweenPlayers(player1Id, player2Id);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<MatchDto> matches = matchService.findMatchesBetweenPlayers(player1Id, player2Id, currentUserId);
         return ResponseEntity.ok(matches);
     }
 
@@ -263,9 +272,11 @@ public class MatchController {
             @PathVariable Long id,
             @RequestParam Long winnerId,
             @RequestParam Integer scoreDifference,
-            @RequestParam Long updatedBy) {
+            @RequestParam Long updatedBy,
+            @RequestParam(required = false) String personalNotes,
+            @RequestParam(required = false) Integer otetsukiCount) {
         log.info("PUT /api/matches/{}/detailed - Updating match (detailed)", id);
-        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy);
+        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount);
         return ResponseEntity.ok(updatedMatch);
     }
 

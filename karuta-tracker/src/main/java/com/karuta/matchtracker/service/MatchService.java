@@ -5,9 +5,11 @@ import com.karuta.matchtracker.dto.MatchDto;
 import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.entity.Match;
+import com.karuta.matchtracker.entity.MatchPersonalNote;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -38,37 +40,42 @@ public class MatchService {
     private final MatchRepository matchRepository;
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final MatchPersonalNoteRepository matchPersonalNoteRepository;
 
     /**
      * IDで試合結果を取得
      */
-    public MatchDto findById(Long id) {
+    public MatchDto findById(Long id, Long currentPlayerId) {
         log.debug("Finding match by id: {}", id);
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
-        return enrichMatchWithPlayerNames(match);
+        MatchDto dto = enrichMatchWithPlayerNames(match);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId);
+        return enriched.get(0);
     }
 
     /**
      * 選手ID・日付・試合番号で試合結果を取得
      */
-    public MatchDto findByPlayerDateAndMatchNumber(Long playerId, LocalDate matchDate, Integer matchNumber) {
+    public MatchDto findByPlayerDateAndMatchNumber(Long playerId, LocalDate matchDate, Integer matchNumber, Long currentPlayerId) {
         log.debug("Finding match by playerId: {}, matchDate: {}, matchNumber: {}", playerId, matchDate, matchNumber);
         Match match = matchRepository.findByPlayerIdAndMatchDateAndMatchNumber(playerId, matchDate, matchNumber);
         if (match == null) {
             return null;
         }
         List<MatchDto> enriched = enrichMatchesWithPlayerPerspective(List.of(match), playerId);
+        enriched = enrichDtosWithPersonalNotes(enriched, currentPlayerId);
         return enriched.isEmpty() ? null : enriched.get(0);
     }
 
     /**
      * 日付別の試合結果を取得（試合番号順）
      */
-    public List<MatchDto> findMatchesByDate(LocalDate date) {
+    public List<MatchDto> findMatchesByDate(LocalDate date, Long currentPlayerId) {
         log.debug("Finding matches by date: {}", date);
         List<Match> matches = matchRepository.findByMatchDateOrderByMatchNumber(date);
-        return enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
     /**
@@ -82,17 +89,18 @@ public class MatchService {
     /**
      * 選手の試合履歴を取得（選手視点版）
      */
-    public List<MatchDto> findPlayerMatches(Long playerId) {
+    public List<MatchDto> findPlayerMatches(Long playerId, Long currentPlayerId) {
         log.debug("Finding matches for player: {}", playerId);
         validatePlayerExists(playerId);
         List<Match> matches = matchRepository.findByPlayerId(playerId);
-        return enrichMatchesWithPlayerPerspective(matches, playerId);
+        List<MatchDto> dtos = enrichMatchesWithPlayerPerspective(matches, playerId);
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
     /**
      * 選手の試合履歴を取得（フィルタ付き）
      */
-    public List<MatchDto> findPlayerMatchesWithFilters(Long playerId, String kyuRank, String gender, String dominantHand) {
+    public List<MatchDto> findPlayerMatchesWithFilters(Long playerId, String kyuRank, String gender, String dominantHand, Long currentPlayerId) {
         log.debug("Finding matches for player {} with filters: kyuRank={}, gender={}, dominantHand={}",
                 playerId, kyuRank, gender, dominantHand);
         validatePlayerExists(playerId);
@@ -100,7 +108,7 @@ public class MatchService {
         List<MatchDto> enrichedMatches = enrichMatchesWithPlayerPerspective(matches, playerId);
 
         // フィルタリング処理
-        return enrichedMatches.stream()
+        List<MatchDto> filteredResult = enrichedMatches.stream()
                 .filter(match -> {
                     // 対戦相手の情報を取得してフィルタリング
                     Player opponent = getOpponentPlayer(match, playerId);
@@ -141,6 +149,7 @@ public class MatchService {
                     return true;
                 })
                 .collect(Collectors.toList());
+        return enrichDtosWithPersonalNotes(filteredResult, currentPlayerId);
     }
 
     /**
@@ -166,11 +175,12 @@ public class MatchService {
     /**
      * 選手の期間内の試合履歴を取得
      */
-    public List<MatchDto> findPlayerMatchesInPeriod(Long playerId, LocalDate startDate, LocalDate endDate) {
+    public List<MatchDto> findPlayerMatchesInPeriod(Long playerId, LocalDate startDate, LocalDate endDate, Long currentPlayerId) {
         log.debug("Finding matches for player {} between {} and {}", playerId, startDate, endDate);
         validatePlayerExists(playerId);
         List<Match> matches = matchRepository.findByPlayerIdAndDateRange(playerId, startDate, endDate);
-        return enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
     /**
@@ -184,7 +194,7 @@ public class MatchService {
     /**
      * 2人の選手間の対戦履歴を取得
      */
-    public List<MatchDto> findMatchesBetweenPlayers(Long player1Id, Long player2Id) {
+    public List<MatchDto> findMatchesBetweenPlayers(Long player1Id, Long player2Id, Long currentPlayerId) {
         log.debug("Finding matches between players {} and {}", player1Id, player2Id);
         validatePlayerExists(player1Id);
         validatePlayerExists(player2Id);
@@ -193,7 +203,8 @@ public class MatchService {
         Long largerId = Math.max(player1Id, player2Id);
 
         List<Match> matches = matchRepository.findByTwoPlayers(smallerId, largerId);
-        return enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
     /**
@@ -354,7 +365,6 @@ public class MatchService {
                 .winnerId(winnerId != null ? winnerId : 0L)
                 .scoreDifference(Math.abs(request.getScoreDifference()))
                 .opponentName(request.getOpponentName())
-                .notes(request.getNotes())
                 .createdBy(request.getPlayerId())
                 .updatedBy(request.getPlayerId())
                 .build();
@@ -364,8 +374,13 @@ public class MatchService {
 
         Match saved = matchRepository.save(match);
 
+        // 個人メモ・お手付きを保存
+        upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
+
         // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
         MatchDto dto = enrichMatchWithPlayerNames(saved);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
+        dto = enriched.get(0);
 
         log.info("Successfully created match with id: {}", saved.getId());
         return dto;
@@ -423,14 +438,19 @@ public class MatchService {
             log.info("Upsert: created new match with id: {}", saved.getId());
         }
 
-        return enrichMatchWithPlayerNames(saved);
+        // 個人メモ・お手付きを保存
+        upsertPersonalNote(saved.getId(), request.getCreatedBy(), request.getPersonalNotes(), request.getOtetsukiCount());
+
+        MatchDto dto = enrichMatchWithPlayerNames(saved);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getCreatedBy());
+        return enriched.get(0);
     }
 
     /**
      * 試合結果を更新
      */
     @Transactional
-    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy) {
+    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount) {
         log.info("Updating match with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -447,8 +467,14 @@ public class MatchService {
 
         Match updated = matchRepository.save(match);
 
+        // 個人メモ・お手付きを保存
+        upsertPersonalNote(updated.getId(), updatedBy, personalNotes, otetsukiCount);
+
+        MatchDto dto = enrichMatchWithPlayerNames(updated);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), updatedBy);
+
         log.info("Successfully updated match with id: {}", id);
-        return enrichMatchWithPlayerNames(updated);
+        return enriched.get(0);
     }
 
     /**
@@ -482,7 +508,6 @@ public class MatchService {
         match.setWinnerId(winnerId);
         match.setScoreDifference(Math.abs(request.getScoreDifference()));
         match.setOpponentName(request.getOpponentName());
-        match.setNotes(request.getNotes());
         match.setUpdatedBy(request.getPlayerId());
 
         // 対戦時の級位を再記録
@@ -490,8 +515,14 @@ public class MatchService {
 
         Match updated = matchRepository.save(match);
 
+        // 個人メモ・お手付きを保存
+        upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
+
+        MatchDto dto = enrichMatchWithPlayerNames(updated);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
+
         log.info("Successfully updated match with id: {}", id);
-        return enrichMatchWithPlayerNames(updated);
+        return enriched.get(0);
     }
 
     /**
@@ -676,5 +707,52 @@ public class MatchService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 個人メモ・お手付き記録をupsert
+     */
+    private void upsertPersonalNote(Long matchId, Long playerId, String personalNotes, Integer otetsukiCount) {
+        if (playerId == null || (personalNotes == null && otetsukiCount == null)) {
+            return;
+        }
+
+        MatchPersonalNote note = matchPersonalNoteRepository.findByMatchIdAndPlayerId(matchId, playerId)
+                .orElse(MatchPersonalNote.builder()
+                        .matchId(matchId)
+                        .playerId(playerId)
+                        .build());
+
+        note.setNotes(personalNotes);
+        note.setOtetsukiCount(otetsukiCount);
+        matchPersonalNoteRepository.save(note);
+    }
+
+    /**
+     * DTOリストに個人メモ・お手付きデータを付与
+     */
+    private List<MatchDto> enrichDtosWithPersonalNotes(List<MatchDto> dtos, Long currentPlayerId) {
+        if (currentPlayerId == null || dtos.isEmpty()) {
+            return dtos;
+        }
+
+        List<Long> matchIds = dtos.stream()
+                .map(MatchDto::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, MatchPersonalNote> noteMap = matchPersonalNoteRepository
+                .findByPlayerIdAndMatchIdIn(currentPlayerId, matchIds)
+                .stream()
+                .collect(Collectors.toMap(MatchPersonalNote::getMatchId, n -> n));
+
+        for (MatchDto dto : dtos) {
+            MatchPersonalNote note = noteMap.get(dto.getId());
+            if (note != null) {
+                dto.setMyPersonalNotes(note.getNotes());
+                dto.setMyOtetsukiCount(note.getOtetsukiCount());
+            }
+        }
+
+        return dtos;
     }
 }
