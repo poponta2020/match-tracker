@@ -8,8 +8,8 @@ import com.karuta.matchtracker.entity.LineMessageLog.LineNotificationType;
 import com.karuta.matchtracker.entity.LineMessageLog.MessageStatus;
 import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
  * 通知の送信可否チェック、メッセージ生成、送信実行、ログ記録を一元管理する。
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class LineNotificationService {
 
@@ -37,6 +36,27 @@ public class LineNotificationService {
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LotteryService lotteryService;
+
+    public LineNotificationService(
+            LineChannelRepository lineChannelRepository,
+            LineChannelAssignmentRepository lineChannelAssignmentRepository,
+            LineNotificationPreferenceRepository lineNotificationPreferenceRepository,
+            LineMessageLogRepository lineMessageLogRepository,
+            LineMessagingService lineMessagingService,
+            PracticeSessionRepository practiceSessionRepository,
+            PracticeParticipantRepository practiceParticipantRepository,
+            PlayerOrganizationRepository playerOrganizationRepository,
+            @Lazy LotteryService lotteryService) {
+        this.lineChannelRepository = lineChannelRepository;
+        this.lineChannelAssignmentRepository = lineChannelAssignmentRepository;
+        this.lineNotificationPreferenceRepository = lineNotificationPreferenceRepository;
+        this.lineMessageLogRepository = lineMessageLogRepository;
+        this.lineMessagingService = lineMessagingService;
+        this.practiceSessionRepository = practiceSessionRepository;
+        this.practiceParticipantRepository = practiceParticipantRepository;
+        this.playerOrganizationRepository = playerOrganizationRepository;
+        this.lotteryService = lotteryService;
+    }
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
