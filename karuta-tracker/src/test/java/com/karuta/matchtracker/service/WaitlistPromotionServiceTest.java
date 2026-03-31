@@ -35,6 +35,8 @@ class WaitlistPromotionServiceTest {
     private NotificationService notificationService;
     @Mock
     private LineNotificationService lineNotificationService;
+    @Mock
+    private DensukeSyncService densukeSyncService;
 
     @InjectMocks
     private WaitlistPromotionService service;

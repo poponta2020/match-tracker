@@ -42,6 +42,10 @@ class PracticeParticipantServiceTest {
     private LotteryExecutionRepository lotteryExecutionRepository;
     @Mock
     private LotteryDeadlineHelper lotteryDeadlineHelper;
+    @Mock
+    private DensukeSyncService densukeSyncService;
+    @Mock
+    private com.karuta.matchtracker.repository.PlayerOrganizationRepository playerOrganizationRepository;
 
     @InjectMocks
     private PracticeParticipantService service;
