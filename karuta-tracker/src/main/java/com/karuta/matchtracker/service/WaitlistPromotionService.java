@@ -7,8 +7,8 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +24,6 @@ import java.util.Optional;
  * 当日キャンセルの場合は繰り上げフローを開始しない。
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class WaitlistPromotionService {
 
@@ -34,6 +33,21 @@ public class WaitlistPromotionService {
     private final NotificationService notificationService;
     private final LineNotificationService lineNotificationService;
     private final DensukeSyncService densukeSyncService;
+
+    public WaitlistPromotionService(
+            PracticeParticipantRepository practiceParticipantRepository,
+            PracticeSessionRepository practiceSessionRepository,
+            LotteryDeadlineHelper lotteryDeadlineHelper,
+            NotificationService notificationService,
+            LineNotificationService lineNotificationService,
+            @Lazy DensukeSyncService densukeSyncService) {
+        this.practiceParticipantRepository = practiceParticipantRepository;
+        this.practiceSessionRepository = practiceSessionRepository;
+        this.lotteryDeadlineHelper = lotteryDeadlineHelper;
+        this.notificationService = notificationService;
+        this.lineNotificationService = lineNotificationService;
+        this.densukeSyncService = densukeSyncService;
+    }
 
     /**
      * WON → WAITLISTED（最後尾）に降格し、空いたWON枠の繰り上げフローを発動する。
