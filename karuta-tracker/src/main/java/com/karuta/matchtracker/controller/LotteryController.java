@@ -72,6 +72,40 @@ public class LotteryController {
     }
 
     /**
+     * 抽選プレビュー（DB保存なし）
+     */
+    @PostMapping("/preview")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<List<LotteryResultDto>> previewLottery(@Valid @RequestBody LotteryExecutionRequest request,
+                                                                  HttpServletRequest httpRequest) {
+        int year = request.getYear();
+        int month = request.getMonth();
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long orgId = request.getOrganizationId();
+        if ("ADMIN".equals(role)) {
+            orgId = adminOrgId;
+        }
+
+        // 締め切り前チェック
+        if (!lotteryDeadlineHelper.isNoDeadline(orgId) && lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選はまだ締め切り前です。締め切り後に実行してください。", year, month));
+        }
+
+        // 重複チェック: 同一月に既に確定済みの抽選がある場合はエラー
+        if (lotteryService.isLotteryConfirmed(year, month)) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選は既に確定済みです。", year, month));
+        }
+
+        List<LotteryResultDto> results = lotteryService.previewLottery(year, month, orgId);
+        return ResponseEntity.ok(results);
+    }
+
+    /**
      * 手動抽選実行
      */
     @PostMapping("/execute")
@@ -469,15 +503,70 @@ public class LotteryController {
     }
 
     /**
+     * キャンセル待ちのみに通知送信（アプリ内通知 + LINE通知）
+     */
+    @PostMapping("/notify-waitlisted")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> notifyWaitlisted(@RequestBody Map<String, Integer> body,
+                                                                 HttpServletRequest httpRequest) {
+        int year = body.getOrDefault("year", 0);
+        int month = body.getOrDefault("month", 0);
+        Integer orgIdInt = body.get("organizationId");
+        Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            organizationId = adminOrgId;
+        }
+
+        // WAITLISTEDの参加者のみ取得
+        List<PracticeSession> sessions = organizationId != null
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+        List<PracticeParticipant> waitlistedParticipants = sessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                        .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED)
+                        .collect(Collectors.toList());
+
+        // アプリ内通知を生成
+        int inAppCount = notificationService.createLotteryResultNotifications(waitlistedParticipants);
+
+        // LINE通知を送信（WAITLISTEDのみ）
+        var lineResult = lineNotificationService.sendLotteryResultsWaitlistedOnly(year, month);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("inAppCount", inAppCount);
+        result.put("lineSent", lineResult.getSentPlayerCount());
+        result.put("lineFailed", lineResult.getFailedPlayerCount());
+        result.put("lineSkipped", lineResult.getSkippedPlayerCount());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 抽選結果確定
      */
     @PostMapping("/confirm")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LotteryExecution> confirmLottery(@Valid @RequestBody LotteryExecutionRequest request,
                                                             HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long orgId = request.getOrganizationId();
+        if ("ADMIN".equals(role)) {
+            orgId = adminOrgId;
+        }
+
         LotteryExecution result = lotteryService.confirmLottery(
-                request.getYear(), request.getMonth(), currentUserId, request.getOrganizationId());
+                request.getYear(), request.getMonth(), currentUserId, orgId);
         return ResponseEntity.ok(result);
     }
 

@@ -13,7 +13,7 @@ status: completed
 - **依存タスク:** なし
 
 ### タスク2: バックエンド — preview エンドポイント追加 + confirm 権限修正 + キャンセル待ち通知
-- [ ] 完了
+- [x] 完了
 - **概要:** `/lottery/preview` と `/lottery/notify-waitlisted` エンドポイントを新設し、既存の `/lottery/confirm` の権限を ADMIN にも拡張してスコープ検証を追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LotteryController.java`
