@@ -48,7 +48,7 @@ status: completed
 - **依存タスク:** タスク3
 
 ### タスク5: フロントエンド — ルーティング・ナビゲーション変更
-- [ ] 完了
+- [x] 完了
 - **概要:** App.jsx にルート追加、SettingsPage のグリッドを変更する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/App.jsx` — `/admin/lottery` ルート追加（RoleProtectedPage、requiredRole="ADMIN"）+ LotteryManagement の import

@@ -41,6 +41,7 @@ import DensukeManagement from './pages/densuke/DensukeManagement';
 import SystemSettings from './pages/settings/SystemSettings';
 import OrganizationSettings from './pages/settings/OrganizationSettings';
 import SettingsPage from './pages/SettingsPage';
+import LotteryManagement from './pages/lottery/LotteryManagement';
 
 const ProtectedPage = ({ children }) => (
   <PrivateRoute>
@@ -124,6 +125,9 @@ function App() {
 
             {/* 伝助管理 */}
             <Route path="/admin/densuke" element={<RoleProtectedPage requiredRole="ADMIN"><DensukeManagement /></RoleProtectedPage>} />
+
+            {/* 抽選管理 */}
+            <Route path="/admin/lottery" element={<RoleProtectedPage requiredRole="ADMIN"><LotteryManagement /></RoleProtectedPage>} />
 
             {/* システム設定 */}
             <Route path="/admin/settings" element={<RoleProtectedPage requiredRole="ADMIN"><SystemSettings /></RoleProtectedPage>} />
