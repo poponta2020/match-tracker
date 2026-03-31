@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: ParticipationGroupDto 新規作成
-- [ ] 完了
+- [x] 完了
 - **概要:** 団体別参加率グループを表現する新DTOを作成
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/ParticipationGroupDto.java` — 新規作成（organizationId, organizationName, top3, myRate）
@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #185
 
 ### タスク2: HomeDto のフィールド変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 旧フィールド（participationTop3, myParticipationRate）を削除し、participationGroups に置き換え
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/HomeDto.java` — participationTop3, myParticipationRate を削除、participationGroups (List<ParticipationGroupDto>) を追加
@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #186
 
 ### タスク3: PracticeParticipantService に団体フィルタ対応追加
-- [ ] 完了
+- [x] 完了
 - **概要:** computeAllParticipationRates に organizationId フィルタ版を追加。getParticipationRateTop3 / getPlayerParticipationRate も対応。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeParticipantService.java` — computeAllParticipationRates(year, month, organizationId) オーバーロード追加。computeAllParticipationRates(year, month, List<Long> orgIds) 全体合算用追加。getParticipationRateTop3 / getPlayerParticipationRate にorganizationId版追加。
@@ -31,7 +31,7 @@ status: completed
 - **対応Issue:** #187
 
 ### タスク4: HomeController の参加率ロジック改修
-- [ ] 完了
+- [x] 完了
 - **概要:** playerIdから所属団体を取得し、1団体/複数団体に応じてParticipationGroupDtoリストを組み立てる
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/HomeController.java` — OrganizationService注入、団体別参加率ロジック実装、HomeDtoの組み立て変更
@@ -39,7 +39,7 @@ status: completed
 - **対応Issue:** #188
 
 ### タスク5: フロントエンド Home.jsx の表示改修
-- [ ] 完了
+- [x] 完了
 - **概要:** participationGroups に対応した表示ロジックに変更。1団体→ラベルなし、複数団体→団体名ラベル付きで繰り返し描画。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/Home.jsx` — participationTop3/myParticipationRate → participationGroups に変更。複数グループ時のセクション繰り返し描画実装。
