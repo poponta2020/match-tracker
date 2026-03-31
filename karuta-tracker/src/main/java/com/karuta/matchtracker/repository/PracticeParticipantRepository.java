@@ -255,6 +255,19 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                         @Param("waitlistNumber") Integer waitlistNumber);
 
     /**
+     * 特定セッション・特定選手のmatchNumber=null（抜け番）レコードを検索
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId AND p.playerId = :playerId AND p.matchNumber IS NULL")
+    Optional<PracticeParticipant> findByeParticipant(@Param("sessionId") Long sessionId, @Param("playerId") Long playerId);
+
+    /**
+     * 特定セッション・特定選手のmatchNumber=null（抜け番）レコードを削除
+     */
+    @Modifying
+    @Query("DELETE FROM PracticeParticipant p WHERE p.sessionId = :sessionId AND p.playerId = :playerId AND p.matchNumber IS NULL")
+    void deleteByeParticipant(@Param("sessionId") Long sessionId, @Param("playerId") Long playerId);
+
+    /**
      * 特定セッション・試合のキャンセル待ち最大番号を取得
      */
     @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +

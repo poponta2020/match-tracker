@@ -8,7 +8,8 @@ public enum ActivityType {
     SOLO_PICK("一人取り"),
     OBSERVING("見学"),
     ASSIST_OBSERVING("見学対応"),
-    OTHER("その他");
+    OTHER("その他"),
+    ABSENT("休み");
 
     private final String displayName;
 
