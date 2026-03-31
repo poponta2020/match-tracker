@@ -54,7 +54,7 @@ status: completed
 - **対応Issue:** #205
 
 ### タスク6: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** ABSENT に関するテストケースを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/ByeActivityServiceTest.java` — 以下のテストを追加:
