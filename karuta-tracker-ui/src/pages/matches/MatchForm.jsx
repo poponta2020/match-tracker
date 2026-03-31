@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
+import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 const MatchForm = () => {
@@ -226,6 +226,7 @@ const MatchForm = () => {
     { value: 'OBSERVING', label: '見学', icon: Eye },
     { value: 'ASSIST_OBSERVING', label: '見学対応', icon: UsersRound },
     { value: 'OTHER', label: 'その他', icon: MoreHorizontal },
+    { value: 'ABSENT', label: '休み', icon: UserX },
   ];
 
   // 試合番号のデータをstateに適用する共通関数

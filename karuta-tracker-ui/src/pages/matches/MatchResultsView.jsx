@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'reac
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
 // カレンダーピッカーコンポーネント
@@ -126,6 +126,7 @@ const MatchResultsView = () => {
     OBSERVING: Eye,
     ASSIST_OBSERVING: UsersRound,
     OTHER: MoreHorizontal,
+    ABSENT: UserX,
   };
 
   // 日付選択関連の状態

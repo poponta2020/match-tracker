@@ -41,6 +41,7 @@ const PairingGenerator = () => {
     { value: 'OBSERVING', label: '見学' },
     { value: 'ASSIST_OBSERVING', label: '見学対応' },
     { value: 'OTHER', label: 'その他' },
+    { value: 'ABSENT', label: '休み' },
   ];
 
   // 各試合番号の組み合わせデータキャッシュ

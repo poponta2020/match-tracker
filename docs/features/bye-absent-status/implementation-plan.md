@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: ActivityType Enum に ABSENT を追加
-- [ ] 完了
+- [x] 完了
 - **概要:** バックエンドの `ActivityType` Enum に `ABSENT("休み")` を追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/ActivityType.java` — `ABSENT("休み")` を追加
@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #201
 
 ### タスク2: PracticeParticipantRepository にクエリ追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `PracticeParticipant` の検索・削除に必要なリポジトリクエリを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PracticeParticipantRepository.java` — セッションID + プレイヤーID + `matchNumber IS NULL` での検索クエリと削除クエリを追加

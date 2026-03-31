@@ -3,8 +3,11 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.ActivityType;
 import com.karuta.matchtracker.entity.ByeActivity;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.repository.ByeActivityRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +26,8 @@ public class ByeActivityService {
 
     private final ByeActivityRepository byeActivityRepository;
     private final PlayerRepository playerRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
 
     @Transactional(readOnly = true)
     public List<ByeActivityDto> getByDate(LocalDate date) {
@@ -95,6 +100,8 @@ public class ByeActivityService {
         log.info("抜け番活動記録作成: date={}, match={}, player={}, type={}",
                 saved.getSessionDate(), saved.getMatchNumber(), saved.getPlayerId(), saved.getActivityType());
 
+        evaluatePracticeParticipant(saved.getSessionDate(), saved.getPlayerId());
+
         Map<Long, String> playerNames = collectPlayerNames(List.of(saved));
         return ByeActivityDto.fromEntity(saved, playerNames.getOrDefault(saved.getPlayerId(), "不明"));
     }
@@ -127,6 +134,12 @@ public class ByeActivityService {
         List<ByeActivity> saved = byeActivityRepository.saveAll(entities);
         log.info("抜け番活動記録一括作成: date={}, match={}, count={}", date, matchNumber, saved.size());
 
+        // バッチ内の全選手に対してPracticeParticipant評価を実行
+        saved.stream()
+                .map(ByeActivity::getPlayerId)
+                .distinct()
+                .forEach(playerId -> evaluatePracticeParticipant(date, playerId));
+
         Map<Long, String> playerNames = collectPlayerNames(saved);
         return saved.stream()
                 .map(a -> ByeActivityDto.fromEntity(a, playerNames.getOrDefault(a.getPlayerId(), "不明")))
@@ -148,6 +161,8 @@ public class ByeActivityService {
 
         ByeActivity saved = byeActivityRepository.save(entity);
         log.info("抜け番活動記録更新: id={}, type={}", id, saved.getActivityType());
+
+        evaluatePracticeParticipant(saved.getSessionDate(), saved.getPlayerId());
 
         Map<Long, String> playerNames = collectPlayerNames(List.of(saved));
         return ByeActivityDto.fromEntity(saved, playerNames.getOrDefault(saved.getPlayerId(), "不明"));
@@ -171,6 +186,43 @@ public class ByeActivityService {
         entity.setDeletedAt(JstDateTimeUtil.now());
         byeActivityRepository.save(entity);
         log.info("抜け番活動記録論理削除: id={}", id);
+    }
+
+    /**
+     * 同日・同選手の全ByeActivityを確認し、PracticeParticipant（matchNumber=null）を評価する。
+     * 全てABSENTなら削除、1つでもABSENT以外があれば復元する。
+     */
+    private void evaluatePracticeParticipant(LocalDate sessionDate, Long playerId) {
+        List<ByeActivity> allActivities = byeActivityRepository.findBySessionDateOrderByMatchNumber(sessionDate)
+                .stream()
+                .filter(a -> a.getPlayerId().equals(playerId))
+                .collect(Collectors.toList());
+
+        if (allActivities.isEmpty()) {
+            return;
+        }
+
+        boolean allAbsent = allActivities.stream()
+                .allMatch(a -> a.getActivityType() == ActivityType.ABSENT);
+
+        practiceSessionRepository.findBySessionDate(sessionDate).ifPresent(session -> {
+            Long sessionId = session.getId();
+            Optional<PracticeParticipant> existing = practiceParticipantRepository
+                    .findByeParticipant(sessionId, playerId);
+
+            if (allAbsent && existing.isPresent()) {
+                practiceParticipantRepository.deleteByeParticipant(sessionId, playerId);
+                log.info("PracticeParticipant削除（全ABSENT）: session={}, player={}", sessionId, playerId);
+            } else if (!allAbsent && existing.isEmpty()) {
+                PracticeParticipant restored = PracticeParticipant.builder()
+                        .sessionId(sessionId)
+                        .playerId(playerId)
+                        .matchNumber(null)
+                        .build();
+                practiceParticipantRepository.save(restored);
+                log.info("PracticeParticipant復元: session={}, player={}", sessionId, playerId);
+            }
+        });
     }
 
     private Map<Long, String> collectPlayerNames(List<ByeActivity> activities) {
