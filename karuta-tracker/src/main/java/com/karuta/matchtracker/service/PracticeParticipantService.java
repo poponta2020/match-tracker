@@ -13,8 +13,8 @@ import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.entity.PlayerOrganization;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
  * PracticeSessionServiceから委譲される。
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class PracticeParticipantService {
 
@@ -45,6 +44,23 @@ public class PracticeParticipantService {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final DensukeSyncService densukeSyncService;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+
+    public PracticeParticipantService(
+            PracticeParticipantRepository practiceParticipantRepository,
+            PracticeSessionRepository practiceSessionRepository,
+            PlayerRepository playerRepository,
+            LotteryExecutionRepository lotteryExecutionRepository,
+            LotteryDeadlineHelper lotteryDeadlineHelper,
+            @Lazy DensukeSyncService densukeSyncService,
+            PlayerOrganizationRepository playerOrganizationRepository) {
+        this.practiceParticipantRepository = practiceParticipantRepository;
+        this.practiceSessionRepository = practiceSessionRepository;
+        this.playerRepository = playerRepository;
+        this.lotteryExecutionRepository = lotteryExecutionRepository;
+        this.lotteryDeadlineHelper = lotteryDeadlineHelper;
+        this.densukeSyncService = densukeSyncService;
+        this.playerOrganizationRepository = playerOrganizationRepository;
+    }
 
     @Transactional
     public void setMatchParticipants(Long sessionId, Integer matchNumber, List<Long> playerIds) {
