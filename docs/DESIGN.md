@@ -414,6 +414,8 @@ Entity Layer (JPA Entity)
 | executed_at | DATETIME | NOT NULL | 実行日時 |
 | status | ENUM | NOT NULL | 実行結果（SUCCESS/FAILED/PARTIAL） |
 | details | TEXT | | 処理詳細（JSON形式） |
+| confirmed_at | TIMESTAMP | | 確定日時（NULL = 未確定） |
+| confirmed_by | BIGINT | | 確定者のプレイヤーID（NULL = 未確定） |
 
 **インデックス**:
 - `idx_lottery_target` (target_year, target_month)
@@ -1299,8 +1301,14 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `AdminEditParticipantsRequest`
 
+#### POST /api/lottery/confirm
+**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by` を設定
+**権限**: SUPER_ADMIN
+**リクエスト**: `LotteryExecutionRequest` (year, month, organizationId)
+**レスポンス**: `LotteryExecution`
+
 #### GET /api/lottery/executions?year={year}&month={month}
-**説明**: 抽選実行履歴取得
+**説明**: 抽選実行履歴取得。`confirmedAt` フィールドで確定状態を確認可能
 **権限**: なし
 
 ---
