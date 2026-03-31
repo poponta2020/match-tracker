@@ -58,7 +58,7 @@ status: completed
 - **対応Issue:** #195
 
 ### タスク6: LotteryService + LotteryController — 抽選確定フロー
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選結果の確定APIを追加。確定時に一括書き戻しをトリガー
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/LotteryService.java`

@@ -1,11 +1,7 @@
 package com.karuta.matchtracker.service;
 
-import com.karuta.matchtracker.entity.Notification;
+import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.entity.Notification.NotificationType;
-import com.karuta.matchtracker.entity.Player;
-import com.karuta.matchtracker.entity.PracticeParticipant;
-import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -39,51 +35,43 @@ public class DensukeImportService {
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final LotteryService lotteryService;
+    private final WaitlistPromotionService waitlistPromotionService;
+    private final PracticeParticipantService practiceParticipantService;
 
-    /**
-     * インポート結果
-     */
     @Data
     public static class ImportResult {
-        private int totalEntries;           // 処理した日程エントリ数
-        private int createdSessionCount;    // 作成した練習日数
-        private int registeredCount;        // 登録した参加者数
-        private int skippedCount;           // スキップした数
-        private int removedCount;           // 伝助から消えて自動削除した参加者数
-        private List<String> unmatchedNames = new ArrayList<>();  // アプリに未登録の名前
-        private List<String> unmatchedVenues = new ArrayList<>(); // 会場名がDBに見つからない
-        private List<String> details = new ArrayList<>();         // 詳細ログ
+        private int totalEntries;
+        private int createdSessionCount;
+        private int registeredCount;
+        private int skippedCount;
+        private int removedCount;
+        private List<String> unmatchedNames = new ArrayList<>();
+        private List<String> unmatchedVenues = new ArrayList<>();
+        private List<String> details = new ArrayList<>();
     }
 
-    /** スケジューラー等、認証ユーザーがいない場合のシステムユーザーID */
     public static final Long SYSTEM_USER_ID = 0L;
 
-    /**
-     * 伝助URLから参加者データをインポート
-     *
-     * @param url 伝助のURL
-     * @param targetDate 特定の日付のみインポートする場合（nullなら全日付）
-     * @param createdBy 操作者のプレイヤーID（スケジューラーの場合はSYSTEM_USER_ID）
-     * @return インポート結果
-     */
+    private enum ImportPhase { PHASE1, PHASE2, PHASE3 }
+
     @Transactional
     public ImportResult importFromDensuke(String url, LocalDate targetDate, Long createdBy, Long organizationId) throws IOException {
-        // 年を推定
         int year = targetDate != null ? targetDate.getYear() : JstDateTimeUtil.today().getYear();
 
-        // スクレイピング
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);
 
-        // 全選手の名前→IDマップ、ID→名前マップ（60秒キャッシュ付き）
         Map<String, Long> playerNameMap = playerService.findAllPlayersRaw().stream()
                 .filter(p -> p.getDeletedAt() == null)
                 .collect(Collectors.toMap(Player::getName, Player::getId, (a, b) -> a));
         Map<Long, String> playerIdMap = playerNameMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey, (a, b) -> a));
 
-        // 会場名→Venueマップ
         Map<String, Venue> venueNameMap = venueRepository.findAll().stream()
                 .collect(Collectors.toMap(Venue::getName, v -> v, (a, b) -> a));
+
+        DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
 
         ImportResult result = new ImportResult();
         result.setTotalEntries(scraped.getEntries().size());
@@ -91,7 +79,6 @@ public class DensukeImportService {
         Set<String> unmatchedNameSet = new LinkedHashSet<>();
         Set<String> unmatchedVenueSet = new LinkedHashSet<>();
 
-        // 日付ごとの最大試合番号を事前計算（セッション作成用）
         Map<LocalDate, Integer> maxMatchByDate = new LinkedHashMap<>();
         Map<LocalDate, String> venueByDate = new LinkedHashMap<>();
         for (DensukeScraper.ScheduleEntry entry : scraped.getEntries()) {
@@ -102,177 +89,445 @@ public class DensukeImportService {
         }
 
         for (DensukeScraper.ScheduleEntry entry : scraped.getEntries()) {
-            // 対象日付のフィルタ
             if (targetDate != null && !entry.getDate().equals(targetDate)) {
                 continue;
             }
 
-            // 練習セッションを検索、なければ作成
-            Optional<PracticeSession> sessionOpt = practiceSessionRepository.findBySessionDateAndOrganizationId(entry.getDate(), organizationId);
-            PracticeSession session;
+            // --- セッション作成/取得（既存ロジック維持） ---
+            PracticeSession session = findOrCreateSession(entry, organizationId, createdBy,
+                    maxMatchByDate, venueByDate, venueNameMap, unmatchedVenueSet, result);
 
-            if (sessionOpt.isEmpty()) {
-                // 会場名からVenueを検索
-                String venueName = venueByDate.get(entry.getDate());
-                Long venueId = null;
-                if (venueName != null) {
-                    Venue venue = venueNameMap.get(venueName);
-                    if (venue != null) {
-                        venueId = venue.getId();
-                    } else {
-                        unmatchedVenueSet.add(venueName);
-                    }
+            // --- フェーズ判定 ---
+            int entryYear = entry.getDate().getYear();
+            int entryMonth = entry.getDate().getMonthValue();
+            ImportPhase phase = determinePhase(deadlineType, entryYear, entryMonth, entry.getDate(), organizationId);
+
+            // --- フェーズ別処理 ---
+            switch (phase) {
+                case PHASE1 -> processPhase1(entry, session, deadlineType, playerNameMap, playerIdMap,
+                        unmatchedNameSet, result);
+                case PHASE2 -> {
+                    result.getDetails().add(String.format("%s 第%d試合: 締切後・抽選確定前のためスキップ",
+                            entry.getDate(), entry.getMatchNumber()));
+                    result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
                 }
-
-                int totalMatches = maxMatchByDate.getOrDefault(entry.getDate(), 3);
-
-                // 練習セッションを新規作成
-                session = PracticeSession.builder()
-                        .sessionDate(entry.getDate())
-                        .totalMatches(totalMatches)
-                        .venueId(venueId)
-                        .organizationId(organizationId)
-                        .createdBy(createdBy)
-                        .updatedBy(createdBy)
-                        .build();
-                session = practiceSessionRepository.save(session);
-                result.setCreatedSessionCount(result.getCreatedSessionCount() + 1);
-                result.getDetails().add(String.format("%s 練習日を作成（会場: %s, %d試合）",
-                        entry.getDate(), venueName != null ? venueName : "不明", totalMatches));
-
-                log.info("Created practice session: {} venue={} totalMatches={}", entry.getDate(), venueName, totalMatches);
-            } else {
-                session = sessionOpt.get();
-
-                // 会場が未設定の既存セッションに伝助の会場を補完
-                if (session.getVenueId() == null) {
-                    String venueName = venueByDate.get(entry.getDate());
-                    if (venueName != null) {
-                        Venue venue = venueNameMap.get(venueName);
-                        if (venue != null) {
-                            session.setVenueId(venue.getId());
-                            practiceSessionRepository.save(session);
-                            result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
-                            log.info("Updated venue for existing session: {} venue={}", entry.getDate(), venueName);
-                        } else {
-                            unmatchedVenueSet.add(venueName);
-                        }
-                    }
-                }
+                case PHASE3 -> processPhase3(entry, session, scraped.getMemberNames(),
+                        playerNameMap, playerIdMap, unmatchedNameSet, result);
             }
-
-            // 抽選済みセッションはスキップ（参加者を変更しない）
-            if (lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(session.getId()).isPresent()) {
-                result.getDetails().add(String.format("%s 第%d試合: 抽選済みのためスキップ",
-                        entry.getDate(), entry.getMatchNumber()));
-                result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
-                continue;
-            }
-
-            // 既存の参加者を取得
-            List<PracticeParticipant> existingParticipants =
-                    practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
-            Set<Long> existingPlayerIds = existingParticipants.stream()
-                    .map(PracticeParticipant::getPlayerId)
-                    .collect(Collectors.toSet());
-
-            // 伝助の参加者IDを収集
-            Set<Long> densukePlayerIds = new LinkedHashSet<>();
-            for (String name : entry.getParticipants()) {
-                Long playerId = playerNameMap.get(name);
-                if (playerId != null) {
-                    densukePlayerIds.add(playerId);
-                }
-            }
-
-            // 伝助から消えた参加者を自動削除（DBにいるが伝助にいない）
-            // dirty=true の参加者はアプリ側で変更済みのため削除しない（次サイクルで書き込まれる）
-            for (Long existingId : existingPlayerIds) {
-                if (!densukePlayerIds.contains(existingId)) {
-                    String playerName = playerIdMap.get(existingId);
-                    existingParticipants.stream()
-                            .filter(p -> p.getPlayerId().equals(existingId))
-                            .findFirst()
-                            .ifPresent(p -> {
-                                if (p.isDirty()) {
-                                    log.info("Skipping auto-remove for dirty participant: {} from session {} match {}",
-                                            playerName, entry.getDate(), entry.getMatchNumber());
-                                    return;
-                                }
-                                practiceParticipantRepository.delete(p);
-                                result.setRemovedCount(result.getRemovedCount() + 1);
-                                log.info("Auto-removed participant: {} from session {} match {}",
-                                        playerName, entry.getDate(), entry.getMatchNumber());
-                            });
-                }
-            }
-
-            // 新規参加者のみ追加（既存はそのまま）
-            int matchRegistered = 0;
-            for (String name : entry.getParticipants()) {
-                Long playerId = playerNameMap.get(name);
-                if (playerId == null) {
-                    unmatchedNameSet.add(name);
-                    result.setSkippedCount(result.getSkippedCount() + 1);
-                    continue;
-                }
-
-                if (existingPlayerIds.contains(playerId)) {
-                    continue; // 既に登録済み、スキップ
-                }
-
-                // DB側でも重複チェック（同一トランザクション内での重複挿入を防止）
-                if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(
-                        session.getId(), playerId, entry.getMatchNumber())) {
-                    existingPlayerIds.add(playerId);
-                    continue;
-                }
-
-                PracticeParticipant participant = PracticeParticipant.builder()
-                        .sessionId(session.getId())
-                        .playerId(playerId)
-                        .matchNumber(entry.getMatchNumber())
-                        .dirty(false)
-                        .build();
-                practiceParticipantRepository.save(participant);
-                existingPlayerIds.add(playerId);
-                result.setRegisteredCount(result.getRegisteredCount() + 1);
-                matchRegistered++;
-            }
-
-            result.getDetails().add(String.format("%s 第%d試合: %d名登録",
-                    entry.getDate(), entry.getMatchNumber(), matchRegistered));
         }
 
         result.setUnmatchedNames(new ArrayList<>(unmatchedNameSet));
         result.setUnmatchedVenues(new ArrayList<>(unmatchedVenueSet));
 
-        // 未登録者がいる場合、管理者に通知
         if (!unmatchedNameSet.isEmpty()) {
             notifyAdminsOfUnmatchedNames(new ArrayList<>(unmatchedNameSet), organizationId);
         }
 
-        log.info("Densuke import completed: {} entries, {} sessions created, {} registered, {} skipped, {} unmatched names",
+        log.info("Densuke import completed: {} entries, {} sessions created, {} registered, {} skipped, {} removed",
                 result.getTotalEntries(), result.getCreatedSessionCount(), result.getRegisteredCount(),
-                result.getSkippedCount(), result.getUnmatchedNames().size());
+                result.getSkippedCount(), result.getRemovedCount());
 
         return result;
     }
 
     /**
-     * 未登録者を一括登録し、再度伝助からインポート
-     *
-     * @param names 登録する名前リスト
-     * @param url 伝助URL（再同期用）
-     * @param targetDate 対象日付（nullなら全日付）
-     * @param createdBy 操作者のプレイヤーID
-     * @return 再同期のインポート結果
+     * フェーズ判定
      */
+    private ImportPhase determinePhase(DeadlineType deadlineType, int year, int month,
+                                       LocalDate sessionDate, Long organizationId) {
+        if (deadlineType == DeadlineType.SAME_DAY) {
+            // SAME_DAY: 締切前→Phase1、締切後→Phase3（Phase2なし）
+            return lotteryDeadlineHelper.isBeforeSameDayDeadline(sessionDate)
+                    ? ImportPhase.PHASE1 : ImportPhase.PHASE3;
+        }
+
+        // MONTHLY
+        if (lotteryDeadlineHelper.isBeforeDeadline(year, month, organizationId)) {
+            return ImportPhase.PHASE1;
+        }
+        if (lotteryService.isLotteryConfirmed(year, month)) {
+            return ImportPhase.PHASE3;
+        }
+        return ImportPhase.PHASE2;
+    }
+
+    // ========================================================================
+    // Phase 1: 締め切り前
+    // ========================================================================
+
+    private void processPhase1(DensukeScraper.ScheduleEntry entry, PracticeSession session,
+                               DeadlineType deadlineType,
+                               Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
+                               Set<String> unmatchedNameSet, ImportResult result) {
+        List<PracticeParticipant> existing =
+                practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
+        Set<Long> existingPlayerIds = existing.stream()
+                .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
+
+        // ○の参加者IDを収集
+        Set<Long> markedPlayerIds = new LinkedHashSet<>();
+        for (String name : entry.getParticipants()) {
+            Long playerId = playerNameMap.get(name);
+            if (playerId != null) {
+                markedPlayerIds.add(playerId);
+            }
+        }
+
+        // not-○: 既存レコード(dirty=false)を削除（1-E）
+        for (PracticeParticipant p : existing) {
+            if (!markedPlayerIds.contains(p.getPlayerId()) && !p.isDirty()) {
+                practiceParticipantRepository.delete(p);
+                result.setRemovedCount(result.getRemovedCount() + 1);
+                log.info("Phase1: removed non-○ participant {} from session {} match {}",
+                        playerIdMap.get(p.getPlayerId()), entry.getDate(), entry.getMatchNumber());
+            }
+        }
+
+        // ○: 新規のみ追加（1-A）
+        int matchRegistered = 0;
+        for (String name : entry.getParticipants()) {
+            Long playerId = playerNameMap.get(name);
+            if (playerId == null) {
+                unmatchedNameSet.add(name);
+                result.setSkippedCount(result.getSkippedCount() + 1);
+                continue;
+            }
+            if (existingPlayerIds.contains(playerId)) {
+                continue; // 1-B, 1-C: 既存はスキップ
+            }
+            if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(
+                    session.getId(), playerId, entry.getMatchNumber())) {
+                existingPlayerIds.add(playerId);
+                continue;
+            }
+
+            // SAME_DAY → WON/WAITLISTED、MONTHLY → PENDING
+            ParticipantStatus status;
+            Integer waitlistNumber = null;
+            if (deadlineType == DeadlineType.SAME_DAY) {
+                if (practiceParticipantService.isFreeRegistrationOpen(session, entry.getMatchNumber())) {
+                    status = ParticipantStatus.WON;
+                } else {
+                    status = ParticipantStatus.WAITLISTED;
+                    waitlistNumber = practiceParticipantRepository
+                            .findMaxWaitlistNumber(session.getId(), entry.getMatchNumber()).orElse(0) + 1;
+                }
+            } else {
+                status = ParticipantStatus.PENDING;
+            }
+
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .sessionId(session.getId())
+                    .playerId(playerId)
+                    .matchNumber(entry.getMatchNumber())
+                    .status(status)
+                    .waitlistNumber(waitlistNumber)
+                    .dirty(false)
+                    .build();
+            practiceParticipantRepository.save(participant);
+            existingPlayerIds.add(playerId);
+            result.setRegisteredCount(result.getRegisteredCount() + 1);
+            matchRegistered++;
+        }
+
+        result.getDetails().add(String.format("%s 第%d試合 [Phase1]: %d名登録",
+                entry.getDate(), entry.getMatchNumber(), matchRegistered));
+    }
+
+    // ========================================================================
+    // Phase 3: 抽選確定後（またはSAME_DAY締切後）
+    // ========================================================================
+
+    private void processPhase3(DensukeScraper.ScheduleEntry entry, PracticeSession session,
+                               List<String> memberNames,
+                               Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
+                               Set<String> unmatchedNameSet, ImportResult result) {
+        // 既存参加者をマップ化
+        List<PracticeParticipant> existing =
+                practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
+        Map<Long, PracticeParticipant> existingByPlayerId = existing.stream()
+                .collect(Collectors.toMap(PracticeParticipant::getPlayerId, p -> p, (a, b) -> a));
+
+        // 伝助の各カテゴリのプレイヤーIDを収集
+        Set<Long> markedIds = resolvePlayerIds(entry.getParticipants(), playerNameMap, unmatchedNameSet);
+        Set<Long> maybeIds = resolvePlayerIds(entry.getMaybeParticipants(), playerNameMap, unmatchedNameSet);
+
+        // ×/空白: memberNames に含まれるが ○にも△にもいない
+        Set<String> markedAndMaybeNames = new HashSet<>();
+        markedAndMaybeNames.addAll(entry.getParticipants());
+        markedAndMaybeNames.addAll(entry.getMaybeParticipants());
+
+        Set<Long> absentIds = new LinkedHashSet<>();
+        for (String name : memberNames) {
+            if (!markedAndMaybeNames.contains(name)) {
+                Long playerId = playerNameMap.get(name);
+                if (playerId != null) {
+                    absentIds.add(playerId);
+                }
+            }
+        }
+
+        int processed = 0;
+
+        // --- ○ の処理 (3-A) ---
+        for (Long playerId : markedIds) {
+            PracticeParticipant p = existingByPlayerId.get(playerId);
+            if (processPhase3Maru(playerId, p, session, entry.getMatchNumber())) {
+                processed++;
+            }
+        }
+
+        // --- △ の処理 (3-B) ---
+        for (Long playerId : maybeIds) {
+            PracticeParticipant p = existingByPlayerId.get(playerId);
+            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber())) {
+                processed++;
+            }
+        }
+
+        // --- ×/空白 の処理 (3-C) ---
+        for (Long playerId : absentIds) {
+            PracticeParticipant p = existingByPlayerId.get(playerId);
+            if (processPhase3Batsu(playerId, p, session, entry.getMatchNumber())) {
+                processed++;
+            }
+        }
+
+        result.setRegisteredCount(result.getRegisteredCount() + processed);
+        result.getDetails().add(String.format("%s 第%d試合 [Phase3]: %d件処理",
+                entry.getDate(), entry.getMatchNumber(), processed));
+    }
+
+    /**
+     * 3-A: 伝助○の処理
+     */
+    private boolean processPhase3Maru(Long playerId, PracticeParticipant existing,
+                                      PracticeSession session, int matchNumber) {
+        if (existing == null) {
+            // 3-A1/A2/A3: 未登録 → 定員判定して登録
+            registerNewParticipant(playerId, session, matchNumber);
+            return true;
+        }
+        if (existing.isDirty()) return false; // dirty保護
+
+        ParticipantStatus status = existing.getStatus();
+        switch (status) {
+            case WON -> { return false; } // 3-A4: 一致、スキップ
+            case WAITLISTED -> {
+                // 3-A6: ○に変えても抽選バイパス不可。dirty=trueにして△で書き戻す
+                existing.setDirty(true);
+                practiceParticipantRepository.save(existing);
+                log.info("Phase3-A6: WAITLISTED player {} set dirty for △ write-back", playerId);
+                return true;
+            }
+            case OFFERED -> {
+                // 3-A8: オファー期限内なら承諾
+                if (existing.getOfferDeadline() != null
+                        && JstDateTimeUtil.now().isAfter(existing.getOfferDeadline())) {
+                    log.info("Phase3-A8: offer expired for player {}, skipping", playerId);
+                    return false;
+                }
+                try {
+                    waitlistPromotionService.respondToOffer(existing.getId(), true);
+                    log.info("Phase3-A8: accepted offer for player {} via densuke", playerId);
+                } catch (Exception e) {
+                    log.warn("Phase3-A8: failed to accept offer for player {}: {}", playerId, e.getMessage());
+                }
+                return true;
+            }
+            case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
+                // 3-A10/A11: 再登録
+                registerNewParticipant(playerId, session, matchNumber);
+                return true;
+            }
+            default -> { return false; }
+        }
+    }
+
+    /**
+     * 3-B: 伝助△の処理（キャンセル待ち希望）
+     */
+    private boolean processPhase3Sankaku(Long playerId, PracticeParticipant existing,
+                                         PracticeSession session, int matchNumber) {
+        if (existing == null) {
+            // 3-B1: 未登録 → WAITLISTED（最後尾）
+            createWaitlisted(playerId, session, matchNumber);
+            return true;
+        }
+        if (existing.isDirty()) return false; // dirty保護
+
+        ParticipantStatus status = existing.getStatus();
+        switch (status) {
+            case WON -> {
+                // 3-B2: WON → WAITLISTED（最後尾）→ 繰り上げ発動
+                waitlistPromotionService.demoteToWaitlist(existing.getId());
+                log.info("Phase3-B2: demoted WON player {} to waitlist via densuke", playerId);
+                return true;
+            }
+            case WAITLISTED, OFFERED -> { return false; } // 3-B4/B6: 一致、スキップ
+            case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
+                // 3-B8: キャンセル待ちに復帰
+                createWaitlisted(playerId, session, matchNumber);
+                return true;
+            }
+            default -> { return false; }
+        }
+    }
+
+    /**
+     * 3-C: 伝助×/空白の処理
+     */
+    private boolean processPhase3Batsu(Long playerId, PracticeParticipant existing,
+                                       PracticeSession session, int matchNumber) {
+        if (existing == null) return false; // 3-C1: 一致、何もしない
+        if (existing.isDirty()) return false; // dirty保護
+
+        ParticipantStatus status = existing.getStatus();
+        switch (status) {
+            case WON -> {
+                // 3-C2: キャンセル → 繰り上げ発動
+                waitlistPromotionService.cancelParticipation(existing.getId());
+                log.info("Phase3-C2: cancelled WON player {} via densuke", playerId);
+                return true;
+            }
+            case WAITLISTED -> {
+                // 3-C4: キャンセル待ち辞退
+                existing.setStatus(ParticipantStatus.WAITLIST_DECLINED);
+                existing.setDirty(true);
+                Integer oldNumber = existing.getWaitlistNumber();
+                existing.setWaitlistNumber(null);
+                practiceParticipantRepository.save(existing);
+                // 後続番号繰り上げ
+                if (oldNumber != null) {
+                    List<PracticeParticipant> subsequent = practiceParticipantRepository
+                            .findWaitlistedAfterNumber(session.getId(), matchNumber, oldNumber);
+                    for (PracticeParticipant s : subsequent) {
+                        s.setWaitlistNumber(s.getWaitlistNumber() - 1);
+                        practiceParticipantRepository.save(s);
+                    }
+                }
+                log.info("Phase3-C4: WAITLISTED player {} declined via densuke", playerId);
+                return true;
+            }
+            case OFFERED -> {
+                // 3-C6: オファー辞退 → DECLINED → 次繰り上げ
+                try {
+                    waitlistPromotionService.respondToOffer(existing.getId(), false);
+                    log.info("Phase3-C6: OFFERED player {} declined via densuke", playerId);
+                } catch (Exception e) {
+                    log.warn("Phase3-C6: failed to decline offer for player {}: {}", playerId, e.getMessage());
+                }
+                return true;
+            }
+            case CANCELLED, DECLINED, WAITLIST_DECLINED -> { return false; } // 3-C8: 一致
+            default -> { return false; }
+        }
+    }
+
+    // ========================================================================
+    // ヘルパーメソッド
+    // ========================================================================
+
+    private void registerNewParticipant(Long playerId, PracticeSession session, int matchNumber) {
+        if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
+            practiceParticipantRepository.save(PracticeParticipant.builder()
+                    .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
+                    .status(ParticipantStatus.WON).dirty(true).build());
+            log.info("Phase3: registered player {} as WON for session {} match {}", playerId, session.getId(), matchNumber);
+        } else {
+            createWaitlisted(playerId, session, matchNumber);
+        }
+    }
+
+    private void createWaitlisted(Long playerId, PracticeSession session, int matchNumber) {
+        int maxNumber = practiceParticipantRepository
+                .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
+        practiceParticipantRepository.save(PracticeParticipant.builder()
+                .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(maxNumber + 1)
+                .dirty(true).build());
+        log.info("Phase3: registered player {} as WAITLISTED #{} for session {} match {}",
+                playerId, maxNumber + 1, session.getId(), matchNumber);
+    }
+
+    private Set<Long> resolvePlayerIds(List<String> names, Map<String, Long> playerNameMap,
+                                        Set<String> unmatchedNameSet) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (String name : names) {
+            Long playerId = playerNameMap.get(name);
+            if (playerId != null) {
+                ids.add(playerId);
+            } else {
+                unmatchedNameSet.add(name);
+            }
+        }
+        return ids;
+    }
+
+    private PracticeSession findOrCreateSession(DensukeScraper.ScheduleEntry entry, Long organizationId,
+                                                 Long createdBy,
+                                                 Map<LocalDate, Integer> maxMatchByDate,
+                                                 Map<LocalDate, String> venueByDate,
+                                                 Map<String, Venue> venueNameMap,
+                                                 Set<String> unmatchedVenueSet,
+                                                 ImportResult result) {
+        Optional<PracticeSession> sessionOpt = practiceSessionRepository
+                .findBySessionDateAndOrganizationId(entry.getDate(), organizationId);
+
+        if (sessionOpt.isPresent()) {
+            PracticeSession session = sessionOpt.get();
+            if (session.getVenueId() == null) {
+                String venueName = venueByDate.get(entry.getDate());
+                if (venueName != null) {
+                    Venue venue = venueNameMap.get(venueName);
+                    if (venue != null) {
+                        session.setVenueId(venue.getId());
+                        practiceSessionRepository.save(session);
+                        result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
+                    } else {
+                        unmatchedVenueSet.add(venueName);
+                    }
+                }
+            }
+            return session;
+        }
+
+        String venueName = venueByDate.get(entry.getDate());
+        Long venueId = null;
+        if (venueName != null) {
+            Venue venue = venueNameMap.get(venueName);
+            if (venue != null) {
+                venueId = venue.getId();
+            } else {
+                unmatchedVenueSet.add(venueName);
+            }
+        }
+
+        int totalMatches = maxMatchByDate.getOrDefault(entry.getDate(), 3);
+        PracticeSession session = PracticeSession.builder()
+                .sessionDate(entry.getDate())
+                .totalMatches(totalMatches)
+                .venueId(venueId)
+                .organizationId(organizationId)
+                .createdBy(createdBy)
+                .updatedBy(createdBy)
+                .build();
+        session = practiceSessionRepository.save(session);
+        result.setCreatedSessionCount(result.getCreatedSessionCount() + 1);
+        result.getDetails().add(String.format("%s 練習日を作成（会場: %s, %d試合）",
+                entry.getDate(), venueName != null ? venueName : "不明", totalMatches));
+        return session;
+    }
+
+    // ========================================================================
+    // registerAndSync（既存ロジック維持）
+    // ========================================================================
+
     @Transactional
-    public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate, Long createdBy, Long organizationId) throws IOException {
+    public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate,
+                                         Long createdBy, Long organizationId) throws IOException {
         int created = 0;
         for (String name : names) {
-            // 既存チェック
             if (playerRepository.findByNameAndActive(name).isPresent()) {
                 continue;
             }
@@ -288,20 +543,16 @@ public class DensukeImportService {
             created++;
             log.info("Auto-registered player: {}", name);
         }
-
         log.info("Registered {} new players, now re-syncing from densuke", created);
-
-        // 再同期
         return importFromDensuke(url, targetDate, createdBy, organizationId);
     }
 
-    /**
-     * 未登録者名を管理者に通知する（同じ内容の通知が既にあればスキップ、顔ぶれが変わっていれば更新）
-     */
+    // ========================================================================
+    // 通知（既存ロジック維持）
+    // ========================================================================
+
     private void notifyAdminsOfUnmatchedNames(List<String> unmatchedNames, Long organizationId) {
-        // SUPER_ADMINは全団体の通知を受け取る
         List<Player> admins = new ArrayList<>(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
-        // ADMINは自団体の通知のみ受け取る
         playerRepository.findByRoleAndActive(Player.Role.ADMIN).stream()
                 .filter(a -> organizationId.equals(a.getAdminOrganizationId()))
                 .forEach(admins::add);
@@ -314,56 +565,40 @@ public class DensukeImportService {
         String title = "伝助同期: 未登録者あり（" + unmatchedNames.size() + "名）";
 
         List<Notification> toSave = new ArrayList<>();
-        int skipped = 0;
-        int updated = 0;
 
         for (Player admin : admins) {
-            // 削除済みも含めて過去の通知を検索（削除後の再送防止）
             List<Notification> existing = notificationRepository.findByPlayerIdAndTypeOrderByCreatedAtDesc(
                     admin.getId(), NotificationType.DENSUKE_UNMATCHED_NAMES);
 
             if (!existing.isEmpty()) {
-                // 最新の通知と比較（削除済み含む）
                 Notification latest = existing.get(0);
                 if (message.equals(latest.getMessage())) {
-                    // 同じ内容 → スキップ（削除済みでも再送しない）
-                    skipped++;
                     continue;
                 }
-                // 顔ぶれが変わった → 未削除の通知があれば更新、なければ新規作成
                 Notification active = existing.stream()
                         .filter(n -> n.getDeletedAt() == null)
-                        .findFirst()
-                        .orElse(null);
+                        .findFirst().orElse(null);
                 if (active != null) {
                     active.setTitle(title);
                     active.setMessage(message);
                     active.setIsRead(false);
                     toSave.add(active);
-                    updated++;
                 } else {
                     toSave.add(Notification.builder()
                             .playerId(admin.getId())
                             .type(NotificationType.DENSUKE_UNMATCHED_NAMES)
-                            .title(title)
-                            .message(message)
-                            .build());
+                            .title(title).message(message).build());
                 }
             } else {
-                // 既存なし → 新規作成
                 toSave.add(Notification.builder()
                         .playerId(admin.getId())
                         .type(NotificationType.DENSUKE_UNMATCHED_NAMES)
-                        .title(title)
-                        .message(message)
-                        .build());
+                        .title(title).message(message).build());
             }
         }
 
         if (!toSave.isEmpty()) {
             notificationRepository.saveAll(toSave);
-
-            // Web Push送信（新規・更新された通知のみ、管理者の所属団体IDを使用）
             for (Notification n : toSave) {
                 Long orgId = admins.stream()
                         .filter(a -> a.getId().equals(n.getPlayerId()))
@@ -374,7 +609,6 @@ public class DensukeImportService {
                         n.getPlayerId(), n.getType(), n.getTitle(), n.getMessage(), "/admin/densuke", orgId);
             }
         }
-        log.info("Densuke unmatched names notification: {} new/updated, {} skipped (unchanged)",
-                toSave.size(), skipped);
+        log.info("Densuke unmatched names notification: {} new/updated", toSave.size());
     }
 }
