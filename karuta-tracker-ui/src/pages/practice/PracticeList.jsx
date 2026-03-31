@@ -472,7 +472,7 @@ const PracticeList = () => {
                               : { color: '#6b7280' };
                             const parts = session.venueName.split('・');
                             return (
-                              <div key={session.id} className="mt-0.5 text-[10px] leading-tight text-center" style={venueStyle}>
+                              <div key={session.id} className="mt-0.5 text-xs leading-tight text-center" style={venueStyle}>
                                 {parts.map((part, i) => (
                                   <div key={i}>
                                     {part}
