@@ -68,4 +68,12 @@ export const lotteryAPI = {
   // 抽選結果確定（伝助一括書き戻しトリガー）
   confirm: (year, month, organizationId) =>
     apiClient.post('/lottery/confirm', { year, month, organizationId }),
+
+  // 抽選プレビュー（DB保存なし）
+  preview: (year, month, organizationId) =>
+    apiClient.post('/lottery/preview', { year, month, organizationId }),
+
+  // キャンセル待ちのみに通知送信
+  notifyWaitlisted: (year, month, organizationId) =>
+    apiClient.post('/lottery/notify-waitlisted', { year, month, organizationId }),
 };

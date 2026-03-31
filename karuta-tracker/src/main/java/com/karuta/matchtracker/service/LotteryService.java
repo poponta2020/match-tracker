@@ -115,7 +115,7 @@ public class LotteryService {
             List<SessionDetail> sessionDetails = new ArrayList<>();
 
             for (PracticeSession session : sessions) {
-                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId());
+                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), true);
                 sessionDetails.add(sessionDetail);
             }
 
@@ -135,7 +135,7 @@ public class LotteryService {
     /**
      * 1セッション（1日）の全試合を処理する
      */
-    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId) {
+    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, boolean saveResults) {
         log.debug("Processing session: {} (date: {}, capacity: {})",
                 session.getId(), session.getSessionDate(), session.getCapacity());
 
@@ -172,7 +172,7 @@ public class LotteryService {
             Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
 
             MatchDetail detail = processMatch(session, matchNumber, applicants,
-                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder);
+                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, saveResults);
             matchDetails.add(detail);
 
             prevWaitlistOrder = currentWaitlistOrder;
@@ -190,7 +190,8 @@ public class LotteryService {
                                 Set<Long> sessionLosers, Set<Long> monthlyLosers,
                                 Long lotteryId,
                                 Map<Long, Integer> previousMatchWaitlistOrder,
-                                Map<Long, Integer> currentMatchWaitlistOrder) {
+                                Map<Long, Integer> currentMatchWaitlistOrder,
+                                boolean saveResults) {
 
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
@@ -202,7 +203,9 @@ public class LotteryService {
                 p.setDirty(true);
                 p.setLotteryId(lotteryId);
             }
-            practiceParticipantRepository.saveAll(applicants);
+            if (saveResults) {
+                practiceParticipantRepository.saveAll(applicants);
+            }
 
             log.debug("Match {}: all {} applicants win (capacity: {})",
                     matchNumber, totalApplicants, capacity);
@@ -348,12 +351,149 @@ public class LotteryService {
         List<PracticeParticipant> all = new ArrayList<>();
         all.addAll(winners);
         all.addAll(allLosers);
-        practiceParticipantRepository.saveAll(all);
+        if (saveResults) {
+            practiceParticipantRepository.saveAll(all);
+        }
 
         log.info("Match {}: {} winners, {} waitlisted (from {} applicants, capacity {})",
                 matchNumber, winners.size(), allLosers.size(), totalApplicants, capacity);
 
         return new MatchDetail(matchNumber, totalApplicants, winners.size(), allLosers.size());
+    }
+
+    /**
+     * 指定年月の抽選をプレビュー実行する（DB保存なし）
+     *
+     * @param year           対象年
+     * @param month          対象月
+     * @param organizationId 団体ID（nullの場合は全団体）
+     * @return セッションごとの抽選結果プレビュー
+     */
+    @Transactional(readOnly = true)
+    public List<LotteryResultDto> previewLottery(int year, int month, Long organizationId) {
+        log.info("Previewing lottery for {}-{} (orgId: {})", year, month, organizationId);
+
+        // 対象月のセッションを日付昇順で取得
+        List<PracticeSession> sessions;
+        if (organizationId != null) {
+            sessions = practiceSessionRepository
+                    .findByYearAndMonthAndOrganizationId(year, month, organizationId);
+        } else {
+            sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        }
+        sessions = sessions.stream()
+                .sorted(Comparator.comparing(PracticeSession::getSessionDate))
+                .collect(Collectors.toList());
+
+        if (sessions.isEmpty()) {
+            return List.of();
+        }
+
+        // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
+        Set<Long> monthlyLosers = new HashSet<>();
+        // セッションごとに処理された参加者を保持（DTO組み立て用）
+        Map<Long, List<PracticeParticipant>> participantsBySession = new LinkedHashMap<>();
+
+        for (PracticeSession session : sessions) {
+            // PENDING参加者を取得
+            List<PracticeParticipant> participants = practiceParticipantRepository
+                    .findBySessionIdAndStatus(session.getId(), ParticipantStatus.PENDING);
+
+            // 抽選アルゴリズムを実行（DB保存なし）
+            processSession(session, monthlyLosers, null, false);
+
+            // 処理後の参加者（ステータスがインメモリで更新済み）を保持
+            participantsBySession.put(session.getId(), participants);
+        }
+
+        // インメモリの参加者データからLotteryResultDtoを組み立て
+        List<LotteryResultDto> results = new ArrayList<>();
+        for (PracticeSession session : sessions) {
+            List<PracticeParticipant> participants = participantsBySession.get(session.getId());
+            if (participants == null || participants.isEmpty()) {
+                continue;
+            }
+            results.add(buildLotteryResultFromMemory(session, participants));
+        }
+
+        log.info("Lottery preview completed for {}-{}: {} sessions", year, month, results.size());
+        return results;
+    }
+
+    /**
+     * インメモリの参加者データからLotteryResultDtoを組み立てる（プレビュー用）
+     */
+    private LotteryResultDto buildLotteryResultFromMemory(PracticeSession session,
+                                                           List<PracticeParticipant> participants) {
+        // プレイヤー情報を取得
+        Set<Long> playerIds = participants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .collect(Collectors.toSet());
+        Map<Long, Player> playersMap = playerRepository.findAllById(playerIds)
+                .stream().collect(Collectors.toMap(Player::getId, p -> p));
+
+        // 会場名を取得
+        String venueName = null;
+        if (session.getVenueId() != null) {
+            venueName = venueRepository.findById(session.getVenueId())
+                    .map(Venue::getName)
+                    .orElse(null);
+        }
+
+        // 試合番号でグループ化
+        Map<Integer, List<PracticeParticipant>> byMatch = participants.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber,
+                        TreeMap::new, Collectors.toList()));
+
+        Map<Integer, LotteryResultDto.MatchResult> matchResults = new TreeMap<>();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : Integer.MAX_VALUE;
+
+        for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
+            List<LotteryResultDto.ParticipantResult> winners = new ArrayList<>();
+            List<LotteryResultDto.ParticipantResult> waitlisted = new ArrayList<>();
+
+            for (PracticeParticipant p : entry.getValue()) {
+                Player player = playersMap.get(p.getPlayerId());
+                if (player == null) continue;
+
+                LotteryResultDto.ParticipantResult result = LotteryResultDto.ParticipantResult.builder()
+                        .playerId(p.getPlayerId())
+                        .playerName(player.getName())
+                        .kyuRank(player.getKyuRank())
+                        .danRank(player.getDanRank())
+                        .status(p.getStatus())
+                        .waitlistNumber(p.getWaitlistNumber())
+                        .build();
+
+                if (p.getStatus() == ParticipantStatus.WON) {
+                    winners.add(result);
+                } else if (p.getStatus() == ParticipantStatus.WAITLISTED) {
+                    waitlisted.add(result);
+                }
+            }
+
+            waitlisted.sort(Comparator.comparing(r ->
+                    r.getWaitlistNumber() != null ? r.getWaitlistNumber() : Integer.MAX_VALUE));
+
+            matchResults.put(entry.getKey(), LotteryResultDto.MatchResult.builder()
+                    .matchNumber(entry.getKey())
+                    .capacity(capacity)
+                    .lotteryRequired(entry.getValue().size() > capacity)
+                    .winners(winners)
+                    .waitlisted(waitlisted)
+                    .build());
+        }
+
+        return LotteryResultDto.builder()
+                .sessionId(session.getId())
+                .sessionDate(session.getSessionDate())
+                .venueName(venueName)
+                .startTime(session.getStartTime())
+                .endTime(session.getEndTime())
+                .capacity(session.getCapacity())
+                .matchResults(matchResults)
+                .build();
     }
 
     /**
@@ -464,7 +604,7 @@ public class LotteryService {
 
                 processMatch(session, matchNumber, entry.getValue(),
                         sessionLosers, monthlyLosers, execution.getId(),
-                        inheritedOrder, currentWaitlistOrder);
+                        inheritedOrder, currentWaitlistOrder, true);
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;
