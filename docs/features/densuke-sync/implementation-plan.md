@@ -86,7 +86,7 @@ status: completed
 - **対応Issue:** #197
 
 ### タスク8: DensukeSyncService — フェーズ判定統合
-- [ ] 完了
+- [x] 完了
 - **概要:** 同期フローにフェーズ判定を組み込み、フェーズ2ではインポートをスキップ
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/DensukeSyncService.java`

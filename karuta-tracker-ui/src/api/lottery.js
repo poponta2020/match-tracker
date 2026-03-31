@@ -64,4 +64,8 @@ export const lotteryAPI = {
   // キャンセル待ち復帰（セッション単位）
   rejoinWaitlist: (sessionId, playerId) =>
     apiClient.post('/lottery/rejoin-waitlist', { sessionId, playerId }),
+
+  // 抽選結果確定（伝助一括書き戻しトリガー）
+  confirm: (year, month, organizationId) =>
+    apiClient.post('/lottery/confirm', { year, month, organizationId }),
 };
