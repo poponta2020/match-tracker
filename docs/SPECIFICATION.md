@@ -562,11 +562,20 @@ SUPER_ADMIN のみ操作可能。
 
 #### 4.1.3 自動同期
 
-`DensukeSyncScheduler` がバックグラウンドで動作:
-- **間隔**: 60秒ごと（初回は30秒後に開始）
+`DensukeSyncScheduler` が `DensukeSyncService.syncAll()` を呼び出してバックグラウンドで動作:
+- **間隔**: 5分ごと（初回は30秒後に開始）
 - **対象**: 当月 + 翌月の全団体のURL（団体ごとにループ処理）
-- **処理順序**: ① `DensukeWriteService.writeToDensuke()`（アプリ→伝助への書き込み）→ ② `DensukeImportService`（伝助→アプリへの読み取り）
+- **処理順序**: ① 残存 `dirty=true` 参加者の書き込み（フォールバック）→ ② 伝助→アプリへの読み取り
   - 書き込みを先に行うことで、アプリ側の変更が伝助に反映された後に読み取りが実行される
+
+#### 4.1.4 イベント駆動書き込み
+
+アプリ側で参加者の状態が変更された際、`DensukeSyncService.triggerWriteAsync()` を非同期で呼び出し、伝助へ即時書き込みを行う。5分スケジューラーの書き込みはフォールバックとして機能し、即時書き込みが失敗した場合のリカバリを担う。
+
+**トリガー箇所:**
+- `PracticeParticipantService`: 参加者追加（`addParticipantToMatch`）、参加者削除（`removeParticipantFromMatch`）、抽選結果確定（`setMatchParticipants`）、参加登録（`registerParticipations`）
+- `PracticeSessionService`: セッション更新（`updateSession`）
+- `WaitlistPromotionService`: 繰り上げオファー応答（`respondToOffer`）、キャンセル待ち辞退（`declineWaitlistBySession`）
 
 #### 4.1.6 アプリ→伝助への書き込み（DensukeWriteService）
 
@@ -1301,7 +1310,6 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| POST | `/import-densuke` | ADMIN+ | 伝助URLからインポート（`organizationId` 指定） |
 | POST | `/register-and-sync-densuke` | ADMIN+ | 未登録者一括登録+再同期（`organizationId` 指定） |
 | GET | `/densuke-url?year=&month=&organizationId=` | PLAYER+ | 団体別伝助URL取得（認証必須） |
 | PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新（`organizationId` 必須、ADMINは自団体のみ、`https://densuke.biz/` ドメインのみ受付） |

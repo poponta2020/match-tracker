@@ -2074,8 +2074,14 @@ Entity Layer (JPA Entity)
 
 #### 伝助連携
 - 伝助（出欠管理ツール）との双方向同期
-  - **アプリ→伝助**: `DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
-  - **伝助→アプリ**: JsoupによるHTMLスクレイピングで出欠情報を取得
+  - **アプリ→伝助（イベント駆動）**: 参加者の状態変更時に `DensukeSyncService.triggerWriteAsync()` を `@Async` で即時実行。`DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
+  - **伝助→アプリ（5分スケジューラー）**: `DensukeSyncScheduler` が5分間隔で `DensukeSyncService.syncAll()` を呼び出し、JsoupによるHTMLスクレイピングで出欠情報を取得
+- **同期フロー集約**: `DensukeSyncService` がスケジューラー・手動同期・イベント駆動書き込みの全フローを統括
+  - `syncAll()`: 当月+翌月の全団体を処理（スケジューラー用）
+  - `syncForOrganization()`: 指定団体の書き込み→読み取り（Controller・スケジューラー共用）
+  - `triggerWriteAsync()`: dirty参加者の即時書き込み（イベント駆動用、`@Async`）
+- **参加者削除**: `removeParticipantFromMatch()` は物理削除ではなく論理削除（`status=CANCELLED`, `dirty=true`）で処理。`DensukeWriteService` が「x」（不参加）として伝助に書き戻す
+- **セッション更新**: `updateSession()` は差分更新方式。既存参加者の `dirty` フラグを保持し、不要な伝助書き込みを防止
 - 団体×月単位でURL管理（`densuke_urls`テーブル、`organization_id` でマルチ団体対応）
 - メンバーID・行IDをキャッシュテーブル（`densuke_member_mappings`, `densuke_row_ids`）に保存
 - スケジューラー・手動同期ともに ① 書き込み → ② 読み取り の順で実行。全団体のURLをループ処理
@@ -2083,7 +2089,7 @@ Entity Layer (JPA Entity)
 - **認証**: `GET /densuke-url` は PLAYER 以上の認証が必要（未認証アクセス不可）
 - **権限**: ADMINは自団体の伝助URLのみ操作可能。SUPER_ADMINは全団体操作可能
 - **未登録者通知**: ADMINは自団体の未登録者のみ通知。SUPER_ADMINは全団体分を通知
-- **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（毎分スケジューラーのDB負荷軽減）
+- **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（スケジューラーのDB負荷軽減）
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し
