@@ -33,4 +33,10 @@ public interface LotteryExecutionRepository extends JpaRepository<LotteryExecuti
      * 指定セッションIDリストの中で抽選が実行されたセッションIDリストを取得
      */
     List<LotteryExecution> findBySessionIdIn(List<Long> sessionIds);
+
+    /**
+     * 指定年月の最新の成功した抽選実行を取得
+     */
+    Optional<LotteryExecution> findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
+            int targetYear, int targetMonth, ExecutionStatus status);
 }

@@ -469,6 +469,19 @@ public class LotteryController {
     }
 
     /**
+     * 抽選結果確定
+     */
+    @PostMapping("/confirm")
+    @RequireRole(Role.SUPER_ADMIN)
+    public ResponseEntity<LotteryExecution> confirmLottery(@Valid @RequestBody LotteryExecutionRequest request,
+                                                            HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        LotteryExecution result = lotteryService.confirmLottery(
+                request.getYear(), request.getMonth(), currentUserId, request.getOrganizationId());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 抽選実行履歴取得
      */
     @GetMapping("/executions")

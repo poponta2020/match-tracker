@@ -55,6 +55,7 @@ public class LotteryService {
     private final SystemSettingService systemSettingService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final DensukeWriteService densukeWriteService;
     private final ObjectMapper objectMapper;
 
     // details JSON 用の内部レコード
@@ -621,6 +622,52 @@ public class LotteryService {
                 practiceParticipantRepository.save(p);
             }
         }
+    }
+
+    /**
+     * 抽選結果を確定する。
+     * confirmedAt/confirmedBy を設定し、伝助への一括書き戻しをトリガーする。
+     */
+    @Transactional
+    public LotteryExecution confirmLottery(int year, int month, Long confirmedBy, Long organizationId) {
+        LotteryExecution execution = lotteryExecutionRepository
+                .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
+                        year, month, ExecutionStatus.SUCCESS)
+                .orElseThrow(() -> new IllegalStateException(
+                        String.format("%d年%d月の成功した抽選実行が見つかりません", year, month)));
+
+        if (execution.getConfirmedAt() != null) {
+            throw new IllegalStateException(
+                    String.format("%d年%d月の抽選結果は既に確定済みです", year, month));
+        }
+
+        execution.setConfirmedAt(JstDateTimeUtil.now());
+        execution.setConfirmedBy(confirmedBy);
+        lotteryExecutionRepository.save(execution);
+
+        log.info("Lottery confirmed for {}-{} by user {}", year, month, confirmedBy);
+
+        // 伝助への一括書き戻し
+        if (organizationId != null) {
+            try {
+                densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+            } catch (Exception e) {
+                log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
+            }
+        }
+
+        return execution;
+    }
+
+    /**
+     * 指定年月の抽選が確定済みかどうかを返す
+     */
+    public boolean isLotteryConfirmed(int year, int month) {
+        return lotteryExecutionRepository
+                .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
+                        year, month, ExecutionStatus.SUCCESS)
+                .map(e -> e.getConfirmedAt() != null)
+                .orElse(false);
     }
 
     private String toJson(Object obj) {

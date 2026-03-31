@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DB マイグレーション + LotteryExecution エンティティ拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選確定フローの基盤。`lottery_executions` テーブルに `confirmed_at`, `confirmed_by` を追加し、エンティティに反映
 - **変更対象ファイル:**
   - `database/` — ALTER TABLE マイグレーションSQL追加
@@ -15,7 +15,7 @@ status: completed
 - **対応Issue:** #191
 
 ### タスク2: DensukeScraper — memberNames の公開
-- [ ] 完了
+- [x] 完了
 - **概要:** スクレイピング結果に全メンバー名リストを含める。×/空白の判定に使用
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/DensukeScraper.java`
@@ -25,7 +25,7 @@ status: completed
 - **対応Issue:** #192
 
 ### タスク3: DensukeWriteService — toJoinValue 変更 + 一括書き戻しメソッド
-- [ ] 完了
+- [x] 完了
 - **概要:** 未登録者の書き戻し値を空白→×に変更。抽選確定時の一括書き戻しメソッドを追加
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/DensukeWriteService.java`
@@ -35,7 +35,7 @@ status: completed
 - **対応Issue:** #193
 
 ### タスク4: PracticeParticipantService — 論理削除化
-- [ ] 完了
+- [x] 完了
 - **概要:** 参加取消時の物理削除を論理削除（CANCELLED + dirty=true）に変更
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/PracticeParticipantService.java`
@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #194
 
 ### タスク5: WaitlistPromotionService — 伝助連携用メソッド追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助からの操作に対応する新メソッドを追加
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/WaitlistPromotionService.java`
