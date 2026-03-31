@@ -321,7 +321,14 @@ public class PracticeParticipantService {
 
     @Transactional
     public void removeParticipantFromMatch(Long sessionId, Integer matchNumber, Long playerId) {
-        practiceParticipantRepository.deleteBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+        List<PracticeParticipant> participants = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+        for (PracticeParticipant p : participants) {
+            p.setStatus(ParticipantStatus.CANCELLED);
+            p.setDirty(true);
+            p.setCancelledAt(JstDateTimeUtil.now());
+        }
+        practiceParticipantRepository.saveAll(participants);
     }
 
     @Transactional(readOnly = true)
