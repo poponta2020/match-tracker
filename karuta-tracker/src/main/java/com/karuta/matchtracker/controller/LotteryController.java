@@ -76,7 +76,7 @@ public class LotteryController {
      */
     @PostMapping("/preview")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<List<LotteryResultDto>> previewLottery(@Valid @RequestBody LotteryExecutionRequest request,
+    public ResponseEntity<Map<String, Object>> previewLottery(@Valid @RequestBody LotteryExecutionRequest request,
                                                                   HttpServletRequest httpRequest) {
         int year = request.getYear();
         int month = request.getMonth();
@@ -101,8 +101,11 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
 
-        List<LotteryResultDto> results = lotteryService.previewLottery(year, month, orgId);
-        return ResponseEntity.ok(results);
+        var preview = lotteryService.previewLottery(year, month, orgId);
+        Map<String, Object> response = new HashMap<>();
+        response.put("results", preview.results());
+        response.put("seed", preview.seed());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -144,7 +147,7 @@ public class LotteryController {
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                year, month, currentUserId, ExecutionType.MANUAL, orgId);
+                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -593,11 +596,12 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
 
-        // 抽選を実行してDBに保存
-        lotteryService.executeLottery(year, month, currentUserId, ExecutionType.MANUAL, orgId);
-
-        // 確定処理（confirmedAt/confirmedBy設定 + 伝助書き戻し）
-        LotteryExecution result = lotteryService.confirmLottery(year, month, currentUserId, orgId);
+        // プレビュー時のシードで抽選実行 + 即確定（同じ結果を再現）
+        Long seed = request.getSeed();
+        if (seed == null) {
+            throw new IllegalStateException("シード値が指定されていません。プレビューを先に実行してください。");
+        }
+        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed);
         return ResponseEntity.ok(result);
     }
 

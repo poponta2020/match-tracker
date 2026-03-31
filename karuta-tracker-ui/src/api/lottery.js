@@ -66,8 +66,8 @@ export const lotteryAPI = {
     apiClient.post('/lottery/rejoin-waitlist', { sessionId, playerId }),
 
   // 抽選結果確定（伝助一括書き戻しトリガー）
-  confirm: (year, month, organizationId) =>
-    apiClient.post('/lottery/confirm', { year, month, organizationId }),
+  confirm: (year, month, organizationId, seed) =>
+    apiClient.post('/lottery/confirm', { year, month, organizationId, seed }),
 
   // 抽選プレビュー（DB保存なし）
   preview: (year, month, organizationId) =>

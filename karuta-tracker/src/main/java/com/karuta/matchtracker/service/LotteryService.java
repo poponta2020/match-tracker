@@ -77,7 +77,7 @@ public class LotteryService {
      * @return 抽選実行履歴
      */
     @Transactional
-    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type, Long organizationId) {
+    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type, Long organizationId, Long seed) {
         log.info("Starting lottery for {}-{} (type: {})", year, month, type);
 
         LotteryExecution execution = LotteryExecution.builder()
@@ -115,9 +115,10 @@ public class LotteryService {
             // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
             Set<Long> monthlyLosers = new HashSet<>();
             List<SessionDetail> sessionDetails = new ArrayList<>();
+            Random random = new Random(seed);
 
             for (PracticeSession session : sessions) {
-                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), true);
+                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), true, random);
                 sessionDetails.add(sessionDetail);
             }
 
@@ -135,9 +136,39 @@ public class LotteryService {
     }
 
     /**
+     * 抽選を実行し、即座に確定する（プレビュー後の確定用）
+     * executeLottery + confirmLottery を1回の抽選実行で行う。
+     */
+    @Transactional
+    public LotteryExecution executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed) {
+        LotteryExecution execution = executeLottery(year, month, executedBy, ExecutionType.MANUAL, organizationId, seed);
+
+        if (execution.getStatus() != ExecutionStatus.SUCCESS) {
+            return execution;
+        }
+
+        execution.setConfirmedAt(JstDateTimeUtil.now());
+        execution.setConfirmedBy(executedBy);
+        lotteryExecutionRepository.save(execution);
+
+        log.info("Lottery executed and confirmed for {}-{} by user {}", year, month, executedBy);
+
+        // 伝助への一括書き戻し
+        if (organizationId != null) {
+            try {
+                densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+            } catch (Exception e) {
+                log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
+            }
+        }
+
+        return execution;
+    }
+
+    /**
      * 1セッション（1日）の全試合を処理する
      */
-    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, boolean saveResults) {
+    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, boolean saveResults, Random random) {
         // セッションに定員が未設定の場合、会場の定員にフォールバック
         if (session.getCapacity() == null && session.getVenueId() != null) {
             venueRepository.findById(session.getVenueId())
@@ -150,9 +181,10 @@ public class LotteryService {
         // このセッション内の落選者を追跡（連鎖落選用）
         Set<Long> sessionLosers = new HashSet<>();
 
-        // このセッションの全PENDING参加者を取得
+        // このセッションの全PENDING参加者を取得（ID順でシード再現性を確保）
         List<PracticeParticipant> allParticipants = practiceParticipantRepository
                 .findBySessionIdAndStatus(session.getId(), ParticipantStatus.PENDING);
+        allParticipants.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
         if (allParticipants.isEmpty()) {
             return new SessionDetail(session.getId(), session.getSessionDate(), List.of());
@@ -180,7 +212,7 @@ public class LotteryService {
             Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
 
             MatchDetail detail = processMatch(session, matchNumber, applicants,
-                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, saveResults);
+                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, saveResults, random);
             matchDetails.add(detail);
 
             prevWaitlistOrder = currentWaitlistOrder;
@@ -199,7 +231,7 @@ public class LotteryService {
                                 Long lotteryId,
                                 Map<Long, Integer> previousMatchWaitlistOrder,
                                 Map<Long, Integer> currentMatchWaitlistOrder,
-                                boolean saveResults) {
+                                boolean saveResults, Random random) {
 
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
@@ -277,18 +309,18 @@ public class LotteryService {
 
             if (priorityApplicants.size() >= prioritySlots && normalReserve > 0) {
                 // 優先枠と一般枠に分けて抽選
-                Collections.shuffle(priorityApplicants);
+                Collections.shuffle(priorityApplicants, random);
                 winners.addAll(priorityApplicants.subList(0, prioritySlots));
                 lotteryLosers.addAll(priorityApplicants.subList(prioritySlots, priorityApplicants.size()));
 
-                Collections.shuffle(normalApplicants);
+                Collections.shuffle(normalApplicants, random);
                 winners.addAll(normalApplicants.subList(0, normalReserve));
                 if (normalApplicants.size() > normalReserve) {
                     lotteryLosers.addAll(normalApplicants.subList(normalReserve, normalApplicants.size()));
                 }
             } else if (priorityApplicants.size() >= capacity) {
                 // 一般枠なし（一般申込者0 or 設定0%）で優先者が定員以上
-                Collections.shuffle(priorityApplicants);
+                Collections.shuffle(priorityApplicants, random);
                 winners.addAll(priorityApplicants.subList(0, capacity));
                 lotteryLosers.addAll(priorityApplicants.subList(capacity, priorityApplicants.size()));
                 lotteryLosers.addAll(normalApplicants);
@@ -297,7 +329,7 @@ public class LotteryService {
                 winners.addAll(priorityApplicants);
                 int remainingSlots = capacity - priorityApplicants.size();
 
-                Collections.shuffle(normalApplicants);
+                Collections.shuffle(normalApplicants, random);
                 winners.addAll(normalApplicants.subList(0, Math.min(remainingSlots, normalApplicants.size())));
                 if (normalApplicants.size() > remainingSlots) {
                     lotteryLosers.addAll(normalApplicants.subList(remainingSlots, normalApplicants.size()));
@@ -333,7 +365,7 @@ public class LotteryService {
         withPrevOrder.sort(Comparator.comparingInt(p -> previousMatchWaitlistOrder.get(p.getPlayerId())));
 
         // 新規落選者はランダム
-        Collections.shuffle(withoutPrevOrder);
+        Collections.shuffle(withoutPrevOrder, random);
 
         // 結合して連番を付与
         List<PracticeParticipant> orderedLosers = new ArrayList<>();
@@ -377,9 +409,15 @@ public class LotteryService {
      * @param organizationId 団体ID（nullの場合は全団体）
      * @return セッションごとの抽選結果プレビュー
      */
+    /**
+     * プレビュー結果とシードを保持するレコード
+     */
+    public record LotteryPreviewResult(List<LotteryResultDto> results, long seed) {}
+
     @Transactional(readOnly = true)
-    public List<LotteryResultDto> previewLottery(int year, int month, Long organizationId) {
-        log.info("Previewing lottery for {}-{} (orgId: {})", year, month, organizationId);
+    public LotteryPreviewResult previewLottery(int year, int month, Long organizationId) {
+        long seed = new Random().nextLong();
+        log.info("Previewing lottery for {}-{} (orgId: {}, seed: {})", year, month, organizationId, seed);
 
         // 対象月のセッションを日付昇順で取得
         List<PracticeSession> sessions;
@@ -394,21 +432,23 @@ public class LotteryService {
                 .collect(Collectors.toList());
 
         if (sessions.isEmpty()) {
-            return List.of();
+            return new LotteryPreviewResult(List.of(), seed);
         }
 
         // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
         Set<Long> monthlyLosers = new HashSet<>();
         // セッションごとに処理された参加者を保持（DTO組み立て用）
         Map<Long, List<PracticeParticipant>> participantsBySession = new LinkedHashMap<>();
+        Random random = new Random(seed);
 
         for (PracticeSession session : sessions) {
             // PENDING参加者を取得
             List<PracticeParticipant> participants = practiceParticipantRepository
                     .findBySessionIdAndStatus(session.getId(), ParticipantStatus.PENDING);
+            participants.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
             // 抽選アルゴリズムを実行（DB保存なし）
-            processSession(session, monthlyLosers, null, false);
+            processSession(session, monthlyLosers, null, false, random);
 
             // 処理後の参加者（ステータスがインメモリで更新済み）を保持
             participantsBySession.put(session.getId(), participants);
@@ -425,7 +465,7 @@ public class LotteryService {
         }
 
         log.info("Lottery preview completed for {}-{}: {} sessions", year, month, results.size());
-        return results;
+        return new LotteryPreviewResult(results, seed);
     }
 
     /**
@@ -612,7 +652,7 @@ public class LotteryService {
 
                 processMatch(session, matchNumber, entry.getValue(),
                         sessionLosers, monthlyLosers, execution.getId(),
-                        inheritedOrder, currentWaitlistOrder, true);
+                        inheritedOrder, currentWaitlistOrder, true, new Random());
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;

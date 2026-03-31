@@ -26,4 +26,9 @@ public class LotteryExecutionRequest {
     private Integer month;
 
     private Long organizationId;
+
+    /**
+     * 抽選シード値（プレビュー時に生成され、確定時に同じ値を送る）
+     */
+    private Long seed;
 }

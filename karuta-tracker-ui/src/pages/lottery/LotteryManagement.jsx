@@ -38,6 +38,7 @@ export default function LotteryManagement() {
   const [processing, setProcessing] = useState(null);
   const [error, setError] = useState(null);
   const [notifyResult, setNotifyResult] = useState(null);
+  const [lotterySeed, setLotterySeed] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(currentPlayer?.organizationId || null);
 
@@ -76,8 +77,10 @@ export default function LotteryManagement() {
     setNotifyResult(null);
     try {
       const res = await lotteryAPI.preview(currentDate.year, currentDate.month, organizationId);
-      setPreviewResults(res.data);
-      if (res.data.length === 0) {
+      const { results, seed } = res.data;
+      setPreviewResults(results);
+      setLotterySeed(seed);
+      if (results.length === 0) {
         setError('対象のセッションがありません');
         setPhase('idle');
       } else {
@@ -99,7 +102,7 @@ export default function LotteryManagement() {
     setProcessing('confirm');
     setError(null);
     try {
-      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId);
+      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed);
       setPhase('confirmed');
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || '確定処理に失敗しました';
