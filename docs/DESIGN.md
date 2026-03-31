@@ -416,9 +416,11 @@ Entity Layer (JPA Entity)
 | details | TEXT | | 処理詳細（JSON形式） |
 | confirmed_at | TIMESTAMP | | 確定日時（NULL = 未確定） |
 | confirmed_by | BIGINT | | 確定者のプレイヤーID（NULL = 未確定） |
+| organization_id | BIGINT | | 団体ID |
 
 **インデックス**:
 - `idx_lottery_target` (target_year, target_month)
+- `idx_lottery_org` (target_year, target_month, organization_id)
 
 ---
 
@@ -1175,8 +1177,8 @@ Entity Layer (JPA Entity)
 締め切りなしモード時: `{ "deadline": null, "noDeadline": true }`
 
 #### POST /api/lottery/execute
-**説明**: 手動抽選実行（月単位）。「締め切りなし」モード時は締め切り前チェックをスキップ
-**権限**: SUPER_ADMIN
+**説明**: 手動抽選実行（月単位）。「締め切りなし」モード時は締め切り前チェックをスキップ。重複チェック・確定チェックは団体単位で行われる
+**権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
 **リクエスト**: `LotteryExecutionRequest`
 ```json
 {
@@ -1302,10 +1304,22 @@ Entity Layer (JPA Entity)
 **リクエスト**: `AdminEditParticipantsRequest`
 
 #### POST /api/lottery/confirm
-**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by` を設定
-**権限**: SUPER_ADMIN
+**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by` を設定。団体単位で確定状態を管理
+**権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
 **リクエスト**: `LotteryExecutionRequest` (year, month, organizationId)
 **レスポンス**: `LotteryExecution`
+
+#### POST /api/lottery/preview
+**説明**: 抽選プレビュー。抽選アルゴリズムを実行するがDBには保存しない。締め切り前チェック・確定済みチェックあり
+**権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
+**リクエスト**: `LotteryExecutionRequest` (year, month, organizationId)
+**レスポンス**: `List<LotteryResultDto>`
+
+#### POST /api/lottery/notify-waitlisted
+**説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信
+**権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
+**リクエスト**: `{ year, month, organizationId }`
+**レスポンス**: `{ inAppCount, lineSent, lineFailed, lineSkipped }`
 
 #### GET /api/lottery/executions?year={year}&month={month}
 **説明**: 抽選実行履歴取得。`confirmedAt` フィールドで確定状態を確認可能
@@ -1564,6 +1578,7 @@ Entity Layer (JPA Entity)
 | LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | チャネル一覧・登録・無効化・強制解除 |
 | LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
 | 伝助管理 | /admin/densuke | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者一括登録（ADMINは自団体のみ、SUPER_ADMINは全団体） |
+| 抽選管理 | /admin/lottery | ADMIN+ | 抽選プレビュー実行→結果確認→確定→通知送信の一連のワークフロー。システム設定へのリンクあり |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
 
@@ -1790,7 +1805,8 @@ Entity Layer (JPA Entity)
 | | 自動マッチング | ○ | ○ | × |
 | | 組み合わせ閲覧 | ○ | ○ | ○ |
 | 会場管理 | 会場CRUD | ○ | ○ | ○ |
-| 抽選 | 月別抽選実行 | ○ | × | × |
+| 抽選 | 月別抽選実行 | ○ | ○（自団体のみ） | × |
+| | 抽選結果確定 | ○ | ○（自団体のみ） | × |
 | | セッション再抽選 | ○ | ○ | × |
 | | 参加者手動編集 | ○ | ○ | × |
 | | 抽選結果閲覧 | ○ | ○ | ○ |

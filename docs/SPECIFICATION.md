@@ -441,6 +441,9 @@ SUPER_ADMIN のみ操作可能。
 | `status` | Enum | `SUCCESS` / `FAILED` / `PARTIAL` |
 | `executedAt` | LocalDateTime | 実行日時 |
 | `details` | Text | 処理詳細 |
+| `confirmedAt` | LocalDateTime | 確定日時（NULL = 未確定） |
+| `confirmedBy` | Long | 確定者のプレイヤーID |
+| `organizationId` | Long | 団体ID |
 
 **Notification（アプリ内通知）:**
 
@@ -530,11 +533,39 @@ SUPER_ADMIN のみ操作可能。
 
 抽選実行後、管理者が結果を確認し「確定」操作を行うまでフェーズ2が維持される。確定時に伝助への一括書き戻し（WON→○、WAITLISTED→△、それ以外→×）がトリガーされる。
 
-- **API**: `POST /api/lottery/confirm`（SUPER_ADMIN権限）
-- **DB**: `lottery_executions.confirmed_at`（確定日時）, `confirmed_by`（確定者ID）
+- **API**: `POST /api/lottery/confirm`（SUPER_ADMIN / ADMIN権限。ADMINは自団体のみ）
+- **DB**: `lottery_executions.confirmed_at`（確定日時）, `confirmed_by`（確定者ID）, `organization_id`（団体ID）
+- 確定状態は団体単位で管理される。団体Aが確定済みでも団体Bは未確定の状態がありうる
 - 確定前は再抽選が可能。確定後はフェーズ3に移行し、伝助との双方向同期が開始される
 
-#### 3.7.9 共通レイアウトの変更
+#### 3.7.9 抽選管理画面
+
+管理者が手動で月次抽選を実行・確認・確定できる画面（`/admin/lottery`）。
+
+**画面構成:**
+- ヘッダー: 画面タイトル「抽選管理」+ 「システム設定」リンクボタン
+- 年月セレクター（デフォルト: 翌月）
+- 「抽選実行」ボタン
+
+**状態遷移:**
+- 未実行（idle）: 操作部のみ表示
+- プレビュー中（preview）: セッション別・試合別の当選/キャンセル待ち一覧 + 「確定」ボタン。DB未保存状態
+- 確定済み（confirmed）: 確定完了メッセージ + 「全員に通知送信」ボタン + 「キャンセル待ちのみ通知送信」ボタン
+
+**API:**
+- `POST /api/lottery/preview`: 抽選プレビュー（DB保存なし）。締め切り前チェック・確定済みチェックあり
+- `POST /api/lottery/confirm`: 抽選確定（DB保存 + 伝助書き戻し）
+- `POST /api/lottery/notify-waitlisted`: キャンセル待ちのみにアプリ内通知 + LINE通知を送信
+
+**バリデーション:**
+- 締め切り前は抽選実行不可（「締め切りなし」モードの場合はいつでも実行可能）
+- 同一月に既に確定済みの抽選がある場合はエラー
+- ADMINは自団体のセッションのみ対象
+
+**SettingsPageの変更:**
+- グリッドから「システム設定」を削除し、「抽選管理」を追加（Dicesアイコン、ADMIN以上に表示）
+
+#### 3.7.10 共通レイアウトの変更
 
 `Layout.jsx` にヘッダーバーを追加:
 - ページタイトル表示
@@ -1086,6 +1117,9 @@ venues ──< venue_match_schedules (venueId)
 | executed_at | TIMESTAMP | NOT NULL | 実行日時 |
 | status | VARCHAR | NOT NULL | SUCCESS/FAILED/PARTIAL |
 | details | TEXT | — | 処理詳細 |
+| confirmed_at | TIMESTAMP | — | 確定日時（NULL = 未確定） |
+| confirmed_by | BIGINT | — | 確定者のプレイヤーID |
+| organization_id | BIGINT | — | 団体ID |
 
 #### notifications
 
@@ -1366,7 +1400,7 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| POST | `/execute` | SUPER_ADMIN | 手動抽選実行（年月指定） |
+| POST | `/execute` | ADMIN+ | 手動抽選実行（年月指定、ADMINは自団体のみ） |
 | POST | `/re-execute/{sessionId}` | ADMIN+ | セッション再抽選 |
 | GET | `/results?year=&month=` | ALL | 月別抽選結果取得 |
 | GET | `/results/{sessionId}` | ALL | セッション別抽選結果 |
@@ -1375,6 +1409,7 @@ UNIQUE制約: (player_id, organization_id)
 | POST | `/respond-offer` | ALL | 繰り上げへの応答（participantId, accept） |
 | GET | `/waitlist-status?playerId=` | ALL | キャンセル待ち状況 |
 | PUT | `/admin/edit-participants` | ADMIN+ | 管理者による手動編集 |
+| POST | `/confirm` | ADMIN+ | 抽選結果確定（ADMINは自団体のみ） |
 | GET | `/executions?year=&month=` | ALL | 抽選実行履歴 |
 
 ### 7.12 通知 (`/api/notifications`)
