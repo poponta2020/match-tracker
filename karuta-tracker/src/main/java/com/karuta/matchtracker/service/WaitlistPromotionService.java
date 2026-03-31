@@ -33,6 +33,7 @@ public class WaitlistPromotionService {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final NotificationService notificationService;
     private final LineNotificationService lineNotificationService;
+    private final DensukeSyncService densukeSyncService;
 
     /**
      * 当選者が参加をキャンセルする（理由なし・後方互換）
@@ -165,10 +166,12 @@ public class WaitlistPromotionService {
             PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                     .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
             promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+            densukeSyncService.triggerWriteAsync();
             return;
         }
 
         practiceParticipantRepository.save(participant);
+        densukeSyncService.triggerWriteAsync();
     }
 
     /**
@@ -208,6 +211,7 @@ public class WaitlistPromotionService {
                     playerId, sessionId, p.getMatchNumber(), oldNumber);
         }
 
+        densukeSyncService.triggerWriteAsync();
         return waitlisted.size();
     }
 

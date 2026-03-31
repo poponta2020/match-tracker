@@ -51,6 +51,7 @@ public class PracticeSessionService {
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
     private final OrganizationService organizationService;
     private final DensukeUrlRepository densukeUrlRepository;
+    private final DensukeSyncService densukeSyncService;
 
     /**
      * IDで練習日を取得
@@ -430,6 +431,7 @@ public class PracticeSessionService {
         }
 
         log.info("Successfully updated practice session id: {}", id);
+        densukeSyncService.triggerWriteAsync();
         return enrichSessionWithParticipants(updated);
     }
 

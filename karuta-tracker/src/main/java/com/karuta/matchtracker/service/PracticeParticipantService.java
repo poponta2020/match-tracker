@@ -10,7 +10,9 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +43,8 @@ public class PracticeParticipantService {
     private final PlayerRepository playerRepository;
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final DensukeSyncService densukeSyncService;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     @Transactional
     public void setMatchParticipants(Long sessionId, Integer matchNumber, List<Long> playerIds) {
@@ -78,6 +83,7 @@ public class PracticeParticipantService {
 
         log.info("Successfully set {} participants for session: {}, match: {}",
                 playerIds != null ? playerIds.size() : 0, sessionId, matchNumber);
+        densukeSyncService.triggerWriteAsync();
     }
 
     @Transactional(readOnly = true)
@@ -129,6 +135,7 @@ public class PracticeParticipantService {
             // 北大: 締切後はWON/WAITLISTED
             registerAfterDeadline(request);
         }
+        densukeSyncService.triggerWriteAsync();
     }
 
     /**
@@ -317,6 +324,7 @@ public class PracticeParticipantService {
         }
         practiceParticipantRepository.save(PracticeParticipant.builder()
                 .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber).dirty(true).build());
+        densukeSyncService.triggerWriteAsync();
     }
 
     @Transactional
@@ -329,6 +337,7 @@ public class PracticeParticipantService {
             p.setCancelledAt(JstDateTimeUtil.now());
         }
         practiceParticipantRepository.saveAll(participants);
+        densukeSyncService.triggerWriteAsync();
     }
 
     @Transactional(readOnly = true)
@@ -362,6 +371,100 @@ public class PracticeParticipantService {
         Map<Long, Integer> counts = new HashMap<>();
         allParticipants.forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
         Map<Long, String> names = allPlayers.stream().collect(Collectors.toMap(Player::getId, Player::getName));
+
+        return counts.entrySet().stream()
+                .map(e -> ParticipationRateDto.builder()
+                        .playerId(e.getKey()).playerName(names.getOrDefault(e.getKey(), "不明"))
+                        .participatedMatches(e.getValue()).totalScheduledMatches(totalScheduledMatches)
+                        .rate((double) e.getValue() / totalScheduledMatches).build())
+                .collect(Collectors.toList());
+    }
+
+    // === 団体フィルタ対応メソッド ===
+
+    @Transactional(readOnly = true)
+    public List<ParticipationRateDto> getParticipationRateTop3(int year, int month, Long organizationId) {
+        return computeAllParticipationRates(year, month, organizationId).stream()
+                .sorted(java.util.Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
+                        .thenComparing(java.util.Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
+                .limit(3).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ParticipationRateDto> getParticipationRateTop3(int year, int month, List<Long> organizationIds) {
+        return computeAllParticipationRates(year, month, organizationIds).stream()
+                .sorted(java.util.Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
+                        .thenComparing(java.util.Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
+                .limit(3).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public ParticipationRateDto getPlayerParticipationRate(Long playerId, int year, int month, Long organizationId) {
+        return computeAllParticipationRates(year, month, organizationId).stream()
+                .filter(r -> r.getPlayerId().equals(playerId)).findFirst().orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public ParticipationRateDto getPlayerParticipationRate(Long playerId, int year, int month, List<Long> organizationIds) {
+        return computeAllParticipationRates(year, month, organizationIds).stream()
+                .filter(r -> r.getPlayerId().equals(playerId)).findFirst().orElse(null);
+    }
+
+    private List<ParticipationRateDto> computeAllParticipationRates(int year, int month, Long organizationId) {
+        LocalDate today = JstDateTimeUtil.today();
+        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId).stream()
+                .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
+        if (sessions.isEmpty()) return List.of();
+
+        int totalScheduledMatches = sessions.stream()
+                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
+        if (totalScheduledMatches == 0) return List.of();
+
+        Set<Long> memberPlayerIds = playerOrganizationRepository.findByOrganizationId(organizationId).stream()
+                .map(PlayerOrganization::getPlayerId).collect(Collectors.toSet());
+
+        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
+        Map<Long, String> names = playerRepository.findAllActive().stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName));
+
+        Map<Long, Integer> counts = new HashMap<>();
+        allParticipants.stream()
+                .filter(pp -> memberPlayerIds.contains(pp.getPlayerId()))
+                .forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
+
+        return counts.entrySet().stream()
+                .map(e -> ParticipationRateDto.builder()
+                        .playerId(e.getKey()).playerName(names.getOrDefault(e.getKey(), "不明"))
+                        .participatedMatches(e.getValue()).totalScheduledMatches(totalScheduledMatches)
+                        .rate((double) e.getValue() / totalScheduledMatches).build())
+                .collect(Collectors.toList());
+    }
+
+    private List<ParticipationRateDto> computeAllParticipationRates(int year, int month, List<Long> organizationIds) {
+        LocalDate today = JstDateTimeUtil.today();
+        List<PracticeSession> sessions = practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(organizationIds, year, month).stream()
+                .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
+        if (sessions.isEmpty()) return List.of();
+
+        int totalScheduledMatches = sessions.stream()
+                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
+        if (totalScheduledMatches == 0) return List.of();
+
+        Set<Long> memberPlayerIds = organizationIds.stream()
+                .flatMap(orgId -> playerOrganizationRepository.findByOrganizationId(orgId).stream())
+                .map(PlayerOrganization::getPlayerId)
+                .collect(Collectors.toSet());
+
+        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
+        Map<Long, String> names = playerRepository.findAllActive().stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName));
+
+        Map<Long, Integer> counts = new HashMap<>();
+        allParticipants.stream()
+                .filter(pp -> memberPlayerIds.contains(pp.getPlayerId()))
+                .forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
 
         return counts.entrySet().stream()
                 .map(e -> ParticipationRateDto.builder()
