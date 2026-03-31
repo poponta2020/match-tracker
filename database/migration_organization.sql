@@ -22,7 +22,7 @@ VALUES ('wasura', 'わすらもち会', '#22c55e', 'SAME_DAY')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO organizations (code, name, color, deadline_type)
-VALUES ('hokudai', '北海道大学かるた会', '#ef4444', 'MONTHLY')
+VALUES ('hokudai', '北海道大学かるた会', '#9b2335', 'MONTHLY')
 ON CONFLICT (code) DO NOTHING;
 
 -- ============================================

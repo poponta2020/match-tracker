@@ -462,16 +462,14 @@ const PracticeList = () => {
                     >
                       {day && (
                         <div className="text-center flex flex-col items-center">
-                          <div className={`text-sm leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-6 h-6 rounded-full flex items-center justify-center mx-auto' : ''}`}>
+                          <div className={`text-sm leading-tight ${today ? 'font-bold bg-[#4a6b5a] text-white w-6 h-6 rounded-full flex items-center justify-center mx-auto' : 'font-light'}`}>
                             {day}
                           </div>
                           {daySessions.map((session) => session.venueName && (() => {
-                            const orgName = orgMap[session.organizationId]?.name;
-                            const venueStyle = orgName === 'わすらもち会'
-                              ? { color: '#2d5a3f', fontWeight: 'bold' }
-                              : orgName === '北大かるた会'
-                                ? { color: '#8b2252', fontWeight: 'bold' }
-                                : { color: '#6b7280' };
+                            const orgColor = orgMap[session.organizationId]?.color;
+                            const venueStyle = orgColor
+                              ? { color: orgColor, fontWeight: 800 }
+                              : { color: '#6b7280' };
                             const parts = session.venueName.split('・');
                             return (
                               <div key={session.id} className="mt-0.5 text-[10px] leading-tight text-center" style={venueStyle}>
