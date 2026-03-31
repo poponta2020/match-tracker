@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #202
 
 ### タスク3: ByeActivityService に PracticeParticipant 評価ロジックを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `create()` / `createBatch()` / `update()` の保存後に、同日・同選手の全 `ByeActivity` を確認し、全て ABSENT なら `PracticeParticipant`（`matchNumber = null`）を削除、そうでなければ復元するロジックを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/ByeActivityService.java` — 以下を実装:
@@ -36,7 +36,7 @@ status: completed
 - **対応Issue:** #203
 
 ### タスク4: フロントエンド — アクティビティ選択肢に「休み」を追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 抜け番アクティビティのドロップダウンに「休み」を追加する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/BulkResultInput.jsx` — `ACTIVITY_TYPES` 定数に `{ value: 'ABSENT', label: '休み' }` を追加
@@ -46,7 +46,7 @@ status: completed
 - **対応Issue:** #204
 
 ### タスク5: フロントエンド — MatchResultsView に「休み」表示対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合結果表示画面で「休み」アクティビティのアイコンを表示できるようにする
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchResultsView.jsx` — `ACTIVITY_ICONS` マッピングに `ABSENT` 用アイコンを追加
