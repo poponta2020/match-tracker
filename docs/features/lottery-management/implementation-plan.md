@@ -34,7 +34,7 @@ status: completed
 - **依存タスク:** なし
 
 ### タスク4: フロントエンド — 抽選管理画面作成
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選管理画面コンポーネントを新規作成する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/lottery/LotteryManagement.jsx` — 新規作成
