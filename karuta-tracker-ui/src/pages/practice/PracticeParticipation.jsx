@@ -215,6 +215,23 @@ const PracticeParticipation = () => {
     return sessionDate < today;
   };
 
+  // 団体略称を取得
+  const getOrgShortName = (session) => {
+    const org = orgMap[session.organizationId];
+    if (!org) return '';
+    const shortNameMap = {
+      'wasura': 'わすら',
+      'hokudai': '北大',
+    };
+    return shortNameMap[org.code] || org.name.substring(0, 2);
+  };
+
+  // 団体カラーを取得
+  const getOrgColor = (session) => {
+    const org = orgMap[session.organizationId];
+    return org?.color || '#666666';
+  };
+
   // 場所名を省略
   const abbreviateVenue = (name) => {
     if (!name) return '-';
@@ -328,14 +345,22 @@ const PracticeParticipation = () => {
 
                     return (
                       <tr key={session.id} className="hover:bg-[#f0ebe3]">
-                        {/* 日付 */}
+                        {/* 日付 + 団体名 */}
                         <td className="px-2 py-3">
-                          <span className="text-sm text-gray-900 whitespace-nowrap">
-                            {new Date(session.sessionDate).toLocaleDateString(
-                              'ja-JP',
-                              { month: 'numeric', day: 'numeric', weekday: 'short' }
-                            )}
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm text-gray-900 whitespace-nowrap">
+                              {new Date(session.sessionDate).toLocaleDateString(
+                                'ja-JP',
+                                { month: 'numeric', day: 'numeric', weekday: 'short' }
+                              )}
+                            </span>
+                            <span
+                              className="text-[10px] font-bold whitespace-nowrap"
+                              style={{ color: getOrgColor(session) }}
+                            >
+                              {getOrgShortName(session)}
+                            </span>
+                          </div>
                         </td>
 
                         {/* 場所（省略表示） */}
