@@ -31,6 +31,7 @@ import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -373,25 +374,58 @@ public class PracticeSessionService {
 
         PracticeSession updated = practiceSessionRepository.save(session);
 
-        // 既存の参加者を削除して新しい参加者を登録
-        practiceParticipantRepository.deleteBySessionId(id);
-        practiceParticipantRepository.flush(); // 削除を即座に反映
+        // 差分更新: 既存参加者のdirty値を保持しつつ、参加者の追加・削除を行う
+        int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
+        List<PracticeParticipant> existingParticipants = practiceParticipantRepository.findBySessionId(id);
+        Set<Long> requestedPlayerIds = new java.util.HashSet<>(participantIds);
+        Set<Long> existingPlayerIds = existingParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .collect(java.util.stream.Collectors.toSet());
 
-        // 管理者が登録した参加者は全試合に参加するものとして登録
-        if (!participantIds.isEmpty()) {
-            int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
-            List<PracticeParticipant> newParticipants = new java.util.ArrayList<>();
+        // 削除分: リクエストに含まれないプレイヤー → CANCELLED + dirty=true
+        for (PracticeParticipant p : existingParticipants) {
+            if (!requestedPlayerIds.contains(p.getPlayerId())) {
+                p.setStatus(ParticipantStatus.CANCELLED);
+                p.setDirty(true);
+                p.setCancelledAt(JstDateTimeUtil.now());
+            }
+        }
 
-            for (Long playerId : participantIds) {
-                for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
-                    newParticipants.add(PracticeParticipant.builder()
-                            .sessionId(id)
-                            .playerId(playerId)
-                            .matchNumber(matchNumber)
-                            .build());
+        // 継続分: totalMatches変更への対応
+        for (PracticeParticipant p : existingParticipants) {
+            if (requestedPlayerIds.contains(p.getPlayerId()) && p.getStatus() != ParticipantStatus.CANCELLED) {
+                if (p.getMatchNumber() != null && p.getMatchNumber() > totalMatches) {
+                    // 試合数が減った場合: 超過分を削除
+                    practiceParticipantRepository.delete(p);
                 }
             }
+        }
 
+        // 新規追加分 + 継続分の試合数増加分
+        List<PracticeParticipant> newParticipants = new java.util.ArrayList<>();
+        for (Long playerId : participantIds) {
+            if (!existingPlayerIds.contains(playerId)) {
+                // 新規追加: 全試合分を dirty=true で作成
+                for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+                    newParticipants.add(PracticeParticipant.builder()
+                            .sessionId(id).playerId(playerId).matchNumber(matchNumber).dirty(true).build());
+                }
+            } else {
+                // 継続: 試合数が増えた場合、新しい試合番号分を追加
+                Set<Integer> existingMatchNumbers = existingParticipants.stream()
+                        .filter(p -> p.getPlayerId().equals(playerId) && p.getStatus() != ParticipantStatus.CANCELLED)
+                        .map(PracticeParticipant::getMatchNumber)
+                        .collect(java.util.stream.Collectors.toSet());
+                for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+                    if (!existingMatchNumbers.contains(matchNumber)) {
+                        newParticipants.add(PracticeParticipant.builder()
+                                .sessionId(id).playerId(playerId).matchNumber(matchNumber).dirty(true).build());
+                    }
+                }
+            }
+        }
+
+        if (!newParticipants.isEmpty()) {
             practiceParticipantRepository.saveAll(newParticipants);
         }
 
