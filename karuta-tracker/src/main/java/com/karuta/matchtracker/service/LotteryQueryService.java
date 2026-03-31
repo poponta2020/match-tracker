@@ -22,9 +22,18 @@ public class LotteryQueryService {
      */
     public boolean isLotteryConfirmed(int year, int month, Long organizationId) {
         if (organizationId != null) {
-            return lotteryExecutionRepository
+            // 団体指定のレコード、または全団体対象（organization_id = NULL）のレコードを確認
+            boolean orgSpecific = lotteryExecutionRepository
                     .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
                             year, month, organizationId, ExecutionStatus.SUCCESS)
+                    .map(e -> e.getConfirmedAt() != null)
+                    .orElse(false);
+            if (orgSpecific) return true;
+
+            // 全団体対象のレコードもチェック
+            return lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
+                            year, month, ExecutionStatus.SUCCESS)
                     .map(e -> e.getConfirmedAt() != null)
                     .orElse(false);
         }

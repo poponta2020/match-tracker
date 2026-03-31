@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import { organizationAPI } from '../../api/organizations';
+import { isSuperAdmin } from '../../utils/auth';
 import { ArrowLeft, Settings, Play, Check, Bell, BellRing } from 'lucide-react';
 
 /**
@@ -36,8 +38,21 @@ export default function LotteryManagement() {
   const [processing, setProcessing] = useState(null);
   const [error, setError] = useState(null);
   const [notifyResult, setNotifyResult] = useState(null);
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(currentPlayer?.organizationId || null);
 
-  const organizationId = currentPlayer?.organizationId || null;
+  useEffect(() => {
+    if (isSuperAdmin()) {
+      organizationAPI.getAll().then(res => {
+        setOrganizations(res.data);
+        if (!selectedOrgId && res.data.length > 0) {
+          setSelectedOrgId(res.data[0].id);
+        }
+      });
+    }
+  }, []);
+
+  const organizationId = isSuperAdmin() ? selectedOrgId : (currentPlayer?.organizationId || null);
 
   const changeMonth = (delta) => {
     setCurrentDate((prev) => {
@@ -151,6 +166,27 @@ export default function LotteryManagement() {
         <span className="text-lg font-semibold text-[#374151]">{currentDate.year}年{currentDate.month}月</span>
         <button onClick={() => changeMonth(1)} className="p-2 rounded hover:bg-gray-100 text-[#374151]">&gt;</button>
       </div>
+
+      {/* 団体セレクタ（SUPER_ADMIN用） */}
+      {isSuperAdmin() && organizations.length > 1 && (
+        <div className="flex justify-center mb-6">
+          <select
+            value={selectedOrgId || ''}
+            onChange={(e) => {
+              setSelectedOrgId(Number(e.target.value));
+              setPhase('idle');
+              setPreviewResults([]);
+              setError(null);
+              setNotifyResult(null);
+            }}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-[#374151]"
+          >
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* エラー表示 */}
       {error && (

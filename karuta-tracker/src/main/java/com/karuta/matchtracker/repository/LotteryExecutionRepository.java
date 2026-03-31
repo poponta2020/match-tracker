@@ -51,4 +51,10 @@ public interface LotteryExecutionRepository extends JpaRepository<LotteryExecuti
      */
     Optional<LotteryExecution> findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
             int targetYear, int targetMonth, Long organizationId, ExecutionStatus status);
+
+    /**
+     * 指定年月の全団体対象（organization_id IS NULL）の最新の成功した抽選実行を取得
+     */
+    Optional<LotteryExecution> findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
+            int targetYear, int targetMonth, ExecutionStatus status);
 }
