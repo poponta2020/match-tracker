@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
@@ -21,6 +22,8 @@ public class DensukeSyncService {
     private final DensukeWriteService densukeWriteService;
     private final DensukeImportService densukeImportService;
     private final DensukeUrlRepository densukeUrlRepository;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final LotteryService lotteryService;
 
     /**
      * 特定団体の伝助同期（書き込み + 読み取り）
@@ -60,19 +63,32 @@ public class DensukeSyncService {
     private void syncForMonth(int year, int month) {
         List<DensukeUrl> densukeUrls = densukeUrlRepository.findByYearAndMonth(year, month);
         for (DensukeUrl densukeUrl : densukeUrls) {
+            Long orgId = densukeUrl.getOrganizationId();
+
+            // MONTHLY型でフェーズ2（締切後・抽選確定前）の場合、インポートをスキップ
+            // （書き戻しは writeToDensuke() で既に実行済み）
+            DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(orgId);
+            if (deadlineType != DeadlineType.SAME_DAY
+                    && lotteryDeadlineHelper.isAfterDeadline(year, month, orgId)
+                    && !lotteryService.isLotteryConfirmed(year, month)) {
+                log.debug("Skipping import for {}/{} (orgId={}): Phase 2 (after deadline, before lottery confirmation)",
+                        year, month, orgId);
+                continue;
+            }
+
             try {
                 var result = densukeImportService.importFromDensuke(
                         densukeUrl.getUrl(), null,
-                        DensukeImportService.SYSTEM_USER_ID,
-                        densukeUrl.getOrganizationId());
-                if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0) {
-                    log.info("Sync {}/{} (orgId={}): {} sessions created, {} participants registered",
-                            year, month, densukeUrl.getOrganizationId(),
-                            result.getCreatedSessionCount(), result.getRegisteredCount());
+                        DensukeImportService.SYSTEM_USER_ID, orgId);
+                if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0
+                        || result.getRemovedCount() > 0) {
+                    log.info("Sync {}/{} (orgId={}): {} sessions created, {} registered, {} removed",
+                            year, month, orgId,
+                            result.getCreatedSessionCount(), result.getRegisteredCount(),
+                            result.getRemovedCount());
                 }
             } catch (Exception e) {
-                log.error("Sync failed for {}/{} (orgId={})",
-                        year, month, densukeUrl.getOrganizationId(), e);
+                log.error("Sync failed for {}/{} (orgId={})", year, month, orgId, e);
             }
         }
     }

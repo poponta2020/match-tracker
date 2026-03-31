@@ -70,7 +70,7 @@ status: completed
 - **対応Issue:** #196
 
 ### タスク7: DensukeImportService — フェーズ別インポートロジック
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助→アプリのインポートをフェーズ別に分岐。○/△/×の全パターンを処理。本機能の中核
 - **変更対象ファイル:**
   - `karuta-tracker/src/.../service/DensukeImportService.java` — ほぼ全面書き換え
