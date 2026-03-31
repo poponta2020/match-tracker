@@ -10,6 +10,7 @@ import {
   Search,
   Filter,
   X,
+  StickyNote,
 } from 'lucide-react';
 
 const MatchList = () => {
@@ -459,6 +460,14 @@ const MatchList = () => {
                     >
                       {match.opponentName}
                     </button>
+                    {!isOtherPlayer && match.myPersonalNotes && (
+                      <StickyNote className="w-3.5 h-3.5 text-[#9ca3af] flex-shrink-0 ml-1" />
+                    )}
+                    {!isOtherPlayer && match.myOtetsukiCount != null && (
+                      <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
+                        手{match.myOtetsukiCount}
+                      </span>
+                    )}
                     <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
                       {getResultDisplay(match.result, match.scoreDifference)}
                     </span>

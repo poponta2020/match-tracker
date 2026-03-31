@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -106,6 +107,7 @@ const MatchResultsView = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentPlayer } = useAuth();
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get('date');
 
@@ -557,6 +559,17 @@ const MatchResultsView = () => {
                       {pairing.player2Name}
                     </Link>
                   </div>
+                  {/* 自分の試合のお手付き・メモ表示 */}
+                  {match && currentPlayer && (match.player1Id === currentPlayer.id || match.player2Id === currentPlayer.id) && (match.myOtetsukiCount != null || match.myPersonalNotes) && (
+                    <div className="mt-1 flex items-center gap-3 justify-center text-xs text-[#9ca3af]">
+                      {match.myOtetsukiCount != null && (
+                        <span>お手付き: {match.myOtetsukiCount}回</span>
+                      )}
+                      {match.myPersonalNotes && (
+                        <span className="truncate max-w-[200px]">{match.myPersonalNotes}</span>
+                      )}
+                    </div>
+                  )}
                 ) : (
                   // 未入力: A vs B
                   <div className="flex items-center text-lg">

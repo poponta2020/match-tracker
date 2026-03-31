@@ -193,10 +193,20 @@ const MatchDetail = () => {
           </div>
         </div>
 
-        {match.notes && (
-          <div className="pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600 mb-2">メモ</p>
-            <p className="text-gray-900 whitespace-pre-wrap">{match.notes}</p>
+        {(match.myOtetsukiCount != null || match.myPersonalNotes) && (
+          <div className="pt-4 border-t border-gray-200 space-y-3">
+            {match.myOtetsukiCount != null && (
+              <div>
+                <p className="text-sm text-gray-600 mb-1">お手付き回数</p>
+                <p className="text-gray-900">{match.myOtetsukiCount} 回</p>
+              </div>
+            )}
+            {match.myPersonalNotes && (
+              <div>
+                <p className="text-sm text-gray-600 mb-1">メモ</p>
+                <p className="text-gray-900 whitespace-pre-wrap">{match.myPersonalNotes}</p>
+              </div>
+            )}
           </div>
         )}
 
