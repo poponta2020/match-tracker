@@ -57,6 +57,7 @@ public class LotteryService {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final DensukeWriteService densukeWriteService;
     private final ObjectMapper objectMapper;
+    private final LotteryQueryService lotteryQueryService;
 
     // details JSON 用の内部レコード
     record LotteryDetails(List<SessionDetail> sessions) {}
@@ -813,18 +814,7 @@ public class LotteryService {
      * 指定年月・団体の抽選が確定済みかどうかを返す
      */
     public boolean isLotteryConfirmed(int year, int month, Long organizationId) {
-        if (organizationId != null) {
-            return lotteryExecutionRepository
-                    .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
-                            year, month, organizationId, ExecutionStatus.SUCCESS)
-                    .map(e -> e.getConfirmedAt() != null)
-                    .orElse(false);
-        }
-        return lotteryExecutionRepository
-                .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
-                        year, month, ExecutionStatus.SUCCESS)
-                .map(e -> e.getConfirmedAt() != null)
-                .orElse(false);
+        return lotteryQueryService.isLotteryConfirmed(year, month, organizationId);
     }
 
     private String toJson(Object obj) {

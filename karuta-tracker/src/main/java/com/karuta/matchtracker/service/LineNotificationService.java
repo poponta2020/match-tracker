@@ -9,7 +9,6 @@ import com.karuta.matchtracker.entity.LineMessageLog.MessageStatus;
 import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +34,7 @@ public class LineNotificationService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
-    private final LotteryService lotteryService;
+    private final LotteryQueryService lotteryQueryService;
 
     public LineNotificationService(
             LineChannelRepository lineChannelRepository,
@@ -46,7 +45,7 @@ public class LineNotificationService {
             PracticeSessionRepository practiceSessionRepository,
             PracticeParticipantRepository practiceParticipantRepository,
             PlayerOrganizationRepository playerOrganizationRepository,
-            @Lazy LotteryService lotteryService) {
+            LotteryQueryService lotteryQueryService) {
         this.lineChannelRepository = lineChannelRepository;
         this.lineChannelAssignmentRepository = lineChannelAssignmentRepository;
         this.lineNotificationPreferenceRepository = lineNotificationPreferenceRepository;
@@ -55,7 +54,7 @@ public class LineNotificationService {
         this.practiceSessionRepository = practiceSessionRepository;
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.playerOrganizationRepository = playerOrganizationRepository;
-        this.lotteryService = lotteryService;
+        this.lotteryQueryService = lotteryQueryService;
     }
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
@@ -484,7 +483,7 @@ public class LineNotificationService {
                     if (session == null) return false;
                     Long orgId = session.getOrganizationId();
                     return confirmedByOrg.computeIfAbsent(orgId,
-                            id -> lotteryService.isLotteryConfirmed(year, month, id));
+                            id -> lotteryQueryService.isLotteryConfirmed(year, month, id));
                 })
                 .collect(Collectors.toList());
 
