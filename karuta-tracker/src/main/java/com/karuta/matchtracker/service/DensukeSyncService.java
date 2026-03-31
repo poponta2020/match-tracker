@@ -70,7 +70,7 @@ public class DensukeSyncService {
             DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(orgId);
             if (deadlineType != DeadlineType.SAME_DAY
                     && lotteryDeadlineHelper.isAfterDeadline(year, month, orgId)
-                    && !lotteryService.isLotteryConfirmed(year, month)) {
+                    && !lotteryService.isLotteryConfirmed(year, month, orgId)) {
                 log.debug("Skipping import for {}/{} (orgId={}): Phase 2 (after deadline, before lottery confirmation)",
                         year, month, orgId);
                 continue;

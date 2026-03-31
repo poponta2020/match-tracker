@@ -20,9 +20,15 @@ public interface LotteryExecutionRepository extends JpaRepository<LotteryExecuti
     List<LotteryExecution> findByTargetYearAndTargetMonth(int targetYear, int targetMonth);
 
     /**
-     * 指定年月の成功した自動抽選が存在するか確認
+     * 指定年月の成功した抽選が存在するか確認（団体指定なし）
      */
     boolean existsByTargetYearAndTargetMonthAndStatus(int targetYear, int targetMonth, ExecutionStatus status);
+
+    /**
+     * 指定年月・団体の成功した抽選が存在するか確認
+     */
+    boolean existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+            int targetYear, int targetMonth, Long organizationId, ExecutionStatus status);
 
     /**
      * 指定セッションの最新抽選実行を取得
@@ -35,8 +41,14 @@ public interface LotteryExecutionRepository extends JpaRepository<LotteryExecuti
     List<LotteryExecution> findBySessionIdIn(List<Long> sessionIds);
 
     /**
-     * 指定年月の最新の成功した抽選実行を取得
+     * 指定年月の最新の成功した抽選実行を取得（団体指定なし）
      */
     Optional<LotteryExecution> findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
             int targetYear, int targetMonth, ExecutionStatus status);
+
+    /**
+     * 指定年月・団体の最新の成功した抽選実行を取得
+     */
+    Optional<LotteryExecution> findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+            int targetYear, int targetMonth, Long organizationId, ExecutionStatus status);
 }

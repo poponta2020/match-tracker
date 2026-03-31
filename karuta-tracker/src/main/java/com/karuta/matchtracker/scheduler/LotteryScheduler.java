@@ -80,8 +80,11 @@ public class LotteryScheduler {
     }
 
     private void executeLotteryIfNotDone(int year, int month, Long organizationId) {
-        boolean alreadyExecuted = lotteryExecutionRepository
-                .existsByTargetYearAndTargetMonthAndStatus(year, month, ExecutionStatus.SUCCESS);
+        boolean alreadyExecuted = organizationId != null
+                ? lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                        year, month, organizationId, ExecutionStatus.SUCCESS)
+                : lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                        year, month, ExecutionStatus.SUCCESS);
 
         if (alreadyExecuted) {
             log.debug("Lottery for {}-{} already executed, skipping", year, month);

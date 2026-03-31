@@ -86,6 +86,7 @@ public class LotteryService {
                 .executedBy(executedBy)
                 .executedAt(JstDateTimeUtil.now())
                 .status(ExecutionStatus.SUCCESS)
+                .organizationId(organizationId)
                 .build();
 
         // IDを確保するために先にsave（details は処理後に更新して再save）
@@ -770,11 +771,20 @@ public class LotteryService {
      */
     @Transactional
     public LotteryExecution confirmLottery(int year, int month, Long confirmedBy, Long organizationId) {
-        LotteryExecution execution = lotteryExecutionRepository
-                .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
-                        year, month, ExecutionStatus.SUCCESS)
-                .orElseThrow(() -> new IllegalStateException(
-                        String.format("%d年%d月の成功した抽選実行が見つかりません", year, month)));
+        LotteryExecution execution;
+        if (organizationId != null) {
+            execution = lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                            year, month, organizationId, ExecutionStatus.SUCCESS)
+                    .orElseThrow(() -> new IllegalStateException(
+                            String.format("%d年%d月の成功した抽選実行が見つかりません", year, month)));
+        } else {
+            execution = lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
+                            year, month, ExecutionStatus.SUCCESS)
+                    .orElseThrow(() -> new IllegalStateException(
+                            String.format("%d年%d月の成功した抽選実行が見つかりません", year, month)));
+        }
 
         if (execution.getConfirmedAt() != null) {
             throw new IllegalStateException(
@@ -800,9 +810,16 @@ public class LotteryService {
     }
 
     /**
-     * 指定年月の抽選が確定済みかどうかを返す
+     * 指定年月・団体の抽選が確定済みかどうかを返す
      */
-    public boolean isLotteryConfirmed(int year, int month) {
+    public boolean isLotteryConfirmed(int year, int month, Long organizationId) {
+        if (organizationId != null) {
+            return lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                            year, month, organizationId, ExecutionStatus.SUCCESS)
+                    .map(e -> e.getConfirmedAt() != null)
+                    .orElse(false);
+        }
         return lotteryExecutionRepository
                 .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
                         year, month, ExecutionStatus.SUCCESS)

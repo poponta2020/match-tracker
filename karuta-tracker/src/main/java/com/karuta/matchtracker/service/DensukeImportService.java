@@ -145,7 +145,7 @@ public class DensukeImportService {
         if (lotteryDeadlineHelper.isBeforeDeadline(year, month, organizationId)) {
             return ImportPhase.PHASE1;
         }
-        if (lotteryService.isLotteryConfirmed(year, month)) {
+        if (lotteryService.isLotteryConfirmed(year, month, organizationId)) {
             return ImportPhase.PHASE3;
         }
         return ImportPhase.PHASE2;

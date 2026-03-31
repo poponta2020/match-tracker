@@ -65,6 +65,10 @@ public class LotteryExecution {
     @Column(name = "confirmed_by")
     private Long confirmedBy;
 
+    /** 団体ID */
+    @Column(name = "organization_id")
+    private Long organizationId;
+
     public enum ExecutionType {
         AUTO,
         MANUAL,

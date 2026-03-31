@@ -95,8 +95,8 @@ public class LotteryController {
                     String.format("%d年%d月の抽選はまだ締め切り前です。締め切り後に実行してください。", year, month));
         }
 
-        // 重複チェック: 同一月に既に確定済みの抽選がある場合はエラー
-        if (lotteryService.isLotteryConfirmed(year, month)) {
+        // 重複チェック: 同一月・同一団体に既に確定済みの抽選がある場合はエラー
+        if (lotteryService.isLotteryConfirmed(year, month, orgId)) {
             throw new IllegalStateException(
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
@@ -109,23 +109,35 @@ public class LotteryController {
      * 手動抽選実行
      */
     @PostMapping("/execute")
-    @RequireRole(Role.SUPER_ADMIN)
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LotteryExecution> executeLottery(@Valid @RequestBody LotteryExecutionRequest request,
                                                               HttpServletRequest httpRequest) {
         int year = request.getYear();
         int month = request.getMonth();
 
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long orgId = request.getOrganizationId();
+        if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId, "他団体の抽選は実行できません");
+            orgId = adminOrgId;
+        }
+
         // 締め切り前チェック: 締め切り前に実行すると後から参加登録する人が漏れる
         // ただし「締め切りなし」モードの場合は管理者がいつでも手動実行可能
-        Long orgId = request.getOrganizationId();
         if (!lotteryDeadlineHelper.isNoDeadline(orgId) && lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId)) {
             throw new IllegalStateException(
                     String.format("%d年%d月の抽選はまだ締め切り前です。締め切り後に実行してください。", year, month));
         }
 
-        // 重複チェック: 同一月に対して既に成功した抽選がある場合はエラー
-        if (lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                year, month, LotteryExecution.ExecutionStatus.SUCCESS)) {
+        // 重複チェック: 同一月・同一団体に対して既に成功した抽選がある場合はエラー
+        boolean alreadyExecuted = orgId != null
+                ? lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                        year, month, orgId, LotteryExecution.ExecutionStatus.SUCCESS)
+                : lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                        year, month, LotteryExecution.ExecutionStatus.SUCCESS);
+        if (alreadyExecuted) {
             throw new IllegalStateException(
                     String.format("%d年%d月の抽選は既に実行済みです。再抽選が必要な場合はセッション単位で実行してください。", year, month));
         }
@@ -562,6 +574,7 @@ public class LotteryController {
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long orgId = request.getOrganizationId();
         if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId, "他団体の抽選結果は確定できません");
             orgId = adminOrgId;
         }
 

@@ -442,10 +442,6 @@ public class LineNotificationService {
             int year = ym[0];
             int month = ym[1];
 
-            if (!lotteryService.isLotteryConfirmed(year, month)) {
-                continue;
-            }
-
             List<PracticeParticipant> participants = practiceParticipantRepository
                 .findBySessionDateYearAndMonth(year, month);
 
@@ -456,10 +452,20 @@ public class LineNotificationService {
                     id -> practiceSessionRepository.findById(id).orElse(null));
             }
 
-            // 対象ユーザーの WON/WAITLISTED のみ
+            // 団体ごとの確定状態をキャッシュ
+            Map<Long, Boolean> confirmedByOrg = new HashMap<>();
+
+            // 対象ユーザーの WON/WAITLISTED かつ所属団体の抽選が確定済みのもののみ
             List<PracticeParticipant> playerParticipants = participants.stream()
                 .filter(p -> p.getPlayerId().equals(playerId))
                 .filter(p -> p.getStatus() == ParticipantStatus.WON || p.getStatus() == ParticipantStatus.WAITLISTED)
+                .filter(p -> {
+                    PracticeSession session = sessionCache.get(p.getSessionId());
+                    if (session == null) return false;
+                    Long orgId = session.getOrganizationId();
+                    return confirmedByOrg.computeIfAbsent(orgId,
+                            id -> lotteryService.isLotteryConfirmed(year, month, id));
+                })
                 .collect(Collectors.toList());
 
             if (playerParticipants.isEmpty()) {
