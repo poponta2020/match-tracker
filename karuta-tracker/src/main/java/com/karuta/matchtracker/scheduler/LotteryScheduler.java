@@ -36,7 +36,8 @@ public class LotteryScheduler {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final OrganizationRepository organizationRepository;
 
-    @Scheduled(cron = "0 0 0 * * *")
+    // 自動抽選は現在無効（手動実行のみ）。将来的に有効化する場合はアノテーションを戻す。
+    // @Scheduled(cron = "0 0 0 * * *")
     public void checkAndExecuteLottery() {
         LocalDate today = JstDateTimeUtil.today();
         YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
@@ -53,7 +54,7 @@ public class LotteryScheduler {
         }
     }
 
-    @EventListener(ApplicationReadyEvent.class)
+    // @EventListener(ApplicationReadyEvent.class)
     public void retryOnStartup() {
         try {
             LocalDate today = JstDateTimeUtil.today();
