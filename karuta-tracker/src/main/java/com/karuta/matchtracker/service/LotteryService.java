@@ -138,6 +138,12 @@ public class LotteryService {
      * 1セッション（1日）の全試合を処理する
      */
     private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, boolean saveResults) {
+        // セッションに定員が未設定の場合、会場の定員にフォールバック
+        if (session.getCapacity() == null && session.getVenueId() != null) {
+            venueRepository.findById(session.getVenueId())
+                    .ifPresent(venue -> session.setCapacity(venue.getCapacity()));
+        }
+
         log.debug("Processing session: {} (date: {}, capacity: {})",
                 session.getId(), session.getSessionDate(), session.getCapacity());
 
