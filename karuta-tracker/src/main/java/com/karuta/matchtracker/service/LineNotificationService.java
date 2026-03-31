@@ -36,6 +36,7 @@ public class LineNotificationService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final LotteryService lotteryService;
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
@@ -347,6 +348,85 @@ public class LineNotificationService {
             "body", body,
             "footer", footer
         );
+    }
+
+    /**
+     * 特定ユーザー1人に対して、確定済みの抽選結果をLINE送信する。
+     * LINE連携完了時に呼び出される。当月・翌月の確定済み結果があれば送信する。
+     */
+    @Transactional
+    public void sendLotteryResultsForPlayer(Long playerId) {
+        var now = JstDateTimeUtil.now();
+        int[][] targetMonths = {
+            { now.getYear(), now.getMonthValue() },
+            { now.getMonthValue() == 12 ? now.getYear() + 1 : now.getYear(),
+              now.getMonthValue() == 12 ? 1 : now.getMonthValue() + 1 }
+        };
+
+        for (int[] ym : targetMonths) {
+            int year = ym[0];
+            int month = ym[1];
+
+            if (!lotteryService.isLotteryConfirmed(year, month)) {
+                continue;
+            }
+
+            List<PracticeParticipant> participants = practiceParticipantRepository
+                .findBySessionDateYearAndMonth(year, month);
+
+            // セッション情報をキャッシュ
+            Map<Long, PracticeSession> sessionCache = new HashMap<>();
+            for (PracticeParticipant p : participants) {
+                sessionCache.computeIfAbsent(p.getSessionId(),
+                    id -> practiceSessionRepository.findById(id).orElse(null));
+            }
+
+            // 対象ユーザーの WON/WAITLISTED のみ
+            List<PracticeParticipant> playerParticipants = participants.stream()
+                .filter(p -> p.getPlayerId().equals(playerId))
+                .filter(p -> p.getStatus() == ParticipantStatus.WON || p.getStatus() == ParticipantStatus.WAITLISTED)
+                .collect(Collectors.toList());
+
+            if (playerParticipants.isEmpty()) {
+                continue;
+            }
+
+            List<PracticeParticipant> waitlisted = playerParticipants.stream()
+                .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED)
+                .collect(Collectors.toList());
+            boolean hasWon = playerParticipants.stream()
+                .anyMatch(p -> p.getStatus() == ParticipantStatus.WON);
+
+            if (waitlisted.isEmpty() && hasWon) {
+                sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                    "申し込んだ練習はすべて当選しました");
+            } else if (!waitlisted.isEmpty()) {
+                sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                    "落選した試合があります");
+
+                Map<Long, List<PracticeParticipant>> waitlistedBySession = waitlisted.stream()
+                    .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
+
+                for (Map.Entry<Long, List<PracticeParticipant>> sessionEntry : waitlistedBySession.entrySet()) {
+                    PracticeSession session = sessionCache.get(sessionEntry.getKey());
+                    if (session == null) continue;
+
+                    String dateStr = session.getSessionDate().format(DATE_FORMAT);
+                    Map<String, Object> flex = buildLotteryWaitlistedFlex(
+                        dateStr, sessionEntry.getValue(), sessionEntry.getKey(), playerId);
+                    String altText = dateStr + "の練習: キャンセル待ち";
+
+                    sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
+                }
+
+                if (hasWon) {
+                    sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
+                        "上記以外の申し込みはすべて当選しています");
+                }
+            }
+
+            log.info("Sent lottery results for {}-{} to player {} after LINE linking", year, month, playerId);
+        }
     }
 
     /**

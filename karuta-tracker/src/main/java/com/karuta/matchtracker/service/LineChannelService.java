@@ -38,6 +38,7 @@ public class LineChannelService {
     private final LineNotificationPreferenceRepository lineNotificationPreferenceRepository;
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final LineNotificationService lineNotificationService;
 
     /**
      * プレイヤーにチャネルを割り当てる
@@ -137,6 +138,14 @@ public class LineChannelService {
 
         log.info("Linked LINE channel {} with lineUserId {} for player {}",
             channelId, lineUserId, assignment.getPlayerId());
+
+        // 確定済みの抽選結果があれば自動送信
+        try {
+            lineNotificationService.sendLotteryResultsForPlayer(assignment.getPlayerId());
+        } catch (Exception e) {
+            log.error("Failed to send lottery results after LINE linking for player {}",
+                assignment.getPlayerId(), e);
+        }
     }
 
     /**
