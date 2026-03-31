@@ -44,6 +44,13 @@ public class MatchCreateRequest {
     @NotNull(message = "登録者のIDは必須です")
     private Long createdBy;
 
+    // 個人メモ・お手付き（任意）
+    private String personalNotes;
+
+    @Min(value = 0, message = "お手付き回数は0以上で入力してください")
+    @Max(value = 20, message = "お手付き回数は20以下で入力してください")
+    private Integer otetsukiCount;
+
     /**
      * リクエストからエンティティへ変換
      * player1Idとplayer2Idは自動的にソートされます
