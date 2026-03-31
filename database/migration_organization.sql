@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 
 -- 初期データ挿入
 INSERT INTO organizations (code, name, color, deadline_type)
-VALUES ('wasura', 'わすらもち会', '#22c55e', 'SAME_DAY')
+VALUES ('wasura', 'わすらもち会', '#16a34a', 'SAME_DAY')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO organizations (code, name, color, deadline_type)

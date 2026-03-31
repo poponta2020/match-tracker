@@ -51,7 +51,7 @@ class PracticeSessionRepositoryTest {
         // 団体データの準備
         Organization org = organizationRepository.findByCode("wasura").orElseGet(() ->
             organizationRepository.save(Organization.builder()
-                .code("wasura").name("わすらもち会").color("#22c55e").deadlineType(DeadlineType.SAME_DAY).build())
+                .code("wasura").name("わすらもち会").color("#16a34a").deadlineType(DeadlineType.SAME_DAY).build())
         );
         orgId = org.getId();
 

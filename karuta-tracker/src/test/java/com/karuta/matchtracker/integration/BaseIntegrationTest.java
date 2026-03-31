@@ -45,7 +45,7 @@ public abstract class BaseIntegrationTest {
         // テスト用の団体データを挿入
         jdbcTemplate.execute(
             "INSERT INTO organizations (id, code, name, color, deadline_type, created_at, updated_at) " +
-            "VALUES (1, 'wasura', 'わすらもち会', '#22c55e', 'SAME_DAY', NOW(), NOW()) " +
+            "VALUES (1, 'wasura', 'わすらもち会', '#16a34a', 'SAME_DAY', NOW(), NOW()) " +
             "ON CONFLICT (id) DO NOTHING"
         );
         jdbcTemplate.execute(
