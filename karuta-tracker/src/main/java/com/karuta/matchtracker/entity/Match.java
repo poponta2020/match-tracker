@@ -91,12 +91,6 @@ public class Match {
     private String opponentName;
 
     /**
-     * コメント
-     */
-    @Column(name = "notes", columnDefinition = "TEXT")
-    private String notes;
-
-    /**
      * 作成者のID
      */
     @Column(name = "created_by", nullable = false)
