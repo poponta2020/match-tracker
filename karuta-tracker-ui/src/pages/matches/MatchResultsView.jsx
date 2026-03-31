@@ -535,41 +535,43 @@ const MatchResultsView = () => {
             return (
               <div key={index} className="py-4">
                 {match ? (
-                  // 結果入力済み: A 〇 枚数差 × B
-                  <div className="flex items-center text-lg">
-                    <Link
-                      to={`/matches?playerId=${pairing.player1Id}`}
-                      className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
-                    >
-                      {pairing.player1Name}
-                    </Link>
-                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
-                      {isPlayer1Winner ? '〇' : '×'}
+                  <>
+                    {/* 結果入力済み: A 〇 枚数差 × B */}
+                    <div className="flex items-center text-lg">
+                      <Link
+                        to={`/matches?playerId=${pairing.player1Id}`}
+                        className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      >
+                        {pairing.player1Name}
+                      </Link>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer1Winner ? '〇' : '×'}
+                      </div>
+                      <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
+                        {match.scoreDifference}
+                      </div>
+                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                        {isPlayer2Winner ? '〇' : '×'}
+                      </div>
+                      <Link
+                        to={`/matches?playerId=${pairing.player2Id}`}
+                        className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      >
+                        {pairing.player2Name}
+                      </Link>
                     </div>
-                    <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
-                      {match.scoreDifference}
-                    </div>
-                    <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
-                      {isPlayer2Winner ? '〇' : '×'}
-                    </div>
-                    <Link
-                      to={`/matches?playerId=${pairing.player2Id}`}
-                      className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
-                    >
-                      {pairing.player2Name}
-                    </Link>
-                  </div>
-                  {/* 自分の試合のお手付き・メモ表示 */}
-                  {match && currentPlayer && (match.player1Id === currentPlayer.id || match.player2Id === currentPlayer.id) && (match.myOtetsukiCount != null || match.myPersonalNotes) && (
-                    <div className="mt-1 flex items-center gap-3 justify-center text-xs text-[#9ca3af]">
-                      {match.myOtetsukiCount != null && (
-                        <span>お手付き: {match.myOtetsukiCount}回</span>
-                      )}
-                      {match.myPersonalNotes && (
-                        <span className="truncate max-w-[200px]">{match.myPersonalNotes}</span>
-                      )}
-                    </div>
-                  )}
+                    {/* 自分の試合のお手付き・メモ表示 */}
+                    {currentPlayer && (match.player1Id === currentPlayer.id || match.player2Id === currentPlayer.id) && (match.myOtetsukiCount != null || match.myPersonalNotes) && (
+                      <div className="mt-1 flex items-center gap-3 justify-center text-xs text-[#9ca3af]">
+                        {match.myOtetsukiCount != null && (
+                          <span>お手付き: {match.myOtetsukiCount}回</span>
+                        )}
+                        {match.myPersonalNotes && (
+                          <span className="truncate max-w-[200px]">{match.myPersonalNotes}</span>
+                        )}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   // 未入力: A vs B
                   <div className="flex items-center text-lg">

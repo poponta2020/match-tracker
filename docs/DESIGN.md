@@ -105,6 +105,10 @@ Entity Layer (JPA Entity)
 ### 3.1 ER図
 ```
 [players] 1───多 [matches] 多───1 [players]
+    │                   │
+    │                   │1
+    │                   多
+    │              [match_personal_notes] 多───1 [players]
     │
     │1
     │
@@ -201,7 +205,6 @@ Entity Layer (JPA Entity)
 | winner_id | BIGINT | NOT NULL, FK | 勝者ID |
 | score_difference | INT | NOT NULL | 枚数差（1～50） |
 | opponent_name | VARCHAR(100) | | 未登録選手名（簡易登録用） |
-| notes | TEXT | | コメント |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |
 | created_at | DATETIME | NOT NULL | 登録日時 |
@@ -216,6 +219,26 @@ Entity Layer (JPA Entity)
 
 **特殊ロジック**:
 - `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証
+
+---
+
+#### match_personal_notes（個人メモ・お手付き記録）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | レコードID |
+| match_id | BIGINT | NOT NULL, FK(matches.id, CASCADE) | 対象試合ID |
+| player_id | BIGINT | NOT NULL, FK(players.id, RESTRICT) | 記録者ID |
+| notes | TEXT | | 個人メモ |
+| otetsuki_count | INT | CHECK(0〜20) | お手付き回数（nullは未入力） |
+| created_at | DATETIME | NOT NULL | 登録日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE: `uq_match_personal_notes` (match_id, player_id)
+- CHECK: `otetsuki_count >= 0 AND otetsuki_count <= 20`
+
+**インデックス**:
+- `idx_match_personal_notes_player` (player_id, match_id)
 
 ---
 
@@ -844,7 +867,8 @@ Entity Layer (JPA Entity)
   "opponentName": "佐藤花子",
   "result": "勝ち",
   "scoreDifference": 5,
-  "notes": "コメント"
+  "personalNotes": "右下段が甘かった",
+  "otetsukiCount": 3
 }
 ```
 
@@ -859,14 +883,16 @@ Entity Layer (JPA Entity)
   "player1Id": 1,
   "player2Id": 2,
   "winnerId": 1,
-  "scoreDifference": 5
+  "scoreDifference": 5,
+  "personalNotes": "右下段が甘かった",
+  "otetsukiCount": 3
 }
 ```
 
 #### GET /api/matches?date={date}
 **説明**: 日付別試合一覧
 **権限**: なし
-**レスポンス**: `List<MatchDto>`
+**レスポンス**: `List<MatchDto>`（リクエストユーザーの個人メモ・お手付きを `myPersonalNotes` / `myOtetsukiCount` として含む）
 
 #### GET /api/matches/player/{playerId}
 **説明**: 選手の試合履歴

@@ -40,12 +40,12 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ） |
-| 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
-| 9 | `/matches/:id` | `MatchDetail.jsx` | — | ALL | 試合詳細表示 |
-| 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択 | ALL | 試合結果編集 |
-| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力 | ADMIN+ | 一括結果入力（抜け番の活動も含む） |
-| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示） |
+| 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ）。自分の試合にはメモ有無アイコン・お手付き回数を表示 |
+| 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
+| 9 | `/matches/:id` | `MatchDetail.jsx` | — | ALL | 試合詳細表示（自分のお手付き回数・個人メモを表示） |
+| 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
+| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力 | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない） |
+| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示） |
 
 ---
 

@@ -73,7 +73,7 @@ class MatchRepositoryTest {
                 .player2Id(player2.getId())
                 .winnerId(player1.getId())
                 .scoreDifference(15)
-                .notes("テスト試合1")
+
                 .createdBy(player1.getId())
                 .updatedBy(player1.getId())
                 .build();
@@ -85,7 +85,7 @@ class MatchRepositoryTest {
                 .player2Id(player3.getId())
                 .winnerId(player3.getId())
                 .scoreDifference(10)
-                .notes("テスト試合2")
+
                 .createdBy(player1.getId())
                 .updatedBy(player1.getId())
                 .build();
@@ -97,7 +97,7 @@ class MatchRepositoryTest {
                 .player2Id(player3.getId())
                 .winnerId(player2.getId())
                 .scoreDifference(20)
-                .notes("1週間前の試合")
+
                 .createdBy(player2.getId())
                 .updatedBy(player2.getId())
                 .build();
@@ -154,7 +154,7 @@ class MatchRepositoryTest {
 
         // Then
         assertThat(matches).hasSize(1);
-        assertThat(matches.get(0).getNotes()).isEqualTo("テスト試合1");
+        assertThat(matches.get(0).getPlayer1Id()).isEqualTo(player1.getId());
     }
 
     @Test
@@ -188,7 +188,7 @@ class MatchRepositoryTest {
         // Then
         assertThat(matches).hasSize(1);
         assertThat(matches.get(0).getMatchNumber()).isEqualTo(1);
-        assertThat(matches.get(0).getNotes()).isEqualTo("テスト試合1");
+        assertThat(matches.get(0).getPlayer1Id()).isEqualTo(player1.getId());
     }
 
     @Test

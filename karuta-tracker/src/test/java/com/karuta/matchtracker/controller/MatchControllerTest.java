@@ -88,7 +88,7 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches - 日付別の試合結果を取得できる")
     void testGetMatchesByDate() throws Exception {
         // Given
-        when(matchService.findMatchesByDate(today)).thenReturn(List.of(testMatchDto));
+        when(matchService.findMatchesByDate(eq(today), isNull())).thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches")
@@ -101,7 +101,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$[0].player1Name").value("山田太郎"))
                 .andExpect(jsonPath("$[0].player2Name").value("佐藤花子"));
 
-        verify(matchService).findMatchesByDate(today);
+        verify(matchService).findMatchesByDate(eq(today), isNull());
     }
 
     @Test
@@ -124,7 +124,7 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId} - 選手の試合履歴を取得できる")
     void testGetPlayerMatches() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull()))
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
@@ -135,14 +135,14 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].player1Id").value(1));
 
-        verify(matchService).findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull());
+        verify(matchService).findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test
     @DisplayName("GET /api/matches/player/{playerId} - 存在しない選手は404を返す")
     void testGetPlayerMatchesNotFound() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull()))
+        when(matchService.findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ResourceNotFoundException("Player", 999L));
 
         // When & Then
@@ -151,7 +151,7 @@ class MatchControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(matchService).findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull());
+        verify(matchService).findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test
@@ -160,7 +160,7 @@ class MatchControllerTest {
         // Given
         LocalDate startDate = today.minusDays(7);
         LocalDate endDate = today;
-        when(matchService.findPlayerMatchesInPeriod(1L, startDate, endDate))
+        when(matchService.findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), isNull()))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
@@ -172,14 +172,14 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(matchService).findPlayerMatchesInPeriod(1L, startDate, endDate);
+        verify(matchService).findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), isNull());
     }
 
     @Test
     @DisplayName("GET /api/matches/between - 対戦履歴を取得できる")
     void testGetMatchesBetweenPlayers() throws Exception {
         // Given
-        when(matchService.findMatchesBetweenPlayers(1L, 2L)).thenReturn(List.of(testMatchDto));
+        when(matchService.findMatchesBetweenPlayers(eq(1L), eq(2L), isNull())).thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/between")
@@ -190,7 +190,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(matchService).findMatchesBetweenPlayers(1L, 2L);
+        verify(matchService).findMatchesBetweenPlayers(eq(1L), eq(2L), isNull());
     }
 
     @Test
@@ -344,7 +344,7 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId}?filters - フィルタ付きで試合履歴を取得できる")
     void testFindPlayerMatchesWithFilters() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右")))
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), isNull()))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
@@ -355,7 +355,7 @@ class MatchControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
-        verify(matchService).findPlayerMatchesWithFilters(1L, "A級", "男性", "右");
+        verify(matchService).findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), isNull());
     }
 
     @Test
@@ -470,7 +470,7 @@ class MatchControllerTest {
                 .winnerId(2L)
                 .scoreDifference(3)
                 .build();
-        when(matchService.updateMatch(1L, 2L, 3, 1L)).thenReturn(updatedMatch);
+        when(matchService.updateMatch(1L, 2L, 3, 1L, null, null)).thenReturn(updatedMatch);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
@@ -482,14 +482,14 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.winnerId").value(2))
                 .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatch(1L, 2L, 3, 1L);
+        verify(matchService).updateMatch(1L, 2L, 3, 1L, null, null);
     }
 
     @Test
     @DisplayName("GET /api/matches/{id} - IDで試合結果を取得できる")
     void testFindById() throws Exception {
         // Given
-        when(matchService.findById(1L)).thenReturn(testMatchDto);
+        when(matchService.findById(eq(1L), isNull())).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(get("/api/matches/1"))
@@ -497,20 +497,20 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.player1Name").value("山田太郎"));
 
-        verify(matchService).findById(1L);
+        verify(matchService).findById(eq(1L), isNull());
     }
 
     @Test
     @DisplayName("GET /api/matches/{id} - 存在しない試合は404を返す")
     void testFindByIdNotFound() throws Exception {
         // Given
-        when(matchService.findById(999L))
+        when(matchService.findById(eq(999L), isNull()))
                 .thenThrow(new com.karuta.matchtracker.exception.ResourceNotFoundException("Match", 999L));
 
         // When & Then
         mockMvc.perform(get("/api/matches/999"))
                 .andExpect(status().isNotFound());
 
-        verify(matchService).findById(999L);
+        verify(matchService).findById(eq(999L), isNull());
     }
 }

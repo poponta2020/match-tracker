@@ -4,6 +4,7 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -44,6 +45,9 @@ class MatchServiceTest {
 
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
+
+    @Mock
+    private MatchPersonalNoteRepository matchPersonalNoteRepository;
 
     @InjectMocks
     private MatchService matchService;
@@ -89,7 +93,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        List<MatchDto> result = matchService.findMatchesByDate(today);
+        List<MatchDto> result = matchService.findMatchesByDate(today, null);
 
         // Then
         assertThat(result).hasSize(1);
@@ -121,7 +125,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        List<MatchDto> result = matchService.findPlayerMatches(1L);
+        List<MatchDto> result = matchService.findPlayerMatches(1L, null);
 
         // Then
         assertThat(result).hasSize(1);
@@ -137,7 +141,7 @@ class MatchServiceTest {
         when(playerRepository.existsById(999L)).thenReturn(false);
 
         // When & Then
-        assertThatThrownBy(() -> matchService.findPlayerMatches(999L))
+        assertThatThrownBy(() -> matchService.findPlayerMatches(999L, null))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Player")
                 .hasMessageContaining("999");
@@ -157,7 +161,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        List<MatchDto> result = matchService.findPlayerMatchesInPeriod(1L, startDate, endDate);
+        List<MatchDto> result = matchService.findPlayerMatchesInPeriod(1L, startDate, endDate, null);
 
         // Then
         assertThat(result).hasSize(1);
@@ -174,7 +178,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        List<MatchDto> result = matchService.findMatchesBetweenPlayers(1L, 2L);
+        List<MatchDto> result = matchService.findMatchesBetweenPlayers(1L, 2L, null);
 
         // Then
         assertThat(result).hasSize(1);
@@ -292,7 +296,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L);
+        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null);
 
         // Then
         assertThat(result).isNotNull();
@@ -373,7 +377,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null);
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null, null);
 
             // Then
             assertThat(result).hasSize(1);
@@ -417,7 +421,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, "男性", null);
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, "男性", null, null);
 
             // Then
             assertThat(result).hasSize(1);
@@ -461,7 +465,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, "右");
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, "右", null);
 
             // Then
             assertThat(result).hasSize(1);
@@ -509,7 +513,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", "男性", "右");
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", "男性", "右", null);
 
             // Then
             assertThat(result).hasSize(1);
@@ -540,7 +544,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent));
 
             // When: A級でフィルタするが、対戦相手はB級のみ
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null);
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null, null);
 
             // Then
             assertThat(result).isEmpty();
@@ -564,7 +568,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
-            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null);
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, "A級", null, null, null);
 
             // Then
             assertThat(result).isEmpty();
