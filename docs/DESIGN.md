@@ -340,7 +340,7 @@ Entity Layer (JPA Entity)
 | session_date | DATE | NOT NULL | 練習日 |
 | match_number | INT | NOT NULL | 試合番号 |
 | player_id | BIGINT | NOT NULL, FK | 抜け番の選手ID |
-| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER） |
+| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER/ABSENT） |
 | free_text | VARCHAR(255) | | 「その他」選択時の自由記述 |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |

@@ -340,6 +340,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 | OBSERVING | 見学 | 他の選手の試合を見学 |
 | ASSIST_OBSERVING | 見学対応 | 見学者への説明・案内を担当 |
 | OTHER | その他 | 上記以外の活動（自由テキストで補足） |
+| ABSENT | 休み | 登録済みだが当日無断欠席した選手 |
 
 **入力方法:**
 - **本人入力（MatchForm）:** ペアリング作成済みの場合、抜け番の試合番号タブを選択すると自動で活動種別選択UIが表示される。ペアリング未作成の場合は「抜け番として記録する」ボタンから手動で切り替え可能
@@ -351,6 +352,12 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 「その他」選択時のみ自由テキスト入力欄が表示される
 - 同一試合・同一選手で1レコードのみ（部分ユニーク制約: `deleted_at IS NULL` のレコード間で適用）
 - 削除は論理削除（`deleted_at` にタイムスタンプを設定）
+- 「休み」（ABSENT）を選択した場合:
+  - 自由テキストは不要（OTHERのみ）
+  - その日の全ByeActivityがABSENTの場合、`PracticeParticipant`（`matchNumber=null`）を削除し参加率にカウントしない
+  - 一部のみABSENTの場合は`PracticeParticipant`は維持（来ている試合があるなら参加扱い）
+  - 「休み」→他アクティビティへ変更時は`PracticeParticipant`を復元
+  - 無断欠席回数は`activity_type=ABSENT`のレコード数を試合単位で集計（内部データとしてのみ保持、UI非表示）
 
 ### 3.5 統計機能
 
@@ -902,7 +909,7 @@ venues ──< venue_match_schedules (venueId)
 | session_date | DATE | NOT NULL | 練習日 |
 | match_number | INT | NOT NULL | 試合番号 |
 | player_id | BIGINT | NOT NULL, FK | 抜け番の選手 |
-| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER） |
+| activity_type | VARCHAR(20) | NOT NULL | 活動種別（READING/SOLO_PICK/OBSERVING/ASSIST_OBSERVING/OTHER/ABSENT） |
 | free_text | VARCHAR(255) | — | 「その他」選択時の自由記述 |
 | created_by | BIGINT | NOT NULL | 登録者 |
 | updated_by | BIGINT | NOT NULL | 更新者 |
