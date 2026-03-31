@@ -17,8 +17,7 @@ import java.util.List;
 @Builder
 public class HomeDto {
     private NextParticipationDto nextPractice;
-    private List<ParticipationRateDto> participationTop3;
-    private ParticipationRateDto myParticipationRate;
+    private List<ParticipationGroupDto> participationGroups;
 
     // 抽選関連
     private Long unreadNotificationCount;

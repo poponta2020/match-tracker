@@ -21,8 +21,7 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [nextPractice, setNextPractice] = useState(null);
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
-  const [participationTop3, setParticipationTop3] = useState([]);
-  const [myParticipationRate, setMyParticipationRate] = useState(null);
+  const [participationGroups, setParticipationGroups] = useState([]);
   const [hasPendingOffer, setHasPendingOffer] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -36,13 +35,8 @@ const Home = () => {
 
       const data = res.data;
 
-      // 参加率TOP3
-      setParticipationTop3(data.participationTop3 || []);
-
-      // 自分の参加率
-      if (data.myParticipationRate) {
-        setMyParticipationRate(data.myParticipationRate);
-      }
+      // 参加率グループ（団体別）
+      setParticipationGroups(data.participationGroups || []);
 
       // 繰り上げオファー
       setHasPendingOffer(data.hasPendingOffer || false);
@@ -257,42 +251,49 @@ const Home = () => {
           </div>
         )}
 
-        {/* 参加率TOP3 */}
-        {participationTop3.length > 0 && (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="w-5 h-5 text-[#1A3654]" />
-              <h2 className="text-base font-bold text-[#1A3654]">{monthLabel} 参加率TOP3</h2>
-            </div>
-            <div className="space-y-3">
-              {participationTop3.map((player, index) => {
-                const rankColors = ['bg-[#1A3654] text-white', 'bg-[#2d5a8a] text-white', 'bg-[#5a8ab5] text-white'];
-                const ratePercent = Math.round(player.rate * 100);
-                return (
-                  <div key={player.playerId} className="flex items-center gap-3">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${rankColors[index]}`}>{index + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-[#374151] truncate">{player.playerName}</span>
-                        <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{ratePercent}%</span>
+        {/* 参加率TOP3（団体別） */}
+        {participationGroups.length > 0 && participationGroups.map((group) => {
+          const showLabel = participationGroups.length > 1;
+          const top3 = group.top3 || [];
+          const myRate = group.myRate;
+          if (top3.length === 0) return null;
+          return (
+            <div key={group.organizationId ?? 'all'} className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Trophy className="w-5 h-5 text-[#1A3654]" />
+                <h2 className="text-base font-bold text-[#1A3654]">
+                  {showLabel && <span className="mr-1">{group.organizationName}</span>}
+                  {monthLabel} 参加率TOP3
+                </h2>
+              </div>
+              <div className="space-y-3">
+                {top3.map((player, index) => {
+                  const rankColors = ['bg-[#1A3654] text-white', 'bg-[#2d5a8a] text-white', 'bg-[#5a8ab5] text-white'];
+                  const ratePercent = Math.round(player.rate * 100);
+                  return (
+                    <div key={player.playerId} className="flex items-center gap-3">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${rankColors[index]}`}>{index + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-[#374151] truncate">{player.playerName}</span>
+                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{ratePercent}%</span>
+                        </div>
+                        <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
+                          <div
+                            className="bg-[#1A3654] h-1.5 rounded-full transition-all"
+                            style={{ width: `${ratePercent}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-[#6b7280] mt-0.5 block">
+                          {player.participatedMatches}/{player.totalScheduledMatches}試合
+                        </span>
                       </div>
-                      <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
-                        <div
-                          className="bg-[#1A3654] h-1.5 rounded-full transition-all"
-                          style={{ width: `${ratePercent}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-[#6b7280] mt-0.5 block">
-                        {player.participatedMatches}/{player.totalScheduledMatches}試合
-                      </span>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* 自分がTOP3にいない場合のみ自分の参加率を表示 */}
-            {myParticipationRate && !participationTop3.some((p) => p.playerId === currentPlayer?.id) && (
-              <>
+                  );
+                })}
+              </div>
+              {/* 自分がTOP3にいない場合のみ自分の参加率を表示 */}
+              {myRate && !top3.some((p) => p.playerId === currentPlayer?.id) && (
                 <div className="border-t border-gray-200 mt-3 pt-3">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8ecef]">
@@ -301,30 +302,30 @@ const Home = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-[#374151] truncate">{currentPlayer?.name}</span>
-                        {myParticipationRate.rate !== null && (
-                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{Math.round(myParticipationRate.rate * 100)}%</span>
+                        {myRate.rate !== null && (
+                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{Math.round(myRate.rate * 100)}%</span>
                         )}
                       </div>
-                      {myParticipationRate.rate !== null && (
+                      {myRate.rate !== null && (
                         <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
                           <div
                             className="bg-[#6b7280] h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.round(myParticipationRate.rate * 100)}%` }}
+                            style={{ width: `${Math.round(myRate.rate * 100)}%` }}
                           />
                         </div>
                       )}
                       <span className="text-xs text-[#6b7280] mt-0.5 block">
-                        {myParticipationRate.totalScheduledMatches !== null
-                          ? `${myParticipationRate.participatedMatches}/${myParticipationRate.totalScheduledMatches}試合`
-                          : `${myParticipationRate.participatedMatches}試合参加`}
+                        {myRate.totalScheduledMatches !== null
+                          ? `${myRate.participatedMatches}/${myRate.totalScheduledMatches}試合`
+                          : `${myRate.participatedMatches}試合参加`}
                       </span>
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })}
 
       </div>
     </div>
