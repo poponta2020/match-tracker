@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -29,6 +30,8 @@ class WaitlistPromotionServiceTest {
     private PracticeParticipantRepository practiceParticipantRepository;
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
+    @Mock
+    private PlayerRepository playerRepository;
     @Mock
     private LotteryDeadlineHelper lotteryDeadlineHelper;
     @Mock

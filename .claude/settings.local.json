@@ -148,7 +148,12 @@
       "Bash(npx eslint:*)",
       "Bash(mvn compile:*)",
       "Bash(gh repo:*)",
-      "Bash(gh label:*)"
+      "Bash(gh label:*)",
+      "WebFetch(domain:densuke.biz)",
+      "Bash(BASE=\"https://densuke.biz/\" CD=\"5qZmcUeYxLweswAa\" MI=\"86850930\" PAGE_ID=\"10442543\" __NEW_LINE_de6296ba5d175d20__ echo \"=== 現在の値（全部○のはず） ===\" curl -s -c /tmp/dc.txt -b /tmp/dc.txt \"$BASElist?cd=$CD&mi=$MI\" -H \"User-Agent: Mozilla/5.0\")",
+      "Read(//home/poponta/match-tracker/**)",
+      "Bash(karuta-tracker/gradlew -p karuta-tracker compileJava)",
+      "Bash(karuta-tracker/gradlew -p karuta-tracker test --tests \"com.karuta.matchtracker.service.WaitlistPromotionServiceTest\")"
     ],
     "deny": [],
     "ask": [],

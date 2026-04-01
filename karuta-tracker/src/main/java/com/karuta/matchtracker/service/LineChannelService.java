@@ -138,14 +138,21 @@ public class LineChannelService {
 
         log.info("Linked LINE channel {} with lineUserId {} for player {}",
             channelId, lineUserId, assignment.getPlayerId());
+    }
 
-        // 確定済みの抽選結果があれば自動送信
-        try {
-            lineNotificationService.sendLotteryResultsForPlayer(assignment.getPlayerId());
-        } catch (Exception e) {
-            log.error("Failed to send lottery results after LINE linking for player {}",
-                assignment.getPlayerId(), e);
-        }
+    /**
+     * チャネルに紐づくプレイヤーへ確定済み抽選結果を送信する
+     */
+    public void sendPendingLotteryResultsForChannel(Long channelId) {
+        lineChannelAssignmentRepository.findActiveByChannelId(channelId)
+            .ifPresent(assignment -> {
+                try {
+                    lineNotificationService.sendLotteryResultsForPlayer(assignment.getPlayerId());
+                } catch (Exception e) {
+                    log.error("Failed to send lottery results after LINE linking for player {}",
+                        assignment.getPlayerId(), e);
+                }
+            });
     }
 
     /**

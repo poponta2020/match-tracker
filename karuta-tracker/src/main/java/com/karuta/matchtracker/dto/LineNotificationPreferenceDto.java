@@ -19,6 +19,7 @@ public class LineNotificationPreferenceDto {
     private boolean matchPairing;
     private boolean practiceReminder;
     private boolean deadlineReminder;
+    private boolean adminWaitlistUpdate;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -30,6 +31,7 @@ public class LineNotificationPreferenceDto {
             .matchPairing(entity.getMatchPairing())
             .practiceReminder(entity.getPracticeReminder())
             .deadlineReminder(entity.getDeadlineReminder())
+            .adminWaitlistUpdate(entity.getAdminWaitlistUpdate())
             .build();
     }
 }

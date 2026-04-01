@@ -34,6 +34,7 @@ public class LineNotificationService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final PlayerRepository playerRepository;
     private final LotteryQueryService lotteryQueryService;
 
     public LineNotificationService(
@@ -45,6 +46,7 @@ public class LineNotificationService {
             PracticeSessionRepository practiceSessionRepository,
             PracticeParticipantRepository practiceParticipantRepository,
             PlayerOrganizationRepository playerOrganizationRepository,
+            PlayerRepository playerRepository,
             LotteryQueryService lotteryQueryService) {
         this.lineChannelRepository = lineChannelRepository;
         this.lineChannelAssignmentRepository = lineChannelAssignmentRepository;
@@ -54,6 +56,7 @@ public class LineNotificationService {
         this.practiceSessionRepository = practiceSessionRepository;
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.playerOrganizationRepository = playerOrganizationRepository;
+        this.playerRepository = playerRepository;
         this.lotteryQueryService = lotteryQueryService;
     }
 
@@ -82,6 +85,31 @@ public class LineNotificationService {
             dateStr, participant.getMatchNumber(), deadlineStr, participant.getId(), isUrgent);
 
         sendFlexToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, altText, flexContents);
+    }
+
+    /**
+     * キャンセル待ち列に残っているユーザーに順番繰り上がり通知を送信する
+     *
+     * @param session           対象セッション
+     * @param matchNumber       対象試合番号
+     * @param remainingWaitlist 残りのキャンセル待ちリスト（WAITLISTED状態、番号順）
+     */
+    public void sendWaitlistPositionUpdateNotifications(PracticeSession session, int matchNumber,
+                                                         List<PracticeParticipant> remainingWaitlist) {
+        if (remainingWaitlist.isEmpty()) return;
+
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+
+        for (int i = 0; i < remainingWaitlist.size(); i++) {
+            PracticeParticipant wp = remainingWaitlist.get(i);
+            int position = i + 1;
+            String message = String.format("%sの練習 試合%dのキャンセル待ち順が繰り上がりました。現在%d番目です",
+                dateStr, matchNumber, position);
+            sendToPlayer(wp.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);
+        }
+
+        log.info("Waitlist position update notifications sent for session {} match {}: {} players",
+            session.getId(), matchNumber, remainingWaitlist.size());
     }
 
     /**
@@ -530,6 +558,127 @@ public class LineNotificationService {
     }
 
     /**
+     * 管理者向けキャンセル待ち状況通知を送信する
+     *
+     * SUPER_ADMINのLINE連携済みユーザーに、キャンセル/繰り上げの状況を通知する。
+     *
+     * @param triggerAction  発生イベント（例: "キャンセル", "オファー期限切れ", "オファー辞退", "降格"）
+     * @param triggerPlayer  イベントを起こしたプレイヤー
+     * @param session        対象セッション
+     * @param matchNumber    対象試合番号
+     * @param offeredPlayer  繰り上げオファーを送った相手（null=繰り上げ対象なし）
+     * @param remainingWaitlist 残りのキャンセル待ちリスト（WAITLISTED状態、番号順）
+     */
+    public void sendAdminWaitlistNotification(String triggerAction, Player triggerPlayer,
+                                               PracticeSession session, int matchNumber,
+                                               Player offeredPlayer,
+                                               List<PracticeParticipant> remainingWaitlist) {
+        List<Player> superAdmins = playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN);
+        if (superAdmins.isEmpty()) return;
+
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        String altText = String.format("【管理者通知】%s 試合%d: %sが%s", dateStr, matchNumber, triggerPlayer.getName(), triggerAction);
+
+        // 残りの待ち列の名前解決
+        Map<Long, String> playerNames = new HashMap<>();
+        for (PracticeParticipant wp : remainingWaitlist) {
+            playerNames.computeIfAbsent(wp.getPlayerId(),
+                id -> playerRepository.findById(id).map(Player::getName).orElse("不明"));
+        }
+
+        Map<String, Object> flex = buildAdminWaitlistFlex(
+            dateStr, matchNumber, triggerAction, triggerPlayer.getName(),
+            offeredPlayer != null ? offeredPlayer.getName() : null,
+            remainingWaitlist, playerNames);
+
+        for (Player admin : superAdmins) {
+            sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_WAITLIST_UPDATE, altText, flex);
+        }
+
+        log.info("Admin waitlist notification sent for session {} match {}: {} by {}",
+            session.getId(), matchNumber, triggerAction, triggerPlayer.getName());
+    }
+
+    /**
+     * 管理者向けキャンセル待ち状況Flex Message（Bubble）を構築する
+     */
+    private Map<String, Object> buildAdminWaitlistFlex(String dateStr, int matchNumber,
+                                                        String triggerAction, String triggerPlayerName,
+                                                        String offeredPlayerName,
+                                                        List<PracticeParticipant> remainingWaitlist,
+                                                        Map<Long, String> playerNames) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "キャンセル待ち状況通知",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#8E44AD",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        List<Object> bodyContents = new ArrayList<>();
+
+        // セッション・試合情報
+        bodyContents.add(Map.of("type", "text", "text", dateStr + " 試合" + matchNumber,
+            "weight", "bold", "size", "lg", "margin", "none"));
+
+        bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+
+        // ① 誰がどの試合をキャンセルしたか
+        bodyContents.add(Map.of("type", "text", "text", "発生イベント",
+            "size", "xs", "color", "#888888", "margin", "lg"));
+        bodyContents.add(Map.of("type", "text", "text", triggerPlayerName + " が " + triggerAction,
+            "size", "md", "color", "#333333", "margin", "sm", "wrap", true));
+
+        bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+
+        // ② 誰にキャンセル待ち連絡を送ったか
+        bodyContents.add(Map.of("type", "text", "text", "繰り上げオファー",
+            "size", "xs", "color", "#888888", "margin", "lg"));
+        if (offeredPlayerName != null) {
+            bodyContents.add(Map.of("type", "text", "text", offeredPlayerName + " に送信済み",
+                "size", "md", "color", "#27AE60", "weight", "bold", "margin", "sm", "wrap", true));
+        } else {
+            bodyContents.add(Map.of("type", "text", "text", "繰り上げ対象なし（待ち列が空）",
+                "size", "md", "color", "#E74C3C", "margin", "sm", "wrap", true));
+        }
+
+        bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+
+        // ③ 今のキャンセル待ち列の状態
+        bodyContents.add(Map.of("type", "text", "text", "残りキャンセル待ち列",
+            "size", "xs", "color", "#888888", "margin", "lg"));
+        if (remainingWaitlist.isEmpty()) {
+            bodyContents.add(Map.of("type", "text", "text", "なし",
+                "size", "sm", "color", "#999999", "margin", "sm"));
+        } else {
+            for (PracticeParticipant wp : remainingWaitlist) {
+                String name = playerNames.getOrDefault(wp.getPlayerId(), "不明");
+                bodyContents.add(Map.of("type", "text",
+                    "text", String.format("%d番: %s", wp.getWaitlistNumber(), name),
+                    "size", "sm", "color", "#333333", "margin", "sm"));
+            }
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
+    }
+
+    /**
      * 対戦組み合わせをLINE送信する（管理者手動送信）
      */
     @Transactional
@@ -600,6 +749,7 @@ public class LineNotificationService {
         pref.setMatchPairing(dto.isMatchPairing());
         pref.setPracticeReminder(dto.isPracticeReminder());
         pref.setDeadlineReminder(dto.isDeadlineReminder());
+        pref.setAdminWaitlistUpdate(dto.isAdminWaitlistUpdate());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -710,6 +860,7 @@ public class LineNotificationService {
             case MATCH_PAIRING -> pref.getMatchPairing();
             case PRACTICE_REMINDER -> pref.getPracticeReminder();
             case DEADLINE_REMINDER -> pref.getDeadlineReminder();
+            case ADMIN_WAITLIST_UPDATE -> pref.getAdminWaitlistUpdate();
         };
     }
 

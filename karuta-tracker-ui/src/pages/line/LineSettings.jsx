@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { lineAPI } from '../../api';
 import { MessageSquare, Copy, RefreshCw, ExternalLink, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { isSuperAdmin } from '../../utils/auth';
 
 const LineSettings = () => {
   const { currentPlayer } = useAuth();
@@ -122,6 +123,7 @@ const LineSettings = () => {
     { key: 'matchPairing', label: '対戦組み合わせ' },
     { key: 'practiceReminder', label: '参加予定リマインダー' },
     { key: 'deadlineReminder', label: '締め切りリマインダー' },
+    ...(isSuperAdmin() ? [{ key: 'adminWaitlistUpdate', label: 'キャンセル待ち状況通知（管理者）' }] : []),
   ];
 
   return (

@@ -63,6 +63,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean deadlineReminder = true;
 
+    /** 管理者向けキャンセル待ち状況通知 */
+    @Column(name = "admin_waitlist_update", nullable = false)
+    @Builder.Default
+    private Boolean adminWaitlistUpdate = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

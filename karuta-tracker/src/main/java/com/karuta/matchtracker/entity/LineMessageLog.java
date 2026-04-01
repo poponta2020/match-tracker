@@ -61,7 +61,8 @@ public class LineMessageLog {
         OFFER_EXPIRED,
         MATCH_PAIRING,
         PRACTICE_REMINDER,
-        DEADLINE_REMINDER
+        DEADLINE_REMINDER,
+        ADMIN_WAITLIST_UPDATE
     }
 
     public enum MessageStatus {

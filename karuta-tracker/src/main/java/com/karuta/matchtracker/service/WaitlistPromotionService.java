@@ -1,9 +1,11 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
@@ -29,6 +31,7 @@ public class WaitlistPromotionService {
 
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final PlayerRepository playerRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final NotificationService notificationService;
     private final LineNotificationService lineNotificationService;
@@ -37,12 +40,14 @@ public class WaitlistPromotionService {
     public WaitlistPromotionService(
             PracticeParticipantRepository practiceParticipantRepository,
             PracticeSessionRepository practiceSessionRepository,
+            PlayerRepository playerRepository,
             LotteryDeadlineHelper lotteryDeadlineHelper,
             NotificationService notificationService,
             LineNotificationService lineNotificationService,
             @Lazy DensukeSyncService densukeSyncService) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
+        this.playerRepository = playerRepository;
         this.lotteryDeadlineHelper = lotteryDeadlineHelper;
         this.notificationService = notificationService;
         this.lineNotificationService = lineNotificationService;
@@ -82,7 +87,13 @@ public class WaitlistPromotionService {
                 participant.getPlayerId(), maxNumber + 1, participant.getSessionId(), participant.getMatchNumber());
 
         // WON枠が空いたので繰り上げフローを発動
-        promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+        Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+        // 管理者通知
+        notifyAdminsAboutWaitlistChange("降格", participant.getPlayerId(),
+                session, participant.getMatchNumber(), promoted.orElse(null));
+
         densukeSyncService.triggerWriteAsync();
     }
 
@@ -132,20 +143,32 @@ public class WaitlistPromotionService {
         if (lotteryDeadlineHelper.isToday(session.getSessionDate())) {
             log.info("Same-day cancel: no waitlist promotion triggered for session {} match {}",
                     session.getId(), participant.getMatchNumber());
+
+            // 当日キャンセルでも管理者通知は送る
+            notifyAdminsAboutWaitlistChange("キャンセル（当日）", participant.getPlayerId(),
+                    session, participant.getMatchNumber(), null);
+
             return ParticipantStatus.CANCELLED;
         }
 
         // 当日でなければ繰り上げフローを開始
-        promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+        Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+        // 管理者通知
+        notifyAdminsAboutWaitlistChange("キャンセル", participant.getPlayerId(),
+                session, participant.getMatchNumber(), promoted.orElse(null));
 
         return ParticipantStatus.CANCELLED;
     }
 
     /**
      * キャンセル待ちリストから次の人を繰り上げる
+     *
+     * @return 繰り上げた参加者（繰り上げ対象なしの場合はempty）
      */
     @Transactional
-    public void promoteNextWaitlisted(Long sessionId, Integer matchNumber, LocalDate sessionDate) {
+    public Optional<PracticeParticipant> promoteNextWaitlisted(Long sessionId, Integer matchNumber, LocalDate sessionDate) {
         Optional<PracticeParticipant> nextWaitlisted = practiceParticipantRepository
                 .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
                         sessionId, matchNumber, ParticipantStatus.WAITLISTED);
@@ -153,7 +176,7 @@ public class WaitlistPromotionService {
         if (nextWaitlisted.isEmpty()) {
             log.info("No waitlisted players remaining for session {} match {} - slot remains open",
                     sessionId, matchNumber);
-            return;
+            return Optional.empty();
         }
 
         PracticeParticipant next = nextWaitlisted.get();
@@ -175,6 +198,8 @@ public class WaitlistPromotionService {
 
         // LINE通知を送信
         lineNotificationService.sendWaitlistOfferNotification(next);
+
+        return Optional.of(next);
     }
 
     /**
@@ -216,7 +241,13 @@ public class WaitlistPromotionService {
             // 次のキャンセル待ちに通知
             PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                     .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
-            promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+            Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                    participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+            // 管理者通知
+            notifyAdminsAboutWaitlistChange("オファー辞退", participant.getPlayerId(),
+                    session, participant.getMatchNumber(), promoted.orElse(null));
+
             densukeSyncService.triggerWriteAsync();
             return;
         }
@@ -326,6 +357,46 @@ public class WaitlistPromotionService {
 
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
-        promoteNextWaitlisted(participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+        Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+        // 管理者通知
+        notifyAdminsAboutWaitlistChange("オファー期限切れ", participant.getPlayerId(),
+                session, participant.getMatchNumber(), promoted.orElse(null));
+    }
+
+    /**
+     * キャンセル待ち列の変動を通知する
+     * - SUPER_ADMIN向け: キャンセル待ち状況の詳細
+     * - 残りのWAITLISTEDユーザー向け: 順番繰り上がりの通知
+     */
+    private void notifyAdminsAboutWaitlistChange(String triggerAction, Long triggerPlayerId,
+                                                  PracticeSession session, int matchNumber,
+                                                  PracticeParticipant promotedParticipant) {
+        try {
+            Player triggerPlayer = playerRepository.findById(triggerPlayerId).orElse(null);
+            if (triggerPlayer == null) return;
+
+            Player offeredPlayer = null;
+            if (promotedParticipant != null) {
+                offeredPlayer = playerRepository.findById(promotedParticipant.getPlayerId()).orElse(null);
+            }
+
+            // 残りのキャンセル待ち列を取得
+            List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.WAITLISTED);
+
+            // SUPER_ADMIN向け通知
+            lineNotificationService.sendAdminWaitlistNotification(
+                    triggerAction, triggerPlayer, session, matchNumber,
+                    offeredPlayer, remainingWaitlist);
+
+            // 残りのWAITLISTEDユーザー向け順番繰り上がり通知
+            lineNotificationService.sendWaitlistPositionUpdateNotifications(
+                    session, matchNumber, remainingWaitlist);
+        } catch (Exception e) {
+            log.error("Failed to send waitlist change notifications: {}", e.getMessage(), e);
+        }
     }
 }

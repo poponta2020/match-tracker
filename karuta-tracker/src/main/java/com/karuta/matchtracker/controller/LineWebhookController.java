@@ -8,6 +8,7 @@ import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.service.LineChannelService;
 import com.karuta.matchtracker.service.LineLinkingService;
 import com.karuta.matchtracker.service.LineMessagingService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
@@ -32,6 +33,7 @@ public class LineWebhookController {
     private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final LineMessagingService lineMessagingService;
+    private final LineChannelService lineChannelService;
     private final LineLinkingService lineLinkingService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final ObjectMapper objectMapper;
@@ -118,6 +120,11 @@ public class LineWebhookController {
 
         if (replyToken != null) {
             lineMessagingService.sendReplyMessage(channel.getChannelAccessToken(), replyToken, replyMessage);
+        }
+
+        // 連携成功後、確定済み抽選結果を送信（Replyの後にPushすることで正しい順序を保証）
+        if (result == LineLinkingService.VerificationResult.SUCCESS) {
+            lineChannelService.sendPendingLotteryResultsForChannel(channel.getId());
         }
     }
 

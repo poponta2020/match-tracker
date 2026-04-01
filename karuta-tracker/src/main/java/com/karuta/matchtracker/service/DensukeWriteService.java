@@ -210,7 +210,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             participants, urlSessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors);
+                            base, cd, cookies, pageId, memberNameToMi, errors, false);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     errors.add("選手[" + playerName + "]: " + e.getMessage());
@@ -245,8 +245,9 @@ public class DensukeWriteService {
 
     /**
      * 抽選確定時の一括書き戻し。
-     * 伝助マッピングがある全プレイヤーについて、dirty に関係なく書き戻す。
-     * 完了後に対象レコードの dirty=false に更新する。
+     * 伝助マッピングがある全プレイヤーについて、WON/WAITLISTED/OFFERED/PENDING のみ書き戻す。
+     * CANCELLED/DECLINED/WAITLIST_DECLINED/未登録は伝助の既存値を維持（join-{id} を省略）。
+     * 書き戻したレコードのみ dirty=false に更新する。
      */
     @Transactional
     public void writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
@@ -312,7 +313,7 @@ public class DensukeWriteService {
             Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
                     .collect(Collectors.toMap(Player::getId, Player::getName));
 
-            // 各プレイヤーを書き込み（dirty フィルタなし）
+            // 各プレイヤーを書き込み（WON/WAITLISTED/OFFERED/PENDING のみ、dirty フィルタなし）
             for (DensukeMemberMapping mapping : mappings) {
                 Long playerId = mapping.getPlayerId();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
@@ -322,21 +323,13 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             allParticipants, sessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors);
+                            base, cd, cookies, pageId, memberNameToMi, errors, true);
                 } catch (Exception e) {
                     log.warn("Bulk write-back failed for player {}: {}", playerName, e.getMessage());
                     errors.add("一括書き戻し[" + playerName + "]: " + e.getMessage());
                 }
             }
-
-            // 全レコードの dirty=false に更新
-            List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-            for (PracticeParticipant p : allParticipants) {
-                if (p.isDirty()) {
-                    p.setDirty(false);
-                }
-            }
-            practiceParticipantRepository.saveAll(allParticipants);
+            // dirty=false 更新は writePlayerToDensuke 内で書き戻したレコードのみに適用される
         }
 
         if (!errors.isEmpty()) {
@@ -354,7 +347,8 @@ public class DensukeWriteService {
             String base, String cd,
             Map<String, String> cookies, String pageId,
             Map<String, String> memberNameToMi,
-            List<String> errors) throws IOException {
+            List<String> errors,
+            boolean lotteryConfirmation) throws IOException {
 
         String strippedName = DensukeScraper.stripLeadingEmoji(playerName);
 
@@ -412,10 +406,17 @@ public class DensukeWriteService {
                                 urlId, session.getSessionDate(), matchNum);
                 if (rowIdOpt.isEmpty()) continue;
 
-                String joinKey = "join-" + rowIdOpt.get().getDensukeRowId();
                 String key = session.getId() + "_" + matchNum;
                 PracticeParticipant pp = bySessionAndMatch.get(key);
-                int value = toJoinValue(pp != null ? pp.getStatus() : null);
+                ParticipantStatus status = pp != null ? pp.getStatus() : null;
+
+                // 抽選確定時: WON/WAITLISTED/OFFERED/PENDING のみ書き戻し、それ以外は省略（伝助の既存値を維持）
+                if (lotteryConfirmation && !isActiveStatus(status)) {
+                    continue;
+                }
+
+                String joinKey = "join-" + rowIdOpt.get().getDensukeRowId();
+                int value = toJoinValue(status);
                 formData.put(joinKey, String.valueOf(value));
                 writtenSessionMatchKeys.add(key);
             }
@@ -685,6 +686,18 @@ public class DensukeWriteService {
             }
         }
         return list;
+    }
+
+    /**
+     * 抽選確定時に伝助へ書き戻す対象のステータスか判定する。
+     * WON/WAITLISTED/OFFERED/PENDING は書き戻し対象、それ以外（CANCELLED等/未登録）は省略。
+     */
+    private boolean isActiveStatus(ParticipantStatus status) {
+        if (status == null) return false;
+        return switch (status) {
+            case PENDING, WON, WAITLISTED, OFFERED -> true;
+            case CANCELLED, DECLINED, WAITLIST_DECLINED -> false;
+        };
     }
 
     private int toJoinValue(ParticipantStatus status) {
