@@ -141,19 +141,16 @@ public class WaitlistPromotionService {
         log.info("Player {} cancelled participation in session {} match {} (reason: {})",
                 participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), cancelReason);
 
-        // 当日キャンセルかどうかチェック
-        if (lotteryDeadlineHelper.isToday(session.getSessionDate())) {
-            log.info("Same-day cancel: no waitlist promotion triggered for session {} match {}",
+        // 当日12:00以降のキャンセル → 新フロー（全体募集＋先着ボタン方式）
+        if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
+            log.info("Same-day after-noon cancel: triggering vacancy recruitment for session {} match {}",
                     session.getId(), participant.getMatchNumber());
 
-            // 当日キャンセルでも管理者通知は送る
-            notifyAdminsAboutWaitlistChange("キャンセル（当日）", participant.getPlayerId(),
-                    session, participant.getMatchNumber(), null);
-
+            handleSameDayCancelAndRecruit(participant, session);
             return ParticipantStatus.CANCELLED;
         }
 
-        // 当日でなければ繰り上げフローを開始
+        // 当日12:00より前のキャンセル → 従来通りwaitlistNumberに基づく繰り上げフロー
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
@@ -162,6 +159,28 @@ public class WaitlistPromotionService {
                 session, participant.getMatchNumber(), promoted.orElse(null));
 
         return ParticipantStatus.CANCELLED;
+    }
+
+    /**
+     * 当日12:00以降のキャンセル時に、キャンセル通知＋空き募集通知を送信する。
+     */
+    private void handleSameDayCancelAndRecruit(PracticeParticipant cancelledParticipant, PracticeSession session) {
+        Player cancelledPlayer = playerRepository.findById(cancelledParticipant.getPlayerId()).orElse(null);
+        String playerName = cancelledPlayer != null ? cancelledPlayer.getName() : "不明";
+
+        // 1. キャンセル通知 → 当該セッションの全WON参加者（キャンセル本人除く）
+        lineNotificationService.sendSameDayCancelNotification(
+                session, cancelledParticipant.getMatchNumber(), playerName, cancelledParticipant.getPlayerId());
+
+        // 2. 空き募集通知 → 当該セッションの非WON参加者（キャンセル本人除く）
+        lineNotificationService.sendSameDayVacancyNotification(
+                session, cancelledParticipant.getMatchNumber(), cancelledParticipant.getPlayerId());
+
+        // 3. 管理者通知
+        notifyAdminsAboutWaitlistChange("キャンセル（当日補充）", cancelledParticipant.getPlayerId(),
+                session, cancelledParticipant.getMatchNumber(), null);
+
+        densukeSyncService.triggerWriteAsync();
     }
 
     /**
