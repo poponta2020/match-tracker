@@ -271,14 +271,26 @@ public class WaitlistPromotionService {
         // OFFEREDに変更し、応答期限を設定
         LocalDateTime deadline = lotteryDeadlineHelper.calculateOfferDeadline(sessionDate);
 
+        Integer oldWaitlistNumber = next.getWaitlistNumber();
+
         next.setStatus(ParticipantStatus.OFFERED);
         next.setDirty(true);
         next.setOfferedAt(JstDateTimeUtil.now());
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
 
+        // 後続のキャンセル待ち番号を繰り上げ
+        if (oldWaitlistNumber != null) {
+            List<PracticeParticipant> subsequent = practiceParticipantRepository
+                    .findWaitlistedAfterNumber(sessionId, matchNumber, oldWaitlistNumber);
+            for (PracticeParticipant s : subsequent) {
+                s.setWaitlistNumber(s.getWaitlistNumber() - 1);
+                practiceParticipantRepository.save(s);
+            }
+        }
+
         log.info("Offered waitlist #{} (player {}) for session {} match {}. Deadline: {}",
-                next.getWaitlistNumber(), next.getPlayerId(), sessionId, matchNumber, deadline);
+                oldWaitlistNumber, next.getPlayerId(), sessionId, matchNumber, deadline);
 
         // 通知を送信
         notificationService.createOfferNotification(next);

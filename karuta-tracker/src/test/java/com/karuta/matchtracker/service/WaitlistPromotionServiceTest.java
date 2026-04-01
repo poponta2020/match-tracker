@@ -7,6 +7,7 @@ import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -163,6 +164,70 @@ class WaitlistPromotionServiceTest {
         assertThatThrownBy(() -> service.rejoinWaitlistBySession(100L, 10L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("復帰対象");
+    }
+
+    @Nested
+    @DisplayName("繰り上げ時のキャンセル待ち番号更新")
+    class PromoteRenumberTests {
+
+        @Test
+        @DisplayName("繰り上げ時に後続のキャンセル待ち番号が繰り上がる")
+        void promoteNextWaitlisted_renumbersSubsequent() {
+            // #1 Aさん, #2 Bさん, #3 Cさん → Aさん繰り上げ → B=#1, C=#2
+            PracticeParticipant waitlist1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+            PracticeParticipant waitlist2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+            PracticeParticipant waitlist3 = PracticeParticipant.builder()
+                    .id(3L).sessionId(100L).playerId(30L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
+
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(waitlist1));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(JstDateTimeUtil.now().plusDays(1));
+            when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 1))
+                    .thenReturn(List.of(waitlist2, waitlist3));
+
+            Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
+                    100L, 1, LocalDate.of(2026, 5, 1));
+
+            assertThat(promoted).isPresent();
+            assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+            // 後続の番号が繰り上がっていることを検証
+            assertThat(waitlist2.getWaitlistNumber()).isEqualTo(1);
+            assertThat(waitlist3.getWaitlistNumber()).isEqualTo(2);
+            // 繰り上げ対象 + 後続2人 = 3回save
+            verify(practiceParticipantRepository, times(3)).save(any());
+        }
+
+        @Test
+        @DisplayName("キャンセル待ちが1人だけの場合も正常に繰り上がる")
+        void promoteNextWaitlisted_singleWaitlisted() {
+            PracticeParticipant waitlist1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(waitlist1));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(JstDateTimeUtil.now().plusDays(1));
+            when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 1))
+                    .thenReturn(List.of());
+
+            Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
+                    100L, 1, LocalDate.of(2026, 5, 1));
+
+            assertThat(promoted).isPresent();
+            assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+            verify(practiceParticipantRepository, times(1)).save(any());
+        }
     }
 
     @Nested
