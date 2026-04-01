@@ -501,10 +501,12 @@ public class LineNotificationService {
             // 団体ごとの確定状態をキャッシュ
             Map<Long, Boolean> confirmedByOrg = new HashMap<>();
 
-            // 対象ユーザーの WON/WAITLISTED かつ所属団体の抽選が確定済みのもののみ
+            // 対象ユーザーの WON/WAITLISTED/OFFERED かつ所属団体の抽選が確定済みのもののみ
             List<PracticeParticipant> playerParticipants = participants.stream()
                 .filter(p -> p.getPlayerId().equals(playerId))
-                .filter(p -> p.getStatus() == ParticipantStatus.WON || p.getStatus() == ParticipantStatus.WAITLISTED)
+                .filter(p -> p.getStatus() == ParticipantStatus.WON
+                          || p.getStatus() == ParticipantStatus.WAITLISTED
+                          || p.getStatus() == ParticipantStatus.OFFERED)
                 .filter(p -> {
                     PracticeSession session = sessionCache.get(p.getSessionId());
                     if (session == null) return false;
@@ -521,16 +523,21 @@ public class LineNotificationService {
             List<PracticeParticipant> waitlisted = playerParticipants.stream()
                 .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED)
                 .collect(Collectors.toList());
+            List<PracticeParticipant> offered = playerParticipants.stream()
+                .filter(p -> p.getStatus() == ParticipantStatus.OFFERED)
+                .collect(Collectors.toList());
             boolean hasWon = playerParticipants.stream()
                 .anyMatch(p -> p.getStatus() == ParticipantStatus.WON);
+            boolean hasNonWon = !waitlisted.isEmpty() || !offered.isEmpty();
 
-            if (waitlisted.isEmpty() && hasWon) {
+            if (!hasNonWon && hasWon) {
                 sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
                     "申し込んだ練習はすべて当選しました");
-            } else if (!waitlisted.isEmpty()) {
+            } else if (hasNonWon) {
                 sendToPlayer(playerId, LineNotificationType.LOTTERY_RESULT,
                     "落選した試合があります");
 
+                // キャンセル待ちの練習を通知
                 Map<Long, List<PracticeParticipant>> waitlistedBySession = waitlisted.stream()
                     .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
 
@@ -544,6 +551,11 @@ public class LineNotificationService {
                     String altText = dateStr + "の練習: キャンセル待ち";
 
                     sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
+                }
+
+                // 繰り上げオファー中の練習をFlexメッセージ（参加する/辞退するボタン付き）で通知
+                for (PracticeParticipant offeredParticipant : offered) {
+                    sendWaitlistOfferNotification(offeredParticipant);
                 }
 
                 if (hasWon) {
