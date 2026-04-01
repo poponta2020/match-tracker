@@ -1058,6 +1058,114 @@ public class LineNotificationService {
     }
 
     /**
+     * 当日補充参加通知を送信する。
+     * その試合のWONメンバー（参加した本人除く）に「〇〇さんが参加します」通知。
+     */
+    public void sendSameDayJoinNotification(PracticeSession session, int matchNumber,
+                                             String joinedPlayerName, Long joinedPlayerId) {
+        String message = String.format("%sさんが今日の第%d試合に参加します", joinedPlayerName, matchNumber);
+
+        List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+
+        List<Long> recipientIds = wonParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .filter(id -> !id.equals(joinedPlayerId))
+                .toList();
+
+        for (Long playerId : recipientIds) {
+            try {
+                sendToPlayer(playerId, LineNotificationType.SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send join notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 枠状況通知を送信する。
+     * 参加登録後に、非WON参加者に残り枠数または枠埋まりを通知。
+     */
+    public void sendSameDayVacancyUpdateNotification(PracticeSession session, int matchNumber, Long joinedPlayerId) {
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+
+        List<PracticeParticipant> currentWon = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        int vacancies = Math.max(0, capacity - currentWon.size());
+
+        // 送信先: セッションの非WON参加者（参加登録した本人除く）
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository
+                .findBySessionId(session.getId());
+        Set<Long> wonPlayerIds = currentWon.stream()
+                .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
+
+        List<Long> recipientIds = allParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .filter(id -> !id.equals(joinedPlayerId))
+                .filter(id -> !wonPlayerIds.contains(id))
+                .toList();
+
+        if (recipientIds.isEmpty()) return;
+
+        Map<String, Object> flex;
+        String altText;
+
+        if (vacancies > 0) {
+            altText = String.format("今日の第%d試合は残り%d枠です。参加しますか？", matchNumber, vacancies);
+            flex = buildSameDayVacancyFlex(dateStr, matchNumber, vacancies, session.getId());
+        } else {
+            altText = String.format("今日の第%d試合の枠が埋まりました", matchNumber);
+            flex = buildSameDayVacancyFilledFlex(dateStr, matchNumber);
+        }
+
+        for (Long playerId : recipientIds) {
+            try {
+                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+            } catch (Exception e) {
+                log.error("Failed to send vacancy update to player {}: {}", playerId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 枠埋まり通知のFlex Message（ボタンなし）
+     */
+    private Map<String, Object> buildSameDayVacancyFilledFlex(String dateStr, int matchNumber) {
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "空き枠のお知らせ",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#9E9E9E",
+            "paddingAll", "15px"
+        );
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", dateStr + "の練習",
+                    "weight", "bold", "size", "lg", "margin", "none"),
+                Map.of("type", "text", "text",
+                    String.format("第%d試合の枠が埋まりました", matchNumber),
+                    "size", "md", "margin", "md", "color", "#333333", "wrap", true)
+            ),
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
+    }
+
+    /**
      * プレイヤーにFlex Messageを送信する
      */
     public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,

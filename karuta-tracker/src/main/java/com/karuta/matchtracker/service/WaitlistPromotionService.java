@@ -162,6 +162,72 @@ public class WaitlistPromotionService {
     }
 
     /**
+     * 空き募集ボタンへの応答を処理する。
+     * 先着1名のみWONに変更。2人目以降はエラー。練習開始時間を過ぎていたら無効。
+     */
+    @Transactional
+    public synchronized void handleSameDayJoin(Long sessionId, int matchNumber, Long playerId) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalStateException("セッションが見つかりません"));
+
+        // 練習開始時間チェック
+        if (session.getStartTime() != null) {
+            LocalDateTime practiceStart = session.getSessionDate().atTime(session.getStartTime());
+            if (JstDateTimeUtil.now().isAfter(practiceStart)) {
+                throw new IllegalStateException("練習開始時間を過ぎているため、参加登録できません。");
+            }
+        }
+
+        // この試合で既にWONかどうかチェック
+        List<PracticeParticipant> existingWon = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+        if (existingWon.stream().anyMatch(p -> p.getStatus() == ParticipantStatus.WON)) {
+            throw new IllegalStateException("既にこの試合に参加登録済みです。");
+        }
+
+        // 空き枠チェック
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        List<PracticeParticipant> currentWon = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatus(sessionId, matchNumber, ParticipantStatus.WON);
+        if (currentWon.size() >= capacity) {
+            throw new IllegalStateException("先を越されました。枠が埋まっています。");
+        }
+
+        // 既存レコードがあればステータス更新、なければ新規作成
+        Optional<PracticeParticipant> existing = existingWon.stream()
+                .filter(p -> p.getStatus() != ParticipantStatus.WON)
+                .findFirst();
+
+        PracticeParticipant participant;
+        if (existing.isPresent()) {
+            participant = existing.get();
+            participant.setStatus(ParticipantStatus.WON);
+            participant.setDirty(true);
+        } else {
+            participant = PracticeParticipant.builder()
+                    .sessionId(sessionId)
+                    .playerId(playerId)
+                    .matchNumber(matchNumber)
+                    .status(ParticipantStatus.WON)
+                    .dirty(true)
+                    .build();
+        }
+        practiceParticipantRepository.save(participant);
+
+        Player joinedPlayer = playerRepository.findById(playerId).orElse(null);
+        String playerName = joinedPlayer != null ? joinedPlayer.getName() : "不明";
+
+        log.info("Same-day join: player {} ({}) joined session {} match {}",
+                playerId, playerName, sessionId, matchNumber);
+
+        // 参加通知 + 枠状況通知
+        lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
+        lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerId);
+
+        densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
      * 当日12:00以降のキャンセル時に、キャンセル通知＋空き募集通知を送信する。
      */
     private void handleSameDayCancelAndRecruit(PracticeParticipant cancelledParticipant, PracticeSession session) {

@@ -617,6 +617,25 @@ public class LotteryController {
     }
 
     /**
+     * 当日空き募集への参加登録（Web経由フォールバック）
+     */
+    @PostMapping("/same-day-join")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<?> sameDayJoin(@RequestBody java.util.Map<String, Object> body) {
+        Long sessionId = ((Number) body.get("sessionId")).longValue();
+        int matchNumber = ((Number) body.get("matchNumber")).intValue();
+        Long playerId = ((Number) body.get("playerId")).longValue();
+
+        try {
+            waitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId);
+            return ResponseEntity.ok(java.util.Map.of("status", "WON", "message", "参加登録が完了しました"));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(java.util.Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
      * ADMINスコープ検証（sessionIdベース）
      */
     private void validateAdminScopeBySessionId(Long sessionId, String role, Long adminOrgId) {

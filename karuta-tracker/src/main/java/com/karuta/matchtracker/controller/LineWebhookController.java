@@ -143,8 +143,8 @@ public class LineWebhookController {
         String action = params.getOrDefault("action", "");
         String participantIdStr = params.getOrDefault("participantId", "");
 
-        if (!action.startsWith("waitlist_")) {
-            log.debug("Ignoring non-waitlist postback: {}", data);
+        if (!action.startsWith("waitlist_") && !"same_day_join".equals(action)) {
+            log.debug("Ignoring unknown postback action: {}", data);
             return;
         }
 
@@ -159,6 +159,12 @@ public class LineWebhookController {
         }
 
         Long playerId = assignmentOpt.get().getPlayerId();
+
+        // 当日補充参加のpostback処理
+        if ("same_day_join".equals(action)) {
+            handleSameDayJoin(channel, replyToken, params, playerId);
+            return;
+        }
 
         // キャンセル待ちセッション辞退のpostback処理
         if ("waitlist_decline_session".equals(action)) {
@@ -237,6 +243,34 @@ public class LineWebhookController {
         } catch (Exception e) {
             log.error("Failed to decline waitlist via LINE postback: player={}, error={}",
                 playerId, e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+        }
+    }
+
+    /**
+     * 当日補充参加のpostbackを処理する
+     */
+    private void handleSameDayJoin(LineChannel channel, String replyToken,
+                                    java.util.Map<String, String> params, Long playerId) {
+        String sessionIdStr = params.getOrDefault("sessionId", "");
+        String matchNumberStr = params.getOrDefault("matchNumber", "");
+
+        if (sessionIdStr.isEmpty() || matchNumberStr.isEmpty()) {
+            sendReply(channel, replyToken, "パラメータが不正です。アプリから操作してください。");
+            return;
+        }
+
+        try {
+            Long sessionId = Long.parseLong(sessionIdStr);
+            int matchNumber = Integer.parseInt(matchNumberStr);
+            waitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId);
+            sendReply(channel, replyToken, "参加登録が完了しました！練習でお会いしましょう。");
+            log.info("Same-day join via LINE postback: player={}, session={}, match={}",
+                    playerId, sessionId, matchNumber);
+        } catch (IllegalStateException e) {
+            sendReply(channel, replyToken, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to process same-day join: player={}, error={}", playerId, e.getMessage());
             sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
         }
     }
