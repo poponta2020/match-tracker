@@ -761,6 +761,9 @@ public class LineNotificationService {
         pref.setPracticeReminder(dto.isPracticeReminder());
         pref.setDeadlineReminder(dto.isDeadlineReminder());
         pref.setAdminWaitlistUpdate(dto.isAdminWaitlistUpdate());
+        pref.setSameDayConfirmation(dto.isSameDayConfirmation());
+        pref.setSameDayCancel(dto.isSameDayCancel());
+        pref.setSameDayVacancy(dto.isSameDayVacancy());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -822,6 +825,98 @@ public class LineNotificationService {
                 MessageStatus.FAILED, "LINE API送信失敗");
             return SendResult.FAILED;
         }
+    }
+
+    /**
+     * 当日12:00の参加者確定通知を送信する。
+     * WON参加者に、試合ごとのメンバーリストをFlex Messageで通知。
+     */
+    public void sendSameDayConfirmationNotification(PracticeSession session) {
+        List<PracticeParticipant> allParticipants = practiceParticipantRepository
+                .findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
+
+        if (allParticipants.isEmpty()) {
+            log.debug("No WON participants for session {} on {}", session.getId(), session.getSessionDate());
+            return;
+        }
+
+        // 試合番号ごとにグループ化
+        Map<Integer, List<PracticeParticipant>> byMatch = allParticipants.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber,
+                        java.util.TreeMap::new, Collectors.toList()));
+
+        if (byMatch.isEmpty()) return;
+
+        // プレイヤー名を一括取得
+        List<Long> playerIds = allParticipants.stream()
+                .map(PracticeParticipant::getPlayerId).distinct().toList();
+        Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName));
+
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+
+        // Flex Messageの構築
+        Map<String, Object> flexContents = buildSameDayConfirmationFlex(dateStr, byMatch, playerNames);
+        String altText = dateStr + "の練習メンバーが確定しました";
+
+        // WON参加者（重複除去）に送信
+        for (Long playerId : playerIds) {
+            try {
+                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_CONFIRMATION, altText, flexContents);
+            } catch (Exception e) {
+                log.error("Failed to send confirmation to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        log.info("Sent same-day confirmation to {} players for session {}", playerIds.size(), session.getId());
+    }
+
+    /**
+     * 参加者確定通知のFlex Messageを構築する
+     */
+    private Map<String, Object> buildSameDayConfirmationFlex(
+            String dateStr, Map<Integer, List<PracticeParticipant>> byMatch, Map<Long, String> playerNames) {
+
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "本日の練習メンバー",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#2196F3",
+            "paddingAll", "15px"
+        );
+
+        List<Object> bodyContents = new java.util.ArrayList<>();
+        bodyContents.add(Map.of("type", "text", "text", dateStr + "の練習",
+                "weight", "bold", "size", "lg", "margin", "none"));
+
+        for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
+            bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+            bodyContents.add(Map.of("type", "text", "text", "第" + entry.getKey() + "試合",
+                    "weight", "bold", "size", "md", "margin", "lg", "color", "#333333"));
+
+            String members = entry.getValue().stream()
+                    .map(p -> playerNames.getOrDefault(p.getPlayerId(), "不明"))
+                    .collect(Collectors.joining("、"));
+            bodyContents.add(Map.of("type", "text", "text", members,
+                    "size", "sm", "margin", "sm", "color", "#555555", "wrap", true));
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
     }
 
     /**
