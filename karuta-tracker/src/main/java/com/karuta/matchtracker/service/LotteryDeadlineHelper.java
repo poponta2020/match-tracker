@@ -99,6 +99,14 @@ public class LotteryDeadlineHelper {
     }
 
     /**
+     * 当日12:00（正午）以降かどうかを判定する。
+     * 当日キャンセル補充フローの境界判定に使用。
+     */
+    public boolean isAfterSameDayNoon(LocalDate sessionDate) {
+        return isToday(sessionDate) && !JstDateTimeUtil.now().isBefore(sessionDate.atTime(12, 0));
+    }
+
+    /**
      * 指定年月に対して、自動抽選が実行されるべきかどうかを判定する
      * SAME_DAYタイプの団体は抽選なしのため常にfalse
      */
