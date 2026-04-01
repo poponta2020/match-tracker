@@ -58,7 +58,7 @@
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |
 | 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ、締め切り表示 | ALL | 参加登録（抽選済みセッションはステータス表示のみ）。締め切り前は「締め切り: ○月○日（あと○日）」を表示（締め切り後・締め切りなし時は非表示）。締め切り後は既存登録のチェックボックスがdisabled（グレーアウト）になり解除不可。未登録の試合への追加登録は可能 |
-| 18 | `/practice/cancel` | `PracticeCancelPage.jsx` | キャンセル専用カレンダー、試合選択チェックボックス、キャンセル理由ラジオボタン | ALL | 参加キャンセル（WON登録日をハイライトしたカレンダー→試合選択→理由選択→確認ダイアログ） |
+| 18 | `/practice/cancel` | `PracticeCancelPage.jsx` | キャンセル専用カレンダー、試合選択チェックボックス、キャンセル理由ラジオボタン、当日12:00以降確認ダイアログ | ALL | 参加キャンセル（WON登録日をハイライトしたカレンダー→試合選択→理由選択→確認ダイアログ）。当日12:00（JST）以降のキャンセル時は「当日キャンセルとなります。補充募集が行われます。」の追加警告を確認ダイアログに表示 |
 
 ---
 
@@ -108,7 +108,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル） | ALL | 統合通知設定（Web Push + LINE） |
+| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル）、当日キャンセル補充通知トグル3種（参加者確定通知・当日キャンセル通知・空き募集通知） | ALL | 統合通知設定（Web Push + LINE）。LINE通知セクションに当日キャンセル補充関連の通知トグル3種（sameDayConfirmation / sameDayCancel / sameDayVacancy）を追加 |
 | 33 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
 | 34 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
 

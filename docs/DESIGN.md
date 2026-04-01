@@ -630,6 +630,9 @@ Entity Layer (JPA Entity)
 | match_pairing | BOOLEAN | NOT NULL, DEFAULT TRUE | 対戦組み合わせ |
 | practice_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加予定リマインダー |
 | deadline_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 締め切りリマインダー |
+| same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日参加者確定通知 |
+| same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル通知 |
+| same_day_vacancy | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日空き募集通知 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 ---
@@ -1325,6 +1328,30 @@ Entity Layer (JPA Entity)
 **説明**: 抽選実行履歴取得。`confirmedAt` フィールドで確定状態を確認可能
 **権限**: なし
 
+#### POST /api/lottery/same-day-join
+**説明**: 当日先着参加。12:00以降にキャンセルで空いた枠に先着1名がWONとして参加登録される。枠が既に埋まっている場合は409 Conflict。LINEのpostback `action=same_day_join` またはアプリから呼び出し可能。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
+**リクエスト**:
+```json
+{
+  "sessionId": 100,
+  "matchNumber": 2,
+  "playerId": 10
+}
+```
+**レスポンス（成功）**: 200 OK
+```json
+{
+  "message": "参加が確定しました"
+}
+```
+**レスポンス（枠なし）**: 409 Conflict
+```json
+{
+  "error": "この枠は既に埋まっています"
+}
+```
+
 ---
 
 ### 4.10 通知API
@@ -1976,6 +2003,76 @@ Entity Layer (JPA Entity)
    - 承諾 → status = WON
    - 辞退/期限切れ → status = DECLINED → 次の待ち番号を繰り上げ
 ```
+
+---
+
+### 7.5 当日キャンセル補充フロー
+
+```
+[12:00確定フェーズ — SameDayConfirmationScheduler（毎日12:00 JST）]
+1. 当日セッションのOFFERED参加者を一括でDECLINEDに変更
+   ↓
+2. WON参加者にメンバーリストFlex Message（青ヘッダー）をLINE送信
+   - 通知トグル: sameDayConfirmation
+
+[当日キャンセル→補充フェーズ — WaitlistPromotionService.cancelParticipation()]
+1. 12:00以降にWON参加者がキャンセル
+   ↓
+2. LotteryDeadlineHelper.isAfterSameDayNoon() で12:00以降判定
+   ↓
+3. WON参加者にキャンセル通知送信（通知トグル: sameDayCancel）
+   ↓
+4. 非WON参加者に空き募集Flex Message送信（オレンジヘッダー、「参加する」ボタン付き）
+   - postback: action=same_day_join&sessionId={id}&matchNumber={num}
+   - 通知トグル: sameDayVacancy
+
+[先着参加フェーズ — LINEボタン or アプリ]
+1. LINEボタンpostback → LineWebhookController（same_day_joinアクション）
+   または アプリ → LotteryController POST /api/lottery/same-day-join
+   ↓
+2. WaitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId)
+   ↓
+3. 空き枠チェック → 先着1名がWON（2人目以降: 409 Conflict）
+   ↓
+4. 参加者本人に参加確定通知送信
+   ↓
+5. WON参加者全員に枠状況通知送信
+   - 残り枠あり: オレンジヘッダー + 「参加する」ボタン
+   - 枠埋まり: グレーヘッダー + ボタンなし
+
+[アプリ経由参加登録通知 — PracticeParticipantService]
+1. 12:00以降にアプリ経由でWON登録された場合
+   ↓
+2. WONメンバーに通知送信
+```
+
+**変更クラス一覧:**
+
+| クラス | 変更内容 |
+|--------|---------|
+| `SameDayConfirmationScheduler`（新規） | scheduler/ — 毎日12:00 JSTにOFFERED→DECLINED一括変更 + メンバーリスト送信 |
+| `WaitlistPromotionService` | cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加 |
+| `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加 |
+| `LotteryDeadlineHelper` | isAfterSameDayNoon()追加、calculateOfferDeadline当日対応 |
+| `PracticeParticipantService` | 12:00以降参加時の通知送信追加 |
+| `LineWebhookController` | same_day_joinポストバックハンドリング追加 |
+| `LotteryController` | POST /api/lottery/same-day-joinエンドポイント追加 |
+
+**Flex Messageデザイン:**
+
+| メッセージ種別 | ヘッダー色 | ボタン | 送信先 |
+|---------------|-----------|--------|--------|
+| 参加者確定（メンバーリスト） | 青（#1E88E5） | なし | WON参加者 |
+| 空き募集 | オレンジ（#FF6B00） | 「参加する」（postback） | 非WON参加者 |
+| 残り枠あり（枠状況通知） | オレンジ（#FF6B00） | 「参加する」（postback） | WON参加者 |
+| 枠埋まり（枠状況通知） | グレー（#9E9E9E） | なし | WON参加者 |
+
+**DB変更:**
+
+| 対象 | 変更内容 |
+|------|---------|
+| `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY` の3値追加 |
+| `line_notification_preferences` テーブル | `same_day_confirmation` (BOOLEAN, DEFAULT TRUE), `same_day_cancel` (BOOLEAN, DEFAULT TRUE), `same_day_vacancy` (BOOLEAN, DEFAULT TRUE) の3カラム追加 |
 
 ---
 
