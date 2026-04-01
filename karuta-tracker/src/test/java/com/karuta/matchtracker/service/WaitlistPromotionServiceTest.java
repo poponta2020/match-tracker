@@ -250,7 +250,7 @@ class WaitlistPromotionServiceTest {
 
             verify(practiceParticipantRepository).save(any(PracticeParticipant.class));
             verify(lineNotificationService).sendSameDayJoinNotification(eq(session), eq(1), eq("参加者"), eq(20L));
-            verify(lineNotificationService).sendSameDayVacancyUpdateNotification(eq(session), eq(1), eq(20L));
+            verify(lineNotificationService).sendSameDayVacancyUpdateNotification(eq(session), eq(1), eq("参加者"), eq(20L));
         }
 
         @Test

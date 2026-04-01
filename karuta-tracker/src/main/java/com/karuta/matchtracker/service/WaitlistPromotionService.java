@@ -190,7 +190,7 @@ public class WaitlistPromotionService {
         List<PracticeParticipant> currentWon = practiceParticipantRepository
                 .findBySessionIdAndMatchNumberAndStatus(sessionId, matchNumber, ParticipantStatus.WON);
         if (currentWon.size() >= capacity) {
-            throw new IllegalStateException("先を越されました。枠が埋まっています。");
+            throw new IllegalStateException("定員に達してしまいました...");
         }
 
         // 既存レコードがあればステータス更新、なければ新規作成
@@ -222,7 +222,7 @@ public class WaitlistPromotionService {
 
         // 参加通知 + 枠状況通知
         lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
-        lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerId);
+        lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
 
         densukeSyncService.triggerWriteAsync();
     }

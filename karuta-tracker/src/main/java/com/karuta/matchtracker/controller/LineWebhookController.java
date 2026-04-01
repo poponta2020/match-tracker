@@ -200,7 +200,7 @@ public class LineWebhookController {
         // 既にOFFERED以外のステータスなら処理済み
         if (participant.getStatus() != com.karuta.matchtracker.entity.ParticipantStatus.OFFERED) {
             log.info("Postback for participant {} but status is already {}", participantId, participant.getStatus());
-            sendReply(channel, replyToken, "この繰り上げオファーは既に処理済みです。");
+            sendReply(channel, replyToken, "この操作は既に処理済みです。");
             return;
         }
 
@@ -209,14 +209,14 @@ public class LineWebhookController {
         try {
             waitlistPromotionService.respondToOffer(participantId, accept);
             String replyMessage = accept
-                ? "参加を承諾しました！練習でお会いしましょう。"
-                : "辞退しました。次の方に通知します。";
+                ? "参加登録が完了しました。練習頑張ってください！"
+                : "オファーを辞退しました。次の方に通知します。";
             sendReply(channel, replyToken, replyMessage);
             log.info("Waitlist offer {} via LINE postback: player={}, participant={}",
                 accept ? "accepted" : "declined", playerId, participantId);
         } catch (Exception e) {
             log.error("Failed to process waitlist postback for participant {}: {}", participantId, e.getMessage());
-            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
         }
     }
 
@@ -243,7 +243,7 @@ public class LineWebhookController {
         } catch (Exception e) {
             log.error("Failed to decline waitlist via LINE postback: player={}, error={}",
                 playerId, e.getMessage());
-            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
         }
     }
 
@@ -264,14 +264,14 @@ public class LineWebhookController {
             Long sessionId = Long.parseLong(sessionIdStr);
             int matchNumber = Integer.parseInt(matchNumberStr);
             waitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId);
-            sendReply(channel, replyToken, "参加登録が完了しました！練習でお会いしましょう。");
+            sendReply(channel, replyToken, "参加登録が完了しました！練習頑張ってください！");
             log.info("Same-day join via LINE postback: player={}, session={}, match={}",
                     playerId, sessionId, matchNumber);
         } catch (IllegalStateException e) {
             sendReply(channel, replyToken, e.getMessage());
         } catch (Exception e) {
             log.error("Failed to process same-day join: player={}, error={}", playerId, e.getMessage());
-            sendReply(channel, replyToken, "処理中にエラーが発生しました。アプリから操作してください。");
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
         }
     }
 

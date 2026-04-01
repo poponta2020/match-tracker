@@ -7,6 +7,7 @@ import com.karuta.matchtracker.entity.LineMessageLog.LineNotificationType;
 import com.karuta.matchtracker.entity.LineNotificationScheduleSetting.ScheduleNotificationType;
 import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.service.LineNotificationService;
+import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -34,6 +35,7 @@ public class LineReminderScheduler {
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final LineMessageLogRepository lineMessageLogRepository;
     private final LineNotificationService lineNotificationService;
+    private final VenueRepository venueRepository;
     private final ObjectMapper objectMapper;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
@@ -62,8 +64,21 @@ public class LineReminderScheduler {
             {
                 PracticeSession session = sessionOpt.get();
                 String dateStr = session.getSessionDate().format(DATE_FORMAT);
-                String dayLabel = days == 1 ? "明日" : days == 2 ? "明後日" : "";
-                String message = String.format("%s%sは練習日です。準備をお忘れなく！", dayLabel, dateStr);
+                String venueName = "";
+                if (session.getVenueId() != null) {
+                    venueName = venueRepository.findById(session.getVenueId())
+                        .map(Venue::getName).orElse("");
+                }
+                String message;
+                if (days == 1) {
+                    message = venueName.isEmpty()
+                        ? "明日は練習に参加予定です！"
+                        : String.format("明日は%sでの練習に参加予定です！", venueName);
+                } else if (days == 2) {
+                    message = String.format("明後日%sは練習日です！", dateStr);
+                } else {
+                    message = String.format("%sは練習日です！", dateStr);
+                }
 
                 // 当該セッションのWON参加者に送信
                 List<PracticeParticipant> participants = practiceParticipantRepository
