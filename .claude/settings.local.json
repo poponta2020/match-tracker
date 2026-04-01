@@ -153,7 +153,14 @@
       "Bash(BASE=\"https://densuke.biz/\" CD=\"5qZmcUeYxLweswAa\" MI=\"86850930\" PAGE_ID=\"10442543\" __NEW_LINE_de6296ba5d175d20__ echo \"=== 現在の値（全部○のはず） ===\" curl -s -c /tmp/dc.txt -b /tmp/dc.txt \"$BASElist?cd=$CD&mi=$MI\" -H \"User-Agent: Mozilla/5.0\")",
       "Read(//home/poponta/match-tracker/**)",
       "Bash(karuta-tracker/gradlew -p karuta-tracker compileJava)",
-      "Bash(karuta-tracker/gradlew -p karuta-tracker test --tests \"com.karuta.matchtracker.service.WaitlistPromotionServiceTest\")"
+      "Bash(karuta-tracker/gradlew -p karuta-tracker test --tests \"com.karuta.matchtracker.service.WaitlistPromotionServiceTest\")",
+      "Bash(git -C /home/poponta/match-tracker status --short)",
+      "Bash(git -C /home/poponta/match-tracker log --oneline -5)",
+      "Bash(git -C /home/poponta/match-tracker diff HEAD -- karuta-tracker/src/main/java/com/karuta/matchtracker/service/WaitlistPromotionService.java karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java)",
+      "Bash(karuta-tracker/gradlew -p karuta-tracker test --tests \"com.karuta.matchtracker.service.WaitlistPromotionServiceTest\" --info)",
+      "Bash(gh config:*)",
+      "Bash(git config:*)",
+      "Bash(GH_DEBUG=1 gh auth status)"
     ],
     "deny": [],
     "ask": [],

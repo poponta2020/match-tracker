@@ -100,9 +100,8 @@ public class LineNotificationService {
 
         String dateStr = session.getSessionDate().format(DATE_FORMAT);
 
-        for (int i = 0; i < remainingWaitlist.size(); i++) {
-            PracticeParticipant wp = remainingWaitlist.get(i);
-            int position = i + 1;
+        for (PracticeParticipant wp : remainingWaitlist) {
+            int position = wp.getWaitlistNumber() != null ? wp.getWaitlistNumber() : 0;
             String message = String.format("%sの練習 試合%dのキャンセル待ち順が繰り上がりました。現在%d番目です",
                 dateStr, matchNumber, position);
             sendToPlayer(wp.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);

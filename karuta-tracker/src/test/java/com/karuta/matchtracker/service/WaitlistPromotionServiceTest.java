@@ -1,11 +1,14 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+
+import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -54,11 +58,16 @@ class WaitlistPromotionServiceTest {
                 .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
 
+        PracticeSession session = PracticeSession.builder().id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(p1, p2));
         when(practiceParticipantRepository.findWaitlistedAfterNumber(eq(100L), eq(1), eq(2)))
                 .thenReturn(List.of());
         when(practiceParticipantRepository.findWaitlistedAfterNumber(eq(100L), eq(3), eq(1)))
+                .thenReturn(List.of());
+        when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), anyInt(), eq(ParticipantStatus.WAITLISTED)))
                 .thenReturn(List.of());
 
         int count = service.declineWaitlistBySession(100L, 10L);
@@ -80,9 +89,14 @@ class WaitlistPromotionServiceTest {
                 .id(3L).sessionId(100L).playerId(30L).matchNumber(1)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
 
+        PracticeSession session = PracticeSession.builder().id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(target));
         when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 2))
+                .thenReturn(List.of(next));
+        when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), eq(1), eq(ParticipantStatus.WAITLISTED)))
                 .thenReturn(List.of(next));
 
         service.declineWaitlistBySession(100L, 10L);

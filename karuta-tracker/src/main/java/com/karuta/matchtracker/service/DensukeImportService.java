@@ -336,8 +336,8 @@ public class DensukeImportService {
                 return true;
             }
             case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
-                // 3-A10/A11: 再登録
-                registerNewParticipant(playerId, session, matchNumber);
+                // 3-A10/A11: 既存レコードを再利用して再登録（一意制約違反を防ぐ）
+                reactivateAsNewParticipant(existing, session, matchNumber);
                 return true;
             }
             default -> { return false; }
@@ -366,8 +366,8 @@ public class DensukeImportService {
             }
             case WAITLISTED, OFFERED -> { return false; } // 3-B4/B6: 一致、スキップ
             case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
-                // 3-B8: キャンセル待ちに復帰
-                createWaitlisted(playerId, session, matchNumber);
+                // 3-B8: 既存レコードを再利用してキャンセル待ちに復帰（一意制約違反を防ぐ）
+                reactivateAsWaitlisted(existing, session, matchNumber);
                 return true;
             }
             default -> { return false; }
@@ -448,6 +448,55 @@ public class DensukeImportService {
                 .dirty(true).build());
         log.info("Phase3: registered player {} as WAITLISTED #{} for session {} match {}",
                 playerId, maxNumber + 1, session.getId(), matchNumber);
+    }
+
+    /**
+     * CANCELLED/DECLINED/WAITLIST_DECLINED の既存レコードを再利用して WON or WAITLISTED に復帰させる。
+     * 新規INSERTではなく既存レコードのUPDATEにすることで一意制約違反を防ぐ。
+     */
+    private void reactivateAsNewParticipant(PracticeParticipant existing, PracticeSession session, int matchNumber) {
+        clearCancelledFields(existing);
+        if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
+            existing.setStatus(ParticipantStatus.WON);
+            existing.setWaitlistNumber(null);
+            log.info("Phase3: reactivated player {} as WON for session {} match {}",
+                    existing.getPlayerId(), session.getId(), matchNumber);
+        } else {
+            int maxNumber = practiceParticipantRepository
+                    .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
+            existing.setStatus(ParticipantStatus.WAITLISTED);
+            existing.setWaitlistNumber(maxNumber + 1);
+            log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
+                    existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+        }
+        practiceParticipantRepository.save(existing);
+    }
+
+    /**
+     * CANCELLED/DECLINED/WAITLIST_DECLINED の既存レコードを再利用して WAITLISTED に復帰させる。
+     */
+    private void reactivateAsWaitlisted(PracticeParticipant existing, PracticeSession session, int matchNumber) {
+        clearCancelledFields(existing);
+        int maxNumber = practiceParticipantRepository
+                .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
+        existing.setStatus(ParticipantStatus.WAITLISTED);
+        existing.setWaitlistNumber(maxNumber + 1);
+        practiceParticipantRepository.save(existing);
+        log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
+                existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+    }
+
+    /**
+     * キャンセル系ステータスに紐づくフィールドをクリアし、dirty=true にする。
+     */
+    private void clearCancelledFields(PracticeParticipant existing) {
+        existing.setDirty(true);
+        existing.setCancelReason(null);
+        existing.setCancelReasonDetail(null);
+        existing.setCancelledAt(null);
+        existing.setOfferedAt(null);
+        existing.setOfferDeadline(null);
+        existing.setRespondedAt(null);
     }
 
     private Set<Long> resolvePlayerIds(List<String> names, Map<String, Long> playerNameMap,

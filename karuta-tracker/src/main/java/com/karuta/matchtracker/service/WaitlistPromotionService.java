@@ -16,8 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * キャンセル・繰り上げサービス
@@ -272,6 +274,12 @@ public class WaitlistPromotionService {
             throw new IllegalStateException("辞退対象のキャンセル待ちがありません");
         }
 
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        // 影響を受けた試合番号を記録
+        Set<Integer> affectedMatchNumbers = new HashSet<>();
+
         for (PracticeParticipant p : waitlisted) {
             Integer oldNumber = p.getWaitlistNumber();
             p.setStatus(ParticipantStatus.WAITLIST_DECLINED);
@@ -289,8 +297,16 @@ public class WaitlistPromotionService {
                 }
             }
 
+            affectedMatchNumbers.add(p.getMatchNumber());
+
             log.info("Player {} declined waitlist for session {} match {} (was #{})",
                     playerId, sessionId, p.getMatchNumber(), oldNumber);
+        }
+
+        // 影響を受けた各試合のキャンセル待ちユーザーに通知
+        for (Integer matchNumber : affectedMatchNumbers) {
+            notifyAdminsAboutWaitlistChange("キャンセル待ち辞退", playerId,
+                    session, matchNumber, null);
         }
 
         densukeSyncService.triggerWriteAsync();
