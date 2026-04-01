@@ -36,9 +36,9 @@ import java.util.stream.Collectors;
  * 1. セッションを日付昇順で処理
  * 2. 各セッション内で試合を番号昇順で処理
  * 3. 各試合について:
- *    a. 連鎖落選の適用（同セッション内の先行試合で落選した人を自動落選）
- *    b. 優先当選者の決定（同月内の別セッションで落選経験がある人を優先）
- *    c. 残り枠のランダム抽選
+ *    a. 前試合落選者（低優先度）とその他を分離
+ *    b. その他の参加者で優先当選/一般抽選を実施
+ *    c. 余り枠があれば前試合落選者を当選させる（定員超過時は優先的に落選）
  *    d. 落選者にキャンセル待ち番号を付与
  */
 @Service
@@ -256,28 +256,28 @@ public class LotteryService {
         log.debug("Match {}: {} applicants for {} capacity - lottery required",
                 matchNumber, totalApplicants, capacity);
 
-        // Step 1: 連鎖落選の適用
-        List<PracticeParticipant> cascadeLosers = new ArrayList<>();
+        // Step 1: 前試合落選者（低優先度）とその他を分離
+        List<PracticeParticipant> cascadeCandidates = new ArrayList<>();
         List<PracticeParticipant> remaining = new ArrayList<>();
 
         for (PracticeParticipant p : applicants) {
             if (sessionLosers.contains(p.getPlayerId())) {
-                // 同セッション内で既に落選 → 連鎖落選
-                cascadeLosers.add(p);
+                // 同セッション内で既に落選 → 低優先度（空きがあれば当選）
+                cascadeCandidates.add(p);
             } else {
                 remaining.add(p);
             }
         }
 
-        log.debug("Match {}: {} cascade losers, {} remaining",
-                matchNumber, cascadeLosers.size(), remaining.size());
+        log.debug("Match {}: {} cascade candidates (low priority), {} remaining",
+                matchNumber, cascadeCandidates.size(), remaining.size());
 
-        // Step 2: 残りの参加者で抽選
+        // Step 2: remainingの参加者で抽選
         List<PracticeParticipant> winners = new ArrayList<>();
         List<PracticeParticipant> lotteryLosers = new ArrayList<>();
 
         if (remaining.size() <= capacity) {
-            // 連鎖落選を除けば定員以下 → 残り全員当選
+            // remaining全員当選
             winners.addAll(remaining);
         } else {
             // 優先当選者の決定（同月内の別セッションで落選経験がある人）
@@ -334,6 +334,33 @@ public class LotteryService {
                 if (normalApplicants.size() > remainingSlots) {
                     lotteryLosers.addAll(normalApplicants.subList(remainingSlots, normalApplicants.size()));
                 }
+            }
+        }
+
+        // Step 2b: 余り枠があれば前試合落選者を当選させる
+        List<PracticeParticipant> cascadeLosers = new ArrayList<>();
+        int leftoverSlots = capacity - winners.size();
+
+        if (leftoverSlots > 0 && !cascadeCandidates.isEmpty()) {
+            if (cascadeCandidates.size() <= leftoverSlots) {
+                // 全員当選
+                winners.addAll(cascadeCandidates);
+                log.debug("Match {}: all {} cascade candidates win (leftover slots: {})",
+                        matchNumber, cascadeCandidates.size(), leftoverSlots);
+            } else {
+                // 余り枠分をランダム抽選で当選
+                Collections.shuffle(cascadeCandidates, random);
+                winners.addAll(cascadeCandidates.subList(0, leftoverSlots));
+                cascadeLosers.addAll(cascadeCandidates.subList(leftoverSlots, cascadeCandidates.size()));
+                log.debug("Match {}: {} cascade candidates win, {} lose (leftover slots: {})",
+                        matchNumber, leftoverSlots, cascadeLosers.size(), leftoverSlots);
+            }
+        } else {
+            // 余り枠なし → 全員落選
+            cascadeLosers.addAll(cascadeCandidates);
+            if (!cascadeCandidates.isEmpty()) {
+                log.debug("Match {}: all {} cascade candidates lose (no leftover slots)",
+                        matchNumber, cascadeCandidates.size());
             }
         }
 
