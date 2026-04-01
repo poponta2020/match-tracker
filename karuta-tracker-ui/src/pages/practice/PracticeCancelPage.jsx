@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, lotteryAPI } from '../../api';
-import { ChevronLeft, ChevronRight, ArrowLeft, XCircle, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft, XCircle, Check, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import YearMonthPicker from '../../components/YearMonthPicker';
 
@@ -29,6 +29,7 @@ const PracticeCancelPage = () => {
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+  const [showSameDayConfirm, setShowSameDayConfirm] = useState(false);
 
   const fetchingRef = useRef(false);
 
@@ -195,10 +196,25 @@ const PracticeCancelPage = () => {
     });
   };
 
+  // 当日12:00以降かどうか判定
+  const isSameDayAfterNoon = () => {
+    if (!selectedSession) return false;
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    return selectedSession.sessionDate === todayStr && now.getHours() >= 12;
+  };
+
   // キャンセル実行
   const handleCancel = async () => {
     if (selectedMatches.length === 0) return;
     if (!cancelReason) return;
+
+    // 当日12:00以降の場合は追加確認ダイアログ
+    if (isSameDayAfterNoon() && !showSameDayConfirm) {
+      setShowSameDayConfirm(true);
+      return;
+    }
+    setShowSameDayConfirm(false);
 
     const wonMatches = getWonMatches(selectedSession);
     const participantIds = selectedMatches
@@ -512,6 +528,36 @@ const PracticeCancelPage = () => {
             <XCircle className="w-5 h-5" />
             {cancelling ? 'キャンセル中...' : 'キャンセルする'}
           </button>
+        </div>
+      )}
+      {/* 当日12:00以降のキャンセル確認ダイアログ */}
+      {showSameDayConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-gray-800 mb-2">確認</h3>
+                <p className="text-sm text-gray-600">
+                  直前のキャンセルとなりますがよろしいですか？
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSameDayConfirm(false)}
+                className="flex-1 py-2.5 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                戻る
+              </button>
+              <button
+                onClick={handleCancel}
+                className="flex-1 py-2.5 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                キャンセルする
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
