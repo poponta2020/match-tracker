@@ -161,8 +161,8 @@ public class DensukeImportService {
                                Set<String> unmatchedNameSet, ImportResult result) {
         List<PracticeParticipant> existing =
                 practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
-        Set<Long> existingPlayerIds = existing.stream()
-                .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
+        Map<Long, PracticeParticipant> existingByPlayerId = existing.stream()
+                .collect(Collectors.toMap(PracticeParticipant::getPlayerId, p -> p, (a, b) -> a));
 
         // ○の参加者IDを収集
         Set<Long> markedPlayerIds = new LinkedHashSet<>();
@@ -183,7 +183,7 @@ public class DensukeImportService {
             }
         }
 
-        // ○: 新規のみ追加（1-A）
+        // ○: 新規追加 or キャンセル済みレコードの再有効化（1-A）
         int matchRegistered = 0;
         for (String name : entry.getParticipants()) {
             Long playerId = playerNameMap.get(name);
@@ -192,12 +192,21 @@ public class DensukeImportService {
                 result.setSkippedCount(result.getSkippedCount() + 1);
                 continue;
             }
-            if (existingPlayerIds.contains(playerId)) {
-                continue; // 1-B, 1-C: 既存はスキップ
+
+            PracticeParticipant existingParticipant = existingByPlayerId.get(playerId);
+            if (existingParticipant != null) {
+                // CANCELLED/DECLINED/WAITLIST_DECLINED → 再有効化
+                if (!existingParticipant.isDirty() && isTerminalStatus(existingParticipant.getStatus())) {
+                    reactivatePhase1(existingParticipant, deadlineType, session, entry.getMatchNumber());
+                    result.setRegisteredCount(result.getRegisteredCount() + 1);
+                    matchRegistered++;
+                    log.info("Phase1: reactivated {} ({}) for session {} match {}",
+                            name, existingParticipant.getStatus(), entry.getDate(), entry.getMatchNumber());
+                }
+                continue; // 1-B, 1-C: アクティブな既存レコードはスキップ
             }
             if (practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(
                     session.getId(), playerId, entry.getMatchNumber())) {
-                existingPlayerIds.add(playerId);
                 continue;
             }
 
@@ -225,7 +234,6 @@ public class DensukeImportService {
                     .dirty(false)
                     .build();
             practiceParticipantRepository.save(participant);
-            existingPlayerIds.add(playerId);
             result.setRegisteredCount(result.getRegisteredCount() + 1);
             matchRegistered++;
         }
@@ -484,6 +492,36 @@ public class DensukeImportService {
         practiceParticipantRepository.save(existing);
         log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
                 existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+    }
+
+    /**
+     * Phase1でCANCELLED/DECLINED/WAITLIST_DECLINEDのレコードを再有効化する。
+     * MONTHLY → PENDING、SAME_DAY → WON or WAITLISTED。
+     */
+    private void reactivatePhase1(PracticeParticipant existing, DeadlineType deadlineType,
+                                   PracticeSession session, int matchNumber) {
+        clearCancelledFields(existing);
+        if (deadlineType == DeadlineType.SAME_DAY) {
+            if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
+                existing.setStatus(ParticipantStatus.WON);
+                existing.setWaitlistNumber(null);
+            } else {
+                int maxNumber = practiceParticipantRepository
+                        .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
+                existing.setStatus(ParticipantStatus.WAITLISTED);
+                existing.setWaitlistNumber(maxNumber + 1);
+            }
+        } else {
+            existing.setStatus(ParticipantStatus.PENDING);
+            existing.setWaitlistNumber(null);
+        }
+        practiceParticipantRepository.save(existing);
+    }
+
+    private boolean isTerminalStatus(ParticipantStatus status) {
+        return status == ParticipantStatus.CANCELLED
+                || status == ParticipantStatus.DECLINED
+                || status == ParticipantStatus.WAITLIST_DECLINED;
     }
 
     /**
