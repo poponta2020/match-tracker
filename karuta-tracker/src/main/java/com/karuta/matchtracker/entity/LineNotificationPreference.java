@@ -68,6 +68,21 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean adminWaitlistUpdate = true;
 
+    /** 参加者確定通知（当日12:00） */
+    @Column(name = "same_day_confirmation", nullable = false)
+    @Builder.Default
+    private Boolean sameDayConfirmation = true;
+
+    /** 当日キャンセル通知 */
+    @Column(name = "same_day_cancel", nullable = false)
+    @Builder.Default
+    private Boolean sameDayCancel = true;
+
+    /** 空き募集通知 */
+    @Column(name = "same_day_vacancy", nullable = false)
+    @Builder.Default
+    private Boolean sameDayVacancy = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

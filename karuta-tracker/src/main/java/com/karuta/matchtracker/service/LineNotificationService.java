@@ -860,6 +860,9 @@ public class LineNotificationService {
             case PRACTICE_REMINDER -> pref.getPracticeReminder();
             case DEADLINE_REMINDER -> pref.getDeadlineReminder();
             case ADMIN_WAITLIST_UPDATE -> pref.getAdminWaitlistUpdate();
+            case SAME_DAY_CONFIRMATION -> pref.getSameDayConfirmation();
+            case SAME_DAY_CANCEL -> pref.getSameDayCancel();
+            case SAME_DAY_VACANCY -> pref.getSameDayVacancy();
         };
     }
 

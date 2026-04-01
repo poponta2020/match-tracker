@@ -62,7 +62,10 @@ public class LineMessageLog {
         MATCH_PAIRING,
         PRACTICE_REMINDER,
         DEADLINE_REMINDER,
-        ADMIN_WAITLIST_UPDATE
+        ADMIN_WAITLIST_UPDATE,
+        SAME_DAY_CONFIRMATION,
+        SAME_DAY_CANCEL,
+        SAME_DAY_VACANCY
     }
 
     public enum MessageStatus {

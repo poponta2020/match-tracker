@@ -20,6 +20,9 @@ public class LineNotificationPreferenceDto {
     private boolean practiceReminder;
     private boolean deadlineReminder;
     private boolean adminWaitlistUpdate;
+    private boolean sameDayConfirmation;
+    private boolean sameDayCancel;
+    private boolean sameDayVacancy;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -32,6 +35,9 @@ public class LineNotificationPreferenceDto {
             .practiceReminder(entity.getPracticeReminder())
             .deadlineReminder(entity.getDeadlineReminder())
             .adminWaitlistUpdate(entity.getAdminWaitlistUpdate())
+            .sameDayConfirmation(entity.getSameDayConfirmation())
+            .sameDayCancel(entity.getSameDayCancel())
+            .sameDayVacancy(entity.getSameDayVacancy())
             .build();
     }
 }
