@@ -44,6 +44,7 @@ public class PracticeParticipantService {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final DensukeSyncService densukeSyncService;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final LineNotificationService lineNotificationService;
 
     public PracticeParticipantService(
             PracticeParticipantRepository practiceParticipantRepository,
@@ -52,7 +53,8 @@ public class PracticeParticipantService {
             LotteryExecutionRepository lotteryExecutionRepository,
             LotteryDeadlineHelper lotteryDeadlineHelper,
             @Lazy DensukeSyncService densukeSyncService,
-            PlayerOrganizationRepository playerOrganizationRepository) {
+            PlayerOrganizationRepository playerOrganizationRepository,
+            LineNotificationService lineNotificationService) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
         this.playerRepository = playerRepository;
@@ -60,6 +62,7 @@ public class PracticeParticipantService {
         this.lotteryDeadlineHelper = lotteryDeadlineHelper;
         this.densukeSyncService = densukeSyncService;
         this.playerOrganizationRepository = playerOrganizationRepository;
+        this.lineNotificationService = lineNotificationService;
     }
 
     @Transactional
@@ -187,6 +190,7 @@ public class PracticeParticipantService {
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
                         .status(ParticipantStatus.WON).dirty(true).build());
+                notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
             } else {
                 int maxNumber = practiceParticipantRepository
@@ -250,6 +254,7 @@ public class PracticeParticipantService {
                 practiceParticipantRepository.save(PracticeParticipant.builder()
                         .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
                         .status(ParticipantStatus.WON).dirty(true).build());
+                notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
             } else if (lotteryExecuted) {
                 // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
@@ -266,6 +271,19 @@ public class PracticeParticipantService {
         }
         log.info("Post-deadline: registered {} won, {} waitlisted (skipped {}) for player {}",
                 registered, waitlisted, skipped, playerId);
+    }
+
+    /**
+     * 12:00以降にアプリ経由でWON登録された場合、その試合のWONメンバーに参加通知を送信する。
+     */
+    private void notifySameDayJoinIfApplicable(PracticeSession session, int matchNumber, Long playerId) {
+        if (session == null) return;
+        if (!lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) return;
+
+        Player player = playerRepository.findById(playerId).orElse(null);
+        String playerName = player != null ? player.getName() : "不明";
+
+        lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
     }
 
     public boolean isFreeRegistrationOpen(PracticeSession session, Integer matchNumber) {
