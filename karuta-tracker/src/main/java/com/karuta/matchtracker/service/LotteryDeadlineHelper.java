@@ -122,9 +122,13 @@ public class LotteryDeadlineHelper {
 
     /**
      * 繰り上げ通知の応答期限を計算する
-     * min(通知から24時間, 練習日前日の23:59)
+     * - 当日セッション: 12:00（SameDayConfirmationSchedulerが一括処理するため）
+     * - それ以外: min(通知から24時間, 練習日前日の23:59)
      */
     public LocalDateTime calculateOfferDeadline(LocalDate sessionDate) {
+        if (isToday(sessionDate)) {
+            return sessionDate.atTime(12, 0);
+        }
         LocalDateTime twentyFourHoursLater = JstDateTimeUtil.now().plusHours(24);
         LocalDateTime dayBeforePractice = sessionDate.minusDays(1).atTime(23, 59, 59);
         return twentyFourHoursLater.isBefore(dayBeforePractice) ? twentyFourHoursLater : dayBeforePractice;
