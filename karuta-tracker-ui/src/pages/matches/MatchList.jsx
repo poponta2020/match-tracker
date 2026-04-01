@@ -450,16 +450,9 @@ const MatchList = () => {
                     onClick={() => navigate(`/matches/${match.id}`)}
                   >
                     <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
-                    <button
-                      className="flex-1 min-w-0 text-sm font-medium text-[#374151] hover:text-[#4a6b5a] hover:underline text-left truncate"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const opponentId = match.player1Id === targetPlayerId ? match.player2Id : match.player1Id;
-                        if (opponentId) navigate(`/matches?playerId=${opponentId}`);
-                      }}
-                    >
+                    <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
                       {match.opponentName}
-                    </button>
+                    </span>
                     {!isOtherPlayer && match.myPersonalNotes && (
                       <StickyNote className="w-3.5 h-3.5 text-[#9ca3af] flex-shrink-0 ml-1" />
                     )}
