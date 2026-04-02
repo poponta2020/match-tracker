@@ -1013,6 +1013,149 @@ public class LineNotificationService {
                 playerIds.size(), adminSentCount, session.getId());
     }
 
+    // ===== リッチメニュー照会用 Flex Message ビルダー =====
+
+    /**
+     * キャンセル待ち状況一覧のFlex Messageを構築する
+     */
+    public Map<String, Object> buildWaitlistStatusFlex(List<Map<String, Object>> entries) {
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "キャンセル待ち状況",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#9C27B0",
+            "paddingAll", "15px"
+        );
+
+        List<Object> bodyContents = new java.util.ArrayList<>();
+
+        for (int i = 0; i < entries.size(); i++) {
+            Map<String, Object> entry = entries.get(i);
+            String sessionLabel = (String) entry.get("sessionLabel");
+            Integer matchNumber = (Integer) entry.get("matchNumber");
+            Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
+            String status = (String) entry.get("status");
+            Object offerDeadline = entry.get("offerDeadline");
+
+            if (i > 0) {
+                bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+            }
+
+            bodyContents.add(Map.of("type", "text", "text", sessionLabel,
+                    "weight", "bold", "size", "md", "margin", i == 0 ? "none" : "lg",
+                    "wrap", true));
+            bodyContents.add(Map.of("type", "text", "text",
+                    matchNumber + "試合目",
+                    "size", "sm", "color", "#555555", "margin", "sm"));
+
+            if ("OFFERED".equals(status)) {
+                bodyContents.add(Map.of("type", "text", "text",
+                        "繰り上げオファー中",
+                        "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm"));
+                if (offerDeadline != null) {
+                    java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
+                    String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
+                    bodyContents.add(Map.of("type", "text", "text",
+                            "回答期限: " + deadlineStr,
+                            "size", "xs", "color", "#E65100", "margin", "sm"));
+                }
+            } else {
+                bodyContents.add(Map.of("type", "text", "text",
+                        "キャンセル待ち " + waitlistNumber + "番",
+                        "size", "sm", "color", "#333333", "margin", "sm"));
+            }
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
+    }
+
+    /**
+     * 今日の参加者一覧のFlex Messageを構築する（リッチメニュー照会用）
+     * buildSameDayConfirmationFlex() と同じ形式
+     */
+    public Map<String, Object> buildTodayParticipantsFlex(
+            String sessionLabel, Map<Integer, List<PracticeParticipant>> byMatch, Map<Long, Player> playerMap) {
+        return buildSameDayConfirmationFlex(sessionLabel, byMatch, playerMap);
+    }
+
+    /**
+     * 当日参加申込可能試合一覧のFlex Messageを構築する
+     */
+    public Map<String, Object> buildSameDayJoinFlex(
+            String sessionLabel, List<Map<String, Object>> availableMatches, Long sessionId) {
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "当日参加申込",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#FF9800",
+            "paddingAll", "15px"
+        );
+
+        List<Object> bodyContents = new java.util.ArrayList<>();
+        bodyContents.add(Map.of("type", "text", "text", sessionLabel + "の練習",
+                "weight", "bold", "size", "lg", "margin", "none", "wrap", true));
+        bodyContents.add(Map.of("type", "text", "text",
+                "以下の試合に空きがあります。参加希望の試合の「参加する」ボタンを押してください。",
+                "size", "sm", "color", "#555555", "margin", "md", "wrap", true));
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        List<Object> footerContents = new java.util.ArrayList<>();
+        for (Map<String, Object> match : availableMatches) {
+            int matchNumber = (int) match.get("matchNumber");
+            int vacancy = (int) match.get("vacancy");
+
+            footerContents.add(Map.of(
+                "type", "button",
+                "action", Map.of(
+                    "type", "postback",
+                    "label", matchNumber + "試合目（空き" + vacancy + "名）",
+                    "data", "action=same_day_join&sessionId=" + sessionId + "&matchNumber=" + matchNumber
+                ),
+                "style", "primary",
+                "color", "#FF9800",
+                "height", "sm",
+                "margin", "sm"
+            ));
+        }
+
+        Map<String, Object> footer = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", footerContents,
+            "paddingAll", "15px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body,
+            "footer", footer
+        );
+    }
+
     /**
      * 段位の比較用序数を返す（高段位ほど大きい値、null/無段は-1）
      */

@@ -3,21 +3,18 @@ package com.karuta.matchtracker.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.entity.*;
-import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
-import com.karuta.matchtracker.repository.LineChannelRepository;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
-import com.karuta.matchtracker.repository.PracticeSessionRepository;
-import com.karuta.matchtracker.repository.VenueRepository;
+import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.service.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * LINE Webhookエンドポイント
@@ -36,12 +33,14 @@ public class LineWebhookController {
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final VenueRepository venueRepository;
+    private final PlayerRepository playerRepository;
     private final LineMessagingService lineMessagingService;
     private final LineChannelService lineChannelService;
     private final LineLinkingService lineLinkingService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final LineNotificationService lineNotificationService;
     private final LineConfirmationService lineConfirmationService;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final ObjectMapper objectMapper;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
@@ -165,6 +164,22 @@ public class LineWebhookController {
         }
 
         Long playerId = assignmentOpt.get().getPlayerId();
+
+        // 照会型アクション（読み取り専用、確認ダイアログ不要）
+        switch (action) {
+            case "check_waitlist_status" -> {
+                handleCheckWaitlistStatus(channel, replyToken, playerId);
+                return;
+            }
+            case "check_today_participants" -> {
+                handleCheckTodayParticipants(channel, replyToken);
+                return;
+            }
+            case "check_same_day_join" -> {
+                handleCheckSameDayJoin(channel, replyToken, playerId);
+                return;
+            }
+        }
 
         // 確認対象のアクション → 確認Flexを返す
         if (CONFIRMABLE_ACTIONS.contains(action)) {
@@ -477,6 +492,150 @@ public class LineWebhookController {
     private void sendReplyFlex(LineChannel channel, String replyToken, String altText, Map<String, Object> flex) {
         if (replyToken != null) {
             lineMessagingService.sendReplyFlexMessage(channel.getChannelAccessToken(), replyToken, altText, flex);
+        }
+    }
+
+    // ===== リッチメニュー照会ハンドラー =====
+
+    /**
+     * キャンセル待ち状況を照会する
+     */
+    private void handleCheckWaitlistStatus(LineChannel channel, String replyToken, Long playerId) {
+        try {
+            List<PracticeParticipant> waitlisted = practiceParticipantRepository.findByPlayerId(playerId)
+                    .stream()
+                    .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED
+                            || p.getStatus() == ParticipantStatus.OFFERED)
+                    .toList();
+
+            if (waitlisted.isEmpty()) {
+                sendReply(channel, replyToken, "現在キャンセル待ちはありません");
+                return;
+            }
+
+            // セッション情報を付与してFlex Message構築
+            List<Map<String, Object>> entries = new ArrayList<>();
+            for (PracticeParticipant p : waitlisted) {
+                PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
+                if (session == null) continue;
+
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("sessionLabel", getSessionLabel(session));
+                entry.put("matchNumber", p.getMatchNumber());
+                entry.put("waitlistNumber", p.getWaitlistNumber());
+                entry.put("status", p.getStatus().name());
+                entry.put("offerDeadline", p.getOfferDeadline());
+                entries.add(entry);
+            }
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+            sendReplyFlex(channel, replyToken, "キャンセル待ち状況", flex);
+
+        } catch (Exception e) {
+            log.error("Failed to check waitlist status: player={}, error={}", playerId, e.getMessage());
+            sendReply(channel, replyToken, "キャンセル待ち状況の取得に失敗しました。");
+        }
+    }
+
+    /**
+     * 今日の参加者一覧を照会する
+     */
+    private void handleCheckTodayParticipants(LineChannel channel, String replyToken) {
+        try {
+            LocalDate today = JstDateTimeUtil.today();
+            Optional<PracticeSession> sessionOpt = practiceSessionRepository.findBySessionDate(today);
+
+            if (sessionOpt.isEmpty()) {
+                sendReply(channel, replyToken, "今日の練習はありません");
+                return;
+            }
+
+            PracticeSession session = sessionOpt.get();
+            List<PracticeParticipant> wonParticipants =
+                    practiceParticipantRepository.findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
+
+            if (wonParticipants.isEmpty()) {
+                sendReply(channel, replyToken, "今日の練習の参加者はまだいません");
+                return;
+            }
+
+            // 試合番号でグルーピング（TreeMapでソート済み）
+            Map<Integer, List<PracticeParticipant>> byMatch = wonParticipants.stream()
+                    .collect(Collectors.groupingBy(
+                            PracticeParticipant::getMatchNumber, TreeMap::new, Collectors.toList()));
+
+            // プレイヤー情報を取得
+            Set<Long> playerIds = wonParticipants.stream()
+                    .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
+            Map<Long, Player> playerMap = playerRepository.findAllById(playerIds).stream()
+                    .collect(Collectors.toMap(Player::getId, p -> p));
+
+            String sessionLabel = getSessionLabel(session);
+            Map<String, Object> flex = lineNotificationService.buildTodayParticipantsFlex(
+                    sessionLabel, byMatch, playerMap);
+            sendReplyFlex(channel, replyToken, "今日の参加者", flex);
+
+        } catch (Exception e) {
+            log.error("Failed to check today's participants: error={}", e.getMessage());
+            sendReply(channel, replyToken, "参加者情報の取得に失敗しました。");
+        }
+    }
+
+    /**
+     * 当日参加申込可能な試合を照会する
+     */
+    private void handleCheckSameDayJoin(LineChannel channel, String replyToken, Long playerId) {
+        try {
+            LocalDate today = JstDateTimeUtil.today();
+            Optional<PracticeSession> sessionOpt = practiceSessionRepository.findBySessionDate(today);
+
+            if (sessionOpt.isEmpty()) {
+                sendReply(channel, replyToken, "現在参加申込できる試合はありません");
+                return;
+            }
+
+            PracticeSession session = sessionOpt.get();
+            int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+            int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 0;
+            boolean isAfterNoon = lotteryDeadlineHelper.isAfterSameDayNoon(today);
+
+            // 試合ごとに空き判定
+            List<Map<String, Object>> availableMatches = new ArrayList<>();
+            for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+                int wonCount = practiceParticipantRepository
+                        .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON)
+                        .size();
+                int vacancy = capacity - wonCount;
+                if (vacancy <= 0) continue;
+
+                // キャンセル待ちの有無を確認
+                boolean hasWaitlist = !practiceParticipantRepository
+                        .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                                session.getId(), matchNumber, ParticipantStatus.WAITLISTED)
+                        .isEmpty();
+
+                // 空きあり AND (waitlistなし OR 12時以降)
+                if (!hasWaitlist || isAfterNoon) {
+                    availableMatches.add(Map.of(
+                            "matchNumber", matchNumber,
+                            "vacancy", vacancy
+                    ));
+                }
+            }
+
+            if (availableMatches.isEmpty()) {
+                sendReply(channel, replyToken, "現在参加申込できる試合はありません");
+                return;
+            }
+
+            String sessionLabel = getSessionLabel(session);
+            Map<String, Object> flex = lineNotificationService.buildSameDayJoinFlex(
+                    sessionLabel, availableMatches, session.getId());
+            sendReplyFlex(channel, replyToken, "当日参加申込", flex);
+
+        } catch (Exception e) {
+            log.error("Failed to check same-day join: player={}, error={}", playerId, e.getMessage());
+            sendReply(channel, replyToken, "参加申込情報の取得に失敗しました。");
         }
     }
 
