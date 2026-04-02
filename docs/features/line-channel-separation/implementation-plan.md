@@ -26,7 +26,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク3: LineChannelService の更新
-- [ ] 完了
+- [x] 完了
 - **概要:** チャネル割当・解放・一覧取得を channelType 対応にする。ADMIN チャネル要求時のロールチェックを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineChannelService.java` — `assignChannel()`, `releaseChannel()`, `getAllChannels()` に channelType パラメータ追加、ロールチェックロジック追加
@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク4: LineLinkingService の更新
-- [ ] 完了
+- [x] 完了
 - **概要:** `reissueCode()` を channelType 対応にする
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineLinkingService.java` — `reissueCode(Long playerId, ChannelType channelType)` に変更
@@ -42,7 +42,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク5: LineNotificationService の通知ルーティング対応
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知種別から送信先チャネル種別を判定し、該当チャネルのアサインメントを取得して送信するようにする
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineNotificationType.java` — `getRequiredChannelType()` メソッド追加（ADMIN_ プレフィックス → ADMIN、それ以外 → PLAYER）
@@ -51,7 +51,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク6: LineWebhookController の postback 修正
-- [ ] 完了
+- [x] 完了
 - **概要:** postback 処理で lineUserId + channelId の両方でアサインメントを特定するように修正
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineWebhookController.java` — postback の `findByLineUserIdAndStatus()` を `findByLineUserIdAndLineChannelIdAndStatus()` に変更
@@ -60,7 +60,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク7: LineUserController のエンドポイント変更
-- [ ] 完了
+- [x] 完了
 - **概要:** ユーザー向けLINE APIのパスに `{channelType}` パスパラメータを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineUserController.java` — 各エンドポイントのパスを `/api/line/{channelType}/...` に変更、`@PathVariable ChannelType channelType` 追加、Service 呼び出しに channelType を渡す
@@ -68,7 +68,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク8: LineAdminController のチャネル管理API変更
-- [ ] 完了
+- [x] 完了
 - **概要:** チャネル一覧のフィルタリング対応とチャネル作成時の channelType 対応
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineAdminController.java` — `getAllChannels()` に `@RequestParam(required = false) ChannelType channelType` 追加、チャネル作成に channelType 対応
@@ -78,7 +78,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク9: LineChannelReclaimScheduler の更新
-- [ ] 完了
+- [x] 完了
 - **概要:** 複数アサインメントを持つユーザーのチャネル回収に対応する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/LineChannelReclaimScheduler.java` — 各アサインメントを個別に回収対象として処理するように修正
@@ -86,7 +86,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク10: フロントエンド APIクライアント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** line.js の各API関数に channelType パラメータを追加する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/line.js` — `enableLine(channelType)`, `disableLine(channelType)`, `reissueCode(channelType)`, `getLineStatus(channelType)`, `getChannels(channelType)`, `createChannel(data)` の更新
@@ -94,7 +94,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク11: LineSettings.jsx のUI変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 管理者の場合に「選手用LINE」「管理者用LINE」の2セクションを表示し、それぞれ独立して操作できるようにする
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/line/LineSettings.jsx` — ロール判定追加、LINE設定UIをコンポーネント化して2セクション描画、通知プリファレンスの表示振り分け
@@ -102,7 +102,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク12: LineChannelAdmin.jsx のタブUI追加
-- [ ] 完了
+- [x] 完了
 - **概要:** チャネル管理画面に「選手用」「管理者用」タブを追加し、用途別にフィルタリング表示する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/line/LineChannelAdmin.jsx` — タブUI追加（デフォルト: 選手用）、一覧取得時に channelType クエリパラメータ付与、チャネル追加時に channelType 自動セット
