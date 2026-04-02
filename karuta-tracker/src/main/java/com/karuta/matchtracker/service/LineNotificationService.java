@@ -107,23 +107,37 @@ public class LineNotificationService {
     }
 
     /**
-     * キャンセル待ち列に残っているユーザーに順番繰り上がり通知を送信する
+     * キャンセル待ち列に残っているユーザーに順番繰り上がり通知を送信する（管理者と同じFlexメッセージ）
      *
+     * @param triggerAction     発生イベント（例: "キャンセル", "オファー辞退"）
+     * @param triggerPlayer     イベントを起こしたプレイヤー
      * @param session           対象セッション
      * @param matchNumber       対象試合番号
+     * @param offeredPlayer     繰り上げオファーを送った相手（null=繰り上げ対象なし）
      * @param remainingWaitlist 残りのキャンセル待ちリスト（WAITLISTED状態、番号順）
      */
-    public void sendWaitlistPositionUpdateNotifications(PracticeSession session, int matchNumber,
+    public void sendWaitlistPositionUpdateNotifications(String triggerAction, Player triggerPlayer,
+                                                         PracticeSession session, int matchNumber,
+                                                         Player offeredPlayer,
                                                          List<PracticeParticipant> remainingWaitlist) {
         if (remainingWaitlist.isEmpty()) return;
 
         String sessionLabel = getSessionLabel(session);
+        String altText = String.format("【キャンセル待ち状況】%s %d試合目: %sが%s", sessionLabel, matchNumber, triggerPlayer.getName(), triggerAction);
+
+        Map<Long, String> playerNames = new HashMap<>();
+        for (PracticeParticipant wp : remainingWaitlist) {
+            playerNames.computeIfAbsent(wp.getPlayerId(),
+                id -> playerRepository.findById(id).map(Player::getName).orElse("不明"));
+        }
+
+        Map<String, Object> flex = buildAdminWaitlistFlex(
+            sessionLabel, matchNumber, triggerAction, triggerPlayer.getName(),
+            offeredPlayer != null ? offeredPlayer.getName() : null,
+            remainingWaitlist, playerNames);
 
         for (PracticeParticipant wp : remainingWaitlist) {
-            int position = wp.getWaitlistNumber() != null ? wp.getWaitlistNumber() : 0;
-            String message = String.format("%s %d試合目のキャンセル待ち番号が繰り上がりました。現在%d番目です",
-                sessionLabel, matchNumber, position);
-            sendToPlayer(wp.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);
+            sendFlexToPlayer(wp.getPlayerId(), LineNotificationType.ADMIN_WAITLIST_UPDATE, altText, flex);
         }
 
         log.info("Waitlist position update notifications sent for session {} match {}: {} players",

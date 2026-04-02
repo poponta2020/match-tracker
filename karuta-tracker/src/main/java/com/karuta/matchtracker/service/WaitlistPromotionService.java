@@ -495,9 +495,9 @@ public class WaitlistPromotionService {
                 offeredPlayer = playerRepository.findById(promotedParticipant.getPlayerId()).orElse(null);
             }
 
-            // 残りのキャンセル待ち列を取得
+            // 残りのキャンセル待ち列をwaitlistNumber昇順で取得
             List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
-                    .findBySessionIdAndMatchNumberAndStatus(
+                    .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
                             session.getId(), matchNumber, ParticipantStatus.WAITLISTED);
 
             // SUPER_ADMIN向け通知
@@ -505,9 +505,10 @@ public class WaitlistPromotionService {
                     triggerAction, triggerPlayer, session, matchNumber,
                     offeredPlayer, remainingWaitlist);
 
-            // 残りのWAITLISTEDユーザー向け順番繰り上がり通知
+            // 残りのWAITLISTEDユーザー向け順番繰り上がり通知（管理者と同じFlexメッセージ）
             lineNotificationService.sendWaitlistPositionUpdateNotifications(
-                    session, matchNumber, remainingWaitlist);
+                    triggerAction, triggerPlayer, session, matchNumber,
+                    offeredPlayer, remainingWaitlist);
         } catch (Exception e) {
             log.error("Failed to send waitlist change notifications: {}", e.getMessage(), e);
         }

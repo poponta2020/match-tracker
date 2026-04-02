@@ -179,6 +179,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Integer matchNumber, ParticipantStatus status);
 
     /**
+     * 特定セッション・試合・ステータスの参加者をキャンセル待ち番号昇順で取得
+     */
+    List<PracticeParticipant> findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+            Long sessionId, Integer matchNumber, ParticipantStatus status);
+
+    /**
      * 特定セッション・試合・ステータスの参加者数を取得
      */
     long countBySessionIdAndMatchNumberAndStatus(
