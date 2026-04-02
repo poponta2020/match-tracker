@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: LineMessagingService に Rich Menu API メソッド追加
-- [ ] 完了
+- [x] 完了
 - **概要:** LINE Messaging API の Rich Menu 関連エンドポイントを呼び出すメソッドを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineMessagingService.java` — 以下の3メソッドを追加:
@@ -17,7 +17,7 @@ status: completed
 - **対応Issue:** #253
 
 ### タスク2: リッチメニュー一括設定エンドポイント追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 管理者がPLAYERチャネル全体にリッチメニューを一括設定するAPIエンドポイントを追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineAdminController.java` — `POST /api/admin/line/rich-menu/setup` エンドポイント追加
@@ -35,7 +35,7 @@ status: completed
 - **対応Issue:** #254
 
 ### タスク3: キャンセル待ち状況確認の照会ハンドラー実装
-- [ ] 完了
+- [x] 完了
 - **概要:** リッチメニューから「キャンセル待ち状況確認」が押された時の postback 処理と Flex Message ビルダーを実装する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineWebhookController.java` — `handlePostback()` 内に `check_waitlist_status` の分岐追加、`handleCheckWaitlistStatus()` メソッド追加
@@ -51,7 +51,7 @@ status: completed
 - **対応Issue:** #255
 
 ### タスク4: 今日の参加者表示の照会ハンドラー実装
-- [ ] 完了
+- [x] 完了
 - **概要:** リッチメニューから「今日の参加者」が押された時の postback 処理を実装する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineWebhookController.java` — `handlePostback()` 内に `check_today_participants` の分岐追加、`handleCheckTodayParticipants()` メソッド追加
@@ -63,7 +63,7 @@ status: completed
 - **対応Issue:** #256
 
 ### タスク5: 当日参加申込の照会ハンドラー実装
-- [ ] 完了
+- [x] 完了
 - **概要:** リッチメニューから「当日参加申込」が押された時の postback 処理と Flex Message ビルダーを実装する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineWebhookController.java` — `handlePostback()` 内に `check_same_day_join` の分岐追加、`handleCheckSameDayJoin()` メソッド追加
