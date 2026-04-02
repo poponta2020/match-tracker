@@ -44,6 +44,7 @@ class DensukeImportServiceTest {
     @Mock private LotteryService lotteryService;
     @Mock private WaitlistPromotionService waitlistPromotionService;
     @Mock private PracticeParticipantService practiceParticipantService;
+    @Mock private LineNotificationService lineNotificationService;
 
     @InjectMocks
     private DensukeImportService densukeImportService;

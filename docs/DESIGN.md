@@ -2049,6 +2049,13 @@ Entity Layer (JPA Entity)
 1. 12:00以降にアプリ経由でWON登録された場合
    ↓
 2. WONメンバーに通知送信
+
+[伝助同期経由参加登録通知 — DensukeImportService]
+1. 12:00以降に伝助上で○に変更され、伝助同期によりWONとして登録・昇格された場合
+   ↓
+2. DensukeImportService.notifyVacancyUpdateIfNeeded() が枠状況通知を送信
+   - 対象: 新規WON登録 / WAITLISTED→WON昇格 / 再有効化（CANCELLED等→WON）
+   - 内容: sendSameDayVacancyUpdateNotification()（残り枠あり or 枠埋まり）
 ```
 
 **変更クラス一覧:**
@@ -2060,6 +2067,7 @@ Entity Layer (JPA Entity)
 | `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加 |
 | `LotteryDeadlineHelper` | isAfterSameDayNoon()追加、calculateOfferDeadline当日対応 |
 | `PracticeParticipantService` | 12:00以降参加時の通知送信追加 |
+| `DensukeImportService` | 伝助同期でWON登録時の枠状況通知送信追加（notifyVacancyUpdateIfNeeded） |
 | `LineWebhookController` | same_day_joinポストバックハンドリング追加 |
 | `LotteryController` | POST /api/lottery/same-day-joinエンドポイント追加 |
 

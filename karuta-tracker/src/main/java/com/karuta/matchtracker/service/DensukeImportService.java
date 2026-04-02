@@ -39,6 +39,7 @@ public class DensukeImportService {
     private final LotteryService lotteryService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final PracticeParticipantService practiceParticipantService;
+    private final LineNotificationService lineNotificationService;
 
     @Data
     public static class ImportResult {
@@ -346,6 +347,7 @@ public class DensukeImportService {
                         }
                         log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available)",
                                 playerId);
+                        notifyVacancyUpdateIfNeeded(session, matchNumber, playerId);
                         return true;
                     }
                 }
@@ -469,6 +471,7 @@ public class DensukeImportService {
                     .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
                     .status(ParticipantStatus.WON).dirty(true).build());
             log.info("Phase3: registered player {} as WON for session {} match {}", playerId, session.getId(), matchNumber);
+            notifyVacancyUpdateIfNeeded(session, matchNumber, playerId);
         } else {
             createWaitlisted(playerId, session, matchNumber);
         }
@@ -496,6 +499,8 @@ public class DensukeImportService {
             existing.setWaitlistNumber(null);
             log.info("Phase3: reactivated player {} as WON for session {} match {}",
                     existing.getPlayerId(), session.getId(), matchNumber);
+            practiceParticipantRepository.save(existing);
+            notifyVacancyUpdateIfNeeded(session, matchNumber, existing.getPlayerId());
         } else {
             int maxNumber = practiceParticipantRepository
                     .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
@@ -503,8 +508,8 @@ public class DensukeImportService {
             existing.setWaitlistNumber(maxNumber + 1);
             log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
                     existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+            practiceParticipantRepository.save(existing);
         }
-        practiceParticipantRepository.save(existing);
     }
 
     /**
@@ -543,6 +548,19 @@ public class DensukeImportService {
             existing.setWaitlistNumber(null);
         }
         practiceParticipantRepository.save(existing);
+    }
+
+    /**
+     * 伝助同期でWON登録された後、空き枠状況の通知を送信する。
+     * 当日12:00以降の場合のみ発火する（それ以外は空き募集フロー対象外）。
+     */
+    private void notifyVacancyUpdateIfNeeded(PracticeSession session, int matchNumber, Long playerId) {
+        if (!lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
+            return;
+        }
+        String playerName = playerRepository.findById(playerId)
+                .map(Player::getName).orElse("不明");
+        lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
     }
 
     private boolean isTerminalStatus(ParticipantStatus status) {
