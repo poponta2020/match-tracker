@@ -1,11 +1,9 @@
 package com.karuta.matchtracker.scheduler;
 
-import com.karuta.matchtracker.entity.ParticipantStatus;
-import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
+import com.karuta.matchtracker.service.WaitlistPromotionService;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +19,7 @@ import java.util.List;
  *
  * 毎日12:00 JSTに実行し、以下を処理する:
  * 1. 当日セッションのOFFERED状態の参加者を全てDECLINEDに強制変更
+ *    （dirty=true設定・通知送信・空き枠がある場合は当日空き募集フローを発動）
  * 2. WON参加者に試合ごとのメンバーリストをLINE通知
  */
 @Slf4j
@@ -29,7 +28,7 @@ import java.util.List;
 public class SameDayConfirmationScheduler {
 
     private final PracticeSessionRepository practiceSessionRepository;
-    private final PracticeParticipantRepository practiceParticipantRepository;
+    private final WaitlistPromotionService waitlistPromotionService;
     private final LineNotificationService lineNotificationService;
 
     @Scheduled(cron = "0 0 12 * * *", zone = "Asia/Tokyo")
@@ -47,7 +46,7 @@ public class SameDayConfirmationScheduler {
 
         for (PracticeSession session : sessions) {
             try {
-                expireOfferedParticipants(session);
+                waitlistPromotionService.expireOfferedForSameDayConfirmation(session);
                 lineNotificationService.sendSameDayConfirmationNotification(session);
             } catch (Exception e) {
                 log.error("Failed to process session {} on {}: {}",
@@ -56,26 +55,5 @@ public class SameDayConfirmationScheduler {
         }
 
         log.info("SameDayConfirmation scheduler completed");
-    }
-
-    /**
-     * OFFERED状態の参加者を全てDECLINEDに強制変更（冪等: 既にDECLINEDなら無視）
-     */
-    private void expireOfferedParticipants(PracticeSession session) {
-        List<PracticeParticipant> offered = practiceParticipantRepository
-                .findBySessionIdAndStatus(session.getId(), ParticipantStatus.OFFERED);
-
-        if (offered.isEmpty()) {
-            log.debug("No OFFERED participants for session {}", session.getId());
-            return;
-        }
-
-        log.info("Expiring {} OFFERED participants for session {}", offered.size(), session.getId());
-
-        for (PracticeParticipant participant : offered) {
-            participant.setStatus(ParticipantStatus.DECLINED);
-            participant.setRespondedAt(JstDateTimeUtil.now());
-            practiceParticipantRepository.save(participant);
-        }
     }
 }

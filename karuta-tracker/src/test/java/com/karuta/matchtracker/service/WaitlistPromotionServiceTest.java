@@ -293,6 +293,90 @@ class WaitlistPromotionServiceTest {
     }
 
     @Nested
+    @DisplayName("当日12:00確定時のOFFERED期限切れ処理")
+    class ExpireOfferedForSameDayConfirmationTests {
+
+        @Test
+        @DisplayName("OFFERED参加者がDECLINEDになりdirty=trueが設定される")
+        void expireOffered_setsDeclinedAndDirty() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
+            PracticeParticipant offered = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(offered));
+            when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(13L);
+
+            service.expireOfferedForSameDayConfirmation(session);
+
+            assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            assertThat(offered.isDirty()).isTrue();
+            assertThat(offered.getRespondedAt()).isNotNull();
+            verify(practiceParticipantRepository).save(offered);
+            verify(notificationService).createOfferExpiredNotification(offered);
+            verify(lineNotificationService).sendOfferExpiredNotification(offered);
+            verify(densukeSyncService).triggerWriteAsync();
+        }
+
+        @Test
+        @DisplayName("空き枠がある場合に当日空き募集通知が送信される")
+        void expireOffered_triggersVacancyRecruitment() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
+            PracticeParticipant offered = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(offered));
+            when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(13L); // 13/14 → 1枠空き
+
+            service.expireOfferedForSameDayConfirmation(session);
+
+            verify(lineNotificationService).sendSameDayVacancyNotification(session, 1, null);
+        }
+
+        @Test
+        @DisplayName("定員に達している場合は空き募集通知が送信されない")
+        void expireOffered_noVacancy_noRecruitment() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
+            PracticeParticipant offered = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(offered));
+            when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(14L); // 14/14 → 空きなし
+
+            service.expireOfferedForSameDayConfirmation(session);
+
+            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("OFFERED参加者がいない場合は何もしない")
+        void expireOffered_noOffered() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of());
+
+            service.expireOfferedForSameDayConfirmation(session);
+
+            verify(practiceParticipantRepository, never()).save(any());
+            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(densukeSyncService, never()).triggerWriteAsync();
+        }
+    }
+
+    @Nested
     @DisplayName("当日補充参加（same_day_join）")
     class SameDayJoinTests {
 

@@ -324,7 +324,32 @@ public class DensukeImportService {
         switch (status) {
             case WON -> { return false; } // 3-A4: 一致、スキップ
             case WAITLISTED -> {
-                // 3-A6: ○に変えても抽選バイパス不可。dirty=trueにして△で書き戻す
+                // 当日12:00以降かつ空き枠がある場合: WONに昇格（先着参加の仕様）
+                if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
+                    long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.WON);
+                    int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+                    if (wonCount < capacity) {
+                        Integer oldWaitlistNumber = existing.getWaitlistNumber();
+                        existing.setStatus(ParticipantStatus.WON);
+                        existing.setWaitlistNumber(null);
+                        existing.setDirty(false); // 伝助は既に○なので書き戻し不要
+                        practiceParticipantRepository.save(existing);
+                        // 後続のキャンセル待ち番号を繰り上げ
+                        if (oldWaitlistNumber != null) {
+                            List<PracticeParticipant> subsequent = practiceParticipantRepository
+                                    .findWaitlistedAfterNumber(session.getId(), matchNumber, oldWaitlistNumber);
+                            for (PracticeParticipant s : subsequent) {
+                                s.setWaitlistNumber(s.getWaitlistNumber() - 1);
+                                practiceParticipantRepository.save(s);
+                            }
+                        }
+                        log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available)",
+                                playerId);
+                        return true;
+                    }
+                }
+                // 3-A6: 12:00前または空き枠なし → 抽選バイパス不可。dirty=trueにして△で書き戻す
                 existing.setDirty(true);
                 practiceParticipantRepository.save(existing);
                 log.info("Phase3-A6: WAITLISTED player {} set dirty for △ write-back", playerId);

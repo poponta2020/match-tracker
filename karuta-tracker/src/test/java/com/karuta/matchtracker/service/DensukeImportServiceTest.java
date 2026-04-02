@@ -40,6 +40,10 @@ class DensukeImportServiceTest {
     @Mock private LotteryExecutionRepository lotteryExecutionRepository;
     @Mock private NotificationRepository notificationRepository;
     @Mock private NotificationService notificationService;
+    @Mock private LotteryDeadlineHelper lotteryDeadlineHelper;
+    @Mock private LotteryService lotteryService;
+    @Mock private WaitlistPromotionService waitlistPromotionService;
+    @Mock private PracticeParticipantService practiceParticipantService;
 
     @InjectMocks
     private DensukeImportService densukeImportService;
@@ -336,6 +340,92 @@ class DensukeImportServiceTest {
     @DisplayName("SYSTEM_USER_IDが0Lとして定義されている")
     void testSystemUserIdConstant() {
         assertThat(DensukeImportService.SYSTEM_USER_ID).isEqualTo(0L);
+    }
+
+    // ----------------------------------------------------------------
+    // Phase3 3-A6: WAITLISTED + 伝助○ の処理テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("当日12:00以降に伝助で○にされたWAITLISTEDが空き枠ありならWONに昇格する")
+    void testPhase3A6_afterNoon_withVacancy_promotesToWon() throws IOException {
+        LocalDate today = LocalDate.of(2026, 4, 2);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(today);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // ○
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant waitlisted = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).dirty(false).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, 1L))
+                .thenReturn(Optional.of(session));
+        // Phase3: 締切後 + 抽選確定済み
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(false);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(true);
+        // 当日12:00以降
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(waitlisted));
+        // 空き枠あり（13/14）
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(13L);
+        when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 4))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(waitlisted.getWaitlistNumber()).isNull();
+        assertThat(waitlisted.isDirty()).isFalse(); // 伝助は既に○
+    }
+
+    @Test
+    @DisplayName("12:00より前に伝助で○にされたWAITLISTEDは△に書き戻される")
+    void testPhase3A6_beforeNoon_writesBackSankaku() throws IOException {
+        LocalDate today = LocalDate.of(2026, 4, 2);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(today);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // ○
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant waitlisted = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).dirty(false).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, 1L))
+                .thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(false);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(true);
+        // 12:00より前
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(waitlisted));
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        // ステータスはWAITLISTEDのまま、dirty=trueで△書き戻し
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(waitlisted.isDirty()).isTrue();
     }
 
     // ----------------------------------------------------------------

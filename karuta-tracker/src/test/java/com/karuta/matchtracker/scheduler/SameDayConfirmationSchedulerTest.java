@@ -1,11 +1,9 @@
 package com.karuta.matchtracker.scheduler;
 
-import com.karuta.matchtracker.entity.ParticipantStatus;
-import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
+import com.karuta.matchtracker.service.WaitlistPromotionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,9 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,7 +24,7 @@ class SameDayConfirmationSchedulerTest {
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
     @Mock
-    private PracticeParticipantRepository practiceParticipantRepository;
+    private WaitlistPromotionService waitlistPromotionService;
     @Mock
     private LineNotificationService lineNotificationService;
 
@@ -36,23 +32,17 @@ class SameDayConfirmationSchedulerTest {
     private SameDayConfirmationScheduler scheduler;
 
     @Test
-    @DisplayName("OFFERED参加者がDECLINEDに変更される")
-    void confirmSameDayParticipants_expiresOffered() {
+    @DisplayName("OFFERED参加者の期限切れ処理がWaitlistPromotionService経由で実行される")
+    void confirmSameDayParticipants_delegatesToWaitlistPromotionService() {
         LocalDate today = LocalDate.now();
         PracticeSession session = PracticeSession.builder()
                 .id(100L).sessionDate(today).capacity(6).build();
-        PracticeParticipant offered = PracticeParticipant.builder()
-                .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
-                .status(ParticipantStatus.OFFERED).build();
 
         when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of(offered));
 
         scheduler.confirmSameDayParticipants();
 
-        assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
-        verify(practiceParticipantRepository).save(offered);
+        verify(waitlistPromotionService).expireOfferedForSameDayConfirmation(session);
         verify(lineNotificationService).sendSameDayConfirmationNotification(session);
     }
 
@@ -64,12 +54,10 @@ class SameDayConfirmationSchedulerTest {
                 .id(100L).sessionDate(today).capacity(6).build();
 
         when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of());
 
         scheduler.confirmSameDayParticipants();
 
-        verify(practiceParticipantRepository, never()).save(any());
+        verify(waitlistPromotionService).expireOfferedForSameDayConfirmation(session);
         verify(lineNotificationService).sendSameDayConfirmationNotification(session);
     }
 
@@ -80,7 +68,7 @@ class SameDayConfirmationSchedulerTest {
 
         scheduler.confirmSameDayParticipants();
 
-        verify(practiceParticipantRepository, never()).findBySessionIdAndStatus(any(), any());
+        verify(waitlistPromotionService, never()).expireOfferedForSameDayConfirmation(any());
         verify(lineNotificationService, never()).sendSameDayConfirmationNotification(any());
     }
 }

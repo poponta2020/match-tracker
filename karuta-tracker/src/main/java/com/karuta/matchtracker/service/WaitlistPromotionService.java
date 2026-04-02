@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -478,6 +479,60 @@ public class WaitlistPromotionService {
         // 管理者通知
         notifyAdminsAboutWaitlistChange("オファー期限切れ", participant.getPlayerId(),
                 session, participant.getMatchNumber(), promoted.orElse(null));
+    }
+
+    /**
+     * 当日12:00確定時に、OFFERED状態の参加者を期限切れ処理する。
+     * 通常の expireOffer と異なり、promoteNextWaitlisted ではなく
+     * 当日空き募集フロー（先着ボタン方式）を使用する。
+     * SameDayConfirmationScheduler から呼ばれる。
+     */
+    @Transactional
+    public void expireOfferedForSameDayConfirmation(PracticeSession session) {
+        List<PracticeParticipant> offered = practiceParticipantRepository
+                .findBySessionIdAndStatus(session.getId(), ParticipantStatus.OFFERED);
+
+        if (offered.isEmpty()) {
+            log.debug("No OFFERED participants for session {}", session.getId());
+            return;
+        }
+
+        log.info("Expiring {} OFFERED participants for same-day confirmation (session {})",
+                offered.size(), session.getId());
+
+        Set<Integer> affectedMatches = new LinkedHashSet<>();
+
+        for (PracticeParticipant participant : offered) {
+            participant.setStatus(ParticipantStatus.DECLINED);
+            participant.setDirty(true);
+            participant.setRespondedAt(JstDateTimeUtil.now());
+            practiceParticipantRepository.save(participant);
+
+            notificationService.createOfferExpiredNotification(participant);
+            lineNotificationService.sendOfferExpiredNotification(participant);
+
+            affectedMatches.add(participant.getMatchNumber());
+
+            log.info("Expired offer for player {} session {} match {}",
+                    participant.getPlayerId(), session.getId(), participant.getMatchNumber());
+        }
+
+        // 空き枠がある試合に対して当日空き募集フローを発動
+        for (Integer matchNumber : affectedMatches) {
+            long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                    session.getId(), matchNumber, ParticipantStatus.WON);
+            int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+
+            if (wonCount < capacity) {
+                lineNotificationService.sendSameDayVacancyNotification(
+                        session, matchNumber, null);
+
+                log.info("Triggered same-day vacancy recruitment for session {} match {} ({} vacancies)",
+                        session.getId(), matchNumber, capacity - wonCount);
+            }
+        }
+
+        densukeSyncService.triggerWriteAsync();
     }
 
     /**

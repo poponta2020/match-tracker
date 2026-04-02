@@ -2011,10 +2011,13 @@ Entity Layer (JPA Entity)
 ### 7.5 当日キャンセル補充フロー
 
 ```
-[12:00確定フェーズ — SameDayConfirmationScheduler（毎日12:00 JST）]
-1. 当日セッションのOFFERED参加者を一括でDECLINEDに変更
+[12:00確定フェーズ — SameDayConfirmationScheduler → WaitlistPromotionService.expireOfferedForSameDayConfirmation()]
+1. 当日セッションのOFFERED参加者を一括でDECLINEDに変更（dirty=true設定で伝助同期による再活性化を防止）
    ↓
-2. WON参加者にメンバーリストFlex Message（青ヘッダー）をLINE送信
+2. 空き枠が発生した場合、当日キャンセル補充フロー（先着ボタン方式）を自動トリガー
+   - 非WON参加者に空き募集Flex Message送信（オレンジヘッダー、「参加する」ボタン付き）
+   ↓
+3. WON参加者にメンバーリストFlex Message（青ヘッダー）をLINE送信
    - 通知トグル: sameDayConfirmation
 
 [当日キャンセル→補充フェーズ — WaitlistPromotionService.cancelParticipation()]
@@ -2052,8 +2055,8 @@ Entity Layer (JPA Entity)
 
 | クラス | 変更内容 |
 |--------|---------|
-| `SameDayConfirmationScheduler`（新規） | scheduler/ — 毎日12:00 JSTにOFFERED→DECLINED一括変更 + メンバーリスト送信 |
-| `WaitlistPromotionService` | cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加 |
+| `SameDayConfirmationScheduler`（新規） | scheduler/ — 毎日12:00 JSTに`WaitlistPromotionService.expireOfferedForSameDayConfirmation()`へ委譲 + メンバーリスト送信 |
+| `WaitlistPromotionService` | `expireOfferedForSameDayConfirmation()`追加（dirty=true設定＋空き枠補充トリガー）、cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加 |
 | `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加 |
 | `LotteryDeadlineHelper` | isAfterSameDayNoon()追加、calculateOfferDeadline当日対応 |
 | `PracticeParticipantService` | 12:00以降参加時の通知送信追加 |
@@ -2199,6 +2202,7 @@ Entity Layer (JPA Entity)
 - 伝助（出欠管理ツール）との双方向同期
   - **アプリ→伝助（イベント駆動）**: 参加者の状態変更時に `DensukeSyncService.triggerWriteAsync()` を `@Async` で即時実行。`DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
   - **伝助→アプリ（5分スケジューラー）**: `DensukeSyncScheduler` が5分間隔で `DensukeSyncService.syncAll()` を呼び出し、JsoupによるHTMLスクレイピングで出欠情報を取得
+  - **Phase3 3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ空き枠あり（WON数 < 定員）の場合、`DensukeImportService.processPhase3Maru` がWAITLISTED→WONに昇格し後続のキャンセル待ち番号を繰り上げ（dirty=false）。12:00前または空き枠なしの場合はdirty=trueにして△で書き戻す（抽選バイパス防止）
 - **同期フロー集約**: `DensukeSyncService` がスケジューラー・手動同期・イベント駆動書き込みの全フローを統括
   - `syncAll()`: 当月+翌月の全団体を処理（スケジューラー用）
   - `syncForOrganization()`: 指定団体の書き込み→読み取り（Controller・スケジューラー共用）
