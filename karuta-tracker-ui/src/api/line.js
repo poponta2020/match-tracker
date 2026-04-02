@@ -1,21 +1,21 @@
 import apiClient from './client';
 
 export const lineAPI = {
-  // LINE通知を有効化する
-  enable: (playerId) =>
-    apiClient.post('/line/enable', { playerId }),
+  // LINE通知を有効化する（用途別）
+  enable: (playerId, channelType = 'PLAYER') =>
+    apiClient.post(`/line/${channelType}/enable`, { playerId }),
 
-  // LINE通知を無効化する
-  disable: (playerId) =>
-    apiClient.delete('/line/disable', { data: { playerId } }),
+  // LINE通知を無効化する（用途別）
+  disable: (playerId, channelType = 'PLAYER') =>
+    apiClient.delete(`/line/${channelType}/disable`, { data: { playerId } }),
 
-  // ワンタイムコードを再発行する
-  reissueCode: (playerId) =>
-    apiClient.post('/line/reissue-code', { playerId }),
+  // ワンタイムコードを再発行する（用途別）
+  reissueCode: (playerId, channelType = 'PLAYER') =>
+    apiClient.post(`/line/${channelType}/reissue-code`, { playerId }),
 
-  // LINE連携状態を取得する
-  getStatus: (playerId) =>
-    apiClient.get('/line/status', { params: { playerId } }),
+  // LINE連携状態を取得する（用途別）
+  getStatus: (playerId, channelType = 'PLAYER') =>
+    apiClient.get(`/line/${channelType}/status`, { params: { playerId } }),
 
   // 通知設定を取得する
   getPreferences: (playerId) =>
@@ -27,9 +27,9 @@ export const lineAPI = {
 
   // === 管理者向け ===
 
-  // チャネル一覧を取得する
-  getChannels: () =>
-    apiClient.get('/admin/line/channels'),
+  // チャネル一覧を取得する（用途別フィルタ対応）
+  getChannels: (channelType) =>
+    apiClient.get('/admin/line/channels', { params: channelType ? { channelType } : {} }),
 
   // チャネルを登録する
   createChannel: (data) =>

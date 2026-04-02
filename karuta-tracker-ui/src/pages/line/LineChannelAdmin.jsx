@@ -3,11 +3,17 @@ import { lineAPI } from '../../api';
 import { Plus, Ban, Play, Unlink, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
+const TABS = [
+  { key: 'PLAYER', label: '選手用' },
+  { key: 'ADMIN', label: '管理者用' },
+];
+
 const LineChannelAdmin = () => {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('PLAYER');
   const [form, setForm] = useState({
     channelName: '',
     lineChannelId: '',
@@ -18,12 +24,12 @@ const LineChannelAdmin = () => {
 
   useEffect(() => {
     fetchChannels();
-  }, []);
+  }, [activeTab]);
 
   const fetchChannels = async () => {
     try {
       setLoading(true);
-      const res = await lineAPI.getChannels();
+      const res = await lineAPI.getChannels(activeTab);
       setChannels(res.data);
     } catch (err) {
       setError('チャネル一覧の取得に失敗しました');
@@ -35,7 +41,7 @@ const LineChannelAdmin = () => {
   const handleCreateChannel = async (e) => {
     e.preventDefault();
     try {
-      await lineAPI.createChannel(form);
+      await lineAPI.createChannel({ ...form, channelType: activeTab });
       setShowForm(false);
       setForm({ channelName: '', lineChannelId: '', channelSecret: '', channelAccessToken: '', basicId: '' });
       await fetchChannels();
@@ -102,6 +108,23 @@ const LineChannelAdmin = () => {
         </button>
       </div>
 
+      {/* タブ切替 */}
+      <div className="flex border-b">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => { setActiveTab(key); setError(null); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === key
+                ? 'border-[#4a6b5a] text-[#4a6b5a]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-red-600" />
@@ -111,7 +134,9 @@ const LineChannelAdmin = () => {
 
       {showForm && (
         <form onSubmit={handleCreateChannel} className="bg-white border rounded-lg p-4 space-y-3">
-          <h2 className="font-semibold text-gray-700">チャネル登録</h2>
+          <h2 className="font-semibold text-gray-700">
+            チャネル登録（{TABS.find(t => t.key === activeTab)?.label}）
+          </h2>
           {[
             { key: 'channelName', label: '管理名', required: false },
             { key: 'lineChannelId', label: 'チャネルID', required: true },
