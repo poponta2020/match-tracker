@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { lineAPI } from '../../api';
 import { Plus, Ban, Play, Unlink, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -22,21 +22,21 @@ const LineChannelAdmin = () => {
     basicId: '',
   });
 
-  useEffect(() => {
-    fetchChannels();
-  }, [activeTab]);
-
-  const fetchChannels = async () => {
+  const fetchChannels = useCallback(async () => {
     try {
       setLoading(true);
       const res = await lineAPI.getChannels(activeTab);
       setChannels(res.data);
-    } catch (err) {
+    } catch {
       setError('チャネル一覧の取得に失敗しました');
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
 
   const handleCreateChannel = async (e) => {
     e.preventDefault();
@@ -45,7 +45,7 @@ const LineChannelAdmin = () => {
       setShowForm(false);
       setForm({ channelName: '', lineChannelId: '', channelSecret: '', channelAccessToken: '', basicId: '' });
       await fetchChannels();
-    } catch (err) {
+    } catch {
       setError('チャネルの登録に失敗しました');
     }
   };
@@ -55,7 +55,7 @@ const LineChannelAdmin = () => {
     try {
       await lineAPI.disableChannel(channelId);
       await fetchChannels();
-    } catch (err) {
+    } catch {
       setError('チャネルの無効化に失敗しました');
     }
   };
@@ -64,7 +64,7 @@ const LineChannelAdmin = () => {
     try {
       await lineAPI.enableChannel(channelId);
       await fetchChannels();
-    } catch (err) {
+    } catch {
       setError('チャネルの有効化に失敗しました');
     }
   };
@@ -74,7 +74,7 @@ const LineChannelAdmin = () => {
     try {
       await lineAPI.forceReleaseChannel(channelId);
       await fetchChannels();
-    } catch (err) {
+    } catch {
       setError('割り当て解除に失敗しました');
     }
   };

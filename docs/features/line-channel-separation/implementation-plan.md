@@ -110,7 +110,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク13: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 新機能のユニットテストを追加し、既存テストを修正する
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/LineChannelServiceTest.java` — 新規: channelType 別の割当・解放テスト

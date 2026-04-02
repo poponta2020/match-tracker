@@ -97,7 +97,7 @@ const LineSectionPanel = ({
       setFriendAddUrl(null);
       await fetchStatus();
       setMessage('LINE通知を無効にしました。');
-    } catch (err) {
+    } catch {
       setError('LINE通知の無効化に失敗しました');
     } finally {
       setActionLoading(false);
@@ -283,12 +283,7 @@ const LineSettings = () => {
   const playerId = currentPlayer?.id;
   const showAdminSection = isAdmin();
 
-  useEffect(() => {
-    if (!playerId) return;
-    fetchPreferences();
-  }, [playerId]);
-
-  const fetchPreferences = async () => {
+  const fetchPreferences = useCallback(async () => {
     try {
       setLoading(true);
       const res = await lineAPI.getPreferences(playerId);
@@ -298,7 +293,12 @@ const LineSettings = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [playerId]);
+
+  useEffect(() => {
+    if (!playerId) return;
+    fetchPreferences();
+  }, [playerId, fetchPreferences]);
 
   const handleTogglePreference = async (key) => {
     const updated = { ...preferences, [key]: !preferences[key] };

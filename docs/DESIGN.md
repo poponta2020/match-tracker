@@ -565,6 +565,7 @@ Entity Layer (JPA Entity)
 | line_channel_id | VARCHAR(50) | NOT NULL, UNIQUE | LINE発行のチャネルID |
 | channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（暗号化保存） |
 | channel_access_token | TEXT | NOT NULL | アクセストークン（暗号化保存） |
+| channel_type | VARCHAR(10) | NOT NULL, DEFAULT 'PLAYER' | チャネル用途（PLAYER: 選手用 / ADMIN: 管理者用） |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE' | AVAILABLE / ASSIGNED / LINKED / DISABLED |
 | friend_add_url | TEXT | | 友だち追加URL |
 | monthly_message_count | INT | NOT NULL, DEFAULT 0 | 当月送信数 |
@@ -575,6 +576,7 @@ Entity Layer (JPA Entity)
 **インデックス**:
 - `idx_line_channel_status` (status)
 - `idx_line_channel_line_id` (line_channel_id)
+- `idx_line_channel_type` (channel_type)
 
 ---
 
@@ -585,6 +587,7 @@ Entity Layer (JPA Entity)
 | line_channel_id | BIGINT | NOT NULL, FK → line_channels.id | LINEチャネルID |
 | player_id | BIGINT | NOT NULL, FK → players.id | プレイヤーID |
 | line_user_id | VARCHAR(50) | | follow時に取得するLINE userId |
+| channel_type | VARCHAR(10) | NOT NULL, DEFAULT 'PLAYER' | チャネル用途（PLAYER / ADMIN、非正規化） |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | PENDING / LINKED / UNLINKED / RECLAIMED |
 | assigned_at | DATETIME | NOT NULL | 割り当て日時 |
 | linked_at | DATETIME | | LINKED化日時 |
@@ -596,6 +599,7 @@ Entity Layer (JPA Entity)
 - `idx_lca_channel` (line_channel_id)
 - `idx_lca_player` (player_id)
 - `idx_lca_status` (status)
+- `idx_lca_player_type` (player_id, channel_type)
 
 ---
 
@@ -1456,26 +1460,30 @@ Entity Layer (JPA Entity)
 
 ### 4.13 LINE通知API
 
-#### POST /api/line/enable
+#### POST /api/line/{channelType}/enable
 **説明**: LINE通知を有効化する（チャネル割り当て＋ワンタイムコード発行）
-**権限**: なし
+**権限**: なし（channelType=ADMIN の場合、Service層でADMIN/SUPER_ADMINロールをチェック）
+**パスパラメータ**: `channelType` — PLAYER または ADMIN
 **リクエスト**: `{ "playerId": Long }`
 **レスポンス**: `{ "friendAddUrl": String, "linkingCode": String, "codeExpiresAt": String, "status": String }`
 
-#### DELETE /api/line/disable
+#### DELETE /api/line/{channelType}/disable
 **説明**: LINE通知を無効化する（チャネル解放）
 **権限**: なし
+**パスパラメータ**: `channelType` — PLAYER または ADMIN
 **リクエスト**: `{ "playerId": Long }`
 
-#### POST /api/line/reissue-code
+#### POST /api/line/{channelType}/reissue-code
 **説明**: ワンタイムコードを再発行する
 **権限**: なし
+**パスパラメータ**: `channelType` — PLAYER または ADMIN
 **リクエスト**: `{ "playerId": Long }`
 **レスポンス**: `{ "linkingCode": String, "codeExpiresAt": String }`
 
-#### GET /api/line/status?playerId={playerId}
-**説明**: LINE連携状態を取得する
+#### GET /api/line/{channelType}/status?playerId={playerId}
+**説明**: LINE連携状態を取得する（用途別）
 **権限**: なし
+**パスパラメータ**: `channelType` — PLAYER または ADMIN
 **レスポンス**: `{ "enabled": Boolean, "linked": Boolean, "friendAddUrl": String }`
 
 #### GET /api/line/preferences?playerId={playerId}
@@ -1502,12 +1510,13 @@ Entity Layer (JPA Entity)
 
 ### 4.14 LINE管理者API
 
-#### GET /api/admin/line/channels
-**説明**: チャネル一覧を取得する
+#### GET /api/admin/line/channels?channelType={channelType}
+**説明**: チャネル一覧を取得する（用途別フィルタ対応）
 **権限**: SUPER_ADMIN
+**クエリパラメータ**: `channelType`（任意）— PLAYER / ADMIN。未指定時は全件返却
 
 #### POST /api/admin/line/channels
-**説明**: チャネルを登録する（個別）
+**説明**: チャネルを登録する（個別）。リクエストボディに `channelType` を含める（デフォルト: PLAYER）
 **権限**: SUPER_ADMIN
 
 #### POST /api/admin/line/channels/import
