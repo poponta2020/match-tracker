@@ -502,24 +502,23 @@ public class LineWebhookController {
      */
     private void handleCheckWaitlistStatus(LineChannel channel, String replyToken, Long playerId) {
         try {
+            LocalDate today = JstDateTimeUtil.today();
+
             List<PracticeParticipant> waitlisted = practiceParticipantRepository.findByPlayerId(playerId)
                     .stream()
                     .filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED
                             || p.getStatus() == ParticipantStatus.OFFERED)
                     .toList();
 
-            if (waitlisted.isEmpty()) {
-                sendReply(channel, replyToken, "現在キャンセル待ちはありません");
-                return;
-            }
-
-            // セッション情報を付与してFlex Message構築
+            // セッション情報を付与し、過去の練習日を除外、日付昇順でソート
             List<Map<String, Object>> entries = new ArrayList<>();
             for (PracticeParticipant p : waitlisted) {
                 PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
                 if (session == null) continue;
+                if (session.getSessionDate().isBefore(today)) continue; // 過去の練習日を除外
 
                 Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("sessionDate", session.getSessionDate());
                 entry.put("sessionLabel", getSessionLabel(session));
                 entry.put("matchNumber", p.getMatchNumber());
                 entry.put("waitlistNumber", p.getWaitlistNumber());
@@ -527,6 +526,14 @@ public class LineWebhookController {
                 entry.put("offerDeadline", p.getOfferDeadline());
                 entries.add(entry);
             }
+
+            if (entries.isEmpty()) {
+                sendReply(channel, replyToken, "現在キャンセル待ちはありません");
+                return;
+            }
+
+            // 日付昇順でソート
+            entries.sort(Comparator.comparing(e -> (LocalDate) e.get("sessionDate")));
 
             Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
             sendReplyFlex(channel, replyToken, "キャンセル待ち状況", flex);
@@ -538,24 +545,24 @@ public class LineWebhookController {
     }
 
     /**
-     * 今日の参加者一覧を照会する
+     * 次の練習の参加者一覧を照会する。
+     * 今日の練習が開始時間前ならその日、開始時間を過ぎていたら次回の練習を表示。
      */
     private void handleCheckTodayParticipants(LineChannel channel, String replyToken) {
         try {
-            LocalDate today = JstDateTimeUtil.today();
-            Optional<PracticeSession> sessionOpt = practiceSessionRepository.findBySessionDate(today);
+            PracticeSession session = findNextPracticeSession();
 
-            if (sessionOpt.isEmpty()) {
-                sendReply(channel, replyToken, "今日の練習はありません");
+            if (session == null) {
+                sendReply(channel, replyToken, "予定されている練習はありません");
                 return;
             }
 
-            PracticeSession session = sessionOpt.get();
             List<PracticeParticipant> wonParticipants =
                     practiceParticipantRepository.findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
 
             if (wonParticipants.isEmpty()) {
-                sendReply(channel, replyToken, "今日の練習の参加者はまだいません");
+                String sessionLabel = getSessionLabel(session);
+                sendReply(channel, replyToken, sessionLabel + "の練習の参加者はまだいません");
                 return;
             }
 
@@ -573,7 +580,7 @@ public class LineWebhookController {
             String sessionLabel = getSessionLabel(session);
             Map<String, Object> flex = lineNotificationService.buildTodayParticipantsFlex(
                     sessionLabel, byMatch, playerMap);
-            sendReplyFlex(channel, replyToken, "今日の参加者", flex);
+            sendReplyFlex(channel, replyToken, sessionLabel + "の参加者", flex);
 
         } catch (Exception e) {
             log.error("Failed to check today's participants: error={}", e.getMessage());
@@ -637,6 +644,30 @@ public class LineWebhookController {
             log.error("Failed to check same-day join: player={}, error={}", playerId, e.getMessage());
             sendReply(channel, replyToken, "参加申込情報の取得に失敗しました。");
         }
+    }
+
+    /**
+     * 次の練習セッションを取得する。
+     * 今日の練習が開始時間前ならその日、開始時間を過ぎていたら翌日以降の直近の練習。
+     */
+    private PracticeSession findNextPracticeSession() {
+        LocalDate today = JstDateTimeUtil.today();
+
+        // まず今日の練習を確認
+        Optional<PracticeSession> todaySession = practiceSessionRepository.findBySessionDate(today);
+        if (todaySession.isPresent()) {
+            PracticeSession session = todaySession.get();
+            // 開始時間が未設定、またはまだ開始時間前なら今日の練習を返す
+            if (session.getStartTime() == null
+                    || JstDateTimeUtil.now().isBefore(today.atTime(session.getStartTime()))) {
+                return session;
+            }
+        }
+
+        // 今日の練習がない or 開始時間を過ぎている → 翌日以降の直近の練習
+        return practiceSessionRepository
+                .findFirstBySessionDateGreaterThanEqualOrderBySessionDateAsc(today.plusDays(1))
+                .orElse(null);
     }
 
     private void handleUnfollow(LineChannel channel, JsonNode event) {

@@ -70,6 +70,11 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
     List<LocalDate> findSessionDatesByOrganizationIdIn(@Param("orgIds") List<Long> orgIds, @Param("date") LocalDate date);
 
     /**
+     * 指定日以降の直近の練習セッションを1件取得
+     */
+    Optional<PracticeSession> findFirstBySessionDateGreaterThanEqualOrderBySessionDateAsc(LocalDate date);
+
+    /**
      * 指定日以降の練習日の日付リストのみ取得（降順）
      *
      * @param date 基準日
