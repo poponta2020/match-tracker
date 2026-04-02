@@ -25,11 +25,13 @@ public interface LineChannelAssignmentRepository extends JpaRepository<LineChann
     @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineChannelId = :channelId AND a.status IN ('PENDING', 'LINKED') ORDER BY a.id DESC LIMIT 1")
     Optional<LineChannelAssignment> findActiveByChannelId(@Param("channelId") Long channelId);
 
-    /** LINKED状態の割り当てをプレイヤーIDで取得 */
-    Optional<LineChannelAssignment> findByPlayerIdAndStatus(Long playerId, AssignmentStatus status);
+    /** LINKED状態の割り当てをプレイヤーIDで取得（重複時は最新を返す） */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.playerId = :playerId AND a.status = :status ORDER BY a.id DESC LIMIT 1")
+    Optional<LineChannelAssignment> findByPlayerIdAndStatus(@Param("playerId") Long playerId, @Param("status") AssignmentStatus status);
 
-    /** LINE userIdとステータスで割り当てを取得 */
-    Optional<LineChannelAssignment> findByLineUserIdAndStatus(String lineUserId, AssignmentStatus status);
+    /** LINE userIdとステータスで割り当てを取得（重複時は最新を返す） */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineUserId = :lineUserId AND a.status = :status ORDER BY a.id DESC LIMIT 1")
+    Optional<LineChannelAssignment> findByLineUserIdAndStatus(@Param("lineUserId") String lineUserId, @Param("status") AssignmentStatus status);
 
     /** LINE連携済みの全プレイヤーIDリストを取得 */
     @Query("SELECT a.playerId FROM LineChannelAssignment a WHERE a.status = 'LINKED'")
