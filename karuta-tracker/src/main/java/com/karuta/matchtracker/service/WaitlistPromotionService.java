@@ -154,9 +154,11 @@ public class WaitlistPromotionService {
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
-        // 管理者通知
-        notifyAdminsAboutWaitlistChange("キャンセル", participant.getPlayerId(),
-                session, participant.getMatchNumber(), promoted.orElse(null));
+        // 定員未達（WAITLISTEDなし）の場合は通知不要
+        if (promoted.isPresent()) {
+            notifyAdminsAboutWaitlistChange("キャンセル", participant.getPlayerId(),
+                    session, participant.getMatchNumber(), promoted.get());
+        }
 
         return ParticipantStatus.CANCELLED;
     }

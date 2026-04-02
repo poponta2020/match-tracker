@@ -1996,7 +1996,8 @@ Entity Layer (JPA Entity)
 [キャンセル時]
 1. 当選者が「キャンセル」→ status = CANCELLED
    ↓
-2. キャンセル待ち1番を繰り上げ → status = OFFERED, offerDeadline設定
+2. キャンセル待ちが存在する場合のみ以下を実行（定員未達時は通知なし）:
+   キャンセル待ち1番を繰り上げ → status = OFFERED, offerDeadline設定
    ↓
 3. 繰り上げ通知（WAITLIST_OFFER）+ Web Push + LINE Flex Message（参加/辞退ボタン付き）
    ↓
@@ -2190,7 +2191,7 @@ Entity Layer (JPA Entity)
 #### 抽選・キャンセル待ちシステム
 - 定員（`practice_sessions.capacity`）超過時に自動抽選を実行
 - 落選者にはキャンセル待ち番号を付与
-- 当選者キャンセル時は自動繰り上げ（応答期限付き）
+- 当選者キャンセル時は自動繰り上げ（応答期限付き）。定員未達（キャンセル待ちなし）の場合は通知なし
 - 応答期限切れ時は次の待ち番号に自動繰り上げ
 - アプリ内通知 + Web Push で即座に通知
 
