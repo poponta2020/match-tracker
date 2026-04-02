@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineNotificationScheduleSetting;
 import com.karuta.matchtracker.entity.LineNotificationScheduleSetting.ScheduleNotificationType;
 import com.karuta.matchtracker.entity.Player.Role;
@@ -42,12 +43,13 @@ public class LineAdminController {
     private final PracticeSessionRepository practiceSessionRepository;
 
     /**
-     * チャネル一覧を取得する
+     * チャネル一覧を取得する（用途別フィルタ対応）
      */
     @GetMapping("/channels")
     @RequireRole(Role.SUPER_ADMIN)
-    public ResponseEntity<List<LineChannelDto>> getChannels() {
-        return ResponseEntity.ok(lineChannelService.getAllChannels(null));
+    public ResponseEntity<List<LineChannelDto>> getChannels(
+            @RequestParam(required = false) ChannelType channelType) {
+        return ResponseEntity.ok(lineChannelService.getAllChannels(channelType));
     }
 
     /**

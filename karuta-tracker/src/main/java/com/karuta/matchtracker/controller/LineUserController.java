@@ -1,8 +1,10 @@
 package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannelAssignment;
+import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.LineLinkingCode;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
@@ -15,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,15 +41,17 @@ public class LineUserController {
     /**
      * LINE通知を有効化する（チャネル割り当て+コード発行）
      */
-    @PostMapping("/enable")
-    public ResponseEntity<?> enableLineNotification(@RequestBody Map<String, Long> body) {
+    @PostMapping("/{channelType}/enable")
+    public ResponseEntity<?> enableLineNotification(
+            @PathVariable ChannelType channelType,
+            @RequestBody Map<String, Long> body) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().body("playerId is required");
         }
 
         try {
-            LineChannel channel = lineChannelService.assignChannel(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
+            LineChannel channel = lineChannelService.assignChannel(playerId, channelType);
             LineLinkingCode code = lineLinkingService.issueCode(playerId, channel.getId());
 
             String friendAddUrl = channel.getBasicId() != null
@@ -66,29 +71,33 @@ public class LineUserController {
     /**
      * LINE通知を無効化する（チャネル解放）
      */
-    @DeleteMapping("/disable")
-    public ResponseEntity<Void> disableLineNotification(@RequestBody Map<String, Long> body) {
+    @DeleteMapping("/{channelType}/disable")
+    public ResponseEntity<Void> disableLineNotification(
+            @PathVariable ChannelType channelType,
+            @RequestBody Map<String, Long> body) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        lineChannelService.releaseChannel(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
+        lineChannelService.releaseChannel(playerId, channelType);
         return ResponseEntity.noContent().build();
     }
 
     /**
      * ワンタイムコードを再発行する
      */
-    @PostMapping("/reissue-code")
-    public ResponseEntity<?> reissueCode(@RequestBody Map<String, Long> body) {
+    @PostMapping("/{channelType}/reissue-code")
+    public ResponseEntity<?> reissueCode(
+            @PathVariable ChannelType channelType,
+            @RequestBody Map<String, Long> body) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().body("playerId is required");
         }
 
         try {
-            LineLinkingCode code = lineLinkingService.reissueCode(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
+            LineLinkingCode code = lineLinkingService.reissueCode(playerId, channelType);
             return ResponseEntity.ok(LineReissueCodeResponse.builder()
                 .linkingCode(code.getCode())
                 .codeExpiresAt(code.getExpiresAt().format(ISO_FORMAT))
@@ -99,11 +108,14 @@ public class LineUserController {
     }
 
     /**
-     * LINE連携状態を取得する
+     * LINE連携状態を取得する（用途別）
      */
-    @GetMapping("/status")
-    public ResponseEntity<LineStatusResponse> getStatus(@RequestParam Long playerId) {
-        var assignmentOpt = lineChannelAssignmentRepository.findActiveByPlayerId(playerId);
+    @GetMapping("/{channelType}/status")
+    public ResponseEntity<LineStatusResponse> getStatus(
+            @PathVariable ChannelType channelType,
+            @RequestParam Long playerId) {
+        var assignmentOpt = lineChannelAssignmentRepository
+            .findByPlayerIdAndChannelTypeAndStatusIn(playerId, channelType, List.of(AssignmentStatus.PENDING, AssignmentStatus.LINKED));
 
         if (assignmentOpt.isEmpty()) {
             return ResponseEntity.ok(LineStatusResponse.builder()
@@ -117,7 +129,7 @@ public class LineUserController {
 
         return ResponseEntity.ok(LineStatusResponse.builder()
             .enabled(true)
-            .linked(assignment.getStatus() == LineChannelAssignment.AssignmentStatus.LINKED)
+            .linked(assignment.getStatus() == AssignmentStatus.LINKED)
             .friendAddUrl(friendAddUrl)
             .build());
     }
