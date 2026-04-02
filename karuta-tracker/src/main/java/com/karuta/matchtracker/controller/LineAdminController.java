@@ -217,9 +217,9 @@ public class LineAdminController {
         int colWidth = width / 3; // 833
 
         List<Map<String, Object>> areas = List.of(
-            // 上段左: ロゴ（アプリへ遷移）
+            // 上段左: ロゴ（何もしない）
             buildArea(0, 0, colWidth, rowHeight,
-                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/")),
+                Map.of("type", "postback", "data", "action=noop")),
             // 上段中: 今日の練習参加者を確認する
             buildArea(colWidth, 0, colWidth, rowHeight,
                 Map.of("type", "postback", "data", "action=check_today_participants",
