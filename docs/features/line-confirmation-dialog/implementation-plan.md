@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DBテーブル・エンティティ・リポジトリの作成
-- [ ] 完了
+- [x] 完了
 - **概要:** `line_confirmation_token` テーブルを新設し、対応するJPAエンティティとリポジトリを作成する
 - **変更対象ファイル:**
   - `database/create_line_confirmation_token.sql` — 新規作成。CREATE TABLEのマイグレーションSQL
@@ -16,7 +16,7 @@ status: completed
 - **対応Issue:** #244
 
 ### タスク2: LineConfirmationServiceの作成
-- [ ] 完了
+- [x] 完了
 - **概要:** トークンの発行・検証・消費・クリーンアップを担当するサービスクラスを作成する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineConfirmationService.java` — 新規作成
@@ -26,7 +26,7 @@ status: completed
 - **対応Issue:** #245
 
 ### タスク3: LineMessagingServiceにFlex reply送信メソッドを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 現在テキストのみ対応している `sendReplyMessage()` に加え、Flex Messageをreplyで送信する `sendReplyFlexMessage()` を追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineMessagingService.java` — `sendReplyFlexMessage(channelAccessToken, replyToken, altText, flexContents)` を追加。既存の `sendReplyMessage()`（78-97行目）のパターンを踏襲し、messagesのtypeを `flex` にする
@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:** #246
 
 ### タスク4: LineNotificationServiceに確認用Flex構築メソッドを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 確認ダイアログ用のFlex Messageを構築するメソッドを追加する。DBからセッション情報（日付・会場名）を取得して表示文言を生成する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java` — 以下のメソッドを追加:

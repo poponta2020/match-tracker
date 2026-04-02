@@ -2,20 +2,22 @@ package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.karuta.matchtracker.entity.LineChannel;
-import com.karuta.matchtracker.entity.LineChannelAssignment;
-import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
-import com.karuta.matchtracker.service.LineChannelService;
-import com.karuta.matchtracker.service.LineLinkingService;
-import com.karuta.matchtracker.service.LineMessagingService;
-import com.karuta.matchtracker.service.WaitlistPromotionService;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
+import com.karuta.matchtracker.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * LINE Webhookエンドポイント
@@ -32,11 +34,22 @@ public class LineWebhookController {
     private final LineChannelRepository lineChannelRepository;
     private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
+    private final VenueRepository venueRepository;
     private final LineMessagingService lineMessagingService;
     private final LineChannelService lineChannelService;
     private final LineLinkingService lineLinkingService;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final LineNotificationService lineNotificationService;
+    private final LineConfirmationService lineConfirmationService;
     private final ObjectMapper objectMapper;
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
+
+    /** 確認ダイアログを挟む対象のアクション */
+    private static final Set<String> CONFIRMABLE_ACTIONS = Set.of(
+        "waitlist_accept", "waitlist_decline", "waitlist_decline_session", "same_day_join"
+    );
 
     @PostMapping("/{channelId}")
     public ResponseEntity<String> handleWebhook(
@@ -138,18 +151,11 @@ public class LineWebhookController {
             return;
         }
 
-        // postbackデータをパース（例: action=waitlist_accept&participantId=123）
         java.util.Map<String, String> params = parsePostbackData(data);
         String action = params.getOrDefault("action", "");
-        String participantIdStr = params.getOrDefault("participantId", "");
-
-        if (!action.startsWith("waitlist_") && !"same_day_join".equals(action)) {
-            log.debug("Ignoring unknown postback action: {}", data);
-            return;
-        }
 
         // LINE userId → プレイヤーの紐付けを検証
-        java.util.Optional<LineChannelAssignment> assignmentOpt =
+        Optional<LineChannelAssignment> assignmentOpt =
             lineChannelAssignmentRepository.findByLineUserIdAndStatus(
                 lineUserId, LineChannelAssignment.AssignmentStatus.LINKED);
         if (assignmentOpt.isEmpty()) {
@@ -160,21 +166,175 @@ public class LineWebhookController {
 
         Long playerId = assignmentOpt.get().getPlayerId();
 
-        // 当日補充参加のpostback処理
-        if ("same_day_join".equals(action)) {
-            handleSameDayJoin(channel, replyToken, params, playerId);
+        // 確認対象のアクション → 確認Flexを返す
+        if (CONFIRMABLE_ACTIONS.contains(action)) {
+            handleConfirmationRequest(channel, replyToken, action, params, playerId);
             return;
         }
 
-        // キャンセル待ちセッション辞退のpostback処理
-        if ("waitlist_decline_session".equals(action)) {
-            handleWaitlistDeclineSession(channel, replyToken, params, playerId);
+        // 確認実行アクション（confirm_*） → トークン検証後に本来の処理を実行
+        if (action.startsWith("confirm_")) {
+            handleConfirmAction(channel, replyToken, action, params, playerId);
             return;
         }
 
-        // 以下は繰り上げオファー関連のpostback処理
+        // キャンセル
+        if ("cancel_confirm".equals(action)) {
+            sendReply(channel, replyToken, "操作をキャンセルしました");
+            return;
+        }
+
+        log.debug("Ignoring unknown postback action: {}", data);
+    }
+
+    /**
+     * 確認ダイアログを送信する（元アクション受信時）
+     */
+    private void handleConfirmationRequest(LineChannel channel, String replyToken,
+                                            String action, java.util.Map<String, String> params, Long playerId) {
+        try {
+            // セッション情報をDBから取得
+            String sessionLabel = null;
+            Integer matchNumber = null;
+
+            if ("waitlist_accept".equals(action) || "waitlist_decline".equals(action)) {
+                // participantIdからセッション情報を取得
+                String participantIdStr = params.getOrDefault("participantId", "");
+                if (participantIdStr.isEmpty()) {
+                    sendReply(channel, replyToken, "パラメータが不正です。");
+                    return;
+                }
+                Long participantId = Long.parseLong(participantIdStr);
+                PracticeParticipant participant = practiceParticipantRepository.findById(participantId).orElse(null);
+                if (participant == null) {
+                    sendReply(channel, replyToken, "操作対象が見つかりません。アプリから確認してください。");
+                    return;
+                }
+                PracticeSession session = practiceSessionRepository.findById(participant.getSessionId()).orElse(null);
+                if (session == null) {
+                    sendReply(channel, replyToken, "セッション情報が見つかりません。");
+                    return;
+                }
+                sessionLabel = getSessionLabel(session);
+                matchNumber = participant.getMatchNumber();
+
+            } else if ("waitlist_decline_session".equals(action)) {
+                // sessionIdからセッション情報を取得
+                String sessionIdStr = params.getOrDefault("sessionId", "");
+                if (sessionIdStr.isEmpty()) {
+                    sendReply(channel, replyToken, "セッション情報が不正です。アプリから操作してください。");
+                    return;
+                }
+                Long sessionId = Long.parseLong(sessionIdStr);
+                PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                if (session == null) {
+                    sendReply(channel, replyToken, "セッション情報が見つかりません。");
+                    return;
+                }
+                sessionLabel = getSessionLabel(session);
+
+            } else if ("same_day_join".equals(action)) {
+                // sessionId + matchNumberからセッション情報を取得
+                String sessionIdStr = params.getOrDefault("sessionId", "");
+                String matchNumberStr = params.getOrDefault("matchNumber", "");
+                if (sessionIdStr.isEmpty() || matchNumberStr.isEmpty()) {
+                    sendReply(channel, replyToken, "パラメータが不正です。アプリから操作してください。");
+                    return;
+                }
+                Long sessionId = Long.parseLong(sessionIdStr);
+                PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                if (session == null) {
+                    sendReply(channel, replyToken, "セッション情報が見つかりません。");
+                    return;
+                }
+                sessionLabel = getSessionLabel(session);
+                matchNumber = Integer.parseInt(matchNumberStr);
+            }
+
+            // パラメータをJSON文字列に変換
+            String paramsJson = objectMapper.writeValueAsString(params);
+
+            // 確認トークンを発行
+            String token = lineConfirmationService.createToken(action, paramsJson, playerId);
+
+            // 確認用のpostbackデータを構築
+            String confirmAction = "action=confirm_" + action + "&token=" + token;
+            String cancelAction = "action=cancel_confirm&token=" + token;
+
+            // 確認用Flex Messageを構築・送信
+            Map<String, Object> flex = lineNotificationService.buildConfirmationFlex(
+                action, sessionLabel, matchNumber, confirmAction, cancelAction);
+            sendReplyFlex(channel, replyToken, "操作の確認", flex);
+
+            log.info("Sent confirmation dialog for action={}, player={}", action, playerId);
+
+        } catch (NumberFormatException e) {
+            log.warn("Invalid parameter in confirmation request: {}", e.getMessage());
+            sendReply(channel, replyToken, "パラメータが不正です。アプリから操作してください。");
+        } catch (Exception e) {
+            log.error("Failed to send confirmation dialog: {}", e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
+        }
+    }
+
+    /**
+     * 確認トークンを検証し、本来の処理を実行する（confirm_*アクション受信時）
+     */
+    private void handleConfirmAction(LineChannel channel, String replyToken,
+                                      String action, java.util.Map<String, String> params, Long playerId) {
+        String token = params.getOrDefault("token", "");
+        if (token.isEmpty()) {
+            sendReply(channel, replyToken, "この確認は期限切れです。もう一度操作してください。");
+            return;
+        }
+
+        try {
+            // トークン検証・消費
+            LineConfirmationToken confirmationToken = lineConfirmationService.consumeToken(token, playerId);
+
+            // 元のパラメータを復元
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, String> originalParams =
+                objectMapper.readValue(confirmationToken.getParams(), java.util.Map.class);
+            String originalAction = confirmationToken.getAction();
+
+            // 元のアクションに応じて処理を実行
+            executeOriginalAction(channel, replyToken, originalAction, originalParams, playerId);
+
+        } catch (IllegalStateException e) {
+            // トークン検証NG（期限切れ・使用済み・不在・本人不一致）
+            sendReply(channel, replyToken, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to process confirm action: {}", e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
+        }
+    }
+
+    /**
+     * 元のアクションを実行する
+     */
+    private void executeOriginalAction(LineChannel channel, String replyToken,
+                                        String action, java.util.Map<String, String> params, Long playerId) {
+        switch (action) {
+            case "waitlist_accept", "waitlist_decline" ->
+                handleWaitlistResponse(channel, replyToken, action, params, playerId);
+            case "waitlist_decline_session" ->
+                handleWaitlistDeclineSession(channel, replyToken, params, playerId);
+            case "same_day_join" ->
+                handleSameDayJoin(channel, replyToken, params, playerId);
+            default ->
+                sendReply(channel, replyToken, "不明な操作です。");
+        }
+    }
+
+    /**
+     * 繰り上げオファー承諾/辞退を処理する
+     */
+    private void handleWaitlistResponse(LineChannel channel, String replyToken,
+                                         String action, java.util.Map<String, String> params, Long playerId) {
+        String participantIdStr = params.getOrDefault("participantId", "");
         if (participantIdStr.isEmpty()) {
-            log.debug("Ignoring postback without participantId: {}", data);
+            log.debug("Ignoring postback without participantId");
             return;
         }
 
@@ -182,12 +342,12 @@ public class LineWebhookController {
         try {
             participantId = Long.parseLong(participantIdStr);
         } catch (NumberFormatException e) {
-            log.warn("Invalid participantId in postback data: {}", data);
+            log.warn("Invalid participantId: {}", participantIdStr);
             return;
         }
 
         // 参加者レコードを取得し、本人確認
-        java.util.Optional<PracticeParticipant> participantOpt =
+        Optional<PracticeParticipant> participantOpt =
             practiceParticipantRepository.findById(participantId);
         if (participantOpt.isEmpty() || !participantOpt.get().getPlayerId().equals(playerId)) {
             log.warn("Participant {} not found or not owned by player {}", participantId, playerId);
@@ -198,13 +358,12 @@ public class LineWebhookController {
         PracticeParticipant participant = participantOpt.get();
 
         // 既にOFFERED以外のステータスなら処理済み
-        if (participant.getStatus() != com.karuta.matchtracker.entity.ParticipantStatus.OFFERED) {
+        if (participant.getStatus() != ParticipantStatus.OFFERED) {
             log.info("Postback for participant {} but status is already {}", participantId, participant.getStatus());
             sendReply(channel, replyToken, "この操作は既に処理済みです。");
             return;
         }
 
-        // 応答処理
         boolean accept = "waitlist_accept".equals(action);
         try {
             waitlistPromotionService.respondToOffer(participantId, accept);
@@ -276,6 +435,20 @@ public class LineWebhookController {
     }
 
     /**
+     * セッションのラベルを生成する（例: "4月5日（中央公民館）"）
+     */
+    private String getSessionLabel(PracticeSession session) {
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        if (session.getVenueId() != null) {
+            Venue venue = venueRepository.findById(session.getVenueId()).orElse(null);
+            if (venue != null) {
+                return dateStr + "（" + venue.getName() + "）";
+            }
+        }
+        return dateStr;
+    }
+
+    /**
      * postbackデータをキー=値ペアにパースする
      */
     private java.util.Map<String, String> parsePostbackData(String data) {
@@ -290,11 +463,20 @@ public class LineWebhookController {
     }
 
     /**
-     * Reply APIで返信する（nullチェック付き）
+     * Reply APIでテキスト返信する（nullチェック付き）
      */
     private void sendReply(LineChannel channel, String replyToken, String message) {
         if (replyToken != null) {
             lineMessagingService.sendReplyMessage(channel.getChannelAccessToken(), replyToken, message);
+        }
+    }
+
+    /**
+     * Reply APIでFlex Message返信する（nullチェック付き）
+     */
+    private void sendReplyFlex(LineChannel channel, String replyToken, String altText, Map<String, Object> flex) {
+        if (replyToken != null) {
+            lineMessagingService.sendReplyFlexMessage(channel.getChannelAccessToken(), replyToken, altText, flex);
         }
     }
 
