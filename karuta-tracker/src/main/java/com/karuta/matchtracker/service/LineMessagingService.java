@@ -97,6 +97,31 @@ public class LineMessagingService {
     }
 
     /**
+     * Reply APIでFlex Messageを返信する
+     */
+    public void sendReplyFlexMessage(String channelAccessToken, String replyToken,
+                                      String altText, Map<String, Object> contents) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(channelAccessToken);
+
+            Map<String, Object> body = Map.of(
+                "replyToken", replyToken,
+                "messages", new Object[]{
+                    Map.of("type", "flex", "altText", altText, "contents", contents)
+                }
+            );
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            restTemplate.exchange(REPLY_API_URL, HttpMethod.POST, request, String.class);
+            log.debug("LINE Reply Flex message sent with replyToken: {}...", replyToken.substring(0, Math.min(10, replyToken.length())));
+        } catch (Exception e) {
+            log.error("Failed to send LINE Reply Flex message: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Webhook署名を検証する（HMAC-SHA256）
      */
     public boolean verifySignature(String channelSecret, String body, String signature) {
