@@ -419,7 +419,7 @@ class WaitlistPromotionServiceTest {
 
             assertThatThrownBy(() -> service.handleSameDayJoin(100L, 1, 20L))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("先を越されました");
+                    .hasMessageContaining("定員に達してしまいました");
         }
     }
 }

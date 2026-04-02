@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -28,7 +28,6 @@ public class DensukeSyncService {
     /**
      * 特定団体の伝助同期（書き込み + 読み取り）
      */
-    @Transactional
     public DensukeImportService.ImportResult syncForOrganization(int year, int month, Long organizationId, Long userId) throws IOException {
         // ① アプリ→伝助: dirty=true の参加者を書き込む
         densukeWriteService.writeToDensuke();

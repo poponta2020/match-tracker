@@ -89,8 +89,8 @@ class DensukeImportServiceTest {
             s.setId(1L);
             return s;
         });
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(anyLong()))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
@@ -118,8 +118,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(existingSession));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(99L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(99L, 1))
                 .thenReturn(Collections.emptyList());
 
@@ -130,8 +130,8 @@ class DensukeImportServiceTest {
     }
 
     @Test
-    @DisplayName("抽選済みセッションの参加者はスキップされる")
-    void testImportSkipsLotteryExecutedSession() throws IOException {
+    @DisplayName("Phase2（締切後・抽選確定前）のセッションはスキップされる")
+    void testImportSkipsPhase2Session() throws IOException {
         DensukeData data = createSampleData();
         PracticeSession session = PracticeSession.builder().id(1L)
                 .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
@@ -140,8 +140,10 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.of(LotteryExecution.builder().id(1L).build()));
+        // Phase2: 締切後 かつ 抽選未確定
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(false);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(false);
 
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
@@ -163,8 +165,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(Collections.emptyList());
 
@@ -191,8 +193,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(Collections.emptyList());
         when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(Collections.emptyList());
@@ -231,8 +233,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(existingParticipant));
 
@@ -257,8 +259,8 @@ class DensukeImportServiceTest {
             s.setId(1L);
             return s;
         });
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(anyLong()))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
@@ -298,8 +300,8 @@ class DensukeImportServiceTest {
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 4, 1)), eq(1L)))
                 .thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(Collections.emptyList());
 
@@ -325,8 +327,8 @@ class DensukeImportServiceTest {
             s.setId(1L);
             return s;
         });
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(anyLong()))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
@@ -452,8 +454,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(dirtyParticipant));
 
@@ -483,8 +485,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(List.of(cleanParticipant));
 
@@ -506,8 +508,8 @@ class DensukeImportServiceTest {
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
         when(venueRepository.findAll()).thenReturn(Collections.emptyList());
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
-        when(lotteryExecutionRepository.findTopBySessionIdOrderByExecutedAtDesc(1L))
-                .thenReturn(Optional.empty());
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
                 .thenReturn(Collections.emptyList());
 
