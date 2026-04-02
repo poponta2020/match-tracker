@@ -43,7 +43,7 @@ status: completed
 - **対応Issue:** #247
 
 ### タスク5: LineWebhookControllerのpostback処理を変更
-- [ ] 完了
+- [x] 完了
 - **概要:** `handlePostback()` を変更し、元アクション受信時は確認Flex返却、`confirm_*` 受信時は本来の処理実行、`cancel_confirm` 受信時はキャンセル応答を行うようにする
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LineWebhookController.java` — `handlePostback()`（131-221行目）を以下のように変更:
