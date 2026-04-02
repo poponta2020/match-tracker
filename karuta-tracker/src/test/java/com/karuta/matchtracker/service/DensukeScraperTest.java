@@ -89,4 +89,17 @@ class DensukeScraperTest {
         assertThat(DensukeScraper.stripLeadingEmoji("")).isEqualTo("");
         assertThat(DensukeScraper.stripLeadingEmoji(null)).isNull();
     }
+
+    @Test
+    @DisplayName("stripLeadingEmoji: 不可視Unicode文字（Variation Selector等）が除去される")
+    void testStripInvisibleUnicodeChars() {
+        // U+FE0E (Variation Selector-15) が先頭に付いたケース（実際に発生した不具合）
+        assertThat(DensukeScraper.stripLeadingEmoji("\uFE0E井桁堅章")).isEqualTo("井桁堅章");
+        // U+FE0F (Variation Selector-16)
+        assertThat(DensukeScraper.stripLeadingEmoji("\uFE0F田中")).isEqualTo("田中");
+        // 名前の中間に紛れ込んだ場合も除去
+        assertThat(DensukeScraper.stripLeadingEmoji("井桁\uFE0E堅章")).isEqualTo("井桁堅章");
+        // 絵文字 + Variation Selector の組み合わせ
+        assertThat(DensukeScraper.stripLeadingEmoji("🔰\uFE0E田中")).isEqualTo("田中");
+    }
 }

@@ -152,14 +152,29 @@ public class DensukeScraper {
     }
 
     /**
-     * 名前の先頭に付いている絵文字（Symbol カテゴリの文字）を除去する。
-     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木"
+     * 名前の先頭に付いている絵文字（Symbol カテゴリの文字）を除去し、
+     * 不可視のUnicode制御文字（Variation Selector等）を全体から除去する。
+     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木", "︎井桁" → "井桁"
      */
     static String stripLeadingEmoji(String name) {
         if (name == null || name.isEmpty()) return name;
+
+        // 全体からVariation Selector (U+FE00–U+FE0F, U+E0100–U+E01EF) および
+        // その他の不可視FORMAT文字（ゼロ幅スペース等）を除去
+        StringBuilder sb = new StringBuilder(name.length());
+        name.codePoints().forEach(cp -> {
+            if (cp >= 0xFE00 && cp <= 0xFE0F) return;          // Variation Selectors
+            if (cp >= 0xE0100 && cp <= 0xE01EF) return;        // Variation Selectors Supplement
+            if (cp == 0x200B || cp == 0x200C || cp == 0x200D    // Zero-width chars
+                    || cp == 0xFEFF || cp == 0x2060) return;    // BOM, Word Joiner
+            sb.appendCodePoint(cp);
+        });
+        String cleaned = sb.toString();
+
+        // 先頭の絵文字（Symbolカテゴリ）を除去
         int i = 0;
-        while (i < name.length()) {
-            int codePoint = name.codePointAt(i);
+        while (i < cleaned.length()) {
+            int codePoint = cleaned.codePointAt(i);
             int type = Character.getType(codePoint);
             if (type == Character.OTHER_SYMBOL
                     || type == Character.MATH_SYMBOL
@@ -169,6 +184,6 @@ public class DensukeScraper {
                 break;
             }
         }
-        return name.substring(i).trim();
+        return cleaned.substring(i).trim();
     }
 }
