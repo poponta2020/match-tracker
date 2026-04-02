@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "line_channels", indexes = {
     @Index(name = "idx_line_channel_status", columnList = "status"),
-    @Index(name = "idx_line_channel_line_id", columnList = "line_channel_id")
+    @Index(name = "idx_line_channel_line_id", columnList = "line_channel_id"),
+    @Index(name = "idx_line_channel_type", columnList = "channel_type")
 })
 @Getter
 @Setter
@@ -39,6 +40,12 @@ public class LineChannel {
     /** チャネルアクセストークン（暗号化保存） */
     @Column(name = "channel_access_token", nullable = false, columnDefinition = "TEXT")
     private String channelAccessToken;
+
+    /** チャネル用途（PLAYER: 選手用, ADMIN: 管理者用） */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "channel_type", nullable = false, length = 10)
+    @Builder.Default
+    private ChannelType channelType = ChannelType.PLAYER;
 
     /** ステータス */
     @Enumerated(EnumType.STRING)

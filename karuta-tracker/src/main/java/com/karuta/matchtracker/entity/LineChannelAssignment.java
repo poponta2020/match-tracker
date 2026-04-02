@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 @Table(name = "line_channel_assignments", indexes = {
     @Index(name = "idx_lca_channel", columnList = "line_channel_id"),
     @Index(name = "idx_lca_player", columnList = "player_id"),
-    @Index(name = "idx_lca_status", columnList = "status")
+    @Index(name = "idx_lca_status", columnList = "status"),
+    @Index(name = "idx_lca_player_type", columnList = "player_id, channel_type")
 })
 @Getter
 @Setter
@@ -36,6 +37,12 @@ public class LineChannelAssignment {
     /** LINE userId（follow時に取得） */
     @Column(name = "line_user_id", length = 50)
     private String lineUserId;
+
+    /** チャネル用途（PLAYER: 選手用, ADMIN: 管理者用） */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "channel_type", nullable = false, length = 10)
+    @Builder.Default
+    private ChannelType channelType = ChannelType.PLAYER;
 
     /** ステータス */
     @Enumerated(EnumType.STRING)
