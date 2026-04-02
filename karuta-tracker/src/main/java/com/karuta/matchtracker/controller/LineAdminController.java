@@ -200,36 +200,44 @@ public class LineAdminController {
     }
 
     /**
-     * リッチメニューのJSON定義を構築する（5ボタン: 上段3 + 下段2）
+     * リッチメニューのJSON定義を構築する（3列x2行の6エリア）
+     *
+     * ┌──────────┬──────────┬──────────┐
+     * │  ロゴ    │ 今日の   │キャンセル│
+     * │(アプリへ)│ 参加者   │待ち状況  │
+     * ├──────────┼──────────┼──────────┤
+     * │ 通知設定 │アプリを  │ 当日     │
+     * │          │ 開く     │ 参加申込 │
+     * └──────────┴──────────┴──────────┘
      */
     private Map<String, Object> buildRichMenuDefinition() {
-        // 画像サイズ: 2500x1686（大サイズ）、上段3分割 + 下段2分割
         int width = 2500;
         int height = 1686;
-        int topHeight = 843;
-        int bottomHeight = 843;
-        int topColWidth = width / 3;   // 833
-        int bottomColWidth = width / 2; // 1250
+        int rowHeight = 843;
+        int colWidth = width / 3; // 833
 
         List<Map<String, Object>> areas = List.of(
-            // 上段左: キャンセル待ち状況確認
-            buildArea(0, 0, topColWidth, topHeight,
-                Map.of("type", "postback", "data", "action=check_waitlist_status",
-                    "displayText", "キャンセル待ち状況確認")),
-            // 上段中: 今日の参加者
-            buildArea(topColWidth, 0, topColWidth, topHeight,
+            // 上段左: ロゴ（アプリへ遷移）
+            buildArea(0, 0, colWidth, rowHeight,
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/")),
+            // 上段中: 今日の練習参加者を確認する
+            buildArea(colWidth, 0, colWidth, rowHeight,
                 Map.of("type", "postback", "data", "action=check_today_participants",
                     "displayText", "今日の参加者")),
-            // 上段右: 当日参加申込
-            buildArea(topColWidth * 2, 0, width - topColWidth * 2, topHeight,
-                Map.of("type", "postback", "data", "action=check_same_day_join",
-                    "displayText", "当日参加申込")),
-            // 下段左: アプリへ
-            buildArea(0, topHeight, bottomColWidth, bottomHeight,
+            // 上段右: キャンセル待ち状況を見る
+            buildArea(colWidth * 2, 0, width - colWidth * 2, rowHeight,
+                Map.of("type", "postback", "data", "action=check_waitlist_status",
+                    "displayText", "キャンセル待ち状況確認")),
+            // 下段左: 通知設定
+            buildArea(0, rowHeight, colWidth, rowHeight,
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/settings/notifications")),
+            // 下段中: アプリを開く
+            buildArea(colWidth, rowHeight, colWidth, rowHeight,
                 Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/")),
-            // 下段右: 通知設定
-            buildArea(bottomColWidth, topHeight, width - bottomColWidth, bottomHeight,
-                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/settings/notifications"))
+            // 下段右: 当日参加申込
+            buildArea(colWidth * 2, rowHeight, width - colWidth * 2, rowHeight,
+                Map.of("type", "postback", "data", "action=check_same_day_join",
+                    "displayText", "当日参加申込"))
         );
 
         Map<String, Object> size = Map.of("width", width, "height", height);
