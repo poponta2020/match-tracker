@@ -390,8 +390,9 @@ public class PracticeSessionController {
         }
 
         try {
+            LocalDate targetMonth = LocalDate.of(year, month, 1);
             var result = densukeImportService.registerAndSync(
-                    names, densukeUrl.get().getUrl(), null, currentUserId, organizationId);
+                    names, densukeUrl.get().getUrl(), targetMonth, currentUserId, organizationId);
             return ResponseEntity.ok(result);
         } catch (java.io.IOException e) {
             log.error("Register and sync failed", e);
@@ -512,7 +513,11 @@ public class PracticeSessionController {
     @GetMapping("/densuke-write-status")
     @RequireRole({Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<DensukeWriteStatusDto> getDensukeWriteStatus(
-            @RequestParam Long organizationId) {
+            @RequestParam Long organizationId,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の書き込み状況は取得できません");
         return ResponseEntity.ok(densukeWriteService.getStatus(organizationId));
     }
 }

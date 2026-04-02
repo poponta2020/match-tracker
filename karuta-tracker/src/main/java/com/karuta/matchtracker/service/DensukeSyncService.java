@@ -29,15 +29,17 @@ public class DensukeSyncService {
      * 特定団体の伝助同期（書き込み + 読み取り）
      */
     public DensukeImportService.ImportResult syncForOrganization(int year, int month, Long organizationId, Long userId) throws IOException {
-        // ① アプリ→伝助: dirty=true の参加者を書き込む
-        densukeWriteService.writeToDensuke();
-
-        // ② 伝助→アプリ: 対象団体のURLからデータを読み取り
+        // ① 伝助URLを取得
         DensukeUrl densukeUrl = densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Densuke URL not found for " + year + "/" + month + " (orgId=" + organizationId + ")"));
 
-        return densukeImportService.importFromDensuke(densukeUrl.getUrl(), null, userId, organizationId);
+        // ② アプリ→伝助: 指定団体・指定年月のdirty=true 参加者のみを書き込む
+        densukeWriteService.writeToDensukeForOrganization(densukeUrl);
+
+        // ③ 伝助→アプリ: 対象団体のURLからデータを読み取り
+        LocalDate targetMonth = LocalDate.of(year, month, 1);
+        return densukeImportService.importFromDensuke(densukeUrl.getUrl(), targetMonth, userId, organizationId);
     }
 
     /**
@@ -76,8 +78,9 @@ public class DensukeSyncService {
             }
 
             try {
+                LocalDate targetMonth = LocalDate.of(year, month, 1);
                 var result = densukeImportService.importFromDensuke(
-                        densukeUrl.getUrl(), null,
+                        densukeUrl.getUrl(), targetMonth,
                         DensukeImportService.SYSTEM_USER_ID, orgId);
                 if (result.getRegisteredCount() > 0 || result.getCreatedSessionCount() > 0
                         || result.getRemovedCount() > 0) {

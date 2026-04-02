@@ -117,6 +117,20 @@ class DensukeWriteServiceTest {
         assertThat(densukeWriteService.getStatus(1L).getPendingCount()).isEqualTo(0);
     }
 
+    @Test
+    @DisplayName("writeToDensukeForOrganization: URL未登録時はエラーステータスを設定する")
+    void testWriteToDensukeForOrganization_noUrl_setsErrorStatus() {
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2025, 1, 1L))
+                .thenReturn(Optional.empty());
+
+        densukeWriteService.writeToDensukeForOrganization(2025, 1, 1L);
+
+        DensukeWriteStatusDto status = densukeWriteService.getStatus(1L);
+        assertThat(status.getLastAttemptAt()).isNotNull();
+        assertThat(status.getPendingCount()).isEqualTo(0);
+        assertThat(status.getErrors()).containsExactly("対象年月の伝助URLが未登録のため書き込みをスキップしました");
+    }
+
     // ----------------------------------------------------------------
     // URL パースユーティリティのテスト
     // ----------------------------------------------------------------

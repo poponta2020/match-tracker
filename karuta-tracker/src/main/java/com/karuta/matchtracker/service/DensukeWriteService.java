@@ -77,7 +77,41 @@ public class DensukeWriteService {
         urls.addAll(densukeUrlRepository.findByYearAndMonth(now.getYear(), now.getMonthValue()));
         LocalDate next = now.plusMonths(1);
         urls.addAll(densukeUrlRepository.findByYearAndMonth(next.getYear(), next.getMonthValue()));
+        writeToDensukeInternal(urls);
+    }
 
+    /**
+     * 指定団体・指定年月のdirty参加者のみを伝助へ書き込む（手動同期用）。
+     */
+    @Transactional
+    public void writeToDensukeForOrganization(int year, int month, Long organizationId) {
+        List<DensukeUrl> urls = densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                .map(List::of)
+                .orElseGet(List::of);
+
+        LocalDateTime now = JstDateTimeUtil.now();
+        if (urls.isEmpty()) {
+            lastAttemptAtByOrg.put(organizationId, now);
+            lastPendingCountByOrg.put(organizationId, 0);
+            lastErrorsByOrg.put(organizationId, List.of("対象年月の伝助URLが未登録のため書き込みをスキップしました"));
+            return;
+        }
+
+        writeToDensukeInternal(urls);
+    }
+
+    /**
+     * 指定の伝助URL（団体・年月特定済み）に対してdirty参加者を書き込む。
+     */
+    @Transactional
+    public void writeToDensukeForOrganization(DensukeUrl densukeUrl) {
+        if (densukeUrl == null) {
+            return;
+        }
+        writeToDensukeInternal(List.of(densukeUrl));
+    }
+
+    private void writeToDensukeInternal(List<DensukeUrl> urls) {
         // 団体IDごとにグループ化してステータスを管理
         Map<Long, List<DensukeUrl>> urlsByOrg = urls.stream()
                 .collect(Collectors.groupingBy(DensukeUrl::getOrganizationId));
@@ -91,8 +125,8 @@ public class DensukeWriteService {
             return;
         }
 
-        List<String> errors = new ArrayList<>();
-
+        // 団体別エラー
+        Map<Long, List<String>> errorsByOrg = new HashMap<>();
         // URL ごとに、その団体のセッションを取得
         Map<Long, DensukeUrl> urlById = urls.stream()
                 .collect(Collectors.toMap(DensukeUrl::getId, u -> u));
@@ -164,15 +198,16 @@ public class DensukeWriteService {
             Long urlId = urlEntry.getKey();
             DensukeUrl densukeUrl = urlById.get(urlId);
             if (densukeUrl == null) {
-                errors.add("伝助URL取得失敗: urlId=" + urlId);
                 continue;
             }
+            Long orgId = densukeUrl.getOrganizationId();
+            List<String> orgErrors = errorsByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
             List<PracticeSession> urlSessions = sessionsByUrlId.get(urlId);
             String urlStr = densukeUrl.getUrl();
             String cd = extractCd(urlStr);
             String base = extractBase(urlStr);
             if (cd == null || base == null) {
-                errors.add("URL解析エラー: " + urlStr);
+                orgErrors.add("URL解析エラー: " + urlStr);
                 continue;
             }
 
@@ -192,12 +227,12 @@ public class DensukeWriteService {
                 log.info("Densuke list fetched: cd={}, pageId={}, {} members found", cd, pageId, memberNameToMi.size());
             } catch (IOException e) {
                 log.warn("Failed to fetch densuke list page for cd={}: {}", cd, e.getMessage());
-                errors.add("伝助リストページ取得失敗: " + e.getMessage());
+                orgErrors.add("伝助リストページ取得失敗: " + e.getMessage());
                 continue;
             }
 
             if (pageId == null) {
-                errors.add("伝助ページID取得失敗: cd=" + cd);
+                orgErrors.add("伝助ページID取得失敗: cd=" + cd);
                 continue;
             }
 
@@ -210,17 +245,16 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             participants, urlSessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors, false);
+                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
-                    errors.add("選手[" + playerName + "]: " + e.getMessage());
+                    orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
                 }
             }
         }
 
         // 団体別にステータスを更新
-        // URL → 団体のマッピングを使って、団体別にエラーとpending countを集計
-        Map<Long, List<String>> errorsByOrg = new HashMap<>();
+        // URL → 団体のマッピングを使って、団体別のpending countを集計
         Map<Long, Integer> pendingByOrg = new HashMap<>();
         for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
@@ -229,15 +263,14 @@ public class DensukeWriteService {
                 continue;
             }
             Long orgId = densukeUrl.getOrganizationId();
-            // errors はURL単位で分離できないため、全体のエラーを団体にマップ
-            errorsByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
             pendingByOrg.merge(orgId, urlEntry.getValue().values().stream()
                     .mapToInt(List::size).sum(), Integer::sum);
         }
         for (Long orgId : urlsByOrg.keySet()) {
-            lastErrorsByOrg.put(orgId, errorsByOrg.getOrDefault(orgId, List.of()));
+            List<String> orgErrors = new ArrayList<>(errorsByOrg.getOrDefault(orgId, List.of()));
+            lastErrorsByOrg.put(orgId, orgErrors);
             lastPendingCountByOrg.put(orgId, pendingByOrg.getOrDefault(orgId, 0));
-            if (errors.isEmpty()) {
+            if (orgErrors.isEmpty()) {
                 lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
             }
         }
@@ -252,6 +285,7 @@ public class DensukeWriteService {
     @Transactional
     public void writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
         log.info("Starting bulk write-back for lottery confirmation: orgId={}, {}-{}", organizationId, year, month);
+        lastAttemptAtByOrg.put(organizationId, JstDateTimeUtil.now());
 
         List<DensukeUrl> urls = densukeUrlRepository.findByYearAndMonth(year, month).stream()
                 .filter(u -> u.getOrganizationId().equals(organizationId))
@@ -259,6 +293,7 @@ public class DensukeWriteService {
 
         if (urls.isEmpty()) {
             log.info("No densuke URLs found for orgId={}, {}-{}", organizationId, year, month);
+            lastErrorsByOrg.put(organizationId, List.of());
             return;
         }
 
@@ -334,8 +369,11 @@ public class DensukeWriteService {
 
         if (!errors.isEmpty()) {
             log.warn("Bulk write-back completed with {} errors", errors.size());
+            lastErrorsByOrg.put(organizationId, new ArrayList<>(errors));
         } else {
             log.info("Bulk write-back completed successfully for orgId={}, {}-{}", organizationId, year, month);
+            lastErrorsByOrg.put(organizationId, List.of());
+            lastSuccessAtByOrg.put(organizationId, JstDateTimeUtil.now());
         }
     }
 
