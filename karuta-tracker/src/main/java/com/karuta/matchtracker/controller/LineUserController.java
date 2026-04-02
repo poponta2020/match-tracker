@@ -46,7 +46,7 @@ public class LineUserController {
         }
 
         try {
-            LineChannel channel = lineChannelService.assignChannel(playerId);
+            LineChannel channel = lineChannelService.assignChannel(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
             LineLinkingCode code = lineLinkingService.issueCode(playerId, channel.getId());
 
             String friendAddUrl = channel.getBasicId() != null
@@ -73,7 +73,7 @@ public class LineUserController {
             return ResponseEntity.badRequest().build();
         }
 
-        lineChannelService.releaseChannel(playerId);
+        lineChannelService.releaseChannel(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
         return ResponseEntity.noContent().build();
     }
 
@@ -88,7 +88,7 @@ public class LineUserController {
         }
 
         try {
-            LineLinkingCode code = lineLinkingService.reissueCode(playerId);
+            LineLinkingCode code = lineLinkingService.reissueCode(playerId, com.karuta.matchtracker.entity.ChannelType.PLAYER);
             return ResponseEntity.ok(LineReissueCodeResponse.builder()
                 .linkingCode(code.getCode())
                 .codeExpiresAt(code.getExpiresAt().format(ISO_FORMAT))

@@ -47,7 +47,7 @@ public class LineAdminController {
     @GetMapping("/channels")
     @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<List<LineChannelDto>> getChannels() {
-        return ResponseEntity.ok(lineChannelService.getAllChannels());
+        return ResponseEntity.ok(lineChannelService.getAllChannels(null));
     }
 
     /**

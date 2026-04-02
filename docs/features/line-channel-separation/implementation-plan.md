@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DB マイグレーション & Entity / Enum 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `line_channels` と `line_channel_assignments` に `channel_type` カラムを追加し、対応する Entity・Enum を更新する
 - **変更対象ファイル:**
   - `database/` — 新規マイグレーションSQL（`channel_type` カラム追加、既存レコードに `PLAYER` 設定、インデックス追加）
@@ -17,7 +17,7 @@ status: completed
 - **対応Issue:**
 
 ### タスク2: Repository 層の更新
-- [ ] 完了
+- [x] 完了
 - **概要:** channelType を条件に含む検索メソッドを追加し、既存の単一結果前提のメソッドを修正する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/LineChannelRepository.java` — `findByStatusAndChannelType()`, `findAllByChannelType()` 追加

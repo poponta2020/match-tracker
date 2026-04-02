@@ -903,9 +903,11 @@ public class LineNotificationService {
      * チェックを通過した場合は ResolvedChannel を返し、通過しなかった場合は null を返す。
      */
     private ResolvedChannel resolveChannel(Long playerId, LineNotificationType notificationType, String messageForLog) {
-        // LINKED状態の割り当てを取得
+        // 通知種別に応じたチャネル用途を判定し、該当アサインメントを取得
+        ChannelType requiredChannelType = notificationType.getRequiredChannelType();
         Optional<LineChannelAssignment> assignmentOpt =
-            lineChannelAssignmentRepository.findByPlayerIdAndStatus(playerId, AssignmentStatus.LINKED);
+            lineChannelAssignmentRepository.findByPlayerIdAndChannelTypeAndStatusIn(
+                playerId, requiredChannelType, List.of(AssignmentStatus.LINKED));
         if (assignmentOpt.isEmpty()) {
             return null;
         }

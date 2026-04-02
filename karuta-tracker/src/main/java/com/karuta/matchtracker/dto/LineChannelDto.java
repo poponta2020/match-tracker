@@ -20,6 +20,7 @@ public class LineChannelDto {
     private Integer monthlyMessageCount;
     private String assignedPlayerName;
     private Long assignedPlayerId;
+    private String channelType;
 
     public static LineChannelDto fromEntity(LineChannel entity) {
         return LineChannelDto.builder()
@@ -31,6 +32,7 @@ public class LineChannelDto {
             .friendAddUrl(entity.getBasicId() != null
                 ? "https://line.me/R/ti/p/" + entity.getBasicId() : null)
             .monthlyMessageCount(entity.getMonthlyMessageCount())
+            .channelType(entity.getChannelType().name())
             .build();
     }
 }

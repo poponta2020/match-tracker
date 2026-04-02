@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannelAssignment;
+import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.LineLinkingCode;
 import com.karuta.matchtracker.entity.LineLinkingCode.CodeStatus;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
@@ -14,6 +16,7 @@ import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -102,17 +105,18 @@ public class LineLinkingService {
     }
 
     /**
-     * ワンタイムコードを再発行する
+     * ワンタイムコードを再発行する（用途別）
      */
     @Transactional
-    public LineLinkingCode reissueCode(Long playerId) {
-        Optional<LineChannelAssignment> assignmentOpt = lineChannelAssignmentRepository.findActiveByPlayerId(playerId);
+    public LineLinkingCode reissueCode(Long playerId, ChannelType channelType) {
+        Optional<LineChannelAssignment> assignmentOpt = lineChannelAssignmentRepository
+            .findByPlayerIdAndChannelTypeAndStatusIn(playerId, channelType, List.of(AssignmentStatus.PENDING, AssignmentStatus.LINKED));
         if (assignmentOpt.isEmpty()) {
             throw new IllegalStateException("LINE通知が有効化されていません");
         }
 
         LineChannelAssignment assignment = assignmentOpt.get();
-        if (assignment.getStatus() != LineChannelAssignment.AssignmentStatus.PENDING) {
+        if (assignment.getStatus() != AssignmentStatus.PENDING) {
             throw new IllegalStateException("既にLINE連携が完了しています");
         }
 

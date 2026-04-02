@@ -2,11 +2,13 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.LineChannelCreateRequest;
 import com.karuta.matchtracker.dto.LineChannelDto;
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
 import com.karuta.matchtracker.entity.LineChannelAssignment;
 import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.LineNotificationPreference;
+import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
@@ -41,21 +43,32 @@ public class LineChannelService {
     private final LineNotificationService lineNotificationService;
 
     /**
-     * プレイヤーにチャネルを割り当てる
+     * プレイヤーにチャネルを割り当てる（用途別）
      * @return 割り当てたチャネル
      */
     @Transactional
-    public LineChannel assignChannel(Long playerId) {
-        // 既に割り当て済みか確認
-        Optional<LineChannelAssignment> existing = lineChannelAssignmentRepository.findActiveByPlayerId(playerId);
+    public LineChannel assignChannel(Long playerId, ChannelType channelType) {
+        // ADMINチャネルの場合はロールチェック
+        if (channelType == ChannelType.ADMIN) {
+            Player player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Player", playerId));
+            if (player.getRole() == Player.Role.PLAYER) {
+                throw new IllegalStateException("管理者用LINEは管理者のみ利用できます");
+            }
+        }
+
+        // 該当用途で既に割り当て済みか確認
+        Optional<LineChannelAssignment> existing = lineChannelAssignmentRepository
+            .findByPlayerIdAndChannelTypeAndStatusIn(playerId, channelType, List.of(AssignmentStatus.PENDING, AssignmentStatus.LINKED));
         if (existing.isPresent()) {
             return lineChannelRepository.findById(existing.get().getLineChannelId())
                 .orElseThrow(() -> new ResourceNotFoundException("LineChannel", existing.get().getLineChannelId()));
         }
 
-        // AVAILABLEなチャネルを取得
-        LineChannel channel = lineChannelRepository.findFirstByStatusOrderByIdAsc(ChannelStatus.AVAILABLE)
-            .orElseThrow(() -> new IllegalStateException("利用可能なLINEチャネルがありません"));
+        // 該当用途のAVAILABLEなチャネルを取得
+        String channelLabel = channelType == ChannelType.ADMIN ? "管理者用" : "選手用";
+        LineChannel channel = lineChannelRepository.findFirstByStatusAndChannelTypeOrderByIdAsc(ChannelStatus.AVAILABLE, channelType)
+            .orElseThrow(() -> new IllegalStateException(channelLabel + "のLINEチャネルが不足しています"));
 
         // チャネルをASSIGNEDに変更
         channel.setStatus(ChannelStatus.ASSIGNED);
@@ -65,6 +78,7 @@ public class LineChannelService {
         LineChannelAssignment assignment = LineChannelAssignment.builder()
             .lineChannelId(channel.getId())
             .playerId(playerId)
+            .channelType(channelType)
             .status(AssignmentStatus.PENDING)
             .build();
         lineChannelAssignmentRepository.save(assignment);
@@ -83,18 +97,19 @@ public class LineChannelService {
             }
         }
 
-        log.info("Assigned LINE channel {} to player {}", channel.getId(), playerId);
+        log.info("Assigned {} LINE channel {} to player {}", channelType, channel.getId(), playerId);
         return channel;
     }
 
     /**
-     * プレイヤーのチャネル割り当てを解除する
+     * プレイヤーのチャネル割り当てを解除する（用途別）
      */
     @Transactional
-    public void releaseChannel(Long playerId) {
-        Optional<LineChannelAssignment> assignmentOpt = lineChannelAssignmentRepository.findActiveByPlayerId(playerId);
+    public void releaseChannel(Long playerId, ChannelType channelType) {
+        Optional<LineChannelAssignment> assignmentOpt = lineChannelAssignmentRepository
+            .findByPlayerIdAndChannelTypeAndStatusIn(playerId, channelType, List.of(AssignmentStatus.PENDING, AssignmentStatus.LINKED));
         if (assignmentOpt.isEmpty()) {
-            log.warn("No active LINE channel assignment found for player {}", playerId);
+            log.warn("No active {} LINE channel assignment found for player {}", channelType, playerId);
             return;
         }
 
@@ -110,7 +125,7 @@ public class LineChannelService {
         channel.setStatus(ChannelStatus.AVAILABLE);
         lineChannelRepository.save(channel);
 
-        log.info("Released LINE channel {} from player {}", channel.getId(), playerId);
+        log.info("Released {} LINE channel {} from player {}", channelType, channel.getId(), playerId);
     }
 
     /**
@@ -156,11 +171,14 @@ public class LineChannelService {
     }
 
     /**
-     * チャネル一覧を取得（管理者向け）
+     * チャネル一覧を取得（管理者向け、用途別フィルタ対応）
      */
     @Transactional(readOnly = true)
-    public List<LineChannelDto> getAllChannels() {
-        return lineChannelRepository.findAll().stream().map(channel -> {
+    public List<LineChannelDto> getAllChannels(ChannelType channelType) {
+        List<LineChannel> channels = channelType != null
+            ? lineChannelRepository.findAllByChannelType(channelType)
+            : lineChannelRepository.findAll();
+        return channels.stream().map(channel -> {
             LineChannelDto dto = LineChannelDto.fromEntity(channel);
             // 割り当てユーザー情報を付加
             lineChannelAssignmentRepository.findActiveByChannelId(channel.getId())
@@ -178,12 +196,14 @@ public class LineChannelService {
      */
     @Transactional
     public LineChannel createChannel(LineChannelCreateRequest request) {
+        ChannelType type = request.getChannelType() != null ? request.getChannelType() : ChannelType.PLAYER;
         LineChannel channel = LineChannel.builder()
             .channelName(request.getChannelName())
             .lineChannelId(request.getLineChannelId())
             .channelSecret(request.getChannelSecret())
             .channelAccessToken(request.getChannelAccessToken())
             .basicId(request.getBasicId())
+            .channelType(type)
             .build();
         return lineChannelRepository.save(channel);
     }

@@ -154,10 +154,10 @@ public class LineWebhookController {
         java.util.Map<String, String> params = parsePostbackData(data);
         String action = params.getOrDefault("action", "");
 
-        // LINE userId → プレイヤーの紐付けを検証
+        // LINE userId + channelId でプレイヤーの紐付けを検証
         Optional<LineChannelAssignment> assignmentOpt =
-            lineChannelAssignmentRepository.findByLineUserIdAndStatus(
-                lineUserId, LineChannelAssignment.AssignmentStatus.LINKED);
+            lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                lineUserId, channel.getId(), LineChannelAssignment.AssignmentStatus.LINKED);
         if (assignmentOpt.isEmpty()) {
             log.warn("No linked assignment for lineUserId: {}", lineUserId);
             sendReply(channel, replyToken, "LINE連携が見つかりません。アプリから操作してください。");

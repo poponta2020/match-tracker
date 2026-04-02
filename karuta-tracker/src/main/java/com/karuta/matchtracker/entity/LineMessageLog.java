@@ -66,7 +66,12 @@ public class LineMessageLog {
         SAME_DAY_CONFIRMATION,
         SAME_DAY_CANCEL,
         SAME_DAY_VACANCY,
-        ADMIN_SAME_DAY_CONFIRMATION
+        ADMIN_SAME_DAY_CONFIRMATION;
+
+        /** 通知種別に対応するチャネル用途を返す */
+        public ChannelType getRequiredChannelType() {
+            return this.name().startsWith("ADMIN_") ? ChannelType.ADMIN : ChannelType.PLAYER;
+        }
     }
 
     public enum MessageStatus {

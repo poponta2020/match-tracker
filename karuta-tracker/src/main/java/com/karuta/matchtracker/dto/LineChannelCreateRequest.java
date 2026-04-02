@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.dto;
 
+import com.karuta.matchtracker.entity.ChannelType;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
@@ -22,4 +23,6 @@ public class LineChannelCreateRequest {
     private String channelAccessToken;
 
     private String basicId;
+
+    private ChannelType channelType;
 }
