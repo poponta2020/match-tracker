@@ -145,6 +145,98 @@ public class LineNotificationService {
     }
 
     /**
+     * 操作確認用Flex Message（Bubble）を構築する。
+     *
+     * @param action 元のアクション名（waitlist_accept等）
+     * @param sessionLabel セッションラベル（例: "4月5日（中央公民館）"）
+     * @param matchNumber 試合番号（null可：キャンセル待ち一括辞退の場合）
+     * @param confirmAction 確定ボタンのpostbackデータ
+     * @param cancelAction キャンセルボタンのpostbackデータ
+     * @return Flex Message（Bubble）のMap
+     */
+    public Map<String, Object> buildConfirmationFlex(String action, String sessionLabel,
+                                                      Integer matchNumber,
+                                                      String confirmAction, String cancelAction) {
+        String confirmMessage = buildConfirmMessage(action, sessionLabel, matchNumber);
+
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "操作の確認",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#F39C12",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", confirmMessage,
+                    "weight", "bold", "size", "md", "wrap", true)
+            ),
+            "paddingAll", "20px"
+        );
+
+        // フッター（確定・キャンセルボタン）
+        Map<String, Object> confirmButton = Map.of(
+            "type", "button",
+            "action", Map.of(
+                "type", "postback",
+                "label", "確定",
+                "data", confirmAction
+            ),
+            "style", "primary",
+            "color", "#27AE60",
+            "height", "sm"
+        );
+
+        Map<String, Object> cancelButton = Map.of(
+            "type", "button",
+            "action", Map.of(
+                "type", "postback",
+                "label", "キャンセル",
+                "data", cancelAction
+            ),
+            "style", "secondary",
+            "height", "sm"
+        );
+
+        Map<String, Object> footer = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(confirmButton, cancelButton),
+            "spacing", "sm",
+            "paddingAll", "15px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body,
+            "footer", footer
+        );
+    }
+
+    /**
+     * 操作種別に応じた確認文言を生成する
+     */
+    private String buildConfirmMessage(String action, String sessionLabel, Integer matchNumber) {
+        String matchPart = matchNumber != null ? matchNumber + "試合目" : "";
+        return switch (action) {
+            case "waitlist_accept" -> sessionLabel + matchPart + "の繰り上げ参加を承諾します。よろしいですか？";
+            case "waitlist_decline" -> sessionLabel + matchPart + "の繰り上げ参加を辞退します。よろしいですか？";
+            case "waitlist_decline_session" -> sessionLabel + "のキャンセル待ちをすべて辞退します。よろしいですか？";
+            case "same_day_join" -> sessionLabel + matchPart + "に当日参加します。よろしいですか？";
+            default -> "この操作を実行します。よろしいですか？";
+        };
+    }
+
+    /**
      * キャンセル待ち繰り上げ用Flex Message（Bubble）を構築する
      */
     private Map<String, Object> buildWaitlistOfferFlex(String sessionLabel, int matchNumber,
