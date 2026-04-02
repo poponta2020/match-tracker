@@ -213,15 +213,19 @@ public class PracticeSessionService {
                                   : s1));
         List<NextParticipationDto.ParticipantInfo> participantInfos = new java.util.ArrayList<>();
         if (!participantPlayerIds.isEmpty()) {
-            playerRepository.findAllById(participantPlayerIds).forEach(p ->
-                participantInfos.add(NextParticipationDto.ParticipantInfo.builder()
-                        .id(p.getId())
-                        .name(p.getName())
-                        .kyuRank(p.getKyuRank())
-                        .danRank(p.getDanRank())
-                        .status(statusByPlayerId.get(p.getId()))
-                        .build())
-            );
+            playerRepository.findAllById(participantPlayerIds).forEach(p -> {
+                ParticipantStatus status = statusByPlayerId.get(p.getId());
+                // DECLINED/WAITLIST_DECLINED は表示対象外
+                if (status != null && status != ParticipantStatus.DECLINED && status != ParticipantStatus.WAITLIST_DECLINED) {
+                    participantInfos.add(NextParticipationDto.ParticipantInfo.builder()
+                            .id(p.getId())
+                            .name(p.getName())
+                            .kyuRank(p.getKyuRank())
+                            .danRank(p.getDanRank())
+                            .status(status)
+                            .build());
+                }
+            });
         }
         participantInfos.sort(PlayerSortHelper.participantInfoComparator());
 
@@ -650,12 +654,19 @@ public class PracticeSessionService {
         Map<Integer, List<ParticipantWithPlayer>> matchPlayersList = new java.util.HashMap<>();
 
         for (PracticeParticipant participant : sessionParticipants) {
-            if (participant.getMatchNumber() != null && participant.getStatus().isActive()) {
-                matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
-                Player player = playerMap.get(participant.getPlayerId());
-                if (player != null) {
-                    matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
-                            .add(new ParticipantWithPlayer(participant, player));
+            if (participant.getMatchNumber() != null) {
+                // 人数カウントはアクティブ（WON/PENDING）のみ
+                if (participant.getStatus().isActive()) {
+                    matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
+                }
+                // 表示対象: DECLINED/WAITLIST_DECLINED以外
+                ParticipantStatus status = participant.getStatus();
+                if (status != ParticipantStatus.DECLINED && status != ParticipantStatus.WAITLIST_DECLINED) {
+                    Player player = playerMap.get(participant.getPlayerId());
+                    if (player != null) {
+                        matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())
+                                .add(new ParticipantWithPlayer(participant, player));
+                    }
                 }
             }
         }

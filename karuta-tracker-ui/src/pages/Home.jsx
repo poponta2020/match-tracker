@@ -239,6 +239,25 @@ const Home = () => {
                         </div>
                       </div>
                     )}
+                    {nextPracticeParticipants.some(p => p.status === 'CANCELLED') && (
+                      <div className="mt-2">
+                        <div className="text-[10px] text-red-500 mb-1">キャンセル済み</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status === 'CANCELLED')).map((p) => (
+                            <PlayerChip
+                              key={p.id}
+                              name={p.name}
+                              kyuRank={p.kyuRank}
+                              className={`text-xs ${
+                                isMyself(p)
+                                  ? 'bg-red-200 text-red-800 font-medium'
+                                  : 'bg-red-50 text-red-800'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {nextPractice.today && isAdmin() && (
