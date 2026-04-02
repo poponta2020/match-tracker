@@ -1553,6 +1553,11 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `{ "notificationType": String, "enabled": Boolean, "daysBefore": [Integer] }`
 
+#### POST /api/admin/line/channels/migrate-webhook-urls
+**説明**: 全チャネルのWebhook URLをLINEチャネルIDベースに一括移行する。LINE Messaging APIを呼び出し、各チャネルのWebhook URLを `/api/line/webhook/{lineChannelId}` 形式に更新する。
+**権限**: SUPER_ADMIN
+**レスポンス**: `{ "successCount": Integer, "failedCount": Integer, "skippedCount": Integer }`
+
 ### 4.15 システム設定API (`/api/system-settings`)
 
 #### GET /api/system-settings

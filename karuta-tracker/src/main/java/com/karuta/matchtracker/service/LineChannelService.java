@@ -41,6 +41,7 @@ public class LineChannelService {
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LineNotificationService lineNotificationService;
+    private final LineMessagingService lineMessagingService;
 
     /**
      * プレイヤーにチャネルを割り当てる（用途別）
@@ -242,5 +243,33 @@ public class LineChannelService {
         lineChannelRepository.save(channel);
 
         log.info("Force released LINE channel {}", channelId);
+    }
+
+    /**
+     * 全チャネルのWebhook URLをLINEチャネルIDベースに一括更新する
+     * @param baseUrl アプリケーションのベースURL（例: https://example.com）
+     * @return 成功/失敗の件数
+     */
+    public java.util.Map<String, Integer> migrateWebhookUrls(String baseUrl) {
+        List<LineChannel> channels = lineChannelRepository.findAll();
+        int success = 0;
+        int failed = 0;
+
+        for (LineChannel channel : channels) {
+            String webhookUrl = baseUrl + "/api/line/webhook/" + channel.getLineChannelId();
+            boolean result = lineMessagingService.updateWebhookUrl(
+                channel.getChannelAccessToken(), webhookUrl);
+            if (result) {
+                success++;
+                log.info("Webhook URL migrated for channel {} (lineChannelId={})",
+                    channel.getId(), channel.getLineChannelId());
+            } else {
+                failed++;
+                log.warn("Failed to migrate webhook URL for channel {} (lineChannelId={})",
+                    channel.getId(), channel.getLineChannelId());
+            }
+        }
+
+        return java.util.Map.of("success", success, "failed", failed);
     }
 }

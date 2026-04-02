@@ -121,6 +121,36 @@ public class LineMessagingService {
         }
     }
 
+    private static final String WEBHOOK_ENDPOINT_API_URL = "https://api.line.me/v2/bot/channel/webhook/endpoint";
+
+    /**
+     * LINE Developer ConsoleのWebhook URLを更新する
+     */
+    public boolean updateWebhookUrl(String channelAccessToken, String webhookUrl) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(channelAccessToken);
+
+            Map<String, String> body = Map.of("endpoint", webhookUrl);
+            HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.exchange(
+                WEBHOOK_ENDPOINT_API_URL, HttpMethod.PUT, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("Webhook URL updated successfully: {}", webhookUrl);
+                return true;
+            } else {
+                log.warn("Failed to update webhook URL. Status: {}, Body: {}",
+                    response.getStatusCode(), response.getBody());
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Failed to update webhook URL: {}", e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Webhook署名を検証する（HMAC-SHA256）
      */

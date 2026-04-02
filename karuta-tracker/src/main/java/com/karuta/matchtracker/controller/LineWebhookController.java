@@ -23,7 +23,7 @@ import java.util.Set;
  * LINE Webhookエンドポイント
  *
  * LINEプラットフォームからのWebhookイベントを受信・処理する。
- * チャネルごとに異なるURLを持つ: /api/line/webhook/{channelId}
+ * チャネルごとに異なるURLを持つ: /api/line/webhook/{lineChannelId}
  */
 @RestController
 @RequestMapping("/api/line/webhook")
@@ -51,22 +51,22 @@ public class LineWebhookController {
         "waitlist_accept", "waitlist_decline", "waitlist_decline_session", "same_day_join"
     );
 
-    @PostMapping("/{channelId}")
+    @PostMapping("/{lineChannelId}")
     public ResponseEntity<String> handleWebhook(
-            @PathVariable Long channelId,
+            @PathVariable String lineChannelId,
             @RequestHeader(value = "x-line-signature", required = false) String signature,
             @RequestBody String body) {
 
-        // チャネル検索（DB内部ID）
-        LineChannel channel = lineChannelRepository.findById(channelId).orElse(null);
+        // チャネル検索（LINEチャネルID）
+        LineChannel channel = lineChannelRepository.findByLineChannelId(lineChannelId).orElse(null);
         if (channel == null) {
-            log.warn("Webhook received for unknown channel ID: {}", channelId);
+            log.warn("Webhook received for unknown LINE channel ID: {}", lineChannelId);
             return ResponseEntity.badRequest().body("Unknown channel");
         }
 
         // 署名検証
         if (signature == null || !lineMessagingService.verifySignature(channel.getChannelSecret(), body, signature)) {
-            log.warn("Invalid signature for channel: {}", channelId);
+            log.warn("Invalid signature for channel: {}", lineChannelId);
             return ResponseEntity.badRequest().body("Invalid signature");
         }
 
@@ -82,7 +82,7 @@ public class LineWebhookController {
                 processEvent(channel, event, type);
             }
         } catch (Exception e) {
-            log.error("Error processing webhook for channel {}: {}", channelId, e.getMessage());
+            log.error("Error processing webhook for channel {}: {}", lineChannelId, e.getMessage());
         }
 
         return ResponseEntity.ok("OK");

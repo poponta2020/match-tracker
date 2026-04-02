@@ -136,12 +136,13 @@ status: completed
 | GET | `/api/admin/line/channels` | チャネル一覧取得 | クエリパラメータ `?channelType=PLAYER` / `ADMIN` でフィルタ。未指定時は全件 |
 | POST | `/api/admin/line/channels` | チャネル作成 | リクエストボディに `channelType` フィールド追加（デフォルト: PLAYER） |
 | POST | `/api/admin/line/channels/import` | CSVインポート | `channelType` 未指定時は PLAYER |
+| POST | `/api/admin/line/channels/migrate-webhook-urls` | Webhook URL一括移行 | SUPER_ADMIN限定。全チャネルのWebhook URLをLINEチャネルIDベースに移行 |
 
 #### Webhook API（LineWebhookController）
 
-- `POST /api/line/webhook/{channelId}` — エンドポイント変更なし
-- channelId からチャネルを特定し、そのチャネルの `channel_type` に応じた処理は既存フローのまま
-- postback 処理で `lineUserId` からアサインメントを特定する箇所は、`channelId` も条件に加えて正確に特定する
+- `POST /api/line/webhook/{lineChannelId}` — パスパラメータはLINEチャネルID（DB内部IDではない）
+- lineChannelId からチャネルを特定し、そのチャネルの `channel_type` に応じた処理は既存フローのまま
+- postback 処理で `lineUserId` からアサインメントを特定する箇所は、`lineChannelId` も条件に加えて正確に特定する
 
 ### 4.2 DB設計
 

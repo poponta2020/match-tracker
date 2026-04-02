@@ -107,6 +107,23 @@ public class LineAdminController {
     }
 
     /**
+     * 全チャネルのWebhook URLをLINEチャネルIDベースに一括移行する
+     */
+    @PostMapping("/channels/migrate-webhook-urls")
+    @RequireRole(Role.SUPER_ADMIN)
+    public ResponseEntity<Map<String, Integer>> migrateWebhookUrls(@RequestBody Map<String, String> body) {
+        String baseUrl = body.get("baseUrl");
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        // 末尾スラッシュを除去
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        return ResponseEntity.ok(lineChannelService.migrateWebhookUrls(baseUrl));
+    }
+
+    /**
      * 対戦組み合わせをLINE送信する
      */
     @PostMapping("/send/match-pairing")

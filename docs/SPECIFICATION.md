@@ -1528,6 +1528,7 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/channels/{id}/enable` | SUPER_ADMIN | チャネル有効化 |
 | DELETE | `/channels/{id}/assignment` | SUPER_ADMIN | チャネル強制割り当て解除 |
 | POST | `/send/match-pairing` | ADMIN+ | 対戦組み合わせLINE送信 |
+| POST | `/channels/migrate-webhook-urls` | SUPER_ADMIN | 全チャネルのWebhook URLをLINEチャネルIDベースに一括移行 |
 
 > **注記:** 抽選結果LINE一括送信は `POST /api/lottery/notify-results` に統合済み（アプリ内通知と同時送信）。
 | GET | `/schedule-settings` | ADMIN+ | スケジュール設定取得 |
