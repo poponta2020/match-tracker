@@ -70,8 +70,6 @@ class WaitlistPromotionServiceTest {
         when(practiceParticipantRepository.findWaitlistedAfterNumber(eq(100L), eq(3), eq(1)))
                 .thenReturn(List.of());
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
-        when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), anyInt(), eq(ParticipantStatus.WAITLISTED)))
-                .thenReturn(List.of());
 
         int count = service.declineWaitlistBySession(100L, 10L);
 
@@ -99,8 +97,6 @@ class WaitlistPromotionServiceTest {
         when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 2))
                 .thenReturn(List.of(next));
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
-        when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), eq(1), eq(ParticipantStatus.WAITLISTED)))
-                .thenReturn(List.of(next));
 
         service.declineWaitlistBySession(100L, 10L);
 
@@ -248,8 +244,6 @@ class WaitlistPromotionServiceTest {
             when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
             when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(true);
             when(playerRepository.findById(10L)).thenReturn(Optional.of(player));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), eq(1), eq(ParticipantStatus.WAITLISTED)))
-                    .thenReturn(List.of());
 
             ParticipantStatus result = service.cancelParticipation(1L, "HEALTH", null);
 
@@ -280,9 +274,6 @@ class WaitlistPromotionServiceTest {
             when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(false);
             when(practiceParticipantRepository.findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
                     100L, 1, ParticipantStatus.WAITLISTED)).thenReturn(Optional.empty());
-            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(eq(100L), eq(1), eq(ParticipantStatus.WAITLISTED)))
-                    .thenReturn(List.of());
 
             service.cancelParticipation(1L);
 
