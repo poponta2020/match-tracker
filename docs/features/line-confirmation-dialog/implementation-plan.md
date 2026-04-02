@@ -66,7 +66,7 @@ status: completed
 - **対応Issue:** #248
 
 ### タスク6: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 新規・変更クラスのユニットテストを作成する
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/LineConfirmationServiceTest.java` — 新規作成。トークン発行・検証成功・期限切れ・使用済み・本人不一致・クリーンアップのテスト
