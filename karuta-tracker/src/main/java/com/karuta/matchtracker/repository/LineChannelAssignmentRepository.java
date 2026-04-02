@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.repository;
 
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannelAssignment;
 import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,6 +33,20 @@ public interface LineChannelAssignmentRepository extends JpaRepository<LineChann
     /** LINE userIdとステータスで割り当てを取得（重複時は最新を返す） */
     @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineUserId = :lineUserId AND a.status = :status ORDER BY a.id DESC LIMIT 1")
     Optional<LineChannelAssignment> findByLineUserIdAndStatus(@Param("lineUserId") String lineUserId, @Param("status") AssignmentStatus status);
+
+    /** プレイヤーの用途別アクティブな割り当てを取得 */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.playerId = :playerId AND a.channelType = :channelType AND a.status IN :statuses ORDER BY a.id DESC LIMIT 1")
+    Optional<LineChannelAssignment> findByPlayerIdAndChannelTypeAndStatusIn(
+        @Param("playerId") Long playerId,
+        @Param("channelType") ChannelType channelType,
+        @Param("statuses") List<AssignmentStatus> statuses);
+
+    /** LINE userIdとチャネルIDとステータスで割り当てを取得 */
+    @Query("SELECT a FROM LineChannelAssignment a WHERE a.lineUserId = :lineUserId AND a.lineChannelId = :lineChannelId AND a.status = :status ORDER BY a.id DESC LIMIT 1")
+    Optional<LineChannelAssignment> findByLineUserIdAndLineChannelIdAndStatus(
+        @Param("lineUserId") String lineUserId,
+        @Param("lineChannelId") Long lineChannelId,
+        @Param("status") AssignmentStatus status);
 
     /** LINE連携済みの全プレイヤーIDリストを取得 */
     @Query("SELECT a.playerId FROM LineChannelAssignment a WHERE a.status = 'LINKED'")

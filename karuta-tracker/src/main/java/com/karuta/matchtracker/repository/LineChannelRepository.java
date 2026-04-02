@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.repository;
 
+import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,6 +26,15 @@ public interface LineChannelRepository extends JpaRepository<LineChannel, Long> 
 
     /** AVAILABLEなチャネルを1つ取得（割り当て用） */
     Optional<LineChannel> findFirstByStatusOrderByIdAsc(ChannelStatus status);
+
+    /** 指定ステータス・用途のチャネル一覧を取得 */
+    List<LineChannel> findByStatusAndChannelType(ChannelStatus status, ChannelType channelType);
+
+    /** AVAILABLEなチャネルを用途別に1つ取得（割り当て用） */
+    Optional<LineChannel> findFirstByStatusAndChannelTypeOrderByIdAsc(ChannelStatus status, ChannelType channelType);
+
+    /** 用途別のチャネル一覧を取得 */
+    List<LineChannel> findAllByChannelType(ChannelType channelType);
 
     /** 全チャネルの月間送信数をリセット */
     @Modifying
