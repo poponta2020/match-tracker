@@ -177,7 +177,8 @@
       "Bash(find /c/Users/popon/match-tracker/karuta-tracker-ui/src -type f \\\\\\( -name \"*.jsx\" -o -name \"*.js\" \\\\\\) -exec grep -l \"status\\\\|Status\\\\|WAITLISTED\\\\|DECLINED\\\\|CANCELLED\\\\|WON\" {} \\\\;)",
       "Bash(find /c/Users/popon/match-tracker/karuta-tracker/src/test -name \"*.java\" -exec grep -l \"status\\\\|Status\\\\|WAITLISTED\\\\|DECLINED\\\\|CANCELLED\\\\|WON\" {} \\\\;)",
       "Bash(tasklist //FI \"PID eq 40664\")",
-      "Bash(find build/test-results -name \"*.xml\" -exec grep -l \"failure\" {} \\\\;)"
+      "Bash(find build/test-results -name \"*.xml\" -exec grep -l \"failure\" {} \\\\;)",
+      "Bash(find /c/Users/popon/match-tracker -name \"*.java\" -type f -exec grep -l \"buildRichMenu\\\\|defaultRichMenu\" {} \\\\;)"
     ],
     "deny": [],
     "ask": [],

@@ -16,6 +16,7 @@ class LineNotificationRoutingTest {
     @EnumSource(value = LineNotificationType.class, names = {
         "LOTTERY_RESULT", "WAITLIST_OFFER", "OFFER_EXPIRED", "MATCH_PAIRING",
         "PRACTICE_REMINDER", "DEADLINE_REMINDER",
+        "WAITLIST_POSITION_UPDATE",
         "SAME_DAY_CONFIRMATION", "SAME_DAY_CANCEL", "SAME_DAY_VACANCY"
     })
     @DisplayName("選手向け通知はPLAYERチャネルにルーティングされる")

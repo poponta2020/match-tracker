@@ -633,6 +633,10 @@ public class LotteryController {
         if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
             throw new ForbiddenException("他のプレイヤーとして参加登録することはできません");
         }
+        if (currentUserRole == Role.ADMIN) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            validateAdminScopeBySessionId(sessionId, currentUserRole.name(), adminOrgId);
+        }
 
         try {
             waitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId);

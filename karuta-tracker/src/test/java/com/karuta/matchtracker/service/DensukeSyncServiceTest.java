@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -10,16 +11,21 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("DensukeSyncService 単体テスト")
+@DisplayName("DensukeSyncService tests")
 class DensukeSyncServiceTest {
 
     @Mock private DensukeWriteService densukeWriteService;
@@ -32,7 +38,7 @@ class DensukeSyncServiceTest {
     private DensukeSyncService densukeSyncService;
 
     @Test
-    @DisplayName("syncForOrganization: 指定団体・指定年月のみを書き込み、対象年月で取り込む")
+    @DisplayName("syncForOrganization writes scoped updates then imports target month")
     void syncForOrganization_scopedWriteAndTargetMonthImport() throws Exception {
         DensukeUrl densukeUrl = DensukeUrl.builder()
                 .id(10L)
@@ -62,7 +68,7 @@ class DensukeSyncServiceTest {
     }
 
     @Test
-    @DisplayName("syncForOrganization: URL未登録なら例外を投げる")
+    @DisplayName("syncForOrganization throws when URL is missing")
     void syncForOrganization_throwsWhenUrlMissing() {
         when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2025, 1, 1L))
                 .thenReturn(Optional.empty());
@@ -70,5 +76,87 @@ class DensukeSyncServiceTest {
         assertThatThrownBy(() -> densukeSyncService.syncForOrganization(2025, 1, 1L, 99L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Densuke URL not found");
+    }
+
+    @Test
+    @DisplayName("syncAll skips import in MONTHLY phase2")
+    void syncAll_skipsImportInMonthlyPhase2() throws Exception {
+        DensukeUrl densukeUrl = DensukeUrl.builder()
+                .id(10L)
+                .year(2026)
+                .month(4)
+                .organizationId(1L)
+                .url("https://densuke.biz/list?cd=test")
+                .build();
+
+        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
+                .thenReturn(List.of(densukeUrl));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isAfterDeadline(anyInt(), anyInt(), eq(1L))).thenReturn(true);
+        when(lotteryService.isLotteryConfirmed(anyInt(), anyInt(), eq(1L))).thenReturn(false);
+
+        densukeSyncService.syncAll();
+
+        verify(densukeWriteService).writeToDensuke();
+        verify(densukeImportService, never()).importFromDensuke(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("syncAll does not skip import for SAME_DAY organizations")
+    void syncAll_sameDayDoesNotSkipImport() throws Exception {
+        DensukeUrl densukeUrl = DensukeUrl.builder()
+                .id(10L)
+                .year(2026)
+                .month(4)
+                .organizationId(1L)
+                .url("https://densuke.biz/list?cd=test")
+                .build();
+        DensukeImportService.ImportResult result = new DensukeImportService.ImportResult();
+
+        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
+                .thenReturn(List.of(densukeUrl));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.SAME_DAY);
+        when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
+                .thenReturn(result);
+
+        densukeSyncService.syncAll();
+
+        verify(densukeWriteService).writeToDensuke();
+        verify(densukeImportService, times(2)).importFromDensuke(
+                eq("https://densuke.biz/list?cd=test"),
+                any(LocalDate.class),
+                eq(DensukeImportService.SYSTEM_USER_ID),
+                eq(1L));
+        verify(lotteryDeadlineHelper, never()).isAfterDeadline(anyInt(), anyInt(), eq(1L));
+        verify(lotteryService, never()).isLotteryConfirmed(anyInt(), anyInt(), eq(1L));
+    }
+
+    @Test
+    @DisplayName("syncAll imports when MONTHLY lottery is already confirmed")
+    void syncAll_importsWhenMonthlyLotteryConfirmed() throws Exception {
+        DensukeUrl densukeUrl = DensukeUrl.builder()
+                .id(10L)
+                .year(2026)
+                .month(4)
+                .organizationId(1L)
+                .url("https://densuke.biz/list?cd=test")
+                .build();
+        DensukeImportService.ImportResult result = new DensukeImportService.ImportResult();
+
+        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
+                .thenReturn(List.of(densukeUrl));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isAfterDeadline(anyInt(), anyInt(), eq(1L))).thenReturn(true);
+        when(lotteryService.isLotteryConfirmed(anyInt(), anyInt(), eq(1L))).thenReturn(true);
+        when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
+                .thenReturn(result);
+
+        densukeSyncService.syncAll();
+
+        verify(densukeImportService, times(2)).importFromDensuke(
+                eq("https://densuke.biz/list?cd=test"),
+                any(LocalDate.class),
+                eq(DensukeImportService.SYSTEM_USER_ID),
+                eq(1L));
     }
 }
