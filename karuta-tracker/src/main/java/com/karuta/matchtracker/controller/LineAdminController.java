@@ -9,9 +9,12 @@ import com.karuta.matchtracker.entity.LineNotificationScheduleSetting;
 import com.karuta.matchtracker.entity.LineNotificationScheduleSetting.ScheduleNotificationType;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.repository.LineNotificationScheduleSettingRepository;
+import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.service.LineChannelService;
+import com.karuta.matchtracker.service.LineMessagingService;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.util.AdminScopeValidator;
@@ -21,7 +24,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -37,7 +43,9 @@ import java.util.stream.Collectors;
 public class LineAdminController {
 
     private final LineChannelService lineChannelService;
+    private final LineMessagingService lineMessagingService;
     private final LineNotificationService lineNotificationService;
+    private final LineChannelRepository lineChannelRepository;
     private final LineNotificationScheduleSettingRepository scheduleSettingRepository;
     private final ObjectMapper objectMapper;
     private final PracticeSessionRepository practiceSessionRepository;
@@ -121,6 +129,125 @@ public class LineAdminController {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
         return ResponseEntity.ok(lineChannelService.migrateWebhookUrls(baseUrl));
+    }
+
+    /**
+     * PLAYERチャネル全体にリッチメニューを一括設定する
+     */
+    @PostMapping("/rich-menu/setup")
+    @RequireRole(Role.SUPER_ADMIN)
+    public ResponseEntity<RichMenuSetupResponse> setupRichMenu(
+            @RequestParam("image") MultipartFile image) {
+        try {
+            byte[] imageData = image.getBytes();
+            String contentType = image.getContentType() != null ? image.getContentType() : "image/png";
+
+            // リッチメニューJSON定義を構築
+            Map<String, Object> richMenuJson = buildRichMenuDefinition();
+
+            // 全PLAYERチャネルを取得
+            List<LineChannel> channels = lineChannelRepository.findAllByChannelType(ChannelType.PLAYER);
+
+            int successCount = 0;
+            List<String> failures = new ArrayList<>();
+
+            for (LineChannel channel : channels) {
+                try {
+                    String accessToken = channel.getChannelAccessToken();
+
+                    // 1. リッチメニュー作成
+                    String richMenuId = lineMessagingService.createRichMenu(accessToken, richMenuJson);
+                    if (richMenuId == null) {
+                        failures.add(channel.getChannelName() + " (作成失敗)");
+                        continue;
+                    }
+
+                    // 2. 画像アップロード
+                    boolean uploaded = lineMessagingService.uploadRichMenuImage(
+                        accessToken, richMenuId, imageData, contentType);
+                    if (!uploaded) {
+                        failures.add(channel.getChannelName() + " (画像アップロード失敗)");
+                        continue;
+                    }
+
+                    // 3. デフォルトメニューに設定
+                    boolean set = lineMessagingService.setDefaultRichMenu(accessToken, richMenuId);
+                    if (!set) {
+                        failures.add(channel.getChannelName() + " (デフォルト設定失敗)");
+                        continue;
+                    }
+
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("Rich menu setup failed for channel {}: {}",
+                        channel.getChannelName(), e.getMessage());
+                    failures.add(channel.getChannelName() + " (" + e.getMessage() + ")");
+                }
+            }
+
+            log.info("Rich menu setup completed: success={}, failure={}", successCount, failures.size());
+
+            return ResponseEntity.ok(RichMenuSetupResponse.builder()
+                .successCount(successCount)
+                .failureCount(failures.size())
+                .failures(failures)
+                .build());
+
+        } catch (Exception e) {
+            log.error("Rich menu setup failed: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * リッチメニューのJSON定義を構築する（5ボタン: 上段3 + 下段2）
+     */
+    private Map<String, Object> buildRichMenuDefinition() {
+        // 画像サイズ: 2500x1686（大サイズ）、上段3分割 + 下段2分割
+        int width = 2500;
+        int height = 1686;
+        int topHeight = 843;
+        int bottomHeight = 843;
+        int topColWidth = width / 3;   // 833
+        int bottomColWidth = width / 2; // 1250
+
+        List<Map<String, Object>> areas = List.of(
+            // 上段左: キャンセル待ち状況確認
+            buildArea(0, 0, topColWidth, topHeight,
+                Map.of("type", "postback", "data", "action=check_waitlist_status",
+                    "displayText", "キャンセル待ち状況確認")),
+            // 上段中: 今日の参加者
+            buildArea(topColWidth, 0, topColWidth, topHeight,
+                Map.of("type", "postback", "data", "action=check_today_participants",
+                    "displayText", "今日の参加者")),
+            // 上段右: 当日参加申込
+            buildArea(topColWidth * 2, 0, width - topColWidth * 2, topHeight,
+                Map.of("type", "postback", "data", "action=check_same_day_join",
+                    "displayText", "当日参加申込")),
+            // 下段左: アプリへ
+            buildArea(0, topHeight, bottomColWidth, bottomHeight,
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/")),
+            // 下段右: 通知設定
+            buildArea(bottomColWidth, topHeight, width - bottomColWidth, bottomHeight,
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/settings/notifications"))
+        );
+
+        Map<String, Object> size = Map.of("width", width, "height", height);
+        Map<String, Object> richMenu = new LinkedHashMap<>();
+        richMenu.put("size", size);
+        richMenu.put("selected", true);
+        richMenu.put("name", "Match Tracker メニュー");
+        richMenu.put("chatBarText", "メニュー");
+        richMenu.put("areas", areas);
+
+        return richMenu;
+    }
+
+    private Map<String, Object> buildArea(int x, int y, int w, int h, Map<String, Object> action) {
+        return Map.of(
+            "bounds", Map.of("x", x, "y", y, "width", w, "height", h),
+            "action", action
+        );
     }
 
     /**
