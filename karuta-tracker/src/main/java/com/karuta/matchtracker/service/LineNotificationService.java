@@ -137,7 +137,7 @@ public class LineNotificationService {
             remainingWaitlist, playerNames);
 
         for (PracticeParticipant wp : remainingWaitlist) {
-            sendFlexToPlayer(wp.getPlayerId(), LineNotificationType.ADMIN_WAITLIST_UPDATE, altText, flex);
+            sendFlexToPlayer(wp.getPlayerId(), LineNotificationType.WAITLIST_POSITION_UPDATE, altText, flex);
         }
 
         log.info("Waitlist position update notifications sent for session {} match {}: {} players",
@@ -1604,6 +1604,7 @@ public class LineNotificationService {
             case PRACTICE_REMINDER -> pref.getPracticeReminder();
             case DEADLINE_REMINDER -> pref.getDeadlineReminder();
             case ADMIN_WAITLIST_UPDATE -> pref.getAdminWaitlistUpdate();
+            case WAITLIST_POSITION_UPDATE -> pref.getWaitlistOffer();
             case SAME_DAY_CONFIRMATION -> pref.getSameDayConfirmation();
             case SAME_DAY_CANCEL -> pref.getSameDayCancel();
             case SAME_DAY_VACANCY -> pref.getSameDayVacancy();

@@ -621,10 +621,18 @@ public class LotteryController {
      */
     @PostMapping("/same-day-join")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
-    public ResponseEntity<?> sameDayJoin(@RequestBody java.util.Map<String, Object> body) {
+    public ResponseEntity<?> sameDayJoin(@RequestBody java.util.Map<String, Object> body,
+                                         HttpServletRequest httpRequest) {
         Long sessionId = ((Number) body.get("sessionId")).longValue();
         int matchNumber = ((Number) body.get("matchNumber")).intValue();
         Long playerId = ((Number) body.get("playerId")).longValue();
+
+        // PLAYERロールは自分自身のみ参加登録可能
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
+            throw new ForbiddenException("他のプレイヤーとして参加登録することはできません");
+        }
 
         try {
             waitlistPromotionService.handleSameDayJoin(sessionId, matchNumber, playerId);

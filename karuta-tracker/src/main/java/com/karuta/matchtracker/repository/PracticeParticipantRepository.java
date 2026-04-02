@@ -197,6 +197,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Integer matchNumber, ParticipantStatus status);
 
     /**
+     * 特定セッション・試合のキャンセル待ちで最も若い番号の参加者を取得（特定プレイヤーを除外）
+     */
+    Optional<PracticeParticipant> findFirstBySessionIdAndMatchNumberAndStatusAndPlayerIdNotOrderByWaitlistNumberAsc(
+            Long sessionId, Integer matchNumber, ParticipantStatus status, Long excludePlayerId);
+
+    /**
      * 特定セッション・ステータスの参加者を取得
      */
     List<PracticeParticipant> findBySessionIdAndStatus(Long sessionId, ParticipantStatus status);

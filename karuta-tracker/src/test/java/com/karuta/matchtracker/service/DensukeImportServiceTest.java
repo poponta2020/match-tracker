@@ -278,18 +278,20 @@ class DensukeImportServiceTest {
     }
 
     @Test
-    @DisplayName("targetDateで対象日付のフィルタが機能する")
+    @DisplayName("targetDateで対象月のフィルタが機能する")
     void testImportWithTargetDateFilter() throws IOException {
         DensukeData data = new DensukeData();
 
+        // 4月のエントリ
         ScheduleEntry entry1 = new ScheduleEntry();
         entry1.setDate(LocalDate.of(2026, 4, 1));
         entry1.setMatchNumber(1);
         entry1.getParticipants().add("田中");
         data.getEntries().add(entry1);
 
+        // 5月のエントリ（フィルタでスキップされるべき）
         ScheduleEntry entry2 = new ScheduleEntry();
-        entry2.setDate(LocalDate.of(2026, 4, 8));
+        entry2.setDate(LocalDate.of(2026, 5, 10));
         entry2.setMatchNumber(1);
         entry2.getParticipants().add("鈴木");
         data.getEntries().add(entry2);
@@ -310,9 +312,9 @@ class DensukeImportServiceTest {
         ImportResult result = densukeImportService.importFromDensuke(
                 "http://example.com", LocalDate.of(2026, 4, 1), 10L, 1L);
 
-        // 4/1だけが処理され、4/8はスキップされる
+        // 4月のエントリだけが処理され、5月はスキップされる
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 4, 8)), eq(1L));
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 5, 10)), eq(1L));
     }
 
     @Test

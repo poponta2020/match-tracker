@@ -92,7 +92,9 @@ public class DensukeImportService {
         }
 
         for (DensukeScraper.ScheduleEntry entry : scraped.getEntries()) {
-            if (targetDate != null && !entry.getDate().equals(targetDate)) {
+            if (targetDate != null
+                    && !(entry.getDate().getYear() == targetDate.getYear()
+                         && entry.getDate().getMonthValue() == targetDate.getMonthValue())) {
                 continue;
             }
 

@@ -89,9 +89,9 @@ public class WaitlistPromotionService {
         log.info("Demoted player {} from WON to WAITLISTED #{} for session {} match {}",
                 participant.getPlayerId(), maxNumber + 1, participant.getSessionId(), participant.getMatchNumber());
 
-        // WON枠が空いたので繰り上げフローを発動
+        // WON枠が空いたので繰り上げフローを発動（降格した本人は除外）
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
-                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate(), participant.getPlayerId());
 
         // 管理者通知
         notifyAdminsAboutWaitlistChange("降格", participant.getPlayerId(),
@@ -160,6 +160,8 @@ public class WaitlistPromotionService {
             notifyAdminsAboutWaitlistChange("キャンセル", participant.getPlayerId(),
                     session, participant.getMatchNumber(), promoted.get());
         }
+
+        densukeSyncService.triggerWriteAsync();
 
         return ParticipantStatus.CANCELLED;
     }
@@ -259,9 +261,24 @@ public class WaitlistPromotionService {
      */
     @Transactional
     public Optional<PracticeParticipant> promoteNextWaitlisted(Long sessionId, Integer matchNumber, LocalDate sessionDate) {
-        Optional<PracticeParticipant> nextWaitlisted = practiceParticipantRepository
-                .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                        sessionId, matchNumber, ParticipantStatus.WAITLISTED);
+        return promoteNextWaitlisted(sessionId, matchNumber, sessionDate, null);
+    }
+
+    /**
+     * キャンセル待ちリストから次の人を繰り上げる（特定プレイヤーを除外可能）
+     *
+     * @param excludePlayerId 除外するプレイヤーID（nullなら除外なし）
+     * @return 繰り上げた参加者（繰り上げ対象なしの場合はempty）
+     */
+    @Transactional
+    public Optional<PracticeParticipant> promoteNextWaitlisted(Long sessionId, Integer matchNumber, LocalDate sessionDate, Long excludePlayerId) {
+        Optional<PracticeParticipant> nextWaitlisted = excludePlayerId != null
+                ? practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusAndPlayerIdNotOrderByWaitlistNumberAsc(
+                            sessionId, matchNumber, ParticipantStatus.WAITLISTED, excludePlayerId)
+                : practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            sessionId, matchNumber, ParticipantStatus.WAITLISTED);
 
         if (nextWaitlisted.isEmpty()) {
             log.info("No waitlisted players remaining for session {} match {} - slot remains open",
@@ -433,6 +450,8 @@ public class WaitlistPromotionService {
             log.info("Player {} rejoined waitlist for session {} match {} (new #{})",
                     playerId, sessionId, p.getMatchNumber(), maxNumber + 1);
         }
+
+        densukeSyncService.triggerWriteAsync();
 
         return declined.size();
     }
