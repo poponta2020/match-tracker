@@ -200,19 +200,23 @@ const Home = () => {
                 {/* 参加者セクション */}
                 {nextPracticeParticipants.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
-                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED') && (
+                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED') && (
                       <div className="flex flex-wrap gap-1.5">
-                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED')).map((p) => (
-                          <PlayerChip
-                            key={p.id}
-                            name={p.name}
-                            kyuRank={p.kyuRank}
-                            className={`text-xs ${
-                              isMyself(p)
-                                ? 'bg-[#1A3654] text-white font-medium'
-                                : 'bg-[#e8ecef] text-[#374151]'
-                            }`}
-                          />
+                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED')).map((p) => (
+                          <div key={p.id} className="relative inline-flex">
+                            <PlayerChip
+                              name={p.name}
+                              kyuRank={p.kyuRank}
+                              className={`text-xs ${
+                                isMyself(p)
+                                  ? 'bg-[#1A3654] text-white font-medium'
+                                  : 'bg-[#e8ecef] text-[#374151]'
+                              }`}
+                            />
+                            {p.status === 'OFFERED' && (
+                              <span className="absolute -top-1.5 -right-1 text-[9px] px-1 py-0.5 bg-blue-100 text-blue-800 rounded font-bold leading-none">応答待</span>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
