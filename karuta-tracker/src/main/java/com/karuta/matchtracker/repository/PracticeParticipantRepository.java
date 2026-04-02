@@ -252,13 +252,15 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findDirtyBySessionIds(@Param("sessionIds") List<Long> sessionIds);
 
     /**
-     * 特定セッション・試合でキャンセル待ち番号が指定値より大きい参加者を取得（番号繰り上げ用）
+     * 特定セッション・試合でキャンセル待ち番号が指定値より大きいWAITLISTED参加者の番号を一括繰り上げ
      */
-    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
-           "AND p.status = 'WAITLISTED' AND p.waitlistNumber > :waitlistNumber ORDER BY p.waitlistNumber ASC")
-    List<PracticeParticipant> findWaitlistedAfterNumber(@Param("sessionId") Long sessionId,
-                                                        @Param("matchNumber") Integer matchNumber,
-                                                        @Param("waitlistNumber") Integer waitlistNumber);
+    @Modifying
+    @Query("UPDATE PracticeParticipant p SET p.waitlistNumber = p.waitlistNumber - 1 " +
+           "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
+           "AND p.status = 'WAITLISTED' AND p.waitlistNumber > :waitlistNumber")
+    int decrementWaitlistNumbersAfter(@Param("sessionId") Long sessionId,
+                                      @Param("matchNumber") Integer matchNumber,
+                                      @Param("waitlistNumber") Integer waitlistNumber);
 
     /**
      * 特定セッション・特定選手のmatchNumber=null（抜け番）レコードを検索

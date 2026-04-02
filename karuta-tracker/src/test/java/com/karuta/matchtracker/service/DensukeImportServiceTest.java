@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -383,14 +384,12 @@ class DensukeImportServiceTest {
         // 空き枠あり（13/14）
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(13L);
-        when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 4))
-                .thenReturn(Collections.emptyList());
-
         densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
 
         assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WON);
         assertThat(waitlisted.getWaitlistNumber()).isNull();
         assertThat(waitlisted.isDirty()).isFalse(); // 伝助は既に○
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 4);
     }
 
     @Test
@@ -496,6 +495,393 @@ class DensukeImportServiceTest {
         assertThat(result.getRemovedCount()).isEqualTo(1);
         verify(practiceParticipantRepository).delete(cleanParticipant);
     }
+
+    // ================================================================
+    // Phase3 3-A テスト: 伝助○の処理（12ケース）
+    // ================================================================
+
+    /**
+     * Phase3テスト用の共通セットアップ。
+     * MONTHLY + 締切後 + 抽選確定済みでPhase3に入る。
+     * entryのparticipants（○）にmarkedNamesを設定する。
+     */
+    private void setupPhase3Mocks(DensukeData data, PracticeSession session,
+                                   LocalDate date, List<Player> players) throws IOException {
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(players);
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, 1L))
+                .thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(date.getYear(), date.getMonthValue(), 1L)).thenReturn(false);
+        when(lotteryService.isLotteryConfirmed(date.getYear(), date.getMonthValue(), 1L)).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("3-A1: Phase3 ○ 未登録 + 空きあり → WON で新規登録")
+    void testPhase3Maru_3A1_unregistered_freeCapacity_createsAsWon() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(true);
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(practiceParticipantRepository).save(argThat(p ->
+                p.getPlayerId().equals(1L) &&
+                p.getStatus() == ParticipantStatus.WON &&
+                p.isDirty()));
+    }
+
+    @Test
+    @DisplayName("3-A2: Phase3 ○ 未登録 + 定員超過 → WAITLISTED で新規登録")
+    void testPhase3Maru_3A2_unregistered_overCapacity_createsAsWaitlisted() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(false);
+        when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1)).thenReturn(Optional.of(3));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(practiceParticipantRepository).save(argThat(p ->
+                p.getPlayerId().equals(1L) &&
+                p.getStatus() == ParticipantStatus.WAITLISTED &&
+                p.getWaitlistNumber() == 4 &&
+                p.isDirty()));
+    }
+
+    @Test
+    @DisplayName("3-A3: Phase3 ○ 未登録 + 定員未設定 → WON で新規登録")
+    void testPhase3Maru_3A3_unregistered_noCapacity_createsAsWon() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(null).organizationId(1L).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(true);
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(practiceParticipantRepository).save(argThat(p ->
+                p.getPlayerId().equals(1L) &&
+                p.getStatus() == ParticipantStatus.WON));
+    }
+
+    @Test
+    @DisplayName("3-A4: Phase3 ○ WON + dirty=false → スキップ")
+    void testPhase3Maru_3A4_won_notDirty_skips() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("3-A5: Phase3 ○ WON + dirty=true → スキップ（dirty保護）")
+    void testPhase3Maru_3A5_won_dirty_skips() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(true).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("3-A6: Phase3 ○ WAITLISTED + dirty=false → dirty=true に設定（△書き戻し）")
+    void testPhase3Maru_3A6_waitlisted_notDirty_setsDirtyTrue() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).dirty(false).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(date)).thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        assertThat(existing.isDirty()).isTrue();
+        assertThat(existing.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        verify(practiceParticipantRepository).save(existing);
+    }
+
+    @Test
+    @DisplayName("3-A7: Phase3 ○ WAITLISTED + dirty=true → スキップ（dirty保護）")
+    void testPhase3Maru_3A7_waitlisted_dirty_skips() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).dirty(true).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("3-A8a: Phase3 ○ OFFERED + dirty=false + 期限内 → オファー承認")
+    void testPhase3Maru_3A8a_offered_notDirty_deadlineValid_acceptsOffer() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.OFFERED).dirty(false)
+                .offerDeadline(LocalDateTime.of(2099, 12, 31, 23, 59)).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(waitlistPromotionService).respondToOffer(50L, true);
+    }
+
+    @Test
+    @DisplayName("3-A8b: Phase3 ○ OFFERED + dirty=false + 期限切れ → スキップ")
+    void testPhase3Maru_3A8b_offered_notDirty_deadlineExpired_skips() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.OFFERED).dirty(false)
+                .offerDeadline(LocalDateTime.of(2020, 1, 1, 0, 0)).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(waitlistPromotionService, never()).respondToOffer(anyLong(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("3-A9: Phase3 ○ OFFERED + dirty=true → スキップ（dirty保護）")
+    void testPhase3Maru_3A9_offered_dirty_skips() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.OFFERED).dirty(true)
+                .offerDeadline(LocalDateTime.of(2099, 12, 31, 23, 59)).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(waitlistPromotionService, never()).respondToOffer(anyLong(), anyBoolean());
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("3-A10: Phase3 ○ CANCELLED + dirty=false + 空きあり → WON で再活性化")
+    void testPhase3Maru_3A10_cancelled_notDirty_freeCapacity_reactivatesAsWon() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.CANCELLED).dirty(false)
+                .cancelReason("USER_REQUEST").cancelledAt(LocalDateTime.of(2026, 4, 1, 10, 0)).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(true);
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        assertThat(existing.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(existing.getWaitlistNumber()).isNull();
+        assertThat(existing.getCancelReason()).isNull();
+        assertThat(existing.getCancelledAt()).isNull();
+        assertThat(existing.isDirty()).isTrue();
+        verify(practiceParticipantRepository).save(existing);
+    }
+
+    @Test
+    @DisplayName("3-A11: Phase3 ○ CANCELLED + dirty=false + 定員超過 → WAITLISTED で再活性化")
+    void testPhase3Maru_3A11_cancelled_notDirty_overCapacity_reactivatesAsWaitlisted() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 5);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.CANCELLED).dirty(false)
+                .cancelReason("USER_REQUEST").cancelledAt(LocalDateTime.of(2026, 4, 1, 10, 0)).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(existing));
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(false);
+        when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1)).thenReturn(Optional.of(5));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        assertThat(existing.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(existing.getWaitlistNumber()).isEqualTo(6);
+        assertThat(existing.getCancelReason()).isNull();
+        assertThat(existing.getCancelledAt()).isNull();
+        assertThat(existing.isDirty()).isTrue();
+        verify(practiceParticipantRepository).save(existing);
+    }
+
+    // ================================================================
+    // 既存テスト: dirty フラグ関連
+    // ================================================================
 
     @Test
     @DisplayName("伝助から追加された参加者はdirty=falseで登録される")

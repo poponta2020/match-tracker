@@ -336,14 +336,9 @@ public class DensukeImportService {
                         existing.setWaitlistNumber(null);
                         existing.setDirty(false); // 伝助は既に○なので書き戻し不要
                         practiceParticipantRepository.save(existing);
-                        // 後続のキャンセル待ち番号を繰り上げ
+                        // 後続のキャンセル待ち番号を一括繰り上げ
                         if (oldWaitlistNumber != null) {
-                            List<PracticeParticipant> subsequent = practiceParticipantRepository
-                                    .findWaitlistedAfterNumber(session.getId(), matchNumber, oldWaitlistNumber);
-                            for (PracticeParticipant s : subsequent) {
-                                s.setWaitlistNumber(s.getWaitlistNumber() - 1);
-                                practiceParticipantRepository.save(s);
-                            }
+                            practiceParticipantRepository.decrementWaitlistNumbersAfter(session.getId(), matchNumber, oldWaitlistNumber);
                         }
                         log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available)",
                                 playerId);
@@ -434,14 +429,9 @@ public class DensukeImportService {
                 Integer oldNumber = existing.getWaitlistNumber();
                 existing.setWaitlistNumber(null);
                 practiceParticipantRepository.save(existing);
-                // 後続番号繰り上げ
+                // 後続番号一括繰り上げ
                 if (oldNumber != null) {
-                    List<PracticeParticipant> subsequent = practiceParticipantRepository
-                            .findWaitlistedAfterNumber(session.getId(), matchNumber, oldNumber);
-                    for (PracticeParticipant s : subsequent) {
-                        s.setWaitlistNumber(s.getWaitlistNumber() - 1);
-                        practiceParticipantRepository.save(s);
-                    }
+                    practiceParticipantRepository.decrementWaitlistNumbersAfter(session.getId(), matchNumber, oldNumber);
                 }
                 log.info("Phase3-C4: WAITLISTED player {} declined via densuke", playerId);
                 return true;

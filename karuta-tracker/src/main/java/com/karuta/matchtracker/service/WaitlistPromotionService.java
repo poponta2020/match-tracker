@@ -282,14 +282,9 @@ public class WaitlistPromotionService {
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
 
-        // 後続のキャンセル待ち番号を繰り上げ
+        // 後続のキャンセル待ち番号を一括繰り上げ
         if (oldWaitlistNumber != null) {
-            List<PracticeParticipant> subsequent = practiceParticipantRepository
-                    .findWaitlistedAfterNumber(sessionId, matchNumber, oldWaitlistNumber);
-            for (PracticeParticipant s : subsequent) {
-                s.setWaitlistNumber(s.getWaitlistNumber() - 1);
-                practiceParticipantRepository.save(s);
-            }
+            practiceParticipantRepository.decrementWaitlistNumbersAfter(sessionId, matchNumber, oldWaitlistNumber);
         }
 
         log.info("Offered waitlist #{} (player {}) for session {} match {}. Deadline: {}",
@@ -387,14 +382,9 @@ public class WaitlistPromotionService {
             p.setWaitlistNumber(null);
             practiceParticipantRepository.save(p);
 
-            // 後続のキャンセル待ち番号を繰り上げ
+            // 後続のキャンセル待ち番号を一括繰り上げ
             if (oldNumber != null) {
-                List<PracticeParticipant> subsequent = practiceParticipantRepository
-                        .findWaitlistedAfterNumber(sessionId, p.getMatchNumber(), oldNumber);
-                for (PracticeParticipant s : subsequent) {
-                    s.setWaitlistNumber(s.getWaitlistNumber() - 1);
-                    practiceParticipantRepository.save(s);
-                }
+                practiceParticipantRepository.decrementWaitlistNumbersAfter(sessionId, p.getMatchNumber(), oldNumber);
             }
 
             affectedMatchNumbers.add(p.getMatchNumber());

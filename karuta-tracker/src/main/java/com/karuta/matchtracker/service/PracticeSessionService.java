@@ -633,9 +633,7 @@ public class PracticeSessionService {
             List<PracticeParticipant> sessionParticipants, Map<Long, Player> playerMap) {
         // 参加者数はキャンセル待ち・辞退・キャンセル済みを除外してカウント
         dto.setParticipantCount((int) sessionParticipants.stream()
-                .filter(p -> p.getStatus() != ParticipantStatus.WAITLISTED
-                        && p.getStatus() != ParticipantStatus.DECLINED
-                        && p.getStatus() != ParticipantStatus.CANCELLED)
+                .filter(p -> p.getStatus().isActive())
                 .map(PracticeParticipant::getPlayerId)
                 .distinct()
                 .count());
@@ -652,13 +650,8 @@ public class PracticeSessionService {
         Map<Integer, List<ParticipantWithPlayer>> matchPlayersList = new java.util.HashMap<>();
 
         for (PracticeParticipant participant : sessionParticipants) {
-            if (participant.getMatchNumber() != null) {
-                ParticipantStatus status = participant.getStatus();
-                if (status != ParticipantStatus.WAITLISTED
-                        && status != ParticipantStatus.DECLINED
-                        && status != ParticipantStatus.CANCELLED) {
-                    matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
-                }
+            if (participant.getMatchNumber() != null && participant.getStatus().isActive()) {
+                matchCounts.merge(participant.getMatchNumber(), 1, Integer::sum);
                 Player player = playerMap.get(participant.getPlayerId());
                 if (player != null) {
                     matchPlayersList.computeIfAbsent(participant.getMatchNumber(), k -> new java.util.ArrayList<>())

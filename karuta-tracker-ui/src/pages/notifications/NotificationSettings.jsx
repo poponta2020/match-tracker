@@ -39,7 +39,7 @@ const NotificationSettings = () => {
   const [browserBlocked, setBrowserBlocked] = useState(false);
   const [pushGlobalEnabled, setPushGlobalEnabled] = useState(false);
 
-  // LINE
+  // LINE（選手用）
   const [lineStatus, setLineStatus] = useState(null);
   const [linePrefsMap, setLinePrefsMap] = useState({});
   const [linkingCode, setLinkingCode] = useState(null);
@@ -47,6 +47,14 @@ const NotificationSettings = () => {
   const [friendAddUrl, setFriendAddUrl] = useState(null);
   const [lineActionLoading, setLineActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // LINE（管理者用）
+  const [adminLineStatus, setAdminLineStatus] = useState(null);
+  const [adminLinkingCode, setAdminLinkingCode] = useState(null);
+  const [adminCodeExpiresAt, setAdminCodeExpiresAt] = useState(null);
+  const [adminFriendAddUrl, setAdminFriendAddUrl] = useState(null);
+  const [adminLineActionLoading, setAdminLineActionLoading] = useState(false);
+  const [adminCopied, setAdminCopied] = useState(false);
 
   useEffect(() => {
     if (!playerId) return;
@@ -61,13 +69,18 @@ const NotificationSettings = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [pushRes, lineStatusRes, linePrefsRes, orgsRes, playerOrgsRes] = await Promise.all([
+      const promises = [
         notificationAPI.getPushPreferences(playerId),
         lineAPI.getStatus(playerId),
         lineAPI.getPreferences(playerId),
         organizationAPI.getAll().catch(() => ({ data: [] })),
         organizationAPI.getPlayerOrganizations(playerId).catch(() => ({ data: [] })),
-      ]);
+      ];
+      if (isAdmin) {
+        promises.push(lineAPI.getStatus(playerId, 'ADMIN').catch(() => ({ data: null })));
+      }
+      const results = await Promise.all(promises);
+      const [pushRes, lineStatusRes, linePrefsRes, orgsRes, playerOrgsRes] = results;
 
       // 団体情報
       setOrganizations(orgsRes.data || []);
@@ -83,7 +96,7 @@ const NotificationSettings = () => {
       setPushPrefsMap(pushMap);
       setPushGlobalEnabled(pushPrefs.some(p => p.enabled));
 
-      // LINE設定
+      // LINE設定（選手用）
       setLineStatus(lineStatusRes.data);
       const lineMap = {};
       const linePrefs = Array.isArray(linePrefsRes.data) ? linePrefsRes.data : (linePrefsRes.data ? [linePrefsRes.data] : []);
@@ -94,6 +107,14 @@ const NotificationSettings = () => {
 
       if (lineStatusRes.data.friendAddUrl) {
         setFriendAddUrl(lineStatusRes.data.friendAddUrl);
+      }
+
+      // LINE設定（管理者用）
+      if (isAdmin && results[5]?.data) {
+        setAdminLineStatus(results[5].data);
+        if (results[5].data.friendAddUrl) {
+          setAdminFriendAddUrl(results[5].data.friendAddUrl);
+        }
       }
     } catch (err) {
       console.error('通知設定の取得に失敗:', err);
@@ -294,6 +315,68 @@ const NotificationSettings = () => {
     }
   };
 
+  // === 管理者用LINE ハンドラー ===
+
+  const handleEnableAdminLine = async () => {
+    try {
+      setAdminLineActionLoading(true);
+      setError(null);
+      const res = await lineAPI.enable(playerId, 'ADMIN');
+      setAdminLinkingCode(res.data.linkingCode);
+      setAdminCodeExpiresAt(res.data.codeExpiresAt);
+      setAdminFriendAddUrl(res.data.friendAddUrl);
+      const statusRes = await lineAPI.getStatus(playerId, 'ADMIN');
+      setAdminLineStatus(statusRes.data);
+      setSuccessMessage('管理者用チャネルが割り当てられました。友だち追加してコードを入力してください。');
+    } catch (err) {
+      setError(err.response?.data?.message || '管理者用LINE通知の有効化に失敗しました');
+    } finally {
+      setAdminLineActionLoading(false);
+    }
+  };
+
+  const handleDisableAdminLine = async () => {
+    if (!confirm('管理者用LINE通知を無効にしますか？')) return;
+    try {
+      setAdminLineActionLoading(true);
+      setError(null);
+      await lineAPI.disable(playerId, 'ADMIN');
+      setAdminLinkingCode(null);
+      setAdminCodeExpiresAt(null);
+      setAdminFriendAddUrl(null);
+      const statusRes = await lineAPI.getStatus(playerId, 'ADMIN');
+      setAdminLineStatus(statusRes.data);
+      setSuccessMessage('管理者用LINE通知を無効にしました。');
+    } catch {
+      setError('管理者用LINE通知の無効化に失敗しました');
+    } finally {
+      setAdminLineActionLoading(false);
+    }
+  };
+
+  const handleReissueAdminCode = async () => {
+    try {
+      setAdminLineActionLoading(true);
+      setError(null);
+      const res = await lineAPI.reissueCode(playerId, 'ADMIN');
+      setAdminLinkingCode(res.data.linkingCode);
+      setAdminCodeExpiresAt(res.data.codeExpiresAt);
+      setSuccessMessage('管理者用の新しいコードを発行しました。');
+    } catch (err) {
+      setError(err.response?.data?.message || '管理者用コード再発行に失敗しました');
+    } finally {
+      setAdminLineActionLoading(false);
+    }
+  };
+
+  const handleCopyAdminCode = () => {
+    if (adminLinkingCode) {
+      navigator.clipboard.writeText(adminLinkingCode);
+      setAdminCopied(true);
+      setTimeout(() => setAdminCopied(false), 2000);
+    }
+  };
+
   // SUPER_ADMIN専用の管理者通知設定（organizationId=0 を使用）
   const handleToggleAdminLinePref = async (key) => {
     const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminSameDayConfirmation: true };
@@ -462,11 +545,11 @@ const NotificationSettings = () => {
         )}
       </div>
 
-      {/* ========== LINE通知セクション ========== */}
+      {/* ========== LINE通知セクション（選手用） ========== */}
       <div className="bg-white rounded-lg border p-4 space-y-4">
         <h2 className="font-semibold text-gray-700 flex items-center gap-2">
           <MessageSquare className="h-5 w-5" />
-          LINE通知
+          {isAdmin ? '選手用LINE通知' : 'LINE通知'}
         </h2>
 
         {!lineStatus?.enabled ? (
@@ -589,12 +672,122 @@ const NotificationSettings = () => {
         </div>
       )}
 
-      {/* SUPER_ADMIN専用: 管理者通知設定 */}
-      {currentPlayer?.role === 'SUPER_ADMIN' && lineStatus?.enabled && (
+      {/* ========== 管理者用LINE通知セクション ========== */}
+      {isAdmin && (
+        <div className="bg-white rounded-lg border p-4 space-y-4">
+          <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            管理者用LINE通知
+          </h2>
+
+          {!adminLineStatus?.enabled ? (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                管理者用LINE通知を有効にすると、キャンセル待ち状況や当日確認まとめをLINEで受け取れます。
+              </p>
+              <button
+                onClick={handleEnableAdminLine}
+                disabled={adminLineActionLoading}
+                className="w-full bg-[#06C755] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#05b54d] disabled:opacity-50 transition-colors"
+              >
+                {adminLineActionLoading ? '処理中...' : '管理者用LINE通知を有効にする'}
+              </button>
+            </div>
+          ) : adminLineStatus?.linked ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full" />
+                <span className="text-sm font-medium text-green-700">LINE連携済み</span>
+              </div>
+              <button
+                onClick={handleDisableAdminLine}
+                disabled={adminLineActionLoading}
+                className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
+              >
+                管理者用LINE通知を無効にする
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+                <span className="text-sm font-medium text-yellow-700">連携待ち</span>
+              </div>
+
+              {adminFriendAddUrl && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">1. 友だち追加</p>
+                  <a
+                    href={adminFriendAddUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full bg-[#06C755] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#05b54d] transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    友だち追加する
+                  </a>
+                </div>
+              )}
+
+              {adminLinkingCode && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">2. 連携コードをLINEトークに貼り付け</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-100 border rounded-lg px-4 py-3 font-mono text-lg text-center tracking-widest">
+                      {adminLinkingCode}
+                    </div>
+                    <button
+                      onClick={handleCopyAdminCode}
+                      className="p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      title="コピー"
+                    >
+                      {adminCopied ? <Check className="h-5 w-5 text-green-600" /> : <Copy className="h-5 w-5 text-gray-600" />}
+                    </button>
+                  </div>
+                  {adminCodeExpiresAt && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      有効期限: {new Date(adminCodeExpiresAt).toLocaleString('ja-JP')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReissueAdminCode}
+                  disabled={adminLineActionLoading}
+                  className="flex-1 flex items-center justify-center gap-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  コード再発行
+                </button>
+                <button
+                  onClick={handleDisableAdminLine}
+                  disabled={adminLineActionLoading}
+                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  無効にする
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 管理者用LINE連携済みの場合: 管理者通知種別設定 */}
+      {isAdmin && adminLineStatus?.linked && (
         <div className="bg-white rounded-lg border p-4 space-y-3">
-          <h2 className="font-semibold text-gray-700">管理者通知</h2>
+          <h2 className="font-semibold text-gray-700">管理者通知種別</h2>
+          <div className="flex items-center justify-between py-2 border-b last:border-b-0">
+            <span className="text-sm text-gray-700">キャンセル待ち状況通知</span>
+            <Toggle
+              enabled={linePrefsMap[0]?.adminWaitlistUpdate ?? true}
+              onClick={() => handleToggleAdminLinePref('adminWaitlistUpdate')}
+              color="bg-[#06C755]"
+            />
+          </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-gray-700">参加者確定通知（当日12:00）管理者用</span>
+            <span className="text-sm text-gray-700">参加者確定通知（当日12:00）</span>
             <Toggle
               enabled={linePrefsMap[0]?.adminSameDayConfirmation ?? true}
               onClick={() => handleToggleAdminLinePref('adminSameDayConfirmation')}

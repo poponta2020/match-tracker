@@ -750,11 +750,9 @@ public class LotteryService {
                         .waitlistNumber(p.getWaitlistNumber())
                         .build();
 
-                if (p.getStatus() == ParticipantStatus.WON) {
+                if (p.getStatus().isActive()) {
                     winners.add(result);
-                } else if (p.getStatus() == ParticipantStatus.WAITLISTED
-                        || p.getStatus() == ParticipantStatus.OFFERED
-                        || p.getStatus() == ParticipantStatus.DECLINED) {
+                } else if (p.getStatus().isWaitlisted()) {
                     waitlisted.add(result);
                 }
             }

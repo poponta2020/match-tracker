@@ -377,6 +377,11 @@ public class PracticeSessionController {
         Integer orgIdInt = (Integer) request.get("organizationId");
         Long organizationId = orgIdInt != null ? orgIdInt.longValue() : null;
 
+        // ADMIN権限チェック: 自団体のみ操作可能
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の未登録者一括登録はできません");
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         var densukeUrl = practiceSessionService.getDensukeUrl(year, month, organizationId);
         if (densukeUrl.isEmpty()) {

@@ -65,10 +65,6 @@ class WaitlistPromotionServiceTest {
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(p1, p2));
-        when(practiceParticipantRepository.findWaitlistedAfterNumber(eq(100L), eq(1), eq(2)))
-                .thenReturn(List.of());
-        when(practiceParticipantRepository.findWaitlistedAfterNumber(eq(100L), eq(3), eq(1)))
-                .thenReturn(List.of());
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
 
         int count = service.declineWaitlistBySession(100L, 10L);
@@ -78,6 +74,8 @@ class WaitlistPromotionServiceTest {
         assertThat(p1.getWaitlistNumber()).isNull();
         assertThat(p2.getStatus()).isEqualTo(ParticipantStatus.WAITLIST_DECLINED);
         verify(practiceParticipantRepository, times(2)).save(any());
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 2);
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 3, 1);
     }
 
     @Test
@@ -86,22 +84,16 @@ class WaitlistPromotionServiceTest {
         PracticeParticipant target = PracticeParticipant.builder()
                 .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
-        PracticeParticipant next = PracticeParticipant.builder()
-                .id(3L).sessionId(100L).playerId(30L).matchNumber(1)
-                .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
-
         PracticeSession session = PracticeSession.builder().id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(target));
-        when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 2))
-                .thenReturn(List.of(next));
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
 
         service.declineWaitlistBySession(100L, 10L);
 
-        assertThat(next.getWaitlistNumber()).isEqualTo(2);
-        verify(practiceParticipantRepository, times(2)).save(any()); // target + next
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 2);
+        verify(practiceParticipantRepository, times(1)).save(any()); // target only
     }
 
     @Test
@@ -173,32 +165,21 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant waitlist1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
-            PracticeParticipant waitlist2 = PracticeParticipant.builder()
-                    .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
-                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
-            PracticeParticipant waitlist3 = PracticeParticipant.builder()
-                    .id(3L).sessionId(100L).playerId(30L).matchNumber(1)
-                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
-
             when(practiceParticipantRepository
                     .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
                             100L, 1, ParticipantStatus.WAITLISTED))
                     .thenReturn(Optional.of(waitlist1));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
                     .thenReturn(JstDateTimeUtil.now().plusDays(1));
-            when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 1))
-                    .thenReturn(List.of(waitlist2, waitlist3));
-
             Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
                     100L, 1, LocalDate.of(2026, 5, 1));
 
             assertThat(promoted).isPresent();
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-            // 後続の番号が繰り上がっていることを検証
-            assertThat(waitlist2.getWaitlistNumber()).isEqualTo(1);
-            assertThat(waitlist3.getWaitlistNumber()).isEqualTo(2);
-            // 繰り上げ対象 + 後続2人 = 3回save
-            verify(practiceParticipantRepository, times(3)).save(any());
+            // 後続の番号がバルクUPDATEで繰り上がることを検証
+            verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 1);
+            // 繰り上げ対象のみsave
+            verify(practiceParticipantRepository, times(1)).save(any());
         }
 
         @Test
@@ -214,14 +195,12 @@ class WaitlistPromotionServiceTest {
                     .thenReturn(Optional.of(waitlist1));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
                     .thenReturn(JstDateTimeUtil.now().plusDays(1));
-            when(practiceParticipantRepository.findWaitlistedAfterNumber(100L, 1, 1))
-                    .thenReturn(List.of());
-
             Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
                     100L, 1, LocalDate.of(2026, 5, 1));
 
             assertThat(promoted).isPresent();
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+            verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 1);
             verify(practiceParticipantRepository, times(1)).save(any());
         }
     }

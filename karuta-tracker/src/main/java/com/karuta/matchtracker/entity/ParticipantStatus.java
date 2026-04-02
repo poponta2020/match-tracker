@@ -17,5 +17,21 @@ public enum ParticipantStatus {
     /** 当選後キャンセル */
     CANCELLED,
     /** キャンセル待ち辞退 */
-    WAITLIST_DECLINED
+    WAITLIST_DECLINED;
+
+    /**
+     * 参加確定しているステータスかどうかを判定する。
+     * 対戦組み合わせ候補や参加者数カウントに含めるべきステータスを示す。
+     */
+    public boolean isActive() {
+        return this == WON || this == PENDING;
+    }
+
+    /**
+     * キャンセル待ち系のステータスかどうかを判定する。
+     * 抽選結果のキャンセル待ち一覧に含めるべきステータスを示す。
+     */
+    public boolean isWaitlisted() {
+        return this == WAITLISTED || this == OFFERED || this == DECLINED || this == WAITLIST_DECLINED;
+    }
 }

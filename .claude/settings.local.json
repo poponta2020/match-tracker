@@ -171,7 +171,13 @@
       "Bash(cmd.exe /c \"where java 2>nul && echo JAVA_HOME=%JAVA_HOME%\")",
       "Bash(cmd.exe /c \"cd c:\\\\Users\\\\user\\\\match-tracker\\\\karuta-tracker && gradlew.bat compileJava 2>&1\")",
       "Bash(cmd.exe /c \"where java\")",
-      "Bash(cmd.exe /c \"java -version\")"
+      "Bash(cmd.exe /c \"java -version\")",
+      "Bash(psql -h dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com -p 5432 -U karuta -d karuta_tracker_b297 -c ':*)",
+      "Bash(PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal PGCLIENTENCODING=UTF8 psql -h dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com -p 5432 -U karuta -d karuta_tracker_b297 -c \"SELECT p.name, pp.status, pp.match_number FROM practice_participants pp JOIN players p ON pp.player_id = p.id JOIN practice_sessions ps ON pp.session_id = ps.id WHERE ps.session_date = '2026-04-02' ORDER BY p.name, pp.match_number;\")",
+      "Bash(find /c/Users/popon/match-tracker/karuta-tracker-ui/src -type f \\\\\\( -name \"*.jsx\" -o -name \"*.js\" \\\\\\) -exec grep -l \"status\\\\|Status\\\\|WAITLISTED\\\\|DECLINED\\\\|CANCELLED\\\\|WON\" {} \\\\;)",
+      "Bash(find /c/Users/popon/match-tracker/karuta-tracker/src/test -name \"*.java\" -exec grep -l \"status\\\\|Status\\\\|WAITLISTED\\\\|DECLINED\\\\|CANCELLED\\\\|WON\" {} \\\\;)",
+      "Bash(tasklist //FI \"PID eq 40664\")",
+      "Bash(find build/test-results -name \"*.xml\" -exec grep -l \"failure\" {} \\\\;)"
     ],
     "deny": [],
     "ask": [],
