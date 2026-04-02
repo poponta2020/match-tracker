@@ -1,12 +1,6 @@
--- Add preference flags for same-day notifications
-ALTER TABLE line_notification_preferences
-    ADD COLUMN IF NOT EXISTS same_day_confirmation BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE line_notification_preferences
-    ADD COLUMN IF NOT EXISTS same_day_cancel BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE line_notification_preferences
-    ADD COLUMN IF NOT EXISTS same_day_vacancy BOOLEAN NOT NULL DEFAULT TRUE;
-
--- Keep line_message_log notification_type check aligned with LineMessageLog.LineNotificationType
+-- Hotfix: align line_message_log.notification_type check constraint with enum values.
+-- This prevents WAITLIST_POSITION_UPDATE / ADMIN_SAME_DAY_CONFIRMATION inserts
+-- from breaking outer business transactions.
 ALTER TABLE line_message_log DROP CONSTRAINT IF EXISTS line_message_log_notification_type_check;
 ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_check
     CHECK (notification_type IN (

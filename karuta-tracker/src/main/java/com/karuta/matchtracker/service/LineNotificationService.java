@@ -30,7 +30,7 @@ public class LineNotificationService {
     private final LineChannelRepository lineChannelRepository;
     private final LineChannelAssignmentRepository lineChannelAssignmentRepository;
     private final LineNotificationPreferenceRepository lineNotificationPreferenceRepository;
-    private final LineMessageLogRepository lineMessageLogRepository;
+    private final LineMessageLogService lineMessageLogService;
     private final LineMessagingService lineMessagingService;
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
@@ -43,7 +43,7 @@ public class LineNotificationService {
             LineChannelRepository lineChannelRepository,
             LineChannelAssignmentRepository lineChannelAssignmentRepository,
             LineNotificationPreferenceRepository lineNotificationPreferenceRepository,
-            LineMessageLogRepository lineMessageLogRepository,
+            LineMessageLogService lineMessageLogService,
             LineMessagingService lineMessagingService,
             PracticeSessionRepository practiceSessionRepository,
             PracticeParticipantRepository practiceParticipantRepository,
@@ -54,7 +54,7 @@ public class LineNotificationService {
         this.lineChannelRepository = lineChannelRepository;
         this.lineChannelAssignmentRepository = lineChannelAssignmentRepository;
         this.lineNotificationPreferenceRepository = lineNotificationPreferenceRepository;
-        this.lineMessageLogRepository = lineMessageLogRepository;
+        this.lineMessageLogService = lineMessageLogService;
         this.lineMessagingService = lineMessagingService;
         this.practiceSessionRepository = practiceSessionRepository;
         this.practiceParticipantRepository = practiceParticipantRepository;
@@ -1615,14 +1615,7 @@ public class LineNotificationService {
     private void logMessage(Long channelId, Long playerId, LineNotificationType type,
                            String message, MessageStatus status, String error) {
         try {
-            lineMessageLogRepository.save(LineMessageLog.builder()
-                .lineChannelId(channelId)
-                .playerId(playerId)
-                .notificationType(type)
-                .messageContent(message)
-                .status(status)
-                .errorMessage(error)
-                .build());
+            lineMessageLogService.save(channelId, playerId, type, message, status, error);
         } catch (Exception e) {
             log.error("Failed to save LINE message log: {}", e.getMessage());
         }

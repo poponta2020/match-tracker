@@ -178,7 +178,10 @@
       "Bash(find /c/Users/popon/match-tracker/karuta-tracker/src/test -name \"*.java\" -exec grep -l \"status\\\\|Status\\\\|WAITLISTED\\\\|DECLINED\\\\|CANCELLED\\\\|WON\" {} \\\\;)",
       "Bash(tasklist //FI \"PID eq 40664\")",
       "Bash(find build/test-results -name \"*.xml\" -exec grep -l \"failure\" {} \\\\;)",
-      "Bash(find /c/Users/popon/match-tracker -name \"*.java\" -type f -exec grep -l \"buildRichMenu\\\\|defaultRichMenu\" {} \\\\;)"
+      "Bash(find /c/Users/popon/match-tracker -name \"*.java\" -type f -exec grep -l \"buildRichMenu\\\\|defaultRichMenu\" {} \\\\;)",
+      "Bash(bash docs/features/line-rich-menu/setup-richmenu.sh docs/features/line-rich-menu/richmenu.png)",
+      "Bash(npx --yes sharp-cli -i docs/features/line-rich-menu/richmenu.png -o docs/features/line-rich-menu/richmenu_compressed.jpeg --format jpeg --quality 70)",
+      "Bash(bash docs/features/line-rich-menu/setup-richmenu.sh docs/features/line-rich-menu/richmenu_compressed.jpeg)"
     ],
     "deny": [],
     "ask": [],
