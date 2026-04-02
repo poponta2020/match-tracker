@@ -83,7 +83,7 @@ status: completed
 - **対応Issue:** #257
 
 ### タスク6: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 追加したメソッド・エンドポイントのユニットテストを作成する
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/LineMessagingServiceTest.java` — Rich Menu API メソッドのテスト（モック）

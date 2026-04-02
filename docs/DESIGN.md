@@ -1558,6 +1558,12 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN
 **レスポンス**: `{ "successCount": Integer, "failedCount": Integer, "skippedCount": Integer }`
 
+#### POST /api/admin/line/rich-menu/setup
+**説明**: PLAYERチャネル全体にリッチメニューを一括設定する。画像をアップロードし、全PLAYERチャネルにリッチメニューを作成・画像設定・デフォルト適用する。
+**権限**: SUPER_ADMIN
+**リクエスト**: `multipart/form-data` — `image`: リッチメニュー画像（PNG/JPEG、2500x1686px）
+**レスポンス**: `{ "successCount": Integer, "failureCount": Integer, "failures": [String] }`
+
 ### 4.15 システム設定API (`/api/system-settings`)
 
 #### GET /api/system-settings
