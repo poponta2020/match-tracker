@@ -65,7 +65,8 @@ public class LineMessageLog {
         ADMIN_WAITLIST_UPDATE,
         SAME_DAY_CONFIRMATION,
         SAME_DAY_CANCEL,
-        SAME_DAY_VACANCY
+        SAME_DAY_VACANCY,
+        ADMIN_SAME_DAY_CONFIRMATION
     }
 
     public enum MessageStatus {

@@ -294,6 +294,20 @@ const NotificationSettings = () => {
     }
   };
 
+  // SUPER_ADMIN専用の管理者通知設定（organizationId=0 を使用）
+  const handleToggleAdminLinePref = async (key) => {
+    const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminSameDayConfirmation: true };
+    const currentVal = currentPref[key] ?? true;
+    const updated = { ...currentPref, [key]: !currentVal };
+    setLinePrefsMap(prev => ({ ...prev, 0: updated }));
+    try {
+      await lineAPI.updatePreferences({ ...updated, playerId, organizationId: 0 });
+    } catch {
+      setLinePrefsMap(prev => ({ ...prev, 0: currentPref }));
+      setError('設定の更新に失敗しました');
+    }
+  };
+
   if (loading) return <LoadingScreen />;
 
   const showOrgHeaders = playerOrgIds.length > 1;
@@ -572,6 +586,21 @@ const NotificationSettings = () => {
               ))}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* SUPER_ADMIN専用: 管理者通知設定 */}
+      {currentPlayer?.role === 'SUPER_ADMIN' && lineStatus?.enabled && (
+        <div className="bg-white rounded-lg border p-4 space-y-3">
+          <h2 className="font-semibold text-gray-700">管理者通知</h2>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-gray-700">参加者確定通知（当日12:00）管理者用</span>
+            <Toggle
+              enabled={linePrefsMap[0]?.adminSameDayConfirmation ?? true}
+              onClick={() => handleToggleAdminLinePref('adminSameDayConfirmation')}
+              color="bg-[#06C755]"
+            />
+          </div>
         </div>
       )}
     </div>

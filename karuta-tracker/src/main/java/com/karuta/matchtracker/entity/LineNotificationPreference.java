@@ -83,6 +83,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean sameDayVacancy = true;
 
+    /** 参加者確定通知（当日12:00）管理者用 */
+    @Column(name = "admin_same_day_confirmation", nullable = false)
+    @Builder.Default
+    private Boolean adminSameDayConfirmation = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

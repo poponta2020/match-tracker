@@ -630,9 +630,10 @@ Entity Layer (JPA Entity)
 | match_pairing | BOOLEAN | NOT NULL, DEFAULT TRUE | 対戦組み合わせ |
 | practice_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加予定リマインダー |
 | deadline_reminder | BOOLEAN | NOT NULL, DEFAULT TRUE | 締め切りリマインダー |
-| same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日参加者確定通知 |
+| same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日参加者確定通知（WON参加者向け） |
 | same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル通知 |
 | same_day_vacancy | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日空き募集通知 |
+| admin_same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加者確定通知（管理者向け・SUPER_ADMIN専用） |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 ---
@@ -2062,7 +2063,7 @@ Entity Layer (JPA Entity)
 
 | メッセージ種別 | ヘッダー色 | ボタン | 送信先 |
 |---------------|-----------|--------|--------|
-| 参加者確定（メンバーリスト） | 青（#1E88E5） | なし | WON参加者 |
+| 参加者確定（メンバーリスト） | 青（#1E88E5） | なし | WON参加者 + SUPER_ADMIN（管理者通知） |
 | 空き募集 | オレンジ（#FF6B00） | 「参加する」（postback） | 非WON参加者 |
 | 残り枠あり（枠状況通知） | オレンジ（#FF6B00） | 「参加する」（postback） | WON参加者 |
 | 枠埋まり（枠状況通知） | グレー（#9E9E9E） | なし | WON参加者 |
@@ -2071,8 +2072,8 @@ Entity Layer (JPA Entity)
 
 | 対象 | 変更内容 |
 |------|---------|
-| `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY` の3値追加 |
-| `line_notification_preferences` テーブル | `same_day_confirmation` (BOOLEAN, DEFAULT TRUE), `same_day_cancel` (BOOLEAN, DEFAULT TRUE), `same_day_vacancy` (BOOLEAN, DEFAULT TRUE) の3カラム追加 |
+| `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CONFIRMATION` の4値追加 |
+| `line_notification_preferences` テーブル | `same_day_confirmation`, `same_day_cancel`, `same_day_vacancy`, `admin_same_day_confirmation` の4カラム追加 |
 
 ---
 

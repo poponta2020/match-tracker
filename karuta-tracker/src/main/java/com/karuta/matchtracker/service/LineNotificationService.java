@@ -796,6 +796,7 @@ public class LineNotificationService {
         pref.setSameDayConfirmation(dto.isSameDayConfirmation());
         pref.setSameDayCancel(dto.isSameDayCancel());
         pref.setSameDayVacancy(dto.isSameDayVacancy());
+        pref.setAdminSameDayConfirmation(dto.isAdminSameDayConfirmation());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -901,7 +902,21 @@ public class LineNotificationService {
             }
         }
 
-        log.info("Sent same-day confirmation to {} players for session {}", playerIds.size(), session.getId());
+        // SUPER_ADMINにも送信（WON参加者として既に送信済みの場合は除く）
+        List<Player> superAdmins = playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN);
+        int adminSentCount = 0;
+        for (Player admin : superAdmins) {
+            if (playerIds.contains(admin.getId())) continue; // WON参加者は送信済み
+            try {
+                sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CONFIRMATION, altText, flexContents);
+                adminSentCount++;
+            } catch (Exception e) {
+                log.error("Failed to send admin confirmation to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent same-day confirmation to {} players and {} admins for session {}",
+                playerIds.size(), adminSentCount, session.getId());
     }
 
     /**
@@ -1320,11 +1335,27 @@ public class LineNotificationService {
     }
 
     private boolean isNotificationEnabled(Long playerId, LineNotificationType type) {
+        // 管理者専用通知は organizationId=0 のレコードのみで判定
+        if (type == LineNotificationType.ADMIN_SAME_DAY_CONFIRMATION) {
+            return isAdminSameDayConfirmationEnabled(playerId);
+        }
+
         List<LineNotificationPreference> prefs = lineNotificationPreferenceRepository.findByPlayerId(playerId);
         if (prefs.isEmpty()) return true; // デフォルト全ON
 
         // いずれかの団体で該当種別がONならtrue
         return prefs.stream().anyMatch(pref -> isLineTypeEnabled(pref, type));
+    }
+
+    /**
+     * SUPER_ADMIN向け参加者確定通知の受信可否を確認する。
+     * organizationId=0 のレコードを管理者専用の設定として使用する。
+     */
+    private boolean isAdminSameDayConfirmationEnabled(Long playerId) {
+        return lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, 0L)
+                .map(LineNotificationPreference::getAdminSameDayConfirmation)
+                .orElse(true); // レコードなし＝デフォルトON
     }
 
     private boolean isLineTypeEnabled(LineNotificationPreference pref, LineNotificationType type) {
@@ -1339,6 +1370,7 @@ public class LineNotificationService {
             case SAME_DAY_CONFIRMATION -> pref.getSameDayConfirmation();
             case SAME_DAY_CANCEL -> pref.getSameDayCancel();
             case SAME_DAY_VACANCY -> pref.getSameDayVacancy();
+            case ADMIN_SAME_DAY_CONFIRMATION -> pref.getAdminSameDayConfirmation();
         };
     }
 

@@ -108,7 +108,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル）、当日キャンセル補充通知トグル3種（参加者確定通知・当日キャンセル通知・空き募集通知） | ALL | 統合通知設定（Web Push + LINE）。LINE通知セクションに当日キャンセル補充関連の通知トグル3種（sameDayConfirmation / sameDayCancel / sameDayVacancy）を追加 |
+| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル）、当日キャンセル補充通知トグル3種（参加者確定通知・当日キャンセル通知・空き募集通知）、管理者通知セクション（SUPER_ADMIN専用） | ALL | 統合通知設定（Web Push + LINE）。LINE通知セクションに当日キャンセル補充関連の通知トグル3種（sameDayConfirmation / sameDayCancel / sameDayVacancy）。SUPER_ADMINのみ「管理者通知」セクションが追加表示され、参加者確定通知（当日12:00）管理者用トグル（adminSameDayConfirmation）を制御可能 |
 | 33 | `/admin/line/channels` | `LineChannelAdmin.jsx` | チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除） |
 | 34 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
 
