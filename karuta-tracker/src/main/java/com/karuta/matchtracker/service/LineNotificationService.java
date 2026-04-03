@@ -1197,22 +1197,19 @@ public class LineNotificationService {
                             danRankOrdinal(playerMap.get(a.getPlayerId()))))
                     .toList();
 
-            // 2人ずつ1行に並べる
-            for (int i = 0; i < sorted.size(); i += 2) {
-                Player p1 = playerMap.get(sorted.get(i).getPlayerId());
-                String name1 = p1 != null ? p1.getName() : "不明";
-
+            // 3人ずつ1行に並べる
+            for (int i = 0; i < sorted.size(); i += 3) {
                 List<Object> rowContents = new java.util.ArrayList<>();
-                rowContents.add(Map.of("type", "text", "text", name1,
-                        "flex", 1, "size", "sm", "color", "#555555"));
-
-                if (i + 1 < sorted.size()) {
-                    Player p2 = playerMap.get(sorted.get(i + 1).getPlayerId());
-                    String name2 = p2 != null ? p2.getName() : "不明";
-                    rowContents.add(Map.of("type", "text", "text", name2,
-                            "flex", 1, "size", "sm", "color", "#555555"));
-                } else {
-                    rowContents.add(Map.of("type", "filler"));
+                for (int j = 0; j < 3; j++) {
+                    if (i + j < sorted.size()) {
+                        Player p = playerMap.get(sorted.get(i + j).getPlayerId());
+                        String name = p != null ? p.getName() : "不明";
+                        rowContents.add(Map.of("type", "text", "text", name,
+                                "flex", 1, "size", "sm", "color", "#555555"));
+                    } else {
+                        rowContents.add(Map.of("type", "text", "text", " ",
+                                "flex", 1, "size", "sm"));
+                    }
                 }
 
                 bodyContents.add(Map.of("type", "box", "layout", "horizontal",

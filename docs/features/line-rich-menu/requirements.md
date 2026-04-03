@@ -45,7 +45,7 @@ status: completed
 ### 3.3 今日の参加者表示
 - **トリガー**: リッチメニューのボタン押下（postback）
 - **表示内容**: 当日の練習のWON（参加確定）メンバー一覧をFlex Messageで表示
-  - 既存の `buildSameDayConfirmationFlex()` と同じ形式（段位順・試合別・2列表示）
+  - 既存の `buildSameDayConfirmationFlex()` と同じ形式（段位順・試合別・3列表示）
 - **自分がWONでない日でも閲覧可能**
 - **当日に練習がない場合**: 「今日の練習はありません」とテキストメッセージで返信
 
