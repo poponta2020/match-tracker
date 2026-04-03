@@ -705,12 +705,22 @@ public class LineNotificationService {
      * @param offeredPlayer  繰り上げオファーを送った相手（null=繰り上げ対象なし）
      * @param remainingWaitlist 残りのキャンセル待ちリスト（WAITLISTED状態、番号順）
      */
+    /**
+     * セッションに対応する管理者受信者（該当団体ADMIN + 全SUPER_ADMIN）を取得する。
+     */
+    private List<Player> getAdminRecipientsForSession(PracticeSession session) {
+        List<Player> recipients = new ArrayList<>(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+        recipients.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+            Player.Role.ADMIN, session.getOrganizationId()));
+        return recipients;
+    }
+
     public void sendAdminWaitlistNotification(String triggerAction, Player triggerPlayer,
                                                PracticeSession session, int matchNumber,
                                                Player offeredPlayer,
                                                List<PracticeParticipant> remainingWaitlist) {
-        List<Player> superAdmins = playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN);
-        if (superAdmins.isEmpty()) return;
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        if (adminRecipients.isEmpty()) return;
 
         String sessionLabel = getSessionLabel(session);
         String altText = String.format("【管理者通知】%s %d試合目: %sが%s", sessionLabel, matchNumber, triggerPlayer.getName(), triggerAction);
@@ -727,12 +737,12 @@ public class LineNotificationService {
             offeredPlayer != null ? offeredPlayer.getName() : null,
             remainingWaitlist, playerNames);
 
-        for (Player admin : superAdmins) {
+        for (Player admin : adminRecipients) {
             sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_WAITLIST_UPDATE, altText, flex);
         }
 
-        log.info("Admin waitlist notification sent for session {} match {}: {} by {}",
-            session.getId(), matchNumber, triggerAction, triggerPlayer.getName());
+        log.info("Admin waitlist notification sent to {} admins for session {} match {}: {} by {}",
+            adminRecipients.size(), session.getId(), matchNumber, triggerAction, triggerPlayer.getName());
     }
 
     /**
@@ -889,6 +899,7 @@ public class LineNotificationService {
         pref.setSameDayCancel(dto.isSameDayCancel());
         pref.setSameDayVacancy(dto.isSameDayVacancy());
         pref.setAdminSameDayConfirmation(dto.isAdminSameDayConfirmation());
+        pref.setAdminSameDayCancel(dto.isAdminSameDayCancel());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -996,11 +1007,10 @@ public class LineNotificationService {
             }
         }
 
-        // SUPER_ADMINにも送信（WON参加者として既に送信済みの場合は除く）
-        List<Player> superAdmins = playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN);
+        // 管理者（該当団体ADMIN + 全SUPER_ADMIN）にも送信（WON参加者でも管理者通知は別チャネルで送信）
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
         int adminSentCount = 0;
-        for (Player admin : superAdmins) {
-            if (playerIds.contains(admin.getId())) continue; // WON参加者は送信済み
+        for (Player admin : adminRecipients) {
             try {
                 sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CONFIRMATION, altText, flexContents);
                 adminSentCount++;
@@ -1256,8 +1266,18 @@ public class LineNotificationService {
             }
         }
 
-        log.info("Sent same-day cancel notification to {} players for session {} match {}",
-                recipientIds.size(), session.getId(), matchNumber);
+        // 管理者（該当団体ADMIN + 全SUPER_ADMIN）にも送信
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send admin cancel notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent same-day cancel notification to {} players and {} admins for session {} match {}",
+                recipientIds.size(), adminRecipients.size(), session.getId(), matchNumber);
     }
 
     /**
@@ -1279,18 +1299,15 @@ public class LineNotificationService {
             return;
         }
 
-        // 送信先: 当該セッションの非WON参加者（キャンセル本人除く）
-        // CANCELLEDの人も対象（別試合の空き募集は受け取れる）
-        List<PracticeParticipant> allParticipants = practiceParticipantRepository
-                .findBySessionId(session.getId());
+        // 送信先: 団体全メンバー（該当試合のWON参加者を除く、キャンセル本人も除く）
+        List<PlayerOrganization> orgMembers = playerOrganizationRepository
+                .findByOrganizationId(session.getOrganizationId());
         Set<Long> wonPlayerIds = currentWon.stream()
                 .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
-        // 全試合のWON参加者を取得して除外する必要はない — 同じ練習日の別試合でWONの人も参加可能
-        // ただし、この試合でWONの人は除外
-        List<Long> recipientIds = allParticipants.stream()
-                .map(PracticeParticipant::getPlayerId)
+        List<Long> recipientIds = orgMembers.stream()
+                .map(PlayerOrganization::getPlayerId)
                 .distinct()
-                .filter(id -> !id.equals(cancelledPlayerId))
+                .filter(id -> cancelledPlayerId == null || !id.equals(cancelledPlayerId))
                 .filter(id -> !wonPlayerIds.contains(id))
                 .toList();
 
@@ -1392,6 +1409,16 @@ public class LineNotificationService {
                 log.error("Failed to send join notification to player {}: {}", playerId, e.getMessage());
             }
         }
+
+        // 管理者（該当団体ADMIN + 全SUPER_ADMIN）にも送信
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send admin join notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
     }
 
     /**
@@ -1407,14 +1434,14 @@ public class LineNotificationService {
         int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
         int vacancies = Math.max(0, capacity - currentWon.size());
 
-        // 送信先: セッションの非WON参加者（参加登録した本人除く）
-        List<PracticeParticipant> allParticipants = practiceParticipantRepository
-                .findBySessionId(session.getId());
+        // 送信先: 団体全メンバー（該当試合のWON参加者を除く、参加登録した本人も除く）
+        List<PlayerOrganization> orgMembers = playerOrganizationRepository
+                .findByOrganizationId(session.getOrganizationId());
         Set<Long> wonPlayerIds = currentWon.stream()
                 .map(PracticeParticipant::getPlayerId).collect(Collectors.toSet());
 
-        List<Long> recipientIds = allParticipants.stream()
-                .map(PracticeParticipant::getPlayerId)
+        List<Long> recipientIds = orgMembers.stream()
+                .map(PlayerOrganization::getPlayerId)
                 .distinct()
                 .filter(id -> !id.equals(joinedPlayerId))
                 .filter(id -> !wonPlayerIds.contains(id))
@@ -1569,9 +1596,12 @@ public class LineNotificationService {
     }
 
     private boolean isNotificationEnabled(Long playerId, LineNotificationType type) {
-        // 管理者専用通知は organizationId=0 のレコードのみで判定
-        if (type == LineNotificationType.ADMIN_SAME_DAY_CONFIRMATION) {
-            return isAdminSameDayConfirmationEnabled(playerId);
+        // 管理者専用通知（ADMIN_プレフィクス）は organizationId=0 のレコードのみで判定
+        if (type.name().startsWith("ADMIN_")) {
+            return lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, 0L)
+                .map(pref -> isLineTypeEnabled(pref, type))
+                .orElse(true); // レコードなし＝デフォルトON
         }
 
         List<LineNotificationPreference> prefs = lineNotificationPreferenceRepository.findByPlayerId(playerId);
@@ -1579,17 +1609,6 @@ public class LineNotificationService {
 
         // いずれかの団体で該当種別がONならtrue
         return prefs.stream().anyMatch(pref -> isLineTypeEnabled(pref, type));
-    }
-
-    /**
-     * SUPER_ADMIN向け参加者確定通知の受信可否を確認する。
-     * organizationId=0 のレコードを管理者専用の設定として使用する。
-     */
-    private boolean isAdminSameDayConfirmationEnabled(Long playerId) {
-        return lineNotificationPreferenceRepository
-                .findByPlayerIdAndOrganizationId(playerId, 0L)
-                .map(LineNotificationPreference::getAdminSameDayConfirmation)
-                .orElse(true); // レコードなし＝デフォルトON
     }
 
     private boolean isLineTypeEnabled(LineNotificationPreference pref, LineNotificationType type) {
