@@ -2232,15 +2232,16 @@ Entity Layer (JPA Entity)
 
 #### 伝助連携
 - 伝助（出欠管理ツール）との双方向同期
-  - **アプリ→伝助（イベント駆動）**: 参加者の状態変更時に `DensukeSyncService.triggerWriteAsync()` を `@Async` で即時実行。`DensukeWriteService` が `dirty=true` の参加者を伝助へHTTP POSTで書き込み
+  - **アプリ→伝助（イベント駆動）**: 参加者の状態変更時に `DensukeSyncService.triggerWriteAsync()` を `@Async` で即時実行。`DensukeWriteService` が `dirty=true` かつ `matchNumber IS NOT NULL` の参加者のみを対象に、dirty行に対応するスロットだけを伝助へHTTP POSTで書き込み（未入力保護: アプリに未登録のマスは送信しない）
   - **伝助→アプリ（5分スケジューラー）**: `DensukeSyncScheduler` が5分間隔で `DensukeSyncService.syncAll()` を呼び出し、JsoupによるHTMLスクレイピングで出欠情報を取得
   - **Phase3 3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ空き枠あり（WON数 < 定員）の場合、`DensukeImportService.processPhase3Maru` がWAITLISTED→WONに昇格し後続のキャンセル待ち番号を繰り上げ（dirty=false）。12:00前または空き枠なしの場合はdirty=trueにして△で書き戻す（抽選バイパス防止）
 - **同期フロー集約**: `DensukeSyncService` がスケジューラー・手動同期・イベント駆動書き込みの全フローを統括
   - `syncAll()`: 当月+翌月の全団体を処理（スケジューラー用）
   - `syncForOrganization()`: 指定団体の書き込み→読み取り（Controller・スケジューラー共用）
   - `triggerWriteAsync()`: dirty参加者の即時書き込み（イベント駆動用、`@Async`）
-- **参加者削除**: `removeParticipantFromMatch()` は物理削除ではなく論理削除（`status=CANCELLED`, `dirty=true`）で処理。`DensukeWriteService` が「x」（不参加）として伝助に書き戻す
-- **セッション更新**: `updateSession()` は差分更新方式。既存参加者の `dirty` フラグを保持し、不要な伝助書き込みを防止
+- **参加者削除**: `removeParticipantFromMatch()` は物理削除ではなく論理削除（`status=CANCELLED`, `dirty=true`）で処理。`DensukeWriteService` が「x」（不参加）として伝助に書き戻す。`softDeleteByPlayerIdAndSessionIds` は `matchNumber IS NOT NULL` 条件でBYEを除外
+- **セッション更新**: `updateSession()` は差分更新方式。既存参加者の `dirty` フラグを保持し、不要な伝助書き込みを防止。BYE（matchNumber=null）は削除ループから除外
+- **未入力保護**: 通常同期ではdirty行のみ送信し、伝助上の未入力マスを×で上書きしない。BYE（matchNumber=null）は伝助の行に対応しないため常に `dirty=false` で管理し同期対象外とする。抽選確定同期（`writeAllForLotteryConfirmation`）は現行の全体書き戻し方針を維持
 - 団体×月単位でURL管理（`densuke_urls`テーブル、`organization_id` でマルチ団体対応）
 - メンバーID・行IDをキャッシュテーブル（`densuke_member_mappings`, `densuke_row_ids`）に保存
 - スケジューラー・手動同期ともに ① 書き込み → ② 読み取り の順で実行。全団体のURLをループ処理

@@ -692,16 +692,27 @@ SUPER_ADMIN のみ操作可能。
 - 新規参加登録・ステータス変更（`PracticeParticipantService`, `WaitlistPromotionService`, `LotteryService`）で `dirty=true` を設定
 - 伝助からの取り込み時（`DensukeImportService`）は `dirty=false` で保存
 
-**書き込み処理フロー:**
-1. `dirty=true` の参加者を取得（当月・翌月でDensuke URLが登録されているセッションのみ）
+**書き込み処理フロー（通常同期）:**
+1. `dirty=true` かつ `matchNumber IS NOT NULL` の参加者を取得（`findDirtyForDensukeSync`。BYEエントリを除外）
 2. プレイヤー×URLでグループ化
 3. 各グループに対して：
    a. `densuke_member_id` を取得（未キャッシュの場合は伝助に `POST insert` でメンバー登録し、`densuke_member_mappings` に保存）
    b. `join-{id}` フィールドIDを取得（未キャッシュの場合は伝助の編集フォームをパースし `densuke_row_ids` に保存）
-   c. ステータスに応じた値（3=○/2=△/1=×/0=未入力）を決定
-   d. 伝助の `POST regist` で全セッション分の出欠を一括送信
-   e. 成功したら `dirty=false` に更新、失敗はエラーリストに記録
+   c. dirtyな参加者が存在するセッション×試合のみをformDataに含める（未入力保護: アプリに未登録のマスやdirtyでないマスは送信しない）
+   d. ステータスに応じた値（3=○/2=△/1=×）を決定して `POST regist` で送信
+   e. 成功したら送信対象のみ `dirty=false` に更新、失敗はエラーリストに記録
 4. 書き込み状況（最終実行日時・最終成功日時・エラー・書き込み待ち件数）を `DensukeWriteStatusDto` で保持
+
+**書き込み処理フロー（抽選確定同期）:**
+- `writeAllForLotteryConfirmation` で全マッピング済みプレイヤーを対象に書き込む（dirtyフィルタなし）
+- アクティブステータス（WON/WAITLISTED/OFFERED/PENDING）のみ書き戻し、CANCELLED/DECLINED/未登録はスキップ（伝助の既存値を維持）
+
+**未入力保護:**
+- 伝助上で「未入力」のまま残しているマスをアプリの同期が×に上書きしないよう保護する
+- 通常同期ではdirty行のみ送信し、アプリに未登録のマスは送信しない
+- BYE（matchNumber=null）エントリは伝助の行に対応しないため、常に `dirty=false` で管理し同期対象から除外する
+- `softDeleteByPlayerIdAndSessionIds` は `matchNumber IS NOT NULL` 条件でBYEを除外する
+- `updateSession` の削除ループでもBYE（matchNumber=null）を除外する
 
 **ステータスマッピング:**
 | ParticipantStatus | 伝助値 | 表示 |
@@ -709,7 +720,7 @@ SUPER_ADMIN のみ操作可能。
 | PENDING / WON | 3 | ○（参加） |
 | WAITLISTED / OFFERED | 2 | △（未定） |
 | CANCELLED / DECLINED / WAITLIST_DECLINED | 1 | ×（不参加） |
-| （未登録） | 1 | ×（不参加） |
+| （未登録） | 送信しない | — |
 
 **キャッシュテーブル:**
 - `densuke_member_mappings`: プレイヤー×URLごとの伝助メンバーID（`mi` パラメータ）をキャッシュ
