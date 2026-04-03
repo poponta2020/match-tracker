@@ -129,7 +129,7 @@ status: completed
 ---
 
 ### タスク9: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.mdのドキュメント更新ルールに従い、仕様書・画面一覧・設計書を最新の状態に更新
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 通知仕様（ADMIN_SAME_DAY_CANCEL追加、ADMIN送信先拡張、SAME_DAY_VACANCY送信先変更、0:00空き枠通知）、通知トグル表、PlayerEdit画面の管理団体ドロップダウン
