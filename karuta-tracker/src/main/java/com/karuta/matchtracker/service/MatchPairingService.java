@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
@@ -262,21 +263,38 @@ public class MatchPairingService {
     public AutoMatchingResult autoMatch(AutoMatchingRequest request) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
-        List<Long> participantIds = request.getParticipantIds();
+        List<Long> participantIds = loadWonParticipantIdsForMatch(sessionDate, matchNumber);
 
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
 
+        if (participantIds.isEmpty()) {
+            return AutoMatchingResult.builder()
+                    .pairings(Collections.emptyList())
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
+        }
+
         // 参加者情報を取得
         Map<Long, Player> playerMap = playerRepository.findAllById(participantIds).stream()
                 .collect(Collectors.toMap(Player::getId, p -> p));
+        List<Long> availableParticipantIds = participantIds.stream()
+                .filter(playerMap::containsKey)
+                .toList();
+
+        if (availableParticipantIds.isEmpty()) {
+            return AutoMatchingResult.builder()
+                    .pairings(Collections.emptyList())
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
+        }
 
         // 過去30日の組み合わせ履歴を取得（MatchPairingテーブルから）
         LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
-        Map<String, List<LocalDate>> matchHistoryMap = getPairingHistory(participantIds, startDate, sessionDate);
+        Map<String, List<LocalDate>> matchHistoryMap = getPairingHistory(availableParticipantIds, startDate, sessionDate);
 
         // Matchテーブルからの対戦履歴もマージ
-        Map<String, List<LocalDate>> gameHistoryMap = getMatchHistory(participantIds, startDate, sessionDate);
+        Map<String, List<LocalDate>> gameHistoryMap = getMatchHistory(availableParticipantIds, startDate, sessionDate);
         for (Map.Entry<String, List<LocalDate>> entry : gameHistoryMap.entrySet()) {
             matchHistoryMap.computeIfAbsent(entry.getKey(), k -> new ArrayList<>());
             for (LocalDate date : entry.getValue()) {
@@ -307,7 +325,7 @@ public class MatchPairingService {
         // スコアを計算して最適なペアリングを生成
         List<AutoMatchingResult.PairingSuggestion> pairings = new ArrayList<>();
         Set<Long> paired = new HashSet<>();
-        List<Long> shuffled = new ArrayList<>(participantIds);
+        List<Long> shuffled = new ArrayList<>(availableParticipantIds);
         Collections.shuffle(shuffled);
 
         while (paired.size() + 1 < shuffled.size()) {
@@ -378,8 +396,39 @@ public class MatchPairingService {
     }
 
     /**
-     * 過去の対戦履歴を取得
+     * 指定日・試合番号のWON参加者IDを取得
      */
+    private List<Long> loadWonParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber) {
+        if (sessionDate == null || matchNumber == null) {
+            log.warn("WON参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
+                    sessionDate, matchNumber);
+            return Collections.emptyList();
+        }
+
+        return practiceSessionRepository.findBySessionDate(sessionDate)
+                .map(session -> {
+                    List<Long> wonParticipantIds = practiceParticipantRepository
+                            .findBySessionIdAndMatchNumberAndStatus(
+                                    session.getId(),
+                                    matchNumber,
+                                    ParticipantStatus.WON)
+                            .stream()
+                            .map(PracticeParticipant::getPlayerId)
+                            .distinct()
+                            .toList();
+                    if (wonParticipantIds.isEmpty()) {
+                        log.info("WON参加者なし: sessionId={}, sessionDate={}, matchNumber={}",
+                                session.getId(), sessionDate, matchNumber);
+                    }
+                    return wonParticipantIds;
+                })
+                .orElseGet(() -> {
+                    log.info("セッション未登録のためWON参加者なし: sessionDate={}, matchNumber={}",
+                            sessionDate, matchNumber);
+                    return Collections.emptyList();
+                });
+    }
+
     private Map<String, List<LocalDate>> getMatchHistory(List<Long> participantIds,
                                                           LocalDate startDate, LocalDate endDate) {
         // クエリで過去30日の対戦履歴を取得

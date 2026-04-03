@@ -5,9 +5,14 @@ import com.karuta.matchtracker.dto.AutoMatchingRequest;
 import com.karuta.matchtracker.dto.AutoMatchingResult;
 import com.karuta.matchtracker.dto.MatchPairingCreateRequest;
 import com.karuta.matchtracker.dto.MatchPairingDto;
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +42,12 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private PlayerRepository playerRepository;
+
+    @Autowired
+    private PracticeSessionRepository practiceSessionRepository;
+
+    @Autowired
+    private PracticeParticipantRepository practiceParticipantRepository;
 
     @Test
     @DisplayName("対戦ペアリングのCRUDライフサイクルが正常に動作する")
@@ -262,7 +273,8 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         List<Long> playerIds = Arrays.asList(
                 player1.getId(), player2.getId(), player3.getId(), player4.getId()
         );
-        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).participantIds(playerIds).build();
+        createSessionWithWonParticipants(sessionDate, playerIds, 1);
+        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).build();
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -296,7 +308,8 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         List<Long> playerIds = Arrays.asList(
                 player1.getId(), player2.getId(), player3.getId()
         );
-        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).participantIds(playerIds).build();
+        createSessionWithWonParticipants(sessionDate, playerIds, 1);
+        AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(sessionDate).matchNumber(1).build();
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -369,6 +382,27 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
     }
 
     // ヘルパーメソッド
+
+    private void createSessionWithWonParticipants(LocalDate sessionDate, List<Long> playerIds, Integer matchNumber) {
+        PracticeSession session = PracticeSession.builder()
+                .sessionDate(sessionDate)
+                .totalMatches(7)
+                .organizationId(1L)
+                .createdBy(1L)
+                .updatedBy(1L)
+                .build();
+        PracticeSession savedSession = practiceSessionRepository.save(session);
+
+        List<PracticeParticipant> participants = playerIds.stream()
+                .map(playerId -> PracticeParticipant.builder()
+                        .sessionId(savedSession.getId())
+                        .playerId(playerId)
+                        .matchNumber(matchNumber)
+                        .status(ParticipantStatus.WON)
+                        .build())
+                .toList();
+        practiceParticipantRepository.saveAll(participants);
+    }
 
     private Player createAndSavePlayer(String name, String rank) {
         Player player = new Player();

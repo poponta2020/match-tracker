@@ -4,8 +4,11 @@ import com.karuta.matchtracker.dto.AutoMatchingRequest;
 import com.karuta.matchtracker.dto.AutoMatchingResult;
 import com.karuta.matchtracker.dto.MatchPairingCreateRequest;
 import com.karuta.matchtracker.dto.MatchPairingDto;
+import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -380,9 +383,17 @@ class MatchPairingServiceTest {
             AutoMatchingRequest request = AutoMatchingRequest.builder()
                     .sessionDate(sessionDate)
                     .matchNumber(matchNumber)
-                    .participantIds(playerIds)
                     .build();
 
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1, player2, player3, player4));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
@@ -409,9 +420,16 @@ class MatchPairingServiceTest {
             AutoMatchingRequest request = AutoMatchingRequest.builder()
                     .sessionDate(sessionDate)
                     .matchNumber(matchNumber)
-                    .participantIds(playerIds)
                     .build();
 
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON)
+                    ));
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1, player2, player3));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
@@ -438,9 +456,12 @@ class MatchPairingServiceTest {
             AutoMatchingRequest request = AutoMatchingRequest.builder()
                     .sessionDate(sessionDate)
                     .matchNumber(matchNumber)
-                    .participantIds(playerIds)
                     .build();
 
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of(createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON)));
             when(playerRepository.findAllById(playerIds))
                     .thenReturn(Arrays.asList(player1));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
@@ -467,14 +488,11 @@ class MatchPairingServiceTest {
             AutoMatchingRequest request = AutoMatchingRequest.builder()
                     .sessionDate(sessionDate)
                     .matchNumber(matchNumber)
-                    .participantIds(playerIds)
                     .build();
 
-            when(playerRepository.findAllById(playerIds))
-                    .thenReturn(Collections.emptyList());
-            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
-                    .thenReturn(Collections.emptyList());
-            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                     .thenReturn(Collections.emptyList());
 
             // When
@@ -484,9 +502,85 @@ class MatchPairingServiceTest {
             assertThat(result.getPairings()).isEmpty();
             assertThat(result.getWaitingPlayers()).isEmpty();
         }
+
+        @Test
+        @DisplayName("セッションが存在しない場合は空の結果を返す")
+        void shouldReturnEmptyResultWhenSessionNotFound() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.empty());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request);
+
+            // Then
+            assertThat(result.getPairings()).isEmpty();
+            assertThat(result.getWaitingPlayers()).isEmpty();
+            verify(practiceParticipantRepository, never())
+                    .findBySessionIdAndMatchNumberAndStatus(anyLong(), anyInt(), any());
+            verify(playerRepository, never()).findAllById(anyList());
+        }
+
+        @Test
+        @DisplayName("DBのWON参加者を使用して組み合わせを生成できる")
+        void shouldUseWonParticipantsFromDatabase() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
+                    ));
+            when(playerRepository.findAllById(Arrays.asList(1L, 2L)))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request);
+
+            // Then
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(result.getWaitingPlayers()).isEmpty();
+            verify(playerRepository).findAllById(Arrays.asList(1L, 2L));
+        }
     }
 
     // ヘルパーメソッド
+
+    private PracticeSession createSession(Long id, LocalDate sessionDate) {
+        PracticeSession session = new PracticeSession();
+        session.setId(id);
+        session.setSessionDate(sessionDate);
+        session.setTotalMatches(7);
+        return session;
+    }
+
+    private PracticeParticipant createPracticeParticipant(Long sessionId, Integer matchNumber,
+                                                          Long playerId, ParticipantStatus status) {
+        PracticeParticipant participant = new PracticeParticipant();
+        participant.setSessionId(sessionId);
+        participant.setMatchNumber(matchNumber);
+        participant.setPlayerId(playerId);
+        participant.setStatus(status);
+        return participant;
+    }
 
     private Player createPlayer(Long id, String name) {
         Player player = new Player();

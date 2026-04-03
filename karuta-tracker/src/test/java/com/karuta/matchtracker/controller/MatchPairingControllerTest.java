@@ -2,9 +2,12 @@ package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.*;
+import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +23,7 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +53,9 @@ class MatchPairingControllerTest {
 
     @MockitoBean
     private com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
+
+    @MockitoBean
+    private MatchPairingRepository matchPairingRepository;
 
     @Nested
     @DisplayName("GET /api/match-pairings/date")
@@ -266,6 +273,7 @@ class MatchPairingControllerTest {
             MatchPairingCreateRequest request = new MatchPairingCreateRequest(
                     date, 1, 10L, 20L
             );
+            mockAdminScopeForDate(date, 1L, 1L);
 
             MatchPairingDto created = MatchPairingDto.builder()
                     .id(1L).sessionDate(date).matchNumber(1)
@@ -437,6 +445,7 @@ class MatchPairingControllerTest {
                     ))
                     .waitingPlayerIds(Collections.emptyList())
                     .build();
+            mockAdminScopeForDate(date, 1L, 1L);
 
             List<MatchPairingDto> created = Arrays.asList(
                     MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(1).player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").createdBy(1L).build()
@@ -529,6 +538,10 @@ class MatchPairingControllerTest {
         void shouldDeletePairingAsAdmin() throws Exception {
             // Given
             Long id = 1L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            mockAdminScopeForDate(date, 1L, 1L);
+            when(matchPairingRepository.findById(id))
+                    .thenReturn(Optional.of(createPairing(id, date)));
             doNothing().when(matchPairingService).delete(id);
 
             // When & Then
@@ -582,6 +595,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
+            mockAdminScopeForDate(date, 1L, 1L);
             doNothing().when(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
 
             // When & Then
@@ -618,7 +632,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
-            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
 
             List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
                     AutoMatchingResult.PairingSuggestion.builder()
@@ -659,7 +673,8 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L);
-            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+            mockAdminScopeForDate(date, 1L, 1L);
 
             List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
                     AutoMatchingResult.PairingSuggestion.builder()
@@ -691,7 +706,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L, 3L);
-            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
 
             List<AutoMatchingResult.PairingSuggestion> pairings = Arrays.asList(
                     AutoMatchingResult.PairingSuggestion.builder()
@@ -731,7 +746,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 2L);
-            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
@@ -749,7 +764,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             List<Long> playerIds = Arrays.asList(1L, 999L);
-            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).participantIds(playerIds).build();
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
 
             when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
                     .thenThrow(new ResourceNotFoundException("Player not found"));
@@ -761,5 +776,26 @@ class MatchPairingControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
         }
+    }
+
+    private void mockAdminScopeForDate(LocalDate date, Long adminUserId, Long adminOrgId) {
+        Player admin = new Player();
+        admin.setId(adminUserId);
+        admin.setAdminOrganizationId(adminOrgId);
+        when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+
+        PracticeSession session = new PracticeSession();
+        session.setId(1L);
+        session.setSessionDate(date);
+        session.setOrganizationId(adminOrgId);
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId))
+                .thenReturn(Optional.of(session));
+    }
+
+    private MatchPairing createPairing(Long id, LocalDate sessionDate) {
+        MatchPairing pairing = new MatchPairing();
+        pairing.setId(id);
+        pairing.setSessionDate(sessionDate);
+        return pairing;
     }
 }

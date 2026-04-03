@@ -21,6 +21,7 @@ const PairingGenerator = () => {
   const [waitingPlayers, setWaitingPlayers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [allPlayers, setAllPlayers] = useState([]);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
@@ -66,7 +67,7 @@ const PairingGenerator = () => {
         }
         return updated;
       });
-    } catch (e) {
+    } catch {
       // 履歴取得失敗は無視
     }
   }, [sessionDate, matchNumber]);
@@ -112,21 +113,26 @@ const PairingGenerator = () => {
     setIsViewMode(true);
   }, []);
 
+  const getWonParticipantNamesForMatch = useCallback((session, targetMatchNumber) => {
+    if (!session) return [];
+    const entries = session.matchParticipants?.[String(targetMatchNumber)] || [];
+    return entries
+      .filter(p => (typeof p === 'string') || p.status === 'WON')
+      .map(p => typeof p === 'string' ? p : p.name);
+  }, []);
+
   // 試合番号に対応する参加者をセッションデータから取得してstateに反映
   const updateParticipantsForMatch = useCallback((session, matchNum) => {
     if (!session) {
       setParticipants([]);
       return;
     }
-    // matchParticipants: { "1" -> [{name, kyuRank}, ...], "2" -> [...] }
-    // JSONのキーは文字列なのでString()で変換
-    const matchParticipantEntries = session.matchParticipants?.[String(matchNum)] || [];
-    const matchParticipantNames = matchParticipantEntries.map(p => typeof p === 'string' ? p : p.name);
+    const matchParticipantNames = getWonParticipantNamesForMatch(session, matchNum);
     const sessionParticipants = session.participants || [];
     // 試合番号ごとの登録参加者のみを表示（0人なら0人）
     const filtered = sessionParticipants.filter(p => matchParticipantNames.includes(p.name));
     setParticipants(filtered);
-  }, []);
+  }, [getWonParticipantNamesForMatch]);
 
   // 日付変更時: セッション・参加者・全試合の組み合わせを一括取得
   useEffect(() => {
@@ -146,6 +152,7 @@ const PairingGenerator = () => {
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
       setParticipants([]);
+      setNotice('');
 
       try {
         // セッション情報と全組み合わせデータを並列で取得
@@ -214,8 +221,7 @@ const PairingGenerator = () => {
     // この試合番号の参加者を算出（loadExistingPairingsToStateに渡す用）
     const getMatchParticipants = () => {
       if (!currentSession) return [];
-      const entries = currentSession.matchParticipants?.[String(matchNumber)] || [];
-      const names = entries.map(p => typeof p === 'string' ? p : p.name);
+      const names = getWonParticipantNamesForMatch(currentSession, matchNumber);
       const allParticipants = currentSession.participants || [];
       // 試合番号ごとの登録参加者のみを返す（0人なら空配列）
       return allParticipants.filter(p => names.includes(p.name));
@@ -248,7 +254,7 @@ const PairingGenerator = () => {
       setIsEditingExisting(false);
       setIsViewMode(false);
     }
-  }, [matchNumber, cacheVersion, currentSession, loadExistingPairingsToState, updateParticipantsForMatch]);
+  }, [matchNumber, cacheVersion, currentSession, getWonParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
 
   // 選手一覧を遅延取得（選手追加モーダル表示時に初めて取得）
   const playersLoadedRef = useRef(false);
@@ -272,13 +278,12 @@ const PairingGenerator = () => {
 
     setLoading(true);
     setError('');
+    setNotice('');
 
     try {
-      const participantIds = participants.map((p) => p.id);
       const response = await pairingAPI.autoMatch({
         sessionDate,
         matchNumber,
-        participantIds,
       });
 
       setPairings(response.data.pairings);
@@ -286,6 +291,14 @@ const PairingGenerator = () => {
       setHasUnsavedChanges(true);
       setIsViewMode(false);
       saveDraft(response.data.pairings, response.data.waitingPlayers, false);
+
+      const usedParticipantCount =
+        (response.data.pairings?.length || 0) * 2 + (response.data.waitingPlayers?.length || 0);
+      if (usedParticipantCount !== participants.length) {
+        setNotice(
+          `表示中の参加者数(${participants.length}名)と最新WON参加者数(${usedParticipantCount}名)が異なるため、最新WONで生成しました。`
+        );
+      }
     } catch (err) {
       console.error('Auto matching failed:', err);
       setError('自動組み合わせに失敗しました');
@@ -568,6 +581,7 @@ const PairingGenerator = () => {
   // DBからセッション・参加者データを再取得
   const handleRefresh = async () => {
     setRefreshing(true);
+    setNotice('');
     try {
       const [sessionResponse, allPairingsResponse] = await Promise.all([
         practiceAPI.getByDate(sessionDate),
@@ -768,6 +782,13 @@ const PairingGenerator = () => {
         <div className="bg-red-50 border border-red-200 p-4 rounded-lg flex items-center gap-2 text-red-700">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {notice && (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex items-center gap-2 text-amber-800">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{notice}</span>
         </div>
       )}
 
@@ -986,9 +1007,9 @@ const PairingGenerator = () => {
                       // 既存の組み合わせがあった場合は閲覧モードに戻す
                       const getMatchParticipants = () => {
                         if (!currentSession) return [];
-                        const names = currentSession.matchParticipants?.[String(matchNumber)] || [];
+                        const names = getWonParticipantNamesForMatch(currentSession, matchNumber);
                         const allP = currentSession.participants || [];
-                        return names.length > 0 ? allP.filter(p => names.includes(p.name)) : allP;
+                        return allP.filter(p => names.includes(p.name));
                       };
                       loadExistingPairingsToState(cached, getMatchParticipants());
                     } else {

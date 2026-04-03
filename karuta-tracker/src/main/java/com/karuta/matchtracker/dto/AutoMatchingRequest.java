@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -15,5 +14,4 @@ import java.util.List;
 public class AutoMatchingRequest {
     private LocalDate sessionDate;
     private Integer matchNumber;
-    private List<Long> participantIds;
 }
