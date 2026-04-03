@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
+import { organizationAPI } from '../../api/organizations';
 import { User, Save, ArrowLeft, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -27,6 +28,10 @@ const PlayerEdit = () => {
   const [role, setRole] = useState('PLAYER');
   const [originalRole, setOriginalRole] = useState('PLAYER');
 
+  // 管理団体（ADMIN用）
+  const [organizations, setOrganizations] = useState([]);
+  const [adminOrganizationId, setAdminOrganizationId] = useState('');
+
   // パスワード用の状態（新規作成時 + スーパー管理者の変更時）
   const [passwordData, setPasswordData] = useState({
     newPassword: '',
@@ -42,7 +47,19 @@ const PlayerEdit = () => {
     } else {
       setLoading(false);
     }
+    if (isSuperAdmin()) {
+      fetchOrganizations();
+    }
   }, [id]);
+
+  const fetchOrganizations = async () => {
+    try {
+      const response = await organizationAPI.getAll();
+      setOrganizations(response.data);
+    } catch (err) {
+      console.error('Failed to fetch organizations:', err);
+    }
+  };
 
   const fetchPlayer = async () => {
     try {
@@ -63,6 +80,9 @@ const PlayerEdit = () => {
       // ロールは別管理
       setRole(player.role || 'PLAYER');
       setOriginalRole(player.role || 'PLAYER');
+
+      // 管理団体
+      setAdminOrganizationId(player.adminOrganizationId || '');
     } catch (err) {
       console.error('Failed to fetch player:', err);
       setError('選手情報の取得に失敗しました');
@@ -185,6 +205,11 @@ const PlayerEdit = () => {
         // 3. ロールが変更されている場合は別APIで更新（スーパー管理者のみ）
         if (isSuperAdmin() && role !== originalRole) {
           await playerAPI.updateRole(id, role);
+        }
+
+        // 4. ロールがADMINの場合、管理団体を更新
+        if (isSuperAdmin() && role === 'ADMIN' && adminOrganizationId) {
+          await organizationAPI.updateAdminOrganization(id, Number(adminOrganizationId));
         }
 
         navigate(`/players/${id}`);
@@ -370,6 +395,30 @@ const PlayerEdit = () => {
                 <option value="PLAYER">一般ユーザー</option>
                 <option value="ADMIN">管理者</option>
                 <option value="SUPER_ADMIN">スーパー管理者</option>
+              </select>
+            </div>
+          )}
+
+          {/* 管理団体選択（スーパー管理者のみ、ロールがADMINの場合） */}
+          {isSuperAdmin() && id && role === 'ADMIN' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                管理団体
+                <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                  スーパー管理者専用
+                </span>
+              </label>
+              <select
+                value={adminOrganizationId}
+                onChange={(e) => setAdminOrganizationId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">未設定</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
               </select>
             </div>
           )}
