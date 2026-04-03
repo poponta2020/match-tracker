@@ -135,6 +135,7 @@ public class MatchPairingService {
                                 .sessionId(session.getId())
                                 .playerId(playerId)
                                 .matchNumber(null)
+                                .dirty(false)
                                 .build())
                         .collect(Collectors.toList());
                 practiceParticipantRepository.saveAll(byeParticipants);

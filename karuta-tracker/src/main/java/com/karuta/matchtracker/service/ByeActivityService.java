@@ -218,6 +218,7 @@ public class ByeActivityService {
                         .sessionId(sessionId)
                         .playerId(playerId)
                         .matchNumber(null)
+                        .dirty(false)
                         .build();
                 practiceParticipantRepository.save(restored);
                 log.info("PracticeParticipant復元: session={}, player={}", sessionId, playerId);
