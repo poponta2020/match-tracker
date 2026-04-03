@@ -1314,7 +1314,7 @@ public class LineNotificationService {
         if (recipientIds.isEmpty()) return;
 
         String altText = String.format("%s %d試合目が%d名分空いています", sessionLabel, matchNumber, vacancies);
-        Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId());
+        Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId(), true);
 
         for (Long playerId : recipientIds) {
             try {
@@ -1343,7 +1343,7 @@ public class LineNotificationService {
         if (vacancies <= 0) return;
 
         String altText = String.format("【管理者通知】%s %d試合目が%d名分空いています", sessionLabel, matchNumber, vacancies);
-        Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId());
+        Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId(), false);
 
         List<Player> adminRecipients = getAdminRecipientsForSession(session);
         for (Player admin : adminRecipients) {
@@ -1360,8 +1360,9 @@ public class LineNotificationService {
 
     /**
      * 空き募集Flex Messageを構築する
+     * @param includeJoinButton trueの場合「参加する」ボタンを含める。管理者向けはfalse。
      */
-    private Map<String, Object> buildSameDayVacancyFlex(String sessionLabel, int matchNumber, int vacancies, Long sessionId) {
+    private Map<String, Object> buildSameDayVacancyFlex(String sessionLabel, int matchNumber, int vacancies, Long sessionId, boolean includeJoinButton) {
         Map<String, Object> header = Map.of(
             "type", "box",
             "layout", "vertical",
@@ -1373,11 +1374,14 @@ public class LineNotificationService {
             "paddingAll", "15px"
         );
 
+        String bodyText = includeJoinButton
+            ? String.format("%d試合目が%d名分空いています。参加希望の場合は参加ボタンを押してください", matchNumber, vacancies)
+            : String.format("%d試合目が%d名分空いています", matchNumber, vacancies);
+
         List<Object> bodyContents = List.of(
             Map.of("type", "text", "text", sessionLabel + "の練習",
                 "weight", "bold", "size", "lg", "margin", "none", "wrap", true),
-            Map.of("type", "text", "text",
-                String.format("%d試合目が%d名分空いています。参加希望の場合は参加ボタンを押してください", matchNumber, vacancies),
+            Map.of("type", "text", "text", bodyText,
                 "size", "md", "margin", "md", "color", "#333333", "wrap", true)
         );
 
@@ -1387,6 +1391,14 @@ public class LineNotificationService {
             "contents", bodyContents,
             "paddingAll", "20px"
         );
+
+        if (!includeJoinButton) {
+            return Map.of(
+                "type", "bubble",
+                "header", header,
+                "body", body
+            );
+        }
 
         Map<String, Object> joinButton = Map.of(
             "type", "button",

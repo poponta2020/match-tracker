@@ -379,7 +379,7 @@ const NotificationSettings = () => {
 
   // SUPER_ADMIN専用の管理者通知設定（organizationId=0 を使用）
   const handleToggleAdminLinePref = async (key) => {
-    const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminSameDayConfirmation: true, adminSameDayCancel: true };
+    const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminWaitlistUpdate: true, adminSameDayConfirmation: true, adminSameDayCancel: true };
     const currentVal = currentPref[key] ?? true;
     const updated = { ...currentPref, [key]: !currentVal };
     setLinePrefsMap(prev => ({ ...prev, 0: updated }));

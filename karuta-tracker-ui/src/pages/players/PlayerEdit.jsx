@@ -207,9 +207,9 @@ const PlayerEdit = () => {
           await playerAPI.updateRole(id, role);
         }
 
-        // 4. ロールがADMINの場合、管理団体を更新
-        if (isSuperAdmin() && role === 'ADMIN' && adminOrganizationId) {
-          await organizationAPI.updateAdminOrganization(id, Number(adminOrganizationId));
+        // 4. ロールがADMINの場合、管理団体を更新（未設定の場合はnullで解除）
+        if (isSuperAdmin() && role === 'ADMIN') {
+          await organizationAPI.updateAdminOrganization(id, adminOrganizationId ? Number(adminOrganizationId) : null);
         }
 
         navigate(`/players/${id}`);
