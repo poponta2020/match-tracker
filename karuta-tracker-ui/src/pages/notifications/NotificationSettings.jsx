@@ -379,7 +379,7 @@ const NotificationSettings = () => {
 
   // SUPER_ADMIN専用の管理者通知設定（organizationId=0 を使用）
   const handleToggleAdminLinePref = async (key) => {
-    const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminSameDayConfirmation: true };
+    const currentPref = linePrefsMap[0] || { playerId, organizationId: 0, adminSameDayConfirmation: true, adminSameDayCancel: true };
     const currentVal = currentPref[key] ?? true;
     const updated = { ...currentPref, [key]: !currentVal };
     setLinePrefsMap(prev => ({ ...prev, 0: updated }));
@@ -786,11 +786,22 @@ const NotificationSettings = () => {
               color="bg-[#06C755]"
             />
           </div>
-          <div className="flex items-center justify-between py-2">
+          <div className="flex items-center justify-between py-2 border-b last:border-b-0">
             <span className="text-sm text-gray-700">参加者確定通知（当日12:00）</span>
             <Toggle
               enabled={linePrefsMap[0]?.adminSameDayConfirmation ?? true}
               onClick={() => handleToggleAdminLinePref('adminSameDayConfirmation')}
+              color="bg-[#06C755]"
+            />
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-sm text-gray-700">当日キャンセル・参加・空き枠通知</span>
+              <p className="text-xs text-gray-500">当日のキャンセル・先着参加・空き枠情報を管理者用LINEに送信</p>
+            </div>
+            <Toggle
+              enabled={linePrefsMap[0]?.adminSameDayCancel ?? true}
+              onClick={() => handleToggleAdminLinePref('adminSameDayCancel')}
               color="bg-[#06C755]"
             />
           </div>
