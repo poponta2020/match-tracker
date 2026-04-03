@@ -22,6 +22,7 @@ import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,9 +79,10 @@ public class PracticeParticipantService {
             );
         }
 
-        if (playerIds != null && !playerIds.isEmpty()) {
-            List<Player> players = playerRepository.findAllById(playerIds);
-            if (players.size() != playerIds.size()) {
+        List<Long> uniquePlayerIds = playerIds == null ? List.of() : playerIds.stream().distinct().toList();
+        if (!uniquePlayerIds.isEmpty()) {
+            List<Player> players = playerRepository.findAllById(uniquePlayerIds);
+            if (players.size() != uniquePlayerIds.size()) {
                 throw new ResourceNotFoundException("Some players not found");
             }
         }
@@ -88,20 +90,14 @@ public class PracticeParticipantService {
         practiceParticipantRepository.softDeleteBySessionIdAndMatchNumber(sessionId, matchNumber, JstDateTimeUtil.now());
         practiceParticipantRepository.flush();
 
-        if (playerIds != null && !playerIds.isEmpty()) {
-            List<PracticeParticipant> participants = playerIds.stream()
-                    .map(playerId -> PracticeParticipant.builder()
-                            .sessionId(sessionId)
-                            .playerId(playerId)
-                            .matchNumber(matchNumber)
-                            .dirty(true)
-                            .build())
-                    .toList();
-            practiceParticipantRepository.saveAll(participants);
+        if (!uniquePlayerIds.isEmpty()) {
+            for (Long playerId : uniquePlayerIds) {
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
+            }
         }
 
         log.info("Successfully set {} participants for session: {}, match: {}",
-                playerIds != null ? playerIds.size() : 0, sessionId, matchNumber);
+                uniquePlayerIds.size(), sessionId, matchNumber);
         densukeSyncService.triggerWriteAsync();
     }
 
@@ -182,23 +178,22 @@ public class PracticeParticipantService {
         ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
         int registered = 0, waitlisted = 0;
+        Set<String> processedKeys = new HashSet<>();
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
             Integer matchNumber = participation.getMatchNumber();
+            if (!processedKeys.add(participationKey(sessionId, matchNumber))) {
+                continue;
+            }
 
             if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
-                practiceParticipantRepository.save(PracticeParticipant.builder()
-                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WON).dirty(true).build());
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
                 notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
             } else {
                 int maxNumber = practiceParticipantRepository
                         .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
-                practiceParticipantRepository.save(PracticeParticipant.builder()
-                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WAITLISTED)
-                        .waitlistNumber(maxNumber + 1).dirty(true).build());
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WAITLISTED, maxNumber + 1);
                 waitlisted++;
             }
         }
@@ -216,14 +211,19 @@ public class PracticeParticipantService {
             practiceParticipantRepository.flush();
         }
 
-        List<PracticeParticipant> participants = request.getParticipations().stream()
-                .map(p -> PracticeParticipant.builder()
-                        .sessionId(p.getSessionId()).playerId(request.getPlayerId())
-                        .matchNumber(p.getMatchNumber()).status(ParticipantStatus.PENDING).dirty(true).build())
-                .collect(Collectors.toList());
-        practiceParticipantRepository.saveAll(participants);
+        int registered = 0;
+        Set<String> processedKeys = new HashSet<>();
+        for (var participation : request.getParticipations()) {
+            Long sessionId = participation.getSessionId();
+            Integer matchNumber = participation.getMatchNumber();
+            if (!processedKeys.add(participationKey(sessionId, matchNumber))) {
+                continue;
+            }
+            saveOrReuseParticipant(sessionId, request.getPlayerId(), matchNumber, ParticipantStatus.PENDING, null);
+            registered++;
+        }
 
-        log.info("Pre-deadline: registered {} participations (PENDING) for player {}", participants.size(), request.getPlayerId());
+        log.info("Pre-deadline: registered {} participations (PENDING) for player {}", registered, request.getPlayerId());
     }
 
     private void registerAfterDeadline(PracticeParticipationRequest request) {
@@ -241,9 +241,14 @@ public class PracticeParticipantService {
                         LotteryExecution.ExecutionStatus.SUCCESS);
 
         int registered = 0, waitlisted = 0, skipped = 0;
+        Set<String> processedKeys = new HashSet<>();
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
             Integer matchNumber = participation.getMatchNumber();
+            if (!processedKeys.add(participationKey(sessionId, matchNumber))) {
+                skipped++;
+                continue;
+            }
 
             if (practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)) {
                 skipped++; continue;
@@ -251,19 +256,14 @@ public class PracticeParticipantService {
 
             if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
                 // 空きあり → WON
-                practiceParticipantRepository.save(PracticeParticipant.builder()
-                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WON).dirty(true).build());
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
                 notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
             } else if (lotteryExecuted) {
                 // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
                 int maxNumber = practiceParticipantRepository
                         .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
-                practiceParticipantRepository.save(PracticeParticipant.builder()
-                        .sessionId(sessionId).playerId(playerId).matchNumber(matchNumber)
-                        .status(ParticipantStatus.WAITLISTED)
-                        .waitlistNumber(maxNumber + 1).dirty(true).build());
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WAITLISTED, maxNumber + 1);
                 waitlisted++;
             } else {
                 skipped++;
@@ -284,6 +284,45 @@ public class PracticeParticipantService {
         String playerName = player != null ? player.getName() : "不明";
 
         lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
+    }
+
+    // NOTE:
+    // This method performs "find then save", so concurrent requests for the same
+    // (session_id, player_id, match_number) may still race and one request can hit
+    // the unique constraint. In that case, DB consistency is still protected by
+    // uk_session_player_match.
+    private void saveOrReuseParticipant(Long sessionId, Long playerId, Integer matchNumber,
+                                        ParticipantStatus status, Integer waitlistNumber) {
+        PracticeParticipant participant = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)
+                .stream()
+                .findFirst()
+                .orElseGet(() -> PracticeParticipant.builder()
+                        .sessionId(sessionId)
+                        .playerId(playerId)
+                        .matchNumber(matchNumber)
+                        .build());
+
+        resetParticipationForReregistration(participant);
+        participant.setStatus(status);
+        participant.setWaitlistNumber(waitlistNumber);
+        participant.setDirty(true);
+        practiceParticipantRepository.save(participant);
+    }
+
+    private void resetParticipationForReregistration(PracticeParticipant participant) {
+        participant.setWaitlistNumber(null);
+        participant.setLotteryId(null);
+        participant.setCancelReason(null);
+        participant.setCancelReasonDetail(null);
+        participant.setCancelledAt(null);
+        participant.setOfferedAt(null);
+        participant.setOfferDeadline(null);
+        participant.setRespondedAt(null);
+    }
+
+    private String participationKey(Long sessionId, Integer matchNumber) {
+        return sessionId + ":" + matchNumber;
     }
 
     public boolean isFreeRegistrationOpen(PracticeSession session, Integer matchNumber) {
@@ -355,11 +394,10 @@ public class PracticeParticipantService {
         if (!playerRepository.existsById(playerId)) {
             throw new ResourceNotFoundException("Player", playerId);
         }
-        if (!practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(session.getId(), playerId, matchNumber).isEmpty()) {
+        if (practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(session.getId(), playerId, matchNumber)) {
             return;
         }
-        practiceParticipantRepository.save(PracticeParticipant.builder()
-                .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber).dirty(true).build());
+        saveOrReuseParticipant(session.getId(), playerId, matchNumber, ParticipantStatus.WON, null);
         densukeSyncService.triggerWriteAsync();
     }
 

@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.karuta.matchtracker.dto.PlayerParticipationStatusDto;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +47,8 @@ class PracticeParticipantServiceTest {
     private DensukeSyncService densukeSyncService;
     @Mock
     private com.karuta.matchtracker.repository.PlayerOrganizationRepository playerOrganizationRepository;
+    @Mock
+    private LineNotificationService lineNotificationService;
 
     @InjectMocks
     private PracticeParticipantService service;
@@ -60,6 +63,7 @@ class PracticeParticipantServiceTest {
         s.setId(id);
         s.setCapacity(capacity);
         s.setOrganizationId(ORG_ID);
+        s.setTotalMatches(7);
         return s;
     }
 
@@ -74,8 +78,6 @@ class PracticeParticipantServiceTest {
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
-        when(practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
-                .thenReturn(false);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(4L);
         when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
@@ -108,8 +110,6 @@ class PracticeParticipantServiceTest {
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
-        when(practiceParticipantRepository.existsBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
-                .thenReturn(false);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
         when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
@@ -130,6 +130,236 @@ class PracticeParticipantServiceTest {
         verify(practiceParticipantRepository).save(participantCaptor.capture());
         PracticeParticipant saved = participantCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+    }
+
+    @Test
+    @DisplayName("After deadline reuses cancelled record")
+    void afterDeadline_reuseCancelledRecord() {
+        PracticeSession session = createSession(100L, 4);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(false);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(2L);
+        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
+                .thenReturn(false);
+        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(false);
+
+        PracticeParticipant cancelled = PracticeParticipant.builder()
+                .id(999L)
+                .sessionId(100L)
+                .playerId(10L)
+                .matchNumber(1)
+                .status(ParticipantStatus.CANCELLED)
+                .waitlistNumber(5)
+                .cancelReason("test")
+                .dirty(false)
+                .build();
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of(cancelled));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        PracticeParticipant saved = participantCaptor.getValue();
+        assertThat(saved.getId()).isEqualTo(999L);
+        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(saved.getWaitlistNumber()).isNull();
+        assertThat(saved.getCancelReason()).isNull();
+        assertThat(saved.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Before deadline ignores duplicate request entries")
+    void beforeDeadline_duplicateInRequest_savedOnce() {
+        PracticeSession session = createSession(100L, 4);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of());
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(
+                createParticipation(100L, 1),
+                createParticipation(100L, 1)
+        ));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+    }
+
+    @Test
+    @DisplayName("Same day reuses cancelled record")
+    void sameDay_reuseCancelledRecord() {
+        PracticeSession session = createSession(100L, null);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+
+        PracticeParticipant cancelled = PracticeParticipant.builder()
+                .id(555L)
+                .sessionId(100L)
+                .playerId(10L)
+                .matchNumber(1)
+                .status(ParticipantStatus.CANCELLED)
+                .cancelReason("test")
+                .dirty(false)
+                .build();
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of(cancelled));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        PracticeParticipant saved = participantCaptor.getValue();
+        assertThat(saved.getId()).isEqualTo(555L);
+        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(saved.getCancelReason()).isNull();
+        assertThat(saved.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Same day ignores duplicate request entries")
+    void sameDay_duplicateInRequest_savedOnce() {
+        PracticeSession session = createSession(100L, null);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of());
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(
+                createParticipation(100L, 1),
+                createParticipation(100L, 1)
+        ));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+    }
+
+    @Test
+    @DisplayName("After deadline ignores duplicate request entries")
+    void afterDeadline_duplicateInRequest_savedOnce() {
+        PracticeSession session = createSession(100L, null);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of());
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(
+                createParticipation(100L, 1),
+                createParticipation(100L, 1)
+        ));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+    }
+
+    @Test
+    @DisplayName("Set match participants reuses cancelled record")
+    void setMatchParticipants_reuseCancelledRecord() {
+        PracticeSession session = createSession(100L, 4);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(playerRepository.findAllById(any())).thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class)));
+
+        PracticeParticipant cancelled = PracticeParticipant.builder()
+                .id(777L)
+                .sessionId(100L)
+                .playerId(10L)
+                .matchNumber(2)
+                .status(ParticipantStatus.CANCELLED)
+                .dirty(false)
+                .build();
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+                .thenReturn(List.of(cancelled));
+
+        service.setMatchParticipants(100L, 2, List.of(10L, 10L));
+
+        verify(playerRepository).findAllById(List.of(10L));
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        PracticeParticipant saved = participantCaptor.getValue();
+        assertThat(saved.getId()).isEqualTo(777L);
+        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(saved.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Add participant to match reuses cancelled record")
+    void addParticipantToMatch_reuseCancelledRecord() {
+        LocalDate date = LocalDate.of(2025, 4, 5);
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(date);
+        when(practiceSessionRepository.findBySessionDate(date)).thenReturn(Optional.of(session));
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+                .thenReturn(false);
+
+        PracticeParticipant cancelled = PracticeParticipant.builder()
+                .id(888L)
+                .sessionId(100L)
+                .playerId(10L)
+                .matchNumber(2)
+                .status(ParticipantStatus.CANCELLED)
+                .dirty(false)
+                .build();
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+                .thenReturn(List.of(cancelled));
+
+        service.addParticipantToMatch(date, 2, 10L);
+
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        PracticeParticipant saved = participantCaptor.getValue();
+        assertThat(saved.getId()).isEqualTo(888L);
+        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+        verify(densukeSyncService).triggerWriteAsync();
     }
 
     @Test

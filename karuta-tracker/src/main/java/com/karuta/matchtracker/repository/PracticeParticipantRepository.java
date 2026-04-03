@@ -127,7 +127,7 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     /**
      * 特定の選手の特定セッションリストの参加記録を論理削除（CANCELLED + dirty=true）
      */
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
            "p.cancelledAt = :now " +
            "WHERE p.playerId = :playerId AND p.sessionId IN :sessionIds " +
@@ -139,7 +139,7 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     /**
      * 特定セッションの特定試合の全参加者を論理削除（CANCELLED + dirty=true）
      */
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
            "p.cancelledAt = :now " +
            "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
