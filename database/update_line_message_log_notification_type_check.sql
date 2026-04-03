@@ -15,5 +15,6 @@ ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_c
         'SAME_DAY_CONFIRMATION',
         'SAME_DAY_CANCEL',
         'SAME_DAY_VACANCY',
-        'ADMIN_SAME_DAY_CONFIRMATION'
+        'ADMIN_SAME_DAY_CONFIRMATION',
+        'ADMIN_SAME_DAY_CANCEL'
     ));
