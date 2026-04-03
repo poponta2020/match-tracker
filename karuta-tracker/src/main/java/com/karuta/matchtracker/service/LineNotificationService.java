@@ -1604,6 +1604,7 @@ public class LineNotificationService {
             case WAITLIST_POSITION_UPDATE -> pref.getWaitlistOffer();
             case SAME_DAY_CONFIRMATION -> pref.getSameDayConfirmation();
             case SAME_DAY_CANCEL -> pref.getSameDayCancel();
+            case ADMIN_SAME_DAY_CANCEL -> pref.getAdminSameDayCancel();
             case SAME_DAY_VACANCY -> pref.getSameDayVacancy();
             case ADMIN_SAME_DAY_CONFIRMATION -> pref.getAdminSameDayConfirmation();
         };

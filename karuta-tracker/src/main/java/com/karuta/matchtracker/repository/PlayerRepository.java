@@ -76,4 +76,14 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
      */
     @Query("SELECT p FROM Player p WHERE p.name = :name AND p.deletedAt IS NULL")
     Optional<Player> findByNameAndActive(@Param("name") String name);
+
+    /**
+     * ロールと管理団体IDで選手を検索（削除済みを除外）
+     *
+     * @param role ロール
+     * @param orgId 管理団体ID
+     * @return 指定条件の選手のリスト
+     */
+    @Query("SELECT p FROM Player p WHERE p.role = :role AND p.adminOrganizationId = :orgId AND p.deletedAt IS NULL")
+    List<Player> findByRoleAndAdminOrganizationIdAndActive(@Param("role") Player.Role role, @Param("orgId") Long orgId);
 }

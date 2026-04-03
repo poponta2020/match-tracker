@@ -24,6 +24,7 @@ public class LineNotificationPreferenceDto {
     private boolean sameDayCancel;
     private boolean sameDayVacancy;
     private boolean adminSameDayConfirmation;
+    private boolean adminSameDayCancel;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -40,6 +41,7 @@ public class LineNotificationPreferenceDto {
             .sameDayCancel(entity.getSameDayCancel())
             .sameDayVacancy(entity.getSameDayVacancy())
             .adminSameDayConfirmation(entity.getAdminSameDayConfirmation())
+            .adminSameDayCancel(entity.getAdminSameDayCancel())
             .build();
     }
 }

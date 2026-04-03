@@ -66,6 +66,7 @@ public class LineMessageLog {
         WAITLIST_POSITION_UPDATE,
         SAME_DAY_CONFIRMATION,
         SAME_DAY_CANCEL,
+        ADMIN_SAME_DAY_CANCEL,
         SAME_DAY_VACANCY,
         ADMIN_SAME_DAY_CONFIRMATION;
 

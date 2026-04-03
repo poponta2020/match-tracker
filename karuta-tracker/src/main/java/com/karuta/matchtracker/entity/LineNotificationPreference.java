@@ -88,6 +88,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean adminSameDayConfirmation = true;
 
+    /** 当日キャンセル・参加・空き枠通知 管理者用 */
+    @Column(name = "admin_same_day_cancel", nullable = false)
+    @Builder.Default
+    private Boolean adminSameDayCancel = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
