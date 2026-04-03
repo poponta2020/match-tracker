@@ -12,7 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -193,6 +195,120 @@ class DensukeWriteServiceTest {
         // BYEのみdirtyの場合、書き込み処理に進まない
         verify(densukeMemberMappingRepository, never()).findByDensukeUrlIdAndPlayerId(any(), any());
         assertThat(densukeWriteService.getStatus(1L).getPendingCount()).isEqualTo(0);
+    }
+
+    // ----------------------------------------------------------------
+    // 未入力保護: buildRegistFormData の直接テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("通常同期: dirty行のみformDataに含まれ、未登録マスや非dirty行は含まれない")
+    void testBuildRegistFormData_normalSync_onlyDirtyKeysIncluded() {
+        // Setup: 2セッション(4/12, 4/19) × 各3試合、プレイヤーは4/12の1試合目のみdirty
+        PracticeSession session1 = PracticeSession.builder()
+                .id(10L).sessionDate(LocalDate.of(2026, 4, 12)).totalMatches(3).build();
+        PracticeSession session2 = PracticeSession.builder()
+                .id(20L).sessionDate(LocalDate.of(2026, 4, 19)).totalMatches(3).build();
+        List<PracticeSession> sessions = List.of(session1, session2);
+
+        // dirty参加者: 4/12の1試合目のみ
+        PracticeParticipant dirtyPp = PracticeParticipant.builder()
+                .sessionId(10L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(true).build();
+        List<PracticeParticipant> dirtyParticipants = List.of(dirtyPp);
+
+        // 全参加者マップ: 4/12の1試合目=WON, 4/12の2試合目=WON(非dirty), 他は未登録
+        Map<String, PracticeParticipant> bySessionAndMatch = Map.of(
+                "10_1", dirtyPp,
+                "10_2", PracticeParticipant.builder()
+                        .sessionId(10L).playerId(1L).matchNumber(2)
+                        .status(ParticipantStatus.WON).dirty(false).build()
+        );
+
+        // 全スロットにrow IDがある想定
+        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
+        rowIdsByKey.put("10_1", "101");
+        rowIdsByKey.put("10_2", "102");
+        rowIdsByKey.put("10_3", "103");
+        rowIdsByKey.put("20_1", "201");
+        rowIdsByKey.put("20_2", "202");
+        rowIdsByKey.put("20_3", "203");
+
+        // Act
+        DensukeWriteService.RegistFormResult result = densukeWriteService.buildRegistFormData(
+                "pageId", "mi1", "テスト選手",
+                dirtyParticipants, sessions, bySessionAndMatch, rowIdsByKey, false);
+
+        // Assert: dirty行(10_1)のjoin-101=3のみ含まれる
+        assertThat(result.formData).containsEntry("join-101", "3");
+        assertThat(result.writtenKeys).containsExactly("10_1");
+
+        // 非dirty行(10_2)や未登録マス(10_3, 20_*)は含まれない
+        assertThat(result.formData).doesNotContainKey("join-102");
+        assertThat(result.formData).doesNotContainKey("join-103");
+        assertThat(result.formData).doesNotContainKey("join-201");
+        assertThat(result.formData).doesNotContainKey("join-202");
+        assertThat(result.formData).doesNotContainKey("join-203");
+    }
+
+    @Test
+    @DisplayName("通常同期: 未登録マス(pp=null)がvalue=1(×)で送信されないこと")
+    void testBuildRegistFormData_normalSync_unregisteredNotSent() {
+        // Setup: 1セッション×3試合、1試合目のみdirty、2,3試合目は未登録
+        PracticeSession session = PracticeSession.builder()
+                .id(10L).sessionDate(LocalDate.of(2026, 4, 12)).totalMatches(3).build();
+
+        PracticeParticipant dirtyPp = PracticeParticipant.builder()
+                .sessionId(10L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(true).build();
+
+        Map<String, PracticeParticipant> bySessionAndMatch = Map.of("10_1", dirtyPp);
+        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
+        rowIdsByKey.put("10_1", "101");
+        rowIdsByKey.put("10_2", "102");
+        rowIdsByKey.put("10_3", "103");
+
+        // Act
+        DensukeWriteService.RegistFormResult result = densukeWriteService.buildRegistFormData(
+                "pageId", "mi1", "テスト選手",
+                List.of(dirtyPp), List.of(session), bySessionAndMatch, rowIdsByKey, false);
+
+        // Assert: 1試合目のみ送信、2,3試合目(未登録)は送信されない
+        assertThat(result.formData).containsEntry("join-101", "3");
+        assertThat(result.formData).doesNotContainKey("join-102");
+        assertThat(result.formData).doesNotContainKey("join-103");
+    }
+
+    @Test
+    @DisplayName("抽選確定同期: 既存挙動維持（アクティブのみ書き込み、未登録はスキップ）")
+    void testBuildRegistFormData_lotteryConfirmation_existingBehavior() {
+        // Setup: 1セッション×3試合
+        PracticeSession session = PracticeSession.builder()
+                .id(10L).sessionDate(LocalDate.of(2026, 4, 12)).totalMatches(3).build();
+
+        PracticeParticipant wonPp = PracticeParticipant.builder()
+                .sessionId(10L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        PracticeParticipant cancelledPp = PracticeParticipant.builder()
+                .sessionId(10L).playerId(1L).matchNumber(2)
+                .status(ParticipantStatus.CANCELLED).dirty(false).build();
+
+        Map<String, PracticeParticipant> bySessionAndMatch = Map.of(
+                "10_1", wonPp, "10_2", cancelledPp);
+        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
+        rowIdsByKey.put("10_1", "101");
+        rowIdsByKey.put("10_2", "102");
+        rowIdsByKey.put("10_3", "103");
+
+        // Act: lotteryConfirmation=true
+        DensukeWriteService.RegistFormResult result = densukeWriteService.buildRegistFormData(
+                "pageId", "mi1", "テスト選手",
+                List.of(wonPp, cancelledPp), List.of(session), bySessionAndMatch, rowIdsByKey, true);
+
+        // Assert: WONのみ送信、CANCELLED・未登録はスキップ
+        assertThat(result.formData).containsEntry("join-101", "3");
+        assertThat(result.formData).doesNotContainKey("join-102");
+        assertThat(result.formData).doesNotContainKey("join-103");
     }
 
     // ----------------------------------------------------------------

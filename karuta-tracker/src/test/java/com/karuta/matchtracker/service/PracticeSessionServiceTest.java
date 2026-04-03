@@ -2,6 +2,10 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
+import com.karuta.matchtracker.dto.PracticeSessionUpdateRequest;
+import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
@@ -9,6 +13,7 @@ import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,12 +25,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 /**
@@ -55,6 +62,12 @@ class PracticeSessionServiceTest {
 
     @Mock
     private OrganizationService organizationService;
+
+    @Mock
+    private DensukeUrlRepository densukeUrlRepository;
+
+    @Mock
+    private DensukeSyncService densukeSyncService;
 
     @InjectMocks
     private PracticeSessionService practiceSessionService;
@@ -239,6 +252,56 @@ class PracticeSessionServiceTest {
         verify(practiceSessionRepository).existsById(1L);
         verify(practiceParticipantRepository).deleteBySessionId(1L);
         verify(practiceSessionRepository).deleteById(1L);
+    }
+
+    @Test
+    @DisplayName("updateSession: BYE(matchNumber=null)はキャンセル対象から除外される")
+    void testUpdateSession_byeExcludedFromCancellation() {
+        // Given: セッションに通常参加者2名 + BYE1名が存在
+        Long sessionId = 1L;
+        PracticeSession session = PracticeSession.builder()
+                .id(sessionId).sessionDate(today).totalMatches(3).organizationId(1L).build();
+
+        // player1: 通常参加者（リクエストに含まれる → 残る）
+        PracticeParticipant normalPp1 = PracticeParticipant.builder()
+                .id(100L).sessionId(sessionId).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        // player2: 通常参加者（リクエストに含まれない → CANCELLED）
+        PracticeParticipant normalPp2 = PracticeParticipant.builder()
+                .id(101L).sessionId(sessionId).playerId(2L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        // player3: BYE（matchNumber=null、リクエストに含まれない → 除外される）
+        PracticeParticipant byePp = PracticeParticipant.builder()
+                .id(102L).sessionId(sessionId).playerId(3L).matchNumber(null)
+                .status(ParticipantStatus.WON).dirty(false).build();
+
+        List<PracticeParticipant> existingParticipants = new ArrayList<>(List.of(normalPp1, normalPp2, byePp));
+
+        Player p1 = new Player(); p1.setId(1L); p1.setName("選手1");
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(existingParticipants);
+        when(playerRepository.findAllById(List.of(1L))).thenReturn(List.of(p1));
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(session);
+        when(practiceParticipantRepository.saveAll(anyList())).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        PracticeSessionUpdateRequest request = PracticeSessionUpdateRequest.builder()
+                .sessionDate(today)
+                .totalMatches(3)
+                .participantIds(List.of(1L)) // player1のみ残す
+                .build();
+
+        // When
+        practiceSessionService.updateSession(sessionId, request, 1L);
+
+        // Then: player2は CANCELLED になる
+        assertThat(normalPp2.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        assertThat(normalPp2.isDirty()).isTrue();
+
+        // BYEは除外されるため、ステータスが変更されない
+        assertThat(byePp.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(byePp.isDirty()).isFalse();
     }
 
     @Test

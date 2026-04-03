@@ -426,49 +426,24 @@ public class DensukeWriteService {
                         p -> p.getSessionId() + "_" + p.getMatchNumber(),
                         p -> p, (a, b) -> a));
 
-        // d. regist フォームデータを構築（row ID のあるセッション×試合のみ）
-        Map<String, String> formData = new LinkedHashMap<>();
-        formData.put("id", pageId);
-        formData.put("mi", mi);
-        formData.put("ai", "u2");
-        formData.put("membername", strippedName);
-        formData.put("membercomment", "");
-
-        // regist に含まれるセッション×試合番号を記録（dirty 解除の対象判定用）
-        Set<String> writtenSessionMatchKeys = new HashSet<>();
-
-        // 通常同期用: dirtyなキーだけ送信対象にする（未入力保護）
-        Set<String> dirtyKeys = dirtyParticipants.stream()
-                .map(p -> p.getSessionId() + "_" + p.getMatchNumber())
-                .collect(Collectors.toSet());
-
+        // d. row ID をプリフェッチ
+        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
         for (PracticeSession session : urlSessions) {
             for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
-                Optional<DensukeRowId> rowIdOpt = densukeRowIdRepository
-                        .findByDensukeUrlIdAndSessionDateAndMatchNumber(
-                                urlId, session.getSessionDate(), matchNum);
-                if (rowIdOpt.isEmpty()) continue;
-
                 String key = session.getId() + "_" + matchNum;
-                PracticeParticipant pp = bySessionAndMatch.get(key);
-                ParticipantStatus status = pp != null ? pp.getStatus() : null;
-
-                // 通常同期: dirtyでないマスはスキップ（未入力保護）
-                if (!lotteryConfirmation && !dirtyKeys.contains(key)) {
-                    continue;
-                }
-
-                // 抽選確定時: WON/WAITLISTED/OFFERED/PENDING のみ書き戻し、それ以外は省略（伝助の既存値を維持）
-                if (lotteryConfirmation && !isActiveStatus(status)) {
-                    continue;
-                }
-
-                String joinKey = "join-" + rowIdOpt.get().getDensukeRowId();
-                int value = toJoinValue(status);
-                formData.put(joinKey, String.valueOf(value));
-                writtenSessionMatchKeys.add(key);
+                densukeRowIdRepository
+                        .findByDensukeUrlIdAndSessionDateAndMatchNumber(
+                                urlId, session.getSessionDate(), matchNum)
+                        .ifPresent(r -> rowIdsByKey.put(key, r.getDensukeRowId()));
             }
         }
+
+        // e. regist フォームデータを構築
+        RegistFormResult registResult = buildRegistFormData(
+                pageId, mi, strippedName, dirtyParticipants,
+                urlSessions, bySessionAndMatch, rowIdsByKey, lotteryConfirmation);
+        Map<String, String> formData = registResult.formData;
+        Set<String> writtenSessionMatchKeys = registResult.writtenKeys;
 
         if (formData.size() <= 5) {
             log.debug("No row IDs found for player {} / urlId {}, skipping regist", playerName, urlId);
@@ -734,6 +709,74 @@ public class DensukeWriteService {
             }
         }
         return list;
+    }
+
+    /**
+     * regist フォームデータ構築結果
+     */
+    static class RegistFormResult {
+        final Map<String, String> formData;
+        final Set<String> writtenKeys;
+
+        RegistFormResult(Map<String, String> formData, Set<String> writtenKeys) {
+            this.formData = formData;
+            this.writtenKeys = writtenKeys;
+        }
+    }
+
+    /**
+     * regist POST 用のフォームデータを構築する。
+     * 通常同期時はdirty行のみ、抽選確定時はアクティブステータスのみを含める。
+     * package-private でテスト可能にしている。
+     */
+    RegistFormResult buildRegistFormData(
+            String pageId, String mi, String memberName,
+            List<PracticeParticipant> dirtyParticipants,
+            List<PracticeSession> urlSessions,
+            Map<String, PracticeParticipant> bySessionAndMatch,
+            Map<String, String> rowIdsByKey,
+            boolean lotteryConfirmation) {
+
+        Map<String, String> formData = new LinkedHashMap<>();
+        formData.put("id", pageId);
+        formData.put("mi", mi);
+        formData.put("ai", "u2");
+        formData.put("membername", memberName);
+        formData.put("membercomment", "");
+
+        Set<String> writtenKeys = new HashSet<>();
+
+        Set<String> dirtyKeys = dirtyParticipants.stream()
+                .map(p -> p.getSessionId() + "_" + p.getMatchNumber())
+                .collect(Collectors.toSet());
+
+        for (PracticeSession session : urlSessions) {
+            for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
+                String key = session.getId() + "_" + matchNum;
+                String rowId = rowIdsByKey.get(key);
+                if (rowId == null) continue;
+
+                PracticeParticipant pp = bySessionAndMatch.get(key);
+                ParticipantStatus status = pp != null ? pp.getStatus() : null;
+
+                // 通常同期: dirtyでないマスはスキップ（未入力保護）
+                if (!lotteryConfirmation && !dirtyKeys.contains(key)) {
+                    continue;
+                }
+
+                // 抽選確定時: WON/WAITLISTED/OFFERED/PENDING のみ書き戻し、それ以外は省略
+                if (lotteryConfirmation && !isActiveStatus(status)) {
+                    continue;
+                }
+
+                String joinKey = "join-" + rowId;
+                int value = toJoinValue(status);
+                formData.put(joinKey, String.valueOf(value));
+                writtenKeys.add(key);
+            }
+        }
+
+        return new RegistFormResult(formData, writtenKeys);
     }
 
     /**
