@@ -558,7 +558,10 @@ public class LineWebhookController {
             }
 
             List<PracticeParticipant> wonParticipants =
-                    practiceParticipantRepository.findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
+                    practiceParticipantRepository.findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON)
+                            .stream()
+                            .filter(p -> p.getMatchNumber() != null)
+                            .toList();
 
             if (wonParticipants.isEmpty()) {
                 String sessionLabel = getSessionLabel(session);
