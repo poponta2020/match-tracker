@@ -62,7 +62,7 @@ class DensukeWriteServiceAdditionalTest {
                 .thenReturn(Optional.of(densukeUrl));
         when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, 1L))
                 .thenReturn(List.of(session));
-        when(practiceParticipantRepository.findDirtyBySessionIds(List.of(100L)))
+        when(practiceParticipantRepository.findDirtyForDensukeSync(List.of(100L)))
                 .thenReturn(Collections.emptyList());
 
         densukeWriteService.writeToDensukeForOrganization(2026, 4, 1L);

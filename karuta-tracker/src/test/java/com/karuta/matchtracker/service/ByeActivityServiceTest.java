@@ -205,6 +205,46 @@ class ByeActivityServiceTest {
     }
 
     @Nested
+    @DisplayName("evaluatePracticeParticipant - BYE復元時のdirty=false")
+    class ByeRestorationDirty {
+
+        @Test
+        @DisplayName("BYE復元時にdirty=falseで生成される")
+        void byeRestoration_createdWithDirtyFalse() {
+            // Arrange: ABSENT→READING変更でBYE復元が発生するシナリオ
+            ByeActivity existingEntity = buildByeActivity(1L, 1, ActivityType.ABSENT);
+            ByeActivityUpdateRequest request = ByeActivityUpdateRequest.builder()
+                    .activityType(ActivityType.READING)
+                    .build();
+
+            ByeActivity updatedEntity = buildByeActivity(1L, 1, ActivityType.READING);
+
+            when(byeActivityRepository.findById(1L)).thenReturn(Optional.of(existingEntity));
+            when(byeActivityRepository.save(any(ByeActivity.class))).thenReturn(updatedEntity);
+            when(playerRepository.findAllById(any())).thenReturn(List.of(testPlayer));
+
+            when(byeActivityRepository.findBySessionDateOrderByMatchNumber(SESSION_DATE))
+                    .thenReturn(List.of(updatedEntity));
+            when(practiceSessionRepository.findBySessionDate(SESSION_DATE))
+                    .thenReturn(Optional.of(testSession));
+            when(practiceParticipantRepository.findByeParticipant(SESSION_ID, PLAYER_ID))
+                    .thenReturn(Optional.empty());
+
+            // Act
+            byeActivityService.update(1L, request, USER_ID);
+
+            // Assert: 復元されたBYEのdirtyがfalseであること
+            ArgumentCaptor<PracticeParticipant> captor = ArgumentCaptor.forClass(PracticeParticipant.class);
+            verify(practiceParticipantRepository).save(captor.capture());
+            PracticeParticipant restored = captor.getValue();
+            assertThat(restored.getSessionId()).isEqualTo(SESSION_ID);
+            assertThat(restored.getPlayerId()).isEqualTo(PLAYER_ID);
+            assertThat(restored.getMatchNumber()).isNull();
+            assertThat(restored.isDirty()).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("evaluatePracticeParticipant - createBatch経由")
     class CreateBatchWithAbsent {
 

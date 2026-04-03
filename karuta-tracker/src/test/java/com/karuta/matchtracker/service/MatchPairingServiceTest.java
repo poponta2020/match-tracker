@@ -562,6 +562,54 @@ class MatchPairingServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("createBatch BYE dirty=false")
+    class CreateBatchByeDirtyTests {
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("createBatchで待機者BYEがdirty=falseで生成される")
+        void shouldCreateByeWithDirtyFalse() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            List<MatchPairingCreateRequest> requests = List.of(
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 2L)
+            );
+            List<Long> waitingPlayerIds = List.of(3L);
+
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(sessionDate).totalMatches(7).build();
+
+            List<MatchPairing> savedPairings = List.of(
+                    createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L)
+            );
+
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Collections.emptyList());
+
+            ArgumentCaptor<List<PracticeParticipant>> byeCaptor = ArgumentCaptor.forClass(List.class);
+
+            // When
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy);
+
+            // Then: BYEエントリがdirty=falseで保存されていること
+            // saveAll は2回呼ばれる: 1回目=MatchPairing, 2回目=BYE PracticeParticipant
+            verify(practiceParticipantRepository).saveAll(byeCaptor.capture());
+            List<PracticeParticipant> byeParticipants = byeCaptor.getValue();
+            assertThat(byeParticipants).hasSize(1);
+            assertThat(byeParticipants.get(0).getMatchNumber()).isNull();
+            assertThat(byeParticipants.get(0).getPlayerId()).isEqualTo(3L);
+            assertThat(byeParticipants.get(0).isDirty()).isFalse();
+        }
+    }
+
     // ヘルパーメソッド
 
     private PracticeSession createSession(Long id, LocalDate sessionDate) {

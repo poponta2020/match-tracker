@@ -66,7 +66,7 @@ class DensukeWriteServiceTest {
 
         densukeWriteService.writeToDensuke();
 
-        verify(practiceParticipantRepository, never()).findDirtyBySessionIds(any());
+        verify(practiceParticipantRepository, never()).findDirtyForDensukeSync(any());
     }
 
     @Test
@@ -108,7 +108,7 @@ class DensukeWriteServiceTest {
                     return Collections.emptyList();
                 });
 
-        when(practiceParticipantRepository.findDirtyBySessionIds(any()))
+        when(practiceParticipantRepository.findDirtyForDensukeSync(any()))
                 .thenReturn(Collections.emptyList());
 
         densukeWriteService.writeToDensuke();
@@ -155,6 +155,49 @@ class DensukeWriteServiceTest {
         assertThat(DensukeWriteService.extractCd("https://densuke.biz/list?foo=bar"))
                 .isNull();
     }
+
+    // ----------------------------------------------------------------
+    // 未入力保護: BYEのみdirtyの場合は同期対象外
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("BYE(matchNumber=null)のみdirtyの場合はプレイヤーの書き込みが発生しない")
+    void testWriteToDensuke_byeOnlyDirty_skipsWrite() {
+        DensukeUrl url = DensukeUrl.builder()
+                .id(1L).year(2026).month(4).organizationId(1L)
+                .url("https://densuke.biz/list?cd=test123").build();
+        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
+                .thenAnswer(inv -> {
+                    int y = (int) inv.getArgument(0);
+                    int m = (int) inv.getArgument(1);
+                    if (y == 2026 && m == 4) return List.of(url);
+                    return List.of();
+                });
+
+        PracticeSession session = PracticeSession.builder()
+                .id(10L).sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), eq(1L)))
+                .thenAnswer(inv -> {
+                    int y = (int) inv.getArgument(0);
+                    int m = (int) inv.getArgument(1);
+                    if (y == 2026 && m == 4) return List.of(session);
+                    return Collections.emptyList();
+                });
+
+        // findDirtyForDensukeSync は matchNumber IS NOT NULL なのでBYEを返さない → 空
+        when(practiceParticipantRepository.findDirtyForDensukeSync(any()))
+                .thenReturn(Collections.emptyList());
+
+        densukeWriteService.writeToDensuke();
+
+        // BYEのみdirtyの場合、書き込み処理に進まない
+        verify(densukeMemberMappingRepository, never()).findByDensukeUrlIdAndPlayerId(any(), any());
+        assertThat(densukeWriteService.getStatus(1L).getPendingCount()).isEqualTo(0);
+    }
+
+    // ----------------------------------------------------------------
+    // URL パースユーティリティのテスト
+    // ----------------------------------------------------------------
 
     @Test
     @DisplayName("extractBase: ベースURLを正しく抽出する")
