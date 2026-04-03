@@ -1329,6 +1329,36 @@ public class LineNotificationService {
     }
 
     /**
+     * 管理者向け空き枠通知を送信する。
+     * 0:00スケジューラから呼び出され、該当団体ADMIN + 全SUPER_ADMINにADMIN_SAME_DAY_CANCELで送信。
+     */
+    public void sendAdminVacancyNotification(PracticeSession session, int matchNumber) {
+        String sessionLabel = getSessionLabel(session);
+
+        List<PracticeParticipant> currentWon = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        int vacancies = Math.max(0, capacity - currentWon.size());
+
+        if (vacancies <= 0) return;
+
+        String altText = String.format("【管理者通知】%s %d試合目が%d名分空いています", sessionLabel, matchNumber, vacancies);
+        Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId());
+
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, altText, flex);
+            } catch (Exception e) {
+                log.error("Failed to send admin vacancy notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent admin vacancy notification to {} admins for session {} match {}",
+                adminRecipients.size(), session.getId(), matchNumber);
+    }
+
+    /**
      * 空き募集Flex Messageを構築する
      */
     private Map<String, Object> buildSameDayVacancyFlex(String sessionLabel, int matchNumber, int vacancies, Long sessionId) {
