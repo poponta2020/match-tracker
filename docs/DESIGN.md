@@ -2083,29 +2083,33 @@ Entity Layer (JPA Entity)
 | クラス | 変更内容 |
 |--------|---------|
 | `SameDayConfirmationScheduler`（新規） | scheduler/ — 毎日12:00 JSTに`WaitlistPromotionService.expireOfferedForSameDayConfirmation()`へ委譲 + メンバーリスト送信 |
+| `SameDayVacancyScheduler`（新規） | scheduler/ — 毎日0:00 JSTに当日セッションの空き枠検出＋`SAME_DAY_VACANCY`/`ADMIN_SAME_DAY_CANCEL`自動送信 |
 | `WaitlistPromotionService` | `expireOfferedForSameDayConfirmation()`追加（dirty=true設定＋空き枠補充トリガー）、cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加 |
-| `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加 |
+| `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加、`getAdminRecipientsForSession()`ヘルパー追加（該当団体ADMIN + 全SUPER_ADMIN）、`sendAdminVacancyNotification()`追加、ADMIN向け送信をキャンセル/参加/確定/キャンセル待ち通知に追加、`isNotificationEnabled()`で全ADMIN_系通知を`organizationId=0`判定に統一、SAME_DAY_VACANCY送信先を団体全メンバーに拡大 |
 | `LotteryDeadlineHelper` | isAfterSameDayNoon()追加、calculateOfferDeadline当日対応 |
 | `PracticeParticipantService` | 12:00以降参加時の通知送信追加 |
 | `DensukeImportService` | 伝助同期でWON登録時の枠状況通知送信追加（notifyVacancyUpdateIfNeeded） |
 | `LineWebhookController` | same_day_joinポストバックハンドリング追加 |
 | `LotteryController` | POST /api/lottery/same-day-joinエンドポイント追加 |
+| `PlayerRepository` | `findByRoleAndAdminOrganizationIdAndActive()`メソッド追加 |
+| `PlayerEdit.jsx` | ADMIN管理団体ドロップダウン追加（SUPER_ADMIN専用） |
+| `NotificationSettings.jsx` | `adminSameDayCancel`トグル追加 |
 
 **Flex Messageデザイン:**
 
 | メッセージ種別 | ヘッダー色 | ボタン | 送信先 |
 |---------------|-----------|--------|--------|
-| 参加者確定（メンバーリスト） | 青（#1E88E5） | なし | WON参加者 + SUPER_ADMIN（管理者通知） |
-| 空き募集 | オレンジ（#FF6B00） | 「参加する」（postback） | 非WON参加者 |
-| 残り枠あり（枠状況通知） | オレンジ（#FF6B00） | 「参加する」（postback） | WON参加者 |
-| 枠埋まり（枠状況通知） | グレー（#9E9E9E） | なし | WON参加者 |
+| 参加者確定（メンバーリスト） | 青（#1E88E5） | なし | WON参加者 + 該当団体ADMIN + 全SUPER_ADMIN（管理者通知） |
+| 空き募集 | オレンジ（#FF6B00） | 「参加する」（postback） | 団体全メンバー（該当試合WON除く） |
+| 残り枠あり（枠状況通知） | オレンジ（#FF6B00） | 「参加する」（postback） | 団体全メンバー（該当試合WON除く） |
+| 枠埋まり（枠状況通知） | グレー（#9E9E9E） | なし | 団体全メンバー（該当試合WON除く） |
 
 **DB変更:**
 
 | 対象 | 変更内容 |
 |------|---------|
-| `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CONFIRMATION` の4値追加 |
-| `line_notification_preferences` テーブル | `same_day_confirmation`, `same_day_cancel`, `same_day_vacancy`, `admin_same_day_confirmation` の4カラム追加 |
+| `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `ADMIN_SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CONFIRMATION` の5値追加 |
+| `line_notification_preferences` テーブル | `same_day_confirmation`, `same_day_cancel`, `same_day_vacancy`, `admin_same_day_confirmation`, `admin_same_day_cancel` の5カラム追加 |
 
 ---
 

@@ -78,7 +78,7 @@
 | 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用） | SUPER_ADMIN | 選手一覧 |
 | 22 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
 | 23 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
-| 24 | `/players/:id/edit` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手編集 |
+| 24 | `/players/:id/edit` | `PlayerEdit.jsx` | ロールがADMINの場合に管理団体ドロップダウン表示（SUPER_ADMIN専用） | SUPER_ADMIN | 選手編集 |
 
 ---
 
@@ -108,7 +108,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル）、当日キャンセル補充通知トグル3種（参加者確定通知・当日キャンセル通知・空き募集通知）、管理者通知セクション（SUPER_ADMIN専用） | ALL | 統合通知設定（Web Push + LINE）。LINE通知セクションに当日キャンセル補充関連の通知トグル3種（sameDayConfirmation / sameDayCancel / sameDayVacancy）。SUPER_ADMINのみ「管理者通知」セクションが追加表示され、参加者確定通知（当日12:00）管理者用トグル（adminSameDayConfirmation）を制御可能。**管理者（ADMIN/SUPER_ADMIN）の場合、LINE通知セクションは「選手用LINE」「管理者用LINE」の2セクション表示**。各セクションは独立して有効化/無効化・友だち追加・コードリンクが可能。通知種別トグルも用途別に振り分け表示（選手用: 抽選結果・キャンセル待ち等、管理者用: キャンセル待ち状況通知・当日確認まとめ） |
+| 32 | `/settings/notifications` | `NotificationSettings.jsx` | Web Push通知セクション（有効化/無効化・種別ON/OFFトグル）、LINE通知セクション（連携状態・友だち追加・コード・種別トグル）、当日キャンセル補充通知トグル3種（参加者確定通知・当日キャンセル通知・空き募集通知）、管理者通知セクション（ADMIN/SUPER_ADMIN） | ALL | 統合通知設定（Web Push + LINE）。LINE通知セクションに当日キャンセル補充関連の通知トグル3種（sameDayConfirmation / sameDayCancel / sameDayVacancy）。ADMIN/SUPER_ADMINは「管理者通知」セクションが追加表示され、参加者確定通知（adminSameDayConfirmation）、キャンセル待ち状況通知（adminWaitlistUpdate）、当日キャンセル・参加・空き枠通知（adminSameDayCancel）の3トグルを制御可能。**管理者（ADMIN/SUPER_ADMIN）の場合、LINE通知セクションは「選手用LINE」「管理者用LINE」の2セクション表示**。各セクションは独立して有効化/無効化・友だち追加・コードリンクが可能。通知種別トグルも用途別に振り分け表示（選手用: 抽選結果・キャンセル待ち等、管理者用: キャンセル待ち状況通知・当日確認まとめ・当日キャンセル・参加・空き枠通知） |
 | 33 | `/admin/line/channels` | `LineChannelAdmin.jsx` | タブUI（選手用/管理者用）、チャネル一覧テーブル、新規登録フォーム、ステータスバッジ | SUPER_ADMIN | LINEチャネル管理（登録・無効化・強制解除）。「選手用」「管理者用」タブで用途別にフィルタリング表示。チャネル追加時は選択中タブの用途が自動セットされる |
 | 34 | `/admin/line/schedule` | `LineScheduleAdmin.jsx` | リマインダー設定カード、送信日数入力 | ADMIN+ | LINE通知スケジュール設定 |
 

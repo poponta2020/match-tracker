@@ -252,27 +252,28 @@
 
 **伝助同期経由の参加登録通知**
 
-12:00以降に伝助上で○に変更され、伝助同期によりWONとして登録・昇格された場合も、枠状況通知（空き残り or 枠埋まり）を非WON参加者に送信する。新規登録・WAITLISTED→WON昇格・再有効化（CANCELLED等→WON）のいずれも対象。
+12:00以降に伝助上で○に変更され、伝助同期によりWONとして登録・昇格された場合も、枠状況通知（空き残り or 枠埋まり）を団体全メンバー（該当試合WON除く）に送信する。新規登録・WAITLISTED→WON昇格・再有効化（CANCELLED等→WON）のいずれも対象。
 
-**LINE通知トグル（4種）**
+**LINE通知トグル（5種）**
 
-当日キャンセル補充フローの通知は以下の独立トグルで制御される。いずれも `line_notification_preferences` テーブルで管理。
+当日キャンセル補充フローの通知は以下の独立トグルで制御される。いずれも `line_notification_preferences` テーブルで管理。管理者用トグルは `organizationId=0` レコードで判定。
 
 | トグル | 設定キー | デフォルト | 対象 | 説明 |
 |--------|---------|-----------|------|------|
 | 参加者確定通知 | `same_day_confirmation` | true | 全員 | 12:00確定時のメンバーリスト送信（WON参加者向け） |
 | 当日キャンセル通知 | `same_day_cancel` | true | 全員 | WON参加者へのキャンセル発生通知 |
-| 空き募集通知 | `same_day_vacancy` | true | 全員 | 非WON参加者への空き枠募集通知 |
-| 参加者確定通知（管理者用） | `admin_same_day_confirmation` | true | SUPER_ADMIN | WON参加者でなくてもメンバーリストを受信できる管理者専用トグル |
+| 空き募集通知 | `same_day_vacancy` | true | 全員 | 団体全メンバーへの空き枠募集通知（該当試合WON参加者除く） |
+| 参加者確定通知（管理者用） | `admin_same_day_confirmation` | true | ADMIN/SUPER_ADMIN | WON参加者でなくてもメンバーリストを受信できる管理者専用トグル |
+| 当日キャンセル・参加・空き枠通知（管理者用） | `admin_same_day_cancel` | true | ADMIN/SUPER_ADMIN | 当日のキャンセル・先着参加・空き枠情報を管理者用LINEに送信 |
 
 **Flex Messageデザイン**
 
 | メッセージ | ヘッダー色 | ボタン | 送信先 |
 |-----------|-----------|--------|--------|
-| 参加者確定（メンバーリスト） | 青 | なし | WON参加者 + SUPER_ADMIN（管理者通知） |
-| 空き募集 | オレンジ | 「参加する」 | 非WON参加者 |
-| 残り枠あり（枠状況通知） | オレンジ | 「参加する」 | WON参加者 |
-| 枠埋まり（枠状況通知） | グレー | なし | WON参加者 |
+| 参加者確定（メンバーリスト） | 青 | なし | WON参加者 + 該当団体ADMIN + 全SUPER_ADMIN（管理者通知） |
+| 空き募集 | オレンジ | 「参加する」 | 団体全メンバー（該当試合WON除く） |
+| 残り枠あり（枠状況通知） | オレンジ | 「参加する」 | 団体全メンバー（該当試合WON除く） |
+| 枠埋まり（枠状況通知） | グレー | なし | 団体全メンバー（該当試合WON除く） |
 
 ### 3.3 対戦組み合わせ
 
@@ -1321,7 +1322,8 @@ UNIQUE制約: (player_id, organization_id)
 | same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日参加者確定通知（WON参加者向け） |
 | same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル通知 |
 | same_day_vacancy | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日空き募集通知 |
-| admin_same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加者確定通知（管理者向け・SUPER_ADMIN専用） |
+| admin_same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加者確定通知（管理者向け） |
+| admin_same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル・参加・空き枠通知（管理者向け） |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
 #### line_notification_schedule_settings
