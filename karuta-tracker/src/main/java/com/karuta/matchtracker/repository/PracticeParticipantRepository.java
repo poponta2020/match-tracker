@@ -131,6 +131,7 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
            "p.cancelledAt = :now " +
            "WHERE p.playerId = :playerId AND p.sessionId IN :sessionIds " +
+           "AND p.matchNumber IS NOT NULL " +
            "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
     int softDeleteByPlayerIdAndSessionIds(@Param("playerId") Long playerId,
                                           @Param("sessionIds") List<Long> sessionIds,
@@ -143,6 +144,7 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     @Query("UPDATE PracticeParticipant p SET p.status = 'CANCELLED', p.dirty = true, " +
            "p.cancelledAt = :now " +
            "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber " +
+           "AND p.matchNumber IS NOT NULL " +
            "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
     int softDeleteBySessionIdAndMatchNumber(@Param("sessionId") Long sessionId,
                                             @Param("matchNumber") Integer matchNumber,

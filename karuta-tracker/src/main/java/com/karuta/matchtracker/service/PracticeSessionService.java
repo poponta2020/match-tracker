@@ -388,7 +388,9 @@ public class PracticeSessionService {
                 .collect(java.util.stream.Collectors.toSet());
 
         // 削除分: リクエストに含まれないプレイヤー → CANCELLED + dirty=true
+        // BYE（matchNumber=null）は対戦組み合わせ（createBatch）で管理されるため除外
         for (PracticeParticipant p : existingParticipants) {
+            if (p.getMatchNumber() == null) continue;
             if (!requestedPlayerIds.contains(p.getPlayerId())) {
                 p.setStatus(ParticipantStatus.CANCELLED);
                 p.setDirty(true);
