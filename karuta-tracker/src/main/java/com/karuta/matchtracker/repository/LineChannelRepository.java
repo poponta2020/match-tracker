@@ -4,9 +4,6 @@ import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -36,8 +33,4 @@ public interface LineChannelRepository extends JpaRepository<LineChannel, Long> 
     /** 用途別のチャネル一覧を取得 */
     List<LineChannel> findAllByChannelType(ChannelType channelType);
 
-    /** 全チャネルの月間送信数をリセット */
-    @Modifying
-    @Query("UPDATE LineChannel c SET c.monthlyMessageCount = 0, c.messageCountResetAt = CURRENT_TIMESTAMP")
-    void resetAllMonthlyMessageCounts();
 }

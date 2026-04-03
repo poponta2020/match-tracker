@@ -954,8 +954,6 @@ public class LineNotificationService {
     private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
                                          LineNotificationType notificationType, String messageForLog) {
         if (success) {
-            channel.setMonthlyMessageCount(channel.getMonthlyMessageCount() + 1);
-            lineChannelRepository.save(channel);
             logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null);
             return SendResult.SUCCESS;
         } else {

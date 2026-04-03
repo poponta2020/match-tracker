@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -10,6 +11,7 @@ import org.springframework.web.client.RestTemplate;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 
@@ -25,8 +27,18 @@ public class LineMessagingService {
     private static final String RICH_MENU_API_URL = "https://api.line.me/v2/bot/richmenu";
     private static final String RICH_MENU_IMAGE_API_URL = "https://api-data.line.me/v2/bot/richmenu";
     private static final String RICH_MENU_DEFAULT_API_URL = "https://api.line.me/v2/bot/user/all/richmenu";
+    private static final String QUOTA_CONSUMPTION_API_URL = "https://api.line.me/v2/bot/message/quota/consumption";
+    private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(5);
     private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate syncRestTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public LineMessagingService(RestTemplateBuilder restTemplateBuilder) {
+        this.syncRestTemplate = restTemplateBuilder
+                .connectTimeout(SYNC_TIMEOUT)
+                .readTimeout(SYNC_TIMEOUT)
+                .build();
+    }
 
     /**
      * Push APIでテキストメッセージを送信する
@@ -242,6 +254,33 @@ public class LineMessagingService {
         } catch (Exception e) {
             log.error("Failed to update webhook URL: {}", e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * 当月のメッセージ送信数をLINE APIから取得する。
+     *
+     * @return 当月の送信数。取得失敗時は -1
+     */
+    public int getMonthlyMessageConsumption(String channelAccessToken) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(channelAccessToken);
+
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            ResponseEntity<String> response = syncRestTemplate.exchange(
+                QUOTA_CONSUMPTION_API_URL, HttpMethod.GET, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode node = objectMapper.readTree(response.getBody());
+                return node.path("totalUsage").asInt(-1);
+            } else {
+                log.warn("Failed to get message consumption. Status: {}", response.getStatusCode());
+                return -1;
+            }
+        } catch (Exception e) {
+            log.error("Failed to get message consumption: {}", e.getMessage());
+            return -1;
         }
     }
 
