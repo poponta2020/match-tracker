@@ -151,9 +151,9 @@ public class DensukeWriteService {
             return;
         }
 
-        // dirty=true の参加者を取得
+        // dirty=true かつ matchNumber!=null の参加者を取得（BYE除外・未入力保護）
         List<PracticeParticipant> dirtyParticipants =
-                practiceParticipantRepository.findDirtyBySessionIds(allSessionIds);
+                practiceParticipantRepository.findDirtyForDensukeSync(allSessionIds);
 
         if (dirtyParticipants.isEmpty()) {
             for (Long orgId : urlsByOrg.keySet()) {
@@ -437,6 +437,11 @@ public class DensukeWriteService {
         // regist に含まれるセッション×試合番号を記録（dirty 解除の対象判定用）
         Set<String> writtenSessionMatchKeys = new HashSet<>();
 
+        // 通常同期用: dirtyなキーだけ送信対象にする（未入力保護）
+        Set<String> dirtyKeys = dirtyParticipants.stream()
+                .map(p -> p.getSessionId() + "_" + p.getMatchNumber())
+                .collect(Collectors.toSet());
+
         for (PracticeSession session : urlSessions) {
             for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
                 Optional<DensukeRowId> rowIdOpt = densukeRowIdRepository
@@ -447,6 +452,11 @@ public class DensukeWriteService {
                 String key = session.getId() + "_" + matchNum;
                 PracticeParticipant pp = bySessionAndMatch.get(key);
                 ParticipantStatus status = pp != null ? pp.getStatus() : null;
+
+                // 通常同期: dirtyでないマスはスキップ（未入力保護）
+                if (!lotteryConfirmation && !dirtyKeys.contains(key)) {
+                    continue;
+                }
 
                 // 抽選確定時: WON/WAITLISTED/OFFERED/PENDING のみ書き戻し、それ以外は省略（伝助の既存値を維持）
                 if (lotteryConfirmation && !isActiveStatus(status)) {

@@ -260,6 +260,14 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findDirtyBySessionIds(@Param("sessionIds") List<Long> sessionIds);
 
     /**
+     * 指定セッション群のdirty=trueかつmatchNumber!=nullの参加者を取得（伝助通常同期��用）
+     * BYE（matchNumber=null）を���外し、未入力マスの上書きを防止する。
+     */
+    @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId IN :sessionIds " +
+           "AND p.dirty = true AND p.matchNumber IS NOT NULL")
+    List<PracticeParticipant> findDirtyForDensukeSync(@Param("sessionIds") List<Long> sessionIds);
+
+    /**
      * 特定セッション・試合でキャンセル待ち番号が指定値より大きいWAITLISTED参加者の番号を一括繰り上げ
      */
     @Modifying
