@@ -116,9 +116,11 @@ const MatchForm = () => {
             }
           }
 
+          const opponentId = match.player1Id === currentPlayer.id ? match.player2Id : match.player1Id;
           setFormData({
             matchDate: match.matchDate,
             opponentName: match.opponentName,
+            opponentId: opponentId || null,
             result: match.result,
             scoreDifference: match.scoreDifference,
             matchNumber: match.matchNumber,
