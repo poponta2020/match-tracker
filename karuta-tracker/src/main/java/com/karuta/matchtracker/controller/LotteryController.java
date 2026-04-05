@@ -252,11 +252,29 @@ public class LotteryController {
         }
 
         List<String> results = new ArrayList<>();
+        List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
+
         for (Long pid : ids) {
-            ParticipantStatus status = waitlistPromotionService.cancelParticipation(
+            AdminWaitlistNotificationData notifData = waitlistPromotionService.cancelParticipationSuppressed(
                     pid, request.getCancelReason(), request.getCancelReasonDetail());
-            results.add(pid + ":" + status.name());
+            results.add(pid + ":CANCELLED");
+            if (notifData != null) {
+                notificationDataList.add(notifData);
+            }
         }
+
+        // セッションIDでグルーピングしてまとめ通知
+        if (!notificationDataList.isEmpty()) {
+            notificationDataList.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(AdminWaitlistNotificationData::getSessionId))
+                    .forEach((sessionId, dataList) -> {
+                        PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                        if (session != null) {
+                            waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
+                        }
+                    });
+        }
+
         return ResponseEntity.ok(Map.of("status", "CANCELLED", "results", results));
     }
 
