@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: createdBy ハードコード修正
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchPairingController.java` の3箇所で `createdBy = 1L` を `httpRequest.getAttribute("currentUserId")` に置換
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/MatchPairingController.java` — 行93, 115, 133 の `Long createdBy = 1L;` を `Long createdBy = (Long) httpRequest.getAttribute("currentUserId");` に変更。TODOコメントも削除
@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #285
 
 ### タスク2: side パラメータバリデーション追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchPairingService.updatePlayer` に `side` パラメータの明示的バリデーションを追加
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchPairingService.java` — `updatePlayer` メソッドの先頭（行154付近）に `if (!"player1".equals(side) && !"player2".equals(side)) { throw new IllegalArgumentException("sideは'player1'または'player2'を指定してください"); }` を追加
@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #286
 
 ### タスク3: MatchPairingRepository 直接注入のService移動
-- [ ] 完了
+- [x] 完了
 - **概要:** Controller から `MatchPairingRepository` の直接注入を削除し、Service 経由でアクセスするようにする
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchPairingService.java` — `getSessionDateById(Long id)` メソッドを追加（ペアリングIDからセッション日付を返す）
@@ -31,7 +31,7 @@ status: completed
 - **対応Issue:** #287
 
 ### タスク4: 対戦履歴参照日数を90日→30日に修正
-- [ ] 完了
+- [x] 完了
 - **概要:** `MATCH_HISTORY_DAYS` を90から30に変更
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchPairingService.java` — 行30 `MATCH_HISTORY_DAYS = 90` → `MATCH_HISTORY_DAYS = 30`
@@ -39,7 +39,7 @@ status: completed
 - **対応Issue:** #288
 
 ### タスク5: BulkResultInput の getByDate に light=true 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 対戦結果入力画面での不要な recentMatches データ取得を回避
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/BulkResultInput.jsx` — 行86 `pairingAPI.getByDate(sessionData.sessionDate)` → `pairingAPI.getByDate(sessionData.sessionDate, { light: true })`
@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #289
 
 ### タスク6: PairingGenerator 二重削除の解消
-- [ ] 完了
+- [x] 完了
 - **概要:** 既存編集時のフロントエンド側の明示的削除呼び出しを除去
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx` — 行320-323 の `if (isEditingExisting) { await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber); }` ブロックを削除
@@ -55,7 +55,7 @@ status: completed
 - **対応Issue:** #290
 
 ### タスク7: 仕様書・設計書・コメントの修正
-- [ ] 完了
+- [x] 完了
 - **概要:** 仕様書のAPI権限一覧、対戦履歴日数、scoreDifference範囲、設計書のAutoMatchingRequest/batch API仕様を修正
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — API権限一覧（行1444-1447付近）で `auto-match`, `PUT /{id}/player`, `DELETE /{id}`, `DELETE /date-and-match` の権限を「ALL」→「ADMIN+」に修正。scoreDifference範囲（行337付近）を「1〜25」→「0〜25」に修正
