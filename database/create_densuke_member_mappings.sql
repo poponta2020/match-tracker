@@ -5,5 +5,6 @@ CREATE TABLE densuke_member_mappings (
   player_id         BIGINT NOT NULL REFERENCES players(id),
   densuke_member_id VARCHAR(50) NOT NULL,
   created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (densuke_url_id, player_id)
+  UNIQUE (densuke_url_id, player_id),
+  UNIQUE (densuke_url_id, densuke_member_id)
 );

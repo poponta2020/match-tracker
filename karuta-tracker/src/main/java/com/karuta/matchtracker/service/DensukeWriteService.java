@@ -538,6 +538,14 @@ public class DensukeWriteService {
     }
 
     private void saveMemberMapping(Long urlId, Long playerId, String mi, String playerName) {
+        // 同一 densuke_member_id が別の player_id に既にマッピングされていないかチェック
+        Optional<DensukeMemberMapping> existing =
+                densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(urlId, mi);
+        if (existing.isPresent() && !existing.get().getPlayerId().equals(playerId)) {
+            log.warn("Densuke member_id {} is already mapped to player_id={}, skipping mapping for player={} (id={})",
+                    mi, existing.get().getPlayerId(), playerName, playerId);
+            return;
+        }
         densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
                 .densukeUrlId(urlId)
                 .playerId(playerId)
