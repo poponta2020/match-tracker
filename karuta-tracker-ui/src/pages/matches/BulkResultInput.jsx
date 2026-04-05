@@ -83,7 +83,7 @@ const BulkResultInput = () => {
 
         // 対戦ペアリングと既存試合結果と参加者と抜け番活動を並列取得
         const [pairingsResponse, matchesResponse, participantsResponse, byeActivitiesResponse] = await Promise.all([
-          pairingAPI.getByDate(sessionData.sessionDate),
+          pairingAPI.getByDate(sessionData.sessionDate, { light: true }),
           matchAPI.getByDate(sessionData.sessionDate),
           practiceAPI.getParticipants(sessionId),
           byeActivityAPI.getByDate(sessionData.sessionDate).catch(() => ({ data: [] })),

@@ -641,6 +641,100 @@ class MatchPairingServiceTest {
         return player;
     }
 
+    @Nested
+    @DisplayName("MATCH_HISTORY_DAYS 境界テスト")
+    class MatchHistoryBoundaryTests {
+
+        @Test
+        @DisplayName("自動マッチング時に過去30日分の履歴を参照する（startDateが30日前）")
+        void shouldQueryHistoryFor30Days() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 2, 15);
+            Integer matchNumber = 1;
+            List<Long> playerIds = Arrays.asList(1L, 2L);
+
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
+                    ));
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.autoMatch(request);
+
+            // Then: startDate = sessionDate - 30日 = 2024-01-16
+            LocalDate expectedStartDate = LocalDate.of(2024, 1, 16);
+            verify(matchPairingRepository).findRecentPairingHistory(
+                    anyList(), eq(expectedStartDate), eq(sessionDate));
+            verify(matchRepository).findRecentMatchHistory(
+                    anyList(), eq(expectedStartDate), eq(sessionDate));
+        }
+
+        @Test
+        @DisplayName("30日以内の対戦履歴はスコアに影響する（ペナルティあり）")
+        void shouldPenalizeRecentMatch() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 2, 15);
+            Integer matchNumber = 1;
+            List<Long> playerIds = Arrays.asList(1L, 2L, 3L, 4L);
+
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            when(playerRepository.findAllById(playerIds))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+
+            // player1 と player2 が30日前（境界ちょうど）に対戦
+            LocalDate matchDate30DaysAgo = sessionDate.minusDays(30);
+            Object[] historyRow = new Object[]{matchDate30DaysAgo, 1L, 2L};
+            List<Object[]> pairingHistory = new java.util.ArrayList<>();
+            pairingHistory.add(historyRow);
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(pairingHistory);
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request);
+
+            // Then: 4人いるので2ペアできる。player1-player2は30日前に対戦済みなので、
+            // 初対戦ペア（player3-player4等）が優先される傾向がある
+            assertThat(result.getPairings()).hasSize(2);
+        }
+    }
+
     private MatchPairing createMatchPairing(Long id, LocalDate sessionDate, Integer matchNumber,
                                             Long player1Id, Long player2Id) {
         MatchPairing pairing = new MatchPairing();

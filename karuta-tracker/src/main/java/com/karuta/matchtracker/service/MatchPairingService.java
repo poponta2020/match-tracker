@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -27,7 +28,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class MatchPairingService {
 
-    private static final int MATCH_HISTORY_DAYS = 90;
+    private static final int MATCH_HISTORY_DAYS = 30;
     private static final double SAME_DAY_PENALTY_SCORE = -1000.0;
     private static final double INTERVAL_BASE_SCORE = 100.0;
 
@@ -152,8 +153,12 @@ public class MatchPairingService {
      */
     @Transactional
     public MatchPairingDto updatePlayer(Long id, Long newPlayerId, String side, Long updatedBy) {
+        if (!"player1".equals(side) && !"player2".equals(side)) {
+            throw new IllegalArgumentException("sideは'player1'または'player2'を指定してください");
+        }
+
         MatchPairing pairing = matchPairingRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("ペアリングが見つかりません: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
 
         Long oldPlayer1Id = pairing.getPlayer1Id();
         Long oldPlayer2Id = pairing.getPlayer2Id();
@@ -206,6 +211,16 @@ public class MatchPairingService {
     @Transactional
     public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
         matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+    }
+
+    /**
+     * ペアリングIDからセッション日付を取得
+     */
+    @Transactional(readOnly = true)
+    public LocalDate getSessionDateById(Long id) {
+        return matchPairingRepository.findById(id)
+                .map(MatchPairing::getSessionDate)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
     }
 
     /**
@@ -556,7 +571,7 @@ public class MatchPairingService {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // 過去90日の組み合わせ履歴をMatchPairingテーブルから取得（当日より前の日付）
+        // 過去30日の組み合わせ履歴をMatchPairingテーブルから取得（当日より前の日付）
         LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
         Map<String, List<LocalDate>> pairingHistoryMap = getPairingHistory(playerIds, startDate, sessionDate);
 

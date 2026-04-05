@@ -2,12 +2,10 @@ package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.*;
-import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
 import org.junit.jupiter.api.DisplayName;
@@ -54,8 +52,6 @@ class MatchPairingControllerTest {
     @MockitoBean
     private com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
 
-    @MockitoBean
-    private MatchPairingRepository matchPairingRepository;
 
     @Nested
     @DisplayName("GET /api/match-pairings/date")
@@ -540,8 +536,7 @@ class MatchPairingControllerTest {
             Long id = 1L;
             LocalDate date = LocalDate.of(2024, 1, 15);
             mockAdminScopeForDate(date, 1L, 1L);
-            when(matchPairingRepository.findById(id))
-                    .thenReturn(Optional.of(createPairing(id, date)));
+            when(matchPairingService.getSessionDateById(id)).thenReturn(date);
             doNothing().when(matchPairingService).delete(id);
 
             // When & Then
@@ -564,6 +559,61 @@ class MatchPairingControllerTest {
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).delete(anyLong());
+        }
+
+        @Test
+        @DisplayName("ADMIN権限で存在しないIDの場合は404エラー")
+        void shouldReturn404ForNonExistentIdAsAdmin() throws Exception {
+            // Given
+            Long id = 999L;
+            when(matchPairingService.getSessionDateById(id))
+                    .thenThrow(new ResourceNotFoundException("MatchPairing", id));
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}", id)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isNotFound());
+
+            verify(matchPairingService, never()).delete(anyLong());
+        }
+    }
+
+    @Nested
+    @DisplayName("PUT /api/match-pairings/{id}/player")
+    class UpdatePlayerTests {
+
+        @Test
+        @DisplayName("不正なside値の場合は400エラー")
+        void shouldReturn400ForInvalidSide() throws Exception {
+            // Given
+            Long id = 1L;
+            when(matchPairingService.updatePlayer(eq(id), eq(10L), eq("invalid"), anyLong()))
+                    .thenThrow(new IllegalArgumentException("sideは'player1'または'player2'を指定してください"));
+
+            // When & Then
+            mockMvc.perform(put("/api/match-pairings/{id}/player", id)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .param("newPlayerId", "10")
+                            .param("side", "invalid"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("ADMIN権限で存在しないIDの場合は404エラー")
+        void shouldReturn404ForNonExistentIdAsAdmin() throws Exception {
+            // Given
+            Long id = 999L;
+            when(matchPairingService.getSessionDateById(id))
+                    .thenThrow(new ResourceNotFoundException("MatchPairing", id));
+
+            // When & Then
+            mockMvc.perform(put("/api/match-pairings/{id}/player", id)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .param("newPlayerId", "10")
+                            .param("side", "player1"))
+                    .andExpect(status().isNotFound());
+
+            verify(matchPairingService, never()).updatePlayer(anyLong(), anyLong(), anyString(), anyLong());
         }
     }
 
@@ -790,12 +840,5 @@ class MatchPairingControllerTest {
         session.setOrganizationId(adminOrgId);
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId))
                 .thenReturn(Optional.of(session));
-    }
-
-    private MatchPairing createPairing(Long id, LocalDate sessionDate) {
-        MatchPairing pairing = new MatchPairing();
-        pairing.setId(id);
-        pairing.setSessionDate(sessionDate);
-        return pairing;
     }
 }
