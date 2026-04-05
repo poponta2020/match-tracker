@@ -60,7 +60,7 @@ export default function OfferResponse() {
     : offerDetail?.offerDeadline ? new Date(offerDetail.offerDeadline) : null;
 
   const isExpired = latestDeadline ? latestDeadline < new Date() : false;
-  const isProcessed = offerDetail && offerDetail.status !== 'OFFERED';
+  const isProcessed = offerDetail && offerDetail.status !== 'OFFERED' && allOffers.length === 0;
 
   // 個別参加
   const handleRespondSingle = async (pid) => {
@@ -87,12 +87,27 @@ export default function OfferResponse() {
 
   // 一括参加
   const handleAcceptAll = async () => {
+    if (!offerDetail?.sessionId) return;
     setLoading(true);
     setError(null);
     try {
-      await lotteryAPI.respondOfferAll(offerDetail.sessionId, true);
-      setResponded(true);
-      setResult('accepted');
+      const res = await lotteryAPI.respondOfferAll(offerDetail.sessionId, true);
+      const acceptedCount = res.data?.count ?? allOffers.length;
+      if (acceptedCount < allOffers.length) {
+        // 部分成功（期限切れ分がスキップされた）→ 残りを再取得
+        const offersRes = await lotteryAPI.getSessionOffers(offerDetail.sessionId);
+        const remaining = offersRes.data || [];
+        if (remaining.length > 0) {
+          setAllOffers(remaining);
+          setError(`${acceptedCount}件を承諾しましたが、期限切れのオファーがあります`);
+        } else {
+          setResponded(true);
+          setResult('accepted');
+        }
+      } else {
+        setResponded(true);
+        setResult('accepted');
+      }
     } catch (err) {
       console.error('Failed to accept all offers:', err);
       setError(err.response?.data?.message || '応答に失敗しました');
@@ -103,6 +118,7 @@ export default function OfferResponse() {
 
   // 一括辞退
   const handleDeclineAll = async () => {
+    if (!offerDetail?.sessionId) return;
     setLoading(true);
     setError(null);
     try {
@@ -127,6 +143,22 @@ export default function OfferResponse() {
 
   if (fetching) return <LoadingScreen />;
 
+  if (!offerDetail && !fetching) {
+    return (
+      <div className="max-w-md mx-auto p-4 text-center">
+        <div className="p-6 rounded-lg bg-red-50">
+          <h2 className="text-xl font-bold mb-2 text-red-700">オファー情報を取得できませんでした</h2>
+          <p className="text-gray-600 mb-4">{error || 'オファーが見つかりません'}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+            ホームに戻る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (responded) {
     return (
       <div className="max-w-md mx-auto p-4 text-center">
@@ -150,7 +182,7 @@ export default function OfferResponse() {
     );
   }
 
-  // 処理済み表示
+  // 処理済み表示（元のオファーが応答済み かつ 残りOFFEREDなし）
   if (isProcessed) {
     return (
       <div className="max-w-md mx-auto p-4 text-center">
@@ -160,6 +192,23 @@ export default function OfferResponse() {
           <p className="text-gray-600 mb-4">
             現在のステータス: {offerDetail.status === 'WON' ? '当選' : offerDetail.status === 'DECLINED' ? '辞退' : offerDetail.status}
           </p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+            ホームに戻る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 対象オファーなし（一括辞退後のリンク再訪等）
+  if (offerDetail && allOffers.length === 0) {
+    return (
+      <div className="max-w-md mx-auto p-4 text-center">
+        <div className="p-6 rounded-lg bg-gray-50">
+          <div className="text-4xl mb-4">—</div>
+          <h2 className="text-xl font-bold mb-2">応答可能なオファーはありません</h2>
           <button
             onClick={() => navigate('/')}
             className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
@@ -187,7 +236,7 @@ export default function OfferResponse() {
               <div className="text-gray-600">{offerDetail.venueName}</div>
             )}
             <div className="text-gray-600">
-              {allOffers.length > 1
+              {allOffers.length > 0
                 ? `第${allOffers.map(o => o.matchNumber).join('・')}試合`
                 : `第${offerDetail.matchNumber}試合`}
               {offerDetail.startTime && ` / ${offerDetail.startTime}〜${offerDetail.endTime}`}

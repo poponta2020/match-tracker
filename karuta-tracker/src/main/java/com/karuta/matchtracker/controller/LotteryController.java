@@ -335,6 +335,10 @@ public class LotteryController {
         int count = waitlistPromotionService.respondToOfferAll(
                 request.getSessionId(), currentUserId, request.getAccept());
 
+        // Webアプリから一括応答した場合、LINEに確認通知を送信
+        lineNotificationService.sendBatchOfferResponseConfirmation(
+                request.getSessionId(), currentUserId, request.getAccept(), count);
+
         return ResponseEntity.ok(Map.of(
                 "result", request.getAccept() ? "accepted" : "declined",
                 "count", count));

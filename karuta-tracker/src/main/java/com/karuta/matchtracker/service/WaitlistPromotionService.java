@@ -452,6 +452,9 @@ public class WaitlistPromotionService {
             Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                     participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
+            // 繰り上げ先プレイヤーへLINE通知
+            promoted.ifPresent(p -> lineNotificationService.sendWaitlistOfferNotification(p));
+
             // 管理者通知
             AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
                     .triggerAction("オファー辞退")
@@ -491,6 +494,7 @@ public class WaitlistPromotionService {
 
         if (accept) {
             // 全OFFEREDをWONに変更
+            int acceptedCount = 0;
             Set<Integer> affectedMatches = new LinkedHashSet<>();
             for (PracticeParticipant p : offered) {
                 // 応答期限チェック
@@ -505,6 +509,7 @@ public class WaitlistPromotionService {
                 p.setRespondedAt(JstDateTimeUtil.now());
                 practiceParticipantRepository.save(p);
                 affectedMatches.add(p.getMatchNumber());
+                acceptedCount++;
                 log.info("Player {} accepted offer (batch) for session {} match {}",
                         playerId, sessionId, p.getMatchNumber());
             }
@@ -512,20 +517,37 @@ public class WaitlistPromotionService {
             for (Integer matchNumber : affectedMatches) {
                 renumberRemainingWaitlist(sessionId, matchNumber);
             }
+            if (acceptedCount == 0) {
+                throw new IllegalStateException("すべてのオファーが期限切れです");
+            }
+            densukeSyncService.triggerWriteAsync();
+            return acceptedCount;
         } else {
             // 全OFFEREDをDECLINEDに変更し、各試合で繰り上げ発動
             List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
+            List<PracticeParticipant> declined = new ArrayList<>();
             Set<Integer> affectedMatches = new LinkedHashSet<>();
 
             for (PracticeParticipant p : offered) {
+                // 期限切れチェック（単体respondToOfferと整合）
+                if (p.getOfferDeadline() != null && JstDateTimeUtil.now().isAfter(p.getOfferDeadline())) {
+                    log.warn("Offer expired for player {} session {} match {} during batch decline, skipping",
+                            playerId, sessionId, p.getMatchNumber());
+                    continue;
+                }
                 p.setStatus(ParticipantStatus.DECLINED);
                 p.setDirty(true);
                 p.setWaitlistNumber(null);
                 p.setRespondedAt(JstDateTimeUtil.now());
                 practiceParticipantRepository.save(p);
+                declined.add(p);
                 affectedMatches.add(p.getMatchNumber());
                 log.info("Player {} declined offer (batch) for session {} match {}",
                         playerId, sessionId, p.getMatchNumber());
+            }
+
+            if (declined.isEmpty()) {
+                throw new IllegalStateException("すべてのオファーが期限切れです");
             }
 
             // 影響試合ごとに再採番
@@ -534,9 +556,12 @@ public class WaitlistPromotionService {
             }
 
             // 各試合で次のキャンセル待ちに繰り上げ
-            for (PracticeParticipant p : offered) {
+            for (PracticeParticipant p : declined) {
                 Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                         sessionId, p.getMatchNumber(), session.getSessionDate());
+
+                // 繰り上げ先プレイヤーへLINE通知
+                promoted.ifPresent(pr -> lineNotificationService.sendWaitlistOfferNotification(pr));
 
                 notificationDataList.add(AdminWaitlistNotificationData.builder()
                         .triggerAction("オファー辞退")

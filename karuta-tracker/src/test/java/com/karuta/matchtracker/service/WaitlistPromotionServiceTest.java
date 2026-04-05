@@ -521,6 +521,63 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
+        @DisplayName("一括辞退で期限切れOFFEREDはスキップされる")
+        void respondToOfferAll_decline_skipsExpired() {
+            PracticeParticipant valid = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0)) // 未来
+                    .build();
+            PracticeParticipant expired = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0)) // 過去
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(valid, expired));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(ParticipantStatus.WAITLISTED)))
+                    .thenReturn(Optional.empty());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+
+            service.respondToOfferAll(100L, 10L, false);
+
+            assertThat(valid.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            assertThat(expired.getStatus()).isEqualTo(ParticipantStatus.OFFERED); // 期限切れはスキップ
+        }
+
+        @Test
+        @DisplayName("一括辞退で全件期限切れの場合はエラーが発生する")
+        void respondToOfferAll_decline_allExpired_throwsException() {
+            PracticeParticipant expired1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0))
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(expired1));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> service.respondToOfferAll(100L, 10L, false))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("すべてのオファーが期限切れです");
+        }
+
+        @Test
         @DisplayName("OFFEREDがない場合はエラー")
         void respondToOfferAll_noOffers() {
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
@@ -588,6 +645,185 @@ class WaitlistPromotionServiceTest {
 
             assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.WON);
             verify(lineNotificationService, never()).sendRemainingOfferNotification(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("辞退起点の繰り上げLINE通知テスト")
+    class DeclinePromotionLineNotificationTests {
+
+        @Test
+        @DisplayName("respondToOffer辞退時に繰り上げ先へLINE通知が送信される")
+        void respondToOffer_decline_sendsLineToPromoted() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+            PracticeParticipant nextWaitlisted = PracticeParticipant.builder()
+                    .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            // 再採番用
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            // 繰り上げ候補
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(nextWaitlisted));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+
+            service.respondToOffer(1L, false);
+
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            // 繰り上げ先へLINE通知が送信される
+            verify(lineNotificationService).sendWaitlistOfferNotification(nextWaitlisted);
+        }
+
+        @Test
+        @DisplayName("respondToOfferAll辞退時に各試合の繰り上げ先へLINE通知が送信される")
+        void respondToOfferAll_decline_sendsLineToPromoted() {
+            PracticeParticipant p1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeParticipant p2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeParticipant nextForMatch1 = PracticeParticipant.builder()
+                    .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+            PracticeParticipant nextForMatch3 = PracticeParticipant.builder()
+                    .id(6L).sessionId(100L).playerId(30L).matchNumber(3)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(p1, p2));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            // 再採番用
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            // 繰り上げ候補（試合別）
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(nextForMatch1));
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 3, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(nextForMatch3));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+
+            service.respondToOfferAll(100L, 10L, false);
+
+            // 各試合の繰り上げ先へLINE通知
+            verify(lineNotificationService).sendWaitlistOfferNotification(nextForMatch1);
+            verify(lineNotificationService).sendWaitlistOfferNotification(nextForMatch3);
+        }
+
+        @Test
+        @DisplayName("辞退時に繰り上げ対象がいなければLINE通知は送信されない")
+        void respondToOffer_decline_noWaitlisted_noLineNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.empty());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+
+            service.respondToOffer(1L, false);
+
+            verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("respondToOfferAll: 期限切れスキップ時の件数テスト")
+    class RespondToOfferAllExpiredCountTests {
+
+        @Test
+        @DisplayName("一括承諾で期限切れがスキップされた場合、実処理件数が返される")
+        void respondToOfferAll_accept_skipsExpired_returnsActualCount() {
+            PracticeParticipant valid = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0)) // 未来
+                    .build();
+            PracticeParticipant expired = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0)) // 過去
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(valid, expired));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+
+            int count = service.respondToOfferAll(100L, 10L, true);
+
+            assertThat(count).isEqualTo(1); // 2件中1件のみ承諾
+            assertThat(valid.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(expired.getStatus()).isEqualTo(ParticipantStatus.OFFERED); // 変更なし
+        }
+
+        @Test
+        @DisplayName("一括承諾で全件期限切れの場合はエラーが発生する")
+        void respondToOfferAll_accept_allExpired_throwsException() {
+            PracticeParticipant expired1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0))
+                    .build();
+            PracticeParticipant expired2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0))
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(expired1, expired2));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            assertThatThrownBy(() -> service.respondToOfferAll(100L, 10L, true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("すべてのオファーが期限切れです");
         }
     }
 

@@ -345,6 +345,21 @@ public class LineNotificationService {
     }
 
     /**
+     * 一括オファー応答の確認通知を送信する
+     */
+    public void sendBatchOfferResponseConfirmation(Long sessionId, Long playerId, boolean accepted, int count) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+        if (session == null) return;
+
+        String sessionLabel = getSessionLabel(session);
+        String message = accepted
+            ? String.format("%sの繰り上げ参加を%d件一括承諾しました。", sessionLabel, count)
+            : String.format("%sの繰り上げ参加を%d件一括辞退しました。", sessionLabel, count);
+
+        sendToPlayer(playerId, LineNotificationType.WAITLIST_OFFER, message);
+    }
+
+    /**
      * オファー期限切れ通知を送信する
      */
     public void sendOfferExpiredNotification(PracticeParticipant participant) {
