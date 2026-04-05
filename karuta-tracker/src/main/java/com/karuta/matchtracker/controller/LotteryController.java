@@ -271,6 +271,21 @@ public class LotteryController {
                         PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
                         if (session != null) {
                             waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
+
+                            // プレイヤー向けオファー統合通知: promotedParticipantをプレイヤーIDでグルーピング
+                            dataList.stream()
+                                    .filter(d -> d.getPromotedParticipant() != null)
+                                    .collect(java.util.stream.Collectors.groupingBy(
+                                            d -> d.getPromotedParticipant().getPlayerId()))
+                                    .forEach((offeredPlayerId, playerDataList) -> {
+                                        List<PracticeParticipant> offeredParticipants = playerDataList.stream()
+                                                .map(AdminWaitlistNotificationData::getPromotedParticipant)
+                                                .collect(java.util.stream.Collectors.toList());
+                                        AdminWaitlistNotificationData first = playerDataList.get(0);
+                                        lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                                                offeredParticipants, session, first.getTriggerAction(),
+                                                first.getTriggerPlayerId());
+                                    });
                         }
                     });
         }
@@ -306,6 +321,27 @@ public class LotteryController {
         }
 
         return ResponseEntity.ok(Map.of("result", request.getAccept() ? "accepted" : "declined"));
+    }
+
+    /**
+     * 繰り上げオファー一括応答
+     */
+    @PostMapping("/respond-offer-all")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Map<String, Object>> respondToOfferAll(
+            @Valid @RequestBody OfferBatchResponseRequest request, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+
+        int count = waitlistPromotionService.respondToOfferAll(
+                request.getSessionId(), currentUserId, request.getAccept());
+
+        // Webアプリから一括応答した場合、LINEに確認通知を送信
+        lineNotificationService.sendBatchOfferResponseConfirmation(
+                request.getSessionId(), currentUserId, request.getAccept(), count);
+
+        return ResponseEntity.ok(Map.of(
+                "result", request.getAccept() ? "accepted" : "declined",
+                "count", count));
     }
 
     /**
@@ -350,6 +386,47 @@ public class LotteryController {
                 .build();
 
         return ResponseEntity.ok(entry);
+    }
+
+    /**
+     * セッション内の自分のOFFERED一覧取得
+     */
+    @GetMapping("/session-offers/{sessionId}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<List<WaitlistStatusDto.WaitlistEntry>> getSessionOffers(
+            @PathVariable Long sessionId, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        List<PracticeParticipant> offered = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndStatus(sessionId, currentUserId, ParticipantStatus.OFFERED);
+
+        String venueName = null;
+        if (session.getVenueId() != null) {
+            venueName = venueRepository.findById(session.getVenueId())
+                    .map(v -> v.getName()).orElse(null);
+        }
+
+        final String finalVenueName = venueName;
+        List<WaitlistStatusDto.WaitlistEntry> entries = offered.stream()
+                .map(p -> WaitlistStatusDto.WaitlistEntry.builder()
+                        .participantId(p.getId())
+                        .sessionId(session.getId())
+                        .sessionDate(session.getSessionDate())
+                        .venueName(finalVenueName)
+                        .startTime(session.getStartTime())
+                        .endTime(session.getEndTime())
+                        .matchNumber(p.getMatchNumber())
+                        .waitlistNumber(p.getWaitlistNumber())
+                        .status(p.getStatus())
+                        .offerDeadline(p.getOfferDeadline())
+                        .build())
+                .sorted(Comparator.comparingInt(WaitlistStatusDto.WaitlistEntry::getMatchNumber))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(entries);
     }
 
     /**

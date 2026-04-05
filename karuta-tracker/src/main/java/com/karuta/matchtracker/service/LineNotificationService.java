@@ -236,6 +236,8 @@ public class LineNotificationService {
         return switch (action) {
             case "waitlist_accept" -> sessionLabel + matchPart + "の繰り上げ参加を承諾します。よろしいですか？";
             case "waitlist_decline" -> sessionLabel + matchPart + "の繰り上げ参加を辞退します。よろしいですか？";
+            case "waitlist_accept_all" -> sessionLabel + "のすべての試合に参加します。よろしいですか？";
+            case "waitlist_decline_all" -> sessionLabel + "のすべてのオファーを辞退します。よろしいですか？";
             case "waitlist_decline_session" -> sessionLabel + "のキャンセル待ちをすべて辞退します。よろしいですか？";
             case "same_day_join" -> sessionLabel + matchPart + "に当日参加します。よろしいですか？";
             default -> "この操作を実行します。よろしいですか？";
@@ -340,6 +342,21 @@ public class LineNotificationService {
             : String.format("%s %d試合目の繰り上げ参加を辞退しました。", sessionLabel, participant.getMatchNumber());
 
         sendToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, message);
+    }
+
+    /**
+     * 一括オファー応答の確認通知を送信する
+     */
+    public void sendBatchOfferResponseConfirmation(Long sessionId, Long playerId, boolean accepted, int count) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+        if (session == null) return;
+
+        String sessionLabel = getSessionLabel(session);
+        String message = accepted
+            ? String.format("%sの繰り上げ参加を%d件一括承諾しました。", sessionLabel, count)
+            : String.format("%sの繰り上げ参加を%d件一括辞退しました。", sessionLabel, count);
+
+        sendToPlayer(playerId, LineNotificationType.WAITLIST_OFFER, message);
     }
 
     /**
@@ -1813,6 +1830,283 @@ public class LineNotificationService {
         } catch (Exception e) {
             log.error("Failed to save LINE message log: {}", e.getMessage());
         }
+    }
+
+    // ========================================================================
+    // 統合オファー通知
+    // ========================================================================
+
+    /**
+     * 同一セッション×同一プレイヤーの複数オファーを1通の統合Flexメッセージとして送信する。
+     * トリガープレイヤーIDから内部でプレイヤー名を解決するオーバーロード。
+     */
+    public void sendConsolidatedWaitlistOfferNotification(List<PracticeParticipant> offeredParticipants,
+                                                           PracticeSession session,
+                                                           String triggerAction,
+                                                           Long triggerPlayerId) {
+        Player triggerPlayer = triggerPlayerId != null
+                ? playerRepository.findById(triggerPlayerId).orElse(null)
+                : null;
+        sendConsolidatedWaitlistOfferNotification(offeredParticipants, session, triggerAction, triggerPlayer);
+    }
+
+    /**
+     * 同一セッション×同一プレイヤーの複数オファーを1通の統合Flexメッセージとして送信する。
+     *
+     * @param offeredParticipants 同一セッション×同一プレイヤーのOFFERED参加者リスト
+     * @param session             対象セッション
+     * @param triggerAction       トリガーアクション（"キャンセル"等）
+     * @param triggerPlayer       トリガーを起こしたプレイヤー
+     */
+    public void sendConsolidatedWaitlistOfferNotification(List<PracticeParticipant> offeredParticipants,
+                                                           PracticeSession session,
+                                                           String triggerAction,
+                                                           Player triggerPlayer) {
+        if (offeredParticipants == null || offeredParticipants.isEmpty()) return;
+
+        Long playerId = offeredParticipants.get(0).getPlayerId();
+        String sessionLabel = getSessionLabelWithCapacity(session);
+        String eventText = getEventText(triggerAction);
+        String triggerName = triggerPlayer != null ? triggerPlayer.getName() : "不明";
+
+        // 応答期限は最も遅い期限に統一
+        LocalDateTime latestDeadline = offeredParticipants.stream()
+                .map(PracticeParticipant::getOfferDeadline)
+                .filter(java.util.Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        String deadlineStr = latestDeadline != null
+                ? latestDeadline.format(DateTimeFormatter.ofPattern("M/d HH:mm"))
+                : "不明";
+        boolean isUrgent = latestDeadline != null
+                && java.time.Duration.between(JstDateTimeUtil.now(), latestDeadline).toHours() < 12;
+
+        List<Integer> matchNumbers = offeredParticipants.stream()
+                .map(PracticeParticipant::getMatchNumber)
+                .sorted()
+                .collect(Collectors.toList());
+
+        String matchStr = matchNumbers.stream()
+                .map(n -> n + "試合目")
+                .collect(Collectors.joining("と"));
+        String altText = String.format("%s %sに空きが出ました。参加しますか？（期限: %s）",
+                sessionLabel, matchStr, deadlineStr);
+
+        Map<String, Object> flex = buildConsolidatedOfferFlex(
+                sessionLabel, triggerName, eventText, deadlineStr, isUrgent,
+                offeredParticipants, session.getId(), playerId);
+
+        sendFlexToPlayer(playerId, LineNotificationType.WAITLIST_OFFER, altText, flex);
+    }
+
+    /**
+     * 部分参加後に残りのOFFEREDオファーを通知する。
+     * ヘッダーのみ（ボディのセッション情報は省略）。
+     *
+     * @param remainingOffered 残りのOFFERED参加者リスト（同一セッション×同一プレイヤー）
+     */
+    public void sendRemainingOfferNotification(List<PracticeParticipant> remainingOffered) {
+        if (remainingOffered == null || remainingOffered.isEmpty()) return;
+
+        Long playerId = remainingOffered.get(0).getPlayerId();
+        Long sessionId = remainingOffered.get(0).getSessionId();
+
+        List<Integer> matchNumbers = remainingOffered.stream()
+                .map(PracticeParticipant::getMatchNumber)
+                .sorted()
+                .collect(Collectors.toList());
+
+        String matchStr = matchNumbers.stream()
+                .map(n -> n + "試合目")
+                .collect(Collectors.joining("と"));
+        String altText = String.format("残りの試合のオファー: %s", matchStr);
+
+        Map<String, Object> flex = buildRemainingOfferFlex(remainingOffered, sessionId, playerId);
+
+        sendFlexToPlayer(playerId, LineNotificationType.WAITLIST_OFFER, altText, flex);
+    }
+
+    /**
+     * セッションラベルに定員情報を含めて生成する（例: "4月5日（中央公民館：定員20名）"）
+     */
+    private String getSessionLabelWithCapacity(PracticeSession session) {
+        String dateStr = session.getSessionDate().format(DATE_FORMAT);
+        String venueName = null;
+        if (session.getVenueId() != null) {
+            Venue venue = venueRepository.findById(session.getVenueId()).orElse(null);
+            if (venue != null) {
+                venueName = venue.getName();
+            }
+        }
+        Integer capacity = session.getCapacity();
+        if (venueName != null && capacity != null && capacity > 0) {
+            return dateStr + "（" + venueName + "：定員" + capacity + "名）";
+        } else if (venueName != null) {
+            return dateStr + "（" + venueName + "）";
+        } else if (capacity != null && capacity > 0) {
+            return dateStr + "（定員" + capacity + "名）";
+        }
+        return dateStr;
+    }
+
+    /**
+     * 統合オファーFlex Message（パターン1/2）を構築する。
+     */
+    private Map<String, Object> buildConsolidatedOfferFlex(String sessionLabel, String triggerName,
+                                                            String eventText, String deadlineStr,
+                                                            boolean isUrgent,
+                                                            List<PracticeParticipant> offeredParticipants,
+                                                            Long sessionId, Long playerId) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", List.of(
+                        Map.of("type", "text", "text", "繰り上げ参加のお知らせ",
+                                "color", "#ffffff", "weight", "bold", "size", "md")
+                ),
+                "backgroundColor", "#27AE60",
+                "paddingAll", "15px"
+        );
+
+        // ボディ
+        List<Object> bodyContents = new ArrayList<>(List.of(
+                Map.of("type", "text", "text", sessionLabel + "の練習",
+                        "weight", "bold", "size", "lg", "margin", "none", "wrap", true),
+                Map.of("type", "text", "text", triggerName + "が" + eventText,
+                        "size", "md", "margin", "md", "color", "#333333"),
+                Map.of("type", "separator", "margin", "lg"),
+                Map.<String, Object>of("type", "box", "layout", "horizontal", "margin", "lg",
+                        "contents", List.of(
+                                Map.of("type", "text", "text", "応答期限",
+                                        "size", "sm", "color", "#888888", "flex", 0),
+                                Map.of("type", "text", "text", deadlineStr,
+                                        "size", "sm", "color", "#E74C3C", "weight", "bold",
+                                        "align", "end")
+                        ))
+        ));
+        if (isUrgent) {
+            bodyContents.add(Map.of("type", "text",
+                    "text", "※ 応答期限まで残りわずかです。お早めにご回答ください。",
+                    "size", "xs", "color", "#E74C3C", "margin", "md", "wrap", true));
+        }
+        Map<String, Object> body = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", bodyContents,
+                "paddingAll", "20px"
+        );
+
+        // フッター（ボタン群）
+        List<Object> footerContents = buildOfferButtons(offeredParticipants, sessionId, playerId);
+        Map<String, Object> footer = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", footerContents,
+                "spacing", "sm",
+                "paddingAll", "15px"
+        );
+
+        return Map.of(
+                "type", "bubble",
+                "header", header,
+                "body", body,
+                "footer", footer
+        );
+    }
+
+    /**
+     * 残りオファーFlex Message（パターン3/4）を構築する。
+     * ヘッダー + フッター（ボタン）のみ。ボディは省略。
+     */
+    private Map<String, Object> buildRemainingOfferFlex(List<PracticeParticipant> remainingOffered,
+                                                         Long sessionId, Long playerId) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", List.of(
+                        Map.of("type", "text", "text", "残りの試合のオファー",
+                                "color", "#ffffff", "weight", "bold", "size", "md")
+                ),
+                "backgroundColor", "#27AE60",
+                "paddingAll", "15px"
+        );
+
+        // フッター（ボタン群）
+        List<Object> footerContents = buildOfferButtons(remainingOffered, sessionId, playerId);
+        Map<String, Object> footer = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", footerContents,
+                "spacing", "sm",
+                "paddingAll", "15px"
+        );
+
+        return Map.of(
+                "type", "bubble",
+                "header", header,
+                "footer", footer
+        );
+    }
+
+    /**
+     * オファー用ボタン群を構築する。
+     * - 個別参加ボタン（緑） × N
+     * - すべての試合に参加（青）※2試合以上の場合のみ
+     * - 辞退する（赤）※常に一括辞退
+     */
+    private List<Object> buildOfferButtons(List<PracticeParticipant> offeredParticipants,
+                                            Long sessionId, Long playerId) {
+        List<Object> buttons = new ArrayList<>();
+
+        // 個別参加ボタン（緑）
+        List<PracticeParticipant> sorted = offeredParticipants.stream()
+                .sorted(Comparator.comparingInt(PracticeParticipant::getMatchNumber))
+                .collect(Collectors.toList());
+        for (PracticeParticipant p : sorted) {
+            buttons.add(Map.of(
+                    "type", "button",
+                    "action", Map.of(
+                            "type", "postback",
+                            "label", p.getMatchNumber() + "試合目に参加",
+                            "data", "action=waitlist_accept&participantId=" + p.getId()
+                    ),
+                    "style", "primary",
+                    "color", "#27AE60",
+                    "height", "sm"
+            ));
+        }
+
+        // すべての試合に参加（青）※2試合以上の場合のみ
+        if (offeredParticipants.size() >= 2) {
+            buttons.add(Map.of(
+                    "type", "button",
+                    "action", Map.of(
+                            "type", "postback",
+                            "label", "すべての試合に参加",
+                            "data", "action=waitlist_accept_all&sessionId=" + sessionId + "&playerId=" + playerId
+                    ),
+                    "style", "primary",
+                    "color", "#2E86C1",
+                    "height", "sm"
+            ));
+        }
+
+        // 辞退する（赤）※常に一括辞退
+        buttons.add(Map.of(
+                "type", "button",
+                "action", Map.of(
+                        "type", "postback",
+                        "label", "辞退する",
+                        "data", "action=waitlist_decline_all&sessionId=" + sessionId + "&playerId=" + playerId
+                ),
+                "style", "primary",
+                "color", "#E74C3C",
+                "height", "sm"
+        ));
+
+        return buttons;
     }
 
     public enum SendResult {

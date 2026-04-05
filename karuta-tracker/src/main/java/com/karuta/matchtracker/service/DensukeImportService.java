@@ -769,5 +769,24 @@ public class DensukeImportService {
                         waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
                     }
                 });
+
+        // プレイヤー向けオファー統合通知: promotedParticipantをセッションID×プレイヤーIDでグルーピング
+        pendingNotifications.stream()
+                .filter(d -> d.getPromotedParticipant() != null)
+                .collect(Collectors.groupingBy(d -> d.getSessionId() + ":" + d.getPromotedParticipant().getPlayerId()))
+                .values()
+                .forEach(dataList -> {
+                    Long sessionId = dataList.get(0).getSessionId();
+                    PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                    if (session != null) {
+                        List<PracticeParticipant> offeredParticipants = dataList.stream()
+                                .map(AdminWaitlistNotificationData::getPromotedParticipant)
+                                .collect(Collectors.toList());
+                        AdminWaitlistNotificationData first = dataList.get(0);
+                        lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                                offeredParticipants, session, first.getTriggerAction(),
+                                first.getTriggerPlayerId());
+                    }
+                });
     }
 }

@@ -228,6 +228,74 @@ class LineWebhookControllerTest {
                 .build();
     }
 
+    @Test
+    @DisplayName("confirm waitlist_accept_all postback executes batch accept")
+    void handleWebhook_confirmWaitlistAcceptAll_executesBatchAccept() throws Exception {
+        LineChannel channel = channel();
+        LineChannelAssignment assignment = linkedAssignment();
+        LineConfirmationToken token = LineConfirmationToken.builder()
+                .token("tok-all-accept")
+                .action("waitlist_accept_all")
+                .params("{\"sessionId\":\"200\",\"playerId\":\"77\"}")
+                .playerId(77L)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+        when(lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
+                .thenReturn(Optional.of(assignment));
+        when(lineConfirmationService.consumeToken("tok-all-accept", 77L)).thenReturn(token);
+        when(waitlistPromotionService.respondToOfferAll(200L, 77L, true)).thenReturn(3);
+
+        String body = postbackBody("action=confirm_waitlist_accept_all&token=tok-all-accept");
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(waitlistPromotionService).respondToOfferAll(200L, 77L, true);
+        verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("3試合の参加登録が完了しました。練習頑張ってください！"));
+    }
+
+    @Test
+    @DisplayName("confirm waitlist_decline_all postback executes batch decline")
+    void handleWebhook_confirmWaitlistDeclineAll_executesBatchDecline() throws Exception {
+        LineChannel channel = channel();
+        LineChannelAssignment assignment = linkedAssignment();
+        LineConfirmationToken token = LineConfirmationToken.builder()
+                .token("tok-all-decline")
+                .action("waitlist_decline_all")
+                .params("{\"sessionId\":\"200\",\"playerId\":\"77\"}")
+                .playerId(77L)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+        when(lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
+                .thenReturn(Optional.of(assignment));
+        when(lineConfirmationService.consumeToken("tok-all-decline", 77L)).thenReturn(token);
+        when(waitlistPromotionService.respondToOfferAll(200L, 77L, false)).thenReturn(2);
+
+        String body = postbackBody("action=confirm_waitlist_decline_all&token=tok-all-decline");
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(waitlistPromotionService).respondToOfferAll(200L, 77L, false);
+        verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("2試合のオファーを辞退しました。次の方に通知します。"));
+    }
+
     private String postbackBody(String data) throws Exception {
         return objectMapper.writeValueAsString(
                 java.util.Map.of("events", java.util.List.of(

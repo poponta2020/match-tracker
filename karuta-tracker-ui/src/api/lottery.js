@@ -33,9 +33,17 @@ export const lotteryAPI = {
   respondOffer: (participantId, accept) =>
     apiClient.post('/lottery/respond-offer', { participantId, accept }),
 
+  // 繰り上げオファー一括応答
+  respondOfferAll: (sessionId, accept) =>
+    apiClient.post('/lottery/respond-offer-all', { sessionId, accept }),
+
   // 個別オファー詳細取得
   getOfferDetail: (participantId) =>
     apiClient.get(`/lottery/offer-detail/${participantId}`),
+
+  // セッション内の自分のOFFERED一覧取得
+  getSessionOffers: (sessionId) =>
+    apiClient.get(`/lottery/session-offers/${sessionId}`),
 
   // キャンセル待ち状況取得
   getWaitlistStatus: () =>

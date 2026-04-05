@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.AdminEditParticipantsRequest;
+import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.LotteryResultDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
@@ -54,6 +55,7 @@ public class LotteryService {
     private final NotificationService notificationService;
     private final SystemSettingService systemSettingService;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final LineNotificationService lineNotificationService;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
     private final DensukeWriteService densukeWriteService;
     private final ObjectMapper objectMapper;
@@ -802,6 +804,7 @@ public class LotteryService {
         }
 
         // ステータス変更
+        List<AdminWaitlistNotificationData> promotionDataList = new ArrayList<>();
         if (request.getStatusChanges() != null) {
             for (AdminEditParticipantsRequest.StatusChange change : request.getStatusChanges()) {
                 PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
@@ -819,11 +822,44 @@ public class LotteryService {
                     PracticeSession session = practiceSessionRepository.findById(p.getSessionId())
                             .orElse(null);
                     if (session != null && !lotteryDeadlineHelper.isToday(session.getSessionDate())) {
-                        waitlistPromotionService.promoteNextWaitlisted(
+                        Optional<PracticeParticipant> promoted = waitlistPromotionService.promoteNextWaitlisted(
                                 p.getSessionId(), p.getMatchNumber(), session.getSessionDate());
+                        promotionDataList.add(AdminWaitlistNotificationData.builder()
+                                .triggerAction("キャンセル")
+                                .triggerPlayerId(p.getPlayerId())
+                                .sessionId(p.getSessionId())
+                                .matchNumber(p.getMatchNumber())
+                                .promotedParticipant(promoted.orElse(null))
+                                .build());
                     }
                 }
             }
+        }
+
+        // 管理者通知＋プレイヤー向けオファー統合通知をバッチ送信
+        if (!promotionDataList.isEmpty()) {
+            promotionDataList.stream()
+                    .collect(Collectors.groupingBy(AdminWaitlistNotificationData::getSessionId))
+                    .forEach((sid, dataList) -> {
+                        PracticeSession session = practiceSessionRepository.findById(sid).orElse(null);
+                        if (session != null) {
+                            waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
+
+                            // プレイヤー向けオファー統合通知
+                            dataList.stream()
+                                    .filter(d -> d.getPromotedParticipant() != null)
+                                    .collect(Collectors.groupingBy(d -> d.getPromotedParticipant().getPlayerId()))
+                                    .forEach((offeredPlayerId, playerDataList) -> {
+                                        List<PracticeParticipant> offeredParticipants = playerDataList.stream()
+                                                .map(AdminWaitlistNotificationData::getPromotedParticipant)
+                                                .collect(Collectors.toList());
+                                        AdminWaitlistNotificationData first = playerDataList.get(0);
+                                        lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                                                offeredParticipants, session, first.getTriggerAction(),
+                                                first.getTriggerPlayerId());
+                                    });
+                        }
+                    });
         }
 
         // キャンセル待ち順番変更
