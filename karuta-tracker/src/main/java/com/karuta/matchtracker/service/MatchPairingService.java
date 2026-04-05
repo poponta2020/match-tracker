@@ -158,7 +158,7 @@ public class MatchPairingService {
         }
 
         MatchPairing pairing = matchPairingRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("ペアリングが見つかりません: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
 
         Long oldPlayer1Id = pairing.getPlayer1Id();
         Long oldPlayer2Id = pairing.getPlayer2Id();
