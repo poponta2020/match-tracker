@@ -1093,11 +1093,76 @@ public class LineNotificationService {
 
     /**
      * 今日の参加者一覧のFlex Messageを構築する（リッチメニュー照会用）
-     * buildSameDayConfirmationFlex() と同じ形式
+     * ヘッダーに「〇月〇日（会場名：定員〇名）」、本文に「〇試合目：〇名」形式で表示
      */
     public Map<String, Object> buildTodayParticipantsFlex(
-            String sessionLabel, Map<Integer, List<PracticeParticipant>> byMatch, Map<Long, Player> playerMap) {
-        return buildSameDayConfirmationFlex(sessionLabel, byMatch, playerMap);
+            String sessionLabel, Map<Integer, List<PracticeParticipant>> byMatch, Map<Long, Player> playerMap,
+            Integer capacity) {
+
+        String headerText = capacity != null
+                ? sessionLabel.replaceAll("）$", "：定員" + capacity + "名）")
+                : sessionLabel;
+
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", headerText,
+                    "color", "#ffffff", "weight", "bold", "size", "md", "wrap", true)
+            ),
+            "backgroundColor", "#2196F3",
+            "paddingAll", "15px"
+        );
+
+        List<Object> bodyContents = new java.util.ArrayList<>();
+
+        for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
+            if (!bodyContents.isEmpty()) {
+                bodyContents.add(Map.of("type", "separator", "margin", "lg"));
+            }
+            bodyContents.add(Map.of("type", "text", "text",
+                    entry.getKey() + "試合目：" + entry.getValue().size() + "名",
+                    "weight", "bold", "size", "md", "margin", "lg", "color", "#333333"));
+
+            // 段位順（高段位→低段位）でソート
+            List<PracticeParticipant> sorted = entry.getValue().stream()
+                    .sorted((a, b) -> Integer.compare(
+                            danRankOrdinal(playerMap.get(b.getPlayerId())),
+                            danRankOrdinal(playerMap.get(a.getPlayerId()))))
+                    .toList();
+
+            // 3人ずつ1行に並べる
+            for (int i = 0; i < sorted.size(); i += 3) {
+                List<Object> rowContents = new java.util.ArrayList<>();
+                for (int j = 0; j < 3; j++) {
+                    if (i + j < sorted.size()) {
+                        Player p = playerMap.get(sorted.get(i + j).getPlayerId());
+                        String name = p != null ? p.getName() : "不明";
+                        rowContents.add(Map.of("type", "text", "text", name,
+                                "flex", 1, "size", "sm", "color", "#555555"));
+                    } else {
+                        rowContents.add(Map.of("type", "text", "text", " ",
+                                "flex", 1, "size", "sm"));
+                    }
+                }
+
+                bodyContents.add(Map.of("type", "box", "layout", "horizontal",
+                        "contents", rowContents, "margin", "sm"));
+            }
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
     }
 
     /**
