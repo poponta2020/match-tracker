@@ -1086,8 +1086,7 @@ Entity Layer (JPA Entity)
 ```json
 {
   "sessionDate": "2025-11-20",
-  "matchNumber": 1,
-  "participantIds": [1, 2, 3, 4, 5]
+  "matchNumber": 1
 }
 ```
 **レスポンス**: `AutoMatchingResult`
@@ -1114,12 +1113,15 @@ Entity Layer (JPA Entity)
 #### POST /api/match-pairings/batch?date={date}&matchNumber={matchNumber}
 **説明**: 一括組み合わせ作成
 **権限**: SUPER_ADMIN, ADMIN
-**リクエスト**:
+**リクエスト**: `MatchPairingBatchRequest`
 ```json
-[
-  {"player1Id": 1, "player2Id": 2},
-  {"player1Id": 3, "player2Id": 4}
-]
+{
+  "pairings": [
+    {"player1Id": 1, "player2Id": 2},
+    {"player1Id": 3, "player2Id": 4}
+  ],
+  "waitingPlayerIds": [5]
+}
 ```
 
 #### GET /api/match-pairings/date?date={date}

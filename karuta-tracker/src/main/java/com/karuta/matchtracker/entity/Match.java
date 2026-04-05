@@ -67,7 +67,7 @@ public class Match {
     private Long winnerId;
 
     /**
-     * 枚数差（1～50）
+     * 枚数差（0～25）
      */
     @Column(name = "score_difference", nullable = false)
     private Integer scoreDifference;

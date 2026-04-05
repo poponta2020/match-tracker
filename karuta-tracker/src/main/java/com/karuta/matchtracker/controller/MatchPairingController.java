@@ -4,8 +4,6 @@ import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.ForbiddenException;
-import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
 import com.karuta.matchtracker.util.AdminScopeValidator;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +28,6 @@ public class MatchPairingController {
     private final MatchPairingService matchPairingService;
     private final com.karuta.matchtracker.service.OrganizationService organizationService;
     private final com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
-    private final MatchPairingRepository matchPairingRepository;
 
     /**
      * 指定日の対戦組み合わせを取得
@@ -89,8 +86,7 @@ public class MatchPairingController {
         log.info("対戦組み合わせ作成: {}", request);
         validateAdminScopeByDate(request.getSessionDate(), httpRequest);
 
-        // TODO: UserDetailsからplayerIdを取得する実装が必要
-        Long createdBy = 1L; // 仮のID
+        Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
 
         MatchPairingDto created = matchPairingService.create(request, createdBy);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -111,8 +107,7 @@ public class MatchPairingController {
                  request.getWaitingPlayerIds() != null ? request.getWaitingPlayerIds().size() : 0);
         validateAdminScopeByDate(date, httpRequest);
 
-        // TODO: UserDetailsからplayerIdを取得する実装が必要
-        Long createdBy = 1L; // 仮のID
+        Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
 
         List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -130,7 +125,7 @@ public class MatchPairingController {
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ選手変更: ID={}, newPlayerId={}, side={}", id, newPlayerId, side);
         validateAdminScopeByPairingId(id, httpRequest);
-        Long updatedBy = 1L; // TODO: UserDetailsから取得
+        Long updatedBy = (Long) httpRequest.getAttribute("currentUserId");
         MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy);
         return ResponseEntity.ok(updated);
     }
@@ -212,9 +207,8 @@ public class MatchPairingController {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         if (!"ADMIN".equals(role)) return;
 
-        var pairing = matchPairingRepository.findById(pairingId)
-                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
-        validateAdminScopeByDate(pairing.getSessionDate(), httpRequest);
+        LocalDate sessionDate = matchPairingService.getSessionDateById(pairingId);
+        validateAdminScopeByDate(sessionDate, httpRequest);
     }
 
     private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {

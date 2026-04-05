@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class MatchPairingService {
 
-    private static final int MATCH_HISTORY_DAYS = 90;
+    private static final int MATCH_HISTORY_DAYS = 30;
     private static final double SAME_DAY_PENALTY_SCORE = -1000.0;
     private static final double INTERVAL_BASE_SCORE = 100.0;
 
@@ -152,6 +152,10 @@ public class MatchPairingService {
      */
     @Transactional
     public MatchPairingDto updatePlayer(Long id, Long newPlayerId, String side, Long updatedBy) {
+        if (!"player1".equals(side) && !"player2".equals(side)) {
+            throw new IllegalArgumentException("sideは'player1'または'player2'を指定してください");
+        }
+
         MatchPairing pairing = matchPairingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("ペアリングが見つかりません: " + id));
 
@@ -206,6 +210,16 @@ public class MatchPairingService {
     @Transactional
     public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
         matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+    }
+
+    /**
+     * ペアリングIDからセッション日付を取得
+     */
+    @Transactional(readOnly = true)
+    public LocalDate getSessionDateById(Long id) {
+        return matchPairingRepository.findById(id)
+                .map(MatchPairing::getSessionDate)
+                .orElseThrow(() -> new IllegalArgumentException("ペアリングが見つかりません: " + id));
     }
 
     /**

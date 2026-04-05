@@ -333,7 +333,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 | `player1Id` | Long | Yes | 選手1 ID（常に player1Id < player2Id） |
 | `player2Id` | Long | Yes | 選手2 ID |
 | `winnerId` | Long | Yes | 勝者ID |
-| `scoreDifference` | Integer | Yes | 枚数差（1〜25） |
+| `scoreDifference` | Integer | Yes | 枚数差（0〜25） |
 | `opponentName` | String(100) | No | 未登録の対戦相手名（簡易入力用） |
 | `createdBy` | Long | Yes | 登録者ID |
 | `updatedBy` | Long | Yes | 更新者ID |
@@ -1024,7 +1024,7 @@ venues ──< venue_match_schedules (venueId)
 | player1_id | BIGINT | NOT NULL | 選手1（ID小さい方） |
 | player2_id | BIGINT | NOT NULL | 選手2（ID大きい方） |
 | winner_id | BIGINT | NOT NULL | 勝者ID |
-| score_difference | INT | NOT NULL | 枚数差（1〜25） |
+| score_difference | INT | NOT NULL | 枚数差（0〜25） |
 | opponent_name | VARCHAR(100) | — | 未登録相手名 |
 | notes | TEXT | — | コメント |
 | created_by | BIGINT | NOT NULL | 登録者 |
@@ -1441,10 +1441,10 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/pair-history?player1Id=&player2Id=&sessionDate=` | ALL | ペアの対戦履歴 |
 | POST | `/` | ADMIN+ | 単一作成 |
 | POST | `/batch?date=&matchNumber=` | ADMIN+ | 一括作成 |
-| POST | `/auto-match` | ALL | 自動マッチング |
-| PUT | `/{id}/player?newPlayerId=&side=` | ALL | 選手差し替え |
-| DELETE | `/{id}` | ALL | 単一削除 |
-| DELETE | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号の全削除 |
+| POST | `/auto-match` | ADMIN+ | 自動マッチング |
+| PUT | `/{id}/player?newPlayerId=&side=` | ADMIN+ | 選手差し替え |
+| DELETE | `/{id}` | ADMIN+ | 単一削除 |
+| DELETE | `/date-and-match?date=&matchNumber=` | ADMIN+ | 日付+試合番号の全削除 |
 
 ### 7.6 練習日 (`/api/practice-sessions`)
 

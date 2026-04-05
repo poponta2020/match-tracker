@@ -317,11 +317,6 @@ const PairingGenerator = () => {
     setError('');
 
     try {
-      // 既存の組み合わせを編集していた場合は先に削除
-      if (isEditingExisting) {
-        await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber);
-      }
-
       const requests = pairings.map((p) => ({
         player1Id: p.player1Id,
         player2Id: p.player2Id,
