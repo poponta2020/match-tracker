@@ -2,12 +2,10 @@ package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.*;
-import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.MatchPairingService;
 import org.junit.jupiter.api.DisplayName;
@@ -54,8 +52,6 @@ class MatchPairingControllerTest {
     @MockitoBean
     private com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
 
-    @MockitoBean
-    private MatchPairingRepository matchPairingRepository;
 
     @Nested
     @DisplayName("GET /api/match-pairings/date")
@@ -540,8 +536,7 @@ class MatchPairingControllerTest {
             Long id = 1L;
             LocalDate date = LocalDate.of(2024, 1, 15);
             mockAdminScopeForDate(date, 1L, 1L);
-            when(matchPairingRepository.findById(id))
-                    .thenReturn(Optional.of(createPairing(id, date)));
+            when(matchPairingService.getSessionDateById(id)).thenReturn(date);
             doNothing().when(matchPairingService).delete(id);
 
             // When & Then
@@ -790,12 +785,5 @@ class MatchPairingControllerTest {
         session.setOrganizationId(adminOrgId);
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId))
                 .thenReturn(Optional.of(session));
-    }
-
-    private MatchPairing createPairing(Long id, LocalDate sessionDate) {
-        MatchPairing pairing = new MatchPairing();
-        pairing.setId(id);
-        pairing.setSessionDate(sessionDate);
-        return pairing;
     }
 }
