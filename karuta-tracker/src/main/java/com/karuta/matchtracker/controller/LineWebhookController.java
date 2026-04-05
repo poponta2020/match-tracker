@@ -41,6 +41,7 @@ public class LineWebhookController {
     private final LineNotificationService lineNotificationService;
     private final LineConfirmationService lineConfirmationService;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
+    private final PracticeSessionService practiceSessionService;
     private final ObjectMapper objectMapper;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
@@ -172,7 +173,7 @@ public class LineWebhookController {
                 return;
             }
             case "check_today_participants" -> {
-                handleCheckTodayParticipants(channel, replyToken);
+                handleCheckTodayParticipants(channel, replyToken, playerId);
                 return;
             }
             case "check_same_day_join" -> {
@@ -548,9 +549,9 @@ public class LineWebhookController {
      * 次の練習の参加者一覧を照会する。
      * 今日の練習が開始時間前ならその日、開始時間を過ぎていたら次回の練習を表示。
      */
-    private void handleCheckTodayParticipants(LineChannel channel, String replyToken) {
+    private void handleCheckTodayParticipants(LineChannel channel, String replyToken, Long playerId) {
         try {
-            PracticeSession session = findNextPracticeSession();
+            PracticeSession session = practiceSessionService.findNextSessionForPlayer(playerId);
 
             if (session == null) {
                 sendReply(channel, replyToken, "予定されている練習はありません");
@@ -647,30 +648,6 @@ public class LineWebhookController {
             log.error("Failed to check same-day join: player={}, error={}", playerId, e.getMessage());
             sendReply(channel, replyToken, "参加申込情報の取得に失敗しました。");
         }
-    }
-
-    /**
-     * 次の練習セッションを取得する。
-     * 今日の練習が開始時間前ならその日、開始時間を過ぎていたら翌日以降の直近の練習。
-     */
-    private PracticeSession findNextPracticeSession() {
-        LocalDate today = JstDateTimeUtil.today();
-
-        // まず今日の練習を確認
-        Optional<PracticeSession> todaySession = practiceSessionRepository.findBySessionDate(today);
-        if (todaySession.isPresent()) {
-            PracticeSession session = todaySession.get();
-            // 開始時間が未設定、またはまだ開始時間前なら今日の練習を返す
-            if (session.getStartTime() == null
-                    || JstDateTimeUtil.now().isBefore(today.atTime(session.getStartTime()))) {
-                return session;
-            }
-        }
-
-        // 今日の練習がない or 開始時間を過ぎている → 翌日以降の直近の練習
-        return practiceSessionRepository
-                .findFirstBySessionDateGreaterThanEqualOrderBySessionDateAsc(today.plusDays(1))
-                .orElse(null);
     }
 
     private void handleUnfollow(LineChannel channel, JsonNode event) {

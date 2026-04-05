@@ -158,6 +158,34 @@ public class PracticeSessionService {
     }
 
     /**
+     * プレイヤーの所属団体に基づいて、次の練習セッションを取得する。
+     * 今日の練習が開始時間前ならその日、開始時間を過ぎていたら翌日以降の直近の練習。
+     */
+    public PracticeSession findNextSessionForPlayer(Long playerId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerId);
+        if (orgIds.isEmpty()) {
+            return null;
+        }
+
+        LocalDate today = JstDateTimeUtil.today();
+        List<PracticeSession> upcomingSessions = practiceSessionRepository
+                .findUpcomingSessionsByOrganizationIdIn(orgIds, today);
+
+        for (PracticeSession session : upcomingSessions) {
+            if (session.getSessionDate().isEqual(today)) {
+                if (session.getStartTime() == null
+                        || JstDateTimeUtil.now().isBefore(today.atTime(session.getStartTime()))) {
+                    return session;
+                }
+            } else {
+                return session;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 次の参加予定練習を取得（ホーム画面用・軽量）
      */
     @Transactional(readOnly = true)

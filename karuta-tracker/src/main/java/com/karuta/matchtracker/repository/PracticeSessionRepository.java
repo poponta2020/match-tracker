@@ -63,7 +63,7 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
     @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month ORDER BY ps.sessionDate ASC")
     List<PracticeSession> findByOrganizationIdInAndYearAndMonth(@Param("orgIds") List<Long> orgIds, @Param("year") int year, @Param("month") int month);
 
-    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate ASC")
+    @Query("SELECT ps FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate ASC, ps.startTime ASC NULLS FIRST, ps.id ASC")
     List<PracticeSession> findUpcomingSessionsByOrganizationIdIn(@Param("orgIds") List<Long> orgIds, @Param("date") LocalDate date);
 
     @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate DESC")

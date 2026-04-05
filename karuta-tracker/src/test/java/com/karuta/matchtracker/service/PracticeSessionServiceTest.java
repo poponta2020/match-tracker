@@ -25,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -316,5 +317,88 @@ class PracticeSessionServiceTest {
                 .hasMessageContaining("PracticeSession")
                 .hasMessageContaining("999");
         verify(practiceSessionRepository, never()).deleteById(any());
+    }
+
+    // === findNextSessionForPlayer テスト ===
+
+    @Test
+    @DisplayName("所属団体がない場合はnullを返す")
+    void findNextSessionForPlayer_noOrganizations_returnsNull() {
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of());
+
+        PracticeSession result = practiceSessionService.findNextSessionForPlayer(1L);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("所属団体の次の練習セッションを返す")
+    void findNextSessionForPlayer_withUpcomingSession_returnsSession() {
+        LocalDate tomorrow = today.plusDays(1);
+        PracticeSession futureSession = PracticeSession.builder()
+                .id(2L).sessionDate(tomorrow).organizationId(10L).build();
+
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(10L));
+        when(practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(List.of(10L), today))
+                .thenReturn(List.of(futureSession));
+
+        PracticeSession result = practiceSessionService.findNextSessionForPlayer(1L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("今日の練習で開始時間前なら今日の練習を返す")
+    void findNextSessionForPlayer_todayBeforeStart_returnsTodaySession() {
+        PracticeSession todaySession = PracticeSession.builder()
+                .id(3L).sessionDate(today).organizationId(10L)
+                .startTime(LocalTime.of(23, 59)).build();
+
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(10L));
+        when(practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(List.of(10L), today))
+                .thenReturn(List.of(todaySession));
+
+        PracticeSession result = practiceSessionService.findNextSessionForPlayer(1L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("今日の練習で開始時間を過ぎていたら翌日以降の練習を返す")
+    void findNextSessionForPlayer_todayAfterStart_returnsFutureSession() {
+        LocalDate tomorrow = today.plusDays(1);
+        PracticeSession todaySession = PracticeSession.builder()
+                .id(3L).sessionDate(today).organizationId(10L)
+                .startTime(LocalTime.of(0, 0)).build();
+        PracticeSession tomorrowSession = PracticeSession.builder()
+                .id(4L).sessionDate(tomorrow).organizationId(10L).build();
+
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(10L));
+        when(practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(List.of(10L), today))
+                .thenReturn(List.of(todaySession, tomorrowSession));
+
+        PracticeSession result = practiceSessionService.findNextSessionForPlayer(1L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(4L);
+    }
+
+    @Test
+    @DisplayName("開始時間がnullの今日の練習は返す")
+    void findNextSessionForPlayer_todayNullStartTime_returnsTodaySession() {
+        PracticeSession todaySession = PracticeSession.builder()
+                .id(5L).sessionDate(today).organizationId(10L)
+                .startTime(null).build();
+
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(10L));
+        when(practiceSessionRepository.findUpcomingSessionsByOrganizationIdIn(List.of(10L), today))
+                .thenReturn(List.of(todaySession));
+
+        PracticeSession result = practiceSessionService.findNextSessionForPlayer(1L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(5L);
     }
 }
