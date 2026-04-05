@@ -1,0 +1,3 @@
+# Ignore generated prompts and review results (contain diffs/code)
+*.md
+!.gitignore

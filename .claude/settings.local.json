@@ -182,7 +182,8 @@
       "Bash(bash docs/features/line-rich-menu/setup-richmenu.sh docs/features/line-rich-menu/richmenu.png)",
       "Bash(npx --yes sharp-cli -i docs/features/line-rich-menu/richmenu.png -o docs/features/line-rich-menu/richmenu_compressed.jpeg --format jpeg --quality 70)",
       "Bash(bash docs/features/line-rich-menu/setup-richmenu.sh docs/features/line-rich-menu/richmenu_compressed.jpeg)",
-      "Bash(find c:/Users/popon/match-tracker/database -type f -name \"*.sql\" -exec grep -l \"practice_participants\" {} \\\\;)"
+      "Bash(find c:/Users/popon/match-tracker/database -type f -name \"*.sql\" -exec grep -l \"practice_participants\" {} \\\\;)",
+      "Bash(gh pr:*)"
     ],
     "deny": [],
     "ask": [],
