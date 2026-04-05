@@ -97,22 +97,24 @@
 | 項目 | 内容 |
 |------|------|
 | **発火条件** | キャンセル待ち列に変動があったとき（キャンセル、降格、オファー辞退、オファー期限切れ、キャンセル待ち辞退、当日キャンセル補充） |
-| **トリガー** | `WaitlistPromotionService.notifyAdminsAboutWaitlistChange()` → `LineNotificationService.sendAdminWaitlistNotification()` |
+| **トリガー** | `WaitlistPromotionService.sendBatchedAdminWaitlistNotifications()` → `LineNotificationService.sendAdminWaitlistNotification()` |
 | **送信先** | 該当団体のADMIN + 全SUPER_ADMIN |
 | **チャネル** | ADMIN |
 | **トグル** | `adminWaitlistUpdate`（`organizationId=0` レコードで判定） |
-| **内容** | Flex Message（紫ヘッダー「キャンセル待ち状況通知」。発生イベント・繰り上げオファー先・残りキャンセル待ち列を表示） |
+| **まとめ送信** | 同一セッション×同一トリガー種別×同一プレイヤーの複数試合を1通のFlex Messageにまとめる。`AdminWaitlistNotificationData` にまとめ情報を蓄積し、呼び出し元（LotteryController, DensukeImportService等）でバッチ送信 |
+| **内容** | Flex Message（紫ヘッダー `#8E44AD`。トリガー種別に応じたヘッダーテキスト + セッション情報 `〇月〇日（会場名：定員〇〇名）` + 該当試合番号（カンマ区切り） + イベント内容 + キャンセル待ち列（全試合同一ならまとめ表示、異なれば試合別表示。1番にオファー送信済みなら緑太字で「オファー応答待ち」付記）） |
+| **altText** | `【管理者通知】〇月〇日: {選手名}が{イベント文言}` |
 
 ### 8. WAITLIST_POSITION_UPDATE（キャンセル待ち順番通知）
 
 | 項目 | 内容 |
 |------|------|
 | **発火条件** | ADMIN_WAITLIST_UPDATE と同じタイミング |
-| **トリガー** | `WaitlistPromotionService.notifyAdminsAboutWaitlistChange()` → `LineNotificationService.sendWaitlistPositionUpdateNotifications()` |
+| **トリガー** | `WaitlistPromotionService.sendBatchedAdminWaitlistNotifications()` → `LineNotificationService.sendWaitlistPositionUpdateNotifications()` |
 | **送信先** | 残りのWAITLISTEDユーザー全員（当該試合の待ち列にいる人） |
 | **チャネル** | PLAYER |
 | **トグル** | `waitlistOffer`（流用） |
-| **内容** | Flex Message（ADMIN_WAITLIST_UPDATEと同じFlex。発生イベント・繰り上げオファー先・残り待ち列を表示） |
+| **内容** | Flex Message（ADMIN_WAITLIST_UPDATEと同じFlex構成。altTextは `【キャンセル待ち状況】〇月〇日: {選手名}が{イベント文言}`） |
 
 ### 9. SAME_DAY_CONFIRMATION（当日12:00参加者確定）
 
@@ -201,7 +203,7 @@ LINE Webhookからの応答は **リプライAPI** で返すため、`LineNotifi
 
 ### DensukeImportService からの間接的な通知
 
-伝助同期は `WaitlistPromotionService` のメソッドを呼ぶことで、`WAITLIST_OFFER`, `OFFER_EXPIRED`, `ADMIN_WAITLIST_UPDATE`, `WAITLIST_POSITION_UPDATE`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CANCEL` が間接的に発火し得る。直接呼び出しは `sendSameDayVacancyUpdateNotification()` のみ（当日12:00以降に伝助同期でWON登録された場合）。
+伝助同期は `WaitlistPromotionService` のメソッド（`cancelParticipationSuppressed`, `demoteToWaitlistSuppressed`）を呼び、通知データ（`AdminWaitlistNotificationData`）を蓄積後にまとめ送信（`sendBatchedAdminWaitlistNotifications`）することで、`WAITLIST_OFFER`, `OFFER_EXPIRED`, `ADMIN_WAITLIST_UPDATE`, `WAITLIST_POSITION_UPDATE`, `SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CANCEL` が間接的に発火し得る。直接呼び出しは `sendSameDayVacancyUpdateNotification()` のみ（当日12:00以降に伝助同期でWON登録された場合）。
 
 ### チャネルタイプの判定ルール
 

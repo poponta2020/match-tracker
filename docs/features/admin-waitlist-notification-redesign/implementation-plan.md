@@ -7,7 +7,7 @@ status: completed
 
 ### タスク1: 通知データモデルの導入と WaitlistPromotionService の通知分離
 
-- [ ] 完了
+- [x] 完了
 - **概要:** 現在 `WaitlistPromotionService` 内で即時送信している管理者通知を、通知情報を蓄積して返す方式に変更する。通知に必要な情報を保持するデータクラスを導入し、各メソッドから通知を分離する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/AdminWaitlistNotificationData.java` — 新規作成。通知に必要な情報（triggerAction, triggerPlayerId, sessionId, matchNumber, offeredPlayer）を保持するデータクラス
@@ -24,7 +24,7 @@ status: completed
 
 ### タスク2: LotteryController のキャンセルバッチ通知対応
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `LotteryController.cancelParticipation` で複数 `participantId` をループでキャンセルする際、通知情報を蓄積し、ループ完了後にセッション×トリガー×プレイヤーでグルーピングしてまとめ送信する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LotteryController.java` — キャンセルループ後にまとめ通知を呼び出す
@@ -34,7 +34,7 @@ status: completed
 
 ### タスク3: DensukeImportService のキャンセル/降格バッチ通知対応
 
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助同期で同一セッション・同一プレイヤーの複数試合が同時にキャンセル/降格される場合の通知まとめ対応。`processPhase3Batsu`（キャンセル）と `processPhase3Sankaku`（降格）で発生する通知をセッション単位で蓄積し、試合ごとの処理完了後にまとめ送信する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` — 通知データの蓄積とまとめ送信の呼び出し
@@ -44,7 +44,7 @@ status: completed
 
 ### タスク4: LineNotificationService の Flex Message 構成改修
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `sendAdminWaitlistNotification` と `buildAdminWaitlistFlex` を改修し、新しいFlex Message構成に対応する。`sendWaitlistPositionUpdateNotifications` も同様に改修。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LineNotificationService.java` — 以下を変更:

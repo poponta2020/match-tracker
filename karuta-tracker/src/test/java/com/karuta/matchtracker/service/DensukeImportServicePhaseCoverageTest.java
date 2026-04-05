@@ -112,7 +112,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(waitlistPromotionService).demoteToWaitlist(11L);
+        verify(waitlistPromotionService).demoteToWaitlistSuppressed(11L);
     }
 
     @ParameterizedTest(name = "Phase3 3-B4/3-B6: △ with status={0} is skipped")
@@ -132,7 +132,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(0);
-        verify(waitlistPromotionService, never()).demoteToWaitlist(11L);
+        verify(waitlistPromotionService, never()).demoteToWaitlistSuppressed(11L);
         verify(practiceParticipantRepository, never()).save(existing);
     }
 
@@ -189,7 +189,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(0);
-        verify(waitlistPromotionService, never()).demoteToWaitlist(12L);
+        verify(waitlistPromotionService, never()).demoteToWaitlistSuppressed(12L);
         verify(practiceParticipantRepository, never()).save(existing);
     }
 
@@ -237,7 +237,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(waitlistPromotionService).cancelParticipation(21L);
+        verify(waitlistPromotionService).cancelParticipationSuppressed(21L, null, null);
     }
 
     @Test
@@ -321,7 +321,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(0);
-        verify(waitlistPromotionService, never()).cancelParticipation(org.mockito.ArgumentMatchers.anyLong());
+        verify(waitlistPromotionService, never()).cancelParticipationSuppressed(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -341,7 +341,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(0);
-        verify(waitlistPromotionService, never()).cancelParticipation(25L);
+        verify(waitlistPromotionService, never()).cancelParticipationSuppressed(org.mockito.ArgumentMatchers.eq(25L), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
         verify(practiceParticipantRepository, never()).save(existing);
     }
 
@@ -362,7 +362,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(0);
-        verify(waitlistPromotionService, never()).cancelParticipation(24L);
+        verify(waitlistPromotionService, never()).cancelParticipationSuppressed(org.mockito.ArgumentMatchers.eq(24L), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
         verify(waitlistPromotionService, never()).respondToOffer(24L, false);
         verify(practiceParticipantRepository, never()).save(existing);
     }
@@ -481,7 +481,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(waitlistPromotionService).demoteToWaitlist(41L);
+        verify(waitlistPromotionService).demoteToWaitlistSuppressed(41L);
         verify(lotteryDeadlineHelper).isBeforeSameDayDeadline(date);
         verify(lotteryDeadlineHelper, never()).isBeforeDeadline(anyInt(), anyInt(), org.mockito.ArgumentMatchers.eq(ORG_ID));
         verify(lotteryService, never()).isLotteryConfirmed(anyInt(), anyInt(), org.mockito.ArgumentMatchers.eq(ORG_ID));
@@ -506,7 +506,7 @@ class DensukeImportServicePhaseCoverageTest {
                 p.getPlayerId().equals(1L)
                         && p.getStatus() == ParticipantStatus.WON
                         && !p.isDirty()));
-        verify(waitlistPromotionService, never()).demoteToWaitlist(org.mockito.ArgumentMatchers.anyLong());
+        verify(waitlistPromotionService, never()).demoteToWaitlistSuppressed(org.mockito.ArgumentMatchers.anyLong());
         verify(lotteryDeadlineHelper).isBeforeSameDayDeadline(date);
     }
 

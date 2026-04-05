@@ -2086,8 +2086,8 @@ Entity Layer (JPA Entity)
 |--------|---------|
 | `SameDayConfirmationScheduler`（新規） | scheduler/ — 毎日12:00 JSTに`WaitlistPromotionService.expireOfferedForSameDayConfirmation()`へ委譲 + メンバーリスト送信 |
 | `SameDayVacancyScheduler`（新規） | scheduler/ — 毎日0:00 JSTに当日セッションの空き枠検出＋`SAME_DAY_VACANCY`/`ADMIN_SAME_DAY_CANCEL`自動送信 |
-| `WaitlistPromotionService` | `expireOfferedForSameDayConfirmation()`追加（dirty=true設定＋空き枠補充トリガー）、cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加 |
-| `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加、`getAdminRecipientsForSession()`ヘルパー追加（該当団体ADMIN + 全SUPER_ADMIN）、`sendAdminVacancyNotification()`追加、ADMIN向け送信をキャンセル/参加/確定/キャンセル待ち通知に追加、`isNotificationEnabled()`で全ADMIN_系通知を`organizationId=0`判定に統一、SAME_DAY_VACANCY送信先を団体全メンバーに拡大 |
+| `WaitlistPromotionService` | `expireOfferedForSameDayConfirmation()`追加（dirty=true設定＋空き枠補充トリガー）、cancelParticipationの12:00以降分岐追加、handleSameDayJoinメソッド追加。**管理者通知バッチ化**: `cancelParticipationSuppressed()`・`demoteToWaitlistSuppressed()`で通知データ（`AdminWaitlistNotificationData`）を返し、`sendBatchedAdminWaitlistNotifications()`でセッション×トリガー×プレイヤー単位でまとめ送信 |
+| `LineNotificationService` | 確定通知/キャンセル通知/空き募集通知/参加通知/枠状況通知メソッド追加、`getAdminRecipientsForSession()`ヘルパー追加（該当団体ADMIN + 全SUPER_ADMIN）、`sendAdminVacancyNotification()`追加、ADMIN向け送信をキャンセル/参加/確定/キャンセル待ち通知に追加、`isNotificationEnabled()`で全ADMIN_系通知を`organizationId=0`判定に統一、SAME_DAY_VACANCY送信先を団体全メンバーに拡大。**管理者通知Flex改修**: `sendAdminWaitlistNotification()`が`List<Integer> matchNumbers`+試合別キャンセル待ち列を受け取り、トリガー種別に応じたヘッダー/イベント文言、複数試合まとめ表示、キャンセル待ち列の全試合同一判定に対応 |
 | `LotteryDeadlineHelper` | isAfterSameDayNoon()追加、calculateOfferDeadline当日対応 |
 | `PracticeParticipantService` | 12:00以降参加時の通知送信追加 |
 | `DensukeImportService` | 伝助同期でWON登録時の枠状況通知送信追加（notifyVacancyUpdateIfNeeded） |
