@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
@@ -81,6 +82,7 @@ public class DensukeImportService {
 
         Set<String> unmatchedNameSet = new LinkedHashSet<>();
         Set<String> unmatchedVenueSet = new LinkedHashSet<>();
+        List<AdminWaitlistNotificationData> pendingNotifications = new ArrayList<>();
 
         Map<LocalDate, Integer> maxMatchByDate = new LinkedHashMap<>();
         Map<LocalDate, String> venueByDate = new LinkedHashMap<>();
@@ -117,8 +119,13 @@ public class DensukeImportService {
                     result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
                 }
                 case PHASE3 -> processPhase3(entry, session, scraped.getMemberNames(),
-                        playerNameMap, playerIdMap, unmatchedNameSet, result);
+                        playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications);
             }
+        }
+
+        // 蓄積した通知をセッション×トリガー×プレイヤーでグルーピングしてまとめ送信
+        if (!pendingNotifications.isEmpty()) {
+            sendPendingNotifications(pendingNotifications);
         }
 
         result.setUnmatchedNames(new ArrayList<>(unmatchedNameSet));
@@ -254,7 +261,8 @@ public class DensukeImportService {
     private void processPhase3(DensukeScraper.ScheduleEntry entry, PracticeSession session,
                                List<String> memberNames,
                                Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
-                               Set<String> unmatchedNameSet, ImportResult result) {
+                               Set<String> unmatchedNameSet, ImportResult result,
+                               List<AdminWaitlistNotificationData> pendingNotifications) {
         // 既存参加者をマップ化
         List<PracticeParticipant> existing =
                 practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
@@ -293,7 +301,7 @@ public class DensukeImportService {
         // --- △ の処理 (3-B) ---
         for (Long playerId : maybeIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber())) {
+            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber(), pendingNotifications)) {
                 processed++;
             }
         }
@@ -301,7 +309,7 @@ public class DensukeImportService {
         // --- ×/空白 の処理 (3-C) ---
         for (Long playerId : absentIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Batsu(playerId, p, session, entry.getMatchNumber())) {
+            if (processPhase3Batsu(playerId, p, session, entry.getMatchNumber(), pendingNotifications)) {
                 processed++;
             }
         }
@@ -382,7 +390,8 @@ public class DensukeImportService {
      * 3-B: 伝助△の処理（キャンセル待ち希望）
      */
     private boolean processPhase3Sankaku(Long playerId, PracticeParticipant existing,
-                                         PracticeSession session, int matchNumber) {
+                                         PracticeSession session, int matchNumber,
+                                         List<AdminWaitlistNotificationData> pendingNotifications) {
         if (existing == null) {
             // 3-B1: 未登録 → WAITLISTED（最後尾）
             createWaitlisted(playerId, session, matchNumber);
@@ -394,7 +403,10 @@ public class DensukeImportService {
         switch (status) {
             case WON -> {
                 // 3-B2: WON → WAITLISTED（最後尾）→ 繰り上げ発動
-                waitlistPromotionService.demoteToWaitlist(existing.getId());
+                AdminWaitlistNotificationData notifData = waitlistPromotionService.demoteToWaitlistSuppressed(existing.getId());
+                if (notifData != null) {
+                    pendingNotifications.add(notifData);
+                }
                 log.info("Phase3-B2: demoted WON player {} to waitlist via densuke", playerId);
                 return true;
             }
@@ -412,7 +424,8 @@ public class DensukeImportService {
      * 3-C: 伝助×/空白の処理
      */
     private boolean processPhase3Batsu(Long playerId, PracticeParticipant existing,
-                                       PracticeSession session, int matchNumber) {
+                                       PracticeSession session, int matchNumber,
+                                       List<AdminWaitlistNotificationData> pendingNotifications) {
         if (existing == null) return false; // 3-C1: 一致、何もしない
         if (existing.isDirty()) return false; // dirty保護
 
@@ -420,7 +433,11 @@ public class DensukeImportService {
         switch (status) {
             case WON -> {
                 // 3-C2: キャンセル → 繰り上げ発動
-                waitlistPromotionService.cancelParticipation(existing.getId());
+                AdminWaitlistNotificationData notifData = waitlistPromotionService.cancelParticipationSuppressed(
+                        existing.getId(), null, null);
+                if (notifData != null) {
+                    pendingNotifications.add(notifData);
+                }
                 log.info("Phase3-C2: cancelled WON player {} via densuke", playerId);
                 return true;
             }
@@ -735,5 +752,22 @@ public class DensukeImportService {
             }
         }
         log.info("Densuke unmatched names notification: {} new/updated", toSave.size());
+    }
+
+    /**
+     * 蓄積された通知データをセッション×トリガー×プレイヤーでグルーピングしてまとめ送信する。
+     */
+    private void sendPendingNotifications(List<AdminWaitlistNotificationData> pendingNotifications) {
+        // セッションID×トリガー×プレイヤーIDでグルーピング
+        pendingNotifications.stream()
+                .collect(Collectors.groupingBy(d -> d.getSessionId() + ":" + d.getTriggerAction() + ":" + d.getTriggerPlayerId()))
+                .values()
+                .forEach(dataList -> {
+                    Long sessionId = dataList.get(0).getSessionId();
+                    PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                    if (session != null) {
+                        waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
+                    }
+                });
     }
 }

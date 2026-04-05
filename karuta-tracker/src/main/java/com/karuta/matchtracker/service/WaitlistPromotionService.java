@@ -14,11 +14,17 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -65,6 +71,34 @@ public class WaitlistPromotionService {
      */
     @Transactional
     public void demoteToWaitlist(Long participantId) {
+        AdminWaitlistNotificationData notifData = demoteToWaitlistInternal(participantId);
+
+        PracticeParticipant participant = practiceParticipantRepository.findById(participantId).orElse(null);
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+
+        sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+        densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
+     * WON → WAITLISTED（最後尾）に降格する（通知抑制版）。
+     * 呼び出し元で複数件分をまとめて sendBatchedAdminWaitlistNotifications に渡す用途。
+     *
+     * @param participantId 参加者レコードID
+     * @return 通知データ
+     */
+    @Transactional
+    public AdminWaitlistNotificationData demoteToWaitlistSuppressed(Long participantId) {
+        AdminWaitlistNotificationData notifData = demoteToWaitlistInternal(participantId);
+        densukeSyncService.triggerWriteAsync();
+        return notifData;
+    }
+
+    /**
+     * 降格処理の内部実装。通知送信は行わず、通知データを返す。
+     */
+    private AdminWaitlistNotificationData demoteToWaitlistInternal(Long participantId) {
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
 
@@ -93,11 +127,13 @@ public class WaitlistPromotionService {
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate(), participant.getPlayerId());
 
-        // 管理者通知
-        notifyAdminsAboutWaitlistChange("降格", participant.getPlayerId(),
-                session, participant.getMatchNumber(), promoted.orElse(null));
-
-        densukeSyncService.triggerWriteAsync();
+        return AdminWaitlistNotificationData.builder()
+                .triggerAction("降格")
+                .triggerPlayerId(participant.getPlayerId())
+                .sessionId(participant.getSessionId())
+                .matchNumber(participant.getMatchNumber())
+                .promotedParticipant(promoted.orElse(null))
+                .build();
     }
 
     /**
@@ -121,6 +157,44 @@ public class WaitlistPromotionService {
      */
     @Transactional
     public ParticipantStatus cancelParticipation(Long participantId, String cancelReason, String cancelReasonDetail) {
+        AdminWaitlistNotificationData notifData = cancelParticipationInternal(participantId, cancelReason, cancelReasonDetail);
+
+        if (notifData != null) {
+            PracticeSession session = practiceSessionRepository.findById(notifData.getSessionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", notifData.getSessionId()));
+            sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+        }
+
+        densukeSyncService.triggerWriteAsync();
+        return ParticipantStatus.CANCELLED;
+    }
+
+    /**
+     * 当選者が参加をキャンセルする（通知抑制オプション付き）。
+     * suppressNotification=true の場合、管理者通知を送信せず通知データを返す。
+     * 呼び出し元で複数件分をまとめて sendBatchedAdminWaitlistNotifications に渡す用途。
+     *
+     * @param participantId      参加者レコードID
+     * @param cancelReason       キャンセル理由コード
+     * @param cancelReasonDetail キャンセル理由詳細
+     * @param suppressNotification true=通知を送信しない
+     * @return 通知データ（通知不要の場合はnull）
+     */
+    @Transactional
+    public AdminWaitlistNotificationData cancelParticipationSuppressed(Long participantId,
+                                                                        String cancelReason,
+                                                                        String cancelReasonDetail) {
+        AdminWaitlistNotificationData notifData = cancelParticipationInternal(participantId, cancelReason, cancelReasonDetail);
+        densukeSyncService.triggerWriteAsync();
+        return notifData;
+    }
+
+    /**
+     * キャンセル処理の内部実装。通知送信は行わず、通知データを返す。
+     */
+    private AdminWaitlistNotificationData cancelParticipationInternal(Long participantId,
+                                                                       String cancelReason,
+                                                                       String cancelReasonDetail) {
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
 
@@ -148,7 +222,7 @@ public class WaitlistPromotionService {
                     session.getId(), participant.getMatchNumber());
 
             handleSameDayCancelAndRecruit(participant, session);
-            return ParticipantStatus.CANCELLED;
+            return null; // 当日補充は独自の通知フローを持つ
         }
 
         // 当日12:00より前のキャンセル → 従来通りwaitlistNumberに基づく繰り上げフロー
@@ -156,14 +230,17 @@ public class WaitlistPromotionService {
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
         // 定員未達（WAITLISTEDなし）の場合は通知不要
-        if (promoted.isPresent()) {
-            notifyAdminsAboutWaitlistChange("キャンセル", participant.getPlayerId(),
-                    session, participant.getMatchNumber(), promoted.get());
+        if (promoted.isEmpty()) {
+            return null;
         }
 
-        densukeSyncService.triggerWriteAsync();
-
-        return ParticipantStatus.CANCELLED;
+        return AdminWaitlistNotificationData.builder()
+                .triggerAction("キャンセル")
+                .triggerPlayerId(participant.getPlayerId())
+                .sessionId(participant.getSessionId())
+                .matchNumber(participant.getMatchNumber())
+                .promotedParticipant(promoted.get())
+                .build();
     }
 
     /**
@@ -248,8 +325,14 @@ public class WaitlistPromotionService {
                 session, cancelledParticipant.getMatchNumber(), cancelledParticipant.getPlayerId());
 
         // 3. 管理者通知
-        notifyAdminsAboutWaitlistChange("キャンセル（当日補充）", cancelledParticipant.getPlayerId(),
-                session, cancelledParticipant.getMatchNumber(), null);
+        AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
+                .triggerAction("キャンセル（当日補充）")
+                .triggerPlayerId(cancelledParticipant.getPlayerId())
+                .sessionId(cancelledParticipant.getSessionId())
+                .matchNumber(cancelledParticipant.getMatchNumber())
+                .promotedParticipant(null)
+                .build();
+        sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
 
         densukeSyncService.triggerWriteAsync();
     }
@@ -359,8 +442,14 @@ public class WaitlistPromotionService {
                     participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
             // 管理者通知
-            notifyAdminsAboutWaitlistChange("オファー辞退", participant.getPlayerId(),
-                    session, participant.getMatchNumber(), promoted.orElse(null));
+            AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
+                    .triggerAction("オファー辞退")
+                    .triggerPlayerId(participant.getPlayerId())
+                    .sessionId(participant.getSessionId())
+                    .matchNumber(participant.getMatchNumber())
+                    .promotedParticipant(promoted.orElse(null))
+                    .build();
+            sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
 
             densukeSyncService.triggerWriteAsync();
             return;
@@ -389,8 +478,8 @@ public class WaitlistPromotionService {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
-        // 影響を受けた試合番号を記録
-        Set<Integer> affectedMatchNumbers = new HashSet<>();
+        // 通知データを蓄積
+        List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
 
         for (PracticeParticipant p : waitlisted) {
             Integer oldNumber = p.getWaitlistNumber();
@@ -404,17 +493,20 @@ public class WaitlistPromotionService {
                 practiceParticipantRepository.decrementWaitlistNumbersAfter(sessionId, p.getMatchNumber(), oldNumber);
             }
 
-            affectedMatchNumbers.add(p.getMatchNumber());
+            notificationDataList.add(AdminWaitlistNotificationData.builder()
+                    .triggerAction("キャンセル待ち辞退")
+                    .triggerPlayerId(playerId)
+                    .sessionId(sessionId)
+                    .matchNumber(p.getMatchNumber())
+                    .promotedParticipant(null)
+                    .build());
 
             log.info("Player {} declined waitlist for session {} match {} (was #{})",
                     playerId, sessionId, p.getMatchNumber(), oldNumber);
         }
 
-        // 影響を受けた各試合のキャンセル待ちユーザーに通知
-        for (Integer matchNumber : affectedMatchNumbers) {
-            notifyAdminsAboutWaitlistChange("キャンセル待ち辞退", playerId,
-                    session, matchNumber, null);
-        }
+        // まとめて通知送信
+        sendBatchedAdminWaitlistNotifications(notificationDataList, session);
 
         densukeSyncService.triggerWriteAsync();
         return waitlisted.size();
@@ -486,8 +578,14 @@ public class WaitlistPromotionService {
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
         // 管理者通知
-        notifyAdminsAboutWaitlistChange("オファー期限切れ", participant.getPlayerId(),
-                session, participant.getMatchNumber(), promoted.orElse(null));
+        AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
+                .triggerAction("オファー期限切れ")
+                .triggerPlayerId(participant.getPlayerId())
+                .sessionId(participant.getSessionId())
+                .matchNumber(participant.getMatchNumber())
+                .promotedParticipant(promoted.orElse(null))
+                .build();
+        sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
     }
 
     /**
@@ -545,38 +643,52 @@ public class WaitlistPromotionService {
     }
 
     /**
-     * キャンセル待ち列の変動を通知する
-     * - SUPER_ADMIN向け: キャンセル待ち状況の詳細
-     * - 残りのWAITLISTEDユーザー向け: 順番繰り上がりの通知
+     * 複数試合分のキャンセル待ち状況通知をまとめて送信する。
+     * 同一セッション×トリガー×プレイヤーの通知データをリストで受け取り、
+     * 試合ごとのキャンセル待ち列を収集して1通のFlexメッセージとして送信する。
+     *
+     * @param notificationDataList 通知データのリスト（同一セッション・トリガー・プレイヤー）
+     * @param session              対象セッション
      */
-    private void notifyAdminsAboutWaitlistChange(String triggerAction, Long triggerPlayerId,
-                                                  PracticeSession session, int matchNumber,
-                                                  PracticeParticipant promotedParticipant) {
+    public void sendBatchedAdminWaitlistNotifications(List<AdminWaitlistNotificationData> notificationDataList,
+                                                       PracticeSession session) {
+        if (notificationDataList.isEmpty()) return;
+
         try {
-            Player triggerPlayer = playerRepository.findById(triggerPlayerId).orElse(null);
+            AdminWaitlistNotificationData first = notificationDataList.get(0);
+            Player triggerPlayer = playerRepository.findById(first.getTriggerPlayerId()).orElse(null);
             if (triggerPlayer == null) return;
 
-            Player offeredPlayer = null;
-            if (promotedParticipant != null) {
-                offeredPlayer = playerRepository.findById(promotedParticipant.getPlayerId()).orElse(null);
+            // 各試合の情報を収集
+            List<Integer> matchNumbers = new ArrayList<>();
+            Map<Integer, List<PracticeParticipant>> waitlistByMatch = new LinkedHashMap<>();
+            Map<Integer, Player> offeredPlayerByMatch = new HashMap<>();
+
+            for (AdminWaitlistNotificationData data : notificationDataList) {
+                matchNumbers.add(data.getMatchNumber());
+
+                List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
+                        .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                                session.getId(), data.getMatchNumber(), ParticipantStatus.WAITLISTED);
+                waitlistByMatch.put(data.getMatchNumber(), remainingWaitlist);
+
+                if (data.getPromotedParticipant() != null) {
+                    Player offeredPlayer = playerRepository.findById(data.getPromotedParticipant().getPlayerId()).orElse(null);
+                    offeredPlayerByMatch.put(data.getMatchNumber(), offeredPlayer);
+                }
             }
 
-            // 残りのキャンセル待ち列をwaitlistNumber昇順で取得
-            List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
-                    .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                            session.getId(), matchNumber, ParticipantStatus.WAITLISTED);
-
-            // SUPER_ADMIN向け通知
+            // 管理者向け通知（1通のFlexにまとめて送信）
             lineNotificationService.sendAdminWaitlistNotification(
-                    triggerAction, triggerPlayer, session, matchNumber,
-                    offeredPlayer, remainingWaitlist);
+                    first.getTriggerAction(), triggerPlayer, session, matchNumbers,
+                    waitlistByMatch, offeredPlayerByMatch);
 
-            // 残りのWAITLISTEDユーザー向け順番繰り上がり通知（管理者と同じFlexメッセージ）
+            // WAITLISTEDユーザー向け通知（同じFlexを使用）
             lineNotificationService.sendWaitlistPositionUpdateNotifications(
-                    triggerAction, triggerPlayer, session, matchNumber,
-                    offeredPlayer, remainingWaitlist);
+                    first.getTriggerAction(), triggerPlayer, session, matchNumbers,
+                    waitlistByMatch, offeredPlayerByMatch);
         } catch (Exception e) {
-            log.error("Failed to send waitlist change notifications: {}", e.getMessage(), e);
+            log.error("Failed to send batched waitlist change notifications: {}", e.getMessage(), e);
         }
     }
 }
