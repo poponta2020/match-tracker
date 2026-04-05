@@ -62,7 +62,7 @@ status: completed
 
 ### タスク5: テスト修正と動作確認
 
-- [ ] 完了
+- [x] 完了
 - **概要:** シグネチャ変更に伴うテストの修正と、全体テストの実行。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/WaitlistPromotionServiceTest.java` — 通知呼び出しのverify修正
