@@ -880,9 +880,7 @@ public class LineNotificationService {
                                      Player offeredPlayer, Map<Long, String> playerNames) {
         for (PracticeParticipant wp : waitlist) {
             String name = playerNames.getOrDefault(wp.getPlayerId(), "不明");
-            boolean isFirstAndOffered = wp.getWaitlistNumber() != null
-                && wp.getWaitlistNumber() == 1
-                && offeredPlayer != null
+            boolean isFirstAndOffered = offeredPlayer != null
                 && offeredPlayer.getId().equals(wp.getPlayerId());
             if (isFirstAndOffered) {
                 bodyContents.add(Map.of("type", "text",

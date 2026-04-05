@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,8 +64,8 @@ class WaitlistPromotionServiceAdditionalTest {
                 .thenReturn(Optional.empty());
         when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
         when(practiceParticipantRepository
-                .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                        100L, 1, ParticipantStatus.WAITLISTED))
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                 .thenReturn(List.of());
 
         service.demoteToWaitlist(1L);

@@ -382,10 +382,7 @@ public class WaitlistPromotionService {
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
 
-        // 後続のキャンセル待ち番号を一括繰り上げ
-        if (oldWaitlistNumber != null) {
-            practiceParticipantRepository.decrementWaitlistNumbersAfter(sessionId, matchNumber, oldWaitlistNumber);
-        }
+        // OFFERED時点では番号を繰り上げない（離脱確定時＝WON/DECLINED時に繰り上げる）
 
         log.info("Offered waitlist #{} (player {}) for session {} match {}. Deadline: {}",
                 oldWaitlistNumber, next.getPlayerId(), sessionId, matchNumber, deadline);
@@ -423,14 +420,31 @@ public class WaitlistPromotionService {
         participant.setRespondedAt(JstDateTimeUtil.now());
 
         if (accept) {
+            Integer oldNumber = participant.getWaitlistNumber();
             participant.setStatus(ParticipantStatus.WON);
             participant.setDirty(true);
+            participant.setWaitlistNumber(null);
             log.info("Player {} accepted offer for session {} match {}",
                     participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
+
+            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
+            practiceParticipantRepository.save(participant);
+            if (oldNumber != null) {
+                practiceParticipantRepository.decrementWaitlistNumbersAfter(
+                        participant.getSessionId(), participant.getMatchNumber(), oldNumber);
+            }
         } else {
+            Integer oldNumber = participant.getWaitlistNumber();
             participant.setStatus(ParticipantStatus.DECLINED);
             participant.setDirty(true);
+            participant.setWaitlistNumber(null);
             practiceParticipantRepository.save(participant);
+
+            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
+            if (oldNumber != null) {
+                practiceParticipantRepository.decrementWaitlistNumbersAfter(
+                        participant.getSessionId(), participant.getMatchNumber(), oldNumber);
+            }
 
             log.info("Player {} declined offer for session {} match {}",
                     participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
@@ -455,7 +469,6 @@ public class WaitlistPromotionService {
             return;
         }
 
-        practiceParticipantRepository.save(participant);
         densukeSyncService.triggerWriteAsync();
     }
 
@@ -558,14 +571,22 @@ public class WaitlistPromotionService {
             return;
         }
 
+        Integer oldNumber = participant.getWaitlistNumber();
         participant.setStatus(ParticipantStatus.DECLINED);
         participant.setDirty(true);
         participant.setRespondedAt(JstDateTimeUtil.now());
+        participant.setWaitlistNumber(null);
         practiceParticipantRepository.save(participant);
 
-        log.info("Offer expired for player {} in session {} match {} (waitlist #{})",
+        // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
+        if (oldNumber != null) {
+            practiceParticipantRepository.decrementWaitlistNumbersAfter(
+                    participant.getSessionId(), participant.getMatchNumber(), oldNumber);
+        }
+
+        log.info("Offer expired for player {} in session {} match {} (was waitlist #{})",
                 participant.getPlayerId(), participant.getSessionId(),
-                participant.getMatchNumber(), participant.getWaitlistNumber());
+                participant.getMatchNumber(), oldNumber);
 
         notificationService.createOfferExpiredNotification(participant);
 
@@ -610,18 +631,26 @@ public class WaitlistPromotionService {
         Set<Integer> affectedMatches = new LinkedHashSet<>();
 
         for (PracticeParticipant participant : offered) {
+            Integer oldNumber = participant.getWaitlistNumber();
             participant.setStatus(ParticipantStatus.DECLINED);
             participant.setDirty(true);
             participant.setRespondedAt(JstDateTimeUtil.now());
+            participant.setWaitlistNumber(null);
             practiceParticipantRepository.save(participant);
+
+            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
+            if (oldNumber != null) {
+                practiceParticipantRepository.decrementWaitlistNumbersAfter(
+                        session.getId(), participant.getMatchNumber(), oldNumber);
+            }
 
             notificationService.createOfferExpiredNotification(participant);
             lineNotificationService.sendOfferExpiredNotification(participant);
 
             affectedMatches.add(participant.getMatchNumber());
 
-            log.info("Expired offer for player {} session {} match {}",
-                    participant.getPlayerId(), session.getId(), participant.getMatchNumber());
+            log.info("Expired offer for player {} session {} match {} (was waitlist #{})",
+                    participant.getPlayerId(), session.getId(), participant.getMatchNumber(), oldNumber);
         }
 
         // 空き枠がある試合に対して当日空き募集フローを発動
@@ -668,8 +697,9 @@ public class WaitlistPromotionService {
                 matchNumbers.add(data.getMatchNumber());
 
                 List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
-                        .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                                session.getId(), data.getMatchNumber(), ParticipantStatus.WAITLISTED);
+                        .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                                session.getId(), data.getMatchNumber(),
+                                List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED));
                 waitlistByMatch.put(data.getMatchNumber(), remainingWaitlist);
 
                 if (data.getPromotedParticipant() != null) {

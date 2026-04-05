@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -159,9 +160,9 @@ class WaitlistPromotionServiceTest {
     class PromoteRenumberTests {
 
         @Test
-        @DisplayName("繰り上げ時に後続のキャンセル待ち番号が繰り上がる")
-        void promoteNextWaitlisted_renumbersSubsequent() {
-            // #1 Aさん, #2 Bさん, #3 Cさん → Aさん繰り上げ → B=#1, C=#2
+        @DisplayName("OFFERED時には番号繰り上げが行われない（離脱確定時に繰り上げる）")
+        void promoteNextWaitlisted_doesNotRenumberOnOffer() {
+            // #1 Aさん → OFFERED → decrementは呼ばれない
             PracticeParticipant waitlist1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
@@ -176,15 +177,14 @@ class WaitlistPromotionServiceTest {
 
             assertThat(promoted).isPresent();
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-            // 後続の番号がバルクUPDATEで繰り上がることを検証
-            verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 1);
-            // 繰り上げ対象のみsave
+            // OFFERED時点ではdecrementは呼ばれない
+            verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
             verify(practiceParticipantRepository, times(1)).save(any());
         }
 
         @Test
-        @DisplayName("キャンセル待ちが1人だけの場合も正常に繰り上がる")
-        void promoteNextWaitlisted_singleWaitlisted() {
+        @DisplayName("キャンセル待ちが1人だけの場合もOFFERED時に番号繰り上げは行われない")
+        void promoteNextWaitlisted_singleWaitlisted_noRenumber() {
             PracticeParticipant waitlist1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
@@ -200,7 +200,7 @@ class WaitlistPromotionServiceTest {
 
             assertThat(promoted).isPresent();
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-            verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 1);
+            verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
             verify(practiceParticipantRepository, times(1)).save(any());
         }
     }
