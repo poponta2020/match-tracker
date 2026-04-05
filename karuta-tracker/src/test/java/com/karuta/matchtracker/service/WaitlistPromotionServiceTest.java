@@ -442,4 +442,177 @@ class WaitlistPromotionServiceTest {
                     .hasMessageContaining("定員に達してしまいました");
         }
     }
+
+    @Nested
+    @DisplayName("respondToOfferAll: 一括応答テスト")
+    class RespondToOfferAllTest {
+
+        @Test
+        @DisplayName("全OFFEREDを一括承諾できる")
+        void respondToOfferAll_acceptAll() {
+            PracticeParticipant p1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+            PracticeParticipant p2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(p1, p2));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+
+            int count = service.respondToOfferAll(100L, 10L, true);
+
+            assertThat(count).isEqualTo(2);
+            assertThat(p1.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(p2.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(p1.getWaitlistNumber()).isNull();
+            assertThat(p2.getWaitlistNumber()).isNull();
+            verify(densukeSyncService).triggerWriteAsync();
+        }
+
+        @Test
+        @DisplayName("全OFFEREDを一括辞退できる")
+        void respondToOfferAll_declineAll() {
+            PracticeParticipant p1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .build();
+            PracticeParticipant p2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(p1, p2));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            // promoteNextWaitlisted用のモック（各試合で繰り上げ対象なし）
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(ParticipantStatus.WAITLISTED)))
+                    .thenReturn(Optional.empty());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+            // 再採番用モック
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+
+            int count = service.respondToOfferAll(100L, 10L, false);
+
+            assertThat(count).isEqualTo(2);
+            assertThat(p1.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            assertThat(p2.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            verify(densukeSyncService).triggerWriteAsync();
+        }
+
+        @Test
+        @DisplayName("OFFEREDがない場合はエラー")
+        void respondToOfferAll_noOffers() {
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of());
+
+            assertThatThrownBy(() -> service.respondToOfferAll(100L, 10L, true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("応答可能なオファーがありません");
+        }
+    }
+
+    @Nested
+    @DisplayName("respondToOffer: 部分参加後の残りオファー通知テスト")
+    class RespondToOfferRemainingTest {
+
+        @Test
+        @DisplayName("承諾後に残りOFFEREDがあれば通知が送信される")
+        void respondToOffer_accept_sendsRemainingNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+
+            PracticeParticipant remaining = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            // 残りOFFERED
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of(remaining));
+
+            service.respondToOffer(1L, true);
+
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.WON);
+            verify(lineNotificationService).sendRemainingOfferNotification(List.of(remaining));
+            verify(densukeSyncService).triggerWriteAsync();
+        }
+
+        @Test
+        @DisplayName("承諾後に残りOFFEREDがなければ通知は送信されない")
+        void respondToOffer_accept_noRemainingNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            // 残りOFFEREDなし
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of());
+
+            service.respondToOffer(1L, true);
+
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.WON);
+            verify(lineNotificationService, never()).sendRemainingOfferNotification(any());
+        }
+    }
+
+    @Test
+    @DisplayName("promoteNextWaitlistedはLINE通知を送信しない")
+    void promoteNextWaitlisted_doesNotSendLineNotification() {
+        PracticeParticipant waitlisted = PracticeParticipant.builder()
+                .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+        when(practiceParticipantRepository
+                .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                        100L, 1, ParticipantStatus.WAITLISTED))
+                .thenReturn(Optional.of(waitlisted));
+        when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+
+        Optional<PracticeParticipant> result = service.promoteNextWaitlisted(
+                100L, 1, LocalDate.of(2026, 5, 5));
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        // アプリ内通知は送信される
+        verify(notificationService).createOfferNotification(any());
+        // LINE通知は送信されない（呼び出し元でバッチ送信するため）
+        verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+    }
 }

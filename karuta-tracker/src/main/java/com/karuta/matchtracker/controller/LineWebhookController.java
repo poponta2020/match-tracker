@@ -48,7 +48,8 @@ public class LineWebhookController {
 
     /** 確認ダイアログを挟む対象のアクション */
     private static final Set<String> CONFIRMABLE_ACTIONS = Set.of(
-        "waitlist_accept", "waitlist_decline", "waitlist_decline_session", "same_day_join"
+        "waitlist_accept", "waitlist_decline", "waitlist_decline_session", "same_day_join",
+        "waitlist_accept_all", "waitlist_decline_all"
     );
 
     @PostMapping("/{lineChannelId}")
@@ -234,7 +235,9 @@ public class LineWebhookController {
                 sessionLabel = getSessionLabel(session);
                 matchNumber = participant.getMatchNumber();
 
-            } else if ("waitlist_decline_session".equals(action)) {
+            } else if ("waitlist_decline_session".equals(action)
+                    || "waitlist_accept_all".equals(action)
+                    || "waitlist_decline_all".equals(action)) {
                 // sessionIdからセッション情報を取得
                 String sessionIdStr = params.getOrDefault("sessionId", "");
                 if (sessionIdStr.isEmpty()) {
@@ -334,6 +337,8 @@ public class LineWebhookController {
         switch (action) {
             case "waitlist_accept", "waitlist_decline" ->
                 handleWaitlistResponse(channel, replyToken, action, params, playerId);
+            case "waitlist_accept_all", "waitlist_decline_all" ->
+                handleWaitlistResponseAll(channel, replyToken, action, params, playerId);
             case "waitlist_decline_session" ->
                 handleWaitlistDeclineSession(channel, replyToken, params, playerId);
             case "same_day_join" ->
@@ -391,6 +396,35 @@ public class LineWebhookController {
                 accept ? "accepted" : "declined", playerId, participantId);
         } catch (Exception e) {
             log.error("Failed to process waitlist postback for participant {}: {}", participantId, e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
+        }
+    }
+
+    /**
+     * 繰り上げオファー一括承諾/辞退を処理する
+     */
+    private void handleWaitlistResponseAll(LineChannel channel, String replyToken,
+                                            String action, java.util.Map<String, String> params, Long playerId) {
+        String sessionIdStr = params.getOrDefault("sessionId", "");
+        if (sessionIdStr.isEmpty()) {
+            sendReply(channel, replyToken, "セッション情報が不正です。アプリから操作してください。");
+            return;
+        }
+
+        try {
+            Long sessionId = Long.parseLong(sessionIdStr);
+            boolean accept = "waitlist_accept_all".equals(action);
+            int count = waitlistPromotionService.respondToOfferAll(sessionId, playerId, accept);
+            String replyMessage = accept
+                    ? count + "試合の参加登録が完了しました。練習頑張ってください！"
+                    : count + "試合のオファーを辞退しました。次の方に通知します。";
+            sendReply(channel, replyToken, replyMessage);
+            log.info("Waitlist offer batch {} via LINE postback: player={}, session={}, count={}",
+                    accept ? "accepted" : "declined", playerId, sessionId, count);
+        } catch (IllegalStateException e) {
+            sendReply(channel, replyToken, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to process batch waitlist postback: {}", e.getMessage());
             sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
         }
     }

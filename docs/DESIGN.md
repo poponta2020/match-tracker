@@ -1259,6 +1259,51 @@ Entity Layer (JPA Entity)
 }
 ```
 
+#### POST /api/lottery/respond-offer-all
+**説明**: 繰り上げオファー一括応答。同一セッション内の自分の全OFFEREDを一括承諾/辞退する。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
+**リクエスト**: `OfferBatchResponseRequest`
+```json
+{
+  "sessionId": 45,
+  "accept": true
+}
+```
+**レスポンス**:
+```json
+{
+  "result": "accepted",
+  "count": 3
+}
+```
+
+#### GET /api/lottery/session-offers/{sessionId}
+**説明**: セッション内の自分のOFFERED一覧取得。ログインユーザーのOFFEREDのみ返す。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
+**レスポンス**: `List<WaitlistStatusDto.WaitlistEntry>`
+```json
+[
+  {
+    "participantId": 123,
+    "sessionId": 45,
+    "sessionDate": "2026-04-05",
+    "venueName": "市民館",
+    "matchNumber": 1,
+    "status": "OFFERED",
+    "offerDeadline": "2026-04-04T23:59:59"
+  },
+  {
+    "participantId": 124,
+    "sessionId": 45,
+    "sessionDate": "2026-04-05",
+    "venueName": "市民館",
+    "matchNumber": 3,
+    "status": "OFFERED",
+    "offerDeadline": "2026-04-04T23:59:59"
+  }
+]
+```
+
 #### GET /api/lottery/waitlist-status
 **説明**: キャンセル待ち状況取得（ログインユーザーの状況のみ）
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
