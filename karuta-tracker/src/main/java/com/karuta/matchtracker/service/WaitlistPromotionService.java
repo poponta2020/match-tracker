@@ -19,9 +19,12 @@ import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -658,30 +661,32 @@ public class WaitlistPromotionService {
 
             // 各試合の情報を収集
             List<Integer> matchNumbers = new ArrayList<>();
+            Map<Integer, List<PracticeParticipant>> waitlistByMatch = new LinkedHashMap<>();
+            Map<Integer, Player> offeredPlayerByMatch = new HashMap<>();
+
             for (AdminWaitlistNotificationData data : notificationDataList) {
                 matchNumbers.add(data.getMatchNumber());
-            }
-
-            // 暫定実装: 試合ごとにループして旧シグネチャのメソッドを呼ぶ
-            // タスク4でLineNotificationServiceのシグネチャ変更後にバッチ送信に置き換える
-            for (AdminWaitlistNotificationData data : notificationDataList) {
-                Player offeredPlayer = null;
-                if (data.getPromotedParticipant() != null) {
-                    offeredPlayer = playerRepository.findById(data.getPromotedParticipant().getPlayerId()).orElse(null);
-                }
 
                 List<PracticeParticipant> remainingWaitlist = practiceParticipantRepository
                         .findBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
                                 session.getId(), data.getMatchNumber(), ParticipantStatus.WAITLISTED);
+                waitlistByMatch.put(data.getMatchNumber(), remainingWaitlist);
 
-                lineNotificationService.sendAdminWaitlistNotification(
-                        data.getTriggerAction(), triggerPlayer, session, data.getMatchNumber(),
-                        offeredPlayer, remainingWaitlist);
-
-                lineNotificationService.sendWaitlistPositionUpdateNotifications(
-                        data.getTriggerAction(), triggerPlayer, session, data.getMatchNumber(),
-                        offeredPlayer, remainingWaitlist);
+                if (data.getPromotedParticipant() != null) {
+                    Player offeredPlayer = playerRepository.findById(data.getPromotedParticipant().getPlayerId()).orElse(null);
+                    offeredPlayerByMatch.put(data.getMatchNumber(), offeredPlayer);
+                }
             }
+
+            // 管理者向け通知（1通のFlexにまとめて送信）
+            lineNotificationService.sendAdminWaitlistNotification(
+                    first.getTriggerAction(), triggerPlayer, session, matchNumbers,
+                    waitlistByMatch, offeredPlayerByMatch);
+
+            // WAITLISTEDユーザー向け通知（同じFlexを使用）
+            lineNotificationService.sendWaitlistPositionUpdateNotifications(
+                    first.getTriggerAction(), triggerPlayer, session, matchNumbers,
+                    waitlistByMatch, offeredPlayerByMatch);
         } catch (Exception e) {
             log.error("Failed to send batched waitlist change notifications: {}", e.getMessage(), e);
         }
