@@ -109,9 +109,9 @@ public class WaitlistPromotionService {
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
 
-        // 最後尾のキャンセル待ち番号を取得
+        // 最後尾のキャンセル待ち番号を取得（OFFEREDも含めて重複を防ぐ）
         int maxNumber = practiceParticipantRepository
-                .findMaxWaitlistNumber(participant.getSessionId(), participant.getMatchNumber())
+                .findMaxWaitlistNumberIncludingOffered(participant.getSessionId(), participant.getMatchNumber())
                 .orElse(0);
 
         // WON → WAITLISTED（最後尾）
@@ -420,31 +420,23 @@ public class WaitlistPromotionService {
         participant.setRespondedAt(JstDateTimeUtil.now());
 
         if (accept) {
-            Integer oldNumber = participant.getWaitlistNumber();
             participant.setStatus(ParticipantStatus.WON);
             participant.setDirty(true);
             participant.setWaitlistNumber(null);
             log.info("Player {} accepted offer for session {} match {}",
                     participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
 
-            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
+            // キャンセル待ち列から離脱確定 → 残存キューを再採番
             practiceParticipantRepository.save(participant);
-            if (oldNumber != null) {
-                practiceParticipantRepository.decrementWaitlistNumbersAfter(
-                        participant.getSessionId(), participant.getMatchNumber(), oldNumber);
-            }
+            renumberRemainingWaitlist(participant.getSessionId(), participant.getMatchNumber());
         } else {
-            Integer oldNumber = participant.getWaitlistNumber();
             participant.setStatus(ParticipantStatus.DECLINED);
             participant.setDirty(true);
             participant.setWaitlistNumber(null);
             practiceParticipantRepository.save(participant);
 
-            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
-            if (oldNumber != null) {
-                practiceParticipantRepository.decrementWaitlistNumbersAfter(
-                        participant.getSessionId(), participant.getMatchNumber(), oldNumber);
-            }
+            // キャンセル待ち列から離脱確定 → 残存キューを再採番
+            renumberRemainingWaitlist(participant.getSessionId(), participant.getMatchNumber());
 
             log.info("Player {} declined offer for session {} match {}",
                     participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
@@ -493,6 +485,7 @@ public class WaitlistPromotionService {
 
         // 通知データを蓄積
         List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
+        Set<Integer> affectedMatches = new LinkedHashSet<>();
 
         for (PracticeParticipant p : waitlisted) {
             Integer oldNumber = p.getWaitlistNumber();
@@ -501,10 +494,7 @@ public class WaitlistPromotionService {
             p.setWaitlistNumber(null);
             practiceParticipantRepository.save(p);
 
-            // 後続のキャンセル待ち番号を一括繰り上げ
-            if (oldNumber != null) {
-                practiceParticipantRepository.decrementWaitlistNumbersAfter(sessionId, p.getMatchNumber(), oldNumber);
-            }
+            affectedMatches.add(p.getMatchNumber());
 
             notificationDataList.add(AdminWaitlistNotificationData.builder()
                     .triggerAction("キャンセル待ち辞退")
@@ -516,6 +506,11 @@ public class WaitlistPromotionService {
 
             log.info("Player {} declined waitlist for session {} match {} (was #{})",
                     playerId, sessionId, p.getMatchNumber(), oldNumber);
+        }
+
+        // 影響試合ごとに1回だけ再採番
+        for (Integer matchNumber : affectedMatches) {
+            renumberRemainingWaitlist(sessionId, matchNumber);
         }
 
         // まとめて通知送信
@@ -542,9 +537,9 @@ public class WaitlistPromotionService {
         }
 
         for (PracticeParticipant p : declined) {
-            // 該当試合の最後尾番号を取得
+            // 該当試合の最後尾番号を取得（OFFEREDも含めて重複を防ぐ）
             int maxNumber = practiceParticipantRepository
-                    .findMaxWaitlistNumber(sessionId, p.getMatchNumber())
+                    .findMaxWaitlistNumberIncludingOffered(sessionId, p.getMatchNumber())
                     .orElse(0);
 
             p.setStatus(ParticipantStatus.WAITLISTED);
@@ -578,11 +573,8 @@ public class WaitlistPromotionService {
         participant.setWaitlistNumber(null);
         practiceParticipantRepository.save(participant);
 
-        // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
-        if (oldNumber != null) {
-            practiceParticipantRepository.decrementWaitlistNumbersAfter(
-                    participant.getSessionId(), participant.getMatchNumber(), oldNumber);
-        }
+        // キャンセル待ち列から離脱確定 → 残存キューを再採番
+        renumberRemainingWaitlist(participant.getSessionId(), participant.getMatchNumber());
 
         log.info("Offer expired for player {} in session {} match {} (was waitlist #{})",
                 participant.getPlayerId(), participant.getSessionId(),
@@ -638,12 +630,6 @@ public class WaitlistPromotionService {
             participant.setWaitlistNumber(null);
             practiceParticipantRepository.save(participant);
 
-            // キャンセル待ち列から離脱確定 → 後続の番号を繰り上げ
-            if (oldNumber != null) {
-                practiceParticipantRepository.decrementWaitlistNumbersAfter(
-                        session.getId(), participant.getMatchNumber(), oldNumber);
-            }
-
             notificationService.createOfferExpiredNotification(participant);
             lineNotificationService.sendOfferExpiredNotification(participant);
 
@@ -651,6 +637,11 @@ public class WaitlistPromotionService {
 
             log.info("Expired offer for player {} session {} match {} (was waitlist #{})",
                     participant.getPlayerId(), session.getId(), participant.getMatchNumber(), oldNumber);
+        }
+
+        // 影響試合ごとに1回だけ再採番
+        for (Integer matchNumber : affectedMatches) {
+            renumberRemainingWaitlist(session.getId(), matchNumber);
         }
 
         // 空き枠がある試合に対して当日空き募集フローを発動
@@ -719,6 +710,25 @@ public class WaitlistPromotionService {
                     waitlistByMatch, offeredPlayerByMatch);
         } catch (Exception e) {
             log.error("Failed to send batched waitlist change notifications: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 指定試合の残存キャンセル待ち（WAITLISTED + OFFERED）を 1..N で再採番する。
+     * decrement方式では OFFERED が対象外になり番号が崩れるため、全ステータスを一括で再付番する。
+     */
+    private void renumberRemainingWaitlist(Long sessionId, Integer matchNumber) {
+        List<PracticeParticipant> remaining = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        sessionId, matchNumber,
+                        List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED));
+        for (int i = 0; i < remaining.size(); i++) {
+            PracticeParticipant p = remaining.get(i);
+            int newNumber = i + 1;
+            if (!Integer.valueOf(newNumber).equals(p.getWaitlistNumber())) {
+                p.setWaitlistNumber(newNumber);
+                practiceParticipantRepository.save(p);
+            }
         }
     }
 }

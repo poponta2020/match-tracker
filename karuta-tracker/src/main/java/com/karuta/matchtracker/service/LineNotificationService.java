@@ -121,11 +121,13 @@ public class LineNotificationService {
                                                          List<Integer> matchNumbers,
                                                          Map<Integer, List<PracticeParticipant>> waitlistByMatch,
                                                          Map<Integer, Player> offeredPlayerByMatch) {
-        // 全試合のWAITLISTEDユーザーを収集（重複排除）
+        // 全試合のWAITLISTEDユーザーを収集（OFFERED は除外、重複排除）
         Set<Long> allWaitlistedPlayerIds = new LinkedHashSet<>();
         for (List<PracticeParticipant> wl : waitlistByMatch.values()) {
             for (PracticeParticipant wp : wl) {
-                allWaitlistedPlayerIds.add(wp.getPlayerId());
+                if (wp.getStatus() == ParticipantStatus.WAITLISTED) {
+                    allWaitlistedPlayerIds.add(wp.getPlayerId());
+                }
             }
         }
         if (allWaitlistedPlayerIds.isEmpty()) return;

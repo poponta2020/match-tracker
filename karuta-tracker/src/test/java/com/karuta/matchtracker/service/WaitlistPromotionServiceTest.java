@@ -67,6 +67,11 @@ class WaitlistPromotionServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(p1, p2));
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+        // 再採番用モック（辞退後の残存キュー）
+        when(practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                .thenReturn(List.of());
 
         int count = service.declineWaitlistBySession(100L, 10L);
 
@@ -75,26 +80,36 @@ class WaitlistPromotionServiceTest {
         assertThat(p1.getWaitlistNumber()).isNull();
         assertThat(p2.getStatus()).isEqualTo(ParticipantStatus.WAITLIST_DECLINED);
         verify(practiceParticipantRepository, times(2)).save(any());
-        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 2);
-        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 3, 1);
+        // 各試合ごとに再採番が呼ばれる（通知処理からも呼ばれるためatLeast）
+        verify(practiceParticipantRepository, atLeast(2))
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED)));
     }
 
     @Test
-    @DisplayName("辞退時に後続のキャンセル待ち番号が繰り上がる")
-    void declineWaitlistBySession_renumbersSubsequent() {
+    @DisplayName("辞退時に残存キューが再採番される")
+    void declineWaitlistBySession_renumbersRemaining() {
         PracticeParticipant target = PracticeParticipant.builder()
                 .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+        PracticeParticipant remaining = PracticeParticipant.builder()
+                .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
         PracticeSession session = PracticeSession.builder().id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(target));
         when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
+        // 辞退後の残存: #3のremainingのみ → #1に再採番
+        when(practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                .thenReturn(List.of(remaining));
 
         service.declineWaitlistBySession(100L, 10L);
 
-        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, 1, 2);
-        verify(practiceParticipantRepository, times(1)).save(any()); // target only
+        // remainingが#3→#1に再採番される
+        assertThat(remaining.getWaitlistNumber()).isEqualTo(1);
     }
 
     @Test
@@ -117,7 +132,7 @@ class WaitlistPromotionServiceTest {
 
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLIST_DECLINED))
                 .thenReturn(List.of(p1));
-        when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
+        when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 1))
                 .thenReturn(Optional.of(3));
 
         int count = service.rejoinWaitlistBySession(100L, 10L);
@@ -136,7 +151,7 @@ class WaitlistPromotionServiceTest {
 
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLIST_DECLINED))
                 .thenReturn(List.of(p1));
-        when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
+        when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 1))
                 .thenReturn(Optional.empty());
 
         service.rejoinWaitlistBySession(100L, 10L);
@@ -160,9 +175,8 @@ class WaitlistPromotionServiceTest {
     class PromoteRenumberTests {
 
         @Test
-        @DisplayName("OFFERED時には番号繰り上げが行われない（離脱確定時に繰り上げる）")
+        @DisplayName("OFFERED時には番号の再採番が行われない（離脱確定時に再採番する）")
         void promoteNextWaitlisted_doesNotRenumberOnOffer() {
-            // #1 Aさん → OFFERED → decrementは呼ばれない
             PracticeParticipant waitlist1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
@@ -177,13 +191,15 @@ class WaitlistPromotionServiceTest {
 
             assertThat(promoted).isPresent();
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-            // OFFERED時点ではdecrementは呼ばれない
+            // OFFERED時点では再採番は呼ばれない
             verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
+            verify(practiceParticipantRepository, never())
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(anyLong(), anyInt(), any());
             verify(practiceParticipantRepository, times(1)).save(any());
         }
 
         @Test
-        @DisplayName("キャンセル待ちが1人だけの場合もOFFERED時に番号繰り上げは行われない")
+        @DisplayName("キャンセル待ちが1人だけの場合もOFFERED時に再採番は行われない")
         void promoteNextWaitlisted_singleWaitlisted_noRenumber() {
             PracticeParticipant waitlist1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
@@ -202,6 +218,40 @@ class WaitlistPromotionServiceTest {
             assertThat(promoted.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
             verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
             verify(practiceParticipantRepository, times(1)).save(any());
+        }
+
+        @Test
+        @DisplayName("複数OFFERED存在時に離脱しても番号が重複しない（再採番で整合性維持）")
+        void respondToOffer_multipleOffered_renumbersCorrectly() {
+            // OFFERED#1 Aさん, OFFERED#2 Bさん, WAITLISTED#3 Cさん
+            // Aさんが承認 → 残存B,CをOFFERED#1, WAITLISTED#2に再採番
+            PracticeParticipant offeredA = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offeredAt(JstDateTimeUtil.now())
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(1)).build();
+            PracticeParticipant offeredB = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(2).build();
+            PracticeParticipant waitlistedC = PracticeParticipant.builder()
+                    .id(3L).sessionId(100L).playerId(30L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(offeredA));
+            // 再採番用クエリ: A離脱後の残存はB(OFFERED#2), C(WAITLISTED#3)
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of(offeredB, waitlistedC));
+
+            service.respondToOffer(1L, true);
+
+            // Aが離脱確定
+            assertThat(offeredA.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(offeredA.getWaitlistNumber()).isNull();
+            // 再採番によりB=#1, C=#2
+            assertThat(offeredB.getWaitlistNumber()).isEqualTo(1);
+            assertThat(waitlistedC.getWaitlistNumber()).isEqualTo(2);
         }
     }
 

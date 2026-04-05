@@ -299,12 +299,20 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     void deleteByeParticipant(@Param("sessionId") Long sessionId, @Param("playerId") Long playerId);
 
     /**
-     * 特定セッション・試合のキャンセル待ち最大番号を取得
+     * 特定セッション・試合のキャンセル待ち最大番号を取得（WAITLISTEDのみ）
      */
     @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +
            "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber AND p.status = 'WAITLISTED'")
     Optional<Integer> findMaxWaitlistNumber(@Param("sessionId") Long sessionId,
                                             @Param("matchNumber") Integer matchNumber);
+
+    /**
+     * 特定セッション・試合のキャンセル待ち最大番号を取得（WAITLISTED + OFFERED）
+     */
+    @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +
+           "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber AND p.status IN ('WAITLISTED', 'OFFERED')")
+    Optional<Integer> findMaxWaitlistNumberIncludingOffered(@Param("sessionId") Long sessionId,
+                                                            @Param("matchNumber") Integer matchNumber);
 
     /**
      * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
