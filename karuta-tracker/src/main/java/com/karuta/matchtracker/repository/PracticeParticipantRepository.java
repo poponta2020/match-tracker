@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -187,6 +188,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Integer matchNumber, ParticipantStatus status);
 
     /**
+     * 特定セッション・試合・複数ステータスの参加者をキャンセル待ち番号昇順で取得
+     */
+    List<PracticeParticipant> findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+            Long sessionId, Integer matchNumber, Collection<ParticipantStatus> statuses);
+
+    /**
      * 特定セッション・試合・ステータスの参加者数を取得
      */
     long countBySessionIdAndMatchNumberAndStatus(
@@ -292,12 +299,20 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     void deleteByeParticipant(@Param("sessionId") Long sessionId, @Param("playerId") Long playerId);
 
     /**
-     * 特定セッション・試合のキャンセル待ち最大番号を取得
+     * 特定セッション・試合のキャンセル待ち最大番号を取得（WAITLISTEDのみ）
      */
     @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +
            "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber AND p.status = 'WAITLISTED'")
     Optional<Integer> findMaxWaitlistNumber(@Param("sessionId") Long sessionId,
                                             @Param("matchNumber") Integer matchNumber);
+
+    /**
+     * 特定セッション・試合のキャンセル待ち最大番号を取得（WAITLISTED + OFFERED）
+     */
+    @Query("SELECT MAX(p.waitlistNumber) FROM PracticeParticipant p " +
+           "WHERE p.sessionId = :sessionId AND p.matchNumber = :matchNumber AND p.status IN ('WAITLISTED', 'OFFERED')")
+    Optional<Integer> findMaxWaitlistNumberIncludingOffered(@Param("sessionId") Long sessionId,
+                                                            @Param("matchNumber") Integer matchNumber);
 
     /**
      * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
