@@ -119,7 +119,7 @@ class LineRichMenuHandlerTest {
             Map<Long, Player> playerMap = Map.of(10L, player1, 20L, player2);
 
             Map<String, Object> flex = lineNotificationService.buildTodayParticipantsFlex(
-                    "4月2日（中央公民館）", byMatch, playerMap);
+                    "4月2日（中央公民館）", byMatch, playerMap, 4);
 
             assertThat(flex.get("type")).isEqualTo("bubble");
             assertThat(flex).containsKey("header");

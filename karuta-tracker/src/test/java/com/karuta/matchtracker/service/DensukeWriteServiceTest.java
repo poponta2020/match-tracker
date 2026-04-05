@@ -327,4 +327,82 @@ class DensukeWriteServiceTest {
     void testExtractBase_null() {
         assertThat(DensukeWriteService.extractBase(null)).isNull();
     }
+
+    // ----------------------------------------------------------------
+    // saveMemberMapping: 重複防止テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("saveMemberMapping: 競合なしの場合はtrueを返しマッピングが保存される")
+    void testSaveMemberMapping_noConflict_returnsTrue() {
+        when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
+                .thenReturn(Optional.empty());
+        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
+
+        assertThat(result).isTrue();
+        verify(densukeMemberMappingRepository).save(any(DensukeMemberMapping.class));
+    }
+
+    @Test
+    @DisplayName("saveMemberMapping: 同一プレイヤーで既存の場合はtrueを返す（再利用）")
+    void testSaveMemberMapping_samePlayer_returnsTrue_noSave() {
+        DensukeMemberMapping existing = DensukeMemberMapping.builder()
+                .densukeUrlId(1L).playerId(100L).densukeMemberId("mi1").build();
+        when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
+                .thenReturn(Optional.of(existing));
+
+        boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
+
+        assertThat(result).isTrue();
+        verify(densukeMemberMappingRepository, never()).save(any(DensukeMemberMapping.class));
+    }
+
+    @Test
+    @DisplayName("saveMemberMapping: 別プレイヤーに競合する場合はfalseを返し保存しない")
+    void testSaveMemberMapping_conflict_returnsFalse() {
+        DensukeMemberMapping existing = DensukeMemberMapping.builder()
+                .densukeUrlId(1L).playerId(200L).densukeMemberId("mi1").build();
+        when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
+                .thenReturn(Optional.of(existing));
+
+        boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
+
+        assertThat(result).isFalse();
+        verify(densukeMemberMappingRepository, never()).save(any(DensukeMemberMapping.class));
+    }
+
+    @Test
+    @DisplayName("saveMemberMapping: 一意制約例外後に別プレイヤーが登録済みならfalseを返す")
+    void testSaveMemberMapping_dataIntegrityViolation_otherPlayer_returnsFalse() {
+        DensukeMemberMapping otherPlayerMapping = DensukeMemberMapping.builder()
+                .densukeUrlId(1L).playerId(200L).densukeMemberId("mi1").build();
+        when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(otherPlayerMapping));
+        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    @DisplayName("saveMemberMapping: 一意制約例外後に同一プレイヤーが登録済みならtrueを返す（TOCTOU救済）")
+    void testSaveMemberMapping_dataIntegrityViolation_samePlayer_returnsTrue() {
+        DensukeMemberMapping samePlayerMapping = DensukeMemberMapping.builder()
+                .densukeUrlId(1L).playerId(100L).densukeMemberId("mi1").build();
+        when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(samePlayerMapping));
+        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+
+        boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
+
+        assertThat(result).isTrue();
+    }
 }

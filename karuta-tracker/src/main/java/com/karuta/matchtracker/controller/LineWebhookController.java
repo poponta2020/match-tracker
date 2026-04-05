@@ -582,7 +582,7 @@ public class LineWebhookController {
 
             String sessionLabel = getSessionLabel(session);
             Map<String, Object> flex = lineNotificationService.buildTodayParticipantsFlex(
-                    sessionLabel, byMatch, playerMap);
+                    sessionLabel, byMatch, playerMap, session.getCapacity());
             sendReplyFlex(channel, replyToken, sessionLabel + "の参加者", flex);
 
         } catch (Exception e) {

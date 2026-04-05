@@ -13,4 +13,6 @@ public interface DensukeMemberMappingRepository extends JpaRepository<DensukeMem
     Optional<DensukeMemberMapping> findByDensukeUrlIdAndPlayerId(Long densukeUrlId, Long playerId);
 
     List<DensukeMemberMapping> findByDensukeUrlId(Long densukeUrlId);
+
+    Optional<DensukeMemberMapping> findByDensukeUrlIdAndDensukeMemberId(Long densukeUrlId, String densukeMemberId);
 }

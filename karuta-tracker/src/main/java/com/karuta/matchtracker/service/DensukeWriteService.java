@@ -400,7 +400,10 @@ public class DensukeWriteService {
             // リストページのメンバーマップから探す
             mi = memberNameToMi.get(strippedName);
             if (mi != null) {
-                saveMemberMapping(urlId, playerId, mi, playerName);
+                if (!saveMemberMapping(urlId, playerId, mi, playerName)) {
+                    errors.add("選手[" + playerName + "]: 伝助メンバーID(" + mi + ")が別選手に既にマッピングされているため書き戻しを中断");
+                    return;
+                }
             }
         }
 
@@ -506,7 +509,10 @@ public class DensukeWriteService {
             if (location != null) {
                 String mi = extractQueryParam(location, "ii");
                 if (mi != null) {
-                    saveMemberMapping(urlId, playerId, mi, memberName);
+                    if (!saveMemberMapping(urlId, playerId, mi, memberName)) {
+                        errors.add("選手[" + memberName + "]: 伝助メンバーID(" + mi + ")が別選手に既にマッピングされているため書き戻しを中断");
+                        return null;
+                    }
                     return mi;
                 }
                 log.warn("Insert redirect has no ii param: {}", location);
@@ -523,7 +529,10 @@ public class DensukeWriteService {
             Map<String, String> memberMap = extractAllMemberMappings(listDoc);
             String mi = memberMap.get(memberName);
             if (mi != null) {
-                saveMemberMapping(urlId, playerId, mi, memberName);
+                if (!saveMemberMapping(urlId, playerId, mi, memberName)) {
+                    errors.add("選手[" + memberName + "]: 伝助メンバーID(" + mi + ")が別選手に既にマッピングされているため書き戻しを中断");
+                    return null;
+                }
                 return mi;
             }
 
@@ -537,13 +546,44 @@ public class DensukeWriteService {
         }
     }
 
-    private void saveMemberMapping(Long urlId, Long playerId, String mi, String playerName) {
-        densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
-                .densukeUrlId(urlId)
-                .playerId(playerId)
-                .densukeMemberId(mi)
-                .build());
-        log.info("Mapped densuke member: player={}, mi={}", playerName, mi);
+    /**
+     * メンバーマッピングを保存する。
+     * @return true: 保存成功（または同一プレイヤーで既存）、false: 別プレイヤーに競合しており保存失敗
+     */
+    boolean saveMemberMapping(Long urlId, Long playerId, String mi, String playerName) {
+        // 同一 densuke_member_id が既にマッピングされていないかチェック
+        Optional<DensukeMemberMapping> existing =
+                densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(urlId, mi);
+        if (existing.isPresent()) {
+            if (existing.get().getPlayerId().equals(playerId)) {
+                // 同一プレイヤーで既に登録済み → 再保存不要、成功扱い
+                log.debug("Densuke member mapping already exists: player={}, mi={}", playerName, mi);
+                return true;
+            }
+            log.warn("Densuke member_id {} is already mapped to player_id={}, skipping mapping for player={} (id={})",
+                    mi, existing.get().getPlayerId(), playerName, playerId);
+            return false;
+        }
+        try {
+            densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
+                    .densukeUrlId(urlId)
+                    .playerId(playerId)
+                    .densukeMemberId(mi)
+                    .build());
+            log.info("Mapped densuke member: player={}, mi={}", playerName, mi);
+            return true;
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // TOCTOU: チェック後に並行処理で先に登録された場合 → 再取得して同一プレイヤーなら成功扱い
+            Optional<DensukeMemberMapping> retry =
+                    densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(urlId, mi);
+            if (retry.isPresent() && retry.get().getPlayerId().equals(playerId)) {
+                log.info("Concurrent mapping resolved as same player: player={}, mi={}", playerName, mi);
+                return true;
+            }
+            log.warn("Concurrent mapping detected for densuke member_id {} (player={}): {}",
+                    mi, playerName, e.getMessage());
+            return false;
+        }
     }
 
     /**
