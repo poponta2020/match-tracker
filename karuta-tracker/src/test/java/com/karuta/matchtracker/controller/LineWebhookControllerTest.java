@@ -17,6 +17,7 @@ import com.karuta.matchtracker.service.LineLinkingService;
 import com.karuta.matchtracker.service.LineMessagingService;
 import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.LotteryDeadlineHelper;
+import com.karuta.matchtracker.service.OrganizationService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,7 @@ class LineWebhookControllerTest {
     @MockitoBean private LineNotificationService lineNotificationService;
     @MockitoBean private LineConfirmationService lineConfirmationService;
     @MockitoBean private LotteryDeadlineHelper lotteryDeadlineHelper;
+    @MockitoBean private OrganizationService organizationService;
 
     @Test
     @DisplayName("invalid signature returns 400")
