@@ -30,7 +30,7 @@ RICH_MENU_JSON='{
     },
     {
       "bounds": {"x": 0, "y": 843, "width": 833, "height": 843},
-      "action": {"type": "uri", "uri": "https://match-tracker-eight-gilt.vercel.app/settings/notifications"}
+      "action": {"type": "uri", "uri": "https://match-tracker-eight-gilt.vercel.app/matches/results"}
     },
     {
       "bounds": {"x": 833, "y": 843, "width": 833, "height": 843},
