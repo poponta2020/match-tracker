@@ -1003,6 +1003,82 @@ class MatchPairingServiceTest {
                 return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
             }));
         }
+
+        @Test
+        @DisplayName("createBatchで組織スコープ時に他団体のペアリングは削除対象にならない")
+        void shouldNotDeleteOtherOrgPairingsOnCreateBatch() {
+            // Given: 同日に Org A と Org B のペアリングが混在
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long orgAId = 10L;
+            Long createdBy = 1L;
+
+            PracticeSession sessionA = new PracticeSession();
+            sessionA.setId(100L);
+            sessionA.setSessionDate(sessionDate);
+            sessionA.setOrganizationId(orgAId);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgAId))
+                    .thenReturn(Optional.of(sessionA));
+
+            // Org A の参加者: player1, player2
+            PracticeParticipant pp1 = PracticeParticipant.builder().playerId(1L).sessionId(100L).build();
+            PracticeParticipant pp2 = PracticeParticipant.builder().playerId(2L).sessionId(100L).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(pp1, pp2));
+
+            // DB上には Org A (player1 vs player2) と Org B (player5 vs player6) のペアリングが混在
+            MatchPairing orgAPairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing orgBPairing = createMatchPairing(2L, sessionDate, matchNumber, 5L, 6L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(orgAPairing, orgBPairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // 新規ペアリング: player1 vs player2
+            MatchPairingCreateRequest req = new MatchPairingCreateRequest();
+            req.setPlayer1Id(1L);
+            req.setPlayer2Id(2L);
+            req.setSessionDate(sessionDate);
+            req.setMatchNumber(matchNumber);
+
+            when(matchPairingRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyCollection())).thenReturn(Arrays.asList(player1, player2));
+
+            // When: Org A のスコープで createBatch
+            matchPairingService.createBatch(sessionDate, matchNumber, List.of(req), null, createdBy, orgAId);
+
+            // Then: Org A のペアリングのみ削除される（Org B は対象外）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
+            }));
+        }
+
+        @Test
+        @DisplayName("getOrganizationIdByPairingIdでセッション未参加ならnullを返す")
+        void shouldReturnNullWhenPairingPlayerNotInAnySession() {
+            // Given: ペアリングのプレイヤーがどのセッションにも参加していない
+            Long pairingId = 1L;
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(pairingId, sessionDate, 1, 1L, 2L);
+            when(matchPairingRepository.findById(pairingId)).thenReturn(Optional.of(pairing));
+
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            session.setOrganizationId(10L);
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(session));
+            // セッション参加者に player1, player2 がいない
+            PracticeParticipant pp = PracticeParticipant.builder().playerId(99L).sessionId(100L).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(List.of(pp));
+
+            // When
+            Long orgId = matchPairingService.getOrganizationIdByPairingId(pairingId);
+
+            // Then: 組織特定不能のためnull
+            assertThat(orgId).isNull();
+        }
     }
 
     @Nested

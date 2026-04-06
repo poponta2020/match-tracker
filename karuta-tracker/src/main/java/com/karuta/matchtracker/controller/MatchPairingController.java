@@ -229,7 +229,7 @@ public class MatchPairingController {
             throw new ForbiddenException("他団体の組み合わせは操作できません");
         }
         Long pairingOrgId = matchPairingService.getOrganizationIdByPairingId(pairingId);
-        if (!adminOrgId.equals(pairingOrgId)) {
+        if (pairingOrgId == null || !adminOrgId.equals(pairingOrgId)) {
             throw new ForbiddenException("他団体の組み合わせは操作できません");
         }
     }

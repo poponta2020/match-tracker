@@ -757,6 +757,78 @@ class MatchPairingControllerTest {
     }
 
     @Nested
+    @DisplayName("ADMINスコープ境界テスト")
+    class AdminScopeBoundaryTests {
+
+        @Test
+        @DisplayName("ADMIN: getOrganizationIdByPairingIdがnullを返す場合は403")
+        void shouldReturn403WhenPairingOrgIdIsNull() throws Exception {
+            // Given: pairingOrgId が null（セッション参加者経由で組織を特定できない）
+            Long pairingId = 1L;
+            Long adminUserId = 1L;
+            Long adminOrgId = 10L;
+
+            Player admin = new Player();
+            admin.setId(adminUserId);
+            admin.setAdminOrganizationId(adminOrgId);
+            when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(null);
+
+            // When & Then: 組織特定不能のため403
+            mockMvc.perform(delete("/api/match-pairings/{id}", pairingId)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).delete(anyLong());
+        }
+
+        @Test
+        @DisplayName("ADMIN: getOrganizationIdByPairingIdが別組織IDを返す場合は403")
+        void shouldReturn403WhenPairingBelongsToDifferentOrg() throws Exception {
+            // Given: pairingOrgId が ADMIN の組織と異なる
+            Long pairingId = 1L;
+            Long adminUserId = 1L;
+            Long adminOrgId = 10L;
+            Long otherOrgId = 20L;
+
+            Player admin = new Player();
+            admin.setId(adminUserId);
+            admin.setAdminOrganizationId(adminOrgId);
+            when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(otherOrgId);
+
+            // When & Then: 他団体のため403
+            mockMvc.perform(delete("/api/match-pairings/{id}", pairingId)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).delete(anyLong());
+        }
+
+        @Test
+        @DisplayName("ADMIN: resetWithResultでもpairingOrgIdがnullなら403")
+        void shouldReturn403OnResetWhenPairingOrgIdIsNull() throws Exception {
+            // Given
+            Long pairingId = 1L;
+            Long adminUserId = 1L;
+            Long adminOrgId = 10L;
+
+            Player admin = new Player();
+            admin.setId(adminUserId);
+            admin.setAdminOrganizationId(adminOrgId);
+            when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(null);
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", pairingId)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).resetWithResult(anyLong());
+        }
+    }
+
+    @Nested
     @DisplayName("POST /api/match-pairings/auto-match")
     class AutoMatchTests {
 
