@@ -1810,13 +1810,13 @@ Entity Layer (JPA Entity)
 - 試合番号選択（1～7）
 - 参加者一覧（チェックボックス）
 - 「自動マッチング」ボタン → `POST /api/match-pairings/auto-match`
-- 提案されたペア一覧
-  - 選手1 vs 選手2
+- 提案されたペア一覧（ドラッグ&ドロップ対応）
+  - 選手カード（DraggablePlayerChip）を長押し/クリックでドラッグして入れ替え
   - 最近の対戦履歴（日付、何日前）
-  - スコア表示
-- 手動調整可能
-- 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`
-- 待機者リスト
+- 手動調整: 選手カード同士のスワップ、待機リストとの入れ替え
+- 新規ペアリング作成ドロップゾーン（待機選手をドロップして新規行作成）
+- 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化）
+- 待機者リスト（DroppableSlot、選手はDraggablePlayerChip）
 
 **アルゴリズム**:
 - 過去30日の対戦履歴取得

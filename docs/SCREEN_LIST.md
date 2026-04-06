@@ -66,7 +66,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト、対戦履歴 | ADMIN+ | 組み合わせ作成 |
+| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト（D&D対応）、対戦履歴、新規作成ドロップゾーン、DraggablePlayerChip、DroppableSlot | ADMIN+ | 組み合わせ作成（ドラッグ&ドロップ） |
 | 20 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | ADMIN+ | 組み合わせ一覧表示 |
 
 ---
