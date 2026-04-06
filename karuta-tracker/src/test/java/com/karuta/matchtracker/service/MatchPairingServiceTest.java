@@ -329,17 +329,26 @@ class MatchPairingServiceTest {
     class DeleteByDateAndMatchNumberTests {
 
         @Test
-        @DisplayName("日付と試合番号で対戦ペアリングを削除できる")
+        @DisplayName("日付と試合番号で対戦ペアリングを削除できる（ロック済みなし）")
         void shouldDeletePairingByDateAndMatchNumber() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
 
+            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
             // When
             matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber);
 
-            // Then
-            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+            // Then: 全件削除される（ロック済みなし）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
+            }));
         }
     }
 
@@ -919,6 +928,33 @@ class MatchPairingServiceTest {
             assertThat(result.getLockedPairings()).hasSize(1);
             assertThat(result.getLockedPairings().get(0).getPlayer1Id()).isEqualTo(1L);
             assertThat(result.getLockedPairings().get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.getLockedPairings().get(0).getId()).isEqualTo(10L);
+        }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumberでロック済みペアリングが保持される")
+        void shouldPreserveLockedPairingsOnDeleteByDateAndMatchNumber() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+
+            MatchPairing lockedPairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing unlockedPairing = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(lockedPairing, unlockedPairing));
+
+            Match existingMatch = createMatch(100L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber);
+
+            // Then: 未ロックのペアリングのみ削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+            }));
         }
     }
 }

@@ -830,7 +830,7 @@ const PairingGenerator = () => {
                       <Lock className="w-3 h-3" />
                       結果入力済
                     </span>
-                    {!isReadOnly && !isViewMode && (
+                    {!isReadOnly && !isViewMode && pairing.id && (
                       <button
                         onClick={() => handleResetPairing(pairing)}
                         disabled={loading}

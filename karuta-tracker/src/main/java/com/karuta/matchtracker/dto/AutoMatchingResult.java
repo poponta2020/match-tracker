@@ -22,6 +22,7 @@ public class AutoMatchingResult {
     @AllArgsConstructor
     @Builder
     public static class PairingSuggestion {
+        private Long id;
         private Long player1Id;
         private String player1Name;
         private Long player2Id;

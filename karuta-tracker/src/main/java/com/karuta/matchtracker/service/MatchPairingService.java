@@ -237,11 +237,24 @@ public class MatchPairingService {
     }
 
     /**
-     * 指定日・試合番号の対戦組み合わせを削除
+     * 指定日・試合番号の対戦組み合わせを削除（ロック済みペアリングは保持）
      */
     @Transactional
     public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
-        matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+        List<MatchPairing> existingPairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
+        List<Match> existingMatches = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
+
+        List<MatchPairing> toDelete = existingPairings.stream()
+                .filter(pairing -> {
+                    Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+                    Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+                    return existingMatches.stream().noneMatch(m ->
+                            (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                            (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
+                })
+                .collect(Collectors.toList());
+
+        matchPairingRepository.deleteAll(toDelete);
     }
 
     /**
@@ -377,6 +390,7 @@ public class MatchPairingService {
                 Player player1 = allPlayerMap.get(pairing.getPlayer1Id());
                 Player player2 = allPlayerMap.get(pairing.getPlayer2Id());
                 lockedPairingSuggestions.add(AutoMatchingResult.PairingSuggestion.builder()
+                        .id(pairing.getId())
                         .player1Id(pairing.getPlayer1Id())
                         .player1Name(player1 != null ? player1.getName() : "Unknown")
                         .player2Id(pairing.getPlayer2Id())
@@ -412,6 +426,7 @@ public class MatchPairingService {
             return AutoMatchingResult.builder()
                     .pairings(Collections.emptyList())
                     .waitingPlayers(Collections.emptyList())
+                    .lockedPairings(lockedPairingSuggestions)
                     .build();
         }
 
