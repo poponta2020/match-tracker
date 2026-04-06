@@ -46,6 +46,7 @@ public class PracticeParticipantService {
     private final DensukeSyncService densukeSyncService;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LineNotificationService lineNotificationService;
+    private final OrganizationService organizationService;
 
     public PracticeParticipantService(
             PracticeParticipantRepository practiceParticipantRepository,
@@ -55,7 +56,8 @@ public class PracticeParticipantService {
             LotteryDeadlineHelper lotteryDeadlineHelper,
             @Lazy DensukeSyncService densukeSyncService,
             PlayerOrganizationRepository playerOrganizationRepository,
-            LineNotificationService lineNotificationService) {
+            LineNotificationService lineNotificationService,
+            OrganizationService organizationService) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
         this.playerRepository = playerRepository;
@@ -64,6 +66,7 @@ public class PracticeParticipantService {
         this.densukeSyncService = densukeSyncService;
         this.playerOrganizationRepository = playerOrganizationRepository;
         this.lineNotificationService = lineNotificationService;
+        this.organizationService = organizationService;
     }
 
     @Transactional
@@ -137,6 +140,9 @@ public class PracticeParticipantService {
             organizationId = practiceSessionRepository.findById(requestSessionIds.iterator().next())
                     .map(PracticeSession::getOrganizationId).orElse(null);
         }
+
+        // 練習会に未所属であれば自動的に所属させる
+        organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), organizationId);
 
         com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
 

@@ -9,6 +9,7 @@ import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrganizationService {
@@ -123,6 +125,26 @@ public class OrganizationService {
 
         player.setAdminOrganizationId(organizationId);
         playerRepository.save(player);
+    }
+
+    /**
+     * 選手が指定団体に未所属であれば自動的に所属させる（通知設定も作成）
+     */
+    @Transactional
+    public void ensurePlayerBelongsToOrganization(Long playerId, Long organizationId) {
+        if (organizationId == null) {
+            return;
+        }
+        if (playerOrganizationRepository.existsByPlayerIdAndOrganizationId(playerId, organizationId)) {
+            return;
+        }
+        PlayerOrganization po = PlayerOrganization.builder()
+                .playerId(playerId)
+                .organizationId(organizationId)
+                .build();
+        playerOrganizationRepository.save(po);
+        createDefaultNotificationPreferences(playerId, organizationId);
+        log.info("Auto-assigned player {} to organization {}", playerId, organizationId);
     }
 
     /**

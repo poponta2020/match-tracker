@@ -49,6 +49,8 @@ class PracticeParticipantServiceTest {
     private com.karuta.matchtracker.repository.PlayerOrganizationRepository playerOrganizationRepository;
     @Mock
     private LineNotificationService lineNotificationService;
+    @Mock
+    private OrganizationService organizationService;
 
     @InjectMocks
     private PracticeParticipantService service;

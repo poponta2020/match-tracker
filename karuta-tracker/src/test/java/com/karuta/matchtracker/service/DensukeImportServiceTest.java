@@ -46,6 +46,7 @@ class DensukeImportServiceTest {
     @Mock private WaitlistPromotionService waitlistPromotionService;
     @Mock private PracticeParticipantService practiceParticipantService;
     @Mock private LineNotificationService lineNotificationService;
+    @Mock private OrganizationService organizationService;
 
     @InjectMocks
     private DensukeImportService densukeImportService;
@@ -275,6 +276,7 @@ class DensukeImportServiceTest {
         assertThat(savedPlayer.getName()).isEqualTo("新人");
         assertThat(savedPlayer.getRequirePasswordChange()).isTrue();
         assertThat(savedPlayer.getRole()).isEqualTo(Player.Role.PLAYER);
+        verify(organizationService).ensurePlayerBelongsToOrganization(savedPlayer.getId(), 1L);
     }
 
     @Test

@@ -41,6 +41,7 @@ public class DensukeImportService {
     private final WaitlistPromotionService waitlistPromotionService;
     private final PracticeParticipantService practiceParticipantService;
     private final LineNotificationService lineNotificationService;
+    private final OrganizationService organizationService;
 
     @Data
     public static class ImportResult {
@@ -682,8 +683,9 @@ public class DensukeImportService {
                     .requirePasswordChange(true)
                     .build();
             playerRepository.save(player);
+            organizationService.ensurePlayerBelongsToOrganization(player.getId(), organizationId);
             created++;
-            log.info("Auto-registered player: {}", name);
+            log.info("Auto-registered player: {} (org: {})", name, organizationId);
         }
         log.info("Registered {} new players, now re-syncing from densuke", created);
         return importFromDensuke(url, targetDate, createdBy, organizationId);
