@@ -15,18 +15,22 @@ import java.util.List;
 public class AutoMatchingResult {
     private List<PairingSuggestion> pairings;
     private List<PlayerInfo> waitingPlayers;
+    private List<PairingSuggestion> lockedPairings;
 
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     @Builder
     public static class PairingSuggestion {
+        private Long id;
         private Long player1Id;
         private String player1Name;
         private Long player2Id;
         private String player2Name;
         private Double score;
         private List<MatchHistory> recentMatches;
+        private String winnerName;
+        private Integer scoreDifference;
     }
 
     @Data

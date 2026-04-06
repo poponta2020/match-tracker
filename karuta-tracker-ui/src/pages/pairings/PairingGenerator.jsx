@@ -5,7 +5,7 @@ import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, RotateCcw } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import PlayerChip from '../../components/PlayerChip';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -19,7 +19,8 @@ const PairingGenerator = () => {
   // URLパラメータの日付があればそれを使用、なければ今日
   const today = new Date().toISOString().split('T')[0];
   const [sessionDate, setSessionDate] = useState(searchParams.get('date') || today);
-  const [matchNumber, setMatchNumber] = useState(1);
+  const initialMatchNumber = parseInt(searchParams.get('matchNumber'), 10);
+  const [matchNumber, setMatchNumber] = useState(initialMatchNumber > 0 ? initialMatchNumber : 1);
   const [participants, setParticipants] = useState([]);
   const [pairings, setPairings] = useState([]);
   const [waitingPlayers, setWaitingPlayers] = useState([]);
@@ -102,11 +103,16 @@ const PairingGenerator = () => {
       return;
     }
     const converted = existingData.map(p => ({
+      id: p.id,
       player1Id: p.player1Id,
       player1Name: p.player1Name,
       player2Id: p.player2Id,
       player2Name: p.player2Name,
       recentMatches: p.recentMatches || [],
+      hasResult: p.hasResult || false,
+      winnerName: p.winnerName || null,
+      scoreDifference: p.scoreDifference ?? null,
+      matchId: p.matchId || null,
     }));
     setPairings(converted);
 
@@ -195,6 +201,8 @@ const PairingGenerator = () => {
             pairingsCache.current[num] = matchPairings;
           }
           setMatchExistsMap(newExistsMap);
+          // URLパラメータの matchNumber が totalMatches を超えている場合はクランプ
+          setMatchNumber(prev => Math.max(1, Math.min(prev, totalMatches)));
           // キャッシュ更新をトリガー → matchNumber useEffectが再実行される
           setCacheVersion(v => v + 1);
         } else {
@@ -296,18 +304,29 @@ const PairingGenerator = () => {
         matchNumber,
       });
 
-      setPairings(response.data.pairings);
+      // ロック済みペアリングを先頭に配置し、新規ペアリングを後ろに追加
+      const locked = (response.data.lockedPairings || []).map(p => ({
+        ...p,
+        hasResult: true,
+      }));
+      const newPairings = response.data.pairings || [];
+      const combined = [...locked, ...newPairings];
+      setPairings(combined);
       setWaitingPlayers(response.data.waitingPlayers);
       setHasUnsavedChanges(true);
       setIsViewMode(false);
-      saveDraft(response.data.pairings, response.data.waitingPlayers, false);
+      saveDraft(combined, response.data.waitingPlayers, false);
 
+      const lockedCount = locked.length * 2;
       const usedParticipantCount =
-        (response.data.pairings?.length || 0) * 2 + (response.data.waitingPlayers?.length || 0);
+        lockedCount + (newPairings.length || 0) * 2 + (response.data.waitingPlayers?.length || 0);
       if (usedParticipantCount !== participants.length) {
         setNotice(
           `表示中の参加者数(${participants.length}名)と最新WON参加者数(${usedParticipantCount}名)が異なるため、最新WONで生成しました。`
         );
+      }
+      if (locked.length > 0) {
+        setNotice(prev => (prev ? prev + ' ' : '') + `結果入力済みの${locked.length}組はロックされています。`);
       }
     } catch (err) {
       console.error('Auto matching failed:', err);
@@ -318,7 +337,8 @@ const PairingGenerator = () => {
   };
 
   const handleSave = async () => {
-    if (pairings.length === 0) {
+    const unlockedPairings = pairings.filter(p => !p.hasResult);
+    if (unlockedPairings.length === 0 && waitingPlayers.length === 0) {
       setError('保存する組み合わせがありません');
       return;
     }
@@ -327,10 +347,13 @@ const PairingGenerator = () => {
     setError('');
 
     try {
-      const requests = pairings.map((p) => ({
-        player1Id: p.player1Id,
-        player2Id: p.player2Id,
-      }));
+      // ロック済みペアリングは送信対象から除外（バックエンド側でも保護されるが、明示的に除外）
+      const requests = pairings
+        .filter((p) => !p.hasResult)
+        .map((p) => ({
+          player1Id: p.player1Id,
+          player2Id: p.player2Id,
+        }));
 
       const waitingIds = waitingPlayers.map((p) => p.id);
       await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
@@ -378,7 +401,11 @@ const PairingGenerator = () => {
   };
 
   const handleDeleteExisting = async () => {
-    if (!window.confirm('既存の組み合わせを削除しますか？')) {
+    const lockedCount = pairings.filter(p => p.hasResult).length;
+    const msg = lockedCount > 0
+      ? `結果入力済みの${lockedCount}組を除く組み合わせを削除しますか？\n（結果入力済みの組み合わせは個別にリセットしてください）`
+      : '既存の組み合わせを削除しますか？';
+    if (!window.confirm(msg)) {
       return;
     }
 
@@ -387,17 +414,53 @@ const PairingGenerator = () => {
 
     try {
       await pairingAPI.deleteByDateAndMatchNumber(sessionDate, matchNumber);
-      pairingsCache.current[matchNumber] = null;
-      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: false }));
-      setPairings([]);
-      setWaitingPlayers([]);
-      setIsEditingExisting(false);
-      setIsViewMode(false);
+      // 削除後にキャッシュを再取得（ロック済みペアが残っている可能性がある）
+      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
+      const remaining = pairingsRes.data || [];
+      pairingsCache.current[matchNumber] = remaining.length > 0 ? remaining : null;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: remaining.length > 0 }));
+      if (remaining.length > 0) {
+        // ロック済みペアが残っている場合
+        setCacheVersion(v => v + 1);
+      } else {
+        setPairings([]);
+        setWaitingPlayers([]);
+        setIsEditingExisting(false);
+        setIsViewMode(false);
+      }
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
     } catch (err) {
       console.error('Delete failed:', err);
       setError('削除に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ロック済みペアリングのリセット
+  const handleResetPairing = async (pairing) => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm('未保存の変更があります。リセットすると未保存の変更は失われます。続行しますか？')) return;
+    }
+    const msg = `この組み合わせの結果をリセットしますか？\n\n${pairing.player1Name} vs ${pairing.player2Name}\n勝者: ${pairing.winnerName || '不明'}${pairing.scoreDifference != null ? `（${pairing.scoreDifference}枚差）` : ''}\n\n対戦組み合わせと試合結果の両方が削除されます。`;
+    if (!window.confirm(msg)) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      await pairingAPI.resetWithResult(pairing.id);
+      // キャッシュを更新して再表示
+      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
+      pairingsCache.current[matchNumber] = pairingsRes.data;
+      const hasData = pairingsRes.data && pairingsRes.data.length > 0;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
+      setCacheVersion(v => v + 1);
+      setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
+    } catch (err) {
+      console.error('Reset failed:', err);
+      setError('リセットに失敗しました');
     } finally {
       setLoading(false);
     }
@@ -418,6 +481,11 @@ const PairingGenerator = () => {
     const dest = over.data.current;
 
     if (!source || !dest) return;
+
+    // ロック済みペアリングへのドロップを防止
+    if (dest.slotType?.startsWith('pairing-') && pairings[dest.pairingIndex]?.hasResult) return;
+    // ロック済みペアリングからのドラッグを防止
+    if (source.type === 'pairing' && pairings[source.pairingIndex]?.hasResult) return;
 
     const result = computeDragResult({
       source,
@@ -545,13 +613,16 @@ const PairingGenerator = () => {
     }
   };
 
-  // 既に参加している選手を除外
+  // 既に参加している選手を除外（ロック済みペアの選手も除外）
   const availablePlayers = allPlayers.filter(player => {
     const isParticipant = participants.some(p => p.id === player.id);
     const isWaiting = waitingPlayers.some(p => p.id === player.id);
     const isInPairings = pairings.some(p => p.player1Id === player.id || p.player2Id === player.id);
     return !isParticipant && !isWaiting && !isInPairings;
   });
+
+  // ロック済みでないペアリングが存在するか
+  const hasUnlockedPairings = pairings.some(p => !p.hasResult);
 
   if (matchLoading) {
     return (
@@ -638,8 +709,8 @@ const PairingGenerator = () => {
 
       </div>
 
-      {/* 参加者セクション（組み合わせ未作成時のみ表示） */}
-      {pairings.length === 0 && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      {/* 参加者セクション（未ロックの組み合わせが未作成時のみ表示） */}
+      {!hasUnlockedPairings && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="bg-[#e5ebe7] px-6 py-3 flex items-center justify-between">
           <button
             onClick={() => setShowParticipantList(!showParticipantList)}
@@ -690,8 +761,8 @@ const PairingGenerator = () => {
         )}
       </div>}
 
-      {/* 自動組み合わせボタン（組み合わせ未生成時のみ表示、閲覧モードでは非表示） */}
-      {!isReadOnly && sessionDate && participants.length > 0 && pairings.length === 0 && (
+      {/* 自動組み合わせボタン（未ロックの組み合わせ未生成時のみ表示、閲覧モードでは非表示） */}
+      {!isReadOnly && sessionDate && participants.length > 0 && !hasUnlockedPairings && (
         <div className="flex justify-center">
           <button
             onClick={handleAutoMatch}
@@ -752,8 +823,32 @@ const PairingGenerator = () => {
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
             {pairings.map((pairing, index) => (
-              <div key={index} className="px-3 py-2.5">
-                {(isReadOnly || isViewMode) ? (
+              <div key={index} className={`px-3 py-2.5 ${pairing.hasResult ? 'bg-gray-50' : ''}`}>
+                {pairing.hasResult ? (
+                  /* ロック済み（結果入力済み）表示 */
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center justify-center gap-3">
+                      <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>
+                      <span className="text-gray-300 text-xs">vs</span>
+                      <span className="font-medium text-gray-400 text-sm">{pairing.player2Name}</span>
+                    </div>
+                    <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <Lock className="w-3 h-3" />
+                      結果入力済
+                    </span>
+                    {!isReadOnly && !isViewMode && pairing.id && (
+                      <button
+                        onClick={() => handleResetPairing(pairing)}
+                        disabled={loading}
+                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 whitespace-nowrap"
+                        title="組み合わせと結果をリセット"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        リセット
+                      </button>
+                    )}
+                  </div>
+                ) : (isReadOnly || isViewMode) ? (
                   /* 閲覧モード */
                   <div className="flex items-center justify-center gap-3">
                     <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
@@ -913,7 +1008,7 @@ const PairingGenerator = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={loading || pairings.some(p => !p.player1Id || !p.player2Id)}
+                  disabled={loading || pairings.some(p => !p.hasResult && (!p.player1Id || !p.player2Id))}
                   className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />

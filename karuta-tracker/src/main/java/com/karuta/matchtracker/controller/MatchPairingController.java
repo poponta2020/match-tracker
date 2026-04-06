@@ -108,8 +108,9 @@ public class MatchPairingController {
         validateAdminScopeByDate(date, httpRequest);
 
         Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
+        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
 
-        List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy);
+        List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy, organizationId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -153,7 +154,8 @@ public class MatchPairingController {
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ削除: 日付={}, 試合番号={}", date, matchNumber);
         validateAdminScopeByDate(date, httpRequest);
-        matchPairingService.deleteByDateAndMatchNumber(date, matchNumber);
+        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        matchPairingService.deleteByDateAndMatchNumber(date, matchNumber, organizationId);
         return ResponseEntity.noContent().build();
     }
 
@@ -181,7 +183,22 @@ public class MatchPairingController {
             HttpServletRequest httpRequest) {
         log.info("自動マッチング実行: {}", request);
         validateAdminScopeByDate(request.getSessionDate(), httpRequest);
-        AutoMatchingResult result = matchPairingService.autoMatch(request);
+        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * ペアリングと対応する試合結果を同時に削除（リセット）
+     */
+    @DeleteMapping("/{id}/with-result")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<MatchPairingDto> resetWithResult(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("対戦組み合わせリセット（結果込み）: ID={}", id);
+        validateAdminScopeByPairingId(id, httpRequest);
+        MatchPairingDto result = matchPairingService.resetWithResult(id);
         return ResponseEntity.ok(result);
     }
 
@@ -201,14 +218,20 @@ public class MatchPairingController {
     }
 
     /**
-     * ADMINスコープ検証（MatchPairing IDベース）
+     * ADMINスコープ検証（MatchPairing IDベース：ペアリング所属組織で照合）
      */
     private void validateAdminScopeByPairingId(Long pairingId, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         if (!"ADMIN".equals(role)) return;
 
-        LocalDate sessionDate = matchPairingService.getSessionDateById(pairingId);
-        validateAdminScopeByDate(sessionDate, httpRequest);
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if (adminOrgId == null) {
+            throw new ForbiddenException("他団体の組み合わせは操作できません");
+        }
+        Long pairingOrgId = matchPairingService.getOrganizationIdByPairingId(pairingId);
+        if (pairingOrgId == null || !adminOrgId.equals(pairingOrgId)) {
+            throw new ForbiddenException("他団体の組み合わせは操作できません");
+        }
     }
 
     private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {

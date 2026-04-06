@@ -9,6 +9,8 @@ import com.karuta.matchtracker.entity.MatchPersonalNote;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -38,6 +40,7 @@ public class MatchService {
     static final String RESULT_DRAW = "引き分け";
 
     private final MatchRepository matchRepository;
+    private final MatchPairingRepository matchPairingRepository;
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final MatchPersonalNoteRepository matchPersonalNoteRepository;
@@ -441,9 +444,37 @@ public class MatchService {
         // 個人メモ・お手付きを保存
         upsertPersonalNote(saved.getId(), request.getCreatedBy(), request.getPersonalNotes(), request.getOtetsukiCount());
 
+        // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
+        autoCreateMatchPairingIfAbsent(saved);
+
         MatchDto dto = enrichMatchWithPlayerNames(saved);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getCreatedBy());
         return enriched.get(0);
+    }
+
+    /**
+     * 対応するmatch_pairingが存在しなければ自動生成する
+     */
+    private void autoCreateMatchPairingIfAbsent(Match match) {
+        if (match.getPlayer2Id() == null || match.getPlayer2Id() == 0L) {
+            return; // 未登録対戦相手の場合はスキップ
+        }
+        Long p1 = Math.min(match.getPlayer1Id(), match.getPlayer2Id());
+        Long p2 = Math.max(match.getPlayer1Id(), match.getPlayer2Id());
+        var existing = matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(
+                match.getMatchDate(), match.getMatchNumber(), p1, p2);
+        if (existing.isEmpty()) {
+            MatchPairing pairing = MatchPairing.builder()
+                    .sessionDate(match.getMatchDate())
+                    .matchNumber(match.getMatchNumber())
+                    .player1Id(p1)
+                    .player2Id(p2)
+                    .createdBy(match.getCreatedBy())
+                    .build();
+            matchPairingRepository.save(pairing);
+            log.info("match_pairing自動生成: date={}, matchNumber={}, p1={}, p2={}",
+                     match.getMatchDate(), match.getMatchNumber(), p1, p2);
+        }
     }
 
     /**

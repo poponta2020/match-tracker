@@ -60,6 +60,7 @@ public class MatchPairingService {
         if (!light) {
             enrichWithRecentMatches(dtos, sessionDate, null);
         }
+        enrichWithMatchResults(dtos, sessionDate);
         return dtos;
     }
 
@@ -74,6 +75,7 @@ public class MatchPairingService {
                 .map(p -> convertToDtoWithCache(p, playerNames))
                 .collect(Collectors.toList());
         enrichWithRecentMatches(dtos, sessionDate, matchNumber);
+        enrichWithMatchResults(dtos, sessionDate);
         return dtos;
     }
 
@@ -105,11 +107,45 @@ public class MatchPairingService {
     @Transactional
     public List<MatchPairingDto> createBatch(LocalDate sessionDate, Integer matchNumber,
                                               List<MatchPairingCreateRequest> requests,
-                                              List<Long> waitingPlayerIds, Long createdBy) {
-        // 既存の組み合わせを削除
-        matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+                                              List<Long> waitingPlayerIds, Long createdBy,
+                                              Long organizationId) {
+        // 組織スコープ: セッション参加者でフィルタ
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
 
+        // ロック済みペアリング（結果入力済み）を特定して保持
+        boolean orgScoped = organizationId != null;
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+        Set<String> lockedPairKeys = new HashSet<>();
+        Set<Long> lockedPlayerIds = new HashSet<>();
+        List<MatchPairing> lockedPairings = new ArrayList<>();
+
+        for (MatchPairing pairing : existingPairings) {
+            Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+            Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+            boolean hasResult = existingMatches.stream().anyMatch(m ->
+                    (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                    (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
+            if (hasResult) {
+                lockedPairKeys.add(getPairKey(p1, p2));
+                lockedPlayerIds.add(pairing.getPlayer1Id());
+                lockedPlayerIds.add(pairing.getPlayer2Id());
+                lockedPairings.add(pairing);
+            }
+        }
+
+        // ロック済み以外の既存ペアリングを削除
+        List<MatchPairing> toDelete = existingPairings.stream()
+                .filter(p -> !lockedPairKeys.contains(getPairKey(p.getPlayer1Id(), p.getPlayer2Id())))
+                .collect(Collectors.toList());
+        matchPairingRepository.deleteAll(toDelete);
+
+        // 新規ペアリングからロック済みプレイヤーを含むものを除外
         List<MatchPairing> pairings = requests.stream()
+                .filter(request -> !lockedPlayerIds.contains(request.getPlayer1Id())
+                        && !lockedPlayerIds.contains(request.getPlayer2Id()))
                 .map(request -> MatchPairing.builder()
                         .sessionDate(sessionDate)
                         .matchNumber(matchNumber)
@@ -120,26 +156,40 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
 
         List<MatchPairing> saved = matchPairingRepository.saveAll(pairings);
+        // ロック済みペアリングも結果に含める
+        saved.addAll(lockedPairings);
+
+        // 待機者リストからロック済みプレイヤーを除外
+        List<Long> filteredWaitingPlayerIds = waitingPlayerIds != null
+                ? waitingPlayerIds.stream().filter(id -> !lockedPlayerIds.contains(id)).collect(Collectors.toList())
+                : Collections.emptyList();
 
         // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
-        if (waitingPlayerIds != null && !waitingPlayerIds.isEmpty()) {
-            practiceSessionRepository.findBySessionDate(sessionDate).ifPresent(session -> {
-                // 既存の抜け番登録（matchNumber=null）を一旦削除してから再登録
+        // waitingPlayerIds が渡された場合は、まず既存抜け番を必ず削除し、フィルタ後の待機者を再登録
+        if (waitingPlayerIds != null) {
+            Optional<com.karuta.matchtracker.entity.PracticeSession> byeSessionOpt = organizationId != null
+                    ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                    : practiceSessionRepository.findBySessionDate(sessionDate);
+            byeSessionOpt.ifPresent(session -> {
+                // 既存の抜け番登録（matchNumber=null）を一旦削除
                 List<PracticeParticipant> existingBye = practiceParticipantRepository
                         .findBySessionId(session.getId()).stream()
                         .filter(pp -> pp.getMatchNumber() == null)
                         .collect(Collectors.toList());
                 practiceParticipantRepository.deleteAll(existingBye);
 
-                List<PracticeParticipant> byeParticipants = waitingPlayerIds.stream()
-                        .map(playerId -> PracticeParticipant.builder()
-                                .sessionId(session.getId())
-                                .playerId(playerId)
-                                .matchNumber(null)
-                                .dirty(false)
-                                .build())
-                        .collect(Collectors.toList());
-                practiceParticipantRepository.saveAll(byeParticipants);
+                // フィルタ後の待機者を再登録（0件なら登録なし）
+                if (!filteredWaitingPlayerIds.isEmpty()) {
+                    List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
+                            .map(playerId -> PracticeParticipant.builder()
+                                    .sessionId(session.getId())
+                                    .playerId(playerId)
+                                    .matchNumber(null)
+                                    .dirty(false)
+                                    .build())
+                            .collect(Collectors.toList());
+                    practiceParticipantRepository.saveAll(byeParticipants);
+                }
             });
         }
 
@@ -206,11 +256,75 @@ public class MatchPairingService {
     }
 
     /**
-     * 指定日・試合番号の対戦組み合わせを削除
+     * 指定日・試合番号の対戦組み合わせを削除（ロック済みペアリングは保持）
      */
     @Transactional
-    public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
-        matchPairingRepository.deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+    public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber, Long organizationId) {
+        // 組織スコープ: セッション参加者でフィルタ
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+        boolean orgScoped = organizationId != null;
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+
+        List<MatchPairing> toDelete = existingPairings.stream()
+                .filter(pairing -> {
+                    Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+                    Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+                    return existingMatches.stream().noneMatch(m ->
+                            (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                            (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
+                })
+                .collect(Collectors.toList());
+
+        matchPairingRepository.deleteAll(toDelete);
+    }
+
+    /**
+     * ペアリングと対応する試合結果を同時に削除（リセット）
+     * @return 削除された試合結果の情報を含むDTO（結果がない場合はnull）
+     */
+    @Transactional
+    public MatchPairingDto resetWithResult(Long pairingId) {
+        MatchPairing pairing = matchPairingRepository.findById(pairingId)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
+
+        // 対応する試合結果を検索して削除
+        Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        List<Match> matches = matchRepository.findByMatchDateAndMatchNumber(
+                pairing.getSessionDate(), pairing.getMatchNumber());
+
+        // 対応する試合結果を検索
+        Match targetMatch = null;
+        for (Match match : matches) {
+            Long mp1 = Math.min(match.getPlayer1Id(), match.getPlayer2Id());
+            Long mp2 = Math.max(match.getPlayer1Id(), match.getPlayer2Id());
+            if (mp1.equals(p1) && mp2.equals(p2)) {
+                targetMatch = match;
+                break;
+            }
+        }
+
+        // 結果が存在しないペアリングはリセット対象外
+        if (targetMatch == null) {
+            throw new IllegalStateException("対応する試合結果が見つかりません。結果なしの組み合わせはリセットできません。");
+        }
+
+        MatchPairingDto result = convertToDto(pairing);
+        result.setHasResult(true);
+        result.setMatchId(targetMatch.getId());
+        result.setScoreDifference(targetMatch.getScoreDifference());
+        Player winner = targetMatch.getWinnerId() != null && targetMatch.getWinnerId() != 0L
+                ? playerRepository.findById(targetMatch.getWinnerId()).orElse(null) : null;
+        result.setWinnerName(winner != null ? winner.getName() : null);
+
+        // 試合結果とペアリングを削除
+        matchRepository.delete(targetMatch);
+        matchPairingRepository.delete(pairing);
+
+        return result;
     }
 
     /**
@@ -221,6 +335,30 @@ public class MatchPairingService {
         return matchPairingRepository.findById(id)
                 .map(MatchPairing::getSessionDate)
                 .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
+    }
+
+    /**
+     * ペアリングIDから所属組織IDを取得（セッション参加者経由で一意特定）
+     * ペアリングのプレイヤーが参加しているセッションの組織IDを返す
+     */
+    @Transactional(readOnly = true)
+    public Long getOrganizationIdByPairingId(Long pairingId) {
+        MatchPairing pairing = matchPairingRepository.findById(pairingId)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
+
+        // ペアリングの日付にあるセッション一覧から、プレイヤーが参加しているセッションを特定
+        List<com.karuta.matchtracker.entity.PracticeSession> sessions =
+                practiceSessionRepository.findByDateRange(pairing.getSessionDate(), pairing.getSessionDate());
+        for (com.karuta.matchtracker.entity.PracticeSession session : sessions) {
+            boolean hasPlayer = practiceParticipantRepository.findBySessionId(session.getId()).stream()
+                    .anyMatch(pp -> pp.getPlayerId().equals(pairing.getPlayer1Id())
+                            || pp.getPlayerId().equals(pairing.getPlayer2Id()));
+            if (hasPlayer) {
+                return session.getOrganizationId();
+            }
+        }
+        // セッションが見つからない場合はnull（SUPER_ADMINのみアクセス可）
+        return null;
     }
 
     /**
@@ -276,7 +414,7 @@ public class MatchPairingService {
      * 自動マッチングを実行
      */
     @Transactional(readOnly = true)
-    public AutoMatchingResult autoMatch(AutoMatchingRequest request) {
+    public AutoMatchingResult autoMatch(AutoMatchingRequest request, Long organizationId) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
         List<Long> participantIds = loadWonParticipantIdsForMatch(sessionDate, matchNumber);
@@ -284,16 +422,78 @@ public class MatchPairingService {
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
 
+        // ロック済みペアリング（結果入力済み）を特定して除外（組織スコープ付き）
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+        boolean orgScoped = organizationId != null;
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
+        Set<Long> lockedPlayerIds = new HashSet<>();
+        List<AutoMatchingResult.PairingSuggestion> lockedPairingSuggestions = new ArrayList<>();
+
+        Map<Long, Player> allPlayerMap = new HashMap<>();
+        // ロック判定用に全プレイヤー情報を取得
+        Set<Long> allPlayerIds = new HashSet<>(participantIds);
+        existingPairings.forEach(p -> { allPlayerIds.add(p.getPlayer1Id()); allPlayerIds.add(p.getPlayer2Id()); });
+        playerRepository.findAllById(allPlayerIds).forEach(p -> allPlayerMap.put(p.getId(), p));
+
+        for (MatchPairing pairing : existingPairings) {
+            Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+            Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+            boolean hasResult = existingMatches.stream().anyMatch(m ->
+                    (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                    (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
+            if (hasResult) {
+                lockedPlayerIds.add(pairing.getPlayer1Id());
+                lockedPlayerIds.add(pairing.getPlayer2Id());
+                Player player1 = allPlayerMap.get(pairing.getPlayer1Id());
+                Player player2 = allPlayerMap.get(pairing.getPlayer2Id());
+
+                // 対応するMatchから結果情報を取得
+                Match matchResult = existingMatches.stream()
+                        .filter(m -> (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                                     (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2))
+                        .findFirst().orElse(null);
+                String winnerName = null;
+                Integer scoreDiff = null;
+                if (matchResult != null) {
+                    Player winner = allPlayerMap.get(matchResult.getWinnerId());
+                    winnerName = winner != null ? winner.getName() : "Unknown";
+                    scoreDiff = matchResult.getScoreDifference();
+                }
+
+                lockedPairingSuggestions.add(AutoMatchingResult.PairingSuggestion.builder()
+                        .id(pairing.getId())
+                        .player1Id(pairing.getPlayer1Id())
+                        .player1Name(player1 != null ? player1.getName() : "Unknown")
+                        .player2Id(pairing.getPlayer2Id())
+                        .player2Name(player2 != null ? player2.getName() : "Unknown")
+                        .score(0.0)
+                        .recentMatches(Collections.emptyList())
+                        .winnerName(winnerName)
+                        .scoreDifference(scoreDiff)
+                        .build());
+            }
+        }
+
+        // ロック済みプレイヤーを参加者リストから除外
+        participantIds = participantIds.stream()
+                .filter(id -> !lockedPlayerIds.contains(id))
+                .collect(Collectors.toList());
+
+        log.info("ロック済みペア数={}, ロック除外後の参加者数={}", lockedPairingSuggestions.size(), participantIds.size());
+
         if (participantIds.isEmpty()) {
             return AutoMatchingResult.builder()
                     .pairings(Collections.emptyList())
                     .waitingPlayers(Collections.emptyList())
+                    .lockedPairings(lockedPairingSuggestions)
                     .build();
         }
 
         // 参加者情報を取得
-        Map<Long, Player> playerMap = playerRepository.findAllById(participantIds).stream()
-                .collect(Collectors.toMap(Player::getId, p -> p));
+        Map<Long, Player> playerMap = allPlayerMap;
         List<Long> availableParticipantIds = participantIds.stream()
                 .filter(playerMap::containsKey)
                 .toList();
@@ -302,6 +502,7 @@ public class MatchPairingService {
             return AutoMatchingResult.builder()
                     .pairings(Collections.emptyList())
                     .waitingPlayers(Collections.emptyList())
+                    .lockedPairings(lockedPairingSuggestions)
                     .build();
         }
 
@@ -403,12 +604,54 @@ public class MatchPairingService {
                 })
                 .collect(Collectors.toList());
 
-        log.info("自動マッチング完了: ペア数={}, 待機者数={}", pairings.size(), waitingPlayers.size());
+        log.info("自動マッチング完了: ペア数={}, 待機者数={}, ロック済みペア数={}",
+                 pairings.size(), waitingPlayers.size(), lockedPairingSuggestions.size());
 
         return AutoMatchingResult.builder()
                 .pairings(pairings)
                 .waitingPlayers(waitingPlayers)
+                .lockedPairings(lockedPairingSuggestions)
                 .build();
+    }
+
+    /**
+     * 指定日・組織のセッション全参加者IDを取得（組織スコープ用）
+     * organizationId が null の場合は組織フィルタなし（SUPER_ADMIN向け）
+     */
+    private Set<Long> getSessionAllPlayerIds(LocalDate sessionDate, Long organizationId) {
+        Optional<com.karuta.matchtracker.entity.PracticeSession> sessionOpt;
+        if (organizationId != null) {
+            sessionOpt = practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId);
+        } else {
+            sessionOpt = practiceSessionRepository.findBySessionDate(sessionDate);
+        }
+        return sessionOpt
+                .map(session -> practiceParticipantRepository.findBySessionId(session.getId()).stream()
+                        .map(PracticeParticipant::getPlayerId)
+                        .collect(Collectors.toSet()))
+                .orElse(Collections.emptySet());
+    }
+
+    /**
+     * ペアリング/マッチをセッション参加者でフィルタ（組織スコープ）
+     */
+    private List<MatchPairing> filterPairingsBySession(List<MatchPairing> pairings, Set<Long> sessionPlayerIds,
+                                                        boolean orgScoped) {
+        // 組織スコープ時に参加者0人なら空リストを返す（無フィルタにフォールバックしない）
+        if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
+        if (sessionPlayerIds.isEmpty()) return pairings;
+        return pairings.stream()
+                .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id()) || sessionPlayerIds.contains(p.getPlayer2Id()))
+                .collect(Collectors.toList());
+    }
+
+    private List<Match> filterMatchesBySession(List<Match> matches, Set<Long> sessionPlayerIds,
+                                                boolean orgScoped) {
+        if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
+        if (sessionPlayerIds.isEmpty()) return matches;
+        return matches.stream()
+                .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id()) || sessionPlayerIds.contains(m.getPlayer2Id()))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -595,6 +838,53 @@ public class MatchPairingService {
             dto.setRecentMatches(
                     getRecentMatchesForPair(dto.getPlayer1Id(), dto.getPlayer2Id(), pairingHistoryMap, sessionDate)
             );
+        }
+    }
+
+    /**
+     * DTOリストに対応する試合結果情報（ロック状態）を付加
+     */
+    private void enrichWithMatchResults(List<MatchPairingDto> dtos, LocalDate sessionDate) {
+        if (dtos.isEmpty()) return;
+
+        // 該当日の全試合番号を収集して一括取得
+        Set<Integer> matchNumbers = dtos.stream()
+                .map(MatchPairingDto::getMatchNumber)
+                .collect(Collectors.toSet());
+
+        // 全matchNumberの試合結果を一括取得（N+1回避）
+        Map<String, Match> matchMap = new HashMap<>();
+        for (Integer mn : matchNumbers) {
+            List<Match> matches = matchRepository.findByMatchDateAndMatchNumber(sessionDate, mn);
+            for (Match m : matches) {
+                Long p1 = Math.min(m.getPlayer1Id(), m.getPlayer2Id());
+                Long p2 = Math.max(m.getPlayer1Id(), m.getPlayer2Id());
+                matchMap.put(mn + "-" + p1 + "-" + p2, m);
+            }
+        }
+
+        // 勝者名取得用にプレイヤー名を一括取得
+        Set<Long> winnerIds = matchMap.values().stream()
+                .map(Match::getWinnerId)
+                .filter(id -> id != null && id != 0L)
+                .collect(Collectors.toSet());
+        Map<Long, String> winnerNames = new HashMap<>();
+        if (!winnerIds.isEmpty()) {
+            playerRepository.findAllById(winnerIds).forEach(p -> winnerNames.put(p.getId(), p.getName()));
+        }
+
+        // 各DTOにマッチ結果を付加
+        for (MatchPairingDto dto : dtos) {
+            Long p1 = Math.min(dto.getPlayer1Id(), dto.getPlayer2Id());
+            Long p2 = Math.max(dto.getPlayer1Id(), dto.getPlayer2Id());
+            String key = dto.getMatchNumber() + "-" + p1 + "-" + p2;
+            Match match = matchMap.get(key);
+            if (match != null) {
+                dto.setHasResult(true);
+                dto.setMatchId(match.getId());
+                dto.setScoreDifference(match.getScoreDifference());
+                dto.setWinnerName(winnerNames.getOrDefault(match.getWinnerId(), null));
+            }
         }
     }
 

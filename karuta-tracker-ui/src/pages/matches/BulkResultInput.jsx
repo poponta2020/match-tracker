@@ -508,6 +508,22 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        {currentPairings.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-[#9b8a7e] text-sm mb-4">
+              この試合の対戦組み合わせが作成されていません
+            </p>
+            {(isAdmin() || isSuperAdmin()) && session && (
+              <button
+                onClick={() => navigate(`/pairings?date=${session.sessionDate}&matchNumber=${currentMatchNumber}`)}
+                className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] text-sm"
+              >
+                対戦組み合わせを作成する
+              </button>
+            )}
+          </div>
+        ) : (
+        <>
         <p className="text-xs text-[#9b8a7e] mb-3">
           {editMode ? '変更したい選手名をタップしてください' : '勝者の名前をタップ → 枚数差を選択'}
         </p>
@@ -662,6 +678,8 @@ const BulkResultInput = () => {
               })}
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 

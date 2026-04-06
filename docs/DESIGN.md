@@ -1106,12 +1106,22 @@ Entity Layer (JPA Entity)
   ],
   "waitingPlayers": [
     {"id": 5, "name": "山田太郎"}
+  ],
+  "lockedPairings": [
+    {
+      "player1Id": 3,
+      "player1Name": "鈴木一郎",
+      "player2Id": 4,
+      "player2Name": "高橋次郎",
+      "score": 0.0,
+      "recentMatches": []
+    }
   ]
 }
 ```
 
 #### POST /api/match-pairings/batch?date={date}&matchNumber={matchNumber}
-**説明**: 一括組み合わせ作成
+**説明**: 一括組み合わせ作成（結果入力済みペアリングはロック保持）
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `MatchPairingBatchRequest`
 ```json
@@ -1127,6 +1137,11 @@ Entity Layer (JPA Entity)
 #### GET /api/match-pairings/date?date={date}
 **説明**: 日付別組み合わせ取得
 **権限**: なし
+
+#### DELETE /api/match-pairings/{id}/with-result
+**説明**: ペアリングと対応する試合結果を同時削除（リセット）
+**権限**: SUPER_ADMIN, ADMIN
+**レスポンス**: 削除されたペアリング情報（`MatchPairingDto`、`hasResult=true`、`matchId`付き）
 
 #### DELETE /api/match-pairings/date-and-match?date={date}&matchNumber={matchNumber}
 **説明**: 組み合わせ削除
@@ -1994,21 +2009,25 @@ Entity Layer (JPA Entity)
 4. 参加者選択調整 → 「自動マッチング」ボタンクリック
    ↓
 [バックエンド: MatchPairingService.autoMatch()]
-5. 過去30日の対戦履歴を取得
+5. ロック済みペアリング判定（既存ペアリング + 対応するmatchesの存在チェック）
    ↓
-6. ペアごとの最終対戦日マップ作成
+6. ロック済みプレイヤーを参加者リストから除外
    ↓
-7. 同日既存対戦を除外
+7. 過去30日の対戦履歴を取得
    ↓
-8. 参加者シャッフル → 貪欲法でスコア最高ペアを選択
+8. ペアごとの最終対戦日マップ作成
    ↓
-9. レスポンス: AutoMatchingResult（ペア一覧 + 待機者リスト）
+9. 同日既存対戦を除外
+   ↓
+10. 参加者シャッフル → 貪欲法でスコア最高ペアを選択
+   ↓
+11. レスポンス: AutoMatchingResult（ペア一覧 + 待機者リスト + ロック済みペア一覧）
    ↓
 [ユーザー操作]
-10. 手動調整 → 「組み合わせ確定」ボタンクリック
+12. 手動調整 → 「組み合わせ確定」ボタンクリック
    ↓
 [バックエンド]
-11. 既存組み合わせ削除 → 新規一括登録
+13. ロック済みペアリングを保持しつつ、未ロック分を削除 → 新規一括登録
 ```
 
 ---

@@ -44,7 +44,7 @@
 | 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
 | 9 | `/matches/:id` | `MatchDetail.jsx` | — | ALL | 試合詳細表示（自分のお手付き回数・個人メモを表示） |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
-| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力 | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない） |
+| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。組み合わせ未作成時はメッセージ表示+ADMIN以上に作成画面への遷移ボタン |
 | 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示） |
 
 ---
@@ -66,7 +66,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト（D&D対応）、対戦履歴、新規作成ドロップゾーン、DraggablePlayerChip、DroppableSlot | ADMIN+ | 組み合わせ作成（ドラッグ&ドロップ） |
+| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト（D&D対応）、対戦履歴、新規作成ドロップゾーン、DraggablePlayerChip、DroppableSlot、結果入力済ロック表示・リセットボタン | ADMIN+ | 組み合わせ作成（ドラッグ&ドロップ）。結果入力済みペアリングはロック表示（グレーアウト+「結果入力済」バッジ）、個別リセット可能 |
 | 20 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | ADMIN+ | 組み合わせ一覧表示 |
 
 ---

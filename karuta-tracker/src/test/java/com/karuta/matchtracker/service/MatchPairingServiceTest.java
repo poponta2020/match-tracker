@@ -4,6 +4,7 @@ import com.karuta.matchtracker.dto.AutoMatchingRequest;
 import com.karuta.matchtracker.dto.AutoMatchingResult;
 import com.karuta.matchtracker.dto.MatchPairingCreateRequest;
 import com.karuta.matchtracker.dto.MatchPairingDto;
+import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.entity.Player;
@@ -26,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -250,16 +252,21 @@ class MatchPairingServiceTest {
                     new MatchPairingCreateRequest(sessionDate, matchNumber, 3L, 4L)
             );
 
-            List<MatchPairing> savedPairings = Arrays.asList(
+            List<MatchPairing> savedPairings = new ArrayList<>(Arrays.asList(
                     createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L),
                     createMatchPairing(2L, sessionDate, matchNumber, 3L, 4L)
-            );
+            ));
 
+            // ロック判定用スタブ（既存ペアリングなし、結果なし）
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
             when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
             when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2, player3, player4));
 
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy, null);
 
             // Then
             assertThat(result).hasSize(2);
@@ -270,7 +277,7 @@ class MatchPairingServiceTest {
             assertThat(result.get(1).getPlayer1Id()).isEqualTo(3L);
             assertThat(result.get(1).getPlayer2Id()).isEqualTo(4L);
 
-            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+            verify(matchPairingRepository).deleteAll(anyList());
             verify(matchPairingRepository).saveAll(anyList());
         }
 
@@ -283,14 +290,19 @@ class MatchPairingServiceTest {
             Long createdBy = 1L;
             List<MatchPairingCreateRequest> requests = Collections.emptyList();
 
-            when(matchPairingRepository.saveAll(anyList())).thenReturn(Collections.emptyList());
+            // ロック判定用スタブ
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(new ArrayList<>());
 
             // When
-            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy);
+            List<MatchPairingDto> result = matchPairingService.createBatch(sessionDate, matchNumber, requests, Collections.emptyList(), createdBy, null);
 
             // Then
             assertThat(result).isEmpty();
-            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+            verify(matchPairingRepository).deleteAll(anyList());
         }
     }
 
@@ -317,17 +329,26 @@ class MatchPairingServiceTest {
     class DeleteByDateAndMatchNumberTests {
 
         @Test
-        @DisplayName("日付と試合番号で対戦ペアリングを削除できる")
+        @DisplayName("日付と試合番号で対戦ペアリングを削除できる（ロック済みなし）")
         void shouldDeletePairingByDateAndMatchNumber() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
 
-            // When
-            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber);
+            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
 
-            // Then
-            verify(matchPairingRepository).deleteBySessionDateAndMatchNumber(sessionDate, matchNumber);
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, null);
+
+            // Then: 全件削除される（ロック済みなし）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
+            }));
         }
     }
 
@@ -394,15 +415,19 @@ class MatchPairingServiceTest {
                             createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
                     ));
-            when(playerRepository.findAllById(playerIds))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1, player2, player3, player4));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).hasSize(2);
@@ -430,15 +455,19 @@ class MatchPairingServiceTest {
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON)
                     ));
-            when(playerRepository.findAllById(playerIds))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1, player2, player3));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).hasSize(1);
@@ -462,15 +491,19 @@ class MatchPairingServiceTest {
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
             when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                     .thenReturn(List.of(createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON)));
-            when(playerRepository.findAllById(playerIds))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).isEmpty();
@@ -496,7 +529,7 @@ class MatchPairingServiceTest {
                     .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).isEmpty();
@@ -517,7 +550,7 @@ class MatchPairingServiceTest {
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.empty());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).isEmpty();
@@ -545,20 +578,23 @@ class MatchPairingServiceTest {
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
                     ));
-            when(playerRepository.findAllById(Arrays.asList(1L, 2L)))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1, player2));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then
             assertThat(result.getPairings()).hasSize(1);
             assertThat(result.getWaitingPlayers()).isEmpty();
-            verify(playerRepository).findAllById(Arrays.asList(1L, 2L));
         }
     }
 
@@ -583,10 +619,15 @@ class MatchPairingServiceTest {
             PracticeSession session = PracticeSession.builder()
                     .id(100L).sessionDate(sessionDate).totalMatches(7).build();
 
-            List<MatchPairing> savedPairings = List.of(
+            List<MatchPairing> savedPairings = new ArrayList<>(List.of(
                     createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L)
-            );
+            ));
 
+            // ロック判定用スタブ
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
             when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
             when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
             when(practiceSessionRepository.findBySessionDate(sessionDate))
@@ -597,7 +638,7 @@ class MatchPairingServiceTest {
             ArgumentCaptor<List<PracticeParticipant>> byeCaptor = ArgumentCaptor.forClass(List.class);
 
             // When
-            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy);
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy, null);
 
             // Then: BYEエントリがdirty=falseで保存されていること
             // saveAll は2回呼ばれる: 1回目=MatchPairing, 2回目=BYE PracticeParticipant
@@ -665,7 +706,7 @@ class MatchPairingServiceTest {
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
                     ));
-            when(playerRepository.findAllById(playerIds))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1, player2));
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
@@ -673,11 +714,15 @@ class MatchPairingServiceTest {
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
             when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
                     .thenReturn(Collections.emptyList());
 
             // When
-            matchPairingService.autoMatch(request);
+            matchPairingService.autoMatch(request, null);
 
             // Then: startDate = sessionDate - 30日 = 2024-01-16
             LocalDate expectedStartDate = LocalDate.of(2024, 1, 16);
@@ -709,7 +754,7 @@ class MatchPairingServiceTest {
                             createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
                     ));
-            when(playerRepository.findAllById(playerIds))
+            when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1, player2, player3, player4));
 
             // player1 と player2 が30日前（境界ちょうど）に対戦
@@ -723,11 +768,15 @@ class MatchPairingServiceTest {
                     .thenReturn(Collections.emptyList());
             when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
                     .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
             when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
                     .thenReturn(Collections.emptyList());
 
             // When
-            AutoMatchingResult result = matchPairingService.autoMatch(request);
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
 
             // Then: 4人いるので2ペアできる。player1-player2は30日前に対戦済みなので、
             // 初対戦ペア（player3-player4等）が優先される傾向がある
@@ -745,5 +794,406 @@ class MatchPairingServiceTest {
         pairing.setPlayer2Id(player2Id);
         pairing.setCreatedBy(1L);
         return pairing;
+    }
+
+    private Match createMatch(Long id, LocalDate matchDate, Integer matchNumber,
+                               Long player1Id, Long player2Id, Long winnerId, Integer scoreDiff) {
+        return Match.builder()
+                .id(id)
+                .matchDate(matchDate)
+                .matchNumber(matchNumber)
+                .player1Id(player1Id)
+                .player2Id(player2Id)
+                .winnerId(winnerId)
+                .scoreDifference(scoreDiff)
+                .createdBy(1L)
+                .updatedBy(1L)
+                .build();
+    }
+
+    @Nested
+    @DisplayName("結果入力済みロック機能")
+    class MatchResultLockTests {
+
+        @Test
+        @DisplayName("createBatch時に結果入力済みペアリングが保持される")
+        void shouldPreserveLockedPairingsInCreateBatch() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            // 既存ペアリング: player1 vs player2（結果入力済み）, player3 vs player4（結果なし）
+            MatchPairing lockedPairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing unlockedPairing = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(lockedPairing, unlockedPairing));
+
+            // player1 vs player2 に対応するmatch結果が存在
+            Match existingMatch = createMatch(100L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+
+            // 新規ペアリングリクエスト: player3 vs player4
+            List<MatchPairingCreateRequest> requests = List.of(
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 3L, 4L)
+            );
+
+            when(matchPairingRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2, player3, player4));
+
+            // When
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, List.of(), createdBy, null);
+
+            // Then: ロック済みでないペアリングのみ削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+            }));
+            // deleteBySessionDateAndMatchNumber は呼ばれない
+            verify(matchPairingRepository, never()).deleteBySessionDateAndMatchNumber(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("resetWithResultでペアリングと結果が両方削除される")
+        void shouldDeleteBothPairingAndMatchOnReset() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(10L, sessionDate, 1, 1L, 2L);
+            Match match = createMatch(100L, sessionDate, 1, 1L, 2L, 1L, 5);
+
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, 1))
+                    .thenReturn(List.of(match));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+
+            // When
+            MatchPairingDto result = matchPairingService.resetWithResult(10L);
+
+            // Then
+            verify(matchRepository).delete(match);
+            verify(matchPairingRepository).delete(pairing);
+            assertThat(result.isHasResult()).isTrue();
+            assertThat(result.getMatchId()).isEqualTo(100L);
+        }
+
+        @Test
+        @DisplayName("autoMatch時にロック済みプレイヤーが除外される")
+        void shouldExcludeLockedPlayersFromAutoMatch() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            // 4人参加
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+
+            // player1 vs player2 は既にロック済み
+            MatchPairing lockedPairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(lockedPairing));
+            Match existingMatch = createMatch(100L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // Then: player3 vs player4 のみ新規ペアリング、player1 vs player2 はlockedPairings
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(result.getLockedPairings()).hasSize(1);
+            assertThat(result.getLockedPairings().get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.getLockedPairings().get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.getLockedPairings().get(0).getId()).isEqualTo(10L);
+        }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumberでロック済みペアリングが保持される")
+        void shouldPreserveLockedPairingsOnDeleteByDateAndMatchNumber() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+
+            MatchPairing lockedPairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing unlockedPairing = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(lockedPairing, unlockedPairing));
+
+            Match existingMatch = createMatch(100L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, null);
+
+            // Then: 未ロックのペアリングのみ削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+            }));
+        }
+    }
+
+    @Nested
+    @DisplayName("組織スコープ境界テスト")
+    class OrganizationScopeTests {
+
+        @Test
+        @DisplayName("組織IDを指定するとセッション参加者でフィルタされる")
+        void shouldScopeByOrganizationId() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long orgId = 10L;
+
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            session.setSessionDate(sessionDate);
+            session.setOrganizationId(orgId);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgId))
+                    .thenReturn(Optional.of(session));
+
+            // Org A の参加者: player1, player2
+            PracticeParticipant pp1 = PracticeParticipant.builder().playerId(1L).sessionId(100L).build();
+            PracticeParticipant pp2 = PracticeParticipant.builder().playerId(2L).sessionId(100L).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(pp1, pp2));
+
+            // DB上には Org A (player1 vs player2) と Org B (player5 vs player6) のペアリングが混在
+            MatchPairing orgAPairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing orgBPairing = createMatchPairing(2L, sessionDate, matchNumber, 5L, 6L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(orgAPairing, orgBPairing));
+
+            // Org B の match result だけ存在
+            Match orgBMatch = createMatch(200L, sessionDate, matchNumber, 5L, 6L, 5L, 3);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(orgBMatch));
+
+            // When: Org A のスコープでdeleteを実行
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
+
+            // Then: Org A のペアリングのみ削除される（Org B のペアリングは対象外）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
+            }));
+        }
+
+        @Test
+        @DisplayName("createBatchで組織スコープ時に他団体のペアリングは削除対象にならない")
+        void shouldNotDeleteOtherOrgPairingsOnCreateBatch() {
+            // Given: 同日に Org A と Org B のペアリングが混在
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long orgAId = 10L;
+            Long createdBy = 1L;
+
+            PracticeSession sessionA = new PracticeSession();
+            sessionA.setId(100L);
+            sessionA.setSessionDate(sessionDate);
+            sessionA.setOrganizationId(orgAId);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgAId))
+                    .thenReturn(Optional.of(sessionA));
+
+            // Org A の参加者: player1, player2
+            PracticeParticipant pp1 = PracticeParticipant.builder().playerId(1L).sessionId(100L).build();
+            PracticeParticipant pp2 = PracticeParticipant.builder().playerId(2L).sessionId(100L).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(pp1, pp2));
+
+            // DB上には Org A (player1 vs player2) と Org B (player5 vs player6) のペアリングが混在
+            MatchPairing orgAPairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            MatchPairing orgBPairing = createMatchPairing(2L, sessionDate, matchNumber, 5L, 6L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(orgAPairing, orgBPairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // 新規ペアリング: player1 vs player2
+            MatchPairingCreateRequest req = new MatchPairingCreateRequest();
+            req.setPlayer1Id(1L);
+            req.setPlayer2Id(2L);
+            req.setSessionDate(sessionDate);
+            req.setMatchNumber(matchNumber);
+
+            when(matchPairingRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyCollection())).thenReturn(Arrays.asList(player1, player2));
+
+            // When: Org A のスコープで createBatch
+            matchPairingService.createBatch(sessionDate, matchNumber, List.of(req), null, createdBy, orgAId);
+
+            // Then: Org A のペアリングのみ削除される（Org B は対象外）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(1L);
+            }));
+        }
+
+        @Test
+        @DisplayName("getOrganizationIdByPairingIdでセッション未参加ならnullを返す")
+        void shouldReturnNullWhenPairingPlayerNotInAnySession() {
+            // Given: ペアリングのプレイヤーがどのセッションにも参加していない
+            Long pairingId = 1L;
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(pairingId, sessionDate, 1, 1L, 2L);
+            when(matchPairingRepository.findById(pairingId)).thenReturn(Optional.of(pairing));
+
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            session.setOrganizationId(10L);
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(session));
+            // セッション参加者に player1, player2 がいない
+            PracticeParticipant pp = PracticeParticipant.builder().playerId(99L).sessionId(100L).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(List.of(pp));
+
+            // When
+            Long orgId = matchPairingService.getOrganizationIdByPairingId(pairingId);
+
+            // Then: 組織特定不能のためnull
+            assertThat(orgId).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("待機者ロック除外で空になるケース")
+    class WaitingPlayerLockFilterTests {
+
+        @Test
+        @DisplayName("waitingPlayerIdsが全員ロック除外で空になっても既存抜け番は削除される")
+        void shouldDeleteExistingByeWhenFilteredWaitingIsEmpty() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            // ロック済みペアリング（player1 vs player2 に結果あり）
+            MatchPairing lockedPairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(lockedPairing));
+            Match existingMatch = createMatch(100L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(new ArrayList<>());
+            when(playerRepository.findAllById(anyCollection())).thenReturn(Arrays.asList(player1, player2));
+
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(session));
+
+            // セッション参加者（ロック対象のplayer1,2 + 抜け番のplayer3）
+            PracticeParticipant pp1 = PracticeParticipant.builder().playerId(1L).sessionId(100L).matchNumber(matchNumber).build();
+            PracticeParticipant pp2 = PracticeParticipant.builder().playerId(2L).sessionId(100L).matchNumber(matchNumber).build();
+            PracticeParticipant existingBye = PracticeParticipant.builder()
+                    .playerId(3L).sessionId(100L).matchNumber(null).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(pp1, pp2, existingBye));
+
+            // waitingPlayerIds にロック済みプレイヤーのみ → フィルタ後空
+            List<Long> waitingPlayerIds = Arrays.asList(1L, 2L);
+            List<MatchPairingCreateRequest> requests = Collections.emptyList();
+
+            // When
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy, null);
+
+            // Then: 既存抜け番が削除される
+            verify(practiceParticipantRepository).deleteAll(argThat(list -> {
+                List<PracticeParticipant> deleted = (List<PracticeParticipant>) list;
+                return deleted.size() == 1 && deleted.get(0).getPlayerId().equals(3L);
+            }));
+            // フィルタ後空なので抜け番の新規保存は呼ばれない（deleteAllの後にsaveAllは呼ばれない）
+            verify(practiceParticipantRepository, times(1)).deleteAll(anyCollection());
+            verify(practiceParticipantRepository, never()).saveAll(anyList());
+        }
+    }
+
+    @Nested
+    @DisplayName("resetWithResult 結果なし境界テスト")
+    class ResetWithResultBoundaryTests {
+
+        @Test
+        @DisplayName("結果が存在しないペアリングはリセットできない")
+        void shouldRejectResetWithoutResult() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(10L, sessionDate, 1, 1L, 2L);
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, 1))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            assertThatThrownBy(() -> matchPairingService.resetWithResult(10L))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("試合結果が見つかりません");
+
+            verify(matchPairingRepository, never()).delete(any());
+            verify(matchRepository, never()).delete(any(Match.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("組織スコープ: 参加者0件で無フィルタにならないことの検証")
+    class OrgScopeEmptyParticipantsTests {
+
+        @Test
+        @DisplayName("組織スコープ時に参加者0件なら既存ペアリングは操作対象外になる")
+        void shouldReturnEmptyWhenOrgScopedAndNoParticipants() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long orgId = 10L;
+
+            // 組織のセッションはあるが参加者がいない
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            session.setOrganizationId(orgId);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgId))
+                    .thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Collections.emptyList());
+
+            // DBにはペアリングが存在する
+            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
+
+            // Then: 参加者0のため操作対象なし → 空リストで deleteAll
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.isEmpty();
+            }));
+        }
     }
 }
