@@ -411,7 +411,7 @@ class MatchPairingControllerTest {
                     MatchPairingDto.builder().id(2L).sessionDate(date).matchNumber(2).player1Id(30L).player1Name("選手C").player2Id(40L).player2Name("選手D").createdBy(1L).build()
             );
 
-            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong()))
+            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong(), any()))
                     .thenReturn(created);
 
             // When & Then
@@ -426,7 +426,7 @@ class MatchPairingControllerTest {
                     .andExpect(jsonPath("$[0].matchNumber").value(1))
                     .andExpect(jsonPath("$[1].matchNumber").value(2));
 
-            verify(matchPairingService).createBatch(eq(date), eq(matchNumber), anyList(), anyList(), eq(1L));
+            verify(matchPairingService).createBatch(eq(date), eq(matchNumber), anyList(), anyList(), eq(1L), any());
         }
 
         @Test
@@ -447,7 +447,7 @@ class MatchPairingControllerTest {
                     MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(1).player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").createdBy(1L).build()
             );
 
-            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong()))
+            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong(), any()))
                     .thenReturn(created);
 
             // When & Then
@@ -481,7 +481,7 @@ class MatchPairingControllerTest {
                             .content(objectMapper.writeValueAsString(batchRequest)))
                     .andExpect(status().isForbidden());
 
-            verify(matchPairingService, never()).createBatch(any(), anyInt(), anyList(), anyList(), anyLong());
+            verify(matchPairingService, never()).createBatch(any(), anyInt(), anyList(), anyList(), anyLong(), any());
         }
 
         @Test
@@ -495,7 +495,7 @@ class MatchPairingControllerTest {
                     .waitingPlayerIds(Collections.emptyList())
                     .build();
 
-            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong()))
+            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), anyLong(), any()))
                     .thenReturn(Collections.emptyList());
 
             // When & Then
@@ -534,9 +534,7 @@ class MatchPairingControllerTest {
         void shouldDeletePairingAsAdmin() throws Exception {
             // Given
             Long id = 1L;
-            LocalDate date = LocalDate.of(2024, 1, 15);
-            mockAdminScopeForDate(date, 1L, 1L);
-            when(matchPairingService.getSessionDateById(id)).thenReturn(date);
+            mockAdminScopeForPairingId(id, 1L, 1L);
             doNothing().when(matchPairingService).delete(id);
 
             // When & Then
@@ -566,7 +564,11 @@ class MatchPairingControllerTest {
         void shouldReturn404ForNonExistentIdAsAdmin() throws Exception {
             // Given
             Long id = 999L;
-            when(matchPairingService.getSessionDateById(id))
+            Player admin = new Player();
+            admin.setId(1L);
+            admin.setAdminOrganizationId(1L);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(admin));
+            when(matchPairingService.getOrganizationIdByPairingId(id))
                     .thenThrow(new ResourceNotFoundException("MatchPairing", id));
 
             // When & Then
@@ -603,7 +605,11 @@ class MatchPairingControllerTest {
         void shouldReturn404ForNonExistentIdAsAdmin() throws Exception {
             // Given
             Long id = 999L;
-            when(matchPairingService.getSessionDateById(id))
+            Player admin = new Player();
+            admin.setId(1L);
+            admin.setAdminOrganizationId(1L);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(admin));
+            when(matchPairingService.getOrganizationIdByPairingId(id))
                     .thenThrow(new ResourceNotFoundException("MatchPairing", id));
 
             // When & Then
@@ -627,7 +633,7 @@ class MatchPairingControllerTest {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
-            doNothing().when(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
+            doNothing().when(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), any());
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
@@ -636,7 +642,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
 
-            verify(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
+            verify(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), any());
         }
 
         @Test
@@ -646,7 +652,7 @@ class MatchPairingControllerTest {
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
             mockAdminScopeForDate(date, 1L, 1L);
-            doNothing().when(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
+            doNothing().when(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), any());
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
@@ -655,7 +661,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
 
-            verify(matchPairingService).deleteByDateAndMatchNumber(date, matchNumber);
+            verify(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), any());
         }
 
         @Test
@@ -668,7 +674,7 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "3"))
                     .andExpect(status().isForbidden());
 
-            verify(matchPairingService, never()).deleteByDateAndMatchNumber(any(), anyInt());
+            verify(matchPairingService, never()).deleteByDateAndMatchNumber(any(), anyInt(), any());
         }
     }
 
@@ -687,7 +693,6 @@ class MatchPairingControllerTest {
                     .hasResult(true).winnerName("選手A").scoreDifference(5).matchId(100L)
                     .createdBy(1L).build();
 
-            when(matchPairingService.getSessionDateById(id)).thenReturn(LocalDate.of(2024, 1, 15));
             when(matchPairingService.resetWithResult(id)).thenReturn(dto);
 
             // When & Then
@@ -713,8 +718,7 @@ class MatchPairingControllerTest {
                     .hasResult(true).winnerName("選手A").scoreDifference(5).matchId(100L)
                     .createdBy(1L).build();
 
-            when(matchPairingService.getSessionDateById(id)).thenReturn(date);
-            mockAdminScopeForDate(date, 1L, 1L);
+            mockAdminScopeForPairingId(id, 1L, 1L);
             when(matchPairingService.resetWithResult(id)).thenReturn(dto);
 
             // When & Then
@@ -780,7 +784,7 @@ class MatchPairingControllerTest {
                     .waitingPlayers(Collections.emptyList())
                     .build();
 
-            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), any()))
                     .thenReturn(result);
 
             // When & Then
@@ -794,7 +798,7 @@ class MatchPairingControllerTest {
                     .andExpect(jsonPath("$.pairings[0].player1Id").value(1))
                     .andExpect(jsonPath("$.pairings[1].player1Id").value(3));
 
-            verify(matchPairingService).autoMatch(any(AutoMatchingRequest.class));
+            verify(matchPairingService).autoMatch(any(AutoMatchingRequest.class), any());
         }
 
         @Test
@@ -818,7 +822,7 @@ class MatchPairingControllerTest {
                     .waitingPlayers(Collections.emptyList())
                     .build();
 
-            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), any()))
                     .thenReturn(result);
 
             // When & Then
@@ -855,7 +859,7 @@ class MatchPairingControllerTest {
                     .waitingPlayers(Arrays.asList(waitingPlayer))
                     .build();
 
-            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), any()))
                     .thenReturn(result);
 
             // When & Then
@@ -885,7 +889,7 @@ class MatchPairingControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
 
-            verify(matchPairingService, never()).autoMatch(any());
+            verify(matchPairingService, never()).autoMatch(any(), any());
         }
 
         @Test
@@ -896,7 +900,7 @@ class MatchPairingControllerTest {
             List<Long> playerIds = Arrays.asList(1L, 999L);
             AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
 
-            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class)))
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), any()))
                     .thenThrow(new ResourceNotFoundException("Player not found"));
 
             // When & Then
@@ -920,5 +924,13 @@ class MatchPairingControllerTest {
         session.setOrganizationId(adminOrgId);
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId))
                 .thenReturn(Optional.of(session));
+    }
+
+    private void mockAdminScopeForPairingId(Long pairingId, Long adminUserId, Long adminOrgId) {
+        Player admin = new Player();
+        admin.setId(adminUserId);
+        admin.setAdminOrganizationId(adminOrgId);
+        when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+        when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(adminOrgId);
     }
 }

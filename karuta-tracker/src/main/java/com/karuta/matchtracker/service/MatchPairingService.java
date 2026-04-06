@@ -107,9 +107,10 @@ public class MatchPairingService {
     @Transactional
     public List<MatchPairingDto> createBatch(LocalDate sessionDate, Integer matchNumber,
                                               List<MatchPairingCreateRequest> requests,
-                                              List<Long> waitingPlayerIds, Long createdBy) {
+                                              List<Long> waitingPlayerIds, Long createdBy,
+                                              Long organizationId) {
         // 組織スコープ: セッション参加者でフィルタ
-        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
 
         // ロック済みペアリング（結果入力済み）を特定して保持
         List<MatchPairing> existingPairings = filterPairingsBySession(
@@ -163,24 +164,28 @@ public class MatchPairingService {
                 : Collections.emptyList();
 
         // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
-        if (!filteredWaitingPlayerIds.isEmpty()) {
+        // waitingPlayerIds が渡された場合は、まず既存抜け番を必ず削除し、フィルタ後の待機者を再登録
+        if (waitingPlayerIds != null) {
             practiceSessionRepository.findBySessionDate(sessionDate).ifPresent(session -> {
-                // 既存の抜け番登録（matchNumber=null）を一旦削除してから再登録
+                // 既存の抜け番登録（matchNumber=null）を一旦削除
                 List<PracticeParticipant> existingBye = practiceParticipantRepository
                         .findBySessionId(session.getId()).stream()
                         .filter(pp -> pp.getMatchNumber() == null)
                         .collect(Collectors.toList());
                 practiceParticipantRepository.deleteAll(existingBye);
 
-                List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
-                        .map(playerId -> PracticeParticipant.builder()
-                                .sessionId(session.getId())
-                                .playerId(playerId)
-                                .matchNumber(null)
-                                .dirty(false)
-                                .build())
-                        .collect(Collectors.toList());
-                practiceParticipantRepository.saveAll(byeParticipants);
+                // フィルタ後の待機者を再登録（0件なら登録なし）
+                if (!filteredWaitingPlayerIds.isEmpty()) {
+                    List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
+                            .map(playerId -> PracticeParticipant.builder()
+                                    .sessionId(session.getId())
+                                    .playerId(playerId)
+                                    .matchNumber(null)
+                                    .dirty(false)
+                                    .build())
+                            .collect(Collectors.toList());
+                    practiceParticipantRepository.saveAll(byeParticipants);
+                }
             });
         }
 
@@ -250,9 +255,9 @@ public class MatchPairingService {
      * 指定日・試合番号の対戦組み合わせを削除（ロック済みペアリングは保持）
      */
     @Transactional
-    public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
+    public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber, Long organizationId) {
         // 組織スコープ: セッション参加者でフィルタ
-        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
         List<MatchPairing> existingPairings = filterPairingsBySession(
                 matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
         List<Match> existingMatches = filterMatchesBySession(
@@ -320,6 +325,18 @@ public class MatchPairingService {
     }
 
     /**
+     * ペアリングIDから所属組織IDを取得（セッション経由）
+     */
+    @Transactional(readOnly = true)
+    public Long getOrganizationIdByPairingId(Long pairingId) {
+        MatchPairing pairing = matchPairingRepository.findById(pairingId)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
+        return practiceSessionRepository.findBySessionDate(pairing.getSessionDate())
+                .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                .orElse(null);
+    }
+
+    /**
      * 対戦組み合わせが存在するか確認
      */
     @Transactional(readOnly = true)
@@ -372,7 +389,7 @@ public class MatchPairingService {
      * 自動マッチングを実行
      */
     @Transactional(readOnly = true)
-    public AutoMatchingResult autoMatch(AutoMatchingRequest request) {
+    public AutoMatchingResult autoMatch(AutoMatchingRequest request, Long organizationId) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
         List<Long> participantIds = loadWonParticipantIdsForMatch(sessionDate, matchNumber);
@@ -381,7 +398,7 @@ public class MatchPairingService {
                  sessionDate, matchNumber, participantIds.size());
 
         // ロック済みペアリング（結果入力済み）を特定して除外（組織スコープ付き）
-        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
         List<MatchPairing> existingPairings = filterPairingsBySession(
                 matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
         List<Match> existingMatches = filterMatchesBySession(
@@ -572,10 +589,17 @@ public class MatchPairingService {
     }
 
     /**
-     * 指定日のセッション全参加者IDを取得（組織スコープ用）
+     * 指定日・組織のセッション全参加者IDを取得（組織スコープ用）
+     * organizationId が null の場合は組織フィルタなし（SUPER_ADMIN向け）
      */
-    private Set<Long> getSessionAllPlayerIds(LocalDate sessionDate) {
-        return practiceSessionRepository.findBySessionDate(sessionDate)
+    private Set<Long> getSessionAllPlayerIds(LocalDate sessionDate, Long organizationId) {
+        Optional<com.karuta.matchtracker.entity.PracticeSession> sessionOpt;
+        if (organizationId != null) {
+            sessionOpt = practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId);
+        } else {
+            sessionOpt = practiceSessionRepository.findBySessionDate(sessionDate);
+        }
+        return sessionOpt
                 .map(session -> practiceParticipantRepository.findBySessionId(session.getId()).stream()
                         .map(PracticeParticipant::getPlayerId)
                         .collect(Collectors.toSet()))
