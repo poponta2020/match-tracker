@@ -673,6 +673,86 @@ class MatchPairingControllerTest {
     }
 
     @Nested
+    @DisplayName("DELETE /api/match-pairings/{id}/with-result")
+    class ResetWithResultTests {
+
+        @Test
+        @DisplayName("SUPER_ADMIN権限でリセットできる")
+        void shouldResetWithResultAsSuperAdmin() throws Exception {
+            // Given
+            Long id = 1L;
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(id).sessionDate(LocalDate.of(2024, 1, 15)).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B")
+                    .hasResult(true).winnerName("選手A").scoreDifference(5).matchId(100L)
+                    .createdBy(1L).build();
+
+            when(matchPairingService.getSessionDateById(id)).thenReturn(LocalDate.of(2024, 1, 15));
+            when(matchPairingService.resetWithResult(id)).thenReturn(dto);
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.hasResult").value(true))
+                    .andExpect(jsonPath("$.matchId").value(100));
+
+            verify(matchPairingService).resetWithResult(id);
+        }
+
+        @Test
+        @DisplayName("ADMIN権限でリセットできる")
+        void shouldResetWithResultAsAdmin() throws Exception {
+            // Given
+            Long id = 1L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(id).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B")
+                    .hasResult(true).winnerName("選手A").scoreDifference(5).matchId(100L)
+                    .createdBy(1L).build();
+
+            when(matchPairingService.getSessionDateById(id)).thenReturn(date);
+            mockAdminScopeForDate(date, 1L, 1L);
+            when(matchPairingService.resetWithResult(id)).thenReturn(dto);
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1));
+
+            verify(matchPairingService).resetWithResult(id);
+        }
+
+        @Test
+        @DisplayName("PLAYER権限では403エラー")
+        void shouldReturn403ForPlayerRole() throws Exception {
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", 1L)
+                            .header("X-User-Role", "PLAYER"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).resetWithResult(anyLong());
+        }
+
+        @Test
+        @DisplayName("存在しないIDの場合は404エラー")
+        void shouldReturn404ForNonExistentId() throws Exception {
+            // Given
+            Long id = 999L;
+            when(matchPairingService.resetWithResult(id))
+                    .thenThrow(new ResourceNotFoundException("MatchPairing", id));
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    @Nested
     @DisplayName("POST /api/match-pairings/auto-match")
     class AutoMatchTests {
 

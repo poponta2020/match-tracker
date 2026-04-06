@@ -29,6 +29,8 @@ public class AutoMatchingResult {
         private String player2Name;
         private Double score;
         private List<MatchHistory> recentMatches;
+        private String winnerName;
+        private Integer scoreDifference;
     }
 
     @Data

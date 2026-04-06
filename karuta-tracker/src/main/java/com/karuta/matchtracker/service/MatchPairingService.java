@@ -389,6 +389,20 @@ public class MatchPairingService {
                 lockedPlayerIds.add(pairing.getPlayer2Id());
                 Player player1 = allPlayerMap.get(pairing.getPlayer1Id());
                 Player player2 = allPlayerMap.get(pairing.getPlayer2Id());
+
+                // 対応するMatchから結果情報を取得
+                Match matchResult = existingMatches.stream()
+                        .filter(m -> (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                                     (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2))
+                        .findFirst().orElse(null);
+                String winnerName = null;
+                Integer scoreDiff = null;
+                if (matchResult != null) {
+                    Player winner = allPlayerMap.get(matchResult.getWinnerId());
+                    winnerName = winner != null ? winner.getName() : "Unknown";
+                    scoreDiff = matchResult.getScoreDifference();
+                }
+
                 lockedPairingSuggestions.add(AutoMatchingResult.PairingSuggestion.builder()
                         .id(pairing.getId())
                         .player1Id(pairing.getPlayer1Id())
@@ -397,6 +411,8 @@ public class MatchPairingService {
                         .player2Name(player2 != null ? player2.getName() : "Unknown")
                         .score(0.0)
                         .recentMatches(Collections.emptyList())
+                        .winnerName(winnerName)
+                        .scoreDifference(scoreDiff)
                         .build());
             }
         }

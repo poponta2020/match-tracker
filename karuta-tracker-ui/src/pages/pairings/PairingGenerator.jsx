@@ -19,7 +19,8 @@ const PairingGenerator = () => {
   // URLパラメータの日付があればそれを使用、なければ今日
   const today = new Date().toISOString().split('T')[0];
   const [sessionDate, setSessionDate] = useState(searchParams.get('date') || today);
-  const [matchNumber, setMatchNumber] = useState(1);
+  const initialMatchNumber = parseInt(searchParams.get('matchNumber'), 10);
+  const [matchNumber, setMatchNumber] = useState(initialMatchNumber > 0 ? initialMatchNumber : 1);
   const [participants, setParticipants] = useState([]);
   const [pairings, setPairings] = useState([]);
   const [waitingPlayers, setWaitingPlayers] = useState([]);
@@ -200,6 +201,8 @@ const PairingGenerator = () => {
             pairingsCache.current[num] = matchPairings;
           }
           setMatchExistsMap(newExistsMap);
+          // URLパラメータの matchNumber が totalMatches を超えている場合はクランプ
+          setMatchNumber(prev => Math.max(1, Math.min(prev, totalMatches)));
           // キャッシュ更新をトリガー → matchNumber useEffectが再実行される
           setCacheVersion(v => v + 1);
         } else {
@@ -335,7 +338,7 @@ const PairingGenerator = () => {
 
   const handleSave = async () => {
     const unlockedPairings = pairings.filter(p => !p.hasResult);
-    if (unlockedPairings.length === 0) {
+    if (unlockedPairings.length === 0 && waitingPlayers.length === 0) {
       setError('保存する組み合わせがありません');
       return;
     }
