@@ -108,9 +108,14 @@ public class MatchPairingService {
     public List<MatchPairingDto> createBatch(LocalDate sessionDate, Integer matchNumber,
                                               List<MatchPairingCreateRequest> requests,
                                               List<Long> waitingPlayerIds, Long createdBy) {
+        // 組織スコープ: セッション参加者でフィルタ
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+
         // ロック済みペアリング（結果入力済み）を特定して保持
-        List<MatchPairing> existingPairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
-        List<Match> existingMatches = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
         Set<String> lockedPairKeys = new HashSet<>();
         Set<Long> lockedPlayerIds = new HashSet<>();
         List<MatchPairing> lockedPairings = new ArrayList<>();
@@ -152,8 +157,13 @@ public class MatchPairingService {
         // ロック済みペアリングも結果に含める
         saved.addAll(lockedPairings);
 
+        // 待機者リストからロック済みプレイヤーを除外
+        List<Long> filteredWaitingPlayerIds = waitingPlayerIds != null
+                ? waitingPlayerIds.stream().filter(id -> !lockedPlayerIds.contains(id)).collect(Collectors.toList())
+                : Collections.emptyList();
+
         // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
-        if (waitingPlayerIds != null && !waitingPlayerIds.isEmpty()) {
+        if (!filteredWaitingPlayerIds.isEmpty()) {
             practiceSessionRepository.findBySessionDate(sessionDate).ifPresent(session -> {
                 // 既存の抜け番登録（matchNumber=null）を一旦削除してから再登録
                 List<PracticeParticipant> existingBye = practiceParticipantRepository
@@ -162,7 +172,7 @@ public class MatchPairingService {
                         .collect(Collectors.toList());
                 practiceParticipantRepository.deleteAll(existingBye);
 
-                List<PracticeParticipant> byeParticipants = waitingPlayerIds.stream()
+                List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
                         .map(playerId -> PracticeParticipant.builder()
                                 .sessionId(session.getId())
                                 .playerId(playerId)
@@ -241,8 +251,12 @@ public class MatchPairingService {
      */
     @Transactional
     public void deleteByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
-        List<MatchPairing> existingPairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
-        List<Match> existingMatches = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
+        // 組織スコープ: セッション参加者でフィルタ
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
 
         List<MatchPairing> toDelete = existingPairings.stream()
                 .filter(pairing -> {
@@ -366,9 +380,12 @@ public class MatchPairingService {
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
 
-        // ロック済みペアリング（結果入力済み）を特定して除外
-        List<MatchPairing> existingPairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
-        List<Match> existingMatches = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
+        // ロック済みペアリング（結果入力済み）を特定して除外（組織スコープ付き）
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate);
+        List<MatchPairing> existingPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
+        List<Match> existingMatches = filterMatchesBySession(
+                matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds);
         Set<Long> lockedPlayerIds = new HashSet<>();
         List<AutoMatchingResult.PairingSuggestion> lockedPairingSuggestions = new ArrayList<>();
 
@@ -552,6 +569,34 @@ public class MatchPairingService {
                 .waitingPlayers(waitingPlayers)
                 .lockedPairings(lockedPairingSuggestions)
                 .build();
+    }
+
+    /**
+     * 指定日のセッション全参加者IDを取得（組織スコープ用）
+     */
+    private Set<Long> getSessionAllPlayerIds(LocalDate sessionDate) {
+        return practiceSessionRepository.findBySessionDate(sessionDate)
+                .map(session -> practiceParticipantRepository.findBySessionId(session.getId()).stream()
+                        .map(PracticeParticipant::getPlayerId)
+                        .collect(Collectors.toSet()))
+                .orElse(Collections.emptySet());
+    }
+
+    /**
+     * ペアリング/マッチをセッション参加者でフィルタ（組織スコープ）
+     */
+    private List<MatchPairing> filterPairingsBySession(List<MatchPairing> pairings, Set<Long> sessionPlayerIds) {
+        if (sessionPlayerIds.isEmpty()) return pairings;
+        return pairings.stream()
+                .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id()) || sessionPlayerIds.contains(p.getPlayer2Id()))
+                .collect(Collectors.toList());
+    }
+
+    private List<Match> filterMatchesBySession(List<Match> matches, Set<Long> sessionPlayerIds) {
+        if (sessionPlayerIds.isEmpty()) return matches;
+        return matches.stream()
+                .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id()) || sessionPlayerIds.contains(m.getPlayer2Id()))
+                .collect(Collectors.toList());
     }
 
     /**

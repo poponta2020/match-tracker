@@ -440,6 +440,9 @@ const PairingGenerator = () => {
 
   // ロック済みペアリングのリセット
   const handleResetPairing = async (pairing) => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm('未保存の変更があります。リセットすると未保存の変更は失われます。続行しますか？')) return;
+    }
     const msg = `この組み合わせの結果をリセットしますか？\n\n${pairing.player1Name} vs ${pairing.player2Name}\n勝者: ${pairing.winnerName || '不明'}${pairing.scoreDifference != null ? `（${pairing.scoreDifference}枚差）` : ''}\n\n対戦組み合わせと試合結果の両方が削除されます。`;
     if (!window.confirm(msg)) return;
 
