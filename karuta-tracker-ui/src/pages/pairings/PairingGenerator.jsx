@@ -8,6 +8,9 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import PlayerChip from '../../components/PlayerChip';
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import DraggablePlayerChip from './DraggablePlayerChip';
+import DroppableSlot from './DroppableSlot';
 
 
 const PairingGenerator = () => {
@@ -52,6 +55,12 @@ const PairingGenerator = () => {
 
   // 現在の試合が閲覧専用か（他の試合に未保存の変更がある場合）
   const isReadOnly = hasUnsavedChanges && unsavedDraft.current?.matchNumber !== matchNumber;
+
+  // ドラッグ＆ドロップ設定
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const sensors = useSensors(pointerSensor, touchSensor);
+  const [activeDragItem, setActiveDragItem] = useState(null);
 
   // ペアの直近対戦履歴を取得し、該当ペアのrecentMatchesを更新するヘルパー
   const fetchPairHistory = useCallback(async (pairingIndex, player1Id, player2Id) => {
@@ -393,127 +402,170 @@ const PairingGenerator = () => {
     }
   };
 
-  const handleRemovePair = (index) => {
-    const newPairings = [...pairings];
-    const removed = newPairings.splice(index, 1)[0];
-
-    const newWaiting = [
-      ...waitingPlayers,
-      { id: removed.player1Id, name: removed.player1Name },
-      { id: removed.player2Id, name: removed.player2Name },
-    ];
-
-    setPairings(newPairings);
-    setWaitingPlayers(newWaiting);
-    setHasUnsavedChanges(true);
-    saveDraft(newPairings, newWaiting, isEditingExisting);
+  // ドラッグ＆ドロップハンドラー
+  const handleDragStart = (event) => {
+    setActiveDragItem(event.active.data.current);
   };
 
-  const handleSwapPlayer = (pairingIndex, playerPosition, newPlayerId) => {
-    const newPairings = [...pairings];
-    const pairing = newPairings[pairingIndex];
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveDragItem(null);
 
-    // 現在の選手
-    const oldPlayer = playerPosition === 1
-      ? { id: pairing.player1Id, name: pairing.player1Name }
-      : { id: pairing.player2Id, name: pairing.player2Name };
+    if (!over) return;
 
-    // 選択された選手が待機リストにいるか確認
-    const waitingPlayer = waitingPlayers.find((p) => p.id === newPlayerId);
+    const source = active.data.current.source;
+    const dest = over.data.current;
 
-    let updatedWaiting = waitingPlayers;
-    if (waitingPlayer) {
-      // 待機リストから選手を選んだ場合
-      if (playerPosition === 1) {
-        pairing.player1Id = waitingPlayer.id;
-        pairing.player1Name = waitingPlayer.name;
+    if (!source || !dest) return;
+
+    const sourceType = source.type; // 'pairing' or 'waiting'
+    const destType = dest.slotType; // 'pairing-player1', 'pairing-player2', 'waiting-list', 'new-pairing'
+
+    const draggedPlayerId = active.data.current.playerId;
+    const draggedPlayerName = active.data.current.playerName;
+
+    // 同じスロットにドロップした場合は何もしない
+    if (sourceType === 'pairing' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
+      const destPosition = destType === 'pairing-player1' ? 1 : 2;
+      if (source.pairingIndex === dest.pairingIndex && source.position === destPosition) return;
+    }
+    if (sourceType === 'waiting' && destType === 'waiting-list') return;
+
+    let newPairings = pairings.map(p => ({ ...p }));
+    let newWaiting = [...waitingPlayers];
+    const affectedPairingIndices = [];
+
+    if (sourceType === 'pairing' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
+      // Case 1: Pairing slot -> Pairing slot (swap two players)
+      const srcIdx = source.pairingIndex;
+      const srcPos = source.position;
+      const dstIdx = dest.pairingIndex;
+      const dstPos = destType === 'pairing-player1' ? 1 : 2;
+
+      const srcPairing = newPairings[srcIdx];
+      const dstPairing = newPairings[dstIdx];
+
+      const dstPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
+      const dstPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
+
+      // Handle drop onto empty slot
+      if (!dstPlayerId) {
+        // Move player to empty slot
+        if (dstPos === 1) {
+          dstPairing.player1Id = draggedPlayerId;
+          dstPairing.player1Name = draggedPlayerName;
+        } else {
+          dstPairing.player2Id = draggedPlayerId;
+          dstPairing.player2Name = draggedPlayerName;
+        }
+        // Clear source
+        if (srcPos === 1) {
+          srcPairing.player1Id = null;
+          srcPairing.player1Name = null;
+        } else {
+          srcPairing.player2Id = null;
+          srcPairing.player2Name = null;
+        }
+        // If source pairing has both slots empty, remove it
+        if (!srcPairing.player1Id && !srcPairing.player2Id) {
+          newPairings.splice(srcIdx, 1);
+          // Adjust affected indices
+          affectedPairingIndices.push(dstIdx > srcIdx ? dstIdx - 1 : dstIdx);
+        } else {
+          affectedPairingIndices.push(srcIdx, dstIdx);
+        }
       } else {
-        pairing.player2Id = waitingPlayer.id;
-        pairing.player2Name = waitingPlayer.name;
+        // Swap players
+        if (srcPos === 1) {
+          srcPairing.player1Id = dstPlayerId;
+          srcPairing.player1Name = dstPlayerName;
+        } else {
+          srcPairing.player2Id = dstPlayerId;
+          srcPairing.player2Name = dstPlayerName;
+        }
+        if (dstPos === 1) {
+          dstPairing.player1Id = draggedPlayerId;
+          dstPairing.player1Name = draggedPlayerName;
+        } else {
+          dstPairing.player2Id = draggedPlayerId;
+          dstPairing.player2Name = draggedPlayerName;
+        }
+        srcPairing.recentMatches = null;
+        dstPairing.recentMatches = null;
+        affectedPairingIndices.push(srcIdx, dstIdx);
+      }
+    } else if (sourceType === 'waiting' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
+      // Case 2: Waiting -> Pairing slot (replace player, old goes to waiting)
+      const dstIdx = dest.pairingIndex;
+      const dstPos = destType === 'pairing-player1' ? 1 : 2;
+      const dstPairing = newPairings[dstIdx];
+
+      const oldPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
+      const oldPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
+
+      if (dstPos === 1) {
+        dstPairing.player1Id = draggedPlayerId;
+        dstPairing.player1Name = draggedPlayerName;
+      } else {
+        dstPairing.player2Id = draggedPlayerId;
+        dstPairing.player2Name = draggedPlayerName;
+      }
+      dstPairing.recentMatches = null;
+
+      newWaiting = newWaiting.filter(p => p.id !== draggedPlayerId);
+      if (oldPlayerId) {
+        newWaiting.push({ id: oldPlayerId, name: oldPlayerName });
+      }
+      affectedPairingIndices.push(dstIdx);
+    } else if (sourceType === 'pairing' && destType === 'waiting-list') {
+      // Case 3: Pairing slot -> Waiting list
+      const srcIdx = source.pairingIndex;
+      const srcPos = source.position;
+      const srcPairing = newPairings[srcIdx];
+
+      newWaiting.push({ id: draggedPlayerId, name: draggedPlayerName });
+
+      if (srcPos === 1) {
+        srcPairing.player1Id = null;
+        srcPairing.player1Name = null;
+      } else {
+        srcPairing.player2Id = null;
+        srcPairing.player2Name = null;
       }
 
-      // 待機リストを更新
-      updatedWaiting = waitingPlayers.filter((p) => p.id !== newPlayerId);
-      updatedWaiting.push(oldPlayer);
-      setWaitingPlayers(updatedWaiting);
+      // If both slots are empty, remove the row
+      if (!srcPairing.player1Id && !srcPairing.player2Id) {
+        newPairings.splice(srcIdx, 1);
+      }
+    } else if (sourceType === 'waiting' && destType === 'new-pairing') {
+      // Case 4: Waiting -> New pairing zone
+      newWaiting = newWaiting.filter(p => p.id !== draggedPlayerId);
+      newPairings.push({
+        player1Id: draggedPlayerId,
+        player1Name: draggedPlayerName,
+        player2Id: null,
+        player2Name: null,
+        recentMatches: null,
+      });
     } else {
-      // 他の組み合わせから選手を選んだ場合
-      const otherPairingIndex = newPairings.findIndex(
-        (p, idx) => idx !== pairingIndex && (p.player1Id === newPlayerId || p.player2Id === newPlayerId)
-      );
-
-      if (otherPairingIndex !== -1) {
-        const otherPairing = newPairings[otherPairingIndex];
-
-        // 選択された選手が相手の組み合わせのどちらか確認
-        if (otherPairing.player1Id === newPlayerId) {
-          // 入れ替え
-          otherPairing.player1Id = oldPlayer.id;
-          otherPairing.player1Name = oldPlayer.name;
-        } else {
-          otherPairing.player2Id = oldPlayer.id;
-          otherPairing.player2Name = oldPlayer.name;
-        }
-
-        // 現在の組み合わせを更新
-        if (playerPosition === 1) {
-          pairing.player1Id = newPlayerId;
-          pairing.player1Name = participants.find((p) => p.id === newPlayerId)?.name || '';
-        } else {
-          pairing.player2Id = newPlayerId;
-          pairing.player2Name = participants.find((p) => p.id === newPlayerId)?.name || '';
-        }
-      }
+      return; // Unsupported combination
     }
 
-    // 変更されたペアのrecentMatchesを即座にクリア
-    newPairings[pairingIndex] = { ...newPairings[pairingIndex], recentMatches: null };
-    // 他の組み合わせから選手を入れ替えた場合、そちらもクリア
-    const otherIdx = newPairings.findIndex(
-      (p, idx) => idx !== pairingIndex && !waitingPlayer &&
-        (p.player1Id === oldPlayer?.id || p.player2Id === oldPlayer?.id)
-    );
-    if (otherIdx !== -1) {
-      newPairings[otherIdx] = { ...newPairings[otherIdx], recentMatches: null };
-    }
-
-    setPairings(newPairings);
-    setHasUnsavedChanges(true);
-    saveDraft(newPairings, updatedWaiting, isEditingExisting);
-
-    // API呼び出しで対戦履歴を取得
-    const updatedPairing = newPairings[pairingIndex];
-    fetchPairHistory(pairingIndex, updatedPairing.player1Id, updatedPairing.player2Id);
-    if (otherIdx !== -1) {
-      const otherP = newPairings[otherIdx];
-      fetchPairHistory(otherIdx, otherP.player1Id, otherP.player2Id);
-    }
-  };
-
-  const handleAddPairing = () => {
-    if (waitingPlayers.length < 2) {
-      setError('組み合わせを作成するには2名以上の待機選手が必要です');
-      return;
-    }
-
-    const newPairing = {
-      player1Id: waitingPlayers[0].id,
-      player1Name: waitingPlayers[0].name,
-      player2Id: waitingPlayers[1].id,
-      player2Name: waitingPlayers[1].name,
-      recentMatches: null,
-    };
-
-    const newPairings = [...pairings, newPairing];
-    const newWaiting = waitingPlayers.slice(2);
     setPairings(newPairings);
     setWaitingPlayers(newWaiting);
     setHasUnsavedChanges(true);
     saveDraft(newPairings, newWaiting, isEditingExisting);
-    setError('');
 
-    // 追加したペアの対戦履歴を取得
-    fetchPairHistory(newPairings.length - 1, newPairing.player1Id, newPairing.player2Id);
+    // Fetch pair history for affected pairings
+    affectedPairingIndices.forEach(idx => {
+      if (newPairings[idx] && newPairings[idx].player1Id && newPairings[idx].player2Id) {
+        fetchPairHistory(idx, newPairings[idx].player1Id, newPairings[idx].player2Id);
+      }
+    });
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragItem(null);
   };
 
   const handleAddPlayer = async () => {
@@ -788,6 +840,7 @@ const PairingGenerator = () => {
       )}
 
       {pairings.length > 0 && (
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-[#374151]">
@@ -829,60 +882,29 @@ const PairingGenerator = () => {
                     <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
                   </div>
                 ) : (
-                  /* 編集モード: コンパクト1行 */
+                  /* 編集モード: ドラッグ＆ドロップ */
                   <div className="flex items-center gap-2">
-                    <select
-                      value={pairing.player1Id}
-                      onChange={(e) => handleSwapPlayer(index, 1, Number(e.target.value))}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-200 rounded bg-[#f9f6f2] focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a]"
-                    >
-                      <option value={pairing.player1Id}>{pairing.player1Name}</option>
-                      <optgroup label="待機中">
-                        {waitingPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>{player.name}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="他の組み合わせ">
-                        {pairings
-                          .filter((_, idx) => idx !== index)
-                          .flatMap((p) => [
-                            { id: p.player1Id, name: p.player1Name },
-                            { id: p.player2Id, name: p.player2Name },
-                          ])
-                          .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
-                          .map((player) => (
-                            <option key={player.id} value={player.id}>{player.name}</option>
-                          ))}
-                      </optgroup>
-                    </select>
-
+                    <DroppableSlot id={`slot-pairing-${index}-player1`} data={{ slotType: 'pairing-player1', pairingIndex: index }}>
+                      {pairing.player1Id ? (
+                        <DraggablePlayerChip
+                          id={`pairing-${index}-player1`}
+                          data={{ playerId: pairing.player1Id, playerName: pairing.player1Name, kyuRank: participants.find(p => p.id === pairing.player1Id)?.kyuRank, source: { type: 'pairing', pairingIndex: index, position: 1 } }}
+                        />
+                      ) : (
+                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
+                      )}
+                    </DroppableSlot>
                     <span className="text-[#a5b4aa] text-xs flex-shrink-0">vs</span>
-
-                    <select
-                      value={pairing.player2Id}
-                      onChange={(e) => handleSwapPlayer(index, 2, Number(e.target.value))}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-200 rounded bg-[#f9f6f2] focus:ring-1 focus:ring-[#4a6b5a] focus:border-[#4a6b5a]"
-                    >
-                      <option value={pairing.player2Id}>{pairing.player2Name}</option>
-                      <optgroup label="待機中">
-                        {waitingPlayers.map((player) => (
-                          <option key={player.id} value={player.id}>{player.name}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="他の組み合わせ">
-                        {pairings
-                          .filter((_, idx) => idx !== index)
-                          .flatMap((p) => [
-                            { id: p.player1Id, name: p.player1Name },
-                            { id: p.player2Id, name: p.player2Name },
-                          ])
-                          .filter((p) => p.id !== pairing.player1Id && p.id !== pairing.player2Id)
-                          .map((player) => (
-                            <option key={player.id} value={player.id}>{player.name}</option>
-                          ))}
-                      </optgroup>
-                    </select>
-
+                    <DroppableSlot id={`slot-pairing-${index}-player2`} data={{ slotType: 'pairing-player2', pairingIndex: index }}>
+                      {pairing.player2Id ? (
+                        <DraggablePlayerChip
+                          id={`pairing-${index}-player2`}
+                          data={{ playerId: pairing.player2Id, playerName: pairing.player2Name, kyuRank: participants.find(p => p.id === pairing.player2Id)?.kyuRank, source: { type: 'pairing', pairingIndex: index, position: 2 } }}
+                        />
+                      ) : (
+                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
+                      )}
+                    </DroppableSlot>
                     <span className="text-xs text-[#6b7280] flex-shrink-0 w-12 text-right">
                       {pairing.recentMatches === null
                         ? <span className="text-gray-300">...</span>
@@ -891,19 +913,19 @@ const PairingGenerator = () => {
                           : <span className="text-[#4a6b5a]">初</span>
                       }
                     </span>
-
-                    <button
-                      onClick={() => handleRemovePair(index)}
-                      className="text-[#d1d5db] hover:text-red-500 flex-shrink-0 transition-colors"
-                      title="この組み合わせを削除"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 )}
               </div>
             ))}
           </div>
+
+          {!isReadOnly && !isViewMode && waitingPlayers.length > 0 && (
+            <DroppableSlot id="slot-new-pairing" data={{ slotType: 'new-pairing' }}>
+              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${activeDragItem ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
+                ここにドロップして新しい組み合わせを作成
+              </div>
+            </DroppableSlot>
+          )}
 
           {!isReadOnly && !isViewMode && (
             <div className={`${waitingPlayers.length > 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'} p-4 rounded-lg`}>
@@ -912,15 +934,6 @@ const PairingGenerator = () => {
                   待機中の選手{waitingPlayers.length > 0 && `（${waitingPlayers.length}名）`}
                 </h3>
                 <div className="flex items-center gap-2">
-                  {waitingPlayers.length >= 2 && (
-                    <button
-                      onClick={handleAddPairing}
-                      className="flex items-center gap-1 text-sm bg-[#4a6b5a] text-white px-3 py-1 rounded hover:bg-[#3d5a4c]"
-                    >
-                      <Plus className="w-4 h-4" />
-                      組み合わせを追加
-                    </button>
-                  )}
                   <button
                     onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
                     className="flex items-center gap-1 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1 rounded hover:bg-[#e5ebe7] transition-colors"
@@ -930,15 +943,14 @@ const PairingGenerator = () => {
                   </button>
                 </div>
               </div>
-              {waitingPlayers.length > 0 ? (
-                <>
+              <DroppableSlot id="slot-waiting-list" data={{ slotType: 'waiting-list' }}>
+                {waitingPlayers.length > 0 ? (
                   <div className="space-y-2">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
                       <div key={player.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
-                        <PlayerChip
-                          name={player.name}
-                          kyuRank={player.kyuRank}
-                          className="text-sm bg-[#f9f6f2] text-[#374151]"
+                        <DraggablePlayerChip
+                          id={`waiting-${player.id}`}
+                          data={{ playerId: player.id, playerName: player.name, kyuRank: player.kyuRank || participants.find(p => p.id === player.id)?.kyuRank, source: { type: 'waiting' } }}
                         />
                         <select
                           value={waitingActivities[player.id]?.activityType || ''}
@@ -968,13 +980,10 @@ const PairingGenerator = () => {
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-600 mt-2">
-                    ※各組み合わせのドロップダウンから選手を入れ替えることができます
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-[#6b7280]">待機中の選手はいません</p>
-              )}
+                ) : (
+                  <p className="text-xs text-[#6b7280]">待機中の選手はいません</p>
+                )}
+              </DroppableSlot>
             </div>
           )}
 
@@ -1025,7 +1034,7 @@ const PairingGenerator = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={loading}
+                  disabled={loading || pairings.some(p => !p.player1Id || !p.player2Id)}
                   className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />
@@ -1035,6 +1044,16 @@ const PairingGenerator = () => {
             </div>
           )}
         </div>
+        <DragOverlay>
+          {activeDragItem ? (
+            <PlayerChip
+              name={activeDragItem.playerName}
+              kyuRank={activeDragItem.kyuRank}
+              className="text-sm bg-[#f9f6f2] text-[#374151] shadow-lg opacity-80"
+            />
+          ) : null}
+        </DragOverlay>
+        </DndContext>
       )}
 
       {/* 選手追加モーダル */}
