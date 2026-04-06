@@ -884,7 +884,7 @@ const PairingGenerator = () => {
                 ) : (
                   /* 編集モード: ドラッグ＆ドロップ */
                   <div className="flex items-center gap-2">
-                    <DroppableSlot id={`slot-pairing-${index}-player1`} data={{ slotType: 'pairing-player1', pairingIndex: index }}>
+                    <DroppableSlot id={`slot-pairing-${index}-player1`} data={{ slotType: 'pairing-player1', pairingIndex: index }} isDragActive={!!activeDragItem}>
                       {pairing.player1Id ? (
                         <DraggablePlayerChip
                           id={`pairing-${index}-player1`}
@@ -895,7 +895,7 @@ const PairingGenerator = () => {
                       )}
                     </DroppableSlot>
                     <span className="text-[#a5b4aa] text-xs flex-shrink-0">vs</span>
-                    <DroppableSlot id={`slot-pairing-${index}-player2`} data={{ slotType: 'pairing-player2', pairingIndex: index }}>
+                    <DroppableSlot id={`slot-pairing-${index}-player2`} data={{ slotType: 'pairing-player2', pairingIndex: index }} isDragActive={!!activeDragItem}>
                       {pairing.player2Id ? (
                         <DraggablePlayerChip
                           id={`pairing-${index}-player2`}
@@ -920,7 +920,7 @@ const PairingGenerator = () => {
           </div>
 
           {!isReadOnly && !isViewMode && waitingPlayers.length > 0 && (
-            <DroppableSlot id="slot-new-pairing" data={{ slotType: 'new-pairing' }}>
+            <DroppableSlot id="slot-new-pairing" data={{ slotType: 'new-pairing' }} isDragActive={!!activeDragItem}>
               <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${activeDragItem ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
                 ここにドロップして新しい組み合わせを作成
               </div>
@@ -943,7 +943,7 @@ const PairingGenerator = () => {
                   </button>
                 </div>
               </div>
-              <DroppableSlot id="slot-waiting-list" data={{ slotType: 'waiting-list' }}>
+              <DroppableSlot id="slot-waiting-list" data={{ slotType: 'waiting-list' }} isDragActive={!!activeDragItem}>
                 {waitingPlayers.length > 0 ? (
                   <div className="space-y-2">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
