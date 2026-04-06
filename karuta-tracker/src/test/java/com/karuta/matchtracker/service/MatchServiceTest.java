@@ -4,6 +4,8 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -39,6 +41,9 @@ class MatchServiceTest {
 
     @Mock
     private MatchRepository matchRepository;
+
+    @Mock
+    private MatchPairingRepository matchPairingRepository;
 
     @Mock
     private PlayerRepository playerRepository;
@@ -903,6 +908,84 @@ class MatchServiceTest {
                     .hasMessageContaining("Match");
 
             verify(matchRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("ペアリング自動生成テスト")
+    class AutoCreateMatchPairingTests {
+
+        @Test
+        @DisplayName("createMatch時に両プレイヤー登録済みの場合ペアリングが自動生成される")
+        void shouldAutoCreatePairingOnCreateMatch() {
+            // Given
+            MatchCreateRequest request = new MatchCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayer1Id(1L);
+            request.setPlayer2Id(2L);
+            request.setWinnerId(1L);
+            request.setScoreDifference(5);
+            request.setCreatedBy(1L);
+
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
+            when(matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.createMatch(request);
+
+            // Then: ペアリングが自動生成される
+            ArgumentCaptor<MatchPairing> captor = ArgumentCaptor.forClass(MatchPairing.class);
+            verify(matchPairingRepository).save(captor.capture());
+            MatchPairing saved = captor.getValue();
+            assertThat(saved.getSessionDate()).isEqualTo(today);
+            assertThat(saved.getMatchNumber()).isEqualTo(1);
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L);
+            assertThat(saved.getPlayer2Id()).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("createMatch時にペアリングが既存の場合は重複生成されない")
+        void shouldNotDuplicatePairingOnCreateMatch() {
+            // Given
+            MatchCreateRequest request = new MatchCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayer1Id(1L);
+            request.setPlayer2Id(2L);
+            request.setWinnerId(1L);
+            request.setScoreDifference(5);
+            request.setCreatedBy(1L);
+
+            MatchPairing existingPairing = MatchPairing.builder()
+                    .id(10L).sessionDate(today).matchNumber(1).player1Id(1L).player2Id(2L).createdBy(1L).build();
+
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
+            when(matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(existingPairing));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.createMatch(request);
+
+            // Then: ペアリングは保存されない
+            verify(matchPairingRepository, never()).save(any(MatchPairing.class));
         }
     }
 }

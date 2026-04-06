@@ -15,6 +15,7 @@ import java.util.List;
 public class AutoMatchingResult {
     private List<PairingSuggestion> pairings;
     private List<PlayerInfo> waitingPlayers;
+    private List<PairingSuggestion> lockedPairings;
 
     @Data
     @NoArgsConstructor

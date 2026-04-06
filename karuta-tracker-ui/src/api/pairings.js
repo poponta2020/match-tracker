@@ -51,4 +51,8 @@ export const pairingAPI = {
     apiClient.get('/match-pairings/pair-history', {
       params: { player1Id, player2Id, sessionDate, matchNumber },
     }),
+
+  // ペアリングと対応する試合結果を同時に削除（リセット）
+  resetWithResult: (id) =>
+    apiClient.delete(`/match-pairings/${id}/with-result`),
 };

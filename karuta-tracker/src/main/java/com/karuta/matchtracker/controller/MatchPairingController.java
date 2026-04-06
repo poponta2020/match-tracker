@@ -186,6 +186,20 @@ public class MatchPairingController {
     }
 
     /**
+     * ペアリングと対応する試合結果を同時に削除（リセット）
+     */
+    @DeleteMapping("/{id}/with-result")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<MatchPairingDto> resetWithResult(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("対戦組み合わせリセット（結果込み）: ID={}", id);
+        validateAdminScopeByPairingId(id, httpRequest);
+        MatchPairingDto result = matchPairingService.resetWithResult(id);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * ADMINスコープ検証（日付ベース）
      */
     private void validateAdminScopeByDate(LocalDate date, HttpServletRequest httpRequest) {

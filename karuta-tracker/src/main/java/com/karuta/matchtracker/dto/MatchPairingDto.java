@@ -26,4 +26,10 @@ public class MatchPairingDto {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<AutoMatchingResult.MatchHistory> recentMatches;
+
+    // ロック関連（結果入力済み判定用）
+    private boolean hasResult;
+    private String winnerName;
+    private Integer scoreDifference;
+    private Long matchId;
 }

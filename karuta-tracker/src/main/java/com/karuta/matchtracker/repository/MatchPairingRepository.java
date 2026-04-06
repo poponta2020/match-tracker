@@ -64,4 +64,16 @@ public interface MatchPairingRepository extends JpaRepository<MatchPairing, Long
            "AND (mp.player1Id IN :participantIds OR mp.player2Id IN :participantIds)")
     List<Object[]> findSameDayPairingHistory(@Param("sessionDate") LocalDate sessionDate,
                                               @Param("participantIds") List<Long> participantIds);
+
+    /**
+     * 指定日・試合番号・プレイヤーペアでペアリングが存在するか確認（player1Id < player2Id の正規化済み前提）
+     */
+    @Query("SELECT mp FROM MatchPairing mp WHERE mp.sessionDate = :sessionDate AND mp.matchNumber = :matchNumber " +
+           "AND ((mp.player1Id = :player1Id AND mp.player2Id = :player2Id) " +
+           "OR (mp.player1Id = :player2Id AND mp.player2Id = :player1Id))")
+    java.util.Optional<MatchPairing> findBySessionDateAndMatchNumberAndPlayers(
+            @Param("sessionDate") LocalDate sessionDate,
+            @Param("matchNumber") Integer matchNumber,
+            @Param("player1Id") Long player1Id,
+            @Param("player2Id") Long player2Id);
 }
