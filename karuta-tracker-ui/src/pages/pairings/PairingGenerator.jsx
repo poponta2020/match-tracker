@@ -435,8 +435,8 @@ const PairingGenerator = () => {
     setHasUnsavedChanges(true);
     saveDraft(result.pairings, result.waitingPlayers, isEditingExisting);
 
-    // Fetch pair history for affected pairings
-    result.affectedPairingIndices.forEach(idx => {
+    // Fetch pair history for affected pairings (deduplicate indices)
+    [...new Set(result.affectedPairingIndices)].forEach(idx => {
       if (result.pairings[idx] && result.pairings[idx].player1Id && result.pairings[idx].player2Id) {
         fetchPairHistory(idx, result.pairings[idx].player1Id, result.pairings[idx].player2Id);
       }
@@ -800,7 +800,7 @@ const PairingGenerator = () => {
 
           {!isReadOnly && !isViewMode && waitingPlayers.length > 0 && (
             <DroppableSlot id="slot-new-pairing" data={{ slotType: 'new-pairing' }} isDragActive={!!activeDragItem}>
-              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${activeDragItem ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
+              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${activeDragItem?.source?.type === 'waiting' ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
                 ここにドロップして新しい組み合わせを作成
               </div>
             </DroppableSlot>
