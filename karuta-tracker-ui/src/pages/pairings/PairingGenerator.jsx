@@ -11,6 +11,7 @@ import PlayerChip from '../../components/PlayerChip';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
+import { computeDragResult } from './pairingDragLogic';
 
 
 const PairingGenerator = () => {
@@ -418,148 +419,26 @@ const PairingGenerator = () => {
 
     if (!source || !dest) return;
 
-    const sourceType = source.type; // 'pairing' or 'waiting'
-    const destType = dest.slotType; // 'pairing-player1', 'pairing-player2', 'waiting-list', 'new-pairing'
+    const result = computeDragResult({
+      source,
+      dest,
+      draggedPlayerId: active.data.current.playerId,
+      draggedPlayerName: active.data.current.playerName,
+      pairings,
+      waitingPlayers,
+    });
 
-    const draggedPlayerId = active.data.current.playerId;
-    const draggedPlayerName = active.data.current.playerName;
+    if (!result) return;
 
-    // 同じスロットにドロップした場合は何もしない
-    if (sourceType === 'pairing' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
-      const destPosition = destType === 'pairing-player1' ? 1 : 2;
-      if (source.pairingIndex === dest.pairingIndex && source.position === destPosition) return;
-    }
-    if (sourceType === 'waiting' && destType === 'waiting-list') return;
-
-    let newPairings = pairings.map(p => ({ ...p }));
-    let newWaiting = [...waitingPlayers];
-    const affectedPairingIndices = [];
-
-    if (sourceType === 'pairing' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
-      // Case 1: Pairing slot -> Pairing slot (swap two players)
-      const srcIdx = source.pairingIndex;
-      const srcPos = source.position;
-      const dstIdx = dest.pairingIndex;
-      const dstPos = destType === 'pairing-player1' ? 1 : 2;
-
-      const srcPairing = newPairings[srcIdx];
-      const dstPairing = newPairings[dstIdx];
-
-      const dstPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
-      const dstPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
-
-      // Handle drop onto empty slot
-      if (!dstPlayerId) {
-        // Move player to empty slot
-        if (dstPos === 1) {
-          dstPairing.player1Id = draggedPlayerId;
-          dstPairing.player1Name = draggedPlayerName;
-        } else {
-          dstPairing.player2Id = draggedPlayerId;
-          dstPairing.player2Name = draggedPlayerName;
-        }
-        // Clear source
-        if (srcPos === 1) {
-          srcPairing.player1Id = null;
-          srcPairing.player1Name = null;
-        } else {
-          srcPairing.player2Id = null;
-          srcPairing.player2Name = null;
-        }
-        // If source pairing has both slots empty, remove it
-        if (!srcPairing.player1Id && !srcPairing.player2Id) {
-          newPairings.splice(srcIdx, 1);
-          // Adjust affected indices
-          affectedPairingIndices.push(dstIdx > srcIdx ? dstIdx - 1 : dstIdx);
-        } else {
-          affectedPairingIndices.push(srcIdx, dstIdx);
-        }
-      } else {
-        // Swap players
-        if (srcPos === 1) {
-          srcPairing.player1Id = dstPlayerId;
-          srcPairing.player1Name = dstPlayerName;
-        } else {
-          srcPairing.player2Id = dstPlayerId;
-          srcPairing.player2Name = dstPlayerName;
-        }
-        if (dstPos === 1) {
-          dstPairing.player1Id = draggedPlayerId;
-          dstPairing.player1Name = draggedPlayerName;
-        } else {
-          dstPairing.player2Id = draggedPlayerId;
-          dstPairing.player2Name = draggedPlayerName;
-        }
-        srcPairing.recentMatches = null;
-        dstPairing.recentMatches = null;
-        affectedPairingIndices.push(srcIdx, dstIdx);
-      }
-    } else if (sourceType === 'waiting' && (destType === 'pairing-player1' || destType === 'pairing-player2')) {
-      // Case 2: Waiting -> Pairing slot (replace player, old goes to waiting)
-      const dstIdx = dest.pairingIndex;
-      const dstPos = destType === 'pairing-player1' ? 1 : 2;
-      const dstPairing = newPairings[dstIdx];
-
-      const oldPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
-      const oldPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
-
-      if (dstPos === 1) {
-        dstPairing.player1Id = draggedPlayerId;
-        dstPairing.player1Name = draggedPlayerName;
-      } else {
-        dstPairing.player2Id = draggedPlayerId;
-        dstPairing.player2Name = draggedPlayerName;
-      }
-      dstPairing.recentMatches = null;
-
-      newWaiting = newWaiting.filter(p => p.id !== draggedPlayerId);
-      if (oldPlayerId) {
-        newWaiting.push({ id: oldPlayerId, name: oldPlayerName });
-      }
-      affectedPairingIndices.push(dstIdx);
-    } else if (sourceType === 'pairing' && destType === 'waiting-list') {
-      // Case 3: Pairing slot -> Waiting list
-      const srcIdx = source.pairingIndex;
-      const srcPos = source.position;
-      const srcPairing = newPairings[srcIdx];
-
-      newWaiting.push({ id: draggedPlayerId, name: draggedPlayerName });
-
-      if (srcPos === 1) {
-        srcPairing.player1Id = null;
-        srcPairing.player1Name = null;
-      } else {
-        srcPairing.player2Id = null;
-        srcPairing.player2Name = null;
-      }
-
-      // If both slots are empty, remove the row
-      if (!srcPairing.player1Id && !srcPairing.player2Id) {
-        newPairings.splice(srcIdx, 1);
-      }
-    } else if (sourceType === 'waiting' && destType === 'new-pairing') {
-      // Case 4: Waiting -> New pairing zone
-      newWaiting = newWaiting.filter(p => p.id !== draggedPlayerId);
-      newPairings.push({
-        player1Id: draggedPlayerId,
-        player1Name: draggedPlayerName,
-        player2Id: null,
-        player2Name: null,
-        recentMatches: null,
-      });
-    } else {
-      return; // Unsupported combination
-    }
-
-    setPairings(newPairings);
-    setWaitingPlayers(newWaiting);
+    setPairings(result.pairings);
+    setWaitingPlayers(result.waitingPlayers);
     setHasUnsavedChanges(true);
-    saveDraft(newPairings, newWaiting, isEditingExisting);
+    saveDraft(result.pairings, result.waitingPlayers, isEditingExisting);
 
     // Fetch pair history for affected pairings
-    affectedPairingIndices.forEach(idx => {
-      if (newPairings[idx] && newPairings[idx].player1Id && newPairings[idx].player2Id) {
-        fetchPairHistory(idx, newPairings[idx].player1Id, newPairings[idx].player2Id);
+    result.affectedPairingIndices.forEach(idx => {
+      if (result.pairings[idx] && result.pairings[idx].player1Id && result.pairings[idx].player2Id) {
+        fetchPairHistory(idx, result.pairings[idx].player1Id, result.pairings[idx].player2Id);
       }
     });
   };
