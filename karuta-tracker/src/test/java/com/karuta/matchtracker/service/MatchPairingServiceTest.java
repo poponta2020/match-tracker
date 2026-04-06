@@ -1057,4 +1057,67 @@ class MatchPairingServiceTest {
             verify(practiceParticipantRepository, never()).saveAll(anyList());
         }
     }
+
+    @Nested
+    @DisplayName("resetWithResult 結果なし境界テスト")
+    class ResetWithResultBoundaryTests {
+
+        @Test
+        @DisplayName("結果が存在しないペアリングはリセットできない")
+        void shouldRejectResetWithoutResult() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(10L, sessionDate, 1, 1L, 2L);
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, 1))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            assertThatThrownBy(() -> matchPairingService.resetWithResult(10L))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("試合結果が見つかりません");
+
+            verify(matchPairingRepository, never()).delete(any());
+            verify(matchRepository, never()).delete(any(Match.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("組織スコープ: 参加者0件で無フィルタにならないことの検証")
+    class OrgScopeEmptyParticipantsTests {
+
+        @Test
+        @DisplayName("組織スコープ時に参加者0件なら既存ペアリングは操作対象外になる")
+        void shouldReturnEmptyWhenOrgScopedAndNoParticipants() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long orgId = 10L;
+
+            // 組織のセッションはあるが参加者がいない
+            PracticeSession session = new PracticeSession();
+            session.setId(100L);
+            session.setOrganizationId(orgId);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgId))
+                    .thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Collections.emptyList());
+
+            // DBにはペアリングが存在する
+            MatchPairing pairing = createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(pairing));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
+
+            // Then: 参加者0のため操作対象なし → 空リストで deleteAll
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.isEmpty();
+            }));
+        }
+    }
 }
