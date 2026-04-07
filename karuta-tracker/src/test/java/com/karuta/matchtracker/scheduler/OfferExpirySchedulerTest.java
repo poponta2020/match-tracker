@@ -240,5 +240,64 @@ class OfferExpirySchedulerTest {
             verify(waitlistPromotionService, never()).sendBatchedAdminWaitlistNotifications(
                     anyList(), any(PracticeSession.class));
         }
+
+        @Test
+        @DisplayName("同一セッション×異なるトリガープレイヤー → 通知が分離される")
+        void sameSession_differentTriggerPlayers_separateNotifications() {
+            // 同一セッション（100）で、トリガープレイヤーが異なる（10と30）
+            PracticeParticipant expired1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).build();
+            PracticeParticipant expired2 = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(30L).matchNumber(2)
+                    .status(ParticipantStatus.OFFERED).build();
+
+            // 繰り上げ先は同一プレイヤー（20）だがトリガーが異なる
+            PracticeParticipant promoted1 = PracticeParticipant.builder()
+                    .id(11L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).build();
+            PracticeParticipant promoted2 = PracticeParticipant.builder()
+                    .id(12L).sessionId(100L).playerId(20L).matchNumber(2)
+                    .status(ParticipantStatus.OFFERED).build();
+
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceParticipantRepository.findExpiredOffers(any()))
+                    .thenReturn(List.of(expired1, expired2));
+            when(practiceParticipantRepository.findExpiringOffers(any(), any()))
+                    .thenReturn(List.of());
+
+            when(waitlistPromotionService.expireOfferSuppressed(expired1))
+                    .thenReturn(ExpireOfferResult.builder()
+                            .notificationData(AdminWaitlistNotificationData.builder()
+                                    .triggerAction("オファー期限切れ").triggerPlayerId(10L)
+                                    .sessionId(100L).matchNumber(1).promotedParticipant(promoted1).build())
+                            .promotedParticipant(promoted1).build());
+            when(waitlistPromotionService.expireOfferSuppressed(expired2))
+                    .thenReturn(ExpireOfferResult.builder()
+                            .notificationData(AdminWaitlistNotificationData.builder()
+                                    .triggerAction("オファー期限切れ").triggerPlayerId(30L)
+                                    .sessionId(100L).matchNumber(2).promotedParticipant(promoted2).build())
+                            .promotedParticipant(promoted2).build());
+
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            scheduler.checkExpiredOffers();
+
+            // 繰り上げ先LINE通知: 同一プレイヤー（20）だがトリガーが異なるので2回に分離
+            verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
+                    argThat(list -> list.size() == 1 && list.get(0).getMatchNumber() == 1),
+                    eq(session), eq("オファー期限切れ"), eq(10L));
+            verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
+                    argThat(list -> list.size() == 1 && list.get(0).getMatchNumber() == 2),
+                    eq(session), eq("オファー期限切れ"), eq(30L));
+            verify(lineNotificationService, times(2)).sendConsolidatedWaitlistOfferNotification(
+                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+
+            // 管理者通知: トリガープレイヤーが異なるので2回に分離
+            verify(waitlistPromotionService, times(2)).sendBatchedAdminWaitlistNotifications(
+                    argThat(list -> list.size() == 1), eq(session));
+        }
     }
 }

@@ -1989,7 +1989,10 @@ public class LineNotificationService {
         List<Object> bodyContents = new ArrayList<>(List.of(
                 Map.of("type", "text", "text", sessionLabel + "の練習",
                         "weight", "bold", "size", "lg", "margin", "none", "wrap", true),
-                Map.of("type", "text", "text", triggerName + "が" + eventText,
+                Map.of("type", "text", "text",
+                        (triggerName != null && !triggerName.equals("不明") && !eventText.isEmpty())
+                                ? triggerName + "が" + eventText
+                                : "空きが出ました",
                         "size", "md", "margin", "md", "color", "#333333"),
                 Map.of("type", "separator", "margin", "lg"),
                 Map.<String, Object>of("type", "box", "layout", "horizontal", "margin", "lg",

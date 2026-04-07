@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+
 
 /**
  * 繰り上げオファー期限切れチェックスケジューラ
@@ -87,20 +87,21 @@ public class OfferExpiryScheduler {
      * 繰り上げ先プレイヤーへのLINE通知をセッション×プレイヤーでグルーピングして統合送信する。
      */
     private void sendConsolidatedOfferNotifications(List<ExpireOfferResult> results) {
-        // promotedParticipant があるもののみ抽出し、セッション×プレイヤーでグルーピング
-        Map<String, List<PracticeParticipant>> promotedBySessionPlayer = new LinkedHashMap<>();
+        // promotedParticipant があるもののみ抽出し、セッション×プレイヤー×トリガープレイヤーでグルーピング
+        Map<String, List<PracticeParticipant>> promotedByKey = new LinkedHashMap<>();
         Map<String, Long> triggerPlayerByKey = new LinkedHashMap<>();
 
         for (ExpireOfferResult result : results) {
             if (result.getPromotedParticipant() == null) continue;
 
             PracticeParticipant promoted = result.getPromotedParticipant();
-            String key = promoted.getSessionId() + ":" + promoted.getPlayerId();
-            promotedBySessionPlayer.computeIfAbsent(key, k -> new ArrayList<>()).add(promoted);
-            triggerPlayerByKey.putIfAbsent(key, result.getNotificationData().getTriggerPlayerId());
+            Long triggerPlayerId = result.getNotificationData().getTriggerPlayerId();
+            String key = promoted.getSessionId() + ":" + promoted.getPlayerId() + ":" + triggerPlayerId;
+            promotedByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(promoted);
+            triggerPlayerByKey.putIfAbsent(key, triggerPlayerId);
         }
 
-        for (Map.Entry<String, List<PracticeParticipant>> entry : promotedBySessionPlayer.entrySet()) {
+        for (Map.Entry<String, List<PracticeParticipant>> entry : promotedByKey.entrySet()) {
             List<PracticeParticipant> offeredList = entry.getValue();
             Long triggerPlayerId = triggerPlayerByKey.get(entry.getKey());
             try {
@@ -117,28 +118,29 @@ public class OfferExpiryScheduler {
     }
 
     /**
-     * 管理者通知をセッション単位でグルーピングしてバッチ送信する。
+     * 管理者通知をセッション×トリガーアクション×トリガープレイヤーでグルーピングしてバッチ送信する。
      */
     private void sendBatchedAdminNotifications(List<ExpireOfferResult> results) {
-        // セッションIDでグルーピング
-        Map<Long, List<AdminWaitlistNotificationData>> bySession = results.stream()
-                .map(ExpireOfferResult::getNotificationData)
-                .collect(Collectors.groupingBy(
-                        AdminWaitlistNotificationData::getSessionId,
-                        LinkedHashMap::new,
-                        Collectors.toList()));
+        // セッションID + triggerAction + triggerPlayerId でグルーピング
+        Map<String, List<AdminWaitlistNotificationData>> byKey = new LinkedHashMap<>();
 
-        for (Map.Entry<Long, List<AdminWaitlistNotificationData>> entry : bySession.entrySet()) {
+        for (ExpireOfferResult result : results) {
+            AdminWaitlistNotificationData data = result.getNotificationData();
+            String key = data.getSessionId() + ":" + data.getTriggerAction() + ":" + data.getTriggerPlayerId();
+            byKey.computeIfAbsent(key, k -> new ArrayList<>()).add(data);
+        }
+
+        for (List<AdminWaitlistNotificationData> dataList : byKey.values()) {
             try {
                 PracticeSession session = practiceSessionRepository
-                        .findById(entry.getKey()).orElse(null);
+                        .findById(dataList.get(0).getSessionId()).orElse(null);
                 if (session == null) continue;
 
                 waitlistPromotionService.sendBatchedAdminWaitlistNotifications(
-                        entry.getValue(), session);
+                        dataList, session);
             } catch (Exception e) {
                 log.error("Failed to send batched admin notification for session {}: {}",
-                        entry.getKey(), e.getMessage(), e);
+                        dataList.get(0).getSessionId(), e.getMessage(), e);
             }
         }
     }
