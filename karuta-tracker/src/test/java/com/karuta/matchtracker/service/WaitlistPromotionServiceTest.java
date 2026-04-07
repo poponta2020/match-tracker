@@ -312,6 +312,70 @@ class WaitlistPromotionServiceTest {
         }
     }
 
+
+    @Nested
+    @DisplayName("オファー期限切れ時の繰り上げLINE通知")
+    class ExpireOfferTests {
+
+        @Test
+        @DisplayName("繰り上げありの場合、sendWaitlistOfferNotificationが呼ばれる")
+        void expireOffer_withPromotion_sendsNotification() {
+            PracticeParticipant offered = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
+            PracticeParticipant waitlisted = PracticeParticipant.builder()
+                    .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+
+            // 再採番用モック
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            // 繰り上げ対象あり
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(waitlisted));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+
+            service.expireOffer(offered);
+
+            assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            verify(lineNotificationService).sendWaitlistOfferNotification(waitlisted);
+        }
+
+        @Test
+        @DisplayName("繰り上げなしの場合、sendWaitlistOfferNotificationが呼ばれない")
+        void expireOffer_withoutPromotion_doesNotSendNotification() {
+            PracticeParticipant offered = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
+
+            // 再採番用モック
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            // 繰り上げ対象なし
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.empty());
+
+            service.expireOffer(offered);
+
+            assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+        }
+    }
     @Nested
     @DisplayName("当日12:00確定時のOFFERED期限切れ処理")
     class ExpireOfferedForSameDayConfirmationTests {
