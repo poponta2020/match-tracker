@@ -33,8 +33,9 @@ PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q '.headRefName')
 BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName -q '.baseRefName')
 
-# 差分の取得
-DIFF=$(gh pr diff "$PR_NUMBER")
+# 差分をファイルに保存（変数経由だと特殊文字が破損するため）
+DIFF_FILE=$(mktemp)
+gh pr diff "$PR_NUMBER" > "$DIFF_FILE"
 
 # テンプレートの読み込みと置換
 OUTPUT="$OUTPUT_DIR/review-prompt-pr${PR_NUMBER}.md"
@@ -46,16 +47,17 @@ sed \
     -e "s|{{BASE_BRANCH}}|${BASE_BRANCH}|g" \
     "$TEMPLATE" > "$OUTPUT.tmp"
 
-# {{DIFF}} の置換（差分は複数行なのでsedでは難しいためawkを使用）
-awk -v diff="$DIFF" '{
+# {{DIFF}} の置換（差分をファイルから読み込み、特殊文字を安全に埋め込む）
+awk -v difffile="$DIFF_FILE" '{
     if ($0 ~ /\{\{DIFF\}\}/) {
-        print diff
+        while ((getline line < difffile) > 0) print line
+        close(difffile)
     } else {
         print $0
     }
 }' "$OUTPUT.tmp" > "$OUTPUT"
 
-rm -f "$OUTPUT.tmp"
+rm -f "$OUTPUT.tmp" "$DIFF_FILE"
 
 echo ""
 echo "=== レビュープロンプト生成完了 ==="
