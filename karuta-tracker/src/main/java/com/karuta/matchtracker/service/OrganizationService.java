@@ -145,12 +145,13 @@ public class OrganizationService {
                     .organizationId(organizationId)
                     .build();
             playerOrganizationRepository.save(po);
-            createDefaultNotificationPreferences(playerId, organizationId);
-            log.info("Auto-assigned player {} to organization {}", playerId, organizationId);
         } catch (DataIntegrityViolationException e) {
             // 同時リクエストで既に登録済みの場合は無視（冪等性保証）
             log.debug("Player {} already belongs to organization {} (concurrent insert)", playerId, organizationId);
+            return;
         }
+        createDefaultNotificationPreferences(playerId, organizationId);
+        log.info("Auto-assigned player {} to organization {}", playerId, organizationId);
     }
 
     /**

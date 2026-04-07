@@ -135,10 +135,12 @@ public class PracticeParticipantService {
             }
         }
 
-        // セッションからorganizationIdとDeadlineTypeを取得
+        // リクエスト先頭セッションIDから団体IDを決定（findAllByIdの戻り順に依存しない）
         Long organizationId = null;
         if (!sessions.isEmpty()) {
-            organizationId = sessions.get(0).getOrganizationId();
+            Map<Long, PracticeSession> sessionMap = sessions.stream()
+                    .collect(Collectors.toMap(PracticeSession::getId, s -> s));
+            organizationId = sessionMap.get(requestSessionIds.get(0)).getOrganizationId();
         }
 
         // リクエスト内の全団体に対して未所属であれば自動的に所属させる

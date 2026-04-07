@@ -1,9 +1,14 @@
 package com.karuta.matchtracker.scheduler;
 
+import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
+import com.karuta.matchtracker.dto.ExpireOfferResult;
 import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.service.LineNotificationService;
 import com.karuta.matchtracker.service.NotificationService;
 import com.karuta.matchtracker.service.WaitlistPromotionService;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
@@ -13,7 +18,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+
 
 /**
  * 繰り上げオファー期限切れチェックスケジューラ
@@ -27,7 +36,9 @@ import java.util.List;
 public class OfferExpiryScheduler {
 
     private final PracticeParticipantRepository practiceParticipantRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final LineNotificationService lineNotificationService;
     private final NotificationService notificationService;
     private final NotificationRepository notificationRepository;
 
@@ -50,12 +61,89 @@ public class OfferExpiryScheduler {
 
         log.info("Found {} expired offers to process", expired.size());
 
+        // 通知データを蓄積
+        List<ExpireOfferResult> results = new ArrayList<>();
+
         for (PracticeParticipant participant : expired) {
             try {
-                waitlistPromotionService.expireOffer(participant);
+                ExpireOfferResult result = waitlistPromotionService.expireOfferSuppressed(participant);
+                if (result != null) {
+                    results.add(result);
+                }
             } catch (Exception e) {
                 log.error("Failed to expire offer for participant {}: {}",
                         participant.getId(), e.getMessage(), e);
+            }
+        }
+
+        // セッションキャッシュ（同一セッションの重複クエリを防止）
+        Map<Long, PracticeSession> sessionCache = new LinkedHashMap<>();
+
+        // 繰り上げ先プレイヤーへの統合LINE通知（セッション×プレイヤーでグルーピング）
+        sendConsolidatedOfferNotifications(results, sessionCache);
+
+        // 管理者通知（セッション単位でバッチ送信）
+        sendBatchedAdminNotifications(results, sessionCache);
+    }
+
+    /**
+     * 繰り上げ先プレイヤーへのLINE通知をセッション×プレイヤーでグルーピングして統合送信する。
+     */
+    private void sendConsolidatedOfferNotifications(List<ExpireOfferResult> results,
+                                                     Map<Long, PracticeSession> sessionCache) {
+        // promotedParticipant があるもののみ抽出し、セッション×プレイヤーでグルーピング
+        Map<String, List<PracticeParticipant>> promotedByKey = new LinkedHashMap<>();
+
+        for (ExpireOfferResult result : results) {
+            if (result.getPromotedParticipant() == null) continue;
+
+            PracticeParticipant promoted = result.getPromotedParticipant();
+            String key = promoted.getSessionId() + ":" + promoted.getPlayerId();
+            promotedByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(promoted);
+        }
+
+        for (Map.Entry<String, List<PracticeParticipant>> entry : promotedByKey.entrySet()) {
+            List<PracticeParticipant> offeredList = entry.getValue();
+            try {
+                Long sessionId = offeredList.get(0).getSessionId();
+                PracticeSession session = sessionCache.computeIfAbsent(sessionId,
+                        id -> practiceSessionRepository.findById(id).orElse(null));
+                if (session == null) continue;
+
+                // triggerPlayerIdはnull → 通知文言は汎用の「空きが出ました」になる
+                lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                        offeredList, session, "オファー期限切れ", (Long) null);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated offer notification: {}", e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * 管理者通知をセッション単位でグルーピングしてバッチ送信する。
+     */
+    private void sendBatchedAdminNotifications(List<ExpireOfferResult> results,
+                                                Map<Long, PracticeSession> sessionCache) {
+        // セッションID でグルーピング
+        Map<Long, List<AdminWaitlistNotificationData>> byKey = new LinkedHashMap<>();
+
+        for (ExpireOfferResult result : results) {
+            AdminWaitlistNotificationData data = result.getNotificationData();
+            byKey.computeIfAbsent(data.getSessionId(), k -> new ArrayList<>()).add(data);
+        }
+
+        for (List<AdminWaitlistNotificationData> dataList : byKey.values()) {
+            try {
+                Long sessionId = dataList.get(0).getSessionId();
+                PracticeSession session = sessionCache.computeIfAbsent(sessionId,
+                        id -> practiceSessionRepository.findById(id).orElse(null));
+                if (session == null) continue;
+
+                waitlistPromotionService.sendBatchedAdminWaitlistNotifications(
+                        dataList, session);
+            } catch (Exception e) {
+                log.error("Failed to send batched admin notification for session {}: {}",
+                        dataList.get(0).getSessionId(), e.getMessage(), e);
             }
         }
     }

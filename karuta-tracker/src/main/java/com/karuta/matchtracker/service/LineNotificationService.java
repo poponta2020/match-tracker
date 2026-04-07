@@ -701,9 +701,14 @@ public class LineNotificationService {
                     sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
                 }
 
-                // 繰り上げオファー中の練習をFlexメッセージ（参加する/辞退するボタン付き）で通知
-                for (PracticeParticipant offeredParticipant : offered) {
-                    sendWaitlistOfferNotification(offeredParticipant);
+                // 繰り上げオファー中の練習をセッション単位の統合Flexメッセージで通知
+                Map<Long, List<PracticeParticipant>> offeredBySession = offered.stream()
+                    .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
+                for (Map.Entry<Long, List<PracticeParticipant>> offeredEntry : offeredBySession.entrySet()) {
+                    PracticeSession offeredSession = sessionCache.get(offeredEntry.getKey());
+                    if (offeredSession == null) continue;
+                    sendConsolidatedWaitlistOfferNotification(
+                            offeredEntry.getValue(), offeredSession, null, (Player) null);
                 }
 
                 if (hasWon) {
@@ -770,6 +775,7 @@ public class LineNotificationService {
 
     /** triggerAction に応じたイベント文言を返す */
     private String getEventText(String triggerAction) {
+        if (triggerAction == null) return "";
         return switch (triggerAction) {
             case "キャンセル" -> "キャンセル";
             case "キャンセル（当日補充）" -> "当日キャンセル";
@@ -1127,59 +1133,53 @@ public class LineNotificationService {
             "paddingAll", "15px"
         );
 
-        List<Object> bodyContents = new java.util.ArrayList<>();
-
-        // sessionIdでグルーピング（同一ラベル・別セッションの混在を防止）
-        // キーを文字列正規化して型差異（Long vs Integer等）を吸収
-        java.util.LinkedHashMap<String, List<Map<String, Object>>> grouped = new java.util.LinkedHashMap<>();
-        int fallbackCounter = 0;
+        // セッション単位でグループ化（sessionIdがあればそれを優先、なければsessionLabelでフォールバック）
+        java.util.LinkedHashMap<String, List<Map<String, Object>>> bySession = new java.util.LinkedHashMap<>();
         for (Map<String, Object> entry : entries) {
-            String groupKey = entry.get("sessionId") != null
-                    ? "id:" + entry.get("sessionId")
-                    : "solo:" + (fallbackCounter++);
-            grouped.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
+            Object sessionId = entry.get("sessionId");
+            String groupKey = sessionId != null ? String.valueOf(sessionId) : (String) entry.get("sessionLabel");
+            bySession.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
         }
 
-        boolean isFirstGroup = true;
-        for (List<Map<String, Object>> groupEntries : grouped.values()) {
-            String sessionLabel = (String) groupEntries.get(0).get("sessionLabel");
+        List<Object> bodyContents = new java.util.ArrayList<>();
+        boolean first = true;
 
-            if (!isFirstGroup) {
+        for (Map.Entry<String, List<Map<String, Object>>> sessionEntry : bySession.entrySet()) {
+            if (!first) {
                 bodyContents.add(Map.of("type", "separator", "margin", "lg"));
             }
 
-            bodyContents.add(Map.of("type", "text", "text", sessionLabel,
-                    "weight", "bold", "size", "md", "margin", isFirstGroup ? "none" : "lg",
+            // 表示用ラベルはグループ先頭要素のsessionLabelを使用
+            String displayLabel = (String) sessionEntry.getValue().get(0).get("sessionLabel");
+            bodyContents.add(Map.of("type", "text", "text", displayLabel,
+                    "weight", "bold", "size", "md", "margin", first ? "none" : "lg",
                     "wrap", true));
 
-            for (Map<String, Object> entry : groupEntries) {
+            for (Map<String, Object> entry : sessionEntry.getValue()) {
                 Integer matchNumber = (Integer) entry.get("matchNumber");
                 Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
                 String status = (String) entry.get("status");
                 Object offerDeadline = entry.get("offerDeadline");
 
-                bodyContents.add(Map.of("type", "text", "text",
-                        matchNumber + "試合目",
-                        "size", "sm", "color", "#555555", "margin", "sm"));
-
+                String line;
                 if ("OFFERED".equals(status)) {
-                    bodyContents.add(Map.of("type", "text", "text",
-                            "繰り上げオファー中",
-                            "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm"));
+                    line = matchNumber + "試合目 繰り上げオファー中";
                     if (offerDeadline != null) {
                         java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
                         String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
-                        bodyContents.add(Map.of("type", "text", "text",
-                                "回答期限: " + deadlineStr,
-                                "size", "xs", "color", "#E65100", "margin", "sm"));
+                        line += " 期限：" + deadlineStr;
                     }
+                    bodyContents.add(Map.of("type", "text", "text", line,
+                            "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm",
+                            "wrap", true));
                 } else {
-                    bodyContents.add(Map.of("type", "text", "text",
-                            "キャンセル待ち " + waitlistNumber + "番",
+                    line = matchNumber + "試合目 キャンセル待ち" + waitlistNumber + "番";
+                    bodyContents.add(Map.of("type", "text", "text", line,
                             "size", "sm", "color", "#333333", "margin", "sm"));
                 }
             }
-            isFirstGroup = false;
+
+            first = false;
         }
 
         Map<String, Object> body = Map.of(
@@ -1989,7 +1989,10 @@ public class LineNotificationService {
         List<Object> bodyContents = new ArrayList<>(List.of(
                 Map.of("type", "text", "text", sessionLabel + "の練習",
                         "weight", "bold", "size", "lg", "margin", "none", "wrap", true),
-                Map.of("type", "text", "text", triggerName + "が" + eventText,
+                Map.of("type", "text", "text",
+                        (triggerName != null && !triggerName.equals("不明") && !eventText.isEmpty())
+                                ? triggerName + "が" + eventText
+                                : "空きが出ました",
                         "size", "md", "margin", "md", "color", "#333333"),
                 Map.of("type", "separator", "margin", "lg"),
                 Map.<String, Object>of("type", "box", "layout", "horizontal", "margin", "lg",

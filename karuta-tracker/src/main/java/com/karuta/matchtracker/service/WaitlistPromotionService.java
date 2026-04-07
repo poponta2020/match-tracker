@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
+import com.karuta.matchtracker.dto.ExpireOfferResult;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -555,13 +556,13 @@ public class WaitlistPromotionService {
                 renumberRemainingWaitlist(sessionId, matchNumber);
             }
 
-            // 各試合で次のキャンセル待ちに繰り上げ
+            // 各試合で次のキャンセル待ちに繰り上げ（通知は蓄積して後でまとめ送信）
+            List<PracticeParticipant> promotedList = new ArrayList<>();
             for (PracticeParticipant p : declined) {
                 Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                         sessionId, p.getMatchNumber(), session.getSessionDate());
 
-                // 繰り上げ先プレイヤーへLINE通知
-                promoted.ifPresent(pr -> lineNotificationService.sendWaitlistOfferNotification(pr));
+                promoted.ifPresent(promotedList::add);
 
                 notificationDataList.add(AdminWaitlistNotificationData.builder()
                         .triggerAction("オファー辞退")
@@ -570,6 +571,18 @@ public class WaitlistPromotionService {
                         .matchNumber(p.getMatchNumber())
                         .promotedParticipant(promoted.orElse(null))
                         .build());
+            }
+
+            // 繰り上げ先プレイヤーへ統合LINE通知（セッション×プレイヤーでグルーピング）
+            if (!promotedList.isEmpty()) {
+                Map<Long, List<PracticeParticipant>> byPlayer = new LinkedHashMap<>();
+                for (PracticeParticipant pp : promotedList) {
+                    byPlayer.computeIfAbsent(pp.getPlayerId(), k -> new ArrayList<>()).add(pp);
+                }
+                for (List<PracticeParticipant> playerOffered : byPlayer.values()) {
+                    lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                            playerOffered, session, "オファー辞退", playerId);
+                }
             }
 
             // 管理者通知をバッチ送信
@@ -706,6 +719,9 @@ public class WaitlistPromotionService {
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
+        // 繰り上げ先プレイヤーへLINE通知
+        promoted.ifPresent(p -> lineNotificationService.sendWaitlistOfferNotification(p));
+
         // 管理者通知
         AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
                 .triggerAction("オファー期限切れ")
@@ -715,6 +731,57 @@ public class WaitlistPromotionService {
                 .promotedParticipant(promoted.orElse(null))
                 .build();
         sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+    }
+
+    /**
+     * オファー期限切れ処理（通知抑制版）。
+     * LINE通知（繰り上げ先・管理者）を送信せず、通知データを返す。
+     * OfferExpirySchedulerでバッチ処理する用途。
+     *
+     * @param participant 期限切れのOFFERED参加者
+     * @return 通知データ（繰り上げ結果 + 管理者通知データ）。OFFERED以外の場合はnull
+     */
+    @Transactional
+    public ExpireOfferResult expireOfferSuppressed(PracticeParticipant participant) {
+        if (participant.getStatus() != ParticipantStatus.OFFERED) {
+            return null;
+        }
+
+        Integer oldNumber = participant.getWaitlistNumber();
+        participant.setStatus(ParticipantStatus.DECLINED);
+        participant.setDirty(true);
+        participant.setRespondedAt(JstDateTimeUtil.now());
+        participant.setWaitlistNumber(null);
+        practiceParticipantRepository.save(participant);
+
+        // キャンセル待ち列から離脱確定 → 残存キューを再採番
+        renumberRemainingWaitlist(participant.getSessionId(), participant.getMatchNumber());
+
+        log.info("Offer expired for player {} in session {} match {} (was waitlist #{})",
+                participant.getPlayerId(), participant.getSessionId(),
+                participant.getMatchNumber(), oldNumber);
+
+        // アプリ内通知・期限切れ本人へのLINE通知は個別送信（統合不要）
+        notificationService.createOfferExpiredNotification(participant);
+        lineNotificationService.sendOfferExpiredNotification(participant);
+
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+        Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+        AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
+                .triggerAction("オファー期限切れ")
+                .triggerPlayerId(participant.getPlayerId())
+                .sessionId(participant.getSessionId())
+                .matchNumber(participant.getMatchNumber())
+                .promotedParticipant(promoted.orElse(null))
+                .build();
+
+        return ExpireOfferResult.builder()
+                .notificationData(notifData)
+                .promotedParticipant(promoted.orElse(null))
+                .build();
     }
 
     /**
