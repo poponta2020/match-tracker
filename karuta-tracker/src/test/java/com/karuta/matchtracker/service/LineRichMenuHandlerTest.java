@@ -94,6 +94,66 @@ class LineRichMenuHandlerTest {
 
             assertThat(flex.get("type")).isEqualTo("bubble");
         }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("同一セッションの複数試合を1セクションにまとめる")
+        void shouldGroupEntriesBySession() {
+            List<Map<String, Object>> entries = List.of(
+                Map.of(
+                    "sessionLabel", "4月10日（中央公民館）",
+                    "matchNumber", 1,
+                    "waitlistNumber", 3,
+                    "status", "WAITLISTED"
+                ),
+                Map.of(
+                    "sessionLabel", "4月10日（中央公民館）",
+                    "matchNumber", 2,
+                    "waitlistNumber", 1,
+                    "status", "OFFERED",
+                    "offerDeadline", LocalDateTime.of(2026, 4, 9, 18, 0)
+                ),
+                Map.of(
+                    "sessionLabel", "4月17日（中央公民館）",
+                    "matchNumber", 1,
+                    "waitlistNumber", 2,
+                    "status", "WAITLISTED"
+                )
+            );
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+
+            Map<String, Object> body = (Map<String, Object>) flex.get("body");
+            List<Object> contents = (List<Object>) body.get("contents");
+
+            // セッションラベルのテキスト要素を抽出
+            List<String> sessionLabels = contents.stream()
+                .filter(c -> {
+                    Map<String, Object> m = (Map<String, Object>) c;
+                    return "text".equals(m.get("type")) && "bold".equals(m.get("weight"))
+                            && "md".equals(m.get("size"));
+                })
+                .map(c -> (String) ((Map<String, Object>) c).get("text"))
+                .toList();
+
+            // セッションラベルは2つ（同一セッションは1回のみ）
+            assertThat(sessionLabels).containsExactly("4月10日（中央公民館）", "4月17日（中央公民館）");
+
+            // 各試合の行テキストを抽出
+            List<String> matchLines = contents.stream()
+                .filter(c -> {
+                    Map<String, Object> m = (Map<String, Object>) c;
+                    return "text".equals(m.get("type")) && "sm".equals(m.get("size"));
+                })
+                .map(c -> (String) ((Map<String, Object>) c).get("text"))
+                .toList();
+
+            assertThat(matchLines).containsExactly(
+                "1試合目 キャンセル待ち3番",
+                "2試合目 繰り上げオファー中 期限：4/9 18:00",
+                "1試合目 キャンセル待ち2番"
+            );
+        }
     }
 
     // ===== 今日の参加者表示 =====

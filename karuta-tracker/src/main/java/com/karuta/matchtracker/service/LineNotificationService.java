@@ -1127,43 +1127,50 @@ public class LineNotificationService {
             "paddingAll", "15px"
         );
 
-        List<Object> bodyContents = new java.util.ArrayList<>();
-
-        for (int i = 0; i < entries.size(); i++) {
-            Map<String, Object> entry = entries.get(i);
+        // セッション単位でグループ化（順序維持）
+        java.util.LinkedHashMap<String, List<Map<String, Object>>> bySession = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> entry : entries) {
             String sessionLabel = (String) entry.get("sessionLabel");
-            Integer matchNumber = (Integer) entry.get("matchNumber");
-            Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
-            String status = (String) entry.get("status");
-            Object offerDeadline = entry.get("offerDeadline");
+            bySession.computeIfAbsent(sessionLabel, k -> new java.util.ArrayList<>()).add(entry);
+        }
 
-            if (i > 0) {
+        List<Object> bodyContents = new java.util.ArrayList<>();
+        boolean first = true;
+
+        for (Map.Entry<String, List<Map<String, Object>>> sessionEntry : bySession.entrySet()) {
+            if (!first) {
                 bodyContents.add(Map.of("type", "separator", "margin", "lg"));
             }
 
-            bodyContents.add(Map.of("type", "text", "text", sessionLabel,
-                    "weight", "bold", "size", "md", "margin", i == 0 ? "none" : "lg",
+            bodyContents.add(Map.of("type", "text", "text", sessionEntry.getKey(),
+                    "weight", "bold", "size", "md", "margin", first ? "none" : "lg",
                     "wrap", true));
-            bodyContents.add(Map.of("type", "text", "text",
-                    matchNumber + "試合目",
-                    "size", "sm", "color", "#555555", "margin", "sm"));
 
-            if ("OFFERED".equals(status)) {
-                bodyContents.add(Map.of("type", "text", "text",
-                        "繰り上げオファー中",
-                        "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm"));
-                if (offerDeadline != null) {
-                    java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
-                    String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
-                    bodyContents.add(Map.of("type", "text", "text",
-                            "回答期限: " + deadlineStr,
-                            "size", "xs", "color", "#E65100", "margin", "sm"));
+            for (Map<String, Object> entry : sessionEntry.getValue()) {
+                Integer matchNumber = (Integer) entry.get("matchNumber");
+                Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
+                String status = (String) entry.get("status");
+                Object offerDeadline = entry.get("offerDeadline");
+
+                String line;
+                if ("OFFERED".equals(status)) {
+                    line = matchNumber + "試合目 繰り上げオファー中";
+                    if (offerDeadline != null) {
+                        java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
+                        String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
+                        line += " 期限：" + deadlineStr;
+                    }
+                    bodyContents.add(Map.of("type", "text", "text", line,
+                            "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm",
+                            "wrap", true));
+                } else {
+                    line = matchNumber + "試合目 キャンセル待ち" + waitlistNumber + "番";
+                    bodyContents.add(Map.of("type", "text", "text", line,
+                            "size", "sm", "color", "#333333", "margin", "sm"));
                 }
-            } else {
-                bodyContents.add(Map.of("type", "text", "text",
-                        "キャンセル待ち " + waitlistNumber + "番",
-                        "size", "sm", "color", "#333333", "margin", "sm"));
             }
+
+            first = false;
         }
 
         Map<String, Object> body = Map.of(
