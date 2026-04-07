@@ -706,6 +706,9 @@ public class WaitlistPromotionService {
         Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                 participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
 
+        // 繰り上げ先プレイヤーへLINE通知
+        promoted.ifPresent(p -> lineNotificationService.sendWaitlistOfferNotification(p));
+
         // 管理者通知
         AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
                 .triggerAction("オファー期限切れ")
