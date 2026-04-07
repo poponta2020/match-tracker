@@ -143,8 +143,8 @@ class LineRichMenuHandlerTest {
         }
 
         @Test
-        @DisplayName("sessionIdがnullの場合はsessionLabelでグルーピングされる")
-        void shouldGroupByLabelWhenSessionIdIsNull() {
+        @DisplayName("sessionIdがnullの場合は個別表示される")
+        void shouldDisplayIndividuallyWhenSessionIdIsNull() {
             // sessionIdを持たないエントリ（同一ラベル）
             java.util.Map<String, Object> entry1 = new java.util.LinkedHashMap<>();
             entry1.put("sessionLabel", "4月10日（中央公民館）");
@@ -168,23 +168,23 @@ class LineRichMenuHandlerTest {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> contents = (List<Map<String, Object>>) body.get("contents");
 
-            // sessionIdがnullなのでsessionLabelでグルーピングされ、ラベルは1回だけ表示
+            // sessionIdがnullなので個別表示され、ラベルは各エントリごとに表示
             long labelCount = contents.stream()
                     .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
                     .count();
-            assertThat(labelCount).isEqualTo(1);
+            assertThat(labelCount).isEqualTo(2);
 
-            // 同一グループ内にmatchNumber行が2つ含まれることを検証
+            // 各グループにmatchNumber行が1つずつ、計2つ含まれることを検証
             long matchNumberCount = contents.stream()
                     .filter(c -> c.get("text") != null && c.get("text").toString().contains("試合目"))
                     .count();
             assertThat(matchNumberCount).isEqualTo(2);
 
-            // 単一グループなのでseparatorは存在しない
+            // 個別グループなのでseparatorが1つ存在する
             long separatorCount = contents.stream()
                     .filter(c -> "separator".equals(c.get("type")))
                     .count();
-            assertThat(separatorCount).isEqualTo(0);
+            assertThat(separatorCount).isEqualTo(1);
         }
 
     }

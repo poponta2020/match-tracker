@@ -35,6 +35,7 @@ BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName -q '.baseRefName')
 
 # 差分をファイルに保存（変数経由だと特殊文字が破損するため）
 DIFF_FILE=$(mktemp)
+trap 'rm -f "$OUTPUT.tmp" "$DIFF_FILE"' EXIT
 gh pr diff "$PR_NUMBER" > "$DIFF_FILE"
 
 # テンプレートの読み込みと置換

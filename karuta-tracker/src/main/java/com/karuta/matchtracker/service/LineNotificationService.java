@@ -1132,10 +1132,11 @@ public class LineNotificationService {
         // sessionIdでグルーピング（同一ラベル・別セッションの混在を防止）
         // キーを文字列正規化して型差異（Long vs Integer等）を吸収
         java.util.LinkedHashMap<String, List<Map<String, Object>>> grouped = new java.util.LinkedHashMap<>();
+        int fallbackCounter = 0;
         for (Map<String, Object> entry : entries) {
             String groupKey = entry.get("sessionId") != null
                     ? "id:" + entry.get("sessionId")
-                    : "label:" + entry.get("sessionLabel");
+                    : "solo:" + (fallbackCounter++);
             grouped.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
         }
 
