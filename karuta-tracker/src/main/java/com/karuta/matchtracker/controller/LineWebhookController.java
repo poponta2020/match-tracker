@@ -553,6 +553,7 @@ public class LineWebhookController {
                 if (session.getSessionDate().isBefore(today)) continue; // 過去の練習日を除外
 
                 Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("sessionId", session.getId());
                 entry.put("sessionDate", session.getSessionDate());
                 entry.put("sessionLabel", getSessionLabel(session));
                 entry.put("matchNumber", p.getMatchNumber());
