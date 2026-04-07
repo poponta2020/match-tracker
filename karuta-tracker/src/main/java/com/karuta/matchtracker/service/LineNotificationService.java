@@ -1127,11 +1127,12 @@ public class LineNotificationService {
             "paddingAll", "15px"
         );
 
-        // セッション単位でグループ化（順序維持）
+        // セッション単位でグループ化（sessionIdがあればそれを優先、なければsessionLabelでフォールバック）
         java.util.LinkedHashMap<String, List<Map<String, Object>>> bySession = new java.util.LinkedHashMap<>();
         for (Map<String, Object> entry : entries) {
-            String sessionLabel = (String) entry.get("sessionLabel");
-            bySession.computeIfAbsent(sessionLabel, k -> new java.util.ArrayList<>()).add(entry);
+            Object sessionId = entry.get("sessionId");
+            String groupKey = sessionId != null ? String.valueOf(sessionId) : (String) entry.get("sessionLabel");
+            bySession.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
         }
 
         List<Object> bodyContents = new java.util.ArrayList<>();
@@ -1142,7 +1143,9 @@ public class LineNotificationService {
                 bodyContents.add(Map.of("type", "separator", "margin", "lg"));
             }
 
-            bodyContents.add(Map.of("type", "text", "text", sessionEntry.getKey(),
+            // 表示用ラベルはグループ先頭要素のsessionLabelを使用
+            String displayLabel = (String) sessionEntry.getValue().get(0).get("sessionLabel");
+            bodyContents.add(Map.of("type", "text", "text", displayLabel,
                     "weight", "bold", "size", "md", "margin", first ? "none" : "lg",
                     "wrap", true));
 

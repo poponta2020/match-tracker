@@ -83,6 +83,7 @@ class LineRichMenuHandlerTest {
         void shouldBuildFlexWithWaitlistedOnly() {
             List<Map<String, Object>> entries = List.of(
                 Map.of(
+                    "sessionId", 100L,
                     "sessionLabel", "4月10日（中央公民館）",
                     "matchNumber", 3,
                     "waitlistNumber", 1,
@@ -101,12 +102,14 @@ class LineRichMenuHandlerTest {
         void shouldGroupEntriesBySession() {
             List<Map<String, Object>> entries = List.of(
                 Map.of(
+                    "sessionId", 100L,
                     "sessionLabel", "4月10日（中央公民館）",
                     "matchNumber", 1,
                     "waitlistNumber", 3,
                     "status", "WAITLISTED"
                 ),
                 Map.of(
+                    "sessionId", 100L,
                     "sessionLabel", "4月10日（中央公民館）",
                     "matchNumber", 2,
                     "waitlistNumber", 1,
@@ -114,6 +117,7 @@ class LineRichMenuHandlerTest {
                     "offerDeadline", LocalDateTime.of(2026, 4, 9, 18, 0)
                 ),
                 Map.of(
+                    "sessionId", 200L,
                     "sessionLabel", "4月17日（中央公民館）",
                     "matchNumber", 1,
                     "waitlistNumber", 2,
@@ -153,6 +157,53 @@ class LineRichMenuHandlerTest {
                 "2試合目 繰り上げオファー中 期限：4/9 18:00",
                 "1試合目 キャンセル待ち2番"
             );
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("同じsessionLabelでもsessionIdが異なれば別セクションになる")
+        void shouldSeparateEntriesWithSameLabelButDifferentSessionId() {
+            List<Map<String, Object>> entries = List.of(
+                Map.of(
+                    "sessionId", 100L,
+                    "sessionLabel", "4月10日（中央公民館）",
+                    "matchNumber", 1,
+                    "waitlistNumber", 1,
+                    "status", "WAITLISTED"
+                ),
+                Map.of(
+                    "sessionId", 200L,
+                    "sessionLabel", "4月10日（中央公民館）",
+                    "matchNumber", 1,
+                    "waitlistNumber", 2,
+                    "status", "WAITLISTED"
+                )
+            );
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+
+            Map<String, Object> body = (Map<String, Object>) flex.get("body");
+            List<Object> contents = (List<Object>) body.get("contents");
+
+            // セッションラベルのテキスト要素を抽出（boldかつmdサイズ）
+            List<String> sessionLabels = contents.stream()
+                .filter(c -> {
+                    Map<String, Object> m = (Map<String, Object>) c;
+                    return "text".equals(m.get("type")) && "bold".equals(m.get("weight"))
+                            && "md".equals(m.get("size"));
+                })
+                .map(c -> (String) ((Map<String, Object>) c).get("text"))
+                .toList();
+
+            // 同じラベルだがsessionIdが異なるので2セクション
+            assertThat(sessionLabels).hasSize(2);
+            assertThat(sessionLabels).containsExactly("4月10日（中央公民館）", "4月10日（中央公民館）");
+
+            // セパレータが1つ存在する
+            long separatorCount = contents.stream()
+                .filter(c -> "separator".equals(((Map<String, Object>) c).get("type")))
+                .count();
+            assertThat(separatorCount).isEqualTo(1);
         }
     }
 
