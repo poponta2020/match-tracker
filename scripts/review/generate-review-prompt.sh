@@ -33,13 +33,13 @@ PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q '.headRefName')
 BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName -q '.baseRefName')
 
+# テンプレートの読み込みと置換
+OUTPUT="$OUTPUT_DIR/review-prompt-pr${PR_NUMBER}.md"
+
 # 差分をファイルに保存（変数経由だと特殊文字が破損するため）
 DIFF_FILE=$(mktemp)
 trap 'rm -f "$OUTPUT.tmp" "$DIFF_FILE"' EXIT
 gh pr diff "$PR_NUMBER" > "$DIFF_FILE"
-
-# テンプレートの読み込みと置換
-OUTPUT="$OUTPUT_DIR/review-prompt-pr${PR_NUMBER}.md"
 
 sed \
     -e "s|{{PR_URL}}|${PR_URL}|g" \
