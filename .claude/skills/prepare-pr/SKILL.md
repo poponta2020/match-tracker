@@ -1,6 +1,6 @@
 ---
 name: prepare-pr
-description: "Detect work state and auto-execute remaining steps: commit, feature branch, push, PR create. Use /prepare-pr after implementation."
+description: 実装完了後にpush・PR作成を行い、/reviewスキルによるレビューへつなげるスキル。/implement、/quickfix、/bug-report の後に使用する。
 user-invocable: true
 disable-model-invocation: true
 allowed-tools:
@@ -10,100 +10,70 @@ allowed-tools:
   - Grep
 ---
 
-# /prepare-pr - Auto PR Creation from Work State
+# /prepare-pr - 実装完了後のPR作成
 
-Detect the current git work state and execute only the remaining steps needed: commit, feature branch creation, push, and PR creation.
+`/implement`、`/quickfix`、`/bug-report` で実装・コミット済みの変更をpushし、PRを作成する。
+完了後は `/review` でクロスレビューに進む。
 
-## Steps
+**前提**: 各スキルがfeatureブランチ作成・コミットまで完了していること。
 
-### Step 1: Gather current state
+**ユーザーとの対話はすべて日本語で行うこと。**
 
-Run these commands **in parallel**:
+## Step 1: 現在の状態を収集
+
+以下のコマンドを**並列で**実行する:
 
 ```bash
 git status --short
 git branch --show-current
 git log --oneline -10
-git diff --stat
-git diff --cached --stat
 git rev-list --count origin/main..HEAD 2>/dev/null || echo "0"
 gh pr view --json number,url 2>/dev/null || echo "NO_PR"
 ```
 
-### Step 2: Classify state
+## Step 2: 状態を分類し、異常を検出
 
-Based on the gathered info, classify into one of:
+収集した情報をもとに、以下のいずれかに分類する:
 
-| State | Condition | Steps to run |
-|-------|-----------|-------------|
-| A. Uncommitted changes | `git status` shows modified/untracked files | commit + branch + push + PR |
-| B. Committed on main, not pushed | On main, commits ahead of origin/main | branch + push + PR |
-| C. On feature branch, not pushed | On feature branch, commits ahead of remote | push + PR |
-| D. Pushed, no PR | Synced with remote, no PR exists | PR only |
-| E. PR already exists | `gh pr view` succeeds | Show PR URL and exit |
-| F. No changes | Nothing to commit, nothing ahead | Show "No changes" and exit |
+| 状態 | 条件 | 実行するステップ |
+|------|------|-----------------|
+| A. featureブランチ上、未push | featureブランチ上でリモートより先行 | push → PR作成 |
+| B. push済み、PRなし | リモートと同期済み、PRが存在しない | PR作成のみ |
+| C. PR作成済み | `gh pr view` が成功 | PR URLを表示して終了 |
 
-**Important**: Handle cases where the user is already on a feature branch (states C, D, E).
+### 異常状態の検出（以下の場合はユーザーに警告して確認を取る）
 
-### Step 3: Commit (state A only)
+- **mainブランチ上にコミットがある場合**: 「mainブランチ上に未pushのコミットがあります。featureブランチに移しますか？」と確認し、承認を得たらfeatureブランチを作成してmainを巻き戻す
+- **未コミットの変更がある場合**: 「未コミットの変更があります。先にコミットしてから再実行してください。」と伝える
+- **変更なし**: 「コミットもPRもありません。先に実装スキルを実行してください。」と伝える
 
-1. Analyze `git diff`, `git diff --cached`, and `git status`
-2. Check `git log --oneline -5` for existing commit message style
-3. Generate a concise commit message matching existing style
-   - Target: under 50 chars for first line
-4. Stage relevant files with `git add`
-   - **EXCLUDE**: `.env`, `credentials`, secrets files
-   - **EXCLUDE**: `scripts/review/output/` files
-5. Execute commit
+## Step 3: Push
 
 ```bash
-git add <target files>
-git commit -m "<generated message>"
+git push -u origin <ブランチ名>
 ```
 
-### Step 4: Create feature branch (when on main)
+## Step 4: PR作成
 
-1. Generate a kebab-case English summary from the commit content
-2. Branch name format: `feature/<summary>` (e.g., `feature/add-player-search`)
-3. Create and switch to the feature branch:
-
-```bash
-git checkout -b feature/<summary>
-```
-
-4. Reset main back to origin/main so the commits only exist on the feature branch:
+1. `git log --oneline origin/main..HEAD` でコミット内容を確認する
+2. コミット内容からPRタイトルと本文を生成する
 
 ```bash
-git branch -f main origin/main
-```
-
-### Step 5: Push
-
-```bash
-git push -u origin <branch-name>
-```
-
-### Step 6: Create PR
-
-1. Generate PR title and body from commit content
-2. Create the PR:
-
-```bash
-gh pr create --base main --title "<title>" --body "$(cat <<'EOF'
+gh pr create --base main --title "<タイトル>" --body "$(cat <<'EOF'
 ## Summary
-<bullet points of changes>
+<変更内容の箇条書き>
 
 ## Test plan
-- [ ] Operation check
+- [ ] 動作確認
 
-Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
 
-### Step 7: Report completion
+## Step 5: 完了報告と次ステップの案内
 
-Display:
-- The created PR URL
-- List of steps that were executed
-- Remind: "To generate a review prompt, run `/review`"
+以下を表示する:
+- 作成されたPRのURL
+- 実行されたステップの一覧（push / PR作成）
+- **「`/review` でレビュープロンプトを生成し、クロスレビューに進められます。」** と案内する
