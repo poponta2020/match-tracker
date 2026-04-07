@@ -129,6 +129,38 @@ class LineRichMenuHandlerTest {
                     .count();
             assertThat(labelCount).isEqualTo(2);
         }
+        @Test
+        @DisplayName("sessionIdがnullの場合はsessionLabelでグルーピングされる")
+        void shouldGroupByLabelWhenSessionIdIsNull() {
+            // sessionIdを持たないエントリ（同一ラベル）
+            java.util.Map<String, Object> entry1 = new java.util.LinkedHashMap<>();
+            entry1.put("sessionLabel", "4月10日（中央公民館）");
+            entry1.put("matchNumber", 1);
+            entry1.put("waitlistNumber", 2);
+            entry1.put("status", "WAITLISTED");
+
+            java.util.Map<String, Object> entry2 = new java.util.LinkedHashMap<>();
+            entry2.put("sessionLabel", "4月10日（中央公民館）");
+            entry2.put("matchNumber", 2);
+            entry2.put("waitlistNumber", 1);
+            entry2.put("status", "WAITLISTED");
+
+            List<Map<String, Object>> entries = List.of(entry1, entry2);
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+
+            assertThat(flex.get("type")).isEqualTo("bubble");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) flex.get("body");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> contents = (List<Map<String, Object>>) body.get("contents");
+
+            // sessionIdがnullなのでsessionLabelでグルーピングされ、ラベルは1回だけ表示
+            long labelCount = contents.stream()
+                    .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
+                    .count();
+            assertThat(labelCount).isEqualTo(1);
+        }
     }
 
     // ===== 今日の参加者表示 =====

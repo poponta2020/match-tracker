@@ -31,6 +31,7 @@ echo "PR #${PR_NUMBER} のレビュープロンプトを生成中..."
 PR_URL=$(gh pr view "$PR_NUMBER" --json url -q '.url')
 PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
 BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q '.headRefName')
+BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName -q '.baseRefName')
 
 # 差分の取得
 DIFF=$(gh pr diff "$PR_NUMBER")
@@ -42,6 +43,7 @@ sed \
     -e "s|{{PR_URL}}|${PR_URL}|g" \
     -e "s|{{PR_TITLE}}|${PR_TITLE}|g" \
     -e "s|{{BRANCH}}|${BRANCH}|g" \
+    -e "s|{{BASE_BRANCH}}|${BASE_BRANCH}|g" \
     "$TEMPLATE" > "$OUTPUT.tmp"
 
 # {{DIFF}} の置換（差分は複数行なのでsedでは難しいためawkを使用）
