@@ -1,6 +1,9 @@
 ---
-description: フロントエンド・バックエンドを起動する
-skill: startapp
+name: startapp
+description: フロントエンド（Vite）とバックエンド（Spring Boot + Render PostgreSQL）を起動するスキル。開発サーバーを立ち上げたいときに使用する。
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: Bash, Read
 ---
 
 # /startapp - アプリケーション起動
@@ -19,20 +22,20 @@ skill: startapp
 ### 2. 起動していなければ起動
 
 #### バックエンド（Spring Boot）
-- 作業ディレクトリ: `/home/poponta/match-tracker/karuta-tracker`
+- 作業ディレクトリ: `c:/Users/popon/match-tracker/karuta-tracker`
 - **重要**: RenderのPostgreSQLに接続するため、以下の環境変数を必ず設定して起動すること
 - 起動コマンド:
 ```bash
-cd /home/poponta/match-tracker/karuta-tracker && DB_URL="jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297" DB_USERNAME="karuta" DB_PASSWORD="b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal" ./gradlew bootRun 2>&1
+cd c:/Users/popon/match-tracker/karuta-tracker && DB_URL="jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297" DB_USERNAME="karuta" DB_PASSWORD="b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal" ./gradlew bootRun 2>&1
 ```
 - `run_in_background: true` で起動する
 - 起動完了まで約30〜60秒かかる。30秒後に `curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/players` で確認し、200でなければさらに15秒ごとにリトライ（最大3回）
 
 #### フロントエンド（Vite）
-- 作業ディレクトリ: `/home/poponta/match-tracker/karuta-tracker-ui`
+- 作業ディレクトリ: `c:/Users/popon/match-tracker/karuta-tracker-ui`
 - 起動コマンド:
 ```bash
-cd /home/poponta/match-tracker/karuta-tracker-ui && npm run dev 2>&1
+cd c:/Users/popon/match-tracker/karuta-tracker-ui && npm run dev 2>&1
 ```
 - `run_in_background: true` で起動する
 - 5秒後に `curl -s -o /dev/null -w "%{http_code}" http://localhost:5173` で確認

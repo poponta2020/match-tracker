@@ -1,5 +1,9 @@
 ---
-description: 仕様書・設計書・画面一覧を現在のコードベースに合わせて更新する
+name: updatefile
+description: 仕様書・設計書・画面一覧を現在のコードベースに合わせて更新するスキル。実装変更後のドキュメント同期に使用する。
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: Read, Edit, Grep, Glob, Bash
 ---
 
 # /updatefile - ドキュメント更新

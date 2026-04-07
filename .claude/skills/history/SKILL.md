@@ -1,3 +1,11 @@
+---
+name: history
+description: 今日の作業内容をhistory/YYYY-MM-DD.mdにまとめて保存するスキル。1日の作業の締めに使用する。
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: Read, Write, Bash
+---
+
 # /history - 作業記録の作成
 
 今日の作業内容を `history/YYYY-MM-DD.md` にまとめて保存してください。

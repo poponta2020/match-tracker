@@ -1,3 +1,12 @@
+---
+name: ship
+description: レビュー完了後の変更をコミット・push・PRマージ・ブランチ削除・親Issueクローズまで行うスキル。PRを出荷したいとき、/shipで使用する。
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: Bash, Read, Glob, Grep
+argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検出）]
+---
+
 # /ship - コミット＆push＆マージ
 
 レビュー完了後の変更をコミットしてpushし、PRをマージする。
@@ -34,11 +43,21 @@
    - 未pushのコミットがある場合: `git push origin {ブランチ名}`
 
 5. PRをマージする
-   - `gh pr merge {PR番号} --merge` でマージを実行
+   - `gh pr merge {PR番号} --merge --delete-branch` でマージを実行（リモートブランチも削除）
    - マージ後、ローカルの `main` を更新する: `git fetch origin main && git merge origin/main --ff-only` （mainにいる場合のみ）
 
-6. レビュー関連資料を削除する
+6. ローカルブランチを削除する
+   - PRのブランチ（headRefName）が `main` でなければ、`git branch -d {ブランチ名}` でローカルブランチを削除
+   - 現在そのブランチにいる場合は、先に `git checkout main` してから削除する
+
+7. 親Issueのクローズ（該当する場合のみ）
+   - PRの本文やコミットメッセージから親Issue番号を探す（`[Feature]` や `[Fix]` プレフィックスのIssue）
+   - 見つかった場合、`gh issue view {Issue番号} --json state -q '.state'` で未クローズか確認する
+   - 未クローズであれば `gh issue close {Issue番号}` でクローズする
+   - 該当するIssueがなければスキップする
+
+8. レビュー関連資料を削除する
    - `scripts/review/output/review-prompt-pr{番号}-*.md` を削除する
    - `scripts/review/output/review-result-pr{番号}-*.md` を削除する
 
-7. 完了したらPR URLとマージ結果を報告する
+9. 完了したらPR URLとマージ結果を報告する

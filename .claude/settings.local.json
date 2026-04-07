@@ -123,7 +123,6 @@
       "Edit(/.claude/skills/bug-report/**)",
       "Edit(/.claude/skills/create-skill/**)",
       "Edit(/.claude/skills/define-feature/**)",
-      "Edit(/.claude/skills/finalize/**)",
       "Edit(/.claude/skills/implement/**)",
       "Bash(git fetch:*)",
       "Edit(/.claude/skills/quickfix/**)",
