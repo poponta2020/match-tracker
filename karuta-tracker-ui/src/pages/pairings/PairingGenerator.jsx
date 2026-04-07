@@ -1056,30 +1056,35 @@ const PairingGenerator = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
                 autoFocus
               />
-              <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
-                {availablePlayers
-                  .filter(player => player.name.includes(playerSearchText))
-                  .map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlayerId(String(player.id));
-                        setPlayerSearchText(player.name);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-[#e8f0eb] transition-colors ${
-                        String(player.id) === selectedPlayerId ? 'bg-[#e8f0eb] font-semibold text-[#4a6b5a]' : 'text-gray-700'
-                      }`}
-                    >
-                      {player.name} ({player.kyuRank || player.danRank || '初心者'})
-                    </button>
-                  ))}
-                {availablePlayers.filter(player => player.name.includes(playerSearchText)).length === 0 && (
-                  <div className="px-4 py-3 text-sm text-gray-400 text-center">
-                    該当する選手がいません
+              {(() => {
+                const filteredPlayers = availablePlayers.filter(
+                  player => (player.name ?? '').includes(playerSearchText)
+                );
+                return (
+                  <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                    {filteredPlayers.map((player) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPlayerId(String(player.id));
+                          setPlayerSearchText(player.name);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-[#e8f0eb] transition-colors ${
+                          String(player.id) === selectedPlayerId ? 'bg-[#e8f0eb] font-semibold text-[#4a6b5a]' : 'text-gray-700'
+                        }`}
+                      >
+                        {player.name} ({player.kyuRank || player.danRank || '初心者'})
+                      </button>
+                    ))}
+                    {filteredPlayers.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-gray-400 text-center">
+                        該当する選手がいません
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
 
             {error && (

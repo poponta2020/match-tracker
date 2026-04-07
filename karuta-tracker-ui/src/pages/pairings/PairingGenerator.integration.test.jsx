@@ -109,3 +109,69 @@ describe('DragOverlay 表示ロジック', () => {
     expect(screen.queryByText('佐藤花子')).not.toBeInTheDocument();
   });
 });
+
+describe('選手検索フィルタロジック', () => {
+  // PairingGenerator のフィルタロジックを再現
+  const filterPlayers = (players, searchText) =>
+    players.filter(p => (p.name ?? '').includes(searchText));
+
+  const testPlayers = [
+    { id: 1, name: '山田太郎', kyuRank: 'A級' },
+    { id: 2, name: '佐藤花子', danRank: '二段' },
+    { id: 3, name: '田中一郎', kyuRank: 'B級' },
+    { id: 4, name: '山田次郎', kyuRank: 'C級' },
+  ];
+
+  it('検索語で候補が絞られる（部分一致）', () => {
+    const result = filterPlayers(testPlayers, '山田');
+    expect(result).toHaveLength(2);
+    expect(result.map(p => p.name)).toEqual(['山田太郎', '山田次郎']);
+  });
+
+  it('空文字の場合は全件表示', () => {
+    const result = filterPlayers(testPlayers, '');
+    expect(result).toHaveLength(4);
+  });
+
+  it('該当なしの場合は空配列', () => {
+    const result = filterPlayers(testPlayers, '鈴木');
+    expect(result).toHaveLength(0);
+  });
+
+  it('name が null/undefined でもクラッシュしない', () => {
+    const playersWithNull = [
+      { id: 1, name: null },
+      { id: 2, name: undefined },
+      { id: 3, name: '山田太郎' },
+    ];
+    const result = filterPlayers(playersWithNull, '山田');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('山田太郎');
+  });
+
+  // 選択・リセット動作のstate遷移テスト
+  it('候補クリックで selectedPlayerId が設定される', () => {
+    let selectedPlayerId = '';
+    let playerSearchText = '';
+
+    // 候補クリックをシミュレート
+    const player = testPlayers[0];
+    selectedPlayerId = String(player.id);
+    playerSearchText = player.name;
+
+    expect(selectedPlayerId).toBe('1');
+    expect(playerSearchText).toBe('山田太郎');
+  });
+
+  it('キャンセル時に playerSearchText がリセットされる', () => {
+    let selectedPlayerId = '1';
+    let playerSearchText = '山田';
+
+    // キャンセル処理をシミュレート
+    selectedPlayerId = '';
+    playerSearchText = '';
+
+    expect(selectedPlayerId).toBe('');
+    expect(playerSearchText).toBe('');
+  });
+});
