@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.ExpireOfferResult;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -794,9 +795,9 @@ class WaitlistPromotionServiceTest {
 
             service.respondToOfferAll(100L, 10L, false);
 
-            // 各試合の繰り上げ先へLINE通知
-            verify(lineNotificationService).sendWaitlistOfferNotification(nextForMatch1);
-            verify(lineNotificationService).sendWaitlistOfferNotification(nextForMatch3);
+            // 繰り上げ先プレイヤーごとに統合LINE通知が送信される（プレイヤーが異なるので2回）
+            verify(lineNotificationService, times(2)).sendConsolidatedWaitlistOfferNotification(
+                    anyList(), any(PracticeSession.class), eq("オファー辞退"), eq(10L));
         }
 
         @Test
@@ -914,5 +915,155 @@ class WaitlistPromotionServiceTest {
         verify(notificationService).createOfferNotification(any());
         // LINE通知は送信されない（呼び出し元でバッチ送信するため）
         verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+    }
+
+    @Nested
+    @DisplayName("expireOfferSuppressed: 通知抑制版オファー期限切れ処理")
+    class ExpireOfferSuppressedTest {
+
+        @Test
+        @DisplayName("OFFERED状態の参加者を渡すとDECLINEDに変更されExpireOfferResultが返る")
+        void expireOfferSuppressed_offeredParticipant_returnResult() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeParticipant nextWaitlisted = PracticeParticipant.builder()
+                    .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(nextWaitlisted));
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+
+            ExpireOfferResult result = service.expireOfferSuppressed(participant);
+
+            assertThat(result).isNotNull();
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.DECLINED);
+            assertThat(participant.getWaitlistNumber()).isNull();
+            assertThat(result.getPromotedParticipant()).isEqualTo(nextWaitlisted);
+            assertThat(result.getNotificationData()).isNotNull();
+            assertThat(result.getNotificationData().getTriggerAction()).isEqualTo("オファー期限切れ");
+            assertThat(result.getNotificationData().getSessionId()).isEqualTo(100L);
+            assertThat(result.getNotificationData().getMatchNumber()).isEqualTo(1);
+            verify(practiceParticipantRepository).save(participant);
+        }
+
+        @Test
+        @DisplayName("OFFERED状態の参加者を渡した場合、sendWaitlistOfferNotificationが呼ばれない（通知抑制）")
+        void expireOfferSuppressed_doesNotSendWaitlistOfferNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.empty());
+
+            service.expireOfferSuppressed(participant);
+
+            // 繰り上げ先へのLINE通知は送信されない（呼び出し元でバッチ送信するため）
+            verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+            verify(lineNotificationService, never()).sendConsolidatedWaitlistOfferNotification(
+                    anyList(), any(PracticeSession.class), any(), any(Player.class));
+            verify(lineNotificationService, never()).sendConsolidatedWaitlistOfferNotification(
+                    anyList(), any(PracticeSession.class), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("OFFERED状態の参加者を渡した場合、sendBatchedAdminWaitlistNotificationsが呼ばれない（通知抑制）")
+        void expireOfferSuppressed_doesNotSendBatchedAdminNotifications() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.empty());
+
+            service.expireOfferSuppressed(participant);
+
+            // 管理者通知は送信されない（呼び出し元でバッチ送信するため）
+            // sendBatchedAdminWaitlistNotificationsはservice自身のメソッドなのでspy不要、
+            // 代わりにpracticeParticipantRepositoryの管理者通知関連呼び出しがないことを確認
+            verify(playerRepository, never()).findById(anyLong());
+        }
+
+        @Test
+        @DisplayName("OFFERED以外の状態を渡した場合、nullが返る")
+        void expireOfferSuppressed_nonOfferedStatus_returnsNull() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+            ExpireOfferResult result = service.expireOfferSuppressed(participant);
+
+            assertThat(result).isNull();
+            verify(practiceParticipantRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("DECLINED状態を渡した場合、nullが返る")
+        void expireOfferSuppressed_declinedStatus_returnsNull() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.DECLINED).build();
+
+            ExpireOfferResult result = service.expireOfferSuppressed(participant);
+
+            assertThat(result).isNull();
+            verify(practiceParticipantRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("繰り上げ対象がいない場合もExpireOfferResultが返る（promotedParticipantはnull）")
+        void expireOfferSuppressed_noWaitlisted_resultWithNullPromoted() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
+            PracticeSession session = PracticeSession.builder().id(100L)
+                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.empty());
+
+            ExpireOfferResult result = service.expireOfferSuppressed(participant);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getPromotedParticipant()).isNull();
+            assertThat(result.getNotificationData().getPromotedParticipant()).isNull();
+        }
     }
 }
