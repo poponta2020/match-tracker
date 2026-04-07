@@ -556,13 +556,13 @@ public class WaitlistPromotionService {
                 renumberRemainingWaitlist(sessionId, matchNumber);
             }
 
-            // 各試合で次のキャンセル待ちに繰り上げ
+            // 各試合で次のキャンセル待ちに繰り上げ（通知は蓄積して後でまとめ送信）
+            List<PracticeParticipant> promotedList = new ArrayList<>();
             for (PracticeParticipant p : declined) {
                 Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
                         sessionId, p.getMatchNumber(), session.getSessionDate());
 
-                // 繰り上げ先プレイヤーへLINE通知
-                promoted.ifPresent(pr -> lineNotificationService.sendWaitlistOfferNotification(pr));
+                promoted.ifPresent(promotedList::add);
 
                 notificationDataList.add(AdminWaitlistNotificationData.builder()
                         .triggerAction("オファー辞退")
@@ -571,6 +571,18 @@ public class WaitlistPromotionService {
                         .matchNumber(p.getMatchNumber())
                         .promotedParticipant(promoted.orElse(null))
                         .build());
+            }
+
+            // 繰り上げ先プレイヤーへ統合LINE通知（セッション×プレイヤーでグルーピング）
+            if (!promotedList.isEmpty()) {
+                Map<Long, List<PracticeParticipant>> byPlayer = new LinkedHashMap<>();
+                for (PracticeParticipant pp : promotedList) {
+                    byPlayer.computeIfAbsent(pp.getPlayerId(), k -> new ArrayList<>()).add(pp);
+                }
+                for (List<PracticeParticipant> playerOffered : byPlayer.values()) {
+                    lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                            playerOffered, session, "オファー辞退", playerId);
+                }
             }
 
             // 管理者通知をバッチ送信
