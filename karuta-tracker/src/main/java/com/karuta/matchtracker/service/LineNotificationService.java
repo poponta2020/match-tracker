@@ -1129,41 +1129,53 @@ public class LineNotificationService {
 
         List<Object> bodyContents = new java.util.ArrayList<>();
 
-        for (int i = 0; i < entries.size(); i++) {
-            Map<String, Object> entry = entries.get(i);
-            String sessionLabel = (String) entry.get("sessionLabel");
-            Integer matchNumber = (Integer) entry.get("matchNumber");
-            Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
-            String status = (String) entry.get("status");
-            Object offerDeadline = entry.get("offerDeadline");
+        // sessionIdでグルーピング（同一ラベル・別セッションの混在を防止）
+        java.util.LinkedHashMap<Object, List<Map<String, Object>>> grouped = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> entry : entries) {
+            Object groupKey = entry.get("sessionId") != null ? entry.get("sessionId") : entry.get("sessionLabel");
+            grouped.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
+        }
 
-            if (i > 0) {
+        boolean isFirstGroup = true;
+        for (List<Map<String, Object>> groupEntries : grouped.values()) {
+            String sessionLabel = (String) groupEntries.get(0).get("sessionLabel");
+
+            if (!isFirstGroup) {
                 bodyContents.add(Map.of("type", "separator", "margin", "lg"));
             }
 
             bodyContents.add(Map.of("type", "text", "text", sessionLabel,
-                    "weight", "bold", "size", "md", "margin", i == 0 ? "none" : "lg",
+                    "weight", "bold", "size", "md", "margin", isFirstGroup ? "none" : "lg",
                     "wrap", true));
-            bodyContents.add(Map.of("type", "text", "text",
-                    matchNumber + "試合目",
-                    "size", "sm", "color", "#555555", "margin", "sm"));
 
-            if ("OFFERED".equals(status)) {
+            for (Map<String, Object> entry : groupEntries) {
+                Integer matchNumber = (Integer) entry.get("matchNumber");
+                Integer waitlistNumber = (Integer) entry.get("waitlistNumber");
+                String status = (String) entry.get("status");
+                Object offerDeadline = entry.get("offerDeadline");
+
                 bodyContents.add(Map.of("type", "text", "text",
-                        "繰り上げオファー中",
-                        "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm"));
-                if (offerDeadline != null) {
-                    java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
-                    String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
+                        matchNumber + "試合目",
+                        "size", "sm", "color", "#555555", "margin", "sm"));
+
+                if ("OFFERED".equals(status)) {
                     bodyContents.add(Map.of("type", "text", "text",
-                            "回答期限: " + deadlineStr,
-                            "size", "xs", "color", "#E65100", "margin", "sm"));
+                            "繰り上げオファー中",
+                            "size", "sm", "color", "#E65100", "weight", "bold", "margin", "sm"));
+                    if (offerDeadline != null) {
+                        java.time.LocalDateTime deadline = (java.time.LocalDateTime) offerDeadline;
+                        String deadlineStr = deadline.format(java.time.format.DateTimeFormatter.ofPattern("M/d H:mm"));
+                        bodyContents.add(Map.of("type", "text", "text",
+                                "回答期限: " + deadlineStr,
+                                "size", "xs", "color", "#E65100", "margin", "sm"));
+                    }
+                } else {
+                    bodyContents.add(Map.of("type", "text", "text",
+                            "キャンセル待ち " + waitlistNumber + "番",
+                            "size", "sm", "color", "#333333", "margin", "sm"));
                 }
-            } else {
-                bodyContents.add(Map.of("type", "text", "text",
-                        "キャンセル待ち " + waitlistNumber + "番",
-                        "size", "sm", "color", "#333333", "margin", "sm"));
             }
+            isFirstGroup = false;
         }
 
         Map<String, Object> body = Map.of(

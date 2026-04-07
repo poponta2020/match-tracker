@@ -9,7 +9,7 @@
    - なければ `gh pr view --json number -q '.number'` で現在のブランチのPRを検出
 
 2. PR情報を取得する
-   - `gh pr view {PR番号} --json url,title,headRefName` でPR情報を取得
+   - `gh pr view {PR番号} --json url,title,headRefName,baseRefName` でPR情報を取得
 
 3. 差分を取得する
    - `gh pr diff {PR番号}` でPRの差分を取得
@@ -19,6 +19,7 @@
    - `{{PR_TITLE}}` → PRのタイトル
    - `{{BRANCH}}` → ブランチ名
    - `{{DIFF}}` → PR差分
+   - `{{BASE_BRANCH}}` → ベースブランチ名（`baseRefName`から取得）
 
 5. 生成結果を `scripts/review/output/review-prompt-pr{番号}.md` に保存する
 
