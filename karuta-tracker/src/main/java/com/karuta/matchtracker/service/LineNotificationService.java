@@ -1130,9 +1130,12 @@ public class LineNotificationService {
         List<Object> bodyContents = new java.util.ArrayList<>();
 
         // sessionIdでグルーピング（同一ラベル・別セッションの混在を防止）
-        java.util.LinkedHashMap<Object, List<Map<String, Object>>> grouped = new java.util.LinkedHashMap<>();
+        // キーを文字列正規化して型差異（Long vs Integer等）を吸収
+        java.util.LinkedHashMap<String, List<Map<String, Object>>> grouped = new java.util.LinkedHashMap<>();
         for (Map<String, Object> entry : entries) {
-            Object groupKey = entry.get("sessionId") != null ? entry.get("sessionId") : entry.get("sessionLabel");
+            String groupKey = entry.get("sessionId") != null
+                    ? "id:" + entry.get("sessionId")
+                    : "label:" + entry.get("sessionLabel");
             grouped.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(entry);
         }
 

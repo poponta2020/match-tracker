@@ -128,7 +128,20 @@ class LineRichMenuHandlerTest {
                     .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
                     .count();
             assertThat(labelCount).isEqualTo(2);
+
+            // 各グループにmatchNumber行が含まれることを検証
+            long matchNumberCount = contents.stream()
+                    .filter(c -> c.get("text") != null && c.get("text").toString().contains("試合目"))
+                    .count();
+            assertThat(matchNumberCount).isEqualTo(2);
+
+            // グループ間にseparatorが1つ存在することを検証
+            long separatorCount = contents.stream()
+                    .filter(c -> "separator".equals(c.get("type")))
+                    .count();
+            assertThat(separatorCount).isEqualTo(1);
         }
+
         @Test
         @DisplayName("sessionIdがnullの場合はsessionLabelでグルーピングされる")
         void shouldGroupByLabelWhenSessionIdIsNull() {
@@ -160,7 +173,20 @@ class LineRichMenuHandlerTest {
                     .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
                     .count();
             assertThat(labelCount).isEqualTo(1);
+
+            // 同一グループ内にmatchNumber行が2つ含まれることを検証
+            long matchNumberCount = contents.stream()
+                    .filter(c -> c.get("text") != null && c.get("text").toString().contains("試合目"))
+                    .count();
+            assertThat(matchNumberCount).isEqualTo(2);
+
+            // 単一グループなのでseparatorは存在しない
+            long separatorCount = contents.stream()
+                    .filter(c -> "separator".equals(c.get("type")))
+                    .count();
+            assertThat(separatorCount).isEqualTo(0);
         }
+
     }
 
     // ===== 今日の参加者表示 =====
