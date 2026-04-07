@@ -12,6 +12,7 @@ import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSens
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
+import PlayerSearchCombobox from './PlayerSearchCombobox';
 
 
 const PairingGenerator = () => {
@@ -30,7 +31,6 @@ const PairingGenerator = () => {
   const [allPlayers, setAllPlayers] = useState([]);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
-  const [playerSearchText, setPlayerSearchText] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showParticipantList, setShowParticipantList] = useState(true);
@@ -565,7 +565,6 @@ const PairingGenerator = () => {
       // 待機リストに追加
       setWaitingPlayers([...waitingPlayers, { id: player.id, name: player.name }]);
       setSelectedPlayerId('');
-      setPlayerSearchText('');
       setShowAddPlayer(false);
       setError('');
     } catch (err) {
@@ -1041,51 +1040,11 @@ const PairingGenerator = () => {
               当日参加者を追加
             </h2>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                選手を選択
-              </label>
-              <input
-                type="text"
-                value={playerSearchText}
-                onChange={(e) => {
-                  setPlayerSearchText(e.target.value);
-                  setSelectedPlayerId('');
-                }}
-                placeholder="選手名を入力して検索..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
-                autoFocus
-              />
-              {(() => {
-                const filteredPlayers = availablePlayers.filter(
-                  player => (player.name ?? '').includes(playerSearchText)
-                );
-                return (
-                  <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
-                    {filteredPlayers.map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPlayerId(String(player.id));
-                          setPlayerSearchText(player.name);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-[#e8f0eb] transition-colors ${
-                          String(player.id) === selectedPlayerId ? 'bg-[#e8f0eb] font-semibold text-[#4a6b5a]' : 'text-gray-700'
-                        }`}
-                      >
-                        {player.name} ({player.kyuRank || player.danRank || '初心者'})
-                      </button>
-                    ))}
-                    {filteredPlayers.length === 0 && (
-                      <div className="px-4 py-3 text-sm text-gray-400 text-center">
-                        該当する選手がいません
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+            <PlayerSearchCombobox
+              players={availablePlayers}
+              selectedPlayerId={selectedPlayerId}
+              onSelect={setSelectedPlayerId}
+            />
 
             {error && (
               <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2 text-red-700 text-sm">
@@ -1099,7 +1058,6 @@ const PairingGenerator = () => {
                 onClick={() => {
                   setShowAddPlayer(false);
                   setSelectedPlayerId('');
-                  setPlayerSearchText('');
                   setError('');
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
