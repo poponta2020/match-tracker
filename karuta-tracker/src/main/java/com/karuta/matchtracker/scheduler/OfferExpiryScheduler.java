@@ -76,41 +76,43 @@ public class OfferExpiryScheduler {
             }
         }
 
+        // セッションキャッシュ（同一セッションの重複クエリを防止）
+        Map<Long, PracticeSession> sessionCache = new LinkedHashMap<>();
+
         // 繰り上げ先プレイヤーへの統合LINE通知（セッション×プレイヤーでグルーピング）
-        sendConsolidatedOfferNotifications(results);
+        sendConsolidatedOfferNotifications(results, sessionCache);
 
         // 管理者通知（セッション単位でバッチ送信）
-        sendBatchedAdminNotifications(results);
+        sendBatchedAdminNotifications(results, sessionCache);
     }
 
     /**
      * 繰り上げ先プレイヤーへのLINE通知をセッション×プレイヤーでグルーピングして統合送信する。
      */
-    private void sendConsolidatedOfferNotifications(List<ExpireOfferResult> results) {
-        // promotedParticipant があるもののみ抽出し、セッション×プレイヤー×トリガープレイヤーでグルーピング
+    private void sendConsolidatedOfferNotifications(List<ExpireOfferResult> results,
+                                                     Map<Long, PracticeSession> sessionCache) {
+        // promotedParticipant があるもののみ抽出し、セッション×プレイヤーでグルーピング
         Map<String, List<PracticeParticipant>> promotedByKey = new LinkedHashMap<>();
-        Map<String, Long> triggerPlayerByKey = new LinkedHashMap<>();
 
         for (ExpireOfferResult result : results) {
             if (result.getPromotedParticipant() == null) continue;
 
             PracticeParticipant promoted = result.getPromotedParticipant();
-            Long triggerPlayerId = result.getNotificationData().getTriggerPlayerId();
-            String key = promoted.getSessionId() + ":" + promoted.getPlayerId() + ":" + triggerPlayerId;
+            String key = promoted.getSessionId() + ":" + promoted.getPlayerId();
             promotedByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(promoted);
-            triggerPlayerByKey.putIfAbsent(key, triggerPlayerId);
         }
 
         for (Map.Entry<String, List<PracticeParticipant>> entry : promotedByKey.entrySet()) {
             List<PracticeParticipant> offeredList = entry.getValue();
-            Long triggerPlayerId = triggerPlayerByKey.get(entry.getKey());
             try {
-                PracticeSession session = practiceSessionRepository
-                        .findById(offeredList.get(0).getSessionId()).orElse(null);
+                Long sessionId = offeredList.get(0).getSessionId();
+                PracticeSession session = sessionCache.computeIfAbsent(sessionId,
+                        id -> practiceSessionRepository.findById(id).orElse(null));
                 if (session == null) continue;
 
+                // triggerPlayerIdはnull → 通知文言は汎用の「空きが出ました」になる
                 lineNotificationService.sendConsolidatedWaitlistOfferNotification(
-                        offeredList, session, "オファー期限切れ", triggerPlayerId);
+                        offeredList, session, "オファー期限切れ", (Long) null);
             } catch (Exception e) {
                 log.error("Failed to send consolidated offer notification: {}", e.getMessage(), e);
             }
@@ -118,22 +120,23 @@ public class OfferExpiryScheduler {
     }
 
     /**
-     * 管理者通知をセッション×トリガーアクション×トリガープレイヤーでグルーピングしてバッチ送信する。
+     * 管理者通知をセッション単位でグルーピングしてバッチ送信する。
      */
-    private void sendBatchedAdminNotifications(List<ExpireOfferResult> results) {
-        // セッションID + triggerAction + triggerPlayerId でグルーピング
-        Map<String, List<AdminWaitlistNotificationData>> byKey = new LinkedHashMap<>();
+    private void sendBatchedAdminNotifications(List<ExpireOfferResult> results,
+                                                Map<Long, PracticeSession> sessionCache) {
+        // セッションID でグルーピング
+        Map<Long, List<AdminWaitlistNotificationData>> byKey = new LinkedHashMap<>();
 
         for (ExpireOfferResult result : results) {
             AdminWaitlistNotificationData data = result.getNotificationData();
-            String key = data.getSessionId() + ":" + data.getTriggerAction() + ":" + data.getTriggerPlayerId();
-            byKey.computeIfAbsent(key, k -> new ArrayList<>()).add(data);
+            byKey.computeIfAbsent(data.getSessionId(), k -> new ArrayList<>()).add(data);
         }
 
         for (List<AdminWaitlistNotificationData> dataList : byKey.values()) {
             try {
-                PracticeSession session = practiceSessionRepository
-                        .findById(dataList.get(0).getSessionId()).orElse(null);
+                Long sessionId = dataList.get(0).getSessionId();
+                PracticeSession session = sessionCache.computeIfAbsent(sessionId,
+                        id -> practiceSessionRepository.findById(id).orElse(null));
                 if (session == null) continue;
 
                 waitlistPromotionService.sendBatchedAdminWaitlistNotifications(

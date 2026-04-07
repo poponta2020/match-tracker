@@ -106,9 +106,9 @@ class OfferExpirySchedulerTest {
 
             scheduler.checkExpiredOffers();
 
-            // 同一セッション×同一プレイヤーなので統合LINE通知は1回だけ
+            // 同一セッション×同一プレイヤーなので統合LINE通知は1回だけ（triggerPlayerIdはnull→汎用文言）
             verify(lineNotificationService, times(1)).sendConsolidatedWaitlistOfferNotification(
-                    argThat(list -> list.size() == 3), eq(session), eq("オファー期限切れ"), eq(10L));
+                    argThat(list -> list.size() == 3), eq(session), eq("オファー期限切れ"), (Long) isNull());
         }
 
         @Test
@@ -158,17 +158,17 @@ class OfferExpirySchedulerTest {
 
             scheduler.checkExpiredOffers();
 
-            // セッション100への統合通知
+            // セッション100への統合通知（triggerPlayerIdはnull→汎用文言）
             verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
                     argThat(list -> list.size() == 1 && list.get(0).getSessionId() == 100L),
-                    eq(session100), eq("オファー期限切れ"), eq(10L));
+                    eq(session100), eq("オファー期限切れ"), (Long) isNull());
             // セッション200への統合通知
             verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
                     argThat(list -> list.size() == 1 && list.get(0).getSessionId() == 200L),
-                    eq(session200), eq("オファー期限切れ"), eq(10L));
+                    eq(session200), eq("オファー期限切れ"), (Long) isNull());
             // 合計2回
             verify(lineNotificationService, times(2)).sendConsolidatedWaitlistOfferNotification(
-                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+                    anyList(), any(PracticeSession.class), anyString(), nullable(Long.class));
         }
 
         @Test
@@ -183,7 +183,7 @@ class OfferExpirySchedulerTest {
 
             verify(waitlistPromotionService, never()).expireOfferSuppressed(any());
             verify(lineNotificationService, never()).sendConsolidatedWaitlistOfferNotification(
-                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+                    anyList(), any(PracticeSession.class), anyString(), nullable(Long.class));
         }
 
         @Test
@@ -214,7 +214,7 @@ class OfferExpirySchedulerTest {
 
             // 繰り上げ対象なしなので統合LINE通知は送信されない
             verify(lineNotificationService, never()).sendConsolidatedWaitlistOfferNotification(
-                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+                    anyList(), any(PracticeSession.class), anyString(), nullable(Long.class));
             // 管理者通知はバッチ送信される
             verify(waitlistPromotionService).sendBatchedAdminWaitlistNotifications(anyList(), eq(session));
         }
@@ -236,14 +236,14 @@ class OfferExpirySchedulerTest {
             scheduler.checkExpiredOffers();
 
             verify(lineNotificationService, never()).sendConsolidatedWaitlistOfferNotification(
-                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+                    anyList(), any(PracticeSession.class), anyString(), nullable(Long.class));
             verify(waitlistPromotionService, never()).sendBatchedAdminWaitlistNotifications(
                     anyList(), any(PracticeSession.class));
         }
 
         @Test
-        @DisplayName("同一セッション×異なるトリガープレイヤー → 通知が分離される")
-        void sameSession_differentTriggerPlayers_separateNotifications() {
+        @DisplayName("同一セッション×異なるトリガープレイヤー → セッション×プレイヤー単位で統合される")
+        void sameSession_differentTriggerPlayers_consolidatedNotifications() {
             // 同一セッション（100）で、トリガープレイヤーが異なる（10と30）
             PracticeParticipant expired1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
@@ -252,7 +252,7 @@ class OfferExpirySchedulerTest {
                     .id(2L).sessionId(100L).playerId(30L).matchNumber(2)
                     .status(ParticipantStatus.OFFERED).build();
 
-            // 繰り上げ先は同一プレイヤー（20）だがトリガーが異なる
+            // 繰り上げ先は同一プレイヤー（20）でトリガーが異なる
             PracticeParticipant promoted1 = PracticeParticipant.builder()
                     .id(11L).sessionId(100L).playerId(20L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).build();
@@ -285,19 +285,14 @@ class OfferExpirySchedulerTest {
 
             scheduler.checkExpiredOffers();
 
-            // 繰り上げ先LINE通知: 同一プレイヤー（20）だがトリガーが異なるので2回に分離
-            verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
-                    argThat(list -> list.size() == 1 && list.get(0).getMatchNumber() == 1),
-                    eq(session), eq("オファー期限切れ"), eq(10L));
-            verify(lineNotificationService).sendConsolidatedWaitlistOfferNotification(
-                    argThat(list -> list.size() == 1 && list.get(0).getMatchNumber() == 2),
-                    eq(session), eq("オファー期限切れ"), eq(30L));
-            verify(lineNotificationService, times(2)).sendConsolidatedWaitlistOfferNotification(
-                    anyList(), any(PracticeSession.class), anyString(), anyLong());
+            // 繰り上げ先LINE通知: 同一セッション×同一プレイヤー（20）なので1回に統合（triggerPlayerIdはnull→汎用文言）
+            verify(lineNotificationService, times(1)).sendConsolidatedWaitlistOfferNotification(
+                    argThat(list -> list.size() == 2 && list.get(0).getPlayerId() == 20L),
+                    eq(session), eq("オファー期限切れ"), (Long) isNull());
 
-            // 管理者通知: トリガープレイヤーが異なるので2回に分離
-            verify(waitlistPromotionService, times(2)).sendBatchedAdminWaitlistNotifications(
-                    argThat(list -> list.size() == 1), eq(session));
+            // 管理者通知: 同一セッションなので1回に統合（2件分のデータを含む）
+            verify(waitlistPromotionService, times(1)).sendBatchedAdminWaitlistNotifications(
+                    argThat(list -> list.size() == 2), eq(session));
         }
     }
 }
