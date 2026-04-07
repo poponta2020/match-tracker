@@ -143,6 +143,103 @@ class LineRichMenuHandlerTest {
         }
 
         @Test
+        @DisplayName("同一sessionIdの複数エントリが1グループにまとまりラベルは1回のみ表示される")
+        void shouldGroupSameSessionIdEntriesWithSingleLabel() {
+            java.util.Map<String, Object> entry1 = new java.util.LinkedHashMap<>();
+            entry1.put("sessionId", 100L);
+            entry1.put("sessionLabel", "4月10日（中央公民館）");
+            entry1.put("matchNumber", 1);
+            entry1.put("waitlistNumber", 2);
+            entry1.put("status", "WAITLISTED");
+
+            java.util.Map<String, Object> entry2 = new java.util.LinkedHashMap<>();
+            entry2.put("sessionId", 100L);
+            entry2.put("sessionLabel", "4月10日（中央公民館）");
+            entry2.put("matchNumber", 2);
+            entry2.put("waitlistNumber", 1);
+            entry2.put("status", "WAITLISTED");
+
+            List<Map<String, Object>> entries = List.of(entry1, entry2);
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) flex.get("body");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> contents = (List<Map<String, Object>>) body.get("contents");
+
+            // 同一sessionIdなのでラベルは1回だけ表示される
+            long labelCount = contents.stream()
+                    .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
+                    .count();
+            assertThat(labelCount).isEqualTo(1);
+
+            // 試合目は2つ表示される
+            long matchNumberCount = contents.stream()
+                    .filter(c -> c.get("text") != null && c.get("text").toString().contains("試合目"))
+                    .count();
+            assertThat(matchNumberCount).isEqualTo(2);
+
+            // グループ内なのでseparatorは0
+            long separatorCount = contents.stream()
+                    .filter(c -> "separator".equals(c.get("type")))
+                    .count();
+            assertThat(separatorCount).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("同一sessionId内でOFFEREDとWAITLISTEDが混在しても1グループにまとまる")
+        void shouldGroupMixedStatusEntriesWithSameSessionId() {
+            java.util.Map<String, Object> entry1 = new java.util.LinkedHashMap<>();
+            entry1.put("sessionId", 100L);
+            entry1.put("sessionLabel", "4月10日（中央公民館）");
+            entry1.put("matchNumber", 1);
+            entry1.put("waitlistNumber", 1);
+            entry1.put("status", "OFFERED");
+            entry1.put("offerDeadline", LocalDateTime.of(2026, 4, 8, 18, 0));
+
+            java.util.Map<String, Object> entry2 = new java.util.LinkedHashMap<>();
+            entry2.put("sessionId", 100L);
+            entry2.put("sessionLabel", "4月10日（中央公民館）");
+            entry2.put("matchNumber", 2);
+            entry2.put("waitlistNumber", 1);
+            entry2.put("status", "WAITLISTED");
+
+            List<Map<String, Object>> entries = List.of(entry1, entry2);
+
+            Map<String, Object> flex = lineNotificationService.buildWaitlistStatusFlex(entries);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) flex.get("body");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> contents = (List<Map<String, Object>>) body.get("contents");
+
+            // ラベルは1回のみ
+            long labelCount = contents.stream()
+                    .filter(c -> "4月10日（中央公民館）".equals(c.get("text")))
+                    .count();
+            assertThat(labelCount).isEqualTo(1);
+
+            // OFFEREDの「繰り上げオファー中」が表示される
+            long offerCount = contents.stream()
+                    .filter(c -> "繰り上げオファー中".equals(c.get("text")))
+                    .count();
+            assertThat(offerCount).isEqualTo(1);
+
+            // WAITLISTEDの「キャンセル待ち」が表示される
+            long waitlistCount = contents.stream()
+                    .filter(c -> c.get("text") != null && c.get("text").toString().startsWith("キャンセル待ち"))
+                    .count();
+            assertThat(waitlistCount).isEqualTo(1);
+
+            // グループ内なのでseparatorは0
+            long separatorCount = contents.stream()
+                    .filter(c -> "separator".equals(c.get("type")))
+                    .count();
+            assertThat(separatorCount).isEqualTo(0);
+        }
+
+        @Test
         @DisplayName("sessionIdがnullの場合は個別表示される")
         void shouldDisplayIndividuallyWhenSessionIdIsNull() {
             // sessionIdを持たないエントリ（同一ラベル）
