@@ -701,9 +701,14 @@ public class LineNotificationService {
                     sendFlexToPlayer(playerId, LineNotificationType.LOTTERY_RESULT, altText, flex);
                 }
 
-                // 繰り上げオファー中の練習をFlexメッセージ（参加する/辞退するボタン付き）で通知
-                for (PracticeParticipant offeredParticipant : offered) {
-                    sendWaitlistOfferNotification(offeredParticipant);
+                // 繰り上げオファー中の練習をセッション単位の統合Flexメッセージで通知
+                Map<Long, List<PracticeParticipant>> offeredBySession = offered.stream()
+                    .collect(Collectors.groupingBy(PracticeParticipant::getSessionId));
+                for (Map.Entry<Long, List<PracticeParticipant>> offeredEntry : offeredBySession.entrySet()) {
+                    PracticeSession offeredSession = sessionCache.get(offeredEntry.getKey());
+                    if (offeredSession == null) continue;
+                    sendConsolidatedWaitlistOfferNotification(
+                            offeredEntry.getValue(), offeredSession, null, (Player) null);
                 }
 
                 if (hasWon) {
@@ -770,6 +775,7 @@ public class LineNotificationService {
 
     /** triggerAction に応じたイベント文言を返す */
     private String getEventText(String triggerAction) {
+        if (triggerAction == null) return "";
         return switch (triggerAction) {
             case "キャンセル" -> "キャンセル";
             case "キャンセル（当日補充）" -> "当日キャンセル";
