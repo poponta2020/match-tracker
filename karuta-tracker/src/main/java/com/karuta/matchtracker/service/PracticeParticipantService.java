@@ -127,8 +127,9 @@ public class PracticeParticipantService {
                 .map(PracticeParticipationRequest.SessionMatchParticipation::getSessionId)
                 .distinct().collect(Collectors.toList());
 
+        List<PracticeSession> sessions = List.of();
         if (!requestSessionIds.isEmpty()) {
-            List<PracticeSession> sessions = practiceSessionRepository.findAllById(requestSessionIds);
+            sessions = practiceSessionRepository.findAllById(requestSessionIds);
             if (sessions.size() != requestSessionIds.size()) {
                 throw new ResourceNotFoundException("Some practice sessions not found");
             }
@@ -136,13 +137,15 @@ public class PracticeParticipantService {
 
         // セッションからorganizationIdとDeadlineTypeを取得
         Long organizationId = null;
-        if (!requestSessionIds.isEmpty()) {
-            organizationId = practiceSessionRepository.findById(requestSessionIds.iterator().next())
-                    .map(PracticeSession::getOrganizationId).orElse(null);
+        if (!sessions.isEmpty()) {
+            organizationId = sessions.get(0).getOrganizationId();
         }
 
-        // 練習会に未所属であれば自動的に所属させる
-        organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), organizationId);
+        // リクエスト内の全団体に対して未所属であれば自動的に所属させる
+        sessions.stream()
+                .map(PracticeSession::getOrganizationId)
+                .distinct()
+                .forEach(orgId -> organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), orgId));
 
         com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
 

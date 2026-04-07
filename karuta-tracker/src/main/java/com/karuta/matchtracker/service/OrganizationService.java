@@ -10,6 +10,7 @@ import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -138,13 +139,18 @@ public class OrganizationService {
         if (playerOrganizationRepository.existsByPlayerIdAndOrganizationId(playerId, organizationId)) {
             return;
         }
-        PlayerOrganization po = PlayerOrganization.builder()
-                .playerId(playerId)
-                .organizationId(organizationId)
-                .build();
-        playerOrganizationRepository.save(po);
-        createDefaultNotificationPreferences(playerId, organizationId);
-        log.info("Auto-assigned player {} to organization {}", playerId, organizationId);
+        try {
+            PlayerOrganization po = PlayerOrganization.builder()
+                    .playerId(playerId)
+                    .organizationId(organizationId)
+                    .build();
+            playerOrganizationRepository.save(po);
+            createDefaultNotificationPreferences(playerId, organizationId);
+            log.info("Auto-assigned player {} to organization {}", playerId, organizationId);
+        } catch (DataIntegrityViolationException e) {
+            // 同時リクエストで既に登録済みの場合は無視（冪等性保証）
+            log.debug("Player {} already belongs to organization {} (concurrent insert)", playerId, organizationId);
+        }
     }
 
     /**
