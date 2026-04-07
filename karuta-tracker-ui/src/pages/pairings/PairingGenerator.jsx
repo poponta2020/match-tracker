@@ -12,6 +12,7 @@ import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSens
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
+import PlayerSearchCombobox from './PlayerSearchCombobox';
 
 
 const PairingGenerator = () => {
@@ -1039,23 +1040,11 @@ const PairingGenerator = () => {
               当日参加者を追加
             </h2>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                選手を選択
-              </label>
-              <select
-                value={selectedPlayerId}
-                onChange={(e) => setSelectedPlayerId(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
-              >
-                <option value="">選手を選択してください</option>
-                {availablePlayers.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.name} ({player.kyuRank || player.danRank || '初心者'})
-                  </option>
-                ))}
-              </select>
-            </div>
+            <PlayerSearchCombobox
+              players={availablePlayers}
+              selectedPlayerId={selectedPlayerId}
+              onSelect={setSelectedPlayerId}
+            />
 
             {error && (
               <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2 text-red-700 text-sm">
