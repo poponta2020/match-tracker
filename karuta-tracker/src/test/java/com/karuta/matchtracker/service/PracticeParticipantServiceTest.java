@@ -49,6 +49,8 @@ class PracticeParticipantServiceTest {
     private com.karuta.matchtracker.repository.PlayerOrganizationRepository playerOrganizationRepository;
     @Mock
     private LineNotificationService lineNotificationService;
+    @Mock
+    private OrganizationService organizationService;
 
     @InjectMocks
     private PracticeParticipantService service;
@@ -73,7 +75,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
@@ -105,7 +106,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
@@ -138,7 +138,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
@@ -188,7 +187,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
@@ -215,7 +213,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, null);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
 
@@ -253,7 +250,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, null);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
@@ -279,7 +275,6 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, null);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
         when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
@@ -382,6 +377,79 @@ class PracticeParticipantServiceTest {
         PlayerParticipationStatusDto result = service.getPlayerParticipationStatusByMonth(10L, 2025, 4);
 
         assertThat(result.getBeforeDeadline()).isFalse();
+    }
+
+    @Test
+    @DisplayName("参加登録時にensurePlayerBelongsToOrganizationが該当団体で呼ばれる")
+    void registerParticipations_callsEnsureForOrganization() {
+        PracticeSession session = createSession(100L, 10);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(0L);
+        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
+                .thenReturn(false);
+        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(false);
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        verify(organizationService).ensurePlayerBelongsToOrganization(10L, ORG_ID);
+    }
+
+    @Test
+    @DisplayName("複数団体のセッションに参加登録した場合、団体ごとにensureが呼ばれる")
+    void registerParticipations_multipleOrgs_callsEnsureForEach() {
+        Long orgId2 = 2L;
+        PracticeSession session1 = createSession(100L, null);
+        PracticeSession session2 = new PracticeSession();
+        session2.setId(200L);
+        session2.setCapacity(null);
+        session2.setOrganizationId(orgId2);
+        session2.setTotalMatches(7);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1, session2));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session1, session2));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(
+                createParticipation(100L, 1),
+                createParticipation(200L, 1)
+        ));
+
+        service.registerParticipations(request);
+
+        verify(organizationService).ensurePlayerBelongsToOrganization(10L, ORG_ID);
+        verify(organizationService).ensurePlayerBelongsToOrganization(10L, orgId2);
+        verify(organizationService, times(2)).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("参加登録が空リストの場合ensureは呼ばれない")
+    void registerParticipations_emptyParticipations_noEnsureCall() {
+        when(playerRepository.existsById(10L)).thenReturn(true);
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of());
+
+        service.registerParticipations(request);
+
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
     }
 
     private PracticeParticipationRequest.SessionMatchParticipation createParticipation(Long sessionId, int matchNumber) {

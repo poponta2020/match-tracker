@@ -192,6 +192,8 @@ Entity Layer (JPA Entity)
 
 **ユニーク制約**: (player_id, organization_id)
 
+**自動所属**: 練習参加登録時・伝助経由の新規選手登録時に、該当団体へ未所属であれば `OrganizationService.ensurePlayerBelongsToOrganization()` により自動追加（通知設定のデフォルトレコードも同時作成）。退会は手動操作のみ。
+
 ---
 
 #### matches（対戦結果）

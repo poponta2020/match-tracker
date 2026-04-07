@@ -46,6 +46,7 @@ public class PracticeParticipantService {
     private final DensukeSyncService densukeSyncService;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LineNotificationService lineNotificationService;
+    private final OrganizationService organizationService;
 
     public PracticeParticipantService(
             PracticeParticipantRepository practiceParticipantRepository,
@@ -55,7 +56,8 @@ public class PracticeParticipantService {
             LotteryDeadlineHelper lotteryDeadlineHelper,
             @Lazy DensukeSyncService densukeSyncService,
             PlayerOrganizationRepository playerOrganizationRepository,
-            LineNotificationService lineNotificationService) {
+            LineNotificationService lineNotificationService,
+            OrganizationService organizationService) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
         this.playerRepository = playerRepository;
@@ -64,6 +66,7 @@ public class PracticeParticipantService {
         this.densukeSyncService = densukeSyncService;
         this.playerOrganizationRepository = playerOrganizationRepository;
         this.lineNotificationService = lineNotificationService;
+        this.organizationService = organizationService;
     }
 
     @Transactional
@@ -124,8 +127,9 @@ public class PracticeParticipantService {
                 .map(PracticeParticipationRequest.SessionMatchParticipation::getSessionId)
                 .distinct().collect(Collectors.toList());
 
+        List<PracticeSession> sessions = List.of();
         if (!requestSessionIds.isEmpty()) {
-            List<PracticeSession> sessions = practiceSessionRepository.findAllById(requestSessionIds);
+            sessions = practiceSessionRepository.findAllById(requestSessionIds);
             if (sessions.size() != requestSessionIds.size()) {
                 throw new ResourceNotFoundException("Some practice sessions not found");
             }
@@ -133,10 +137,15 @@ public class PracticeParticipantService {
 
         // セッションからorganizationIdとDeadlineTypeを取得
         Long organizationId = null;
-        if (!requestSessionIds.isEmpty()) {
-            organizationId = practiceSessionRepository.findById(requestSessionIds.iterator().next())
-                    .map(PracticeSession::getOrganizationId).orElse(null);
+        if (!sessions.isEmpty()) {
+            organizationId = sessions.get(0).getOrganizationId();
         }
+
+        // リクエスト内の全団体に対して未所属であれば自動的に所属させる
+        sessions.stream()
+                .map(PracticeSession::getOrganizationId)
+                .distinct()
+                .forEach(orgId -> organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), orgId));
 
         com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
 
