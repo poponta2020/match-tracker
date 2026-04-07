@@ -4,7 +4,7 @@
 
 ## PR情報
 - **PR**: {{PR_URL}}
-- **ブランチ**: {{BRANCH}} → main
+- **ブランチ**: {{BRANCH}} → {{BASE_BRANCH}}
 - **タイトル**: {{PR_TITLE}}
 
 ## レビュー観点

@@ -14,7 +14,7 @@
    - 次のレビュー回数 = カウント + 1
 
 3. PR情報を取得する
-   - `gh pr view {PR番号} --json url,title,headRefName` でPR情報を取得
+   - `gh pr view {PR番号} --json url,title,headRefName,baseRefName` でPR情報を取得
    - **headRefName** からブランチ名を取得する（現在のブランチに依存しない）
 
 4. 差分を取得する
@@ -29,6 +29,7 @@
    - `{{REVIEW_ROUND}}` → レビュー回数（数字のみ）
    - `{{BRANCH}}` → ブランチ名
    - `{{DIFF}}` → PR差分
+   - `{{BASE_BRANCH}}` → ベースブランチ名（`baseRefName`から取得）
    - `{{RESULT_FILE}}` → レビュー結果ファイルのパス（`scripts/review/output/review-result-pr{番号}-{レビュー回数}.md`）
 
 6. 生成結果を `scripts/review/output/review-prompt-pr{番号}-{レビュー回数}.md` に保存する
