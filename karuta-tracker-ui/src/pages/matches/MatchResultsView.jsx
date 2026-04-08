@@ -642,7 +642,7 @@ const MatchResultsView = () => {
             className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
-            結果を編集・入力する
+            結果を一括入力
           </button>
         )}
       </div>
@@ -654,7 +654,7 @@ const MatchResultsView = () => {
         style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <Plus className="w-5 h-5" />
-        <span className="text-sm font-medium">結果を入力</span>
+        <span className="text-sm font-medium">自分の結果を入力</span>
       </button>
     </div>
   );
