@@ -52,7 +52,7 @@ public class MatchService {
         log.debug("Finding match by id: {}", id);
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
-        MatchDto dto = enrichMatchWithPlayerNames(match);
+        MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId);
         return enriched.get(0);
     }
@@ -77,7 +77,7 @@ public class MatchService {
     public List<MatchDto> findMatchesByDate(LocalDate date, Long currentPlayerId) {
         log.debug("Finding matches by date: {}", date);
         List<Match> matches = matchRepository.findByMatchDateOrderByMatchNumber(date);
-        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches, currentPlayerId);
         return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
@@ -182,7 +182,7 @@ public class MatchService {
         log.debug("Finding matches for player {} between {} and {}", playerId, startDate, endDate);
         validatePlayerExists(playerId);
         List<Match> matches = matchRepository.findByPlayerIdAndDateRange(playerId, startDate, endDate);
-        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches, currentPlayerId);
         return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
@@ -206,7 +206,7 @@ public class MatchService {
         Long largerId = Math.max(player1Id, player2Id);
 
         List<Match> matches = matchRepository.findByTwoPlayers(smallerId, largerId);
-        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches);
+        List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches, currentPlayerId);
         return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
     }
 
@@ -381,7 +381,7 @@ public class MatchService {
         upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
 
         // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
-        MatchDto dto = enrichMatchWithPlayerNames(saved);
+        MatchDto dto = enrichMatchWithPlayerNames(saved, request.getPlayerId());
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
         dto = enriched.get(0);
 
@@ -447,7 +447,7 @@ public class MatchService {
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
 
-        MatchDto dto = enrichMatchWithPlayerNames(saved);
+        MatchDto dto = enrichMatchWithPlayerNames(saved, request.getCreatedBy());
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getCreatedBy());
         return enriched.get(0);
     }
@@ -501,7 +501,7 @@ public class MatchService {
         // 個人メモ・お手付きを保存
         upsertPersonalNote(updated.getId(), updatedBy, personalNotes, otetsukiCount);
 
-        MatchDto dto = enrichMatchWithPlayerNames(updated);
+        MatchDto dto = enrichMatchWithPlayerNames(updated, updatedBy);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), updatedBy);
 
         log.info("Successfully updated match with id: {}", id);
@@ -556,7 +556,7 @@ public class MatchService {
         // 個人メモ・お手付きを保存
         upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
 
-        MatchDto dto = enrichMatchWithPlayerNames(updated);
+        MatchDto dto = enrichMatchWithPlayerNames(updated, request.getPlayerId());
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
 
         log.info("Successfully updated match with id: {}", id);
@@ -647,7 +647,7 @@ public class MatchService {
     /**
      * 試合リストに選手名を設定
      */
-    private List<MatchDto> enrichMatchesWithPlayerNames(List<Match> matches) {
+    private List<MatchDto> enrichMatchesWithPlayerNames(List<Match> matches, Long currentPlayerId) {
         if (matches.isEmpty()) {
             return List.of();
         }
@@ -662,16 +662,8 @@ public class MatchService {
                         dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                         dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
 
-                        if (match.getWinnerId() == 0L) {
-                            dto.setResult(RESULT_DRAW);
-                            dto.setWinnerName(null);
-                        } else if (match.getWinnerId().equals(match.getPlayer1Id())) {
-                            dto.setResult(RESULT_WIN);
-                            dto.setWinnerName(playerNames.get(match.getWinnerId()));
-                        } else if (match.getWinnerId().equals(match.getPlayer2Id())) {
-                            dto.setResult(RESULT_LOSE);
-                            dto.setWinnerName(playerNames.get(match.getWinnerId()));
-                        }
+                        dto.setResult(determineResult(match, currentPlayerId));
+                        dto.setWinnerName(match.getWinnerId() == 0L ? null : playerNames.get(match.getWinnerId()));
 
                         dto.setOpponentName(dto.getPlayer2Name());
                     }
@@ -685,7 +677,7 @@ public class MatchService {
                             dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
                         }
 
-                        dto.setResult(determineResult(match, registeredPlayerId));
+                        dto.setResult(determineResult(match, currentPlayerId));
                         if (match.getWinnerId() == 0L) {
                             dto.setWinnerName(null);
                         } else if (match.getWinnerId().equals(registeredPlayerId)) {
@@ -703,8 +695,8 @@ public class MatchService {
     /**
      * 単一の試合に選手名を設定
      */
-    private MatchDto enrichMatchWithPlayerNames(Match match) {
-        List<MatchDto> enriched = enrichMatchesWithPlayerNames(List.of(match));
+    private MatchDto enrichMatchWithPlayerNames(Match match, Long currentPlayerId) {
+        List<MatchDto> enriched = enrichMatchesWithPlayerNames(List.of(match), currentPlayerId);
         return enriched.isEmpty() ? null : enriched.get(0);
     }
 
