@@ -356,6 +356,12 @@ public class WaitlistPromotionService {
      */
     @Transactional
     public Optional<PracticeParticipant> promoteNextWaitlisted(Long sessionId, Integer matchNumber, LocalDate sessionDate, Long excludePlayerId) {
+        if (!hasOfferableVacancy(sessionId, matchNumber)) {
+            log.info("Skip promotion for session {} match {}: no available slot (capacity already reserved)",
+                    sessionId, matchNumber);
+            return Optional.empty();
+        }
+
         Optional<PracticeParticipant> nextWaitlisted = excludePlayerId != null
                 ? practiceParticipantRepository
                     .findFirstBySessionIdAndMatchNumberAndStatusAndPlayerIdNotOrderByWaitlistNumberAsc(
@@ -392,6 +398,29 @@ public class WaitlistPromotionService {
         notificationService.createOfferNotification(next);
 
         return Optional.of(next);
+    }
+
+    /**
+     * 発行可能な空き枠があるかを判定する。
+     * OFFERED は「仮押さえ中の枠」とみなし、WON + OFFERED が定員以上なら新規オファーは出さない。
+     */
+    private boolean hasOfferableVacancy(Long sessionId, Integer matchNumber) {
+        Optional<PracticeSession> sessionOpt = practiceSessionRepository.findById(sessionId);
+        if (sessionOpt.isEmpty()) {
+            // 呼び出し側でセッションは通常存在するが、欠損時は既存挙動を優先して処理継続する。
+            log.warn("Session {} not found while checking vacancy for match {}", sessionId, matchNumber);
+            return true;
+        }
+
+        PracticeSession session = sessionOpt.get();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : Integer.MAX_VALUE;
+        long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                sessionId, matchNumber, ParticipantStatus.WON);
+        long offeredCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                sessionId, matchNumber, ParticipantStatus.OFFERED);
+        long availableSlots = (long) capacity - wonCount - offeredCount;
+
+        return availableSlots > 0;
     }
 
     /**
@@ -471,6 +500,50 @@ public class WaitlistPromotionService {
         }
 
         densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
+     * オファー辞退処理（通知抑制版）。
+     * LINE通知（繰り上げ先・管理者）を送信せず、通知データを返す。
+     * DensukeImportServiceでバッチ処理する用途。
+     *
+     * @param participantId 参加者レコードID
+     * @return 通知データ（繰り上げ結果 + 管理者通知データ）
+     */
+    @Transactional
+    public AdminWaitlistNotificationData respondToOfferDeclineSuppressed(Long participantId) {
+        PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
+
+        if (participant.getStatus() != ParticipantStatus.OFFERED) {
+            throw new IllegalStateException("OFFERED状態のみ応答できます（現在: " + participant.getStatus() + "）");
+        }
+
+        participant.setStatus(ParticipantStatus.DECLINED);
+        participant.setDirty(true);
+        participant.setWaitlistNumber(null);
+        participant.setRespondedAt(JstDateTimeUtil.now());
+        practiceParticipantRepository.save(participant);
+
+        renumberRemainingWaitlist(participant.getSessionId(), participant.getMatchNumber());
+
+        log.info("Player {} declined offer (suppressed) for session {} match {}",
+                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber());
+
+        PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+        Optional<PracticeParticipant> promoted = promoteNextWaitlisted(
+                participant.getSessionId(), participant.getMatchNumber(), session.getSessionDate());
+
+        densukeSyncService.triggerWriteAsync();
+
+        return AdminWaitlistNotificationData.builder()
+                .triggerAction("オファー辞退")
+                .triggerPlayerId(participant.getPlayerId())
+                .sessionId(participant.getSessionId())
+                .matchNumber(participant.getMatchNumber())
+                .promotedParticipant(promoted.orElse(null))
+                .build();
     }
 
     /**
