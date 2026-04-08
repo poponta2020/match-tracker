@@ -734,15 +734,28 @@ const PracticeList = () => {
         />
       )}
       {/* フローティングアクションボタン (FAB) */}
-      <div className="fixed left-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
-        <button
-          onClick={() => navigate('/practice/cancel')}
-          className="bg-white text-red-600 border border-red-300 pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-red-50 transition-all hover:shadow-xl flex items-center gap-2"
-        >
-          <XCircle className="w-5 h-5" />
-          <span className="text-sm font-medium">登録キャンセル</span>
-        </button>
-      </div>
+      {(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const hasCancellable = sessions.some(session => {
+          const sessionDate = new Date(session.sessionDate + 'T00:00:00');
+          if (sessionDate < today) return false;
+          const statuses = myParticipationStatuses[session.id];
+          if (!statuses || statuses.length === 0) return false;
+          return statuses.some(s => s.status === 'WON' || s.status === 'PENDING' || s.status === 'OFFERED');
+        });
+        return hasCancellable ? (
+          <div className="fixed left-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
+            <button
+              onClick={() => navigate('/practice/cancel')}
+              className="bg-white text-red-600 border border-red-300 pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-red-50 transition-all hover:shadow-xl flex items-center gap-2"
+            >
+              <XCircle className="w-5 h-5" />
+              <span className="text-sm font-medium">参加キャンセル</span>
+            </button>
+          </div>
+        ) : null;
+      })()}
       <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
         <button
           onClick={goToParticipation}
