@@ -101,7 +101,8 @@ public class LineNotificationService {
             && java.time.Duration.between(JstDateTimeUtil.now(), participant.getOfferDeadline()).toHours() < 12;
 
         Map<String, Object> flexContents = buildWaitlistOfferFlex(
-            sessionLabel, participant.getMatchNumber(), deadlineStr, participant.getId(), isUrgent);
+            sessionLabel, participant.getMatchNumber(), deadlineStr, participant.getId(),
+            participant.getSessionId(), participant.getPlayerId(), isUrgent);
 
         sendFlexToPlayer(participant.getPlayerId(), LineNotificationType.WAITLIST_OFFER, altText, flexContents);
     }
@@ -248,7 +249,8 @@ public class LineNotificationService {
      * キャンセル待ち繰り上げ用Flex Message（Bubble）を構築する
      */
     private Map<String, Object> buildWaitlistOfferFlex(String sessionLabel, int matchNumber,
-                                                        String deadlineStr, Long participantId, boolean isUrgent) {
+                                                        String deadlineStr, Long participantId,
+                                                        Long sessionId, Long playerId, boolean isUrgent) {
         // ヘッダー
         Map<String, Object> header = Map.of(
             "type", "box",
@@ -307,7 +309,7 @@ public class LineNotificationService {
             "action", Map.of(
                 "type", "postback",
                 "label", "辞退する",
-                "data", "action=waitlist_decline&participantId=" + participantId
+                "data", "action=waitlist_decline_all&sessionId=" + sessionId + "&playerId=" + playerId
             ),
             "style", "secondary",
             "height", "sm"
