@@ -3,7 +3,7 @@ name: bug-report
 description: バグ発見時にGitHub Issueを作成し、原因調査・修正・記録までを一括で行うスキル。バグを見つけたとき、バグ対応を記録したいときに使用する。
 disable-model-invocation: true
 user-invocable: true
-allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Agent
+allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Agent, Skill
 argument-hint: [バグの概要（任意）]
 ---
 
@@ -77,23 +77,35 @@ EOF
 
 判断結果をユーザーに提示し、最終判断はユーザーに委ねる。
 
-## Step 5: ブランチ確認と修正の実施
+## Step 5: Worktree作成と修正の実施
 
-### ブランチの確認
+### Worktreeの作成（並行作業のための隔離環境）
 
-修正に着手する前に現在のブランチを確認する:
+修正に着手する前に、worktreeを使って隔離された作業環境を作成する。
+これにより、他のセッションの作業を妨げずにバグ修正を進められる。
 
-1. `git branch --show-current` で現在のブランチを取得する
-2. **mainブランチ上の場合:**
-   - バグ内容からケバブケースの英語サマリーを生成する
-   - `git checkout -b fix/<summary>` でfixブランチを作成・切り替える
-3. **featureブランチ/fixブランチ上の場合:** そのまま続行する
+1. バグ内容からケバブケースの英語サマリーを生成する（例: `null-pointer-in-match-service`）
+2. worktreeを作成する:
+
+```bash
+git worktree add /tmp/fix-<summary> -b fix/<summary> origin/main
+```
+
+3. **以降のすべてのファイル操作（Read, Edit, Write, Bash）は `/tmp/fix-<summary>/` 配下のパスで行うこと**
+   - 例: `/tmp/fix-<summary>/karuta-tracker/src/main/java/...`
+   - メインの作業ディレクトリには一切触れない
 
 ### 軽微な場合
 
 1. 修正方針をユーザーに提示し、確認を取る
-2. 修正を実装する
-3. コミットする（メッセージに `Fixes #<Issue番号>` を含める）
+2. worktree内で修正を実装する
+3. worktree内でコミットする（メッセージに `Fixes #<Issue番号>` を含める）:
+
+```bash
+git -C /tmp/fix-<summary> add <対象ファイル>
+git -C /tmp/fix-<summary> commit -m "fix: <修正内容>"
+```
+
 4. Issueに原因と修正内容をコメントとして追記する：
 
 ```bash
@@ -137,17 +149,57 @@ EOF
 ```
 
 2. ユーザーに手順書を確認してもらい、承認を得る
-3. 手順書に沿って修正を実装する
+3. 手順書に沿ってworktree内で修正を実装する
 4. 各ステップ完了時にIssueコメントで進捗を更新する（チェックボックスを更新）
-5. すべての修正が完了したらコミットする（メッセージに `Fixes #<Issue番号>` を含める）
+5. すべての修正が完了したらworktree内でコミットする（メッセージに `Fixes #<Issue番号>` を含める）
 6. Issueに最終的な修正サマリーをコメントとして追記する
 
-## Step 6: 完了報告と次ステップの案内
+## Step 6: Push・PR作成
+
+### 6a. Push
+
+```bash
+git -C /tmp/fix-<summary> push -u origin fix/<summary>
+```
+
+### 6b. PR作成
+
+既にPRが存在する場合（`gh pr view fix/<summary> --json number,url` が成功）はスキップする。
+
+```bash
+gh pr create --base main --head fix/<summary> --title "fix: <バグタイトル>" --body "$(cat <<'EOF'
+## Summary
+<修正内容の箇条書き>
+
+## Bug
+Fixes #<Issue番号>
+
+## Test plan
+- [ ] 動作確認
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+### 6c. Worktreeの保持
+
+**Worktreeは削除しない。** `/ship` でPRがマージされるまで `/tmp/fix-<summary>/` を保持する。
+後続の `/fix`（レビュー指摘修正）もこのworktree上で作業する。
+
+## Step 7: レビュープロンプト生成
+
+PR作成後、自動的に `/review` スキルを呼び出してレビュープロンプトを生成する。
+
+Skillツールで `review` スキルを呼び出す。引数にはPR番号を渡す。
+
+## Step 8: 完了報告
 
 ユーザーに以下を報告する：
 - 修正内容のサマリー
 - コミットハッシュ
-- Issue URL（自動クローズされることを伝える）
-
-報告後、次のステップを案内する:
-- 「`/prepare-pr` でPR作成・pushからレビューまで進められます。」
+- Issue URL
+- PR URL
+- Worktreeの場所（`/tmp/fix-<summary>/`）
+- 生成されたレビュープロンプトファイルのパス
+- 「このファイルの内容をレビュー担当AI（Codex or Claude Code）に貼り付けてください」
