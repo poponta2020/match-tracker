@@ -638,7 +638,14 @@ public class MatchService {
         if (match.getWinnerId() == null || match.getWinnerId() == 0L) {
             return RESULT_DRAW;
         }
-        if (match.getWinnerId().equals(viewingPlayerId)) {
+        // 閲覧者が対戦者でない場合（null or 非参加者）はplayer1基準にフォールバック
+        Long effectivePlayerId = viewingPlayerId;
+        if (effectivePlayerId == null
+                || (!effectivePlayerId.equals(match.getPlayer1Id())
+                    && !effectivePlayerId.equals(match.getPlayer2Id()))) {
+            effectivePlayerId = match.getPlayer1Id();
+        }
+        if (match.getWinnerId().equals(effectivePlayerId)) {
             return RESULT_WIN;
         }
         return RESULT_LOSE;

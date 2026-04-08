@@ -1261,4 +1261,124 @@ class MatchServiceTest {
             verify(matchPairingRepository, never()).save(any(MatchPairing.class));
         }
     }
+
+    @Nested
+    @DisplayName("勝敗表示の視点ロジック")
+    class DetermineResultPerspectiveTests {
+
+        @Test
+        @DisplayName("閲覧者が勝者の場合は「勝ち」と表示される")
+        void shouldShowWinWhenViewerIsWinner() {
+            // Given: player1(id=1)が勝者、閲覧者もplayer1
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(eq(1L), anyList())).thenReturn(List.of());
+
+            // When
+            MatchDto result = matchService.findById(1L, 1L);
+
+            // Then
+            assertThat(result.getResult()).isEqualTo("勝ち");
+        }
+
+        @Test
+        @DisplayName("閲覧者が敗者の場合は「負け」と表示される")
+        void shouldShowLoseWhenViewerIsLoser() {
+            // Given: player1(id=1)が勝者、閲覧者はplayer2(id=2)
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(eq(2L), anyList())).thenReturn(List.of());
+
+            // When
+            MatchDto result = matchService.findById(1L, 2L);
+
+            // Then
+            assertThat(result.getResult()).isEqualTo("負け");
+        }
+
+        @Test
+        @DisplayName("閲覧者が非参加者の場合はplayer1基準にフォールバックする")
+        void shouldFallbackToPlayer1WhenViewerIsNotParticipant() {
+            // Given: player1(id=1)が勝者、閲覧者はid=99(非参加者)
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(eq(99L), anyList())).thenReturn(List.of());
+
+            // When
+            MatchDto result = matchService.findById(1L, 99L);
+
+            // Then: player1基準なので「勝ち」
+            assertThat(result.getResult()).isEqualTo("勝ち");
+        }
+
+        @Test
+        @DisplayName("閲覧者がnullの場合はplayer1基準にフォールバックする")
+        void shouldFallbackToPlayer1WhenViewerIsNull() {
+            // Given: player1(id=1)が勝者、閲覧者はnull
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            // When
+            MatchDto result = matchService.findById(1L, null);
+
+            // Then: player1基準なので「勝ち」
+            assertThat(result.getResult()).isEqualTo("勝ち");
+        }
+
+        @Test
+        @DisplayName("引き分けの場合は閲覧者に関わらず「引き分け」と表示される")
+        void shouldShowDrawRegardlessOfViewer() {
+            // Given: 引き分け（winnerId=0）
+            Match drawMatch = Match.builder()
+                    .id(2L)
+                    .matchDate(today)
+                    .matchNumber(2)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(0L)
+                    .build();
+            when(matchRepository.findById(2L)).thenReturn(Optional.of(drawMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(eq(1L), anyList())).thenReturn(List.of());
+
+            // When
+            MatchDto result = matchService.findById(2L, 1L);
+
+            // Then
+            assertThat(result.getResult()).isEqualTo("引き分け");
+        }
+
+        @Test
+        @DisplayName("findMatchesByDateで非参加者が閲覧してもplayer1基準になる")
+        void shouldFallbackToPlayer1InFindMatchesByDate() {
+            // Given: player1(id=1)が勝者、閲覧者はid=99(非参加者)
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            // When
+            List<MatchDto> result = matchService.findMatchesByDate(today, 99L);
+
+            // Then: player1基準なので「勝ち」
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getResult()).isEqualTo("勝ち");
+        }
+
+        @Test
+        @DisplayName("findMatchesBetweenPlayersで非参加者が閲覧してもplayer1基準になる")
+        void shouldFallbackToPlayer1InFindMatchesBetweenPlayers() {
+            // Given: player1(id=1)が勝者、閲覧者はid=99(非参加者)
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(matchRepository.findByTwoPlayers(1L, 2L)).thenReturn(List.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            // When
+            List<MatchDto> result = matchService.findMatchesBetweenPlayers(1L, 2L, 99L);
+
+            // Then: player1基準なので「勝ち」
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getResult()).isEqualTo("勝ち");
+        }
+    }
 }
