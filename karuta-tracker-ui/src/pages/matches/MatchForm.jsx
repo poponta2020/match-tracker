@@ -55,38 +55,40 @@ const MatchForm = () => {
   const allPairingsCache = useRef([]); // 全ペアリングデータ
   const byeActivityCache = useRef({}); // matchNumber -> byeActivity or null（日付はformData.matchDateで固定のためキーに含めない）
 
-  // useEffect 1: 選手一覧 + 今日の練習セッション取得
+  // useEffect 1: 選手一覧 + 練習セッション取得
   useEffect(() => {
     const fetchData = async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
+        // location.stateで日付が指定されていればその日付、なければ今日
+        const targetDate = initialData.matchDate || today;
 
         const promises = [
           playerAPI.getAll(),
-          practiceAPI.getByDate(today).catch(() => ({ data: null }))
+          practiceAPI.getByDate(targetDate).catch(() => ({ data: null }))
         ];
         if (isEdit) promises.push(matchAPI.getById(id));
-        const [playersRes, todaySessionRes, matchRes] = await Promise.all(promises);
+        const [playersRes, sessionRes, matchRes] = await Promise.all(promises);
 
         setPlayers(
           playersRes.data.filter((p) => p.id !== currentPlayer.id)
         );
 
-        const todaySessions = todaySessionRes.data ? [todaySessionRes.data] : [];
-        setPracticeSessions(todaySessions);
+        const sessions = sessionRes.data ? [sessionRes.data] : [];
+        setPracticeSessions(sessions);
 
         // 練習セッションを直接セット（useEffect 2で再取得しない）
-        if (todaySessionRes.data) {
-          setPracticeSession(todaySessionRes.data);
+        if (sessionRes.data) {
+          setPracticeSession(sessionRes.data);
 
-          // 参加登録チェック（新規作成時のみ）
-          if (!isEdit) {
+          // 参加登録チェック（新規作成時のみ、今日の練習の場合のみ）
+          if (!isEdit && targetDate === today) {
             try {
               const now = new Date();
               const participationsRes = await practiceAPI.getPlayerParticipations(
                 currentPlayer.id, now.getFullYear(), now.getMonth() + 1
               );
-              const sessionParticipations = participationsRes.data?.[todaySessionRes.data.id] || [];
+              const sessionParticipations = participationsRes.data?.[sessionRes.data.id] || [];
               if (sessionParticipations.length === 0) {
                 setShowParticipationDialog(true);
               }
@@ -100,8 +102,8 @@ const MatchForm = () => {
         if (isEdit && matchRes) {
           const match = matchRes.data;
 
-          // 過去の日付の場合、その日のセッションも取得
-          if (match.matchDate !== today) {
+          // 編集時に試合の日付がtargetDateと異なる場合、その日のセッションも取得
+          if (match.matchDate !== targetDate) {
             try {
               const editSessionRes = await practiceAPI.getByDate(match.matchDate);
               if (editSessionRes.data) {
@@ -131,7 +133,7 @@ const MatchForm = () => {
         }
 
         // 練習日がない場合、または編集モードの場合はここでローディング終了
-        if (!todaySessionRes.data || isEdit) {
+        if (!sessionRes.data || isEdit) {
           setInitialLoading(false);
         }
       } catch (err) {
