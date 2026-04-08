@@ -909,9 +909,8 @@ public class LineNotificationService {
                                      Player offeredPlayer, Map<Long, String> playerNames) {
         for (PracticeParticipant wp : waitlist) {
             String name = playerNames.getOrDefault(wp.getPlayerId(), "不明");
-            boolean isFirstAndOffered = offeredPlayer != null
-                && offeredPlayer.getId().equals(wp.getPlayerId());
-            if (isFirstAndOffered) {
+            boolean isOffered = wp.getStatus() == ParticipantStatus.OFFERED;
+            if (isOffered) {
                 bodyContents.add(Map.of("type", "text",
                     "text", String.format("%d番: %s（オファー応答待ち）", wp.getWaitlistNumber(), name),
                     "size", "sm", "color", "#27AE60", "weight", "bold", "margin", "sm", "wrap", true));
