@@ -642,19 +642,19 @@ const MatchResultsView = () => {
             className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Edit className="w-5 h-5" />
-            結果を編集・入力する
+            結果を一括入力
           </button>
         )}
       </div>
 
       {/* FAB: 試合結果を追加 */}
       <button
-        onClick={() => navigate('/matches/new')}
+        onClick={() => navigate('/matches/new', { state: { matchDate: selectedDate, matchNumber: currentMatchNumber } })}
         className="fixed right-5 bg-[#4a6b5a] text-white rounded-full shadow-lg hover:bg-[#3d5a4c] active:scale-95 transition-all flex items-center justify-center z-40 px-4 py-3 gap-2"
         style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <Plus className="w-5 h-5" />
-        <span className="text-sm font-medium">結果を入力</span>
+        <span className="text-sm font-medium">自分の結果を入力</span>
       </button>
     </div>
   );
