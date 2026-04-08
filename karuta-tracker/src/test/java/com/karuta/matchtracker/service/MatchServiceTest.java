@@ -950,6 +950,46 @@ class MatchServiceTest {
         }
 
         @Test
+        @DisplayName("player2側から編集してもplayer1Idが上書きされないこと")
+        void shouldNotOverwritePlayer1IdWhenEditedByPlayer2() {
+            // Given: player2(id=2L)がplayer1(id=1L)との試合を編集するケース
+            LocalDate today = LocalDate.now();
+            Match existingMatch = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(2L)
+                    .scoreDifference(5)
+                    .build();
+
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(2L);
+            request.setOpponentName("田中太郎");
+            request.setResult("負け");
+            request.setScoreDifference(3);
+
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.updateMatchSimple(1L, request);
+
+            // Then
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L);
+            assertThat(saved.getPlayer2Id()).isEqualTo(2L);
+            assertThat(saved.getWinnerId()).isEqualTo(1L);
+        }
+
+        @Test
         @DisplayName("両者登録済み試合でRESULT_LOSEのとき相手IDがwinnerIdになること")
         void shouldSetOpponentAsWinnerOnLose() {
             // Given
