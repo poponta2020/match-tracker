@@ -282,7 +282,7 @@ class DensukeImportServicePhaseCoverageTest {
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(waitlistPromotionService).respondToOffer(23L, false);
+        verify(waitlistPromotionService).respondToOfferDeclineSuppressed(23L);
     }
 
     @Test
@@ -299,12 +299,12 @@ class DensukeImportServicePhaseCoverageTest {
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), MATCH_NUMBER))
                 .thenReturn(List.of(existing));
         doThrow(new IllegalStateException("decline failed"))
-                .when(waitlistPromotionService).respondToOffer(230L, false);
+                .when(waitlistPromotionService).respondToOfferDeclineSuppressed(230L);
 
         ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
 
         assertThat(result.getRegisteredCount()).isEqualTo(1);
-        verify(waitlistPromotionService).respondToOffer(230L, false);
+        verify(waitlistPromotionService).respondToOfferDeclineSuppressed(230L);
     }
 
     @Test

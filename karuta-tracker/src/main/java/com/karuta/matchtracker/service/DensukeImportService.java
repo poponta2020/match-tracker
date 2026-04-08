@@ -457,9 +457,12 @@ public class DensukeImportService {
                 return true;
             }
             case OFFERED -> {
-                // 3-C6: オファー辞退 → DECLINED → 次繰り上げ
+                // 3-C6: オファー辞退 → DECLINED → 次繰り上げ（通知はバッチ送信）
                 try {
-                    waitlistPromotionService.respondToOffer(existing.getId(), false);
+                    AdminWaitlistNotificationData notifData = waitlistPromotionService.respondToOfferDeclineSuppressed(existing.getId());
+                    if (notifData != null) {
+                        pendingNotifications.add(notifData);
+                    }
                     log.info("Phase3-C6: OFFERED player {} declined via densuke", playerId);
                 } catch (Exception e) {
                     log.warn("Phase3-C6: failed to decline offer for player {}: {}", playerId, e.getMessage());
