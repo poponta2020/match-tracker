@@ -522,6 +522,11 @@ public class MatchService {
         Player player = playerRepository.findById(request.getPlayerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Player", "id", request.getPlayerId()));
 
+        // リクエストのplayerIdが対戦参加者であることを検証
+        if (!request.getPlayerId().equals(match.getPlayer1Id()) && !request.getPlayerId().equals(match.getPlayer2Id())) {
+            throw new IllegalArgumentException("指定された選手はこの試合の参加者ではありません");
+        }
+
         // 結果に基づいて勝者を決定
         Long winnerId;
         if (RESULT_WIN.equals(request.getResult())) {
