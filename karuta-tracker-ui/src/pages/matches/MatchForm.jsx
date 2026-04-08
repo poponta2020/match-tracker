@@ -836,7 +836,17 @@ const MatchForm = () => {
           <textarea
             name="personalNotes"
             value={formData.personalNotes}
-            onChange={handleChange}
+            onChange={(e) => {
+              handleChange(e);
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+            }}
+            ref={(el) => {
+              if (el) {
+                el.style.height = 'auto';
+                el.style.height = el.scrollHeight + 'px';
+              }
+            }}
             rows="2"
             placeholder="試合の感想、反省点など..."
             className="w-full px-0 py-2 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] resize-none text-[#374151] placeholder-[#9ca3af]"
