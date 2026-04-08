@@ -889,6 +889,123 @@ class MatchServiceTest {
         }
 
         @Test
+        @DisplayName("登録済み選手同士の試合でplayer2が負けた場合、winnerId=player1Idになる")
+        void shouldSetWinnerToPlayer1WhenPlayer2Loses() {
+            // Given
+            Match existingMatch = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(0L)
+                    .scoreDifference(0)
+                    .build();
+
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(2L); // player2が記録
+            request.setOpponentName("山田太郎");
+            request.setResult("負け");
+            request.setScoreDifference(3);
+
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.updateMatchSimple(1L, request);
+
+            // Then
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getWinnerId()).isEqualTo(1L); // player1が勝者
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L); // 変更されない
+            assertThat(saved.getPlayer2Id()).isEqualTo(2L); // 変更されない
+        }
+
+        @Test
+        @DisplayName("登録済み選手同士の試合でplayer1が負けた場合、winnerId=player2Idになる")
+        void shouldSetWinnerToPlayer2WhenPlayer1Loses() {
+            // Given
+            Match existingMatch = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(0L)
+                    .scoreDifference(0)
+                    .build();
+
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L); // player1が記録
+            request.setOpponentName("佐藤花子");
+            request.setResult("負け");
+            request.setScoreDifference(5);
+
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.updateMatchSimple(1L, request);
+
+            // Then
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getWinnerId()).isEqualTo(2L); // player2が勝者
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L); // 変更されない
+            assertThat(saved.getPlayer2Id()).isEqualTo(2L); // 変更されない
+        }
+
+        @Test
+        @DisplayName("登録済み選手同士の試合で勝った場合、winnerId=自分のIDになる")
+        void shouldSetWinnerToSelfWhenWin() {
+            // Given
+            Match existingMatch = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(0L)
+                    .scoreDifference(0)
+                    .build();
+
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(2L); // player2が記録
+            request.setOpponentName("山田太郎");
+            request.setResult("勝ち");
+            request.setScoreDifference(7);
+
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(existingMatch));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
+
+            // When
+            matchService.updateMatchSimple(1L, request);
+
+            // Then
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            Match saved = captor.getValue();
+            assertThat(saved.getWinnerId()).isEqualTo(2L); // player2自身が勝者
+            assertThat(saved.getPlayer1Id()).isEqualTo(1L); // 変更されない
+            assertThat(saved.getPlayer2Id()).isEqualTo(2L); // 変更されない
+        }
+
+        @Test
         @DisplayName("存在しない試合の更新はエラー")
         void shouldFailForNonexistentMatch() {
             // Given
