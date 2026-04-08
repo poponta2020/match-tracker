@@ -244,6 +244,8 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of(offeredB, waitlistedC));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 
@@ -680,6 +682,8 @@ class WaitlistPromotionServiceTest {
             // 残りOFFERED
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(remaining));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 
@@ -705,6 +709,8 @@ class WaitlistPromotionServiceTest {
             // 残りOFFEREDなし
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of());
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 
