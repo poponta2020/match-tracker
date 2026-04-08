@@ -527,15 +527,17 @@ public class MatchService {
         if (RESULT_WIN.equals(request.getResult())) {
             winnerId = request.getPlayerId();
         } else if (RESULT_LOSE.equals(request.getResult())) {
-            winnerId = 0L; // 対戦相手が勝者
+            // 対戦相手のIDを特定（自分がplayer1ならplayer2、逆も同様）
+            Long opponentId = match.getPlayer1Id().equals(request.getPlayerId())
+                    ? match.getPlayer2Id() : match.getPlayer1Id();
+            winnerId = opponentId;
         } else {
             winnerId = 0L; // 引き分け
         }
 
-        // 試合情報を更新
+        // 試合情報を更新（player1Id/player2Idは変更しない）
         match.setMatchDate(request.getMatchDate());
         match.setMatchNumber(request.getMatchNumber());
-        match.setPlayer1Id(request.getPlayerId());
         match.setWinnerId(winnerId);
         match.setScoreDifference(Math.abs(request.getScoreDifference()));
         match.setOpponentName(request.getOpponentName());
