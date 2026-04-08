@@ -742,7 +742,7 @@ const PracticeList = () => {
           if (sessionDate < today) return false;
           const statuses = myParticipationStatuses[session.id];
           if (!statuses || statuses.length === 0) return false;
-          return statuses.some(s => s.status === 'WON' || s.status === 'PENDING' || s.status === 'OFFERED');
+          return statuses.some(s => s.status === 'WON');
         });
         return hasCancellable ? (
           <div className="fixed left-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
