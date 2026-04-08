@@ -244,6 +244,8 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of(offeredB, waitlistedC));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 
@@ -680,12 +682,41 @@ class WaitlistPromotionServiceTest {
             // 残りOFFERED
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(remaining));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 
             assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.WON);
             verify(lineNotificationService).sendRemainingOfferNotification(List.of(remaining));
             verify(densukeSyncService).triggerWriteAsync();
+        }
+
+        @Test
+        @DisplayName("承諾時に管理者通知が送信される")
+        void respondToOffer_accept_sendsAdminNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .build();
+            PracticeSession session = PracticeSession.builder().id(100L).build();
+            Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                            eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                    .thenReturn(List.of());
+            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
+
+            service.respondToOffer(1L, true);
+
+            verify(lineNotificationService).sendAdminWaitlistNotification(
+                    eq("オファー承諾"), eq(triggerPlayer), eq(session), any(), any(), any());
         }
 
         @Test
@@ -705,6 +736,8 @@ class WaitlistPromotionServiceTest {
             // 残りOFFEREDなし
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of());
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                    PracticeSession.builder().id(100L).build()));
 
             service.respondToOffer(1L, true);
 

@@ -769,6 +769,7 @@ public class LineNotificationService {
             case "キャンセル（当日補充）" -> "当日キャンセル発生通知";
             case "降格" -> "練習参加者手動入替通知";
             case "オファー辞退" -> "オファー辞退通知";
+            case "オファー承諾" -> "オファー承諾通知";
             case "キャンセル待ち辞退" -> "キャンセル待ち辞退通知";
             case "オファー期限切れ" -> "オファー辞退通知（期限切れ）";
             default -> "キャンセル待ち状況通知";
@@ -783,6 +784,7 @@ public class LineNotificationService {
             case "キャンセル（当日補充）" -> "当日キャンセル";
             case "降格" -> "管理者操作";
             case "オファー辞退" -> "オファー辞退";
+            case "オファー承諾" -> "オファー承諾";
             case "キャンセル待ち辞退" -> "キャンセル待ち辞退";
             case "オファー期限切れ" -> "オファー辞退（期限切れ）";
             default -> triggerAction;

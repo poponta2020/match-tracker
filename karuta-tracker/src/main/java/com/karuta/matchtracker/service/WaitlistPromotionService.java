@@ -464,6 +464,18 @@ public class WaitlistPromotionService {
             if (!remainingOffered.isEmpty()) {
                 lineNotificationService.sendRemainingOfferNotification(remainingOffered);
             }
+
+            // 管理者通知
+            PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", participant.getSessionId()));
+            AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
+                    .triggerAction("オファー承諾")
+                    .triggerPlayerId(participant.getPlayerId())
+                    .sessionId(participant.getSessionId())
+                    .matchNumber(participant.getMatchNumber())
+                    .promotedParticipant(null)
+                    .build();
+            sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
         } else {
             participant.setStatus(ParticipantStatus.DECLINED);
             participant.setDirty(true);
