@@ -4,6 +4,7 @@ import com.karuta.matchtracker.config.AdjacentRoomConfig;
 import com.karuta.matchtracker.dto.AdjacentRoomStatusDto;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.RoomAvailabilityCache;
+import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
@@ -85,18 +86,17 @@ public class AdjacentRoomService {
         }
 
         Long expandedVenueId = AdjacentRoomConfig.getExpandedVenueId(currentVenueId);
-        Integer expandedCapacity = AdjacentRoomConfig.getExpandedCapacity(currentVenueId);
 
-        // 拡張後の会場が存在するか確認
-        venueRepository.findById(expandedVenueId)
+        // 拡張後の会場が存在するか確認し、Venueマスタから定員を取得
+        Venue expandedVenue = venueRepository.findById(expandedVenueId)
                 .orElseThrow(() -> new ResourceNotFoundException("Venue", expandedVenueId));
 
         session.setVenueId(expandedVenueId);
-        session.setCapacity(expandedCapacity);
+        session.setCapacity(expandedVenue.getCapacity());
         session.setUpdatedBy(currentUserId);
         practiceSessionRepository.save(session);
 
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
-                sessionId, currentVenueId, expandedVenueId, expandedCapacity);
+                sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
     }
 }

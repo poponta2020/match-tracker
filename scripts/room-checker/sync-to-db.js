@@ -91,8 +91,27 @@ async function upsertToDb(dbClient, roomName, targetDate, timeSlot, status) {
 
 async function main() {
   // DB接続設定（環境変数から取得）
+  // DATABASE_URL を優先し、なければ DB_URL + DB_USERNAME + DB_PASSWORD から構築
+  let connectionString = process.env.DATABASE_URL;
+  if (!connectionString && process.env.DB_URL) {
+    // jdbc:postgresql://host:port/db → postgresql://host:port/db に正規化
+    const dbUrl = process.env.DB_URL.replace(/^jdbc:/, '');
+    const username = process.env.DB_USERNAME;
+    const password = process.env.DB_PASSWORD;
+    if (username && password) {
+      const url = new URL(dbUrl);
+      url.username = username;
+      url.password = password;
+      connectionString = url.toString();
+    } else {
+      connectionString = dbUrl;
+    }
+  }
+  if (!connectionString) {
+    throw new Error('DATABASE_URL または DB_URL 環境変数が設定されていません');
+  }
   const dbClient = new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
   });
 
   let browser;
