@@ -1531,7 +1531,216 @@ public class LineNotificationService {
     }
 
     /**
-     * 空き募集Flex Messageを構築する
+     * セッション単位で空き枠通知を統合して送信する（選手向け）。
+     * 複数試合の空き枠情報を1通のFlex Messageにまとめる。
+     *
+     * @param session           対象セッション
+     * @param vacanciesByMatch  試合番号 → 空き枠数のマップ（空き枠 > 0 のもののみ）
+     * @param cancelledPlayerId キャンセルしたプレイヤーのID（除外対象、nullの場合は除外なし）
+     */
+    public void sendConsolidatedSameDayVacancyNotification(PracticeSession session,
+                                                            Map<Integer, Integer> vacanciesByMatch,
+                                                            Long cancelledPlayerId) {
+        if (vacanciesByMatch.isEmpty()) return;
+
+        String sessionLabel = getSessionLabel(session);
+
+        // 全対象試合のWONプレイヤーを収集（除外用）
+        Set<Long> allWonPlayerIds = new HashSet<>();
+        for (Integer matchNumber : vacanciesByMatch.keySet()) {
+            List<PracticeParticipant> currentWon = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+            currentWon.stream().map(PracticeParticipant::getPlayerId).forEach(allWonPlayerIds::add);
+        }
+
+        // 送信先: 団体全メンバー（全対象試合のWON参加者とキャンセル者を除外）
+        List<PlayerOrganization> orgMembers = playerOrganizationRepository
+                .findByOrganizationId(session.getOrganizationId());
+        List<Long> recipientIds = orgMembers.stream()
+                .map(PlayerOrganization::getPlayerId)
+                .distinct()
+                .filter(id -> cancelledPlayerId == null || !id.equals(cancelledPlayerId))
+                .filter(id -> !allWonPlayerIds.contains(id))
+                .toList();
+
+        if (recipientIds.isEmpty()) return;
+
+        String matchSummary = vacanciesByMatch.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                .collect(Collectors.joining(", "));
+        String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
+
+        Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
+                sessionLabel, vacanciesByMatch, session.getId(), true);
+
+        for (Long playerId : recipientIds) {
+            try {
+                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated vacancy notification to {} players for session {} ({} matches)",
+                recipientIds.size(), session.getId(), vacanciesByMatch.size());
+    }
+
+    /**
+     * セッション単位で管理者向け空き枠通知を統合して送信する。
+     *
+     * @param session          対象セッション
+     * @param vacanciesByMatch 試合番号 → 空き枠数のマップ
+     */
+    public void sendConsolidatedAdminVacancyNotification(PracticeSession session,
+                                                          Map<Integer, Integer> vacanciesByMatch) {
+        if (vacanciesByMatch.isEmpty()) return;
+
+        String sessionLabel = getSessionLabel(session);
+
+        String matchSummary = vacanciesByMatch.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                .collect(Collectors.joining(", "));
+        String altText = String.format("【管理者通知】%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
+
+        Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
+                sessionLabel, vacanciesByMatch, session.getId(), false);
+
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendFlexToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, altText, flex);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated admin vacancy notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated admin vacancy notification to {} admins for session {} ({} matches)",
+                adminRecipients.size(), session.getId(), vacanciesByMatch.size());
+    }
+
+    /**
+     * セッション単位統合版の空き枠Flex Messageを構築する。
+     * オファー用Flex Messageと同じ構造（ヘッダー + ボディ + フッター）。
+     *
+     * @param includeButtons trueの場合、試合ごとの「参加する」ボタンと「全試合参加」ボタンを含める
+     */
+    private Map<String, Object> buildConsolidatedSameDayVacancyFlex(String sessionLabel,
+                                                                      Map<Integer, Integer> vacanciesByMatch,
+                                                                      Long sessionId, boolean includeButtons) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", List.of(
+                        Map.of("type", "text", "text", "空き枠のお知らせ",
+                                "color", "#ffffff", "weight", "bold", "size", "md")
+                ),
+                "backgroundColor", "#FF9800",
+                "paddingAll", "15px"
+        );
+
+        // ボディ
+        List<Object> bodyContents = new ArrayList<>(List.of(
+                Map.of("type", "text", "text", sessionLabel + "の練習",
+                        "weight", "bold", "size", "lg", "margin", "none", "wrap", true)
+        ));
+
+        // 各試合の空き枠情報
+        List<Map.Entry<Integer, Integer>> sortedEntries = vacanciesByMatch.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+
+        for (Map.Entry<Integer, Integer> entry : sortedEntries) {
+            bodyContents.add(Map.of("type", "text",
+                    "text", entry.getKey() + "試合目: " + entry.getValue() + "名分空き",
+                    "size", "md", "margin", "sm", "color", "#333333", "wrap", true));
+        }
+
+        if (includeButtons) {
+            bodyContents.add(Map.of("type", "text",
+                    "text", "参加希望の場合はボタンを押してください",
+                    "size", "sm", "margin", "lg", "color", "#888888", "wrap", true));
+        }
+
+        Map<String, Object> body = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", bodyContents,
+                "paddingAll", "20px"
+        );
+
+        if (!includeButtons) {
+            return Map.of(
+                    "type", "bubble",
+                    "header", header,
+                    "body", body
+            );
+        }
+
+        // フッター（ボタン群）
+        List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
+        Map<String, Object> footer = Map.of(
+                "type", "box",
+                "layout", "vertical",
+                "contents", footerContents,
+                "spacing", "sm",
+                "paddingAll", "15px"
+        );
+
+        return Map.of(
+                "type", "bubble",
+                "header", header,
+                "body", body,
+                "footer", footer
+        );
+    }
+
+    /**
+     * 空き枠通知用ボタン群を構築する。
+     * - 個別参加ボタン（オレンジ） × N
+     * - 全試合参加（青）※2試合以上の場合のみ
+     */
+    private List<Object> buildVacancyJoinButtons(Map<Integer, Integer> vacanciesByMatch, Long sessionId) {
+        List<Object> buttons = new ArrayList<>();
+
+        // 個別参加ボタン（オレンジ）
+        List<Integer> sortedMatchNumbers = vacanciesByMatch.keySet().stream().sorted().toList();
+        for (Integer matchNumber : sortedMatchNumbers) {
+            buttons.add(Map.of(
+                    "type", "button",
+                    "action", Map.of(
+                            "type", "postback",
+                            "label", matchNumber + "試合目に参加",
+                            "data", "action=same_day_join&sessionId=" + sessionId + "&matchNumber=" + matchNumber
+                    ),
+                    "style", "primary",
+                    "color", "#FF9800",
+                    "height", "sm"
+            ));
+        }
+
+        // 全試合参加（青）※2試合以上の場合のみ
+        if (vacanciesByMatch.size() >= 2) {
+            buttons.add(Map.of(
+                    "type", "button",
+                    "action", Map.of(
+                            "type", "postback",
+                            "label", "すべての試合に参加",
+                            "data", "action=same_day_join_all&sessionId=" + sessionId
+                    ),
+                    "style", "primary",
+                    "color", "#2E86C1",
+                    "height", "sm"
+            ));
+        }
+
+        return buttons;
+    }
+
+    /**
+     * 空き募集Flex Messageを構築する（単一試合版）
      * @param includeJoinButton trueの場合「参加する」ボタンを含める。管理者向けはfalse。
      */
     private Map<String, Object> buildSameDayVacancyFlex(String sessionLabel, int matchNumber, int vacancies, Long sessionId, boolean includeJoinButton) {
