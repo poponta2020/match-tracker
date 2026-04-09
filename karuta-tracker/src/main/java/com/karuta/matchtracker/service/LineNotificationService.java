@@ -1570,16 +1570,26 @@ public class LineNotificationService {
 
         if (recipientIds.isEmpty()) return;
 
-        String matchSummary = vacanciesByMatch.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
-                .collect(Collectors.joining(", "));
-        String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
-
-        Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
-                sessionLabel, vacanciesByMatch, session.getId(), true);
-
         for (Long playerId : recipientIds) {
+            // プレイヤーごとに参加可能な試合のみを抽出
+            Map<Integer, Integer> playerVacancies = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Integer> entry : vacanciesByMatch.entrySet()) {
+                Set<Long> wonIds = wonPlayersByMatch.get(entry.getKey());
+                if (wonIds == null || !wonIds.contains(playerId)) {
+                    playerVacancies.put(entry.getKey(), entry.getValue());
+                }
+            }
+            if (playerVacancies.isEmpty()) continue;
+
+            String matchSummary = playerVacancies.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                    .collect(Collectors.joining(", "));
+            String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
+
+            Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
+                    sessionLabel, playerVacancies, session.getId(), true);
+
             try {
                 sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
             } catch (Exception e) {
