@@ -130,6 +130,7 @@ public class PushSubscriptionController {
         pref.setOfferExpired(request.isOfferExpired());
         pref.setChannelReclaimWarning(request.isChannelReclaimWarning());
         pref.setDensukeUnmatched(request.isDensukeUnmatched());
+        pref.setAdjacentRoom(request.isAdjacentRoom());
 
         pushNotificationPreferenceRepository.save(pref);
         log.info("Updated push notification preferences for player {} org {}", request.getPlayerId(), request.getOrganizationId());
