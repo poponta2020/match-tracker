@@ -106,10 +106,11 @@ class AdjacentRoomServiceTest {
         when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
         when(practiceSessionRepository.save(any())).thenReturn(session);
 
-        adjacentRoomService.expandVenue(1L);
+        adjacentRoomService.expandVenue(1L, 100L);
 
         assertEquals(7L, session.getVenueId());
         assertEquals(24, session.getCapacity());
+        assertEquals(100L, session.getUpdatedBy());
         verify(practiceSessionRepository).save(session);
     }
 
@@ -120,7 +121,7 @@ class AdjacentRoomServiceTest {
                 .id(1L).venueId(1L).capacity(20).build();
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
 
-        assertThrows(IllegalStateException.class, () -> adjacentRoomService.expandVenue(1L));
+        assertThrows(IllegalStateException.class, () -> adjacentRoomService.expandVenue(1L, 100L));
     }
 
     @Test
@@ -128,7 +129,7 @@ class AdjacentRoomServiceTest {
     void expandVenue_sessionNotFound() {
         when(practiceSessionRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> adjacentRoomService.expandVenue(999L));
+        assertThrows(ResourceNotFoundException.class, () -> adjacentRoomService.expandVenue(999L, 100L));
     }
 
     @Test
@@ -145,7 +146,7 @@ class AdjacentRoomServiceTest {
                 .thenReturn(Optional.of(cache));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> adjacentRoomService.expandVenue(1L));
+                () -> adjacentRoomService.expandVenue(1L, 100L));
         assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
         verify(practiceSessionRepository, never()).save(any());
     }
@@ -162,7 +163,7 @@ class AdjacentRoomServiceTest {
                 .thenReturn(Optional.empty());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> adjacentRoomService.expandVenue(1L));
+                () -> adjacentRoomService.expandVenue(1L, 100L));
         assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
         verify(practiceSessionRepository, never()).save(any());
     }

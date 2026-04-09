@@ -437,7 +437,8 @@ public class PracticeSessionController {
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         practiceSessionService.checkAdminScope(id, role, adminOrgId);
 
-        adjacentRoomService.expandVenue(id);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        adjacentRoomService.expandVenue(id, currentUserId);
         PracticeSessionDto updatedSession = practiceSessionService.findById(id);
         return ResponseEntity.ok(updatedSession);
     }

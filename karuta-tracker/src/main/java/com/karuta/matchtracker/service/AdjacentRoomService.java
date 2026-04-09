@@ -66,9 +66,10 @@ public class AdjacentRoomService {
      * 会場を拡張する（隣室と合わせた大部屋に変更）
      *
      * @param sessionId セッションID
+     * @param currentUserId 操作ユーザーID
      */
     @Transactional
-    public void expandVenue(Long sessionId) {
+    public void expandVenue(Long sessionId, Long currentUserId) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
@@ -92,6 +93,7 @@ public class AdjacentRoomService {
 
         session.setVenueId(expandedVenueId);
         session.setCapacity(expandedCapacity);
+        session.setUpdatedBy(currentUserId);
         practiceSessionRepository.save(session);
 
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
