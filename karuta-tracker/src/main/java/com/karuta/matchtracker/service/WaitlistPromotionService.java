@@ -319,12 +319,13 @@ public class WaitlistPromotionService {
      * 当日補充で全試合に一括参加する。
      * 空き枠があり、まだWONでない試合に一括で参加登録する。
      *
-     * @param sessionId セッションID
-     * @param playerId  プレイヤーID
+     * @param sessionId    セッションID
+     * @param playerId     プレイヤーID
+     * @param matchNumbers 対象試合番号リスト（通知時点の空き試合）。nullの場合は全試合を対象とする。
      * @return 参加登録できた試合数
      */
     @Transactional
-    public synchronized int handleSameDayJoinAll(Long sessionId, Long playerId) {
+    public synchronized int handleSameDayJoinAll(Long sessionId, Long playerId, List<Integer> matchNumbers) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
@@ -344,12 +345,21 @@ public class WaitlistPromotionService {
         int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
         int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
 
+        // 対象試合番号リストが指定されていない場合は全試合を対象とする
+        List<Integer> targetMatches = matchNumbers;
+        if (targetMatches == null || targetMatches.isEmpty()) {
+            targetMatches = new java.util.ArrayList<>();
+            for (int i = 1; i <= totalMatches; i++) {
+                targetMatches.add(i);
+            }
+        }
+
         Player joinedPlayer = playerRepository.findById(playerId).orElse(null);
         String playerName = joinedPlayer != null ? joinedPlayer.getName() : "不明";
 
         int joinedCount = 0;
 
-        for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+        for (int matchNumber : targetMatches) {
             // 既にWONかどうかチェック
             List<PracticeParticipant> existingRecords = practiceParticipantRepository
                     .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);

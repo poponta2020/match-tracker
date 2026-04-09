@@ -515,7 +515,18 @@ public class LineWebhookController {
 
         try {
             Long sessionId = Long.parseLong(sessionIdStr);
-            int joinedCount = waitlistPromotionService.handleSameDayJoinAll(sessionId, playerId);
+
+            // 通知時点の対象試合番号を取得（指定がなければnull→全試合対象）
+            String matchNumbersStr = params.getOrDefault("matchNumbers", "");
+            java.util.List<Integer> matchNumbers = null;
+            if (!matchNumbersStr.isEmpty()) {
+                matchNumbers = java.util.Arrays.stream(matchNumbersStr.split(","))
+                        .map(String::trim)
+                        .map(Integer::parseInt)
+                        .toList();
+            }
+
+            int joinedCount = waitlistPromotionService.handleSameDayJoinAll(sessionId, playerId, matchNumbers);
             if (joinedCount == 0) {
                 sendReply(channel, replyToken, "参加可能な空き試合がありませんでした。");
             } else {

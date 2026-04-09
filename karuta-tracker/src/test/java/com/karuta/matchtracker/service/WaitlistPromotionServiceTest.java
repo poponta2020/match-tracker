@@ -573,7 +573,7 @@ class WaitlistPromotionServiceTest {
                             .thenReturn(List.of());
                 }
 
-                int result = service.handleSameDayJoinAll(100L, 20L);
+                int result = service.handleSameDayJoinAll(100L, 20L, null);
 
                 assertThat(result).isEqualTo(3);
                 verify(practiceParticipantRepository, times(3)).save(any(PracticeParticipant.class));
@@ -595,7 +595,7 @@ class WaitlistPromotionServiceTest {
 
                 when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
 
-                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L))
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, null))
                         .isInstanceOf(IllegalStateException.class)
                         .hasMessageContaining("当日以外のセッションには参加できません");
             }
@@ -615,7 +615,7 @@ class WaitlistPromotionServiceTest {
 
                 when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
 
-                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L))
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, null))
                         .isInstanceOf(IllegalStateException.class)
                         .hasMessageContaining("練習開始時間を過ぎているため");
             }
@@ -649,10 +649,45 @@ class WaitlistPromotionServiceTest {
                 when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 2, ParticipantStatus.WON))
                         .thenReturn(List.of());
 
-                int result = service.handleSameDayJoinAll(100L, 20L);
+                int result = service.handleSameDayJoinAll(100L, 20L, null);
 
                 assertThat(result).isEqualTo(1); // 2試合目のみ参加
                 verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+            }
+        }
+
+        @Test
+        @DisplayName("matchNumbers指定時は対象試合のみ参加し、対象外試合には登録しない")
+        void handleSameDayJoinAll_onlyTargetMatches() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+            Player player = Player.builder().id(20L).name("参加者").build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+                // 1試合目・3試合目: 空き枠あり、未参加
+                for (int m : List.of(1, 3)) {
+                    when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, m))
+                            .thenReturn(List.of());
+                    when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, m, ParticipantStatus.WON))
+                            .thenReturn(List.of());
+                }
+
+                // matchNumbers=[1,3] を指定 → 2試合目は対象外
+                int result = service.handleSameDayJoinAll(100L, 20L, List.of(1, 3));
+
+                assertThat(result).isEqualTo(2);
+                verify(practiceParticipantRepository, times(2)).save(any(PracticeParticipant.class));
+                // 2試合目のレコード検索が呼ばれていないことを確認
+                verify(practiceParticipantRepository, never())
+                        .findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 2);
+                verify(densukeSyncService).triggerWriteAsync();
             }
         }
     }

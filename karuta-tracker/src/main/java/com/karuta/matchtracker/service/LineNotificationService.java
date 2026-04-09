@@ -1744,6 +1744,8 @@ public class LineNotificationService {
                             "type", "postback",
                             "label", "すべての試合に参加",
                             "data", "action=same_day_join_all&sessionId=" + sessionId
+                                    + "&matchNumbers=" + vacanciesByMatch.keySet().stream()
+                                    .sorted().map(String::valueOf).collect(Collectors.joining(","))
                     ),
                     "style", "primary",
                     "color", "#2E86C1",

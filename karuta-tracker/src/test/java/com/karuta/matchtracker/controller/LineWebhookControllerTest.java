@@ -35,6 +35,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -350,7 +351,7 @@ class LineWebhookControllerTest {
                 "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
                 .thenReturn(Optional.of(assignment));
         when(lineConfirmationService.consumeToken("tok-join-all", 77L)).thenReturn(token);
-        when(waitlistPromotionService.handleSameDayJoinAll(300L, 77L)).thenReturn(2);
+        when(waitlistPromotionService.handleSameDayJoinAll(eq(300L), eq(77L), isNull())).thenReturn(2);
 
         String body = postbackBody("action=confirm_same_day_join_all&token=tok-join-all");
 
@@ -361,7 +362,7 @@ class LineWebhookControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("OK"));
 
-        verify(waitlistPromotionService).handleSameDayJoinAll(300L, 77L);
+        verify(waitlistPromotionService).handleSameDayJoinAll(eq(300L), eq(77L), isNull());
         verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("2試合の参加登録が完了しました！練習頑張ってください！"));
     }
 
@@ -384,7 +385,7 @@ class LineWebhookControllerTest {
                 "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
                 .thenReturn(Optional.of(assignment));
         when(lineConfirmationService.consumeToken("tok-join-all-0", 77L)).thenReturn(token);
-        when(waitlistPromotionService.handleSameDayJoinAll(300L, 77L)).thenReturn(0);
+        when(waitlistPromotionService.handleSameDayJoinAll(eq(300L), eq(77L), isNull())).thenReturn(0);
 
         String body = postbackBody("action=confirm_same_day_join_all&token=tok-join-all-0");
 
@@ -395,7 +396,7 @@ class LineWebhookControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("OK"));
 
-        verify(waitlistPromotionService).handleSameDayJoinAll(300L, 77L);
+        verify(waitlistPromotionService).handleSameDayJoinAll(eq(300L), eq(77L), isNull());
         verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("参加可能な空き試合がありませんでした。"));
     }
 
