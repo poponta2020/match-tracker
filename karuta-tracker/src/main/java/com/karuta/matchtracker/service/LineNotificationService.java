@@ -1546,22 +1546,26 @@ public class LineNotificationService {
 
         String sessionLabel = getSessionLabel(session);
 
-        // 全対象試合のWONプレイヤーを収集（除外用）
-        Set<Long> allWonPlayerIds = new HashSet<>();
+        // 試合ごとのWONプレイヤーを収集
+        Map<Integer, Set<Long>> wonPlayersByMatch = new HashMap<>();
         for (Integer matchNumber : vacanciesByMatch.keySet()) {
             List<PracticeParticipant> currentWon = practiceParticipantRepository
                     .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
-            currentWon.stream().map(PracticeParticipant::getPlayerId).forEach(allWonPlayerIds::add);
+            Set<Long> wonIds = currentWon.stream()
+                    .map(PracticeParticipant::getPlayerId)
+                    .collect(Collectors.toSet());
+            wonPlayersByMatch.put(matchNumber, wonIds);
         }
 
-        // 送信先: 団体全メンバー（全対象試合のWON参加者とキャンセル者を除外）
+        // 送信先: 団体全メンバーのうち、空きのある試合の少なくとも1試合で未WONなら送信
         List<PlayerOrganization> orgMembers = playerOrganizationRepository
                 .findByOrganizationId(session.getOrganizationId());
         List<Long> recipientIds = orgMembers.stream()
                 .map(PlayerOrganization::getPlayerId)
                 .distinct()
                 .filter(id -> cancelledPlayerId == null || !id.equals(cancelledPlayerId))
-                .filter(id -> !allWonPlayerIds.contains(id))
+                .filter(id -> wonPlayersByMatch.values().stream()
+                        .anyMatch(wonIds -> !wonIds.contains(id)))
                 .toList();
 
         if (recipientIds.isEmpty()) return;

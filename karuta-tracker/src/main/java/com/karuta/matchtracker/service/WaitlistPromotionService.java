@@ -253,6 +253,11 @@ public class WaitlistPromotionService {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("セッションが見つかりません"));
 
+        // セッション日付チェック（当日以外は参加不可）
+        if (!session.getSessionDate().equals(JstDateTimeUtil.today())) {
+            throw new IllegalStateException("当日以外のセッションには参加できません。");
+        }
+
         // 練習開始時間チェック
         if (session.getStartTime() != null) {
             LocalDateTime practiceStart = session.getSessionDate().atTime(session.getStartTime());
@@ -319,15 +324,19 @@ public class WaitlistPromotionService {
      * @return 参加登録できた試合数
      */
     @Transactional
-    public int handleSameDayJoinAll(Long sessionId, Long playerId) {
+    public synchronized int handleSameDayJoinAll(Long sessionId, Long playerId) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
-        // 練習時間チェック
+        // セッション日付チェック（当日以外は参加不可）
+        if (!session.getSessionDate().equals(JstDateTimeUtil.today())) {
+            throw new IllegalStateException("当日以外のセッションには参加できません。");
+        }
+
+        // 練習開始時間チェック（handleSameDayJoinと同じ判定）
         if (session.getStartTime() != null) {
-            LocalDate today = JstDateTimeUtil.today();
-            java.time.LocalDateTime startDateTime = session.getSessionDate().atTime(session.getStartTime());
-            if (session.getSessionDate().equals(today) && JstDateTimeUtil.now().isAfter(startDateTime)) {
+            LocalDateTime practiceStart = session.getSessionDate().atTime(session.getStartTime());
+            if (JstDateTimeUtil.now().isAfter(practiceStart)) {
                 throw new IllegalStateException("練習開始時間を過ぎているため、参加登録できません。");
             }
         }
