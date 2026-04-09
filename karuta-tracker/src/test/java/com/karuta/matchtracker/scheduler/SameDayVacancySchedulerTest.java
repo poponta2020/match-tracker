@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -91,13 +92,10 @@ class SameDayVacancySchedulerTest {
 
         scheduler.checkAndNotifyVacancies();
 
-        // Match 1 のみ通知される
-        verify(lineNotificationService).sendSameDayVacancyNotification(session, 1, null);
-        verify(lineNotificationService).sendAdminVacancyNotification(session, 1);
-
-        // Match 2 は通知されない
-        verify(lineNotificationService, never()).sendSameDayVacancyNotification(eq(session), eq(2), any());
-        verify(lineNotificationService, never()).sendAdminVacancyNotification(session, 2);
+        // Match 1 のみ統合通知される（空き2名: capacity=6, won=4）
+        Map<Integer, Integer> expectedVacancies = Map.of(1, 2);
+        verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(session, expectedVacancies, null);
+        verify(lineNotificationService).sendConsolidatedAdminVacancyNotification(session, expectedVacancies);
     }
 
     @Test
@@ -113,8 +111,8 @@ class SameDayVacancySchedulerTest {
 
         scheduler.checkAndNotifyVacancies();
 
-        verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
-        verify(lineNotificationService, never()).sendAdminVacancyNotification(any(), anyInt());
+        verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
+        verify(lineNotificationService, never()).sendConsolidatedAdminVacancyNotification(any(), any());
     }
 
     @Test
@@ -135,8 +133,8 @@ class SameDayVacancySchedulerTest {
 
         scheduler.checkAndNotifyVacancies();
 
-        verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
-        verify(lineNotificationService, never()).sendAdminVacancyNotification(any(), anyInt());
+        verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
+        verify(lineNotificationService, never()).sendConsolidatedAdminVacancyNotification(any(), any());
     }
 
     @Test
@@ -157,8 +155,8 @@ class SameDayVacancySchedulerTest {
 
         scheduler.checkAndNotifyVacancies();
 
-        verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
-        verify(lineNotificationService, never()).sendAdminVacancyNotification(any(), anyInt());
+        verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
+        verify(lineNotificationService, never()).sendConsolidatedAdminVacancyNotification(any(), any());
     }
 
     @Test
@@ -172,7 +170,7 @@ class SameDayVacancySchedulerTest {
                 .existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(anyInt(), anyInt(), anyLong(), any());
         verify(practiceParticipantRepository, never())
                 .findBySessionIdAndMatchNumberAndStatus(anyLong(), anyInt(), any());
-        verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
-        verify(lineNotificationService, never()).sendAdminVacancyNotification(any(), anyInt());
+        verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
+        verify(lineNotificationService, never()).sendConsolidatedAdminVacancyNotification(any(), any());
     }
 }

@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -409,7 +410,7 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
-        @DisplayName("空き枠がある場合に当日空き募集通知が送信される")
+        @DisplayName("空き枠がある場合に当日空き募集通知が統合版で送信される")
         void expireOffered_triggersVacancyRecruitment() {
             PracticeSession session = PracticeSession.builder()
                     .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
@@ -424,7 +425,8 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
-            verify(lineNotificationService).sendSameDayVacancyNotification(session, 1, null);
+            verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                    session, Map.of(1, 1), null);
         }
 
         @Test
@@ -443,7 +445,7 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
-            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
         @Test
@@ -458,7 +460,7 @@ class WaitlistPromotionServiceTest {
             service.expireOfferedForSameDayConfirmation(session);
 
             verify(practiceParticipantRepository, never()).save(any());
-            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
             verify(densukeSyncService, never()).triggerWriteAsync();
         }
     }
@@ -530,6 +532,7 @@ class WaitlistPromotionServiceTest {
 
             PracticeSession session = PracticeSession.builder().id(100L)
                     .sessionDate(LocalDate.of(2026, 5, 10)).build();
+            Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(p1, p2));
@@ -538,6 +541,7 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
 
             int count = service.respondToOfferAll(100L, 10L, true);
 
@@ -547,6 +551,9 @@ class WaitlistPromotionServiceTest {
             assertThat(p1.getWaitlistNumber()).isNull();
             assertThat(p2.getWaitlistNumber()).isNull();
             verify(densukeSyncService).triggerWriteAsync();
+            // 管理者通知が送信される
+            verify(lineNotificationService).sendAdminWaitlistNotification(
+                    eq("オファー承諾"), eq(triggerPlayer), eq(session), any(), any(), any());
         }
 
         @Test
@@ -882,6 +889,7 @@ class WaitlistPromotionServiceTest {
 
             PracticeSession session = PracticeSession.builder().id(100L)
                     .sessionDate(LocalDate.of(2026, 5, 10)).build();
+            Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(valid, expired));
@@ -890,12 +898,16 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
 
             int count = service.respondToOfferAll(100L, 10L, true);
 
             assertThat(count).isEqualTo(1); // 2件中1件のみ承諾
             assertThat(valid.getStatus()).isEqualTo(ParticipantStatus.WON);
             assertThat(expired.getStatus()).isEqualTo(ParticipantStatus.OFFERED); // 変更なし
+            // 管理者通知は承諾した1件分のみ送信される
+            verify(lineNotificationService).sendAdminWaitlistNotification(
+                    eq("オファー承諾"), eq(triggerPlayer), eq(session), any(), any(), any());
         }
 
         @Test
