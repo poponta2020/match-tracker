@@ -534,11 +534,17 @@ const PracticeList = () => {
                         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
                           selectedSession.adjacentRoomStatus.available
                             ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-600'
+                            : selectedSession.adjacentRoomStatus.status === '×' ? 'bg-red-100 text-red-600'
+                            : 'bg-gray-100 text-gray-600'
                         }`}>
-                          <span>{selectedSession.adjacentRoomStatus.available ? '○' : '×'}</span>
+                          <span>{selectedSession.adjacentRoomStatus.status}</span>
                           隣室({selectedSession.adjacentRoomStatus.adjacentRoomName})
-                          {selectedSession.adjacentRoomStatus.available ? '空き' : '予約済'}
+                          {selectedSession.adjacentRoomStatus.available ? '空き'
+                            : selectedSession.adjacentRoomStatus.status === '×' ? '予約済'
+                            : selectedSession.adjacentRoomStatus.status === '休館' ? '休館'
+                            : selectedSession.adjacentRoomStatus.status === '不明' ? '不明'
+                            : selectedSession.adjacentRoomStatus.status === '●' ? '要問合せ'
+                            : '利用不可'}
                         </span>
                         {selectedSession.adjacentRoomStatus.available && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
                           <button

@@ -51,9 +51,10 @@ public class AdjacentRoomNotificationScheduler {
     @Transactional
     public void checkCapacityAndNotify() {
         LocalDate today = JstDateTimeUtil.today();
-        // 今日〜60日先の未来のセッションを対象
+        // 翌日〜60日先の未来のセッションを対象（当日分は開始済みの可能性があるため除外）
+        LocalDate startDate = today.plusDays(1);
         LocalDate endDate = today.plusDays(60);
-        List<PracticeSession> sessions = practiceSessionRepository.findByDateRange(today, endDate);
+        List<PracticeSession> sessions = practiceSessionRepository.findByDateRange(startDate, endDate);
 
         // かでる和室のセッションのみフィルタ
         List<PracticeSession> kaderuSessions = sessions.stream()

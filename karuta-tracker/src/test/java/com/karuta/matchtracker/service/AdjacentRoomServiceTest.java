@@ -93,11 +93,16 @@ class AdjacentRoomServiceTest {
     @Test
     @DisplayName("会場拡張 - 正常系")
     void expandVenue_success() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).build();
+                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
         Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
 
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
         when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
         when(practiceSessionRepository.save(any())).thenReturn(session);
 
@@ -124,5 +129,41 @@ class AdjacentRoomServiceTest {
         when(practiceSessionRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> adjacentRoomService.expandVenue(999L));
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 隣室が予約済みの場合はエラー")
+    void expandVenue_adjacentRoomNotAvailable() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("×").build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> adjacentRoomService.expandVenue(1L));
+        assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
+        verify(practiceSessionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 隣室が不明の場合はエラー")
+    void expandVenue_adjacentRoomUnknown() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.empty());
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> adjacentRoomService.expandVenue(1L));
+        assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
+        verify(practiceSessionRepository, never()).save(any());
     }
 }

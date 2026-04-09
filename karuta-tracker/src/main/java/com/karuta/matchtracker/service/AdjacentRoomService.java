@@ -77,6 +77,12 @@ public class AdjacentRoomService {
             throw new IllegalStateException("この会場は拡張できません");
         }
 
+        // 隣室の空き状況をサーバー側で再検証
+        AdjacentRoomStatusDto adjacentRoom = getAdjacentRoomAvailability(currentVenueId, session.getSessionDate());
+        if (adjacentRoom == null || !adjacentRoom.getAvailable()) {
+            throw new IllegalStateException("隣室が空いていないため、会場を拡張できません");
+        }
+
         Long expandedVenueId = AdjacentRoomConfig.getExpandedVenueId(currentVenueId);
         Integer expandedCapacity = AdjacentRoomConfig.getExpandedCapacity(currentVenueId);
 
