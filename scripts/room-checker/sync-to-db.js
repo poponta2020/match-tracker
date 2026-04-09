@@ -112,8 +112,9 @@ async function main() {
     ]);
     await page.waitForTimeout(1500);
 
-    // 今日〜40日先の日付を対象
-    const today = new Date();
+    // 今日〜40日先の日付を対象（JST固定）
+    const jstNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    const today = new Date(jstNow.getFullYear(), jstNow.getMonth(), jstNow.getDate());
     const endDate = new Date(today);
     endDate.setDate(endDate.getDate() + 40);
 

@@ -6,7 +6,6 @@ import com.karuta.matchtracker.entity.AdjacentRoomNotification;
 import com.karuta.matchtracker.entity.Notification.NotificationType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
-import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.AdjacentRoomNotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -19,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -43,12 +42,12 @@ public class AdjacentRoomNotificationScheduler {
     private final AdjacentRoomService adjacentRoomService;
     private final NotificationService notificationService;
     private final PlayerRepository playerRepository;
+    private final TransactionTemplate transactionTemplate;
 
     private static final int THRESHOLD = 4;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M/d");
 
     @Scheduled(cron = "0 */30 * * * *", zone = "Asia/Tokyo")
-    @Transactional
     public void checkCapacityAndNotify() {
         LocalDate today = JstDateTimeUtil.today();
         // 翌日〜60日先の未来のセッションを対象（当日分は開始済みの可能性があるため除外）
@@ -71,7 +70,8 @@ public class AdjacentRoomNotificationScheduler {
         int notifiedCount = 0;
         for (PracticeSession session : kaderuSessions) {
             try {
-                notifiedCount += processSession(session);
+                Integer result = transactionTemplate.execute(status -> processSession(session));
+                notifiedCount += (result != null ? result : 0);
             } catch (Exception e) {
                 log.error("Failed to process adjacent room check for session {}: {}",
                         session.getId(), e.getMessage(), e);

@@ -11,18 +11,21 @@ import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.AdjacentRoomService;
 import com.karuta.matchtracker.service.NotificationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdjacentRoomNotificationScheduler テスト")
@@ -40,9 +43,20 @@ class AdjacentRoomNotificationSchedulerTest {
     private NotificationService notificationService;
     @Mock
     private PlayerRepository playerRepository;
+    @Mock
+    private TransactionTemplate transactionTemplate;
 
     @InjectMocks
     private AdjacentRoomNotificationScheduler scheduler;
+
+    @BeforeEach
+    void setUp() {
+        // TransactionTemplateのexecuteをコールバック即実行に設定
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+    }
 
     private PracticeSession buildKaderuSession(Long id, int capacity, int totalMatches) {
         return PracticeSession.builder()
