@@ -60,4 +60,12 @@ argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検
    - `scripts/review/output/review-prompt-pr{番号}-*.md` を削除する
    - `scripts/review/output/review-result-pr{番号}-*.md` を削除する
 
-9. 完了したらPR URLとマージ結果を報告する
+9. Worktreeのクリーンアップ
+   - `git worktree list` で一覧を取得する
+   - PRのブランチ名（headRefName）に対応するworktreeがあれば削除する:
+     ```bash
+     git worktree remove /tmp/<worktree-dir> 2>/dev/null || true
+     ```
+   - 該当するworktreeがなければスキップする
+
+10. 完了したらPR URLとマージ結果を報告する
