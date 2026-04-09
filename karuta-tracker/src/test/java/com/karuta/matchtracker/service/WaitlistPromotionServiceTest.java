@@ -690,6 +690,35 @@ class WaitlistPromotionServiceTest {
                 verify(densukeSyncService).triggerWriteAsync();
             }
         }
+
+        @Test
+        @DisplayName("範囲外のmatchNumbersを指定するとIllegalStateExceptionで拒否される")
+        void handleSameDayJoinAll_rejectOutOfRangeMatchNumbers() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+                // matchNumbers=[1, 99] → 99は範囲外（totalMatches=3）
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, List.of(1, 99)))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("不正な試合番号");
+
+                // matchNumbers=[0] → 0は範囲外
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, List.of(0)))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("不正な試合番号");
+
+                // 保存が一度も呼ばれていないことを確認
+                verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+            }
+        }
     }
 
     @Nested

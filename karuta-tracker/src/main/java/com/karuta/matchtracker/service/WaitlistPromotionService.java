@@ -346,11 +346,22 @@ public class WaitlistPromotionService {
         int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
 
         // 対象試合番号リストが指定されていない場合は全試合を対象とする
-        List<Integer> targetMatches = matchNumbers;
-        if (targetMatches == null || targetMatches.isEmpty()) {
+        List<Integer> targetMatches;
+        if (matchNumbers == null || matchNumbers.isEmpty()) {
             targetMatches = new java.util.ArrayList<>();
             for (int i = 1; i <= totalMatches; i++) {
                 targetMatches.add(i);
+            }
+        } else {
+            // 重複除去 + 範囲検証（1 <= n <= totalMatches）
+            targetMatches = matchNumbers.stream()
+                    .distinct()
+                    .collect(java.util.stream.Collectors.toList());
+            for (int n : targetMatches) {
+                if (n < 1 || n > totalMatches) {
+                    throw new IllegalStateException(
+                            "不正な試合番号が含まれています: " + n + "（有効範囲: 1〜" + totalMatches + "）");
+                }
             }
         }
 
