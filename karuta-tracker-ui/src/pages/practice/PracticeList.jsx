@@ -243,6 +243,23 @@ const PracticeList = () => {
     setExpandedMatches({}); // アコーディオンの状態をリセット
   };
 
+  // 会場拡張
+  const handleExpandVenue = async (sessionId, venueName, adjacentRoomStatus) => {
+    const confirmed = window.confirm(
+      `${venueName}を${adjacentRoomStatus.expandedVenueName}に拡張しますか？\n定員が${selectedSession.capacity}→${adjacentRoomStatus.expandedCapacity}に変更されます`
+    );
+    if (!confirmed) return;
+    try {
+      const response = await practiceAPI.expandVenue(sessionId);
+      setSelectedSession(response.data);
+      // セッション一覧も更新
+      fetchSessions();
+    } catch (err) {
+      console.error('Error expanding venue:', err);
+      alert('会場の拡張に失敗しました');
+    }
+  };
+
   // 試合別参加者編集モーダルを開く
   const handleEditMatchParticipants = (matchNumber) => {
     setEditingMatchNumber(matchNumber);
@@ -510,7 +527,33 @@ const PracticeList = () => {
                   {formatDateForModal(selectedSession.sessionDate)}
                 </h3>
                 {selectedSession.venueName && (
-                  <p className="text-sm text-[#6b7280] mt-0.5">{selectedSession.venueName}</p>
+                  <div className="mt-0.5">
+                    <p className="text-sm text-[#6b7280]">{selectedSession.venueName}</p>
+                    {selectedSession.adjacentRoomStatus && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                          selectedSession.adjacentRoomStatus.available
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-600'
+                        }`}>
+                          <span>{selectedSession.adjacentRoomStatus.available ? '○' : '×'}</span>
+                          隣室({selectedSession.adjacentRoomStatus.adjacentRoomName})
+                          {selectedSession.adjacentRoomStatus.available ? '空き' : '予約済'}
+                        </span>
+                        {selectedSession.adjacentRoomStatus.available && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExpandVenue(selectedSession.id, selectedSession.venueName, selectedSession.adjacentRoomStatus);
+                            }}
+                            className="text-xs px-2 py-0.5 bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4b] transition-colors"
+                          >
+                            会場を拡張
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {orgMap[selectedSession.organizationId] && (
                   <p className="text-xs mt-0.5 flex items-center gap-1">

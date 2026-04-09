@@ -80,7 +80,9 @@ public class Notification {
         /** LINEチャネル回収警告 */
         CHANNEL_RECLAIM_WARNING,
         /** 伝助同期：未登録者あり（管理者向け） */
-        DENSUKE_UNMATCHED_NAMES
+        DENSUKE_UNMATCHED_NAMES,
+        /** 隣室空き通知（管理者向け） */
+        ADJACENT_ROOM_AVAILABLE
     }
 
     @PrePersist

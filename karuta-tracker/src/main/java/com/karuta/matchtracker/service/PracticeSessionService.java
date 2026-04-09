@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.config.AdjacentRoomConfig;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -52,6 +53,7 @@ public class PracticeSessionService {
     private final OrganizationService organizationService;
     private final DensukeUrlRepository densukeUrlRepository;
     private final DensukeSyncService densukeSyncService;
+    private final AdjacentRoomService adjacentRoomService;
 
     /**
      * IDで練習日を取得
@@ -531,6 +533,12 @@ public class PracticeSessionService {
             });
         }
 
+        // 隣室空き状況を付与
+        if (session.getVenueId() != null) {
+            dto.setAdjacentRoomStatus(
+                    adjacentRoomService.getAdjacentRoomAvailability(session.getVenueId(), session.getSessionDate()));
+        }
+
         // 参加者リストを取得
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionId(session.getId());
         List<Long> playerIds = allParticipants.stream()
@@ -653,6 +661,9 @@ public class PracticeSessionService {
                                 dto.setVenueSchedules(scheduleDtos);
                             }
                         }
+                        // 隣室空き状況を付与
+                        dto.setAdjacentRoomStatus(
+                                adjacentRoomService.getAdjacentRoomAvailability(session.getVenueId(), session.getSessionDate()));
                     }
 
                     return dto;

@@ -357,6 +357,7 @@ public class NotificationService {
             case OFFER_EXPIRED -> pref.getOfferExpired();
             case CHANNEL_RECLAIM_WARNING -> pref.getChannelReclaimWarning();
             case DENSUKE_UNMATCHED_NAMES -> pref.getDensukeUnmatched();
+            case ADJACENT_ROOM_AVAILABLE -> pref.getAdjacentRoom();
             default -> false;
         };
     }
