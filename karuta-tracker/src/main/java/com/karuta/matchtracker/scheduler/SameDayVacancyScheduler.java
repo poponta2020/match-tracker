@@ -15,7 +15,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 当日0:00空き枠通知スケジューラ
@@ -75,8 +77,10 @@ public class SameDayVacancyScheduler {
         int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
         if (capacity <= 0) return 0;
 
-        int notifiedCount = 0;
         int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
+
+        // 空き試合を蓄積（matchNumber → 空き枠数）
+        Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
 
         for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
             List<PracticeParticipant> wonParticipants = practiceParticipantRepository
@@ -85,20 +89,19 @@ public class SameDayVacancyScheduler {
                     .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WAITLISTED);
 
             if (wonParticipants.size() < capacity && waitlistedParticipants.isEmpty()) {
+                int vacancies = capacity - wonParticipants.size();
+                vacanciesByMatch.put(matchNumber, vacancies);
                 log.info("Vacancy detected: session {} match {} (won={}, capacity={}, waitlisted=0)",
                         session.getId(), matchNumber, wonParticipants.size(), capacity);
-
-                // 選手向け空き枠通知（cancelledPlayerId=null: 0:00スケジューラ起点なのでキャンセル者なし）
-                lineNotificationService.sendSameDayVacancyNotification(session, matchNumber, null);
-
-                // 管理者向け通知はsendSameDayVacancyNotificationの中では行われないため、
-                // 別途管理者に送信する
-                lineNotificationService.sendAdminVacancyNotification(session, matchNumber);
-
-                notifiedCount++;
             }
         }
 
-        return notifiedCount;
+        if (!vacanciesByMatch.isEmpty()) {
+            // セッション単位で統合送信
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+            lineNotificationService.sendConsolidatedAdminVacancyNotification(session, vacanciesByMatch);
+        }
+
+        return vacanciesByMatch.size();
     }
 }
