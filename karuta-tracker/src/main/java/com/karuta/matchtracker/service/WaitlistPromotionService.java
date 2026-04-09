@@ -311,6 +311,88 @@ public class WaitlistPromotionService {
     }
 
     /**
+     * 当日補充で全試合に一括参加する。
+     * 空き枠があり、まだWONでない試合に一括で参加登録する。
+     *
+     * @param sessionId セッションID
+     * @param playerId  プレイヤーID
+     * @return 参加登録できた試合数
+     */
+    @Transactional
+    public int handleSameDayJoinAll(Long sessionId, Long playerId) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        // 練習時間チェック
+        if (session.getStartTime() != null) {
+            LocalDate today = JstDateTimeUtil.today();
+            java.time.LocalDateTime startDateTime = session.getSessionDate().atTime(session.getStartTime());
+            if (session.getSessionDate().equals(today) && JstDateTimeUtil.now().isAfter(startDateTime)) {
+                throw new IllegalStateException("練習開始時間を過ぎているため、参加登録できません。");
+            }
+        }
+
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
+
+        Player joinedPlayer = playerRepository.findById(playerId).orElse(null);
+        String playerName = joinedPlayer != null ? joinedPlayer.getName() : "不明";
+
+        int joinedCount = 0;
+
+        for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+            // 既にWONかどうかチェック
+            List<PracticeParticipant> existingRecords = practiceParticipantRepository
+                    .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+            if (existingRecords.stream().anyMatch(p -> p.getStatus() == ParticipantStatus.WON)) {
+                continue;
+            }
+
+            // 空き枠チェック
+            List<PracticeParticipant> currentWon = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(sessionId, matchNumber, ParticipantStatus.WON);
+            if (currentWon.size() >= capacity) {
+                continue;
+            }
+
+            // 既存レコードがあればステータス更新、なければ新規作成
+            Optional<PracticeParticipant> existing = existingRecords.stream()
+                    .filter(p -> p.getStatus() != ParticipantStatus.WON)
+                    .findFirst();
+
+            PracticeParticipant participant;
+            if (existing.isPresent()) {
+                participant = existing.get();
+                participant.setStatus(ParticipantStatus.WON);
+                participant.setDirty(true);
+            } else {
+                participant = PracticeParticipant.builder()
+                        .sessionId(sessionId)
+                        .playerId(playerId)
+                        .matchNumber(matchNumber)
+                        .status(ParticipantStatus.WON)
+                        .dirty(true)
+                        .build();
+            }
+            practiceParticipantRepository.save(participant);
+
+            // 参加通知 + 枠状況通知
+            lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
+            lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
+
+            joinedCount++;
+            log.info("Same-day join all: player {} ({}) joined session {} match {}",
+                    playerId, playerName, sessionId, matchNumber);
+        }
+
+        if (joinedCount > 0) {
+            densukeSyncService.triggerWriteAsync();
+        }
+
+        return joinedCount;
+    }
+
+    /**
      * 当日12:00以降のキャンセル時に、キャンセル通知＋空き募集通知を送信する。
      */
     private void handleSameDayCancelAndRecruit(PracticeParticipant cancelledParticipant, PracticeSession session) {

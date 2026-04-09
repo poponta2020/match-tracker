@@ -241,6 +241,7 @@ public class LineNotificationService {
             case "waitlist_decline_all" -> sessionLabel + "のすべてのオファーを辞退します。よろしいですか？";
             case "waitlist_decline_session" -> sessionLabel + "のキャンセル待ちをすべて辞退します。よろしいですか？";
             case "same_day_join" -> sessionLabel + matchPart + "に当日参加します。よろしいですか？";
+            case "same_day_join_all" -> sessionLabel + "のすべての空き試合に当日参加します。よろしいですか？";
             default -> "この操作を実行します。よろしいですか？";
         };
     }
