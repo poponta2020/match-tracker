@@ -588,6 +588,7 @@ public class WaitlistPromotionService {
             // 全OFFEREDをWONに変更
             int acceptedCount = 0;
             Set<Integer> affectedMatches = new LinkedHashSet<>();
+            List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
             for (PracticeParticipant p : offered) {
                 // 応答期限チェック
                 if (p.getOfferDeadline() != null && JstDateTimeUtil.now().isAfter(p.getOfferDeadline())) {
@@ -604,6 +605,14 @@ public class WaitlistPromotionService {
                 acceptedCount++;
                 log.info("Player {} accepted offer (batch) for session {} match {}",
                         playerId, sessionId, p.getMatchNumber());
+
+                notificationDataList.add(AdminWaitlistNotificationData.builder()
+                        .triggerAction("オファー承諾")
+                        .triggerPlayerId(playerId)
+                        .sessionId(sessionId)
+                        .matchNumber(p.getMatchNumber())
+                        .promotedParticipant(null)
+                        .build());
             }
             // 影響試合ごとに再採番
             for (Integer matchNumber : affectedMatches) {
@@ -612,6 +621,10 @@ public class WaitlistPromotionService {
             if (acceptedCount == 0) {
                 throw new IllegalStateException("すべてのオファーが期限切れです");
             }
+
+            // 管理者通知をバッチ送信
+            sendBatchedAdminWaitlistNotifications(notificationDataList, session);
+
             densukeSyncService.triggerWriteAsync();
             return acceptedCount;
         } else {
