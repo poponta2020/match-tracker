@@ -931,19 +931,25 @@ public class WaitlistPromotionService {
             renumberRemainingWaitlist(session.getId(), matchNumber);
         }
 
-        // 空き枠がある試合に対して当日空き募集フローを発動
+        // 空き枠がある試合を蓄積し、セッション単位で統合通知
+        Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+
         for (Integer matchNumber : affectedMatches) {
             long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                     session.getId(), matchNumber, ParticipantStatus.WON);
-            int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
 
             if (wonCount < capacity) {
-                lineNotificationService.sendSameDayVacancyNotification(
-                        session, matchNumber, null);
-
+                int vacancies = (int) (capacity - wonCount);
+                vacanciesByMatch.put(matchNumber, vacancies);
                 log.info("Triggered same-day vacancy recruitment for session {} match {} ({} vacancies)",
-                        session.getId(), matchNumber, capacity - wonCount);
+                        session.getId(), matchNumber, vacancies);
             }
+        }
+
+        if (!vacanciesByMatch.isEmpty()) {
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(
+                    session, vacanciesByMatch, null);
         }
 
         densukeSyncService.triggerWriteAsync();
