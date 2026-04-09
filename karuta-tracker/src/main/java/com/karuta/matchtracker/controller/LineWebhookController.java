@@ -49,7 +49,7 @@ public class LineWebhookController {
     /** 確認ダイアログを挟む対象のアクション */
     private static final Set<String> CONFIRMABLE_ACTIONS = Set.of(
         "waitlist_accept", "waitlist_decline", "waitlist_decline_session", "same_day_join",
-        "waitlist_accept_all", "waitlist_decline_all"
+        "waitlist_accept_all", "waitlist_decline_all", "same_day_join_all"
     );
 
     @PostMapping("/{lineChannelId}")
@@ -268,6 +268,21 @@ public class LineWebhookController {
                 }
                 sessionLabel = getSessionLabel(session);
                 matchNumber = Integer.parseInt(matchNumberStr);
+
+            } else if ("same_day_join_all".equals(action)) {
+                // sessionIdからセッション情報を取得
+                String sessionIdStr = params.getOrDefault("sessionId", "");
+                if (sessionIdStr.isEmpty()) {
+                    sendReply(channel, replyToken, "セッション情報が不正です。アプリから操作してください。");
+                    return;
+                }
+                Long sessionId = Long.parseLong(sessionIdStr);
+                PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                if (session == null) {
+                    sendReply(channel, replyToken, "セッション情報が見つかりません。");
+                    return;
+                }
+                sessionLabel = getSessionLabel(session);
             }
 
             // パラメータをJSON文字列に変換
@@ -343,6 +358,8 @@ public class LineWebhookController {
                 handleWaitlistDeclineSession(channel, replyToken, params, playerId);
             case "same_day_join" ->
                 handleSameDayJoin(channel, replyToken, params, playerId);
+            case "same_day_join_all" ->
+                handleSameDayJoinAll(channel, replyToken, params, playerId);
             default ->
                 sendReply(channel, replyToken, "不明な操作です。");
         }
@@ -480,6 +497,47 @@ public class LineWebhookController {
             sendReply(channel, replyToken, e.getMessage());
         } catch (Exception e) {
             log.error("Failed to process same-day join: player={}, error={}", playerId, e.getMessage());
+            sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
+        }
+    }
+
+    /**
+     * 当日補充全試合一括参加のpostbackを処理する
+     */
+    private void handleSameDayJoinAll(LineChannel channel, String replyToken,
+                                       java.util.Map<String, String> params, Long playerId) {
+        String sessionIdStr = params.getOrDefault("sessionId", "");
+
+        if (sessionIdStr.isEmpty()) {
+            sendReply(channel, replyToken, "セッション情報が不正です。アプリから操作してください。");
+            return;
+        }
+
+        try {
+            Long sessionId = Long.parseLong(sessionIdStr);
+
+            // 通知時点の対象試合番号を取得（指定がなければnull→全試合対象）
+            String matchNumbersStr = params.getOrDefault("matchNumbers", "");
+            java.util.List<Integer> matchNumbers = null;
+            if (!matchNumbersStr.isEmpty()) {
+                matchNumbers = java.util.Arrays.stream(matchNumbersStr.split(","))
+                        .map(String::trim)
+                        .map(Integer::parseInt)
+                        .toList();
+            }
+
+            int joinedCount = waitlistPromotionService.handleSameDayJoinAll(sessionId, playerId, matchNumbers);
+            if (joinedCount == 0) {
+                sendReply(channel, replyToken, "参加可能な空き試合がありませんでした。");
+            } else {
+                sendReply(channel, replyToken, joinedCount + "試合の参加登録が完了しました！練習頑張ってください！");
+            }
+            log.info("Same-day join all via LINE postback: player={}, session={}, joined={}",
+                    playerId, sessionId, joinedCount);
+        } catch (IllegalStateException e) {
+            sendReply(channel, replyToken, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to process same-day join all: player={}, error={}", playerId, e.getMessage());
             sendReply(channel, replyToken, "処理中にエラーが発生しました。管理者に連絡してください。");
         }
     }

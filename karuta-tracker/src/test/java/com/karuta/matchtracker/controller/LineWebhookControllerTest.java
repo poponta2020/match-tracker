@@ -35,6 +35,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -294,6 +295,109 @@ class LineWebhookControllerTest {
 
         verify(waitlistPromotionService).respondToOfferAll(200L, 77L, false);
         verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("2試合のオファーを辞退しました。次の方に通知します。"));
+    }
+
+    @Test
+    @DisplayName("same_day_join_all postback sends confirmation dialog")
+    void handleWebhook_sameDayJoinAll_sendsConfirmation() throws Exception {
+        LineChannel channel = channel();
+        LineChannelAssignment assignment = linkedAssignment();
+        PracticeSession session = PracticeSession.builder()
+                .id(300L)
+                .sessionDate(LocalDate.now())
+                .organizationId(1L)
+                .build();
+
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+        when(lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
+                .thenReturn(Optional.of(assignment));
+        when(practiceSessionRepository.findById(300L)).thenReturn(Optional.of(session));
+        when(lineConfirmationService.createToken(eq("same_day_join_all"), anyString(), eq(77L)))
+                .thenReturn("confirm-tok-all");
+        when(lineNotificationService.buildConfirmationFlex(
+                eq("same_day_join_all"), anyString(), eq(null), anyString(), anyString()))
+                .thenReturn(java.util.Map.of("type", "bubble"));
+
+        String body = postbackBody("action=same_day_join_all&sessionId=300");
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineConfirmationService).createToken(eq("same_day_join_all"), anyString(), eq(77L));
+    }
+
+    @Test
+    @DisplayName("confirm_same_day_join_all postback calls handleSameDayJoinAll and returns joined count message")
+    void handleWebhook_confirmSameDayJoinAll_executesJoinAll() throws Exception {
+        LineChannel channel = channel();
+        LineChannelAssignment assignment = linkedAssignment();
+        LineConfirmationToken token = LineConfirmationToken.builder()
+                .token("tok-join-all")
+                .action("same_day_join_all")
+                .params("{\"sessionId\":\"300\"}")
+                .playerId(77L)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+        when(lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
+                .thenReturn(Optional.of(assignment));
+        when(lineConfirmationService.consumeToken("tok-join-all", 77L)).thenReturn(token);
+        when(waitlistPromotionService.handleSameDayJoinAll(eq(300L), eq(77L), isNull())).thenReturn(2);
+
+        String body = postbackBody("action=confirm_same_day_join_all&token=tok-join-all");
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(waitlistPromotionService).handleSameDayJoinAll(eq(300L), eq(77L), isNull());
+        verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("2試合の参加登録が完了しました！練習頑張ってください！"));
+    }
+
+    @Test
+    @DisplayName("confirm_same_day_join_all with zero joined returns no-vacancy message")
+    void handleWebhook_confirmSameDayJoinAll_zeroJoined_returnsNoVacancy() throws Exception {
+        LineChannel channel = channel();
+        LineChannelAssignment assignment = linkedAssignment();
+        LineConfirmationToken token = LineConfirmationToken.builder()
+                .token("tok-join-all-0")
+                .action("same_day_join_all")
+                .params("{\"sessionId\":\"300\"}")
+                .playerId(77L)
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+        when(lineChannelAssignmentRepository.findByLineUserIdAndLineChannelIdAndStatus(
+                "U777", 10L, LineChannelAssignment.AssignmentStatus.LINKED))
+                .thenReturn(Optional.of(assignment));
+        when(lineConfirmationService.consumeToken("tok-join-all-0", 77L)).thenReturn(token);
+        when(waitlistPromotionService.handleSameDayJoinAll(eq(300L), eq(77L), isNull())).thenReturn(0);
+
+        String body = postbackBody("action=confirm_same_day_join_all&token=tok-join-all-0");
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(waitlistPromotionService).handleSameDayJoinAll(eq(300L), eq(77L), isNull());
+        verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-2"), eq("参加可能な空き試合がありませんでした。"));
     }
 
     private String postbackBody(String data) throws Exception {

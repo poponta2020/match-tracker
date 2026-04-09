@@ -253,6 +253,11 @@ public class WaitlistPromotionService {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalStateException("セッションが見つかりません"));
 
+        // セッション日付チェック（当日以外は参加不可）
+        if (!session.getSessionDate().equals(JstDateTimeUtil.today())) {
+            throw new IllegalStateException("当日以外のセッションには参加できません。");
+        }
+
         // 練習開始時間チェック
         if (session.getStartTime() != null) {
             LocalDateTime practiceStart = session.getSessionDate().atTime(session.getStartTime());
@@ -308,6 +313,113 @@ public class WaitlistPromotionService {
         lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
 
         densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
+     * 当日補充で全試合に一括参加する。
+     * 空き枠があり、まだWONでない試合に一括で参加登録する。
+     *
+     * @param sessionId    セッションID
+     * @param playerId     プレイヤーID
+     * @param matchNumbers 対象試合番号リスト（通知時点の空き試合）。nullの場合は全試合を対象とする。
+     * @return 参加登録できた試合数
+     */
+    @Transactional
+    public synchronized int handleSameDayJoinAll(Long sessionId, Long playerId, List<Integer> matchNumbers) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        // セッション日付チェック（当日以外は参加不可）
+        if (!session.getSessionDate().equals(JstDateTimeUtil.today())) {
+            throw new IllegalStateException("当日以外のセッションには参加できません。");
+        }
+
+        // 練習開始時間チェック（handleSameDayJoinと同じ判定）
+        if (session.getStartTime() != null) {
+            LocalDateTime practiceStart = session.getSessionDate().atTime(session.getStartTime());
+            if (JstDateTimeUtil.now().isAfter(practiceStart)) {
+                throw new IllegalStateException("練習開始時間を過ぎているため、参加登録できません。");
+            }
+        }
+
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
+
+        // 対象試合番号リストが指定されていない場合は全試合を対象とする
+        List<Integer> targetMatches;
+        if (matchNumbers == null || matchNumbers.isEmpty()) {
+            targetMatches = new java.util.ArrayList<>();
+            for (int i = 1; i <= totalMatches; i++) {
+                targetMatches.add(i);
+            }
+        } else {
+            // 重複除去 + 範囲検証（1 <= n <= totalMatches）
+            targetMatches = matchNumbers.stream()
+                    .distinct()
+                    .collect(java.util.stream.Collectors.toList());
+            for (int n : targetMatches) {
+                if (n < 1 || n > totalMatches) {
+                    throw new IllegalStateException(
+                            "不正な試合番号が含まれています: " + n + "（有効範囲: 1〜" + totalMatches + "）");
+                }
+            }
+        }
+
+        Player joinedPlayer = playerRepository.findById(playerId).orElse(null);
+        String playerName = joinedPlayer != null ? joinedPlayer.getName() : "不明";
+
+        int joinedCount = 0;
+
+        for (int matchNumber : targetMatches) {
+            // 既にWONかどうかチェック
+            List<PracticeParticipant> existingRecords = practiceParticipantRepository
+                    .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
+            if (existingRecords.stream().anyMatch(p -> p.getStatus() == ParticipantStatus.WON)) {
+                continue;
+            }
+
+            // 空き枠チェック
+            List<PracticeParticipant> currentWon = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(sessionId, matchNumber, ParticipantStatus.WON);
+            if (currentWon.size() >= capacity) {
+                continue;
+            }
+
+            // 既存レコードがあればステータス更新、なければ新規作成
+            Optional<PracticeParticipant> existing = existingRecords.stream()
+                    .filter(p -> p.getStatus() != ParticipantStatus.WON)
+                    .findFirst();
+
+            PracticeParticipant participant;
+            if (existing.isPresent()) {
+                participant = existing.get();
+                participant.setStatus(ParticipantStatus.WON);
+                participant.setDirty(true);
+            } else {
+                participant = PracticeParticipant.builder()
+                        .sessionId(sessionId)
+                        .playerId(playerId)
+                        .matchNumber(matchNumber)
+                        .status(ParticipantStatus.WON)
+                        .dirty(true)
+                        .build();
+            }
+            practiceParticipantRepository.save(participant);
+
+            // 参加通知 + 枠状況通知
+            lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
+            lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
+
+            joinedCount++;
+            log.info("Same-day join all: player {} ({}) joined session {} match {}",
+                    playerId, playerName, sessionId, matchNumber);
+        }
+
+        if (joinedCount > 0) {
+            densukeSyncService.triggerWriteAsync();
+        }
+
+        return joinedCount;
     }
 
     /**
@@ -588,6 +700,7 @@ public class WaitlistPromotionService {
             // 全OFFEREDをWONに変更
             int acceptedCount = 0;
             Set<Integer> affectedMatches = new LinkedHashSet<>();
+            List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
             for (PracticeParticipant p : offered) {
                 // 応答期限チェック
                 if (p.getOfferDeadline() != null && JstDateTimeUtil.now().isAfter(p.getOfferDeadline())) {
@@ -604,6 +717,14 @@ public class WaitlistPromotionService {
                 acceptedCount++;
                 log.info("Player {} accepted offer (batch) for session {} match {}",
                         playerId, sessionId, p.getMatchNumber());
+
+                notificationDataList.add(AdminWaitlistNotificationData.builder()
+                        .triggerAction("オファー承諾")
+                        .triggerPlayerId(playerId)
+                        .sessionId(sessionId)
+                        .matchNumber(p.getMatchNumber())
+                        .promotedParticipant(null)
+                        .build());
             }
             // 影響試合ごとに再採番
             for (Integer matchNumber : affectedMatches) {
@@ -612,6 +733,10 @@ public class WaitlistPromotionService {
             if (acceptedCount == 0) {
                 throw new IllegalStateException("すべてのオファーが期限切れです");
             }
+
+            // 管理者通知をバッチ送信
+            sendBatchedAdminWaitlistNotifications(notificationDataList, session);
+
             densukeSyncService.triggerWriteAsync();
             return acceptedCount;
         } else {
@@ -918,19 +1043,25 @@ public class WaitlistPromotionService {
             renumberRemainingWaitlist(session.getId(), matchNumber);
         }
 
-        // 空き枠がある試合に対して当日空き募集フローを発動
+        // 空き枠がある試合を蓄積し、セッション単位で統合通知
+        Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+
         for (Integer matchNumber : affectedMatches) {
             long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                     session.getId(), matchNumber, ParticipantStatus.WON);
-            int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
 
             if (wonCount < capacity) {
-                lineNotificationService.sendSameDayVacancyNotification(
-                        session, matchNumber, null);
-
+                int vacancies = (int) (capacity - wonCount);
+                vacanciesByMatch.put(matchNumber, vacancies);
                 log.info("Triggered same-day vacancy recruitment for session {} match {} ({} vacancies)",
-                        session.getId(), matchNumber, capacity - wonCount);
+                        session.getId(), matchNumber, vacancies);
             }
+        }
+
+        if (!vacanciesByMatch.isEmpty()) {
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(
+                    session, vacanciesByMatch, null);
         }
 
         densukeSyncService.triggerWriteAsync();

@@ -11,6 +11,7 @@ import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -18,9 +19,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -409,7 +412,7 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
-        @DisplayName("空き枠がある場合に当日空き募集通知が送信される")
+        @DisplayName("空き枠がある場合に当日空き募集通知が統合版で送信される")
         void expireOffered_triggersVacancyRecruitment() {
             PracticeSession session = PracticeSession.builder()
                     .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).capacity(14).build();
@@ -424,7 +427,8 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
-            verify(lineNotificationService).sendSameDayVacancyNotification(session, 1, null);
+            verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                    session, Map.of(1, 1), null);
         }
 
         @Test
@@ -443,7 +447,7 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
-            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
         @Test
@@ -458,7 +462,7 @@ class WaitlistPromotionServiceTest {
             service.expireOfferedForSameDayConfirmation(session);
 
             verify(practiceParticipantRepository, never()).save(any());
-            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
             verify(densukeSyncService, never()).triggerWriteAsync();
         }
     }
@@ -470,43 +474,250 @@ class WaitlistPromotionServiceTest {
         @Test
         @DisplayName("空き枠がある場合にWONとして参加できる")
         void handleSameDayJoin_success() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
             PracticeSession session = PracticeSession.builder()
-                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15))
+                    .id(100L).sessionDate(today)
                     .capacity(6).startTime(LocalTime.of(13, 0)).build();
             Player player = Player.builder().id(20L).name("参加者").build();
 
-            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1))
-                    .thenReturn(List.of());
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
-                    .thenReturn(List.of()); // 空き枠あり
-            when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
 
-            service.handleSameDayJoin(100L, 1, 20L);
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1))
+                        .thenReturn(List.of());
+                when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                        .thenReturn(List.of()); // 空き枠あり
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
 
-            verify(practiceParticipantRepository).save(any(PracticeParticipant.class));
-            verify(lineNotificationService).sendSameDayJoinNotification(eq(session), eq(1), eq("参加者"), eq(20L));
-            verify(lineNotificationService).sendSameDayVacancyUpdateNotification(eq(session), eq(1), eq("参加者"), eq(20L));
+                service.handleSameDayJoin(100L, 1, 20L);
+
+                verify(practiceParticipantRepository).save(any(PracticeParticipant.class));
+                verify(lineNotificationService).sendSameDayJoinNotification(eq(session), eq(1), eq("参加者"), eq(20L));
+                verify(lineNotificationService).sendSameDayVacancyUpdateNotification(eq(session), eq(1), eq("参加者"), eq(20L));
+            }
         }
 
         @Test
         @DisplayName("枠が埋まっている場合はエラー")
         void handleSameDayJoin_noVacancy() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
             PracticeSession session = PracticeSession.builder()
-                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15))
+                    .id(100L).sessionDate(today)
                     .capacity(1).startTime(LocalTime.of(13, 0)).build();
             PracticeParticipant existing = PracticeParticipant.builder()
                     .id(5L).sessionId(100L).playerId(30L).matchNumber(1).status(ParticipantStatus.WON).build();
 
-            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1))
-                    .thenReturn(List.of());
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
-                    .thenReturn(List.of(existing)); // 定員1、既に1人
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
 
-            assertThatThrownBy(() -> service.handleSameDayJoin(100L, 1, 20L))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("定員に達してしまいました");
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1))
+                        .thenReturn(List.of());
+                when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                        .thenReturn(List.of(existing)); // 定員1、既に1人
+
+                assertThatThrownBy(() -> service.handleSameDayJoin(100L, 1, 20L))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("定員に達してしまいました");
+            }
+        }
+
+        @Test
+        @DisplayName("過去日のセッションには参加できない")
+        void handleSameDayJoin_pastDate() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            LocalDate yesterday = LocalDate.of(2026, 4, 14);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(yesterday)
+                    .capacity(6).startTime(LocalTime.of(13, 0)).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+                assertThatThrownBy(() -> service.handleSameDayJoin(100L, 1, 20L))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("当日以外のセッションには参加できません");
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("当日補充一括参加（same_day_join_all）")
+    class SameDayJoinAllTests {
+
+        @Test
+        @DisplayName("複数試合に一括参加できる")
+        void handleSameDayJoinAll_success() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+            Player player = Player.builder().id(20L).name("参加者").build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+                // 全試合で空き枠あり、未参加
+                for (int m = 1; m <= 3; m++) {
+                    when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, m))
+                            .thenReturn(List.of());
+                    when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, m, ParticipantStatus.WON))
+                            .thenReturn(List.of());
+                }
+
+                int result = service.handleSameDayJoinAll(100L, 20L, null);
+
+                assertThat(result).isEqualTo(3);
+                verify(practiceParticipantRepository, times(3)).save(any(PracticeParticipant.class));
+                verify(densukeSyncService).triggerWriteAsync();
+            }
+        }
+
+        @Test
+        @DisplayName("過去日のセッションには一括参加できない")
+        void handleSameDayJoinAll_pastDate() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            LocalDate yesterday = LocalDate.of(2026, 4, 14);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(yesterday)
+                    .capacity(6).totalMatches(3).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, null))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("当日以外のセッションには参加できません");
+            }
+        }
+
+        @Test
+        @DisplayName("練習開始時間を過ぎている場合はエラー")
+        void handleSameDayJoinAll_afterStartTime() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(14, 0)); // 13:00を過ぎている
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, null))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("練習開始時間を過ぎているため");
+            }
+        }
+
+        @Test
+        @DisplayName("定員到達の試合はスキップする")
+        void handleSameDayJoinAll_skipFullMatches() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(1).totalMatches(2).startTime(LocalTime.of(13, 0)).build();
+            Player player = Player.builder().id(20L).name("参加者").build();
+            PracticeParticipant existingWon = PracticeParticipant.builder()
+                    .id(5L).sessionId(100L).playerId(30L).matchNumber(1).status(ParticipantStatus.WON).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+                // 1試合目: 定員到達
+                when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1))
+                        .thenReturn(List.of());
+                when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                        .thenReturn(List.of(existingWon));
+                // 2試合目: 空き枠あり
+                when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 2))
+                        .thenReturn(List.of());
+                when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 2, ParticipantStatus.WON))
+                        .thenReturn(List.of());
+
+                int result = service.handleSameDayJoinAll(100L, 20L, null);
+
+                assertThat(result).isEqualTo(1); // 2試合目のみ参加
+                verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+            }
+        }
+
+        @Test
+        @DisplayName("matchNumbers指定時は対象試合のみ参加し、対象外試合には登録しない")
+        void handleSameDayJoinAll_onlyTargetMatches() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+            Player player = Player.builder().id(20L).name("参加者").build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+                // 1試合目・3試合目: 空き枠あり、未参加
+                for (int m : List.of(1, 3)) {
+                    when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, m))
+                            .thenReturn(List.of());
+                    when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, m, ParticipantStatus.WON))
+                            .thenReturn(List.of());
+                }
+
+                // matchNumbers=[1,3] を指定 → 2試合目は対象外
+                int result = service.handleSameDayJoinAll(100L, 20L, List.of(1, 3));
+
+                assertThat(result).isEqualTo(2);
+                verify(practiceParticipantRepository, times(2)).save(any(PracticeParticipant.class));
+                // 2試合目のレコード検索が呼ばれていないことを確認
+                verify(practiceParticipantRepository, never())
+                        .findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 2);
+                verify(densukeSyncService).triggerWriteAsync();
+            }
+        }
+
+        @Test
+        @DisplayName("範囲外のmatchNumbersを指定するとIllegalStateExceptionで拒否される")
+        void handleSameDayJoinAll_rejectOutOfRangeMatchNumbers() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(today)
+                    .capacity(6).totalMatches(3).startTime(LocalTime.of(13, 0)).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+                // matchNumbers=[1, 99] → 99は範囲外（totalMatches=3）
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, List.of(1, 99)))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("不正な試合番号");
+
+                // matchNumbers=[0] → 0は範囲外
+                assertThatThrownBy(() -> service.handleSameDayJoinAll(100L, 20L, List.of(0)))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("不正な試合番号");
+
+                // 保存が一度も呼ばれていないことを確認
+                verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+            }
         }
     }
 
@@ -530,6 +741,7 @@ class WaitlistPromotionServiceTest {
 
             PracticeSession session = PracticeSession.builder().id(100L)
                     .sessionDate(LocalDate.of(2026, 5, 10)).build();
+            Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(p1, p2));
@@ -538,6 +750,7 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
 
             int count = service.respondToOfferAll(100L, 10L, true);
 
@@ -547,6 +760,9 @@ class WaitlistPromotionServiceTest {
             assertThat(p1.getWaitlistNumber()).isNull();
             assertThat(p2.getWaitlistNumber()).isNull();
             verify(densukeSyncService).triggerWriteAsync();
+            // 管理者通知が送信される
+            verify(lineNotificationService).sendAdminWaitlistNotification(
+                    eq("オファー承諾"), eq(triggerPlayer), eq(session), any(), any(), any());
         }
 
         @Test
@@ -882,6 +1098,7 @@ class WaitlistPromotionServiceTest {
 
             PracticeSession session = PracticeSession.builder().id(100L)
                     .sessionDate(LocalDate.of(2026, 5, 10)).build();
+            Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(valid, expired));
@@ -890,12 +1107,16 @@ class WaitlistPromotionServiceTest {
                     .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                             eq(100L), anyInt(), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
                     .thenReturn(List.of());
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(triggerPlayer));
 
             int count = service.respondToOfferAll(100L, 10L, true);
 
             assertThat(count).isEqualTo(1); // 2件中1件のみ承諾
             assertThat(valid.getStatus()).isEqualTo(ParticipantStatus.WON);
             assertThat(expired.getStatus()).isEqualTo(ParticipantStatus.OFFERED); // 変更なし
+            // 管理者通知は承諾した1件分のみ送信される
+            verify(lineNotificationService).sendAdminWaitlistNotification(
+                    eq("オファー承諾"), eq(triggerPlayer), eq(session), any(), any(), any());
         }
 
         @Test
