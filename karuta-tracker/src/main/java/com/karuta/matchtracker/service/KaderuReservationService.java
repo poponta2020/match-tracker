@@ -1,0 +1,172 @@
+package com.karuta.matchtracker.service;
+
+import com.karuta.matchtracker.config.AdjacentRoomConfig;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * かでる2・7 予約画面自動遷移サービス
+ *
+ * Node.js + Playwrightスクリプトを呼び出し、
+ * ログイン→空き状況→スロット選択→申込トレイ画面まで自動遷移する。
+ * 利用目的は未入力のまま（誤申込み防止）。
+ */
+@Service
+@Slf4j
+public class KaderuReservationService {
+
+    @Value("${kaderu.user-id:}")
+    private String kaderuUserId;
+
+    @Value("${kaderu.password:}")
+    private String kaderuPassword;
+
+    @Value("${kaderu.script-path:scripts/room-checker/open-reserve.js}")
+    private String scriptPath;
+
+    @Value("${kaderu.node-command:node}")
+    private String nodeCommand;
+
+    private static final Map<Integer, String> SLOT_LABELS = Map.of(
+            0, "午前 (9:00-12:00)",
+            1, "午後 (13:00-16:00)",
+            2, "夜間 (17:00-21:00)"
+    );
+
+    /**
+     * 予約画面（申込トレイ）をブラウザで開く
+     *
+     * @param roomName 部屋名（すずらん/はまなす/あかなら/えぞまつ）
+     * @param date     予約日
+     * @param slotIndex 時間帯（0=午前, 1=午後, 2=夜間）
+     * @return 実行結果
+     */
+    public ReservationResult openReservationPage(String roomName, LocalDate date, int slotIndex) {
+        // バリデーション
+        if (!AdjacentRoomConfig.isValidKaderuRoomName(roomName)) {
+            return ReservationResult.error("INVALID_ROOM",
+                    "無効な部屋名です: " + roomName);
+        }
+        if (slotIndex < 0 || slotIndex > 2) {
+            return ReservationResult.error("INVALID_SLOT",
+                    "無効な時間帯です: " + slotIndex);
+        }
+        if (date.isBefore(LocalDate.now())) {
+            return ReservationResult.error("PAST_DATE",
+                    "過去の日付は指定できません: " + date);
+        }
+        if (kaderuUserId.isEmpty() || kaderuPassword.isEmpty()) {
+            return ReservationResult.error("NO_CREDENTIALS",
+                    "かでる2・7のログイン情報が設定されていません");
+        }
+
+        String dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        log.info("Opening reservation page: room={}, date={}, slot={}({})",
+                roomName, dateStr, slotIndex, SLOT_LABELS.get(slotIndex));
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    nodeCommand, scriptPath,
+                    "--room", roomName,
+                    "--date", dateStr,
+                    "--slot", String.valueOf(slotIndex)
+            );
+            pb.environment().put("KADERU_USER_ID", kaderuUserId);
+            pb.environment().put("KADERU_PASSWORD", kaderuPassword);
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+
+            // スクリプトの出力を読み取り（申込トレイ画面到達まで待機）
+            StringBuilder output = new StringBuilder();
+            String lastJsonLine = null;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                    log.debug("open-reserve.js: {}", line);
+                    // JSON形式の結果行を探す
+                    if (line.trim().startsWith("{") && line.trim().endsWith("}")) {
+                        lastJsonLine = line.trim();
+                        // 成功ならプロセスの終了を待たずに結果を返す
+                        // （ブラウザはバックグラウンドで開いたまま）
+                        if (lastJsonLine.contains("\"success\":true")) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (lastJsonLine != null && lastJsonLine.contains("\"success\":true")) {
+                log.info("Reservation page opened successfully: room={}, date={}, slot={}",
+                        roomName, dateStr, slotIndex);
+                return ReservationResult.success(roomName, dateStr, SLOT_LABELS.get(slotIndex));
+            } else {
+                // エラー行からエラー種別を抽出
+                String errorType = "UNKNOWN";
+                if (lastJsonLine != null) {
+                    if (lastJsonLine.contains("LOGIN_FAILED")) errorType = "LOGIN_FAILED";
+                    else if (lastJsonLine.contains("NOT_AVAILABLE")) errorType = "NOT_AVAILABLE";
+                    else if (lastJsonLine.contains("ROOM_NOT_FOUND")) errorType = "ROOM_NOT_FOUND";
+                    else if (lastJsonLine.contains("TRAY_NAVIGATION_FAILED")) errorType = "TRAY_NAVIGATION_FAILED";
+                }
+
+                log.warn("Failed to open reservation page: error={}, output={}",
+                        errorType, output.toString().substring(0, Math.min(output.length(), 500)));
+                return ReservationResult.error(errorType,
+                        "予約画面の表示に失敗しました (" + errorType + ")");
+            }
+        } catch (Exception e) {
+            log.error("Error launching reservation script", e);
+            return ReservationResult.error("SCRIPT_ERROR", e.getMessage());
+        }
+    }
+
+    /**
+     * Venue IDを指定して予約画面を開く（隣室予約用）
+     *
+     * @param venueId   かでる会場のVenue ID
+     * @param date      予約日
+     * @param slotIndex 時間帯（0=午前, 1=午後, 2=夜間）
+     * @return 実行結果
+     */
+    public ReservationResult openReservationPageByVenueId(Long venueId, LocalDate date, int slotIndex) {
+        if (!AdjacentRoomConfig.isKaderuRoom(venueId)) {
+            return ReservationResult.error("NOT_KADERU_ROOM",
+                    "かでる2・7の部屋ではありません: venueId=" + venueId);
+        }
+        String roomName = AdjacentRoomConfig.getKaderuRoomName(venueId);
+        return openReservationPage(roomName, date, slotIndex);
+    }
+
+    /**
+     * 予約画面遷移の実行結果
+     */
+    public record ReservationResult(
+            boolean success,
+            String errorCode,
+            String message,
+            String roomName,
+            String date,
+            String timeSlot
+    ) {
+        public static ReservationResult success(String roomName, String date, String timeSlot) {
+            return new ReservationResult(true, null,
+                    "申込トレイ画面を開きました。利用目的を入力後「申込み」を押してください。",
+                    roomName, date, timeSlot);
+        }
+
+        public static ReservationResult error(String errorCode, String message) {
+            return new ReservationResult(false, errorCode, message, null, null, null);
+        }
+    }
+}

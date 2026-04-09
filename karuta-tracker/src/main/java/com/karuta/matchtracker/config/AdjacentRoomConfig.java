@@ -9,6 +9,51 @@ public final class AdjacentRoomConfig {
 
     private AdjacentRoomConfig() {}
 
+    /** かでるサイトの施設コード（setAppStatusの第1引数） */
+    private static final Map<String, String> KADERU_FACILITY_CODES = Map.of(
+            "すずらん", "001|018|01|2|2|0",
+            "はまなす", "001|018|02|3|2|0",
+            "あかなら", "001|017|02|3|2|0",
+            "えぞまつ", "001|017|01|2|2|0"
+    );
+
+    /** タイムスロット: index → 時間帯コード */
+    private static final Map<Integer, String> TIME_SLOT_RANGES = Map.of(
+            0, "09001200",
+            1, "13001600",
+            2, "17002100"
+    );
+
+    /**
+     * かでるサイトの施設コードを返す
+     */
+    public static String getKaderuFacilityCode(String roomName) {
+        return KADERU_FACILITY_CODES.get(roomName);
+    }
+
+    /**
+     * タイムスロットの時間帯コードを返す
+     * @param slotIndex 0=午前, 1=午後, 2=夜間
+     */
+    public static String getTimeSlotRange(int slotIndex) {
+        return TIME_SLOT_RANGES.get(slotIndex);
+    }
+
+    /**
+     * Venue IDからかでるサイトの施設コードを返す
+     */
+    public static String getKaderuFacilityCodeByVenueId(Long venueId) {
+        String roomName = getKaderuRoomName(venueId);
+        return roomName != null ? KADERU_FACILITY_CODES.get(roomName) : null;
+    }
+
+    /**
+     * 有効なかでる部屋名かどうかを判定する
+     */
+    public static boolean isValidKaderuRoomName(String roomName) {
+        return roomName != null && KADERU_FACILITY_CODES.containsKey(roomName);
+    }
+
     /** かでる和室のVenue ID一覧 */
     private static final Map<Long, RoomInfo> ROOM_MAP = Map.of(
             3L, new RoomInfo("すずらん", 11L, 7L),
