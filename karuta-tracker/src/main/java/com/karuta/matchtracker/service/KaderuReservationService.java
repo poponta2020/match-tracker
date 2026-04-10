@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -59,7 +60,7 @@ public class KaderuReservationService {
             return ReservationResult.error("INVALID_SLOT",
                     "無効な時間帯です: " + slotIndex);
         }
-        if (date.isBefore(LocalDate.now())) {
+        if (date.isBefore(JstDateTimeUtil.today())) {
             return ReservationResult.error("PAST_DATE",
                     "過去の日付は指定できません: " + date);
         }
@@ -99,10 +100,18 @@ public class KaderuReservationService {
                         lastJsonLine = line.trim();
                         // 成功ならプロセスの終了を待たずに結果を返す
                         // （ブラウザはバックグラウンドで開いたまま）
-                        if (lastJsonLine.contains("\"success\":true")) {
+                        if (lastJsonLine.contains("\"success\":true") || lastJsonLine.contains("\"success\":false")) {
                             break;
                         }
                     }
+                }
+            }
+
+            // プロセスが残っている場合はタイムアウト付きで終了を待つ
+            if (process.isAlive()) {
+                if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                    log.warn("open-reserve.js process did not exit in time, destroying forcibly");
+                    process.destroyForcibly();
                 }
             }
 

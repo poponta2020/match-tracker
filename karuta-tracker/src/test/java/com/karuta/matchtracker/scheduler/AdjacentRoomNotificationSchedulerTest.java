@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
@@ -85,8 +86,6 @@ class AdjacentRoomNotificationSchedulerTest {
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
 
-        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 3)).thenReturn(false);
-
         AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
                 .adjacentRoomName("はまなす").status("○").available(true)
                 .expandedVenueId(7L).expandedVenueName("すずらん・はまなす").expandedCapacity(24)
@@ -115,8 +114,8 @@ class AdjacentRoomNotificationSchedulerTest {
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
 
-        // 残り3人で既に通知済み
-        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 3)).thenReturn(true);
+        // 残り3人で既に通知済み → save時に一意制約違反
+        when(adjacentRoomNotificationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
 
         scheduler.checkCapacityAndNotify();
 
@@ -133,8 +132,6 @@ class AdjacentRoomNotificationSchedulerTest {
                 .thenReturn(12L);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
-
-        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 2)).thenReturn(false);
 
         AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
                 .adjacentRoomName("はまなす").status("×").available(false).build();
@@ -172,8 +169,6 @@ class AdjacentRoomNotificationSchedulerTest {
                 .thenReturn(14L);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
-
-        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 0)).thenReturn(false);
 
         AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
                 .adjacentRoomName("はまなす").status("○").available(true)

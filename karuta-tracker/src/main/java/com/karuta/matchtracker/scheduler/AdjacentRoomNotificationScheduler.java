@@ -20,6 +20,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import org.springframework.dao.DataIntegrityViolationException;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -108,8 +110,17 @@ public class AdjacentRoomNotificationScheduler {
         // 残りが負の場合は0に補正
         if (remaining < 0) remaining = 0;
 
-        // この段階で既に通知済みかチェック
-        if (adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(session.getId(), remaining)) {
+        // 通知済みレコードを先に原子的に確保（一意制約で並列実行時の重複を防止）
+        try {
+            adjacentRoomNotificationRepository.save(AdjacentRoomNotification.builder()
+                    .sessionId(session.getId())
+                    .remainingCount(remaining)
+                    .build());
+            adjacentRoomNotificationRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // 既に他のインスタンスが通知済み → スキップ
+            log.debug("Adjacent room notification already sent for session {} (remaining={})",
+                    session.getId(), remaining);
             return 0;
         }
 
@@ -157,12 +168,6 @@ public class AdjacentRoomNotificationScheduler {
                     session.getOrganizationId());
             sentCount++;
         }
-
-        // 通知済み記録を保存
-        adjacentRoomNotificationRepository.save(AdjacentRoomNotification.builder()
-                .sessionId(session.getId())
-                .remainingCount(remaining)
-                .build());
 
         log.info("Adjacent room notification sent for session {} (remaining={}, recipients={})",
                 session.getId(), remaining, sentCount);

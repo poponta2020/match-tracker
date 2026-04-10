@@ -236,7 +236,13 @@ async function openReserve({ room, date, slot, userId, password }) {
 // --- メイン ---
 async function main() {
   const params = parseArgs();
-  const { browser } = await openReserve(params);
+  const { browser, success } = await openReserve(params);
+
+  if (!success) {
+    console.log("openReserve failed. Closing browser and exiting.");
+    await browser.close();
+    process.exit(1);
+  }
 
   // ブラウザを開いたまま待機（ユーザーが手動で操作）
   // Ctrl+C で終了
