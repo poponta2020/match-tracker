@@ -55,10 +55,9 @@ const MatchDetail = () => {
           setHasMentorRelation(isMentee);
           if (isMentee) setMenteeIdForComments(Number(queryPlayerId));
         } else {
-          const res = await mentorRelationshipAPI.getMyMentors();
-          const hasActiveMentor = res.data.some(r => r.status === 'ACTIVE');
-          setHasMentorRelation(hasActiveMentor);
-          if (hasActiveMentor) setMenteeIdForComments(currentPlayer?.id);
+          // メンティー本人は常にコメントスレッドを表示（解除後も閲覧可能）
+          setHasMentorRelation(true);
+          setMenteeIdForComments(currentPlayer?.id);
         }
       } catch {
         // ignore

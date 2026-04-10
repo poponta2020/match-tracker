@@ -53,19 +53,37 @@ public class MentorRelationshipService {
             throw new IllegalArgumentException("あなたはこの団体に所属していません");
         }
 
-        if (mentorRelationshipRepository.existsByMentorIdAndMenteeIdAndOrganizationId(mentorId, menteeId, organizationId)) {
+        // 既存の関係を確認（REJECTED なら再指名を許可）
+        var existing = mentorRelationshipRepository
+                .findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(mentorId, menteeId, organizationId, Status.ACTIVE);
+        if (existing.isPresent()) {
+            throw new DuplicateResourceException("MentorRelationship", "mentor_id, mentee_id", mentorId + ", " + menteeId);
+        }
+        var existingPending = mentorRelationshipRepository
+                .findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(mentorId, menteeId, organizationId, Status.PENDING);
+        if (existingPending.isPresent()) {
             throw new DuplicateResourceException("MentorRelationship", "mentor_id, mentee_id", mentorId + ", " + menteeId);
         }
 
-        MentorRelationship entity = MentorRelationship.builder()
-                .mentorId(mentorId)
-                .menteeId(menteeId)
-                .organizationId(organizationId)
-                .status(Status.PENDING)
-                .build();
-
-        MentorRelationship saved = mentorRelationshipRepository.save(entity);
-        log.info("メンター関係作成: mentor={}, mentee={}, org={}", mentorId, menteeId, organizationId);
+        // REJECTED の既存レコードがあれば再利用（UNIQUE制約対応）
+        var existingRejected = mentorRelationshipRepository
+                .findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(mentorId, menteeId, organizationId, Status.REJECTED);
+        MentorRelationship saved;
+        if (existingRejected.isPresent()) {
+            MentorRelationship reuse = existingRejected.get();
+            reuse.setStatus(Status.PENDING);
+            saved = mentorRelationshipRepository.save(reuse);
+            log.info("メンター関係再指名（REJECTED→PENDING）: mentor={}, mentee={}, org={}", mentorId, menteeId, organizationId);
+        } else {
+            MentorRelationship entity = MentorRelationship.builder()
+                    .mentorId(mentorId)
+                    .menteeId(menteeId)
+                    .organizationId(organizationId)
+                    .status(Status.PENDING)
+                    .build();
+            saved = mentorRelationshipRepository.save(entity);
+            log.info("メンター関係作成: mentor={}, mentee={}, org={}", mentorId, menteeId, organizationId);
+        }
 
         return toDto(saved);
     }
@@ -98,8 +116,9 @@ public class MentorRelationshipService {
             throw new ForbiddenException("メンター本人のみ拒否できます");
         }
 
-        mentorRelationshipRepository.delete(entity);
-        log.info("メンター関係拒否（削除）: id={}, mentor={}, mentee={}", id, entity.getMentorId(), entity.getMenteeId());
+        entity.setStatus(Status.REJECTED);
+        mentorRelationshipRepository.save(entity);
+        log.info("メンター関係拒否: id={}, mentor={}, mentee={}", id, entity.getMentorId(), entity.getMenteeId());
     }
 
     @Transactional
@@ -114,6 +133,7 @@ public class MentorRelationshipService {
         mentorRelationshipRepository.delete(entity);
         log.info("メンター関係解除: id={}, by={}", id, currentUserId);
     }
+
 
     @Transactional(readOnly = true)
     public List<MentorRelationshipDto> getMyMentors(Long currentUserId) {

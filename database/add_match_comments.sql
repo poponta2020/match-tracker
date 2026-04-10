@@ -11,3 +11,6 @@ CREATE TABLE IF NOT EXISTS match_comments (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL
 );
+
+-- コメント取得クエリ用の複合インデックス
+CREATE INDEX IF NOT EXISTS idx_match_comments_thread ON match_comments(match_id, mentee_id, deleted_at, created_at);

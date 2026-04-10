@@ -65,7 +65,12 @@ class MentorRelationshipServiceTest {
             when(playerRepository.findById(1L)).thenReturn(Optional.of(mentor));
             when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(1L, 10L)).thenReturn(true);
             when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(2L, 10L)).thenReturn(true);
-            when(mentorRelationshipRepository.existsByMentorIdAndMenteeIdAndOrganizationId(1L, 2L, 10L)).thenReturn(false);
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.PENDING))
+                    .thenReturn(Optional.empty());
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.REJECTED))
+                    .thenReturn(Optional.empty());
             when(mentorRelationshipRepository.save(any())).thenAnswer(inv -> {
                 MentorRelationship r = inv.getArgument(0);
                 r.setId(100L);
@@ -84,6 +89,31 @@ class MentorRelationshipServiceTest {
             MentorRelationshipCreateRequest request = new MentorRelationshipCreateRequest(2L, 10L);
             assertThatThrownBy(() -> service.createRelationship(request, 2L))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("REJECTED後に再指名できる")
+        void reNominateAfterRejection() {
+            MentorRelationshipCreateRequest request = new MentorRelationshipCreateRequest(1L, 10L);
+            MentorRelationship rejected = MentorRelationship.builder()
+                    .id(50L).mentorId(1L).menteeId(2L).organizationId(10L).status(Status.REJECTED).build();
+
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(mentor));
+            when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(1L, 10L)).thenReturn(true);
+            when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(2L, 10L)).thenReturn(true);
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.PENDING))
+                    .thenReturn(Optional.empty());
+            when(mentorRelationshipRepository.findByMentorIdAndMenteeIdAndOrganizationIdAndStatus(1L, 2L, 10L, Status.REJECTED))
+                    .thenReturn(Optional.of(rejected));
+            when(mentorRelationshipRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(mentee));
+            when(organizationRepository.findById(10L)).thenReturn(Optional.of(new Organization()));
+
+            MentorRelationshipDto result = service.createRelationship(request, 2L);
+            assertThat(result).isNotNull();
+            assertThat(result.getStatus()).isEqualTo("PENDING");
         }
     }
 
@@ -113,6 +143,36 @@ class MentorRelationshipServiceTest {
                     .id(1L).mentorId(1L).menteeId(2L).organizationId(10L).status(Status.PENDING).build();
             when(mentorRelationshipRepository.findById(1L)).thenReturn(Optional.of(rel));
             assertThatThrownBy(() -> service.approveRelationship(1L, 2L))
+                    .isInstanceOf(ForbiddenException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("rejectRelationship")
+    class RejectRelationship {
+
+        @Test
+        @DisplayName("拒否するとREJECTEDステータスに変更される（削除ではない）")
+        void setsRejectedStatus() {
+            MentorRelationship rel = MentorRelationship.builder()
+                    .id(1L).mentorId(1L).menteeId(2L).organizationId(10L).status(Status.PENDING).build();
+            when(mentorRelationshipRepository.findById(1L)).thenReturn(Optional.of(rel));
+            when(mentorRelationshipRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.rejectRelationship(1L, 1L);
+
+            verify(mentorRelationshipRepository).save(argThat(entity ->
+                    entity.getStatus() == Status.REJECTED));
+            verify(mentorRelationshipRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("メンター以外が拒否するとエラー")
+        void forbiddenRejection() {
+            MentorRelationship rel = MentorRelationship.builder()
+                    .id(1L).mentorId(1L).menteeId(2L).organizationId(10L).status(Status.PENDING).build();
+            when(mentorRelationshipRepository.findById(1L)).thenReturn(Optional.of(rel));
+            assertThatThrownBy(() -> service.rejectRelationship(1L, 2L))
                     .isInstanceOf(ForbiddenException.class);
         }
     }
