@@ -20,6 +20,7 @@ public class PushNotificationPreferenceDto {
     private boolean offerExpired;
     private boolean channelReclaimWarning;
     private boolean densukeUnmatched;
+    private boolean adjacentRoom;
 
     public static PushNotificationPreferenceDto fromEntity(PushNotificationPreference entity) {
         return PushNotificationPreferenceDto.builder()
@@ -32,6 +33,7 @@ public class PushNotificationPreferenceDto {
             .offerExpired(entity.getOfferExpired())
             .channelReclaimWarning(entity.getChannelReclaimWarning())
             .densukeUnmatched(entity.getDensukeUnmatched())
+            .adjacentRoom(entity.getAdjacentRoom())
             .build();
     }
 
@@ -48,6 +50,7 @@ public class PushNotificationPreferenceDto {
             .offerExpired(true)
             .channelReclaimWarning(true)
             .densukeUnmatched(true)
+            .adjacentRoom(true)
             .build();
     }
 }

@@ -47,8 +47,11 @@ argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検
    - マージ後、ローカルの `main` を更新する: `git fetch origin main && git merge origin/main --ff-only` （mainにいる場合のみ）
 
 6. ローカルブランチを削除する
-   - PRのブランチ（headRefName）が `main` でなければ、`git branch -d {ブランチ名}` でローカルブランチを削除
+   - PRのブランチ（headRefName）が `main` でなければ削除を試みる
+   - **まず `git worktree list` でそのブランチを使っているworktreeがないか確認する**
+   - worktreeが存在する場合は、先に `git worktree remove {worktreeパス}` で削除する
    - 現在そのブランチにいる場合は、先に `git checkout main` してから削除する
+   - `git branch -d {ブランチ名}` でローカルブランチを削除する
 
 7. 親Issueのクローズ（該当する場合のみ）
    - PRの本文やコミットメッセージから親Issue番号を探す（`[Feature]` や `[Fix]` プレフィックスのIssue）

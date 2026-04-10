@@ -45,6 +45,9 @@ public class PracticeSessionDto {
     private java.util.Map<Integer, List<MatchParticipantInfo>> matchParticipants;  // 試合番号ごとの参加者情報リスト
     private List<VenueMatchScheduleDto> venueSchedules;  // 会場の試合時間割
 
+    // 隣室空き状況
+    private AdjacentRoomStatusDto adjacentRoomStatus;
+
     // 抽選関連フィールド
     private Boolean lotteryExecuted;  // 抽選実行済みか
     private java.util.Map<Integer, MatchLotteryInfo> matchLotteryInfo;  // 試合番号ごとの抽選情報

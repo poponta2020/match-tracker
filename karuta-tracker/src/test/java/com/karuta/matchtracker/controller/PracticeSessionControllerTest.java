@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -60,6 +61,9 @@ class PracticeSessionControllerTest {
 
     @MockitoBean
     private com.karuta.matchtracker.service.DensukeSyncService densukeSyncService;
+
+    @MockitoBean
+    private com.karuta.matchtracker.service.AdjacentRoomService adjacentRoomService;
 
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
@@ -244,6 +248,52 @@ class PracticeSessionControllerTest {
                 .andExpect(jsonPath("$.status").value(400));
 
         verify(practiceSessionService).updateTotalMatches(1L, -1);
+    }
+
+    // ========== 会場拡張 ==========
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/expand-venue - 会場を拡張できる")
+    void testExpandVenue() throws Exception {
+        // Given
+        doNothing().when(adjacentRoomService).expandVenue(eq(1L), any());
+        when(practiceSessionService.findById(1L)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("X-Admin-Organization-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(adjacentRoomService).expandVenue(eq(1L), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/expand-venue - PLAYERロールは403")
+    void testExpandVenuePlayerForbidden() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                .andExpect(status().isForbidden());
+
+        verify(adjacentRoomService, never()).expandVenue(any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/expand-venue - 隣室空きなしで400")
+    void testExpandVenueNotAvailable() throws Exception {
+        // Given
+        doThrow(new IllegalStateException("隣室が空いていないため、会場を拡張できません"))
+                .when(adjacentRoomService).expandVenue(eq(1L), any());
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("X-Admin-Organization-Id", "1"))
+                .andExpect(status().isBadRequest());
+
+        verify(adjacentRoomService).expandVenue(eq(1L), any());
     }
 
     @Test

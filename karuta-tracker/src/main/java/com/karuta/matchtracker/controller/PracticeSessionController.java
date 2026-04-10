@@ -34,6 +34,7 @@ public class PracticeSessionController {
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
     private final com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
     private final com.karuta.matchtracker.service.DensukeSyncService densukeSyncService;
+    private final com.karuta.matchtracker.service.AdjacentRoomService adjacentRoomService;
 
     /**
      * IDで練習日を取得
@@ -418,6 +419,28 @@ public class PracticeSessionController {
         practiceSessionService.checkAdminScope(sessionId, role, adminOrgId);
         practiceParticipantService.removeParticipantFromMatch(sessionId, matchNumber, playerId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 会場を拡張（隣室と合わせた大部屋に変更）
+     *
+     * @param id セッションID
+     * @return 更新後のセッション情報
+     */
+    @PostMapping("/{id}/expand-venue")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<PracticeSessionDto> expandVenue(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("POST /api/practice-sessions/{}/expand-venue - Expanding venue", id);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(id, role, adminOrgId);
+
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        adjacentRoomService.expandVenue(id, currentUserId);
+        PracticeSessionDto updatedSession = practiceSessionService.findById(id);
+        return ResponseEntity.ok(updatedSession);
     }
 
     // ========== 伝助URL管理 ==========
