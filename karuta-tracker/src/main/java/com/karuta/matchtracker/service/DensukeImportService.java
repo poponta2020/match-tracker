@@ -84,6 +84,7 @@ public class DensukeImportService {
         Set<String> unmatchedNameSet = new LinkedHashSet<>();
         Set<String> unmatchedVenueSet = new LinkedHashSet<>();
         List<AdminWaitlistNotificationData> pendingNotifications = new ArrayList<>();
+        Set<PracticeSession> vacancyChangedSessions = new LinkedHashSet<>();
 
         Map<LocalDate, Integer> maxMatchByDate = new LinkedHashMap<>();
         Map<LocalDate, String> venueByDate = new LinkedHashMap<>();
@@ -120,7 +121,7 @@ public class DensukeImportService {
                     result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
                 }
                 case PHASE3 -> processPhase3(entry, session, scraped.getMemberNames(),
-                        playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications);
+                        playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications, vacancyChangedSessions);
             }
         }
 
@@ -128,6 +129,9 @@ public class DensukeImportService {
         if (!pendingNotifications.isEmpty()) {
             sendPendingNotifications(pendingNotifications);
         }
+
+        // 伝助同期で空き枠変動があったセッションの統合通知を送信
+        sendConsolidatedVacancyNotifications(vacancyChangedSessions);
 
         result.setUnmatchedNames(new ArrayList<>(unmatchedNameSet));
         result.setUnmatchedVenues(new ArrayList<>(unmatchedVenueSet));
@@ -263,7 +267,8 @@ public class DensukeImportService {
                                List<String> memberNames,
                                Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
                                Set<String> unmatchedNameSet, ImportResult result,
-                               List<AdminWaitlistNotificationData> pendingNotifications) {
+                               List<AdminWaitlistNotificationData> pendingNotifications,
+                               Set<PracticeSession> vacancyChangedSessions) {
         // 既存参加者をマップ化
         List<PracticeParticipant> existing =
                 practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
@@ -294,7 +299,7 @@ public class DensukeImportService {
         // --- ○ の処理 (3-A) ---
         for (Long playerId : markedIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Maru(playerId, p, session, entry.getMatchNumber())) {
+            if (processPhase3Maru(playerId, p, session, entry.getMatchNumber(), vacancyChangedSessions)) {
                 processed++;
             }
         }
@@ -324,10 +329,10 @@ public class DensukeImportService {
      * 3-A: 伝助○の処理
      */
     private boolean processPhase3Maru(Long playerId, PracticeParticipant existing,
-                                      PracticeSession session, int matchNumber) {
+                                      PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
         if (existing == null) {
             // 3-A1/A2/A3: 未登録 → 定員判定して登録
-            registerNewParticipant(playerId, session, matchNumber);
+            registerNewParticipant(playerId, session, matchNumber, vacancyChangedSessions);
             return true;
         }
         if (existing.isDirty()) return false; // dirty保護
@@ -353,7 +358,7 @@ public class DensukeImportService {
                         }
                         log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available)",
                                 playerId);
-                        notifyVacancyUpdateIfNeeded(session, matchNumber, playerId);
+                        vacancyChangedSessions.add(session);
                         return true;
                     }
                 }
@@ -380,7 +385,7 @@ public class DensukeImportService {
             }
             case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
                 // 3-A10/A11: 既存レコードを再利用して再登録（一意制約違反を防ぐ）
-                reactivateAsNewParticipant(existing, session, matchNumber);
+                reactivateAsNewParticipant(existing, session, matchNumber, vacancyChangedSessions);
                 return true;
             }
             default -> { return false; }
@@ -478,13 +483,13 @@ public class DensukeImportService {
     // ヘルパーメソッド
     // ========================================================================
 
-    private void registerNewParticipant(Long playerId, PracticeSession session, int matchNumber) {
+    private void registerNewParticipant(Long playerId, PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
         if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
             practiceParticipantRepository.save(PracticeParticipant.builder()
                     .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
                     .status(ParticipantStatus.WON).dirty(true).build());
             log.info("Phase3: registered player {} as WON for session {} match {}", playerId, session.getId(), matchNumber);
-            notifyVacancyUpdateIfNeeded(session, matchNumber, playerId);
+            vacancyChangedSessions.add(session);
         } else {
             createWaitlisted(playerId, session, matchNumber);
         }
@@ -505,7 +510,7 @@ public class DensukeImportService {
      * CANCELLED/DECLINED/WAITLIST_DECLINED の既存レコードを再利用して WON or WAITLISTED に復帰させる。
      * 新規INSERTではなく既存レコードのUPDATEにすることで一意制約違反を防ぐ。
      */
-    private void reactivateAsNewParticipant(PracticeParticipant existing, PracticeSession session, int matchNumber) {
+    private void reactivateAsNewParticipant(PracticeParticipant existing, PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
         clearCancelledFields(existing);
         if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
             existing.setStatus(ParticipantStatus.WON);
@@ -513,7 +518,7 @@ public class DensukeImportService {
             log.info("Phase3: reactivated player {} as WON for session {} match {}",
                     existing.getPlayerId(), session.getId(), matchNumber);
             practiceParticipantRepository.save(existing);
-            notifyVacancyUpdateIfNeeded(session, matchNumber, existing.getPlayerId());
+            vacancyChangedSessions.add(session);
         } else {
             int maxNumber = practiceParticipantRepository
                     .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
@@ -564,16 +569,39 @@ public class DensukeImportService {
     }
 
     /**
-     * 伝助同期でWON登録された後、空き枠状況の通知を送信する。
-     * 当日12:00以降の場合のみ発火する（それ以外は空き募集フロー対象外）。
+     * 伝助同期で空き枠変動があったセッションについて、統合通知を送信する。
+     * SameDayVacancySchedulerと同じロジックでセッション単位の空き枠を集計し、1回だけ通知する。
      */
-    private void notifyVacancyUpdateIfNeeded(PracticeSession session, int matchNumber, Long playerId) {
-        if (!lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
-            return;
+    private void sendConsolidatedVacancyNotifications(Set<PracticeSession> sessions) {
+        for (PracticeSession session : sessions) {
+            if (!lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
+                continue;
+            }
+            int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+            if (capacity <= 0) continue;
+
+            int totalMatches = session.getTotalMatches() != null ? session.getTotalMatches() : 1;
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+
+            for (int mn = 1; mn <= totalMatches; mn++) {
+                List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                        .findBySessionIdAndMatchNumberAndStatus(session.getId(), mn, ParticipantStatus.WON);
+                List<PracticeParticipant> waitlistedParticipants = practiceParticipantRepository
+                        .findBySessionIdAndMatchNumberAndStatus(session.getId(), mn, ParticipantStatus.WAITLISTED);
+
+                if (wonParticipants.size() < capacity && waitlistedParticipants.isEmpty()) {
+                    int vacancies = capacity - wonParticipants.size();
+                    vacanciesByMatch.put(mn, vacancies);
+                }
+            }
+
+            if (!vacanciesByMatch.isEmpty()) {
+                lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+                lineNotificationService.sendConsolidatedAdminVacancyNotification(session, vacanciesByMatch);
+                log.info("Densuke sync: sent consolidated vacancy notification for session {} ({} matches with vacancies)",
+                        session.getId(), vacanciesByMatch.size());
+            }
         }
-        String playerName = playerRepository.findById(playerId)
-                .map(Player::getName).orElse("不明");
-        lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
     }
 
     private boolean isTerminalStatus(ParticipantStatus status) {
