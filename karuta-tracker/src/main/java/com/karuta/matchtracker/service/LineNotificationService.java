@@ -1685,7 +1685,25 @@ public class LineNotificationService {
                     "size", "md", "margin", "sm", "color", textColor, "wrap", true));
         }
 
-        if (includeButtons) {
+        if (!includeButtons) {
+            Map<String, Object> body = Map.of(
+                    "type", "box",
+                    "layout", "vertical",
+                    "contents", bodyContents,
+                    "paddingAll", "20px"
+            );
+            return Map.of(
+                    "type", "bubble",
+                    "header", header,
+                    "body", body
+            );
+        }
+
+        // フッター（ボタン群）— 空きのある試合がない場合はボタンなし
+        List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
+
+        // CTA文言はボタンがある場合のみ表示（満枠時の表示不整合を防止）
+        if (!footerContents.isEmpty()) {
             bodyContents.add(Map.of("type", "text",
                     "text", "参加希望の場合はボタンを押してください",
                     "size", "sm", "margin", "lg", "color", "#888888", "wrap", true));
@@ -1698,16 +1716,6 @@ public class LineNotificationService {
                 "paddingAll", "20px"
         );
 
-        if (!includeButtons) {
-            return Map.of(
-                    "type", "bubble",
-                    "header", header,
-                    "body", body
-            );
-        }
-
-        // フッター（ボタン群）— 空きのある試合がない場合はボタンなし
-        List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
         if (footerContents.isEmpty()) {
             return Map.of(
                     "type", "bubble",
