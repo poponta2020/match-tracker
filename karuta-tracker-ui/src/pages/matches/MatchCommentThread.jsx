@@ -102,7 +102,7 @@ export default function MatchCommentThread({ matchId, menteeId }) {
         await fetchComments();
         setTimeout(() => setNotifySuccess(false), 3000);
       } else if (result === 'SKIPPED') {
-        setError('LINE未連携のため通知を送信できませんでした');
+        setError('LINE通知を送信できませんでした（LINE未連携・通知設定OFF・月間上限超過の可能性があります）');
       } else {
         setError('LINE通知の送信に失敗しました。再度お試しください');
       }

@@ -2498,17 +2498,24 @@ public class LineNotificationService {
                     .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
             if (relationships.isEmpty()) return SendResult.SKIPPED;
 
-            boolean anyFailed = false;
             boolean anySuccess = false;
+            boolean allSkipped = true;
             for (MentorRelationship rel : relationships) {
                 SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, altText, flex);
-                if (r == SendResult.SUCCESS) anySuccess = true;
-                else if (r == SendResult.FAILED) anyFailed = true;
+                if (r == SendResult.SUCCESS) {
+                    anySuccess = true;
+                    allSkipped = false;
+                } else if (r == SendResult.FAILED) {
+                    log.warn("メンターコメント通知 部分失敗: mentorId={}", rel.getMentorId());
+                    allSkipped = false;
+                }
             }
 
-            if (anyFailed) return SendResult.FAILED;
+            // 1人でも成功すれば SUCCESS（重複送信防止のため lineNotified=true にする）
+            // 全員スキップなら SKIPPED、全員失敗なら FAILED
             if (anySuccess) return SendResult.SUCCESS;
-            return SendResult.SKIPPED;
+            if (allSkipped) return SendResult.SKIPPED;
+            return SendResult.FAILED;
         } else {
             // メンターがコメント → メンティーに通知
             return sendFlexToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, altText, flex);
