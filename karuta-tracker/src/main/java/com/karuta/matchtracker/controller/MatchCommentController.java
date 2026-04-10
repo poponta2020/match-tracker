@@ -11,8 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.karuta.matchtracker.dto.MatchCommentUpdateRequest;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/matches/{matchId}/comments")
@@ -48,12 +48,12 @@ public class MatchCommentController {
     public ResponseEntity<MatchCommentDto> updateComment(
             @PathVariable Long matchId,
             @PathVariable Long commentId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody MatchCommentUpdateRequest request,
             HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        String content = body.get("content");
+        
         log.info("コメント編集: matchId={}, commentId={}, by={}", matchId, commentId, currentUserId);
-        MatchCommentDto updated = matchCommentService.updateComment(matchId, commentId, content, currentUserId);
+        MatchCommentDto updated = matchCommentService.updateComment(matchId, commentId, request.getContent(), currentUserId);
         return ResponseEntity.ok(updated);
     }
 

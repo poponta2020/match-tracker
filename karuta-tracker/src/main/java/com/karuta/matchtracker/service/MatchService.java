@@ -52,11 +52,15 @@ public class MatchService {
      * IDで試合結果を取得
      */
     public MatchDto findById(Long id, Long currentPlayerId) {
+        return findById(id, currentPlayerId, null);
+    }
+
+    public MatchDto findById(Long id, Long currentPlayerId, Long viewedPlayerId) {
         log.debug("Finding match by id: {}", id);
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
         MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId, viewedPlayerId);
         return enriched.get(0);
     }
 

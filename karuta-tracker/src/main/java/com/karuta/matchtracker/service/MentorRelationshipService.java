@@ -118,7 +118,7 @@ public class MentorRelationshipService {
     @Transactional(readOnly = true)
     public List<MentorRelationshipDto> getMyMentors(Long currentUserId) {
         List<MentorRelationship> relationships = mentorRelationshipRepository
-                .findByMenteeIdAndStatus(currentUserId, Status.ACTIVE);
+                .findByMenteeIdAndStatusIn(currentUserId, List.of(Status.ACTIVE, Status.PENDING));
         return relationships.stream().map(this::toDto).collect(Collectors.toList());
     }
 

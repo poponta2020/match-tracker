@@ -1002,6 +1002,7 @@ public class LineNotificationService {
         pref.setSameDayVacancy(dto.isSameDayVacancy());
         pref.setAdminSameDayConfirmation(dto.isAdminSameDayConfirmation());
         pref.setAdminSameDayCancel(dto.isAdminSameDayCancel());
+        pref.setMentorComment(dto.isMentorComment());
 
         lineNotificationPreferenceRepository.save(pref);
     }

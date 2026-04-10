@@ -9,6 +9,8 @@ import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.MatchCommentRepository;
+import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class MatchCommentService {
 
     private final MatchCommentRepository matchCommentRepository;
+    private final MatchRepository matchRepository;
     private final MentorRelationshipRepository mentorRelationshipRepository;
     private final PlayerRepository playerRepository;
     private final LineNotificationService lineNotificationService;
@@ -33,6 +36,7 @@ public class MatchCommentService {
     @Transactional(readOnly = true)
     public List<MatchCommentDto> getComments(Long matchId, Long menteeId, Long currentUserId) {
         validateCommentAccess(menteeId, currentUserId);
+        validateMatchBelongsToMentee(matchId, menteeId);
 
         List<MatchComment> comments = matchCommentRepository.findByMatchIdAndMenteeId(matchId, menteeId);
         return comments.stream().map(this::toDto).collect(Collectors.toList());
@@ -42,6 +46,7 @@ public class MatchCommentService {
     public MatchCommentDto createComment(Long matchId, MatchCommentCreateRequest request, Long currentUserId) {
         Long menteeId = request.getMenteeId();
         validateCommentAccess(menteeId, currentUserId);
+        validateMatchBelongsToMentee(matchId, menteeId);
 
         MatchComment entity = MatchComment.builder()
                 .matchId(matchId)
@@ -97,6 +102,17 @@ public class MatchCommentService {
      * コメントアクセス権の検証。
      * メンティー本人、またはACTIVEなメンター関係を持つメンターのみアクセス可能。
      */
+    /**
+     * matchIdがmenteeIdの試合であることを検証する。
+     */
+    private void validateMatchBelongsToMentee(Long matchId, Long menteeId) {
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Match", matchId));
+        if (!menteeId.equals(match.getPlayer1Id()) && !menteeId.equals(match.getPlayer2Id())) {
+            throw new IllegalArgumentException("指定された試合はこのメンティーの試合ではありません");
+        }
+    }
+
     private void validateCommentAccess(Long menteeId, Long currentUserId) {
         if (menteeId.equals(currentUserId)) {
             return;

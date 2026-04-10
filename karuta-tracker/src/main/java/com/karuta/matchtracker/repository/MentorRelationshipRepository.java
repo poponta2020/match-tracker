@@ -16,6 +16,7 @@ public interface MentorRelationshipRepository extends JpaRepository<MentorRelati
     List<MentorRelationship> findByMentorIdAndStatus(Long mentorId, Status status);
 
     List<MentorRelationship> findByMentorIdAndStatusIn(Long mentorId, List<Status> statuses);
+n    List<MentorRelationship> findByMenteeIdAndStatusIn(Long menteeId, List<Status> statuses);
 
     boolean existsByMentorIdAndMenteeIdAndOrganizationId(Long mentorId, Long menteeId, Long organizationId);
 

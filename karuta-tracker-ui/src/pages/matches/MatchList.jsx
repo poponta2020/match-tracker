@@ -447,7 +447,7 @@ const MatchList = () => {
                   <div
                     key={match.id}
                     className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
-                    onClick={() => navigate(`/matches/${match.id}`)}
+                    onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
                   >
                     <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
                     <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">

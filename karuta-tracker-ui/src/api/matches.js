@@ -5,7 +5,7 @@ export const matchAPI = {
   getAll: () => apiClient.get('/matches'),
 
   // 試合記録詳細取得
-  getById: (id) => apiClient.get(`/matches/${id}`),
+  getById: (id, params = {}) => apiClient.get(`/matches/${id}`, { params }),
 
   // 試合記録登録（簡易版）
   create: (data) => apiClient.post('/matches', data),

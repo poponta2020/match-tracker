@@ -32,7 +32,8 @@ const MatchDetail = () => {
   useEffect(() => {
     const fetchMatch = async () => {
       try {
-        const response = await matchAPI.getById(id);
+        const params = queryPlayerId ? { playerId: queryPlayerId } : {};
+        const response = await matchAPI.getById(id, params);
         setMatch(response.data);
       } catch (error) {
         console.error('試合記録の取得に失敗しました:', error);
