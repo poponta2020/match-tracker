@@ -684,10 +684,13 @@ SUPER_ADMIN のみ操作可能。
 - 投稿者本人のみ編集・削除可能
 - 論理削除対応（`deleted_at`）
 
-**LINE通知連携:**
+**LINE通知連携（バッチ送信方式）:**
 - 通知種別: `MENTOR_COMMENT`
-- メンティーがコメント投稿 → すべてのACTIVEメンターに通知
-- メンターがコメント投稿 → メンティーに通知
+- コメント投稿時にはLINE通知を即時送信しない（`line_notified = false` で保留）
+- ユーザーがコメントスレッド画面の「LINE通知を送信（N件）」ボタンを押した時点で、未通知コメントをまとめて1つのFlex Messageで送信
+- メンティーがボタン押下 → すべてのACTIVEメンターにFlex Message送信
+- メンターがボタン押下 → メンティーにFlex Message送信
+- 送信成功時のみ `line_notified = true` に更新（失敗時は再送可能）
 - ユーザーは通知設定画面で `mentor_comment` の ON/OFF を制御可能（デフォルト: ON）
 
 ### 3.8 選手プロフィール履歴
@@ -1716,8 +1719,9 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/?menteeId=` | ALL | コメント一覧取得（メンティー本人またはACTIVEメンターのみ） |
-| POST | `/` | ALL | コメント投稿（メンティー本人またはACTIVEメンターのみ） |
+| GET | `/?menteeId=` | ALL | コメント一覧取得（メンティー本人またはACTIVEメンターのみ。レスポンスに `lineNotified` フィールドを含む） |
+| POST | `/` | ALL | コメント投稿（メンティー本人またはACTIVEメンターのみ。LINE通知は即時送信しない） |
+| POST | `/notify?menteeId=` | ALL | 未通知コメントをまとめてLINE Flex Messageで送信。成功時のみ `line_notified=true` に更新 |
 | PUT | `/{commentId}` | ALL | コメント編集（投稿者本人のみ） |
 | DELETE | `/{commentId}` | ALL | コメント論理削除（投稿者本人のみ） |
 

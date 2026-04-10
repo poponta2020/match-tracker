@@ -95,10 +95,17 @@ export default function MatchCommentThread({ matchId, menteeId }) {
     try {
       setNotifying(true);
       setError(null);
-      await matchCommentsAPI.sendNotification(matchId, menteeId);
-      setNotifySuccess(true);
-      await fetchComments();
-      setTimeout(() => setNotifySuccess(false), 3000);
+      const res = await matchCommentsAPI.sendNotification(matchId, menteeId);
+      const result = res.data?.result;
+      if (result === 'SUCCESS') {
+        setNotifySuccess(true);
+        await fetchComments();
+        setTimeout(() => setNotifySuccess(false), 3000);
+      } else if (result === 'SKIPPED') {
+        setError('LINE未連携のため通知を送信できませんでした');
+      } else {
+        setError('LINE通知の送信に失敗しました。再度お試しください');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'LINE通知の送信に失敗しました');
     } finally {

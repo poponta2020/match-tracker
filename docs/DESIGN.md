@@ -701,6 +701,7 @@ Entity Layer (JPA Entity)
 | mentee_id | BIGINT | NOT NULL, FK → players.id | コメント対象のメンティーID |
 | author_id | BIGINT | NOT NULL, FK → players.id | 投稿者ID |
 | content | TEXT | NOT NULL | コメント内容 |
+| line_notified | BOOLEAN | NOT NULL, DEFAULT FALSE | LINE通知送信済みフラグ |
 | created_at | DATETIME | NOT NULL | 作成日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 | deleted_at | DATETIME | | 論理削除日時 |
@@ -1736,7 +1737,7 @@ Entity Layer (JPA Entity)
 **権限**: ALL（メンティー本人またはACTIVEメンターのみ）
 
 #### POST /api/matches/{matchId}/comments
-**説明**: コメント投稿
+**説明**: コメント投稿（LINE通知は即時送信しない。`line_notified = false` で保留）
 **権限**: ALL（メンティー本人またはACTIVEメンターのみ）
 **リクエスト**:
 ```json
@@ -1745,7 +1746,19 @@ Entity Layer (JPA Entity)
   "content": "コメント内容"
 }
 ```
-**LINE通知**: メンティー投稿→全ACTIVEメンターに通知、メンター投稿→メンティーに通知
+
+#### POST /api/matches/{matchId}/comments/notify?menteeId={menteeId}
+**説明**: 未通知コメントをまとめてLINE Flex Messageで送信
+**権限**: ALL（メンティー本人またはACTIVEメンターのみ）
+**処理**: 現在のユーザーが書いた未通知コメント（`line_notified = false`）を収集し、1つのFlex Messageにまとめて送信。送信成功時のみ `line_notified = true` に更新。
+**レスポンス**:
+```json
+{
+  "notifiedCount": 3,
+  "result": "SUCCESS"
+}
+```
+**result値**: `SUCCESS`（全件送信成功）/ `FAILED`（送信失敗）/ `SKIPPED`（通知対象外）
 
 #### PUT /api/matches/{matchId}/comments/{commentId}
 **説明**: コメント編集（投稿者本人のみ）
@@ -2303,17 +2316,23 @@ Entity Layer (JPA Entity)
 4. メンターが承認（PUT /{id}/approve → ACTIVE）
    または拒否（PUT /{id}/reject → REJECTED）
 
-[メンターコメントフロー]
+[メンターコメントフロー（バッチ送信方式）]
 1. 試合詳細画面（/matches/:id）でメンティーまたはメンターがコメント投稿
    ↓
-2. POST /api/matches/{matchId}/comments → コメント作成
+2. POST /api/matches/{matchId}/comments → コメント作成（line_notified = false）
+   ※ LINE通知は即時送信しない
    ↓
-3. MatchCommentService.validateCommentAccess() でアクセス権検証
-   （メンティー本人 or ACTIVEメンター関係を持つメンター）
+3. ユーザーが「LINE通知を送信（N件）」ボタンを押下
    ↓
-4. LINE通知送信（MENTOR_COMMENT）
-   - メンティーがコメント → 全ACTIVEメンターに通知
-   - メンターがコメント → メンティーに通知
+4. POST /api/matches/{matchId}/comments/notify → 未通知コメントを収集
+   ↓
+5. Flex Messageを構築（送信者名・試合情報・コメント一覧）
+   ↓
+6. LINE通知送信（MENTOR_COMMENT）
+   - メンティーがボタン押下 → 全ACTIVEメンターにFlex Message送信
+   - メンターがボタン押下 → メンティーにFlex Message送信
+   ↓
+7. 送信成功時のみ line_notified = true に更新（失敗時は再送可能）
 ```
 
 **関連クラス:**
@@ -2321,12 +2340,12 @@ Entity Layer (JPA Entity)
 | クラス | 説明 |
 |--------|------|
 | `MentorRelationship` | entity/ — メンター関係エンティティ（PENDING/ACTIVE/REJECTED） |
-| `MatchComment` | entity/ — メンターコメントエンティティ（論理削除対応） |
+| `MatchComment` | entity/ — メンターコメントエンティティ（論理削除対応、`line_notified` で通知状態管理） |
 | `MentorRelationshipController` | controller/ — メンター関係CRUD（7エンドポイント） |
-| `MatchCommentController` | controller/ — コメントCRUD（4エンドポイント） |
+| `MatchCommentController` | controller/ — コメントCRUD + 通知送信（5エンドポイント） |
 | `MentorRelationshipService` | service/ — 指名・承認・拒否・解除のビジネスロジック |
-| `MatchCommentService` | service/ — コメント投稿・編集・削除・アクセス権検証 |
-| `LineNotificationService` | service/ — MENTOR_COMMENT通知送信 |
+| `MatchCommentService` | service/ — コメント投稿・編集・削除・アクセス権検証・バッチ通知送信 |
+| `LineNotificationService` | service/ — MENTOR_COMMENT Flex Message構築・送信 |
 | `MentorManagement.jsx` | pages/mentor/ — メンター管理画面 |
 | `MatchCommentThread.jsx` | pages/matches/ — コメントスレッドUI |
 

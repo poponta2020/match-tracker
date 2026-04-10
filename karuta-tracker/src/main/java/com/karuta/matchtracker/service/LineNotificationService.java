@@ -2492,22 +2492,27 @@ public class LineNotificationService {
         // Flex Message構築
         Map<String, Object> flex = buildMentorCommentFlex(authorName, match, opponentName, comments);
 
-        SendResult lastResult = SendResult.SKIPPED;
         if (isMenteeAuthor) {
             // メンティーがコメント → 全ACTIVEメンターに通知
             List<MentorRelationship> relationships = mentorRelationshipRepository
                     .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
+            if (relationships.isEmpty()) return SendResult.SKIPPED;
+
+            boolean anyFailed = false;
+            boolean anySuccess = false;
             for (MentorRelationship rel : relationships) {
                 SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, altText, flex);
-                if (r == SendResult.SUCCESS) lastResult = SendResult.SUCCESS;
-                else if (r == SendResult.FAILED && lastResult != SendResult.SUCCESS) lastResult = SendResult.FAILED;
+                if (r == SendResult.SUCCESS) anySuccess = true;
+                else if (r == SendResult.FAILED) anyFailed = true;
             }
+
+            if (anyFailed) return SendResult.FAILED;
+            if (anySuccess) return SendResult.SUCCESS;
+            return SendResult.SKIPPED;
         } else {
             // メンターがコメント → メンティーに通知
-            lastResult = sendFlexToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, altText, flex);
+            return sendFlexToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, altText, flex);
         }
-
-        return lastResult;
     }
 
     private String resolveOpponentName(Match match, Long menteeId) {

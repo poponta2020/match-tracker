@@ -124,10 +124,13 @@ public class MatchCommentService {
         LineNotificationService.SendResult result = lineNotificationService
                 .sendMentorCommentFlexNotification(currentUserId, menteeId, match, unnotified, isMenteeAuthor);
 
-        for (MatchComment comment : unnotified) {
-            comment.setLineNotified(true);
+        // SUCCESSの場合のみ通知済みフラグを更新
+        if (result == LineNotificationService.SendResult.SUCCESS) {
+            for (MatchComment comment : unnotified) {
+                comment.setLineNotified(true);
+            }
+            matchCommentRepository.saveAll(unnotified);
         }
-        matchCommentRepository.saveAll(unnotified);
 
         log.info("コメントLINE通知送信: matchId={}, menteeId={}, by={}, count={}, result={}",
                 matchId, menteeId, currentUserId, unnotified.size(), result);
