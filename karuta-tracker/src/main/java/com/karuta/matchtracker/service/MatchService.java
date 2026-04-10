@@ -59,6 +59,14 @@ public class MatchService {
         log.debug("Finding match by id: {}", id);
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
+
+        // viewedPlayerIdが指定されている場合、その試合の参加者であることを検証
+        if (viewedPlayerId != null && !viewedPlayerId.equals(currentPlayerId)) {
+            if (!viewedPlayerId.equals(match.getPlayer1Id()) && !viewedPlayerId.equals(match.getPlayer2Id())) {
+                throw new IllegalArgumentException("指定されたplayerIdはこの試合の参加者ではありません");
+            }
+        }
+
         MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId, viewedPlayerId);
         return enriched.get(0);

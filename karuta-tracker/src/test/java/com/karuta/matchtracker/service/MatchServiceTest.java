@@ -1381,4 +1381,23 @@ class MatchServiceTest {
             assertThat(result.get(0).getResult()).isEqualTo("勝ち");
         }
     }
+
+    @Nested
+    @DisplayName("findById with viewedPlayerId")
+    class FindByIdWithViewedPlayerId {
+
+        @Test
+        @DisplayName("試合参加者でないplayerIdを指定するとエラー")
+        void invalidViewedPlayerIdThrows() {
+            Match match = new Match();
+            match.setId(1L);
+            match.setPlayer1Id(2L);
+            match.setPlayer2Id(3L);
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+
+            assertThatThrownBy(() -> matchService.findById(1L, 10L, 99L))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
 }
