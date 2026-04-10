@@ -171,7 +171,14 @@ public class KaderuReservationService {
                 watchdog.shutdown();
             }
 
-            // プロセスが残っている場合はタイムアウト付きで終了を待つ
+            // 成功時はプロセス（ブラウザ）をバックグラウンドで開いたまま即座に結果を返す
+            if (lastJsonLine != null && lastJsonLine.contains("\"success\":true")) {
+                log.info("Reservation page opened successfully: room={}, date={}, slot={} (browser stays open)",
+                        roomName, dateStr, slotIndex);
+                return ReservationResult.success(roomName, dateStr, SLOT_LABELS.get(slotIndex));
+            }
+
+            // 失敗時・タイムアウト時はプロセスを終了させる
             if (process.isAlive()) {
                 if (!process.waitFor(60, TimeUnit.SECONDS)) {
                     log.warn("open-reserve.js process did not exit in time, destroying forcibly");
@@ -187,25 +194,19 @@ public class KaderuReservationService {
                         "予約スクリプトがタイムアウトしました");
             }
 
-            if (lastJsonLine != null && lastJsonLine.contains("\"success\":true")) {
-                log.info("Reservation page opened successfully: room={}, date={}, slot={}",
-                        roomName, dateStr, slotIndex);
-                return ReservationResult.success(roomName, dateStr, SLOT_LABELS.get(slotIndex));
-            } else {
-                // エラー行からエラー種別を抽出
-                String errorType = "UNKNOWN";
-                if (lastJsonLine != null) {
-                    if (lastJsonLine.contains("LOGIN_FAILED")) errorType = "LOGIN_FAILED";
-                    else if (lastJsonLine.contains("NOT_AVAILABLE")) errorType = "NOT_AVAILABLE";
-                    else if (lastJsonLine.contains("ROOM_NOT_FOUND")) errorType = "ROOM_NOT_FOUND";
-                    else if (lastJsonLine.contains("TRAY_NAVIGATION_FAILED")) errorType = "TRAY_NAVIGATION_FAILED";
-                }
-
-                log.warn("Failed to open reservation page: error={}, output={}",
-                        errorType, output.toString().substring(0, Math.min(output.length(), 500)));
-                return ReservationResult.error(errorType,
-                        "予約画面の表示に失敗しました (" + errorType + ")");
+            // エラー行からエラー種別を抽出
+            String errorType = "UNKNOWN";
+            if (lastJsonLine != null) {
+                if (lastJsonLine.contains("LOGIN_FAILED")) errorType = "LOGIN_FAILED";
+                else if (lastJsonLine.contains("NOT_AVAILABLE")) errorType = "NOT_AVAILABLE";
+                else if (lastJsonLine.contains("ROOM_NOT_FOUND")) errorType = "ROOM_NOT_FOUND";
+                else if (lastJsonLine.contains("TRAY_NAVIGATION_FAILED")) errorType = "TRAY_NAVIGATION_FAILED";
             }
+
+            log.warn("Failed to open reservation page: error={}, output={}",
+                    errorType, output.toString().substring(0, Math.min(output.length(), 500)));
+            return ReservationResult.error(errorType,
+                    "予約画面の表示に失敗しました (" + errorType + ")");
         } catch (Exception e) {
             log.error("Error launching reservation script", e);
             return ReservationResult.error("SCRIPT_ERROR", e.getMessage());
