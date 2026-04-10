@@ -256,6 +256,8 @@ Entity Layer (JPA Entity)
 | start_time | TIME | | 開始時刻 |
 | end_time | TIME | | 終了時刻 |
 | capacity | INT | | 定員（抽選判定に使用） |
+| reservation_confirmed_at | DATETIME | | 隣室予約確認日時（NULLは未確認） |
+| reservation_confirmed_by | BIGINT | | 隣室予約確認者ID |
 | organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |
@@ -2339,6 +2341,57 @@ Entity Layer (JPA Entity)
 | `LineNotificationType` enum | `MENTOR_COMMENT` 追加 |
 | `line_notification_preferences` テーブル | `mentor_comment` カラム追加（DEFAULT TRUE） |
 | `line_message_log` CHECK制約 | `MENTOR_COMMENT` 追加 |
+
+### 7.7 隣室予約→会場拡張フロー
+
+```
+[ユーザー操作（ADMIN+）]
+1. 練習日詳細モーダルで隣室が「空き」の場合、「隣室を予約」ボタンを表示
+   ↓
+2. 「隣室を予約」ボタンクリック
+   ↓
+[フロントエンド: PracticeList.jsx]
+3. kaderuAPI.openReserve() でかでる2・7の予約画面を開く
+   ↓
+4a. 成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
+4b. DISABLED時 → 同じく「予約完了を報告」ボタンを表示（手動予約を案内）
+   ↓
+[ユーザー操作]
+5. かでる2・7サイトで予約を完了
+   ↓
+6. 「予約完了を報告」ボタンクリック
+   ↓
+[フロントエンド]
+7. POST /api/practice-sessions/{id}/confirm-reservation
+   ↓
+[バックエンド: AdjacentRoomService.confirmReservation()]
+8. reservation_confirmed_at, reservation_confirmed_by をセット
+   ↓
+9. レスポンス: 200 OK + 更新後のセッション情報
+   ↓
+[フロントエンド]
+10. 「会場を拡張」ボタンを表示（reservationReady = true）
+   ↓
+[ユーザー操作]
+11. 「会場を拡張」ボタンクリック → 確認ダイアログ
+   ↓
+[フロントエンド]
+12. POST /api/practice-sessions/{id}/expand-venue
+   ↓
+[バックエンド: AdjacentRoomService.expandVenue()]
+13. 会場を拡張後会場に変更、定員を更新
+   ↓
+14. レスポンス: 200 OK + 更新後のセッション情報
+```
+
+**変更対象テーブル・コード**:
+
+| 対象 | 変更内容 |
+|------|---------|
+| `practice_sessions` テーブル | `reservation_confirmed_at`, `reservation_confirmed_by` カラム追加 |
+| `AdjacentRoomService` | `confirmReservation()`, `expandVenue()` メソッド追加 |
+| `PracticeSessionController` | `POST /{id}/confirm-reservation`, `POST /{id}/expand-venue` エンドポイント追加（ADMIN+） |
+| `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー |
 
 ---
 

@@ -1172,6 +1172,8 @@ venues ──< venue_match_schedules (venueId)
 | start_time | TIME | — | 開始時刻 |
 | end_time | TIME | — | 終了時刻 |
 | capacity | INT | — | 定員 |
+| reservation_confirmed_at | TIMESTAMP | — | 隣室予約確認日時（NULLは未確認） |
+| reservation_confirmed_by | BIGINT | — | 隣室予約確認者ID |
 | organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | — |
 | updated_by | BIGINT | NOT NULL | — |
@@ -1593,6 +1595,8 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/{sid}/matches/{num}/participants` | SUPER_ADMIN | 試合別参加者設定 |
 | POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
+| POST | `/{id}/confirm-reservation` | ADMIN+ | 隣室予約完了を記録（`reservation_confirmed_at` をセット） |
+| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提） |
 
 ### 7.7 伝助連携 (`/api/practice-sessions`)
 

@@ -255,10 +255,9 @@ const PracticeList = () => {
     setReservationLoading(true);
     try {
       await kaderuAPI.openReserve(adjacentRoomName, sessionDate);
-      // サーバー側に予約確認を記録
-      await practiceAPI.confirmReservation(sessionId);
-      setReservationReady(prev => ({ ...prev, [sessionId]: true }));
-      alert('予約画面を開きました。利用目的を入力し予約を完了してください。\n予約完了後に「会場を拡張」ボタンを押してください。');
+      // 予約画面を開いただけでは確認済みにしない。ユーザーが予約完了を明示的に報告するまで待機
+      setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
+      alert('予約画面を開きました。利用目的を入力し予約を完了してください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
     } catch (err) {
       const errorCode = err.response?.data?.errorCode;
       if (errorCode === 'DISABLED') {
