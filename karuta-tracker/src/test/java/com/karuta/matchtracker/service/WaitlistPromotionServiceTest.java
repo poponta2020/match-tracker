@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -348,6 +349,80 @@ class WaitlistPromotionServiceTest {
                 txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
                         any(TransactionSynchronization.class)));
             }
+        }
+
+        @Test
+        @DisplayName("afterCommitコールバック実行時に通知が実際に送信される")
+        void cancelAfterNoon_afterCommitTriggersNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+            Player player = Player.builder().id(10L).name("テスト選手").build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(true);
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(player));
+
+            ArgumentCaptor<TransactionSynchronization> syncCaptor =
+                    ArgumentCaptor.forClass(TransactionSynchronization.class);
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(true);
+                txMock.when(TransactionSynchronizationManager::isSynchronizationActive).thenReturn(true);
+
+                service.cancelParticipation(1L, "HEALTH", null);
+
+                // 登録されたコールバックをキャプチャ
+                txMock.verify(() ->
+                        TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
+            }
+
+            // afterCommit() を手動実行 → 通知が送信されることを検証
+            syncCaptor.getValue().afterCommit();
+
+            verify(lineNotificationService).sendSameDayCancelNotification(
+                    eq(session), eq(1), eq("テスト選手"), eq(10L));
+            verify(lineNotificationService).sendSameDayVacancyNotification(
+                    eq(session), eq(1), eq(10L));
+        }
+
+        @Test
+        @DisplayName("ロールバック時はafterCommitが呼ばれず通知は送信されない")
+        void cancelAfterNoon_rollbackDoesNotTriggerNotification() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(true);
+
+            ArgumentCaptor<TransactionSynchronization> syncCaptor =
+                    ArgumentCaptor.forClass(TransactionSynchronization.class);
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(true);
+                txMock.when(TransactionSynchronizationManager::isSynchronizationActive).thenReturn(true);
+
+                service.cancelParticipation(1L, "HEALTH", null);
+
+                txMock.verify(() ->
+                        TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
+            }
+
+            // afterCompletion(ROLLED_BACK) → afterCommit は呼ばれないことをシミュレート
+            syncCaptor.getValue().afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+            // 通知は送信されないことを検証
+            verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
+            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
         }
 
         @Test
