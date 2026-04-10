@@ -71,6 +71,7 @@ public class MatchCommentService {
         if (!entity.getMatchId().equals(matchId)) {
             throw new ResourceNotFoundException("MatchComment", commentId);
         }
+        validateCommentAccess(entity.getMenteeId(), currentUserId);
         if (!entity.getAuthorId().equals(currentUserId)) {
             throw new ForbiddenException("コメントの編集は投稿者本人のみ可能です");
         }
@@ -91,6 +92,7 @@ public class MatchCommentService {
         if (!entity.getMatchId().equals(matchId)) {
             throw new ResourceNotFoundException("MatchComment", commentId);
         }
+        validateCommentAccess(entity.getMenteeId(), currentUserId);
         if (!entity.getAuthorId().equals(currentUserId)) {
             throw new ForbiddenException("コメントの削除は投稿者本人のみ可能です");
         }
