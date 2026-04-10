@@ -12,6 +12,7 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   const [editContent, setEditContent] = useState('');
   const [error, setError] = useState(null);
   const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const fetchComments = async () => {
     try {
@@ -40,6 +41,9 @@ export default function MatchCommentThread({ matchId, menteeId }) {
       setError(null);
       await matchCommentsAPI.createComment(matchId, menteeId, newComment.trim());
       setNewComment('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
       await fetchComments();
     } catch (err) {
       setError(err.response?.data?.message || 'コメントの投稿に失敗しました');
@@ -81,21 +85,39 @@ export default function MatchCommentThread({ matchId, menteeId }) {
     return `${month}/${day} ${hours}:${minutes}`;
   };
 
+  const handleInputChange = (e) => {
+    setNewComment(e.target.value);
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 96) + 'px';
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !e.repeat) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-sm p-4">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
-        <MessageCircle size={18} className="text-[#4a6b5a]" />
-        コメント
-      </h3>
+    <div className="bg-white rounded-lg shadow-sm flex flex-col h-[28rem]">
+      <div className="p-3 border-b">
+        <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <MessageCircle size={18} className="text-[#4a6b5a]" />
+          コメント
+        </h3>
+      </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded text-sm mb-3">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded text-sm mx-3 mt-2">
           {error}
         </div>
       )}
 
       {/* コメント一覧 */}
-      <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 bg-[#f0ebe4]">
         {comments.length === 0 ? (
           <p className="text-gray-400 text-sm text-center py-4">まだコメントはありません</p>
         ) : (
@@ -173,22 +195,27 @@ export default function MatchCommentThread({ matchId, menteeId }) {
       </div>
 
       {/* 投稿フォーム */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="コメントを入力..."
-          className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
-        />
-        <button
-          type="submit"
-          disabled={!newComment.trim() || submitting}
-          className="bg-[#4a6b5a] text-white p-2 rounded-full disabled:opacity-50"
-        >
-          <Send size={18} />
-        </button>
-      </form>
+      <div className="p-3 border-t bg-white">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <textarea
+            ref={textareaRef}
+            value={newComment}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="コメントを入力..."
+            rows={1}
+            className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4a6b5a] resize-none overflow-y-auto"
+            style={{ height: 'auto' }}
+          />
+          <button
+            type="submit"
+            disabled={!newComment.trim() || submitting}
+            className="bg-[#4a6b5a] text-white p-2 rounded-full disabled:opacity-50"
+          >
+            <Send size={18} />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
