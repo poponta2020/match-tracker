@@ -114,6 +114,13 @@ class AdjacentRoomNotificationSchedulerTest {
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
 
+        // 隣室は空き（通知レコード保存に到達する条件）
+        AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
+                .adjacentRoomName("はまなす").status("○").available(true)
+                .expandedVenueId(7L).expandedVenueName("すずらん・はまなす").expandedCapacity(24)
+                .build();
+        when(adjacentRoomService.getAdjacentRoomAvailability(3L, session.getSessionDate())).thenReturn(status);
+
         // 残り3人で既に通知済み → save時に一意制約違反
         when(adjacentRoomNotificationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
 
@@ -140,6 +147,8 @@ class AdjacentRoomNotificationSchedulerTest {
         scheduler.checkCapacityAndNotify();
 
         verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
+        // 隣室が空いていない場合は通知レコードも保存しない（リトライ可能な状態を維持）
+        verify(adjacentRoomNotificationRepository, never()).save(any());
     }
 
     @Test

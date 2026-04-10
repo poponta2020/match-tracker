@@ -110,7 +110,15 @@ public class AdjacentRoomNotificationScheduler {
         // 残りが負の場合は0に補正
         if (remaining < 0) remaining = 0;
 
-        // 通知済みレコードを先に原子的に確保（一意制約で並列実行時の重複を防止）
+        // 隣室の空き状況を取得（DB障害時は "不明"(available=false) が返りリトライ可能な状態を維持）
+        AdjacentRoomStatusDto adjacentRoom = adjacentRoomService
+                .getAdjacentRoomAvailability(session.getVenueId(), session.getSessionDate());
+        if (adjacentRoom == null || !adjacentRoom.getAvailable()) {
+            return 0;
+        }
+
+        // 通知済みレコードを原子的に確保（一意制約で並列実行時の重複を防止）
+        // ※ 隣室確認後に保存することで、DB障害時に通知未送信なのに通知済みになる問題を防ぐ
         try {
             adjacentRoomNotificationRepository.save(AdjacentRoomNotification.builder()
                     .sessionId(session.getId())
@@ -121,13 +129,6 @@ public class AdjacentRoomNotificationScheduler {
             // 既に他のインスタンスが通知済み → スキップ
             log.debug("Adjacent room notification already sent for session {} (remaining={})",
                     session.getId(), remaining);
-            return 0;
-        }
-
-        // 隣室の空き状況を取得
-        AdjacentRoomStatusDto adjacentRoom = adjacentRoomService
-                .getAdjacentRoomAvailability(session.getVenueId(), session.getSessionDate());
-        if (adjacentRoom == null || !adjacentRoom.getAvailable()) {
             return 0;
         }
 

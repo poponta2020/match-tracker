@@ -11,7 +11,9 @@ import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -37,7 +39,7 @@ public class AdjacentRoomService {
      * @param date 対象日付
      * @return 隣室の空き状況DTO（かでる和室でない場合はnull）
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public AdjacentRoomStatusDto getAdjacentRoomAvailability(Long venueId, LocalDate date) {
         if (!AdjacentRoomConfig.isKaderuRoom(venueId)) {
             return null;
@@ -46,11 +48,15 @@ public class AdjacentRoomService {
         String adjacentRoomName = AdjacentRoomConfig.getAdjacentRoomName(venueId);
         String status = "不明";
 
-        // DBキャッシュから隣室の空き状況を取得
-        var cache = roomAvailabilityCacheRepository
-                .findByRoomNameAndTargetDateAndTimeSlot(adjacentRoomName, date, TIME_SLOT_EVENING);
-        if (cache.isPresent()) {
-            status = cache.get().getStatus();
+        // DBキャッシュから隣室の空き状況を取得（テーブル未作成等のDB障害時はステータス「不明」で継続）
+        try {
+            var cache = roomAvailabilityCacheRepository
+                    .findByRoomNameAndTargetDateAndTimeSlot(adjacentRoomName, date, TIME_SLOT_EVENING);
+            if (cache.isPresent()) {
+                status = cache.get().getStatus();
+            }
+        } catch (DataAccessException e) {
+            log.warn("隣室空き状況の取得に失敗しました（venueId={}, date={}）: {}", venueId, date, e.getMessage(), e);
         }
 
         return AdjacentRoomStatusDto.builder()
