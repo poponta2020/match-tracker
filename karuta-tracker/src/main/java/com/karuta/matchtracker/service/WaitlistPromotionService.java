@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.ExpireOfferResult;
@@ -222,7 +224,21 @@ public class WaitlistPromotionService {
             log.info("Same-day after-noon cancel: triggering vacancy recruitment for session {} match {}",
                     session.getId(), participant.getMatchNumber());
 
-            handleSameDayCancelAndRecruit(participant, session);
+            // LINE通知はトランザクションコミット後に送信する。
+            // importFromDensuke 等の @Transactional メソッド内で呼ばれた場合、
+            // 後続処理のロールバックで CANCELLED が巻き戻っても通知だけ送信済みになる問題を防ぐ。
+            final PracticeParticipant cancelledParticipant = participant;
+            final PracticeSession cancelledSession = session;
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        handleSameDayCancelAndRecruit(cancelledParticipant, cancelledSession);
+                    }
+                });
+            } else {
+                handleSameDayCancelAndRecruit(participant, session);
+            }
             return null; // 当日補充は独自の通知フローを持つ
         }
 
