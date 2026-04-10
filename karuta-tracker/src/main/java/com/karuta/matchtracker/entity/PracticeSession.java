@@ -102,6 +102,12 @@ public class PracticeSession {
     private LocalDateTime updatedAt;
 
     /**
+     * 隣室予約確認日時（予約ステップ完了時にセットされる）
+     */
+    @Column(name = "reservation_confirmed_at")
+    private LocalDateTime reservationConfirmedAt;
+
+    /**
      * エンティティ保存前の処理
      */
     @PrePersist

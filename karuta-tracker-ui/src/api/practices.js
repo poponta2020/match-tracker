@@ -103,6 +103,10 @@ export const practiceAPI = {
   getDensukeWriteStatus: (organizationId) =>
     apiClient.get('/practice-sessions/densuke-write-status', { params: { organizationId } }),
 
+  // 隣室予約完了を記録
+  confirmReservation: (sessionId) =>
+    apiClient.post(`/practice-sessions/${sessionId}/confirm-reservation`),
+
   // 会場を拡張（隣室と合わせた大部屋に変更）
   expandVenue: (sessionId) =>
     apiClient.post(`/practice-sessions/${sessionId}/expand-venue`),

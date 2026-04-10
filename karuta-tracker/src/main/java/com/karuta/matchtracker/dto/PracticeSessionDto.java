@@ -48,6 +48,9 @@ public class PracticeSessionDto {
     // 隣室空き状況
     private AdjacentRoomStatusDto adjacentRoomStatus;
 
+    // 隣室予約確認日時
+    private LocalDateTime reservationConfirmedAt;
+
     // 抽選関連フィールド
     private Boolean lotteryExecuted;  // 抽選実行済みか
     private java.util.Map<Integer, MatchLotteryInfo> matchLotteryInfo;  // 試合番号ごとの抽選情報
@@ -98,6 +101,7 @@ public class PracticeSessionDto {
                 .updatedBy(session.getUpdatedBy())
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
+                .reservationConfirmedAt(session.getReservationConfirmedAt())
                 .build();
     }
 }

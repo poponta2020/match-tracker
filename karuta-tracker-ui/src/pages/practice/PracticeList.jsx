@@ -220,6 +220,10 @@ const PracticeList = () => {
         // 個別に詳細取得（試合別参加者を含むエンリッチメント済みデータ）
         const response = await practiceAPI.getById(session.id);
         setSelectedSession(response.data);
+        // サーバー側の予約確認状態を復元
+        if (response.data.reservationConfirmedAt) {
+          setReservationReady(prev => ({ ...prev, [session.id]: true }));
+        }
         // 全試合をデフォルトで開いた状態にする
         if (response.data.matchParticipants) {
           const allExpanded = {};
@@ -251,20 +255,32 @@ const PracticeList = () => {
     setReservationLoading(true);
     try {
       await kaderuAPI.openReserve(adjacentRoomName, sessionDate);
+      // サーバー側に予約確認を記録
+      await practiceAPI.confirmReservation(sessionId);
       setReservationReady(prev => ({ ...prev, [sessionId]: true }));
       alert('予約画面を開きました。利用目的を入力し予約を完了してください。\n予約完了後に「会場を拡張」ボタンを押してください。');
     } catch (err) {
       const errorCode = err.response?.data?.errorCode;
       if (errorCode === 'DISABLED') {
-        const confirmed = window.confirm(
-          '自動予約機能は現在利用できません。\nかでる2・7のサイトで直接予約を行ってください。\n\n予約が完了しましたか？'
-        );
-        if (confirmed) {
-          setReservationReady(prev => ({ ...prev, [sessionId]: true }));
-        }
+        alert('自動予約機能は現在利用できません。\nかでる2・7のサイトで直接予約を行ってください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
+        setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
       } else {
         alert('予約画面の表示に失敗しました: ' + (err.response?.data?.message || err.message));
       }
+    } finally {
+      setReservationLoading(false);
+    }
+  };
+
+  // 手動予約完了を報告（DISABLED時の明示的な確認フロー）
+  const handleManualReservationConfirm = async (sessionId) => {
+    setReservationLoading(true);
+    try {
+      await practiceAPI.confirmReservation(sessionId);
+      setReservationReady(prev => ({ ...prev, [sessionId]: true }));
+    } catch (err) {
+      console.error('Error confirming reservation:', err);
+      alert('予約完了の記録に失敗しました');
     } finally {
       setReservationLoading(false);
     }
@@ -578,7 +594,7 @@ const PracticeList = () => {
                             : '利用不可'}
                         </span>
                         {selectedSession.adjacentRoomStatus.available && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
-                          reservationReady[selectedSession.id] ? (
+                          reservationReady[selectedSession.id] === true ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -587,6 +603,17 @@ const PracticeList = () => {
                               className="text-xs px-2 py-0.5 bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4b] transition-colors"
                             >
                               会場を拡張
+                            </button>
+                          ) : reservationReady[selectedSession.id] === 'manual_pending' ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleManualReservationConfirm(selectedSession.id);
+                              }}
+                              disabled={reservationLoading}
+                              className="text-xs px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors disabled:opacity-50"
+                            >
+                              {reservationLoading ? '処理中...' : '予約完了を報告'}
                             </button>
                           ) : (
                             <button
