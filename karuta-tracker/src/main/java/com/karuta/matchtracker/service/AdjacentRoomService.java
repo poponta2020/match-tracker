@@ -46,11 +46,15 @@ public class AdjacentRoomService {
         String adjacentRoomName = AdjacentRoomConfig.getAdjacentRoomName(venueId);
         String status = "不明";
 
-        // DBキャッシュから隣室の空き状況を取得
-        var cache = roomAvailabilityCacheRepository
-                .findByRoomNameAndTargetDateAndTimeSlot(adjacentRoomName, date, TIME_SLOT_EVENING);
-        if (cache.isPresent()) {
-            status = cache.get().getStatus();
+        // DBキャッシュから隣室の空き状況を取得（テーブル未作成等のDB障害時はステータス「不明」で継続）
+        try {
+            var cache = roomAvailabilityCacheRepository
+                    .findByRoomNameAndTargetDateAndTimeSlot(adjacentRoomName, date, TIME_SLOT_EVENING);
+            if (cache.isPresent()) {
+                status = cache.get().getStatus();
+            }
+        } catch (Exception e) {
+            log.warn("隣室空き状況の取得に失敗しました（venueId={}, date={}）: {}", venueId, date, e.getMessage());
         }
 
         return AdjacentRoomStatusDto.builder()
