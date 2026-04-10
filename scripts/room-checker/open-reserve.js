@@ -239,7 +239,7 @@ async function main() {
   const { browser, success } = await openReserve(params);
 
   if (!success) {
-    console.log("openReserve failed. Closing browser and exiting.");
+    console.error("予約画面の遷移に失敗しました。ブラウザを閉じて終了します。");
     await browser.close();
     process.exit(1);
   }
