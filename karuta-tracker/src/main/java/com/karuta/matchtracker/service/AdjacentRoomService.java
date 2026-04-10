@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -38,7 +39,7 @@ public class AdjacentRoomService {
      * @param date 対象日付
      * @return 隣室の空き状況DTO（かでる和室でない場合はnull）
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public AdjacentRoomStatusDto getAdjacentRoomAvailability(Long venueId, LocalDate date) {
         if (!AdjacentRoomConfig.isKaderuRoom(venueId)) {
             return null;
