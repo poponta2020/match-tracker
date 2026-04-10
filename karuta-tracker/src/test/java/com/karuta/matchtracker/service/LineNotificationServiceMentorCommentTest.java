@@ -90,8 +90,8 @@ class LineNotificationServiceMentorCommentTest {
         }
 
         @Test
-        @DisplayName("SUCCESS + SKIPPED混在時はSUCCESSを返す")
-        void mixedSuccessAndSkippedReturnsSuccess() {
+        @DisplayName("SUCCESS + SKIPPED混在時はSKIPPEDを返す（スキップ受信者への再送を可能にする）")
+        void mixedSuccessAndSkippedReturnsSkipped() {
             when(playerRepository.findById(10L)).thenReturn(Optional.of(author));
             when(mentorRelationshipRepository.findByMenteeIdAndStatus(2L, MentorRelationship.Status.ACTIVE))
                     .thenReturn(List.of(buildRelationship(20L, 2L), buildRelationship(21L, 2L)));
@@ -106,7 +106,7 @@ class LineNotificationServiceMentorCommentTest {
             LineNotificationService.SendResult result = lineNotificationService
                     .sendMentorCommentFlexNotification(10L, 2L, match, List.of(comment), true);
 
-            assertThat(result).isEqualTo(LineNotificationService.SendResult.SUCCESS);
+            assertThat(result).isEqualTo(LineNotificationService.SendResult.SKIPPED);
         }
 
         @Test
