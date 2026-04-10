@@ -67,6 +67,7 @@ public class MatchCommentService {
         MatchComment entity = matchCommentRepository.findActiveById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("MatchComment", commentId));
 
+        validateCommentAccess(entity.getMenteeId(), currentUserId);
         if (!entity.getMatchId().equals(matchId)) {
             throw new ResourceNotFoundException("MatchComment", commentId);
         }
@@ -86,6 +87,7 @@ public class MatchCommentService {
         MatchComment entity = matchCommentRepository.findActiveById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("MatchComment", commentId));
 
+        validateCommentAccess(entity.getMenteeId(), currentUserId);
         if (!entity.getMatchId().equals(matchId)) {
             throw new ResourceNotFoundException("MatchComment", commentId);
         }

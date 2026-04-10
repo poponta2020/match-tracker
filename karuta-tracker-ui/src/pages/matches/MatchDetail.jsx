@@ -43,7 +43,7 @@ const MatchDetail = () => {
     };
 
     fetchMatch();
-  }, [id]);
+  }, [id, queryPlayerId]);
 
   // メンター関係の確認
   useEffect(() => {

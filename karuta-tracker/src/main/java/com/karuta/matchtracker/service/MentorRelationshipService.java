@@ -54,7 +54,7 @@ public class MentorRelationshipService {
         }
 
         if (mentorRelationshipRepository.existsByMentorIdAndMenteeIdAndOrganizationId(mentorId, menteeId, organizationId)) {
-            throw new DuplicateResourceException("MentorRelationship", "mentor_id=" + mentorId + ", mentee_id=" + menteeId);
+            throw new DuplicateResourceException("MentorRelationship", "mentor_id, mentee_id", mentorId + ", " + menteeId);
         }
 
         MentorRelationship entity = MentorRelationship.builder()

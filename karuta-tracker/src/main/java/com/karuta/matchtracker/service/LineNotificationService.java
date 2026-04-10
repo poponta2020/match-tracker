@@ -2379,14 +2379,11 @@ public class LineNotificationService {
             List<MentorRelationship> relationships = mentorRelationshipRepository
                     .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
             for (MentorRelationship rel : relationships) {
-                String message = String.format("%sさんが試合メモにコメントしました:
-%s", authorName, preview);
+                String message = String.format("%sさんが試合メモにコメントしました:\n%s", authorName, preview);
                 sendToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, message);
             }
         } else {
-            // メンターがコメント → メンティーに通知
-            String message = String.format("%sさんがフィードバックコメントを投稿しました:
-%s", authorName, preview);
+            String message = String.format("%sさんがフィードバックコメントを投稿しました:\n%s", authorName, preview);
             sendToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, message);
         }
     }
