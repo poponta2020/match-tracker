@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { matchAPI } from '../../api';
+import { mentorRelationshipAPI } from '../../api/mentorRelationship';
+import MatchCommentThread from './MatchCommentThread';
 import { useAuth } from '../../context/AuthContext';
 import {
   Trophy,
@@ -21,11 +23,17 @@ const MatchDetail = () => {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [searchParams] = useSearchParams();
+  const queryPlayerId = searchParams.get('playerId');
+  const isOtherPlayer = queryPlayerId && Number(queryPlayerId) !== currentPlayer?.id;
+  const [hasMentorRelation, setHasMentorRelation] = useState(false);
+  const [menteeIdForComments, setMenteeIdForComments] = useState(null);
 
   useEffect(() => {
     const fetchMatch = async () => {
       try {
-        const response = await matchAPI.getById(id);
+        const params = queryPlayerId ? { playerId: queryPlayerId } : {};
+        const response = await matchAPI.getById(id, params);
         setMatch(response.data);
       } catch (error) {
         console.error('試合記録の取得に失敗しました:', error);
@@ -35,8 +43,28 @@ const MatchDetail = () => {
     };
 
     fetchMatch();
-  }, [id]);
+  }, [id, queryPlayerId]);
 
+  // メンター関係の確認
+  useEffect(() => {
+    const checkMentorRelation = async () => {
+      try {
+        if (isOtherPlayer) {
+          const res = await mentorRelationshipAPI.getMyMentees();
+          const isMentee = res.data.some(r => r.menteeId === Number(queryPlayerId) && r.status === 'ACTIVE');
+          setHasMentorRelation(isMentee);
+          if (isMentee) setMenteeIdForComments(Number(queryPlayerId));
+        } else {
+          // メンティー本人は常にコメントスレッドを表示（解除後も閲覧可能）
+          setHasMentorRelation(true);
+          setMenteeIdForComments(currentPlayer?.id);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    checkMentorRelation();
+  }, [isOtherPlayer, queryPlayerId, currentPlayer]);
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -101,6 +129,7 @@ const MatchDetail = () => {
               })}
             </p>
           </div>
+          {!isOtherPlayer && (
           <div className="flex gap-2">
             <Link
               to={`/matches/${id}/edit`}
@@ -117,6 +146,7 @@ const MatchDetail = () => {
               削除
             </button>
           </div>
+          )}
         </div>
       </div>
 
@@ -225,6 +255,31 @@ const MatchDetail = () => {
           </div>
         </div>
       </div>
+
+
+      {/* メンティーのメモ（メンター閲覧時） */}
+      {isOtherPlayer && (match.menteePersonalNotes || match.menteeOtetsukiCount != null) && (
+        <div className="bg-white rounded-lg shadow-sm p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-gray-900">メンティーのメモ</h2>
+          {match.menteeOtetsukiCount != null && (
+            <div>
+              <p className="text-sm text-gray-600 mb-1">お手付き回数</p>
+              <p className="text-gray-900">{match.menteeOtetsukiCount} 回</p>
+            </div>
+          )}
+          {match.menteePersonalNotes && (
+            <div>
+              <p className="text-sm text-gray-600 mb-1">メモ</p>
+              <p className="text-gray-900 whitespace-pre-wrap">{match.menteePersonalNotes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* コメントスレッド */}
+      {hasMentorRelation && menteeIdForComments && (
+        <MatchCommentThread matchId={Number(id)} menteeId={menteeIdForComments} />
+      )}
 
       {/* 削除確認モーダル */}
       {deleteConfirm && (

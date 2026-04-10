@@ -45,6 +45,10 @@ public class MatchDto {
     private String myPersonalNotes;
     private Integer myOtetsukiCount;
 
+    // メンティーのメモ・お手付き（メンター関係がある場合のみ設定）
+    private String menteePersonalNotes;
+    private Integer menteeOtetsukiCount;
+
     /**
      * エンティティからDTOへ変換
      * 注意: 選手名は別途設定する必要があります

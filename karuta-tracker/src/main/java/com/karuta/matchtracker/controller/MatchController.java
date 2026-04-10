@@ -70,10 +70,10 @@ public class MatchController {
      * @return 試合結果
      */
     @GetMapping("/{id}")
-    public ResponseEntity<MatchDto> getMatchById(@PathVariable Long id, HttpServletRequest httpRequest) {
+    public ResponseEntity<MatchDto> getMatchById(@PathVariable Long id, @RequestParam(required = false) Long playerId, HttpServletRequest httpRequest) {
         log.debug("GET /api/matches/{} - Getting match by id", id);
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        MatchDto match = matchService.findById(id, currentUserId);
+        MatchDto match = matchService.findById(id, currentUserId, playerId);
         return ResponseEntity.ok(match);
     }
 

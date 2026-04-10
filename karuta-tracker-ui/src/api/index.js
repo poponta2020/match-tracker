@@ -13,3 +13,5 @@ export { byeActivityAPI } from './byeActivities';
 export { systemSettingsAPI } from './systemSettings';
 export { organizationAPI } from './organizations';
 export { default as apiClient } from './client';
+export { mentorRelationshipAPI } from './mentorRelationship';
+export { matchCommentsAPI } from './matchComments';

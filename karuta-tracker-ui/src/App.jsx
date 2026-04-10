@@ -41,6 +41,7 @@ import DensukeManagement from './pages/densuke/DensukeManagement';
 import SystemSettings from './pages/settings/SystemSettings';
 import OrganizationSettings from './pages/settings/OrganizationSettings';
 import SettingsPage from './pages/SettingsPage';
+import MentorManagement from './pages/mentor/MentorManagement';
 import LotteryManagement from './pages/lottery/LotteryManagement';
 
 const ProtectedPage = ({ children }) => (
@@ -135,6 +136,7 @@ function App() {
             {/* 設定 */}
             <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
             <Route path="/settings/organizations" element={<ProtectedPage><OrganizationSettings /></ProtectedPage>} />
+            <Route path="/settings/mentor" element={<ProtectedPage><MentorManagement /></ProtectedPage>} />
             <Route path="/settings/notifications" element={<ProtectedPage><NotificationSettings /></ProtectedPage>} />
             <Route path="/admin/line/channels" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><LineChannelAdmin /></RoleProtectedPage>} />
             <Route path="/admin/line/schedule" element={<RoleProtectedPage requiredRole="ADMIN"><LineScheduleAdmin /></RoleProtectedPage>} />

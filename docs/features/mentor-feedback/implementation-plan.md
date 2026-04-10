@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: DBマイグレーション
-- [ ] 完了
+- [x] 完了
 - **概要:** 新規テーブル2つ（`mentor_relationships`, `match_comments`）の作成と、既存テーブル（`line_notification_preferences`）へのカラム追加
 - **変更対象ファイル:**
   - `database/add_mentor_relationships.sql` — 新規作成。`mentor_relationships` テーブル定義
@@ -16,7 +16,7 @@ status: completed
 - **対応Issue:** #393
 
 ### タスク2: メンター関係バックエンド（Entity / Repository / Service / Controller / DTO）
-- [ ] 完了
+- [x] 完了
 - **概要:** メンター関係の CRUD + 承認/拒否/解除のバックエンドAPI実装
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/MentorRelationship.java` — 新規作成
@@ -29,7 +29,7 @@ status: completed
 - **対応Issue:** #394
 
 ### タスク3: コメントバックエンド（Entity / Repository / Service / Controller / DTO）
-- [ ] 完了
+- [x] 完了
 - **概要:** コメントスレッドの CRUD + LINE通知連携のバックエンドAPI実装
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/MatchComment.java` — 新規作成
@@ -42,7 +42,7 @@ status: completed
 - **対応Issue:** #395
 
 ### タスク4: 既存API拡張（メンティーのメモ閲覧対応）
-- [ ] 完了
+- [x] 完了
 - **概要:** メンター関係がある場合、メンティーの試合一覧・詳細でメモ・お手つき情報を返すよう既存APIを拡張
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchService.java` — `enrichDtosWithPersonalNotes()` をメンター対応に拡張
@@ -51,7 +51,7 @@ status: completed
 - **対応Issue:** #396
 
 ### タスク5: LINE通知拡張（メンターコメント通知）
-- [ ] 完了
+- [x] 完了
 - **概要:** コメント投稿時のLINE通知送信 + 通知設定対応
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineNotificationPreference.java` — `mentorComment` フィールド追加
@@ -62,7 +62,7 @@ status: completed
 - **対応Issue:** #397
 
 ### タスク6: フロントエンド — メンター管理画面
-- [ ] 完了
+- [x] 完了
 - **概要:** 設定画面にメンター管理セクションを追加。メンター指名・承認・拒否・解除・メンティー一覧の表示
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/mentor/MentorManagement.jsx` — 新規作成。メンター管理画面
@@ -73,7 +73,7 @@ status: completed
 - **対応Issue:** #398
 
 ### タスク7: フロントエンド — メンティー試合一覧のメモ表示対応
-- [ ] 完了
+- [x] 完了
 - **概要:** メンターがメンティーの試合一覧を見た際に、メモ有無・お手つき有無が表示されるよう拡張
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchList.jsx` — メンター関係がある場合のメモ有無表示
@@ -82,7 +82,7 @@ status: completed
 - **対応Issue:** #399
 
 ### タスク8: フロントエンド — コメントスレッドコンポーネント
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合詳細画面にコメントスレッドを追加。投稿・編集・削除機能
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchCommentThread.jsx` — 新規作成。コメントスレッドコンポーネント
@@ -92,7 +92,7 @@ status: completed
 - **対応Issue:** #400
 
 ### タスク9: フロントエンド — 通知設定画面拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知設定画面にメンターコメント通知のON/OFF追加
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/notifications/NotificationSettings.jsx` — メンターコメント通知設定追加

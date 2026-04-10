@@ -447,18 +447,18 @@ const MatchList = () => {
                   <div
                     key={match.id}
                     className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
-                    onClick={() => navigate(`/matches/${match.id}`)}
+                    onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
                   >
                     <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
                     <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
                       {match.opponentName}
                     </span>
-                    {!isOtherPlayer && match.myPersonalNotes && (
+                    {((!isOtherPlayer && match.myPersonalNotes) || (isOtherPlayer && match.menteePersonalNotes)) && (
                       <StickyNote className="w-3.5 h-3.5 text-[#9ca3af] flex-shrink-0 ml-1" />
                     )}
-                    {!isOtherPlayer && match.myOtetsukiCount != null && (
+                    {((!isOtherPlayer && match.myOtetsukiCount != null) || (isOtherPlayer && match.menteeOtetsukiCount != null)) && (
                       <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
-                        手{match.myOtetsukiCount}
+                        手{isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount}
                       </span>
                     )}
                     <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
