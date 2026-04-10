@@ -44,8 +44,9 @@ public class PlayerService {
         log.debug("Finding all active players");
         List<Player> players = playerRepository.findAllActiveOrderByName();
 
-        // 全プレイヤーの所属団体IDをバッチ取得（N+1回避）
-        Map<Long, List<Long>> orgIdsByPlayerId = playerOrganizationRepository.findAll().stream()
+        // アクティブ選手のみの所属団体IDをバッチ取得（N+1回避）
+        List<Long> playerIds = players.stream().map(Player::getId).collect(Collectors.toList());
+        Map<Long, List<Long>> orgIdsByPlayerId = playerOrganizationRepository.findByPlayerIdIn(playerIds).stream()
                 .collect(Collectors.groupingBy(
                         PlayerOrganization::getPlayerId,
                         Collectors.mapping(PlayerOrganization::getOrganizationId, Collectors.toList())

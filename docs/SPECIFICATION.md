@@ -71,7 +71,7 @@
 - **ログイン**: 選手名（`name`）+ パスワードで認証
 - **パスワード**: 平文で保存・比較（プロトタイプ。将来的にBCryptハッシュ化予定）
 - **パスワード変更強制**: `require_password_change` フラグが `true` の場合、ログイン後に `/profile/edit?changePassword=true` へリダイレクトし、パスワード変更を強制する。変更完了後にフラグは自動的に `false` にリセットされる
-- **セッション管理**: ログイン成功時にプレイヤー情報を `localStorage` に保存。トークンは `dummy-token` を使用
+- **セッション管理**: ログイン成功時にプレイヤー情報（`organizationIds` を含む）を `localStorage` に保存。トークンは `dummy-token` を使用
 - **権限チェック**: リクエストヘッダー `X-User-Role` にロールを付与し、バックエンドの `RoleCheckInterceptor` が `@RequireRole` アノテーションで制御
 
 ### 2.3 選手プロパティ
@@ -1501,8 +1501,8 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| POST | `/login` | Public | ログイン |
-| GET | `/` | ALL | 全アクティブ選手取得 |
+| POST | `/login` | Public | ログイン（レスポンスに `organizationIds` を含む） |
+| GET | `/` | ALL | 全アクティブ選手取得（各選手に `organizationIds` を含む） |
 | GET | `/{id}` | ALL | ID指定で取得 |
 | GET | `/search?name=` | ALL | 名前部分一致検索 |
 | GET | `/role/{role}` | ALL | ロール別取得 |

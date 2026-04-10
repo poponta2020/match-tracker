@@ -82,7 +82,7 @@ class PlayerServiceTest {
 
         PlayerOrganization po = PlayerOrganization.builder()
                 .id(1L).playerId(1L).organizationId(10L).build();
-        when(playerOrganizationRepository.findAll()).thenReturn(List.of(po));
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L, 2L))).thenReturn(List.of(po));
 
         // When
         List<PlayerDto> result = playerService.findAllActivePlayers();
@@ -94,7 +94,7 @@ class PlayerServiceTest {
         assertThat(result.get(1).getName()).isEqualTo("佐藤花子");
         assertThat(result.get(1).getOrganizationIds()).isEmpty();
         verify(playerRepository).findAllActiveOrderByName();
-        verify(playerOrganizationRepository).findAll();
+        verify(playerOrganizationRepository).findByPlayerIdIn(List.of(1L, 2L));
     }
 
     @Test
