@@ -175,6 +175,16 @@ class MentorRelationshipServiceTest {
             assertThatThrownBy(() -> service.rejectRelationship(1L, 2L))
                     .isInstanceOf(ForbiddenException.class);
         }
+
+        @Test
+        @DisplayName("ACTIVE関係をrejectするとエラー")
+        void rejectActiveRelationship() {
+            MentorRelationship rel = MentorRelationship.builder()
+                    .id(1L).mentorId(1L).menteeId(2L).organizationId(10L).status(Status.ACTIVE).build();
+            when(mentorRelationshipRepository.findById(1L)).thenReturn(Optional.of(rel));
+            assertThatThrownBy(() -> service.rejectRelationship(1L, 1L))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Nested

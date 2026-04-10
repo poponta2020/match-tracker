@@ -116,6 +116,10 @@ public class MentorRelationshipService {
             throw new ForbiddenException("メンター本人のみ拒否できます");
         }
 
+        if (entity.getStatus() != Status.PENDING) {
+            throw new IllegalArgumentException("承認待ちの関係のみ拒否できます");
+        }
+
         entity.setStatus(Status.REJECTED);
         mentorRelationshipRepository.save(entity);
         log.info("メンター関係拒否: id={}, mentor={}, mentee={}", id, entity.getMentorId(), entity.getMenteeId());
