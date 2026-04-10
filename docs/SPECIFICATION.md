@@ -1173,7 +1173,6 @@ venues ──< venue_match_schedules (venueId)
 | end_time | TIME | — | 終了時刻 |
 | capacity | INT | — | 定員 |
 | reservation_confirmed_at | TIMESTAMP | — | 隣室予約確認日時（NULLは未確認） |
-| reservation_confirmed_by | BIGINT | — | 隣室予約確認者ID |
 | organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | — |
 | updated_by | BIGINT | NOT NULL | — |

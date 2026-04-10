@@ -257,7 +257,6 @@ Entity Layer (JPA Entity)
 | end_time | TIME | | 終了時刻 |
 | capacity | INT | | 定員（抽選判定に使用） |
 | reservation_confirmed_at | DATETIME | | 隣室予約確認日時（NULLは未確認） |
-| reservation_confirmed_by | BIGINT | | 隣室予約確認者ID |
 | organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |
@@ -2365,7 +2364,7 @@ Entity Layer (JPA Entity)
 7. POST /api/practice-sessions/{id}/confirm-reservation
    ↓
 [バックエンド: AdjacentRoomService.confirmReservation()]
-8. reservation_confirmed_at, reservation_confirmed_by をセット
+8. reservation_confirmed_at をセット（確認者は updated_by で記録）
    ↓
 9. レスポンス: 200 OK + 更新後のセッション情報
    ↓
@@ -2388,7 +2387,7 @@ Entity Layer (JPA Entity)
 
 | 対象 | 変更内容 |
 |------|---------|
-| `practice_sessions` テーブル | `reservation_confirmed_at`, `reservation_confirmed_by` カラム追加 |
+| `practice_sessions` テーブル | `reservation_confirmed_at` カラム追加 |
 | `AdjacentRoomService` | `confirmReservation()`, `expandVenue()` メソッド追加 |
 | `PracticeSessionController` | `POST /{id}/confirm-reservation`, `POST /{id}/expand-venue` エンドポイント追加（ADMIN+） |
 | `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー |

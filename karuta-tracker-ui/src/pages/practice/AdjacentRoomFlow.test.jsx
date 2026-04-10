@@ -125,7 +125,7 @@ const openSessionModal = async (user) => {
 };
 
 describe('隣室予約→会場拡張フロー', () => {
-  it('openReserve成功時: 隣室を予約→confirmReservation→会場を拡張ボタン表示', async () => {
+  it('openReserve成功時: 隣室を予約→予約完了を報告ボタン表示→クリック→会場を拡張ボタン表示', async () => {
     kaderuAPI.openReserve.mockResolvedValue({ data: { success: true } });
     practiceAPI.confirmReservation.mockResolvedValue({
       data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
@@ -138,14 +138,23 @@ describe('隣室予約→会場拡張フロー', () => {
     // 「隣室を予約」ボタンをクリック
     await user.click(screen.getByText('隣室を予約'));
 
-    // openReserve → confirmReservation が呼ばれる
+    // alertが表示され、「予約完了を報告」ボタンが表示される
     await waitFor(() => {
       expect(kaderuAPI.openReserve).toHaveBeenCalledWith('はまなす', '2026-04-12');
-      expect(practiceAPI.confirmReservation).toHaveBeenCalledWith(1);
+      expect(window.alert).toHaveBeenCalledWith(
+        expect.stringContaining('予約画面を開きました')
+      );
+      expect(screen.getByText('予約完了を報告')).toBeInTheDocument();
     });
+    // この時点ではconfirmReservationはまだ呼ばれない
+    expect(practiceAPI.confirmReservation).not.toHaveBeenCalled();
 
-    // 「会場を拡張」ボタンが表示される
+    // 「予約完了を報告」ボタンをクリック
+    await user.click(screen.getByText('予約完了を報告'));
+
+    // confirmReservation が呼ばれ、「会場を拡張」ボタンに変わる
     await waitFor(() => {
+      expect(practiceAPI.confirmReservation).toHaveBeenCalledWith(1);
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
     expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
