@@ -2499,6 +2499,7 @@ public class LineNotificationService {
             if (relationships.isEmpty()) return SendResult.SKIPPED;
 
             boolean anySuccess = false;
+            boolean anyFailed = false;
             boolean allSkipped = true;
             for (MentorRelationship rel : relationships) {
                 SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, altText, flex);
@@ -2506,16 +2507,17 @@ public class LineNotificationService {
                     anySuccess = true;
                     allSkipped = false;
                 } else if (r == SendResult.FAILED) {
-                    log.warn("メンターコメント通知 部分失敗: mentorId={}", rel.getMentorId());
+                    anyFailed = true;
                     allSkipped = false;
+                    log.warn("メンターコメント通知 部分失敗: mentorId={}", rel.getMentorId());
                 }
             }
 
-            // 1人でも成功すれば SUCCESS（重複送信防止のため lineNotified=true にする）
-            // 全員スキップなら SKIPPED、全員失敗なら FAILED
-            if (anySuccess) return SendResult.SUCCESS;
+            // FAILED優先: 1件でも失敗があれば FAILED（再送可能にするため lineNotified=true にしない）
+            // 全員スキップなら SKIPPED、全員成功のときのみ SUCCESS
+            if (anyFailed) return SendResult.FAILED;
             if (allSkipped) return SendResult.SKIPPED;
-            return SendResult.FAILED;
+            return SendResult.SUCCESS;
         } else {
             // メンターがコメント → メンティーに通知
             return sendFlexToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, altText, flex);
