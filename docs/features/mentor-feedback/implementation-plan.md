@@ -62,7 +62,7 @@ status: completed
 - **対応Issue:** #397
 
 ### タスク6: フロントエンド — メンター管理画面
-- [ ] 完了
+- [x] 完了
 - **概要:** 設定画面にメンター管理セクションを追加。メンター指名・承認・拒否・解除・メンティー一覧の表示
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/mentor/MentorManagement.jsx` — 新規作成。メンター管理画面
