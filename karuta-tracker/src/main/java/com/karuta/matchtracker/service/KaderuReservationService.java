@@ -6,11 +6,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,6 +28,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class KaderuReservationService {
 
+    @Value("${kaderu.enabled:false}")
+    private boolean enabled;
+
     @Value("${kaderu.user-id:}")
     private String kaderuUserId;
 
@@ -35,6 +42,9 @@ public class KaderuReservationService {
 
     @Value("${kaderu.node-command:node}")
     private String nodeCommand;
+
+    /** スクリプト全体のタイムアウト（秒） — JSON出力前にハングした場合に強制終了する */
+    private static final int PROCESS_TIMEOUT_SECONDS = 120;
 
     private static final Map<Integer, String> SLOT_LABELS = Map.of(
             0, "午前 (9:00-12:00)",
@@ -51,6 +61,11 @@ public class KaderuReservationService {
      * @return 実行結果
      */
     public ReservationResult openReservationPage(String roomName, LocalDate date, int slotIndex) {
+        if (!enabled) {
+            return ReservationResult.error("DISABLED",
+                    "予約画面遷移機能は無効です（kaderu.enabled=false）。ローカル環境でのみ利用可能です。");
+        }
+
         // バリデーション
         if (!AdjacentRoomConfig.isValidKaderuRoomName(roomName)) {
             return ReservationResult.error("INVALID_ROOM",
@@ -74,8 +89,24 @@ public class KaderuReservationService {
                 roomName, dateStr, slotIndex, SLOT_LABELS.get(slotIndex));
 
         try {
+            // スクリプトパスの解決: 相対パスの場合はカレントディレクトリと親ディレクトリの両方を探索
+            String resolvedScriptPath = scriptPath;
+            File scriptFile = new File(scriptPath);
+            if (!scriptFile.isAbsolute() && !scriptFile.exists()) {
+                // karuta-tracker/ から起動した場合、親ディレクトリ基準で探す
+                File parentResolved = new File("..", scriptPath);
+                if (parentResolved.exists()) {
+                    resolvedScriptPath = parentResolved.getCanonicalPath();
+                    log.debug("Resolved script path: {} -> {}", scriptPath, resolvedScriptPath);
+                } else {
+                    log.error("Script not found at {} or {}", scriptFile.getAbsolutePath(), parentResolved.getAbsolutePath());
+                    return ReservationResult.error("SCRIPT_NOT_FOUND",
+                            "予約スクリプトが見つかりません: " + scriptPath);
+                }
+            }
+
             ProcessBuilder pb = new ProcessBuilder(
-                    nodeCommand, scriptPath,
+                    nodeCommand, resolvedScriptPath,
                     "--room", roomName,
                     "--date", dateStr,
                     "--slot", String.valueOf(slotIndex)
@@ -85,6 +116,17 @@ public class KaderuReservationService {
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
+
+            // プロセス全体のタイムアウト: JSON出力前にハングした場合にreadLine()の
+            // ブロックを解除するため、プロセスを強制終了する
+            ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor();
+            ScheduledFuture<?> timeoutTask = watchdog.schedule(() -> {
+                if (process.isAlive()) {
+                    log.warn("open-reserve.js process timed out after {}s, destroying forcibly",
+                            PROCESS_TIMEOUT_SECONDS);
+                    process.destroyForcibly();
+                }
+            }, PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
             // スクリプトの出力を読み取り（申込トレイ画面到達まで待機）
             StringBuilder output = new StringBuilder();
@@ -98,13 +140,15 @@ public class KaderuReservationService {
                     // JSON形式の結果行を探す
                     if (line.trim().startsWith("{") && line.trim().endsWith("}")) {
                         lastJsonLine = line.trim();
-                        // 成功ならプロセスの終了を待たずに結果を返す
-                        // （ブラウザはバックグラウンドで開いたまま）
+                        // 成功/失敗いずれでもプロセスの終了を待たずに結果を返す
                         if (lastJsonLine.contains("\"success\":true") || lastJsonLine.contains("\"success\":false")) {
                             break;
                         }
                     }
                 }
+            } finally {
+                timeoutTask.cancel(false);
+                watchdog.shutdown();
             }
 
             // プロセスが残っている場合はタイムアウト付きで終了を待つ
@@ -113,6 +157,14 @@ public class KaderuReservationService {
                     log.warn("open-reserve.js process did not exit in time, destroying forcibly");
                     process.destroyForcibly();
                 }
+            }
+
+            // タイムアウトでプロセスが強制終了された場合
+            if (lastJsonLine == null && !process.isAlive() && process.exitValue() != 0) {
+                log.warn("open-reserve.js was terminated (exit={}), output={}",
+                        process.exitValue(), output.toString().substring(0, Math.min(output.length(), 500)));
+                return ReservationResult.error("TIMEOUT",
+                        "予約スクリプトがタイムアウトしました");
             }
 
             if (lastJsonLine != null && lastJsonLine.contains("\"success\":true")) {
