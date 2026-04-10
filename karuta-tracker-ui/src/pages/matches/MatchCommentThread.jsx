@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { matchCommentsAPI } from '../../api/matchComments';
 import { useAuth } from '../../context/AuthContext';
-import { Send, Pencil, Trash2, X, Check, MessageCircle } from 'lucide-react';
+import { Send, Pencil, Trash2, X, Check, MessageCircle, Bell } from 'lucide-react';
 
 export default function MatchCommentThread({ matchId, menteeId }) {
   const { currentPlayer } = useAuth();
@@ -11,6 +11,8 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   const [editingId, setEditingId] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [error, setError] = useState(null);
+  const [notifying, setNotifying] = useState(false);
+  const [notifySuccess, setNotifySuccess] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -83,6 +85,25 @@ export default function MatchCommentThread({ matchId, menteeId }) {
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     return `${month}/${day} ${hours}:${minutes}`;
+  };
+
+  const unnotifiedCount = comments.filter(
+    c => c.authorId === currentPlayer?.id && !c.lineNotified
+  ).length;
+
+  const handleSendNotification = async () => {
+    try {
+      setNotifying(true);
+      setError(null);
+      await matchCommentsAPI.sendNotification(matchId, menteeId);
+      setNotifySuccess(true);
+      await fetchComments();
+      setTimeout(() => setNotifySuccess(false), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'LINE通知の送信に失敗しました');
+    } finally {
+      setNotifying(false);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -193,6 +214,23 @@ export default function MatchCommentThread({ matchId, menteeId }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* LINE通知送信ボタン */}
+      {unnotifiedCount > 0 && (
+        <div className="flex justify-end px-3 pt-2">
+          <button
+            onClick={handleSendNotification}
+            disabled={notifying}
+            className="flex items-center gap-1 bg-[#06C755] text-white px-3 py-1.5 rounded-full text-sm hover:bg-[#05b54c] disabled:opacity-50"
+          >
+            <Bell size={14} />
+            {notifying ? '送信中...' : `LINE通知を送信（${unnotifiedCount}件）`}
+          </button>
+        </div>
+      )}
+      {notifySuccess && (
+        <div className="text-sm text-green-600 text-right px-3 pt-1">LINE通知を送信しました</div>
+      )}
 
       {/* 投稿フォーム */}
       <div className="p-3 border-t bg-white">

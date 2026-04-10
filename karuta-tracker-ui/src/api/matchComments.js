@@ -12,4 +12,7 @@ export const matchCommentsAPI = {
 
   deleteComment: (matchId, commentId) =>
     apiClient.delete(`/matches/${matchId}/comments/${commentId}`),
+
+  sendNotification: (matchId, menteeId) =>
+    apiClient.post(`/matches/${matchId}/comments/notify`, null, { params: { menteeId } }),
 };
