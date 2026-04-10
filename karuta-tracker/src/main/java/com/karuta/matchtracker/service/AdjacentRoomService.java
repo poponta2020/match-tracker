@@ -11,6 +11,7 @@ import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,8 +54,8 @@ public class AdjacentRoomService {
             if (cache.isPresent()) {
                 status = cache.get().getStatus();
             }
-        } catch (Exception e) {
-            log.warn("隣室空き状況の取得に失敗しました（venueId={}, date={}）: {}", venueId, date, e.getMessage());
+        } catch (DataAccessException e) {
+            log.warn("隣室空き状況の取得に失敗しました（venueId={}, date={}）: {}", venueId, date, e.getMessage(), e);
         }
 
         return AdjacentRoomStatusDto.builder()

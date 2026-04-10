@@ -15,6 +15,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.dao.DataAccessResourceFailureException;
+
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -82,6 +84,21 @@ class AdjacentRoomServiceTest {
         assertNotNull(result);
         assertEquals("不明", result.getStatus());
         assertFalse(result.getAvailable());
+    }
+
+    @Test
+    @DisplayName("DB障害時はステータス「不明」でフォールバックする")
+    void getAdjacentRoomAvailability_dbError() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenThrow(new DataAccessResourceFailureException("relation \"room_availability_cache\" does not exist"));
+
+        AdjacentRoomStatusDto result = adjacentRoomService.getAdjacentRoomAvailability(3L, date);
+
+        assertNotNull(result);
+        assertEquals("不明", result.getStatus());
+        assertFalse(result.getAvailable());
+        assertEquals("はまなす", result.getAdjacentRoomName());
     }
 
     @Test
