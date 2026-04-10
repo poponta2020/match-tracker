@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
+
 import java.time.LocalDate;
 
 /**
@@ -70,6 +72,30 @@ public class AdjacentRoomService {
     }
 
     /**
+     * 隣室予約完了を記録する
+     *
+     * @param sessionId セッションID
+     * @param currentUserId 操作ユーザーID
+     */
+    @Transactional
+    public void confirmReservation(Long sessionId, Long currentUserId) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        Long currentVenueId = session.getVenueId();
+        if (!AdjacentRoomConfig.isKaderuRoom(currentVenueId)) {
+            throw new IllegalStateException("この会場は隣室予約の対象外です");
+        }
+
+        session.setReservationConfirmedAt(JstDateTimeUtil.now());
+        session.setUpdatedBy(currentUserId);
+        practiceSessionRepository.save(session);
+
+        log.info("Reservation confirmed for session {}: venueId={}, confirmedBy={}",
+                sessionId, currentVenueId, currentUserId);
+    }
+
+    /**
      * 会場を拡張する（隣室と合わせた大部屋に変更）
      *
      * @param sessionId セッションID
@@ -83,6 +109,11 @@ public class AdjacentRoomService {
         Long currentVenueId = session.getVenueId();
         if (!AdjacentRoomConfig.isKaderuRoom(currentVenueId)) {
             throw new IllegalStateException("この会場は拡張できません");
+        }
+
+        // 予約ステップの完了をサーバー側で検証
+        if (session.getReservationConfirmedAt() == null) {
+            throw new IllegalStateException("隣室の予約が確認されていません。先に予約を完了してください");
         }
 
         // 隣室の空き状況をサーバー側で再検証
@@ -99,6 +130,7 @@ public class AdjacentRoomService {
 
         session.setVenueId(expandedVenueId);
         session.setCapacity(expandedVenue.getCapacity());
+        session.setReservationConfirmedAt(null); // 予約確認状態をクリア
         session.setUpdatedBy(currentUserId);
         practiceSessionRepository.save(session);
 

@@ -108,11 +108,37 @@ class AdjacentRoomServiceTest {
     }
 
     @Test
-    @DisplayName("会場拡張 - 正常系")
+    @DisplayName("予約確認 - 正常系")
+    void confirmReservation_success() {
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).build();
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+
+        adjacentRoomService.confirmReservation(1L, 100L);
+
+        assertNotNull(session.getReservationConfirmedAt());
+        assertEquals(100L, session.getUpdatedBy());
+        verify(practiceSessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("予約確認 - かでる和室でないVenueはエラー")
+    void confirmReservation_nonKaderu() {
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(1L).capacity(20).build();
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+
+        assertThrows(IllegalStateException.class, () -> adjacentRoomService.confirmReservation(1L, 100L));
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 正常系（予約確認済み）")
     void expandVenue_success() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
         Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
         RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
                 .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
@@ -128,7 +154,23 @@ class AdjacentRoomServiceTest {
         assertEquals(7L, session.getVenueId());
         assertEquals(24, session.getCapacity());
         assertEquals(100L, session.getUpdatedBy());
+        assertNull(session.getReservationConfirmedAt()); // 拡張後にクリアされる
         verify(practiceSessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 予約未確認の場合はエラー")
+    void expandVenue_reservationNotConfirmed() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(null).build();
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> adjacentRoomService.expandVenue(1L, 100L));
+        assertEquals("隣室の予約が確認されていません。先に予約を完了してください", ex.getMessage());
+        verify(practiceSessionRepository, never()).save(any());
     }
 
     @Test
@@ -154,7 +196,8 @@ class AdjacentRoomServiceTest {
     void expandVenue_adjacentRoomNotAvailable() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
         RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
                 .roomName("はまなす").targetDate(date).timeSlot("evening").status("×").build();
 
@@ -173,7 +216,8 @@ class AdjacentRoomServiceTest {
     void expandVenue_adjacentRoomUnknown() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date).build();
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
 
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
         when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))

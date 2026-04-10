@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
+import kaderuAPI from '../../api/kaderu';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
 import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +31,8 @@ const PracticeList = () => {
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
   const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
+  const [reservationReady, setReservationReady] = useState({}); // 隣室予約済みフラグ {sessionId: true}
+  const [reservationLoading, setReservationLoading] = useState(false); // 予約処理中フラグ
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
@@ -217,6 +220,10 @@ const PracticeList = () => {
         // 個別に詳細取得（試合別参加者を含むエンリッチメント済みデータ）
         const response = await practiceAPI.getById(session.id);
         setSelectedSession(response.data);
+        // サーバー側の予約確認状態を復元
+        if (response.data.reservationConfirmedAt) {
+          setReservationReady(prev => ({ ...prev, [session.id]: true }));
+        }
         // 全試合をデフォルトで開いた状態にする
         if (response.data.matchParticipants) {
           const allExpanded = {};
@@ -243,7 +250,42 @@ const PracticeList = () => {
     setExpandedMatches({}); // アコーディオンの状態をリセット
   };
 
-  // 会場拡張
+  // 隣室を予約（かでる2・7の予約画面を開く）
+  const handleReserveAdjacentRoom = async (sessionId, adjacentRoomName, sessionDate) => {
+    setReservationLoading(true);
+    try {
+      await kaderuAPI.openReserve(adjacentRoomName, sessionDate);
+      // 予約画面を開いただけでは確認済みにしない。ユーザーが予約完了を明示的に報告するまで待機
+      setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
+      alert('予約画面を開きました。利用目的を入力し予約を完了してください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
+    } catch (err) {
+      const errorCode = err.response?.data?.errorCode;
+      if (errorCode === 'DISABLED') {
+        alert('自動予約機能は現在利用できません。\nかでる2・7のサイトで直接予約を行ってください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
+        setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
+      } else {
+        alert('予約画面の表示に失敗しました: ' + (err.response?.data?.message || err.message));
+      }
+    } finally {
+      setReservationLoading(false);
+    }
+  };
+
+  // 手動予約完了を報告（DISABLED時の明示的な確認フロー）
+  const handleManualReservationConfirm = async (sessionId) => {
+    setReservationLoading(true);
+    try {
+      await practiceAPI.confirmReservation(sessionId);
+      setReservationReady(prev => ({ ...prev, [sessionId]: true }));
+    } catch (err) {
+      console.error('Error confirming reservation:', err);
+      alert('予約完了の記録に失敗しました');
+    } finally {
+      setReservationLoading(false);
+    }
+  };
+
+  // 会場拡張（予約完了後にDBを更新）
   const handleExpandVenue = async (sessionId, venueName, adjacentRoomStatus) => {
     const confirmed = window.confirm(
       `${venueName}を${adjacentRoomStatus.expandedVenueName}に拡張しますか？\n定員が${selectedSession.capacity}→${adjacentRoomStatus.expandedCapacity}に変更されます`
@@ -252,7 +294,11 @@ const PracticeList = () => {
     try {
       const response = await practiceAPI.expandVenue(sessionId);
       setSelectedSession(response.data);
-      // セッション一覧も更新
+      setReservationReady(prev => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       fetchSessions();
     } catch (err) {
       console.error('Error expanding venue:', err);
@@ -547,15 +593,43 @@ const PracticeList = () => {
                             : '利用不可'}
                         </span>
                         {selectedSession.adjacentRoomStatus.available && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleExpandVenue(selectedSession.id, selectedSession.venueName, selectedSession.adjacentRoomStatus);
-                            }}
-                            className="text-xs px-2 py-0.5 bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4b] transition-colors"
-                          >
-                            会場を拡張
-                          </button>
+                          reservationReady[selectedSession.id] === true ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExpandVenue(selectedSession.id, selectedSession.venueName, selectedSession.adjacentRoomStatus);
+                              }}
+                              className="text-xs px-2 py-0.5 bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4b] transition-colors"
+                            >
+                              会場を拡張
+                            </button>
+                          ) : reservationReady[selectedSession.id] === 'manual_pending' ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleManualReservationConfirm(selectedSession.id);
+                              }}
+                              disabled={reservationLoading}
+                              className="text-xs px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors disabled:opacity-50"
+                            >
+                              {reservationLoading ? '処理中...' : '予約完了を報告'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReserveAdjacentRoom(
+                                  selectedSession.id,
+                                  selectedSession.adjacentRoomStatus.adjacentRoomName,
+                                  selectedSession.sessionDate
+                                );
+                              }}
+                              disabled={reservationLoading}
+                              className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                              {reservationLoading ? '処理中...' : '隣室を予約'}
+                            </button>
+                          )
                         )}
                       </div>
                     )}

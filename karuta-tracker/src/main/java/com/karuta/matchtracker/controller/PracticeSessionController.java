@@ -422,6 +422,28 @@ public class PracticeSessionController {
     }
 
     /**
+     * 隣室予約完了を記録する
+     *
+     * @param id セッションID
+     * @return 更新後のセッション情報
+     */
+    @PostMapping("/{id}/confirm-reservation")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<PracticeSessionDto> confirmReservation(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("POST /api/practice-sessions/{}/confirm-reservation", id);
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        practiceSessionService.checkAdminScope(id, role, adminOrgId);
+
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        adjacentRoomService.confirmReservation(id, currentUserId);
+        PracticeSessionDto updatedSession = practiceSessionService.findById(id);
+        return ResponseEntity.ok(updatedSession);
+    }
+
+    /**
      * 会場を拡張（隣室と合わせた大部屋に変更）
      *
      * @param id セッションID

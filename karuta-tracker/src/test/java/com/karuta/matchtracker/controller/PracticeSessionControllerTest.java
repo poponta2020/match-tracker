@@ -250,6 +250,52 @@ class PracticeSessionControllerTest {
         verify(practiceSessionService).updateTotalMatches(1L, -1);
     }
 
+    // ========== 隣室予約確認 ==========
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/confirm-reservation - ADMIN成功")
+    void testConfirmReservation() throws Exception {
+        // Given
+        doNothing().when(adjacentRoomService).confirmReservation(eq(1L), any());
+        when(practiceSessionService.findById(1L)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("X-Admin-Organization-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(adjacentRoomService).confirmReservation(eq(1L), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/confirm-reservation - PLAYERロールは403")
+    void testConfirmReservationPlayerForbidden() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                .andExpect(status().isForbidden());
+
+        verify(adjacentRoomService, never()).confirmReservation(any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/{id}/confirm-reservation - サービス例外時は400")
+    void testConfirmReservationServiceException() throws Exception {
+        // Given
+        doThrow(new IllegalStateException("かでる2・7の部屋ではないため、予約確認できません"))
+                .when(adjacentRoomService).confirmReservation(eq(1L), any());
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("X-Admin-Organization-Id", "1"))
+                .andExpect(status().isBadRequest());
+
+        verify(adjacentRoomService).confirmReservation(eq(1L), any());
+    }
+
     // ========== 会場拡張 ==========
 
     @Test
