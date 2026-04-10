@@ -73,12 +73,13 @@ docker-compose -f docker-compose-dev.yml up   # PostgreSQL + アプリ起動
 - `context/` - React Context（AuthContext で認証管理）
 
 ### データベース
-- ローカル・本番ともにRenderのPostgreSQLに接続（`dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297`）
+- RenderのPostgreSQLに接続
 - バックエンド起動時に以下の環境変数の設定が必須:
-  - `DB_URL=jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297`
-  - `DB_USERNAME=karuta`
-  - `DB_PASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal`
+  - `DB_URL` - JDBC接続URL
+  - `DB_USERNAME` - DBユーザー名
+  - `DB_PASSWORD` - DBパスワード
 - 環境変数なしで起動すると `localhost:5432` に接続しようとして失敗する
+- 接続情報はRenderダッシュボードまたはチームの秘密情報管理を参照
 - MySQL 8.0 は CI でのみ使用
 - 論理削除パターン: `deleted_at` カラムで管理
 
