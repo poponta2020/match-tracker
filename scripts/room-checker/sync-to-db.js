@@ -112,6 +112,7 @@ async function main() {
   }
   const dbClient = new Client({
     connectionString,
+    ssl: { rejectUnauthorized: false },
   });
 
   let browser;
