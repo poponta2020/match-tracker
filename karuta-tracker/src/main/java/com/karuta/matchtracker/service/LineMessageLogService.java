@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
  * LINE message log persistence service.
  *
@@ -32,6 +34,12 @@ public class LineMessageLogService {
                 .status(status)
                 .errorMessage(error)
                 .build());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsSuccessfulSince(Long playerId, LineNotificationType type,
+                                         LocalDateTime since) {
+        return lineMessageLogRepository.existsSuccessfulSince(playerId, type, since);
     }
 }
 

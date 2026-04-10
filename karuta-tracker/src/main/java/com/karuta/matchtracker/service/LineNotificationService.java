@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -1573,7 +1574,16 @@ public class LineNotificationService {
 
         if (recipientIds.isEmpty()) return;
 
+        int sentCount = 0;
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+
         for (Long playerId : recipientIds) {
+            // 当日中に同じプレイヤーへ送信済みならスキップ
+            if (lineMessageLogService.existsSuccessfulSince(
+                    playerId, LineNotificationType.SAME_DAY_VACANCY, todayStart)) {
+                continue;
+            }
+
             // プレイヤーごとに参加可能な試合のみを抽出
             Map<Integer, Integer> playerVacancies = new LinkedHashMap<>();
             for (Map.Entry<Integer, Integer> entry : vacanciesByMatch.entrySet()) {
@@ -1597,13 +1607,14 @@ public class LineNotificationService {
 
             try {
                 sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+                sentCount++;
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
             }
         }
 
-        log.info("Sent consolidated vacancy notification to {} players for session {} ({} matches)",
-                recipientIds.size(), session.getId(), vacanciesByMatch.size());
+        log.info("Sent consolidated vacancy notification to {} players (skipped {} already notified) for session {} ({} matches)",
+                sentCount, recipientIds.size() - sentCount, session.getId(), vacanciesByMatch.size());
     }
 
     /**
