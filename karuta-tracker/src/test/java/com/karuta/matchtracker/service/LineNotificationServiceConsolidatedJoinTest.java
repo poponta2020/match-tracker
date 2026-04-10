@@ -167,6 +167,104 @@ class LineNotificationServiceConsolidatedJoinTest {
     }
 
     @Nested
+    @DisplayName("sendConsolidatedSameDayVacancyNotification - 重複防止")
+    class VacancyNotificationDedupeTests {
+
+        @Test
+        @DisplayName("同一セッション・同日で送信済みの場合はスキップされる")
+        void sameSessionSameDaySkipped() {
+            PracticeSession session = createSession();
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 2);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            // 同一セッション・同日で送信済み → true
+            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100"), any())).thenReturn(true);
+
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+
+            // スキップされるため sendFlexToPlayer は呼ばれない
+            verify(lineNotificationService, never())
+                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+        }
+
+        @Test
+        @DisplayName("別セッションの場合は送信される（セッション単位のdedupeKey）")
+        void differentSessionNotSkipped() {
+            PracticeSession session = createSession(); // id=100
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 2);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            // セッション100の送信済みチェック → false（まだ送っていない）
+            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100"), any())).thenReturn(false);
+
+            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
+                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+
+            // dedupeKey="100" で sendFlexToPlayer が呼ばれる
+            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), any(), eq("100"));
+        }
+
+        @Test
+        @DisplayName("dedupeKeyにセッションIDが含まれ、ログに保存される")
+        void dedupeKeyPassedToSendFlexToPlayer() {
+            PracticeSession session = createSession(); // id=100
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 3);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100"), any())).thenReturn(false);
+
+            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
+                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+
+            // 5引数版がdedupeKey="100"で呼ばれたことを確認
+            ArgumentCaptor<String> dedupeCaptor = ArgumentCaptor.forClass(String.class);
+            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), any(), dedupeCaptor.capture());
+            assertEquals("100", dedupeCaptor.getValue());
+        }
+    }
+
+    @Nested
     @DisplayName("sendConsolidatedSameDayVacancyNotification - 満枠ケース")
     class VacancyNotificationFullCapacityTests {
 
@@ -195,13 +293,13 @@ class LineNotificationServiceConsolidatedJoinTest {
 
             // sendFlexToPlayerをスタブ化し、Flexペイロードをキャプチャ
             doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any());
+                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
             ArgumentCaptor<Map<String, Object>> flexCaptor = ArgumentCaptor.forClass(Map.class);
             verify(lineNotificationService).sendFlexToPlayer(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture());
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture(), any());
 
             Map<String, Object> flex = flexCaptor.getValue();
             Map<String, Object> body = (Map<String, Object>) flex.get("body");
@@ -240,13 +338,13 @@ class LineNotificationServiceConsolidatedJoinTest {
                     .thenReturn(List.of(member));
 
             doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any());
+                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
             ArgumentCaptor<Map<String, Object>> flexCaptor = ArgumentCaptor.forClass(Map.class);
             verify(lineNotificationService).sendFlexToPlayer(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture());
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture(), any());
 
             Map<String, Object> flex = flexCaptor.getValue();
             Map<String, Object> body = (Map<String, Object>) flex.get("body");

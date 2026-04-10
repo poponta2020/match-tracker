@@ -26,6 +26,12 @@ public class LineMessageLogService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void save(Long channelId, Long playerId, LineNotificationType type,
                      String message, MessageStatus status, String error) {
+        save(channelId, playerId, type, message, status, error, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void save(Long channelId, Long playerId, LineNotificationType type,
+                     String message, MessageStatus status, String error, String dedupeKey) {
         lineMessageLogRepository.save(LineMessageLog.builder()
                 .lineChannelId(channelId)
                 .playerId(playerId)
@@ -33,6 +39,7 @@ public class LineMessageLogService {
                 .messageContent(message)
                 .status(status)
                 .errorMessage(error)
+                .dedupeKey(dedupeKey)
                 .build());
     }
 
@@ -40,6 +47,13 @@ public class LineMessageLogService {
     public boolean existsSuccessfulSince(Long playerId, LineNotificationType type,
                                          LocalDateTime since) {
         return lineMessageLogRepository.existsSuccessfulSince(playerId, type, since);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsSuccessfulSince(Long playerId, LineNotificationType type,
+                                         String dedupeKey, LocalDateTime since) {
+        return lineMessageLogRepository.existsSuccessfulSinceWithDedupeKey(
+                playerId, type, dedupeKey, since);
     }
 }
 

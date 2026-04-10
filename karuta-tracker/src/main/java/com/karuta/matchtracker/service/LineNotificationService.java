@@ -1057,12 +1057,18 @@ public class LineNotificationService {
      */
     private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
                                          LineNotificationType notificationType, String messageForLog) {
+        return handleSendResult(success, channel, playerId, notificationType, messageForLog, null);
+    }
+
+    private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
+                                         LineNotificationType notificationType, String messageForLog,
+                                         String dedupeKey) {
         if (success) {
-            logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null);
+            logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null, dedupeKey);
             return SendResult.SUCCESS;
         } else {
             logMessage(channel.getId(), playerId, notificationType, messageForLog,
-                MessageStatus.FAILED, "LINE API送信失敗");
+                MessageStatus.FAILED, "LINE API送信失敗", dedupeKey);
             return SendResult.FAILED;
         }
     }
@@ -1575,12 +1581,13 @@ public class LineNotificationService {
         if (recipientIds.isEmpty()) return;
 
         int sentCount = 0;
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayStart = JstDateTimeUtil.today().atStartOfDay();
+        String dedupeKey = String.valueOf(session.getId());
 
         for (Long playerId : recipientIds) {
-            // 当日中に同じプレイヤーへ送信済みならスキップ
+            // 当日中に同じプレイヤー・同じセッションへ送信済みならスキップ
             if (lineMessageLogService.existsSuccessfulSince(
-                    playerId, LineNotificationType.SAME_DAY_VACANCY, todayStart)) {
+                    playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, todayStart)) {
                 continue;
             }
 
@@ -1606,7 +1613,7 @@ public class LineNotificationService {
                     sessionLabel, playerVacancies, session.getId(), true);
 
             try {
-                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
                 sentCount++;
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
@@ -2109,6 +2116,12 @@ public class LineNotificationService {
      */
     public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
                                         String altText, Map<String, Object> flexContents) {
+        return sendFlexToPlayer(playerId, notificationType, altText, flexContents, null);
+    }
+
+    public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
+                                        String altText, Map<String, Object> flexContents,
+                                        String dedupeKey) {
         ResolvedChannel resolved = resolveChannel(playerId, notificationType, altText);
         if (resolved == null) {
             return SendResult.SKIPPED;
@@ -2117,7 +2130,7 @@ public class LineNotificationService {
         boolean success = lineMessagingService.sendPushFlexMessage(
             resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flexContents);
 
-        return handleSendResult(success, resolved.channel(), playerId, notificationType, altText);
+        return handleSendResult(success, resolved.channel(), playerId, notificationType, altText, dedupeKey);
     }
 
     /**
@@ -2172,8 +2185,13 @@ public class LineNotificationService {
 
     private void logMessage(Long channelId, Long playerId, LineNotificationType type,
                            String message, MessageStatus status, String error) {
+        logMessage(channelId, playerId, type, message, status, error, null);
+    }
+
+    private void logMessage(Long channelId, Long playerId, LineNotificationType type,
+                           String message, MessageStatus status, String error, String dedupeKey) {
         try {
-            lineMessageLogService.save(channelId, playerId, type, message, status, error);
+            lineMessageLogService.save(channelId, playerId, type, message, status, error, dedupeKey);
         } catch (Exception e) {
             log.error("Failed to save LINE message log: {}", e.getMessage());
         }

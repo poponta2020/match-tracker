@@ -33,6 +33,22 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
         @Param("since") LocalDateTime since
     );
 
+    /** 重複送信チェック（同一プレイヤー・同一種別・同一dedupeKey・指定期間内） */
+    @Query("""
+        SELECT COUNT(l) > 0 FROM LineMessageLog l
+        WHERE l.playerId = :playerId
+        AND l.notificationType = :type
+        AND l.dedupeKey = :dedupeKey
+        AND l.status = 'SUCCESS'
+        AND l.sentAt >= :since
+        """)
+    boolean existsSuccessfulSinceWithDedupeKey(
+        @Param("playerId") Long playerId,
+        @Param("type") LineNotificationType type,
+        @Param("dedupeKey") String dedupeKey,
+        @Param("since") LocalDateTime since
+    );
+
     /** チャネルの当月送信成功数を集計 */
     @Query("""
         SELECT COUNT(l) FROM LineMessageLog l

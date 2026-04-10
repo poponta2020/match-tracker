@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 @Table(name = "line_message_log", indexes = {
     @Index(name = "idx_lml_channel", columnList = "line_channel_id"),
     @Index(name = "idx_lml_player", columnList = "player_id"),
-    @Index(name = "idx_lml_type_sent", columnList = "notification_type, sent_at")
+    @Index(name = "idx_lml_type_sent", columnList = "notification_type, sent_at"),
+    @Index(name = "idx_lml_dedupe", columnList = "player_id, notification_type, dedupe_key, sent_at")
 })
 @Getter
 @Setter
@@ -50,6 +51,10 @@ public class LineMessageLog {
     /** 失敗時のエラー内容 */
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
+
+    /** 重複排除キー（セッションID等、通知コンテキストを識別する値） */
+    @Column(name = "dedupe_key", length = 100)
+    private String dedupeKey;
 
     /** 送信日時 */
     @Column(name = "sent_at", nullable = false)
