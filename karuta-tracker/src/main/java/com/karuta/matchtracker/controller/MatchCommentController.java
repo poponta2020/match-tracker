@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.karuta.matchtracker.dto.MatchCommentUpdateRequest;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/matches/{matchId}/comments")
@@ -55,6 +56,17 @@ public class MatchCommentController {
         log.info("コメント編集: matchId={}, commentId={}, by={}", matchId, commentId, currentUserId);
         MatchCommentDto updated = matchCommentService.updateComment(matchId, commentId, request.getContent(), currentUserId);
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/notify")
+    public ResponseEntity<Map<String, Object>> sendNotification(
+            @PathVariable Long matchId,
+            @RequestParam Long menteeId,
+            HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        log.info("コメントLINE通知送信: matchId={}, menteeId={}, by={}", matchId, menteeId, currentUserId);
+        Map<String, Object> result = matchCommentService.sendCommentNotification(matchId, menteeId, currentUserId);
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/{commentId}")
