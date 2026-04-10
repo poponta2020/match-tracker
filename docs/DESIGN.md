@@ -816,6 +816,8 @@ Entity Layer (JPA Entity)
   "danRank": "三段",
   "kyuRank": "A級",
   "karutaClub": "東京かるた会",
+  "adminOrganizationId": null,
+  "organizationIds": [1, 3],
   "firstLogin": false,
   "requirePasswordChange": false
 }
@@ -825,6 +827,7 @@ Entity Layer (JPA Entity)
 **説明**: 全アクティブ選手取得
 **権限**: なし
 **レスポンス**: `List<PlayerDto>`
+- 各選手に `organizationIds`（所属団体IDリスト）が含まれる
 
 #### POST /api/players
 **説明**: 選手登録

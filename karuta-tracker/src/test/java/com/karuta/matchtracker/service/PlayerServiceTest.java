@@ -4,8 +4,10 @@ import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +37,9 @@ class PlayerServiceTest {
 
     @Mock
     private PlayerRepository playerRepository;
+
+    @Mock
+    private PlayerOrganizationRepository playerOrganizationRepository;
 
     @InjectMocks
     private PlayerService playerService;
@@ -75,14 +80,21 @@ class PlayerServiceTest {
         when(playerRepository.findAllActiveOrderByName())
                 .thenReturn(List.of(testPlayer, player2));
 
+        PlayerOrganization po = PlayerOrganization.builder()
+                .id(1L).playerId(1L).organizationId(10L).build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L, 2L))).thenReturn(List.of(po));
+
         // When
         List<PlayerDto> result = playerService.findAllActivePlayers();
 
         // Then
         assertThat(result).hasSize(2);
         assertThat(result.get(0).getName()).isEqualTo("山田太郎");
+        assertThat(result.get(0).getOrganizationIds()).containsExactly(10L);
         assertThat(result.get(1).getName()).isEqualTo("佐藤花子");
+        assertThat(result.get(1).getOrganizationIds()).isEmpty();
         verify(playerRepository).findAllActiveOrderByName();
+        verify(playerOrganizationRepository).findByPlayerIdIn(List.of(1L, 2L));
     }
 
     @Test
@@ -336,6 +348,10 @@ class PlayerServiceTest {
 
         when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
 
+        PlayerOrganization po = PlayerOrganization.builder()
+                .id(1L).playerId(1L).organizationId(10L).build();
+        when(playerOrganizationRepository.findByPlayerId(1L)).thenReturn(List.of(po));
+
         // When
         com.karuta.matchtracker.dto.LoginResponse response = playerService.login(request);
 
@@ -344,7 +360,9 @@ class PlayerServiceTest {
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getName()).isEqualTo("山田太郎");
         assertThat(response.getRole()).isEqualTo(Player.Role.PLAYER);
+        assertThat(response.getOrganizationIds()).containsExactly(10L);
         verify(playerRepository).findByNameAndActive("山田太郎");
+        verify(playerOrganizationRepository).findByPlayerId(1L);
     }
 
     @Test

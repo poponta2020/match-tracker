@@ -6,8 +6,10 @@ import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -32,15 +35,25 @@ import java.util.stream.Collectors;
 public class PlayerService {
 
     private final PlayerRepository playerRepository;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     /**
      * 全てのアクティブな選手を取得（名前順）
      */
     public List<PlayerDto> findAllActivePlayers() {
         log.debug("Finding all active players");
-        return playerRepository.findAllActiveOrderByName()
-                .stream()
-                .map(PlayerDto::fromEntity)
+        List<Player> players = playerRepository.findAllActiveOrderByName();
+
+        // アクティブ選手のみの所属団体IDをバッチ取得（N+1回避）
+        List<Long> playerIds = players.stream().map(Player::getId).collect(Collectors.toList());
+        Map<Long, List<Long>> orgIdsByPlayerId = playerOrganizationRepository.findByPlayerIdIn(playerIds).stream()
+                .collect(Collectors.groupingBy(
+                        PlayerOrganization::getPlayerId,
+                        Collectors.mapping(PlayerOrganization::getOrganizationId, Collectors.toList())
+                ));
+
+        return players.stream()
+                .map(p -> PlayerDto.fromEntity(p, orgIdsByPlayerId.getOrDefault(p.getId(), List.of())))
                 .collect(Collectors.toList());
     }
 
@@ -222,7 +235,12 @@ public class PlayerService {
         player.setLastLoginAt(JstDateTimeUtil.now());
         playerRepository.save(player);
 
+        // ユーザーの参加団体IDリストを取得
+        List<Long> organizationIds = playerOrganizationRepository.findByPlayerId(player.getId()).stream()
+                .map(PlayerOrganization::getOrganizationId)
+                .collect(Collectors.toList());
+
         log.info("Successful login for user: {} (firstLogin: {})", request.getName(), isFirstLogin);
-        return LoginResponse.fromEntity(player, isFirstLogin);
+        return LoginResponse.fromEntity(player, isFirstLogin, organizationIds);
     }
 }

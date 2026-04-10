@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 選手情報のDTO
@@ -27,6 +28,7 @@ public class PlayerDto {
     private String remarks;
     private Player.Role role;
     private Long adminOrganizationId;
+    private List<Long> organizationIds;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -50,6 +52,32 @@ public class PlayerDto {
                 .remarks(player.getRemarks())
                 .role(player.getRole())
                 .adminOrganizationId(player.getAdminOrganizationId())
+                .lastLoginAt(player.getLastLoginAt())
+                .createdAt(player.getCreatedAt())
+                .updatedAt(player.getUpdatedAt())
+                .deletedAt(player.getDeletedAt())
+                .build();
+    }
+
+    /**
+     * エンティティからDTOへ変換（organizationIds付き）
+     */
+    public static PlayerDto fromEntity(Player player, List<Long> organizationIds) {
+        if (player == null) {
+            return null;
+        }
+        return PlayerDto.builder()
+                .id(player.getId())
+                .name(player.getName())
+                .gender(player.getGender())
+                .dominantHand(player.getDominantHand())
+                .danRank(player.getDanRank())
+                .kyuRank(player.getKyuRank())
+                .karutaClub(player.getKarutaClub())
+                .remarks(player.getRemarks())
+                .role(player.getRole())
+                .adminOrganizationId(player.getAdminOrganizationId())
+                .organizationIds(organizationIds)
                 .lastLoginAt(player.getLastLoginAt())
                 .createdAt(player.getCreatedAt())
                 .updatedAt(player.getUpdatedAt())

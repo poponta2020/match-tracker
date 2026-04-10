@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * ログインレスポンスDTO
  */
@@ -24,13 +26,14 @@ public class LoginResponse {
     private String karutaClub;
     private Player.Role role;
     private Long adminOrganizationId;
+    private List<Long> organizationIds;
     private boolean firstLogin;
     private boolean requirePasswordChange;
 
     /**
      * エンティティからレスポンスへ変換
      */
-    public static LoginResponse fromEntity(Player player, boolean firstLogin) {
+    public static LoginResponse fromEntity(Player player, boolean firstLogin, List<Long> organizationIds) {
         if (player == null) {
             return null;
         }
@@ -44,6 +47,7 @@ public class LoginResponse {
                 .karutaClub(player.getKarutaClub())
                 .role(player.getRole())
                 .adminOrganizationId(player.getAdminOrganizationId())
+                .organizationIds(organizationIds)
                 .firstLogin(firstLogin)
                 .requirePasswordChange(Boolean.TRUE.equals(player.getRequirePasswordChange()))
                 .build();

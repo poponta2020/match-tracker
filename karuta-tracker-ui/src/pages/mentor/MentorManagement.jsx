@@ -38,9 +38,10 @@ export default function MentorManagement() {
       setMyMentees(menteesRes.data);
       setPendingRequests(pendingRes.data);
 
-      const playerOrgs = orgsRes.data.filter(org =>
-        currentPlayer.organizationIds?.includes(org.id)
-      );
+      // API応答の最新データを優先し、localStorage側はフォールバックに留める
+      const currentFromApi = playersRes.data.find(p => p.id === currentPlayer.id);
+      const orgIds = currentFromApi?.organizationIds ?? currentPlayer.organizationIds ?? [];
+      const playerOrgs = orgsRes.data.filter(org => orgIds.includes(org.id));
       setMyOrgs(playerOrgs);
       setAllPlayers(playersRes.data);
     } catch (e) {
@@ -48,7 +49,8 @@ export default function MentorManagement() {
     } finally {
       setLoading(false);
     }
-  }, [currentPlayer.organizationIds]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- organizationIdsは配列参照で毎レンダー変わるため意図的に除外
+  }, [currentPlayer.id]);
 
   useEffect(() => {
     fetchData();
