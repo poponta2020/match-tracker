@@ -29,7 +29,7 @@ status: completed
 - **対応Issue:** #394
 
 ### タスク3: コメントバックエンド（Entity / Repository / Service / Controller / DTO）
-- [ ] 完了
+- [x] 完了
 - **概要:** コメントスレッドの CRUD + LINE通知連携のバックエンドAPI実装
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/MatchComment.java` — 新規作成
