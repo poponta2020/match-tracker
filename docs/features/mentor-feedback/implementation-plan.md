@@ -82,7 +82,7 @@ status: completed
 - **対応Issue:** #399
 
 ### タスク8: フロントエンド — コメントスレッドコンポーネント
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合詳細画面にコメントスレッドを追加。投稿・編集・削除機能
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchCommentThread.jsx` — 新規作成。コメントスレッドコンポーネント
