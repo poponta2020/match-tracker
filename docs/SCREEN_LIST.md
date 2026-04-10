@@ -42,7 +42,7 @@
 |---|------|---------------------|---------------------|------|------|
 | 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ）。自分の試合にはメモ有無アイコン・お手付き回数を表示 |
 | 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
-| 9 | `/matches/:id` | `MatchDetail.jsx` | — | ALL | 試合詳細表示（自分のお手付き回数・個人メモを表示） |
+| 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンティー本人またはACTIVEメンターのみ表示） | ALL | 試合詳細表示（自分のお手付き回数・個人メモを表示。メンター関係がある場合はコメントスレッドを表示） |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
 | 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。組み合わせ未作成時はメッセージ表示+ADMIN以上に作成画面への遷移ボタン |
 | 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示） |
@@ -120,7 +120,15 @@
 |---|------|---------------------|---------------------|------|------|
 | 38 | `/admin/settings` | `SystemSettings.jsx` | 締め切り日数入力（「締め切りなし」チェックボックス付き）、一般枠割合入力、プレビュー表示、確認ダイアログ | ADMIN+ | システム設定管理（抽選締め切り日数・一般枠保証割合の確認・変更） |
 
-## 8.7 団体設定（organizations）
+## 8.7 メンター管理（mentor）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 39.1 | `/settings/mentor` | `MentorManagement.jsx` | 承認待ちリクエスト（承認/拒否ボタン）、マイメンター（指名フォーム・解除ボタン・ステータス表示）、マイメンティー（試合履歴ナビ・解除ボタン） | ALL | メンター関係の管理。メンティーはメンターを指名、メンターは承認/拒否。メンティーの試合履歴（`/matches?playerId=X`）への導線あり |
+
+---
+
+## 8.8 団体設定（organizations）
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
@@ -198,6 +206,7 @@
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | ADMIN+ |
 | 参加練習会 | `/settings/organizations` | ALL |
+| メンター管理 | `/settings/mentor` | ALL |
 | 通知設定 | `/settings/notifications` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
@@ -237,6 +246,7 @@ karuta-tracker-ui/src/
     │   ├── MatchList.jsx
     │   ├── MatchForm.jsx
     │   ├── MatchDetail.jsx
+    │   ├── MatchCommentThread.jsx
     │   ├── BulkResultInput.jsx
     │   └── MatchResultsView.jsx
     ├── practice/
@@ -265,6 +275,8 @@ karuta-tracker-ui/src/
     │   ├── PlayerList.jsx
     │   ├── PlayerDetail.jsx
     │   └── PlayerEdit.jsx
+    ├── mentor/
+    │   └── MentorManagement.jsx
     ├── settings/
     │   ├── SystemSettings.jsx
     │   └── OrganizationSettings.jsx

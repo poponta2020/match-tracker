@@ -37,6 +37,7 @@
 - LINE通知（LINE Messaging API連携・チャネル管理・ワンタイムコード紐付け）
 - Google Calendar連携（練習予定の同期）
 - 伝助連携（出欠情報スクレイピング）
+- メンター機能（メンター指名・承認・コメントフィードバック）
 - 選手統計情報
 
 ### 1.3 技術スタック
@@ -640,6 +641,7 @@ Entity Layer (JPA Entity)
 | same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル通知 |
 | same_day_vacancy | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日空き募集通知 |
 | admin_same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加者確定通知（管理者向け・SUPER_ADMIN専用） |
+| mentor_comment | BOOLEAN | NOT NULL, DEFAULT TRUE | メンターコメント通知 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 ---
@@ -672,6 +674,39 @@ Entity Layer (JPA Entity)
 - `idx_lml_channel` (line_channel_id)
 - `idx_lml_player` (player_id)
 - `idx_lml_type_sent` (notification_type, sent_at)
+
+---
+
+#### mentor_relationships（メンター関係）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| mentor_id | BIGINT | NOT NULL, FK → players.id | メンターの選手ID |
+| mentee_id | BIGINT | NOT NULL, FK → players.id | メンティーの選手ID |
+| organization_id | BIGINT | NOT NULL, FK → organizations.id | 団体ID |
+| status | VARCHAR(20) | NOT NULL, CHECK | PENDING / ACTIVE / REJECTED |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE: `(mentor_id, mentee_id, organization_id)`
+
+---
+
+#### match_comments（メンターコメント）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| match_id | BIGINT | NOT NULL, FK → matches.id | 試合ID |
+| mentee_id | BIGINT | NOT NULL, FK → players.id | コメント対象のメンティーID |
+| author_id | BIGINT | NOT NULL, FK → players.id | 投稿者ID |
+| content | TEXT | NOT NULL | コメント内容 |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+| deleted_at | DATETIME | | 論理削除日時 |
+
+**インデックス**:
+- `idx_match_comments_thread` (match_id, mentee_id, deleted_at, created_at)
 
 ---
 
@@ -1653,6 +1688,76 @@ Entity Layer (JPA Entity)
 |------|------|-------------|
 | `lottery_deadline_days_before` | 締切日数（月初から何日前） | `0` |
 
+### 4.16 メンター関係API (`/api/mentor-relationships`)
+
+#### POST /api/mentor-relationships
+**説明**: メンター指名（PENDING状態で作成）
+**権限**: ALL
+**リクエスト**:
+```json
+{
+  "mentorId": 1,
+  "organizationId": 1
+}
+```
+**バリデーション**: 自分自身指名不可、同一組み合わせの重複チェック（REJECTED済みは再指名可）
+
+#### PUT /api/mentor-relationships/{id}/approve
+**説明**: メンター関係承認（PENDING → ACTIVE）
+**権限**: ALL（メンター本人のみ）
+
+#### PUT /api/mentor-relationships/{id}/reject
+**説明**: メンター関係拒否（PENDING → REJECTED）
+**権限**: ALL（メンター本人のみ）
+
+#### DELETE /api/mentor-relationships/{id}
+**説明**: メンター関係解除（物理削除）
+**権限**: ALL（メンターまたはメンティー本人のみ）
+
+#### GET /api/mentor-relationships/my-mentors
+**説明**: 自分のメンター一覧取得（ACTIVE + PENDING）
+**権限**: ALL
+
+#### GET /api/mentor-relationships/my-mentees
+**説明**: 自分のメンティー一覧取得（ACTIVEのみ）
+**権限**: ALL
+
+#### GET /api/mentor-relationships/pending
+**説明**: 承認待ちリクエスト取得（自分がメンターのPENDING）
+**権限**: ALL
+
+### 4.17 メンターコメントAPI (`/api/matches/{matchId}/comments`)
+
+#### GET /api/matches/{matchId}/comments?menteeId={menteeId}
+**説明**: コメント一覧取得
+**権限**: ALL（メンティー本人またはACTIVEメンターのみ）
+
+#### POST /api/matches/{matchId}/comments
+**説明**: コメント投稿
+**権限**: ALL（メンティー本人またはACTIVEメンターのみ）
+**リクエスト**:
+```json
+{
+  "menteeId": 1,
+  "content": "コメント内容"
+}
+```
+**LINE通知**: メンティー投稿→全ACTIVEメンターに通知、メンター投稿→メンティーに通知
+
+#### PUT /api/matches/{matchId}/comments/{commentId}
+**説明**: コメント編集（投稿者本人のみ）
+**権限**: ALL
+**リクエスト**:
+```json
+{
+  "content": "更新後のコメント内容"
+}
+```
+
+#### DELETE /api/matches/{matchId}/comments/{commentId}
+**説明**: コメント論理削除（投稿者本人のみ）
+**権限**: ALL
+
 ---
 
 ## 5. 画面設計
@@ -1691,6 +1796,7 @@ Entity Layer (JPA Entity)
 | LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
 | 伝助管理 | /admin/densuke | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者一括登録（ADMINは自団体のみ、SUPER_ADMINは全団体） |
 | 抽選管理 | /admin/lottery | ADMIN+ | 抽選プレビュー実行→結果確認→確定→通知送信の一連のワークフロー。システム設定へのリンクあり |
+| メンター管理 | /settings/mentor | 全員 | メンター指名・承認・拒否・解除、メンティー管理（試合履歴への導線あり） |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
 | 利用規約 | /terms-of-service | なし | 利用規約 |
 
@@ -1924,6 +2030,8 @@ Entity Layer (JPA Entity)
 | | 抽選結果閲覧 | ○ | ○ | ○ |
 | | キャンセル・繰り上げ応答 | ○ | ○ | ○ |
 | 通知 | 通知閲覧・既読 | ○ | ○ | ○ |
+| メンター | メンター指名・承認・拒否・解除 | ○ | ○ | ○ |
+| | メンターコメント投稿・編集・削除 | ○ | ○ | ○ |
 | Google Calendar | 同期 | ○ | ○ | ○ |
 | Web Push | 購読管理 | ○ | ○ | ○ |
 | LINE通知 | LINE連携有効化/無効化 | ○ | ○ | ○ |
@@ -2178,6 +2286,56 @@ Entity Layer (JPA Entity)
 |------|---------|
 | `LineNotificationType` enum | `SAME_DAY_CONFIRMATION`, `SAME_DAY_CANCEL`, `ADMIN_SAME_DAY_CANCEL`, `SAME_DAY_VACANCY`, `ADMIN_SAME_DAY_CONFIRMATION` の5値追加 |
 | `line_notification_preferences` テーブル | `same_day_confirmation`, `same_day_cancel`, `same_day_vacancy`, `admin_same_day_confirmation`, `admin_same_day_cancel` の5カラム追加 |
+
+### 7.6 メンター指名・コメントフロー
+
+```
+[メンター指名フロー]
+1. メンティーが /settings/mentor でメンター指名
+   ↓
+2. POST /api/mentor-relationships → PENDING状態で作成
+   ↓
+3. メンター側の承認待ちリクエストに表示
+   ↓
+4. メンターが承認（PUT /{id}/approve → ACTIVE）
+   または拒否（PUT /{id}/reject → REJECTED）
+
+[メンターコメントフロー]
+1. 試合詳細画面（/matches/:id）でメンティーまたはメンターがコメント投稿
+   ↓
+2. POST /api/matches/{matchId}/comments → コメント作成
+   ↓
+3. MatchCommentService.validateCommentAccess() でアクセス権検証
+   （メンティー本人 or ACTIVEメンター関係を持つメンター）
+   ↓
+4. LINE通知送信（MENTOR_COMMENT）
+   - メンティーがコメント → 全ACTIVEメンターに通知
+   - メンターがコメント → メンティーに通知
+```
+
+**関連クラス:**
+
+| クラス | 説明 |
+|--------|------|
+| `MentorRelationship` | entity/ — メンター関係エンティティ（PENDING/ACTIVE/REJECTED） |
+| `MatchComment` | entity/ — メンターコメントエンティティ（論理削除対応） |
+| `MentorRelationshipController` | controller/ — メンター関係CRUD（7エンドポイント） |
+| `MatchCommentController` | controller/ — コメントCRUD（4エンドポイント） |
+| `MentorRelationshipService` | service/ — 指名・承認・拒否・解除のビジネスロジック |
+| `MatchCommentService` | service/ — コメント投稿・編集・削除・アクセス権検証 |
+| `LineNotificationService` | service/ — MENTOR_COMMENT通知送信 |
+| `MentorManagement.jsx` | pages/mentor/ — メンター管理画面 |
+| `MatchCommentThread.jsx` | pages/matches/ — コメントスレッドUI |
+
+**DB変更:**
+
+| 対象 | 変更内容 |
+|------|---------|
+| `mentor_relationships` テーブル | 新規作成（mentor_id, mentee_id, organization_id, status） |
+| `match_comments` テーブル | 新規作成（match_id, mentee_id, author_id, content, deleted_at） |
+| `LineNotificationType` enum | `MENTOR_COMMENT` 追加 |
+| `line_notification_preferences` テーブル | `mentor_comment` カラム追加（DEFAULT TRUE） |
+| `line_message_log` CHECK制約 | `MENTOR_COMMENT` 追加 |
 
 ---
 

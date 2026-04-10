@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import { organizationAPI } from '../../api/organizations';
 import { playerAPI } from '../../api/players';
-import { getCurrentPlayer } from '../../api/auth';
+import { getCurrentPlayer } from '../../utils/auth';
 import { Users, UserPlus, UserCheck, UserX, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 
