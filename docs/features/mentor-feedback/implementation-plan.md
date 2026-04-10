@@ -92,7 +92,7 @@ status: completed
 - **対応Issue:** #400
 
 ### タスク9: フロントエンド — 通知設定画面拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 通知設定画面にメンターコメント通知のON/OFF追加
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/notifications/NotificationSettings.jsx` — メンターコメント通知設定追加

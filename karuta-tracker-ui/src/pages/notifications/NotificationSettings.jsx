@@ -430,6 +430,7 @@ const NotificationSettings = () => {
       { key: 'sameDayConfirmation', label: '参加者確定通知（当日12:00）' },
       { key: 'sameDayCancel', label: '当日キャンセル通知' },
       { key: 'sameDayVacancy', label: '空き募集通知' },
+      { key: 'mentorComment', label: 'メンターコメント通知' },
     );
     return types;
   };
