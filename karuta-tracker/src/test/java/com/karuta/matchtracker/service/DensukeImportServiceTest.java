@@ -913,4 +913,75 @@ class DensukeImportServiceTest {
         captor.getAllValues().forEach(p ->
                 assertThat(p.isDirty()).as("伝助追加参加者はdirty=false").isFalse());
     }
+    // ================================================================
+    // 空き枠統合通知テスト
+    // ================================================================
+
+    @Test
+    @DisplayName("Phase3で複数WON登録があってもsendConsolidatedSameDayVacancyNotificationは1回だけ呼ばれる")
+    void testPhase3_multipleWonRegistrations_sendsConsolidatedNotificationOnce() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 10);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        entry.getParticipants().add("鈴木");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中", "鈴木"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(200L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1, player2));
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(date)).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantService.isFreeRegistrationOpen(session, 1)).thenReturn(true);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(200L, 1, ParticipantStatus.WON))
+                .thenReturn(12L);
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        verify(lineNotificationService, times(1)).sendConsolidatedSameDayVacancyNotification(
+                eq(session), anyMap(), isNull());
+        verify(lineNotificationService, times(1)).sendConsolidatedAdminVacancyNotification(
+                eq(session), anyMap());
+        verify(lineNotificationService, never()).sendSameDayVacancyUpdateNotification(
+                any(), anyInt(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("2回目の同期でWON状態が変わらなければ空き枚通知は送信されない")
+    void testPhase3_secondSync_noStateChange_noNotification() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 10);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(date);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(200L).sessionDate(date).totalMatches(1).capacity(14).organizationId(1L).build();
+
+        // 既にWONの参加者がいる（前回の同期で登録済み）
+        PracticeParticipant existingWon = PracticeParticipant.builder()
+                .id(50L).sessionId(200L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+
+        setupPhase3Mocks(data, session, date, List.of(player1));
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
+                .thenReturn(List.of(existingWon));
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        // WON状態が変わらないので通知は送信されない
+        verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(
+                any(), anyMap(), any());
+        verify(lineNotificationService, never()).sendConsolidatedAdminVacancyNotification(
+                any(), anyMap());
+    }
+
 }

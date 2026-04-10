@@ -584,13 +584,10 @@ public class DensukeImportService {
             Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
 
             for (int mn = 1; mn <= totalMatches; mn++) {
-                List<PracticeParticipant> wonParticipants = practiceParticipantRepository
-                        .findBySessionIdAndMatchNumberAndStatus(session.getId(), mn, ParticipantStatus.WON);
-                List<PracticeParticipant> waitlistedParticipants = practiceParticipantRepository
-                        .findBySessionIdAndMatchNumberAndStatus(session.getId(), mn, ParticipantStatus.WAITLISTED);
-
-                if (wonParticipants.size() < capacity && waitlistedParticipants.isEmpty()) {
-                    int vacancies = capacity - wonParticipants.size();
+                if (practiceParticipantService.isFreeRegistrationOpen(session, mn)) {
+                    long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), mn, ParticipantStatus.WON);
+                    int vacancies = capacity - (int) wonCount;
                     vacanciesByMatch.put(mn, vacancies);
                 }
             }
