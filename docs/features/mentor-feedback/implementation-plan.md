@@ -16,7 +16,7 @@ status: completed
 - **対応Issue:** #393
 
 ### タスク2: メンター関係バックエンド（Entity / Repository / Service / Controller / DTO）
-- [ ] 完了
+- [x] 完了
 - **概要:** メンター関係の CRUD + 承認/拒否/解除のバックエンドAPI実装
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/MentorRelationship.java` — 新規作成
