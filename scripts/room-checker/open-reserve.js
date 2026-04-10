@@ -246,7 +246,8 @@ async function main() {
 
   // ブラウザを開いたまま待機（ユーザーが手動で操作）
   // Ctrl+C で終了
-  console.log("\nブラウザを開いたまま待機中... Ctrl+C で終了");
+  // 注意: 成功JSON出力後はstdoutに書き込まない（親プロセスがパイプを閉じるためEPIPEで死ぬ）
+  console.error("\nブラウザを開いたまま待機中... Ctrl+C で終了");
 
   await new Promise((resolve) => {
     process.on("SIGINT", resolve);
@@ -256,7 +257,7 @@ async function main() {
   });
 
   await browser.close();
-  console.log("ブラウザを閉じました");
+  console.error("ブラウザを閉じました");
 }
 
 main().catch((err) => {
