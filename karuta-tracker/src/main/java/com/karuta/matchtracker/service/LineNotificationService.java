@@ -2500,23 +2500,25 @@ public class LineNotificationService {
 
             boolean anySuccess = false;
             boolean anyFailed = false;
-            boolean allSkipped = true;
+            boolean anySkipped = false;
             for (MentorRelationship rel : relationships) {
                 SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, altText, flex);
                 if (r == SendResult.SUCCESS) {
                     anySuccess = true;
-                    allSkipped = false;
                 } else if (r == SendResult.FAILED) {
                     anyFailed = true;
-                    allSkipped = false;
                     log.warn("メンターコメント通知 部分失敗: mentorId={}", rel.getMentorId());
+                } else {
+                    anySkipped = true;
                 }
             }
 
             // FAILED優先: 1件でも失敗があれば FAILED（再送可能にするため lineNotified=true にしない）
-            // 全員スキップなら SKIPPED、全員成功のときのみ SUCCESS
+            // SUCCESS+SKIPPED混在もSKIPPED扱い（スキップ受信者への再送を可能にする）
+            // 全員成功のときのみ SUCCESS
             if (anyFailed) return SendResult.FAILED;
-            if (allSkipped) return SendResult.SKIPPED;
+            if (!anySuccess) return SendResult.SKIPPED;
+            if (anySkipped) return SendResult.SKIPPED;
             return SendResult.SUCCESS;
         } else {
             // メンターがコメント → メンティーに通知
