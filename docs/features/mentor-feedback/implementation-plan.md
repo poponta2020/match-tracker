@@ -51,7 +51,7 @@ status: completed
 - **対応Issue:** #396
 
 ### タスク5: LINE通知拡張（メンターコメント通知）
-- [ ] 完了
+- [x] 完了
 - **概要:** コメント投稿時のLINE通知送信 + 通知設定対応
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineNotificationPreference.java` — `mentorComment` フィールド追加

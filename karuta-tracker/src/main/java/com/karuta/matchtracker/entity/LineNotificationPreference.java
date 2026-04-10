@@ -93,6 +93,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean adminSameDayCancel = true;
 
+    /** メンターコメント通知 */
+    @Column(name = "mentor_comment", nullable = false)
+    @Builder.Default
+    private Boolean mentorComment = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

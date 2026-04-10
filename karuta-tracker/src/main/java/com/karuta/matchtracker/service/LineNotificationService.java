@@ -38,6 +38,7 @@ public class LineNotificationService {
     private final PlayerRepository playerRepository;
     private final LotteryQueryService lotteryQueryService;
     private final VenueRepository venueRepository;
+    private final MentorRelationshipRepository mentorRelationshipRepository;
 
     public LineNotificationService(
             LineChannelRepository lineChannelRepository,
@@ -50,7 +51,8 @@ public class LineNotificationService {
             PlayerOrganizationRepository playerOrganizationRepository,
             PlayerRepository playerRepository,
             LotteryQueryService lotteryQueryService,
-            VenueRepository venueRepository) {
+            VenueRepository venueRepository,
+            MentorRelationshipRepository mentorRelationshipRepository) {
         this.lineChannelRepository = lineChannelRepository;
         this.lineChannelAssignmentRepository = lineChannelAssignmentRepository;
         this.lineNotificationPreferenceRepository = lineNotificationPreferenceRepository;
@@ -62,6 +64,7 @@ public class LineNotificationService {
         this.playerRepository = playerRepository;
         this.lotteryQueryService = lotteryQueryService;
         this.venueRepository = venueRepository;
+        this.mentorRelationshipRepository = mentorRelationshipRepository;
     }
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
@@ -2065,6 +2068,7 @@ public class LineNotificationService {
             case ADMIN_SAME_DAY_CANCEL -> pref.getAdminSameDayCancel();
             case SAME_DAY_VACANCY -> pref.getSameDayVacancy();
             case ADMIN_SAME_DAY_CONFIRMATION -> pref.getAdminSameDayConfirmation();
+            case MENTOR_COMMENT -> pref.getMentorComment();
         };
     }
 
@@ -2355,6 +2359,35 @@ public class LineNotificationService {
         ));
 
         return buttons;
+    }
+
+    /**
+     * メンターコメント投稿時の通知。
+     * メンターがコメント → メンティーに通知。
+     * メンティーがコメント → 全メンターに通知。
+     */
+    public void sendMentorCommentNotification(Long authorId, Long menteeId, Long matchId, String commentContent) {
+        Player author = playerRepository.findById(authorId).orElse(null);
+        if (author == null) return;
+
+        String authorName = author.getName();
+        String preview = commentContent.length() > 50 ? commentContent.substring(0, 50) + "..." : commentContent;
+
+        if (authorId.equals(menteeId)) {
+            // メンティーがコメント → 全ACTIVEメンターに通知
+            List<MentorRelationship> relationships = mentorRelationshipRepository
+                    .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
+            for (MentorRelationship rel : relationships) {
+                String message = String.format("%sさんが試合メモにコメントしました:
+%s", authorName, preview);
+                sendToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, message);
+            }
+        } else {
+            // メンターがコメント → メンティーに通知
+            String message = String.format("%sさんがフィードバックコメントを投稿しました:
+%s", authorName, preview);
+            sendToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, message);
+        }
     }
 
     public enum SendResult {

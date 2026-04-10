@@ -28,6 +28,7 @@ public class MatchCommentService {
     private final MatchCommentRepository matchCommentRepository;
     private final MentorRelationshipRepository mentorRelationshipRepository;
     private final PlayerRepository playerRepository;
+    private final LineNotificationService lineNotificationService;
 
     @Transactional(readOnly = true)
     public List<MatchCommentDto> getComments(Long matchId, Long menteeId, Long currentUserId) {
@@ -51,6 +52,7 @@ public class MatchCommentService {
 
         MatchComment saved = matchCommentRepository.save(entity);
         log.info("コメント投稿: matchId={}, menteeId={}, authorId={}", matchId, menteeId, currentUserId);
+        lineNotificationService.sendMentorCommentNotification(currentUserId, menteeId, matchId, request.getContent());
 
         return toDto(saved);
     }
