@@ -95,7 +95,7 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !e.repeat) {
       e.preventDefault();
       handleSubmit(e);
     }
