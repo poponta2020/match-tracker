@@ -1582,7 +1582,9 @@ public class LineNotificationService {
 
             String matchSummary = playerVacancies.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                    .map(e -> e.getValue() > 0
+                            ? e.getKey() + "試合目:" + e.getValue() + "名"
+                            : e.getKey() + "試合目:満枠")
                     .collect(Collectors.joining(", "));
             String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
@@ -1614,7 +1616,9 @@ public class LineNotificationService {
 
         String matchSummary = vacanciesByMatch.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                .map(e -> e.getValue() > 0
+                        ? e.getKey() + "試合目:" + e.getValue() + "名"
+                        : e.getKey() + "試合目:満枠")
                 .collect(Collectors.joining(", "));
         String altText = String.format("【管理者通知】%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
@@ -1667,9 +1671,18 @@ public class LineNotificationService {
                 .toList();
 
         for (Map.Entry<Integer, Integer> entry : sortedEntries) {
+            String matchText;
+            String textColor;
+            if (entry.getValue() > 0) {
+                matchText = entry.getKey() + "試合目: " + entry.getValue() + "名分空き";
+                textColor = "#333333";
+            } else {
+                matchText = entry.getKey() + "試合目: 定員に達しました";
+                textColor = "#999999";
+            }
             bodyContents.add(Map.of("type", "text",
-                    "text", entry.getKey() + "試合目: " + entry.getValue() + "名分空き",
-                    "size", "md", "margin", "sm", "color", "#333333", "wrap", true));
+                    "text", matchText,
+                    "size", "md", "margin", "sm", "color", textColor, "wrap", true));
         }
 
         if (includeButtons) {
@@ -1693,8 +1706,15 @@ public class LineNotificationService {
             );
         }
 
-        // フッター（ボタン群）
+        // フッター（ボタン群）— 空きのある試合がない場合はボタンなし
         List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
+        if (footerContents.isEmpty()) {
+            return Map.of(
+                    "type", "bubble",
+                    "header", header,
+                    "body", body
+            );
+        }
         Map<String, Object> footer = Map.of(
                 "type", "box",
                 "layout", "vertical",
@@ -1719,8 +1739,14 @@ public class LineNotificationService {
     private List<Object> buildVacancyJoinButtons(Map<Integer, Integer> vacanciesByMatch, Long sessionId) {
         List<Object> buttons = new ArrayList<>();
 
+        // 空きのある試合のみボタン対象
+        Map<Integer, Integer> availableMatches = vacanciesByMatch.entrySet().stream()
+                .filter(e -> e.getValue() > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (a, b) -> a, LinkedHashMap::new));
+
         // 個別参加ボタン（オレンジ）
-        List<Integer> sortedMatchNumbers = vacanciesByMatch.keySet().stream().sorted().toList();
+        List<Integer> sortedMatchNumbers = availableMatches.keySet().stream().sorted().toList();
         for (Integer matchNumber : sortedMatchNumbers) {
             buttons.add(Map.of(
                     "type", "button",
@@ -1735,15 +1761,15 @@ public class LineNotificationService {
             ));
         }
 
-        // 全試合参加（青）※2試合以上の場合のみ
-        if (vacanciesByMatch.size() >= 2) {
+        // 全試合参加（青）※空きのある試合が2試合以上の場合のみ
+        if (availableMatches.size() >= 2) {
             buttons.add(Map.of(
                     "type", "button",
                     "action", Map.of(
                             "type", "postback",
                             "label", "すべての試合に参加",
                             "data", "action=same_day_join_all&sessionId=" + sessionId
-                                    + "&matchNumbers=" + vacanciesByMatch.keySet().stream()
+                                    + "&matchNumbers=" + availableMatches.keySet().stream()
                                     .sorted().map(String::valueOf).collect(Collectors.joining(","))
                     ),
                     "style", "primary",

@@ -312,6 +312,14 @@ public class WaitlistPromotionService {
         lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
         lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
 
+        // 管理者向け空き枠通知
+        int adminCapacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        List<PracticeParticipant> currentWonAfterJoin = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatus(sessionId, matchNumber, ParticipantStatus.WON);
+        int adminVacancies = Math.max(0, adminCapacity - currentWonAfterJoin.size());
+        lineNotificationService.sendConsolidatedAdminVacancyNotification(session,
+                Map.of(matchNumber, adminVacancies));
+
         densukeSyncService.triggerWriteAsync();
     }
 
@@ -413,9 +421,7 @@ public class WaitlistPromotionService {
             // 参加登録後の空き枠数を計算（save後なので+1された状態）
             int currentWonCount = currentWon.size() + 1; // 今登録した分を加算
             int vacancies = Math.max(0, capacity - currentWonCount);
-            if (vacancies > 0) {
-                vacanciesByMatch.put(matchNumber, vacancies);
-            }
+            vacanciesByMatch.put(matchNumber, vacancies);
 
             joinedCount++;
             log.info("Same-day join all: player {} ({}) joined session {} match {}",
