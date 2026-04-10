@@ -23,7 +23,7 @@ async function checkAllRooms(page, year, month, day) {
   if (currentYM !== targetYM) {
     await Promise.all([
       page.waitForNavigation(),
-      page.evaluate((y, m) => showCalendar(y, m), year, month),
+      page.evaluate(({ y, m }) => showCalendar(y, m), { y: year, m: month }),
     ]);
     await page.waitForTimeout(1500);
   }

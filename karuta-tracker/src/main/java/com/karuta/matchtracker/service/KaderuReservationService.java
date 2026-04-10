@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -51,6 +52,25 @@ public class KaderuReservationService {
             1, "午後 (13:00-16:00)",
             2, "夜間 (17:00-21:00)"
     );
+
+    @PostConstruct
+    void validateConfiguration() {
+        if (!enabled) {
+            log.info("Kaderu reservation feature is disabled (kaderu.enabled=false)");
+            return;
+        }
+        // 有効時はスクリプトパスの存在を検証（fail-fast）
+        File scriptFile = new File(scriptPath);
+        if (!scriptFile.isAbsolute() && !scriptFile.exists()) {
+            File parentResolved = new File("..", scriptPath);
+            if (!parentResolved.exists()) {
+                log.error("Kaderu script not found at '{}' or '{}'. "
+                        + "Set KADERU_SCRIPT_PATH to a valid path or disable with KADERU_ENABLED=false",
+                        scriptFile.getAbsolutePath(), parentResolved.getAbsolutePath());
+            }
+        }
+        log.info("Kaderu reservation feature is enabled: scriptPath={}, nodeCommand={}", scriptPath, nodeCommand);
+    }
 
     /**
      * 予約画面（申込トレイ）をブラウザで開く

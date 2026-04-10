@@ -138,4 +138,19 @@ class KaderuReservationServiceTest {
         assertEquals("テストエラー", result.message());
         assertNull(result.roomName());
     }
+
+    @Test
+    @DisplayName("機能無効時の起動時検証はエラーなく完了する")
+    void validateConfiguration_disabled_noError() {
+        ReflectionTestUtils.setField(service, "enabled", false);
+        assertDoesNotThrow(() -> service.validateConfiguration());
+    }
+
+    @Test
+    @DisplayName("機能有効・スクリプト未存在でも起動時検証は例外を投げない（ログ警告のみ）")
+    void validateConfiguration_enabled_scriptNotFound_logsWarning() {
+        ReflectionTestUtils.setField(service, "enabled", true);
+        ReflectionTestUtils.setField(service, "scriptPath", "nonexistent/path/script.js");
+        assertDoesNotThrow(() -> service.validateConfiguration());
+    }
 }
