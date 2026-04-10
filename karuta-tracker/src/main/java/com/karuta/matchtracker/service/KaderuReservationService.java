@@ -133,9 +133,25 @@ public class KaderuReservationService {
             );
             pb.environment().put("KADERU_USER_ID", kaderuUserId);
             pb.environment().put("KADERU_PASSWORD", kaderuPassword);
-            pb.redirectErrorStream(true);
+            // stdout/stderrを分離: 成功後もNodeプロセスがstderrに書き込むため、
+            // 統合するとstdoutパイプ閉鎖時にEPIPEで子プロセスが死ぬ
 
             Process process = pb.start();
+
+            // stderrを別スレッドでdrainする（ブロック防止）
+            Thread stderrDrainer = new Thread(() -> {
+                try (BufferedReader errReader = new BufferedReader(
+                        new InputStreamReader(process.getErrorStream()))) {
+                    String errLine;
+                    while ((errLine = errReader.readLine()) != null) {
+                        log.debug("open-reserve.js [stderr]: {}", errLine);
+                    }
+                } catch (Exception e) {
+                    // プロセス終了時のIOExceptionは無視
+                }
+            }, "open-reserve-stderr-drainer");
+            stderrDrainer.setDaemon(true);
+            stderrDrainer.start();
 
             // プロセス全体のタイムアウト: JSON出力前にハングした場合にreadLine()の
             // ブロックを解除するため、プロセスを強制終了する
