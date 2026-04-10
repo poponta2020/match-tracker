@@ -17,4 +17,8 @@ public interface MatchCommentRepository extends JpaRepository<MatchComment, Long
 
     @Query("SELECT c FROM MatchComment c WHERE c.id = :id AND c.deletedAt IS NULL")
     Optional<MatchComment> findActiveById(@Param("id") Long id);
+
+    @Query("SELECT c FROM MatchComment c WHERE c.matchId = :matchId AND c.menteeId = :menteeId AND c.authorId = :authorId AND c.lineNotified = false AND c.deletedAt IS NULL ORDER BY c.createdAt ASC")
+    List<MatchComment> findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(
+        @Param("matchId") Long matchId, @Param("menteeId") Long menteeId, @Param("authorId") Long authorId);
 }
