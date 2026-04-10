@@ -12,6 +12,8 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
+import com.karuta.matchtracker.repository.MentorRelationshipRepository;
+import com.karuta.matchtracker.entity.MentorRelationship;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -44,6 +46,7 @@ public class MatchService {
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final MatchPersonalNoteRepository matchPersonalNoteRepository;
+    private final MentorRelationshipRepository mentorRelationshipRepository;
 
     /**
      * IDで試合結果を取得
@@ -67,7 +70,7 @@ public class MatchService {
             return null;
         }
         List<MatchDto> enriched = enrichMatchesWithPlayerPerspective(List.of(match), playerId);
-        enriched = enrichDtosWithPersonalNotes(enriched, currentPlayerId);
+        enriched = enrichDtosWithPersonalNotes(enriched, currentPlayerId, playerId);
         return enriched.isEmpty() ? null : enriched.get(0);
     }
 
@@ -152,7 +155,7 @@ public class MatchService {
                     return true;
                 })
                 .collect(Collectors.toList());
-        return enrichDtosWithPersonalNotes(filteredResult, currentPlayerId);
+        return enrichDtosWithPersonalNotes(filteredResult, currentPlayerId, playerId);
     }
 
     /**
@@ -183,7 +186,7 @@ public class MatchService {
         validatePlayerExists(playerId);
         List<Match> matches = matchRepository.findByPlayerIdAndDateRange(playerId, startDate, endDate);
         List<MatchDto> dtos = enrichMatchesWithPlayerNames(matches, currentPlayerId);
-        return enrichDtosWithPersonalNotes(dtos, currentPlayerId);
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId, playerId);
     }
 
     /**
@@ -769,6 +772,10 @@ public class MatchService {
      * DTOリストに個人メモ・お手付きデータを付与
      */
     private List<MatchDto> enrichDtosWithPersonalNotes(List<MatchDto> dtos, Long currentPlayerId) {
+        return enrichDtosWithPersonalNotes(dtos, currentPlayerId, null);
+    }
+
+    private List<MatchDto> enrichDtosWithPersonalNotes(List<MatchDto> dtos, Long currentPlayerId, Long viewedPlayerId) {
         if (currentPlayerId == null || dtos.isEmpty()) {
             return dtos;
         }
@@ -787,6 +794,29 @@ public class MatchService {
             if (note != null) {
                 dto.setMyPersonalNotes(note.getNotes());
                 dto.setMyOtetsukiCount(note.getOtetsukiCount());
+            }
+        }
+
+        // メンター関係がある場合、メンティーのメモも取得
+        if (viewedPlayerId != null && !viewedPlayerId.equals(currentPlayerId)) {
+            List<MentorRelationship> activeRelationships = mentorRelationshipRepository
+                    .findByMentorIdAndStatus(currentPlayerId, MentorRelationship.Status.ACTIVE);
+            boolean isMentor = activeRelationships.stream()
+                    .anyMatch(r -> r.getMenteeId().equals(viewedPlayerId));
+
+            if (isMentor) {
+                Map<Long, MatchPersonalNote> menteeNoteMap = matchPersonalNoteRepository
+                        .findByPlayerIdAndMatchIdIn(viewedPlayerId, matchIds)
+                        .stream()
+                        .collect(Collectors.toMap(MatchPersonalNote::getMatchId, n -> n));
+
+                for (MatchDto dto : dtos) {
+                    MatchPersonalNote menteeNote = menteeNoteMap.get(dto.getId());
+                    if (menteeNote != null) {
+                        dto.setMenteePersonalNotes(menteeNote.getNotes());
+                        dto.setMenteeOtetsukiCount(menteeNote.getOtetsukiCount());
+                    }
+                }
             }
         }
 

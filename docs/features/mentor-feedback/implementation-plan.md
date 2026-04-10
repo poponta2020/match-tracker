@@ -42,7 +42,7 @@ status: completed
 - **対応Issue:** #395
 
 ### タスク4: 既存API拡張（メンティーのメモ閲覧対応）
-- [ ] 完了
+- [x] 完了
 - **概要:** メンター関係がある場合、メンティーの試合一覧・詳細でメモ・お手つき情報を返すよう既存APIを拡張
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchService.java` — `enrichDtosWithPersonalNotes()` をメンター対応に拡張
