@@ -127,6 +127,7 @@ const SettingsPage = () => {
     { label: 'プロフィール', icon: User, path: '/profile', visible: true },
     { label: '参加練習会', icon: Building2, path: '/settings/organizations', visible: true },
     { label: '通知設定', icon: Bell, path: '/settings/notifications', visible: true },
+    { label: 'メンター管理', icon: Users, path: '/settings/mentor', visible: true },
     { label: 'Googleカレンダー同期', icon: RefreshCw, action: handleCalendarSync, visible: true, syncing: calSyncing },
     { label: '練習日登録', icon: Calendar, path: '/practice/new', visible: isAdmin() },
     { label: '組み合わせ作成', icon: Shuffle, path: '/pairings', visible: isAdmin() },
