@@ -8,6 +8,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Skill
 ---
 
 # /prepare-pr - 実装完了後のPR作成
@@ -15,51 +16,47 @@ allowed-tools:
 `/implement`、`/quickfix`、`/bug-report` で実装・コミット済みの変更をpushし、PRを作成する。
 完了後は `/review` でクロスレビューに進む。
 
-**前提**: 各スキルがfeatureブランチ作成・コミットまで完了していること。
+**前提**: 各スキルがworktree内でfeatureブランチ作成・コミット・push済みであること。
+各スキル（`/implement`, `/quickfix`, `/bug-report`）は実装完了時にpushまで行うため、このスキルは主に**PRがまだ作成されていない場合**に使用する。
 
 **ユーザーとの対話はすべて日本語で行うこと。**
 
-## Step 1: 現在の状態を収集
+## Step 1: 対象ブランチの特定
+
+1. `$ARGUMENTS` が指定されている場合、それをブランチ名として使う
+2. 指定がない場合:
+   - `git worktree list` で現在アクティブなworktreeを一覧表示する
+   - `git branch -r --no-merged origin/main` でまだマージされていないリモートブランチを確認する
+   - 候補が複数ある場合はユーザーに選択させる
+
+## Step 2: 状態の確認
 
 以下のコマンドを**並列で**実行する:
 
 ```bash
-git status --short
-git branch --show-current
-git log --oneline -10
-git rev-list --count origin/main..HEAD 2>/dev/null || echo "0"
-gh pr view --json number,url 2>/dev/null || echo "NO_PR"
+git log --oneline origin/main..origin/<ブランチ名>
+gh pr list --head <ブランチ名> --json number,url
 ```
-
-## Step 2: 状態を分類し、異常を検出
 
 収集した情報をもとに、以下のいずれかに分類する:
 
 | 状態 | 条件 | 実行するステップ |
 |------|------|-----------------|
-| A. featureブランチ上、未push | featureブランチ上でリモートより先行 | push → PR作成 |
-| B. push済み、PRなし | リモートと同期済み、PRが存在しない | PR作成のみ |
-| C. PR作成済み | `gh pr view` が成功 | PR URLを表示して終了 |
+| A. push済み、PRなし | リモートにブランチがあるがPRが存在しない | PR作成 |
+| B. PR作成済み | `gh pr list` でPRが見つかる | PR URLを表示して終了 |
+| C. ブランチがリモートにない | `origin/<ブランチ名>` が存在しない | エラー（先にpushが必要） |
 
-### 異常状態の検出（以下の場合はユーザーに警告して確認を取る）
+### 異常状態の検出
+- **リモートにブランチがない場合**: 「ブランチがリモートにpushされていません。各実装スキルが正常に完了したか確認してください。」と伝える
+- **コミットがない場合**: 「mainとの差分がありません。先に実装スキルを実行してください。」と伝える
 
-- **mainブランチ上にコミットがある場合**: 「mainブランチ上に未pushのコミットがあります。featureブランチに移しますか？」と確認し、承認を得たらfeatureブランチを作成してmainを巻き戻す
-- **未コミットの変更がある場合**: 「未コミットの変更があります。先にコミットしてから再実行してください。」と伝える
-- **変更なし**: 「コミットもPRもありません。先に実装スキルを実行してください。」と伝える
+## Step 3: PR作成
 
-## Step 3: Push
-
-```bash
-git push -u origin <ブランチ名>
-```
-
-## Step 4: PR作成
-
-1. `git log --oneline origin/main..HEAD` でコミット内容を確認する
+1. `git log --oneline origin/main..origin/<ブランチ名>` でコミット内容を確認する
 2. コミット内容からPRタイトルと本文を生成する
 
 ```bash
-gh pr create --base main --title "<タイトル>" --body "$(cat <<'EOF'
+gh pr create --base main --head <ブランチ名> --title "<タイトル>" --body "$(cat <<'EOF'
 ## Summary
 <変更内容の箇条書き>
 
@@ -71,9 +68,9 @@ EOF
 )"
 ```
 
-## Step 5: 完了報告と次ステップの案内
+## Step 4: 完了報告とレビュー自動開始
 
 以下を表示する:
 - 作成されたPRのURL
-- 実行されたステップの一覧（push / PR作成）
-- **「`/review` でレビュープロンプトを生成し、クロスレビューに進められます。」** と案内する
+
+表示後、**自動で `/review <PR番号>` スキルを呼び出し、クロスレビュープロンプトを生成する。**

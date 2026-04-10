@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -496,6 +497,7 @@ class WaitlistPromotionServiceTest {
                 verify(practiceParticipantRepository).save(any(PracticeParticipant.class));
                 verify(lineNotificationService).sendSameDayJoinNotification(eq(session), eq(1), eq("参加者"), eq(20L));
                 verify(lineNotificationService).sendSameDayVacancyUpdateNotification(eq(session), eq(1), eq("参加者"), eq(20L));
+                verify(lineNotificationService).sendConsolidatedAdminVacancyNotification(eq(session), anyMap());
             }
         }
 
@@ -577,6 +579,9 @@ class WaitlistPromotionServiceTest {
 
                 assertThat(result).isEqualTo(3);
                 verify(practiceParticipantRepository, times(3)).save(any(PracticeParticipant.class));
+                verify(lineNotificationService).sendConsolidatedSameDayJoinNotification(eq(session), eq(List.of(1, 2, 3)), eq("参加者"), eq(20L));
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(eq(session), anyMap(), eq(20L));
+                verify(lineNotificationService).sendConsolidatedAdminVacancyNotification(eq(session), anyMap());
                 verify(densukeSyncService).triggerWriteAsync();
             }
         }

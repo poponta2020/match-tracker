@@ -68,6 +68,11 @@ public class PushNotificationPreference {
     @Builder.Default
     private Boolean densukeUnmatched = true;
 
+    /** 隣室空き通知（ADJACENT_ROOM_AVAILABLE） */
+    @Column(name = "adjacent_room", nullable = false)
+    @Builder.Default
+    private Boolean adjacentRoom = true;
+
     /** 作成日時 */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

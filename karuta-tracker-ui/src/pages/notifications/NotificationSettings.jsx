@@ -411,6 +411,7 @@ const NotificationSettings = () => {
       types.push(
         { key: 'channelReclaimWarning', label: 'LINEチャネル回収警告' },
         { key: 'densukeUnmatched', label: '伝助未登録者' },
+        { key: 'adjacentRoom', label: '隣室空き通知' },
       );
     }
     return types;

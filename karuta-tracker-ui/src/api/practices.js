@@ -102,4 +102,8 @@ export const practiceAPI = {
   // 伝助への書き込み状況を取得（団体別）
   getDensukeWriteStatus: (organizationId) =>
     apiClient.get('/practice-sessions/densuke-write-status', { params: { organizationId } }),
+
+  // 会場を拡張（隣室と合わせた大部屋に変更）
+  expandVenue: (sessionId) =>
+    apiClient.post(`/practice-sessions/${sessionId}/expand-venue`),
 };

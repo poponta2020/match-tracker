@@ -1586,7 +1586,9 @@ public class LineNotificationService {
 
             String matchSummary = playerVacancies.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                    .map(e -> e.getValue() > 0
+                            ? e.getKey() + "試合目:" + e.getValue() + "名"
+                            : e.getKey() + "試合目:満枠")
                     .collect(Collectors.joining(", "));
             String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
@@ -1618,7 +1620,9 @@ public class LineNotificationService {
 
         String matchSummary = vacanciesByMatch.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "試合目:" + e.getValue() + "名")
+                .map(e -> e.getValue() > 0
+                        ? e.getKey() + "試合目:" + e.getValue() + "名"
+                        : e.getKey() + "試合目:満枠")
                 .collect(Collectors.joining(", "));
         String altText = String.format("【管理者通知】%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
@@ -1671,12 +1675,39 @@ public class LineNotificationService {
                 .toList();
 
         for (Map.Entry<Integer, Integer> entry : sortedEntries) {
+            String matchText;
+            String textColor;
+            if (entry.getValue() > 0) {
+                matchText = entry.getKey() + "試合目: " + entry.getValue() + "名分空き";
+                textColor = "#333333";
+            } else {
+                matchText = entry.getKey() + "試合目: 定員に達しました";
+                textColor = "#999999";
+            }
             bodyContents.add(Map.of("type", "text",
-                    "text", entry.getKey() + "試合目: " + entry.getValue() + "名分空き",
-                    "size", "md", "margin", "sm", "color", "#333333", "wrap", true));
+                    "text", matchText,
+                    "size", "md", "margin", "sm", "color", textColor, "wrap", true));
         }
 
-        if (includeButtons) {
+        if (!includeButtons) {
+            Map<String, Object> body = Map.of(
+                    "type", "box",
+                    "layout", "vertical",
+                    "contents", bodyContents,
+                    "paddingAll", "20px"
+            );
+            return Map.of(
+                    "type", "bubble",
+                    "header", header,
+                    "body", body
+            );
+        }
+
+        // フッター（ボタン群）— 空きのある試合がない場合はボタンなし
+        List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
+
+        // CTA文言はボタンがある場合のみ表示（満枠時の表示不整合を防止）
+        if (!footerContents.isEmpty()) {
             bodyContents.add(Map.of("type", "text",
                     "text", "参加希望の場合はボタンを押してください",
                     "size", "sm", "margin", "lg", "color", "#888888", "wrap", true));
@@ -1689,16 +1720,13 @@ public class LineNotificationService {
                 "paddingAll", "20px"
         );
 
-        if (!includeButtons) {
+        if (footerContents.isEmpty()) {
             return Map.of(
                     "type", "bubble",
                     "header", header,
                     "body", body
             );
         }
-
-        // フッター（ボタン群）
-        List<Object> footerContents = buildVacancyJoinButtons(vacanciesByMatch, sessionId);
         Map<String, Object> footer = Map.of(
                 "type", "box",
                 "layout", "vertical",
@@ -1723,8 +1751,14 @@ public class LineNotificationService {
     private List<Object> buildVacancyJoinButtons(Map<Integer, Integer> vacanciesByMatch, Long sessionId) {
         List<Object> buttons = new ArrayList<>();
 
+        // 空きのある試合のみボタン対象
+        Map<Integer, Integer> availableMatches = vacanciesByMatch.entrySet().stream()
+                .filter(e -> e.getValue() > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (a, b) -> a, LinkedHashMap::new));
+
         // 個別参加ボタン（オレンジ）
-        List<Integer> sortedMatchNumbers = vacanciesByMatch.keySet().stream().sorted().toList();
+        List<Integer> sortedMatchNumbers = availableMatches.keySet().stream().sorted().toList();
         for (Integer matchNumber : sortedMatchNumbers) {
             buttons.add(Map.of(
                     "type", "button",
@@ -1739,15 +1773,15 @@ public class LineNotificationService {
             ));
         }
 
-        // 全試合参加（青）※2試合以上の場合のみ
-        if (vacanciesByMatch.size() >= 2) {
+        // 全試合参加（青）※空きのある試合が2試合以上の場合のみ
+        if (availableMatches.size() >= 2) {
             buttons.add(Map.of(
                     "type", "button",
                     "action", Map.of(
                             "type", "postback",
                             "label", "すべての試合に参加",
                             "data", "action=same_day_join_all&sessionId=" + sessionId
-                                    + "&matchNumbers=" + vacanciesByMatch.keySet().stream()
+                                    + "&matchNumbers=" + availableMatches.keySet().stream()
                                     .sorted().map(String::valueOf).collect(Collectors.joining(","))
                     ),
                     "style", "primary",
@@ -1826,6 +1860,58 @@ public class LineNotificationService {
             "body", body,
             "footer", footer
         );
+    }
+
+    /**
+     * 複数試合の参加通知をセッション単位でまとめて送信する。
+     * 参加した試合のWONメンバー（参加した本人除く）に「〇〇さんがX,Y,Z試合目に参加します」通知。
+     *
+     * @param session          対象セッション
+     * @param joinedMatches    参加した試合番号リスト
+     * @param joinedPlayerName 参加したプレイヤー名
+     * @param joinedPlayerId   参加したプレイヤーID
+     */
+    public void sendConsolidatedSameDayJoinNotification(PracticeSession session, List<Integer> joinedMatches,
+                                                         String joinedPlayerName, Long joinedPlayerId) {
+        if (joinedMatches.isEmpty()) return;
+
+        String matchList = joinedMatches.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        String message = String.format("%sさんが今日の%s試合目に参加します", joinedPlayerName, matchList);
+
+        // 送信先: 参加した試合のいずれかでWONのメンバー（本人除く）
+        Set<Long> recipientSet = new java.util.LinkedHashSet<>();
+        for (int matchNumber : joinedMatches) {
+            List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+            wonParticipants.stream()
+                    .map(PracticeParticipant::getPlayerId)
+                    .filter(id -> !id.equals(joinedPlayerId))
+                    .forEach(recipientSet::add);
+        }
+
+        for (Long playerId : recipientSet) {
+            try {
+                sendToPlayer(playerId, LineNotificationType.SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated join notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        // 管理者にも送信
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send admin consolidated join notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated join notification for session {} matches {} player {}",
+                session.getId(), matchList, joinedPlayerId);
     }
 
     /**

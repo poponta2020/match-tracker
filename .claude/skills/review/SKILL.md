@@ -1,7 +1,6 @@
 ---
 name: review
 description: クロスレビュー用プロンプトを生成するスキル。PRの差分からレビュー依頼プロンプトを作成し、外部レビューアー（Codex等）に渡せる形にする。レビューを依頼したいとき、/reviewで使用する。
-disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash, Read, Write, Glob, Grep
 argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検出）]

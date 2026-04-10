@@ -70,6 +70,9 @@ class PracticeSessionServiceTest {
     @Mock
     private DensukeSyncService densukeSyncService;
 
+    @Mock
+    private AdjacentRoomService adjacentRoomService;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 
