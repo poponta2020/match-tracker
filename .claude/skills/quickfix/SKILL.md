@@ -15,6 +15,24 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Agent, AskUserQuestion, Skil
 
 ## 実行手順
 
+### Step 0: 作業ブランチの確認
+
+スキル実行前に、メインの作業ディレクトリが `main` ブランチであることを確認する。
+worktreeで隔離作業を行うため、`main` にいることは必須条件。
+
+```bash
+git branch --show-current
+```
+
+- **`main` の場合** → 次のステップへ進む
+- **`main` 以外の場合** → 自動で `main` に切り替える:
+
+```bash
+git checkout main
+```
+
+切り替え後、ユーザーに「`main` ブランチに切り替えました」と通知して続行する。
+
 ### Step 1: 原因調査
 
 `<arg1>` の内容を元に、以下を調査する:

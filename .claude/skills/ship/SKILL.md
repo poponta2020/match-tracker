@@ -14,6 +14,24 @@ argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検
 
 ## 手順
 
+### 0. 作業ブランチの確認
+
+スキル実行前に、メインの作業ディレクトリが `main` ブランチであることを確認する。
+worktreeで隔離作業を行うため、`main` にいることは必須条件。
+
+```bash
+git branch --show-current
+```
+
+- **`main` の場合** → 次のステップへ進む
+- **`main` 以外の場合** → 自動で `main` に切り替える:
+
+```bash
+git checkout main
+```
+
+切り替え後、ユーザーに「`main` ブランチに切り替えました」と通知して続行する。
+
 1. PR番号を特定する
    - 引数が指定されていればそれを使う: `$ARGUMENTS`
    - なければ `gh pr view --json number -q '.number'` で現在のブランチのPRを検出
