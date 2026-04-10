@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -57,7 +58,6 @@ public class MatchCommentService {
 
         MatchComment saved = matchCommentRepository.save(entity);
         log.info("コメント投稿: matchId={}, menteeId={}, authorId={}", matchId, menteeId, currentUserId);
-        lineNotificationService.sendMentorCommentNotification(currentUserId, menteeId, matchId, request.getContent());
 
         return toDto(saved);
     }
@@ -103,9 +103,44 @@ public class MatchCommentService {
     }
 
     /**
-     * コメントアクセス権の検証。
-     * メンティー本人、またはACTIVEなメンター関係を持つメンターのみアクセス可能。
+     * 未通知コメントをまとめてLINE通知（Flex Message）で送信する。
      */
+    @Transactional
+    public Map<String, Object> sendCommentNotification(Long matchId, Long menteeId, Long currentUserId) {
+        validateCommentAccess(menteeId, currentUserId);
+        validateMatchBelongsToMentee(matchId, menteeId);
+
+        List<MatchComment> unnotified = matchCommentRepository
+                .findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(matchId, menteeId, currentUserId);
+
+        if (unnotified.isEmpty()) {
+            throw new IllegalStateException("未通知のコメントがありません");
+        }
+
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Match", matchId));
+
+        boolean isMenteeAuthor = currentUserId.equals(menteeId);
+        LineNotificationService.SendResult result = lineNotificationService
+                .sendMentorCommentFlexNotification(currentUserId, menteeId, match, unnotified, isMenteeAuthor);
+
+        // SUCCESSの場合のみ通知済みフラグを更新
+        if (result == LineNotificationService.SendResult.SUCCESS) {
+            for (MatchComment comment : unnotified) {
+                comment.setLineNotified(true);
+            }
+            matchCommentRepository.saveAll(unnotified);
+        }
+
+        log.info("コメントLINE通知送信: matchId={}, menteeId={}, by={}, count={}, result={}",
+                matchId, menteeId, currentUserId, unnotified.size(), result);
+
+        return Map.of(
+                "notifiedCount", unnotified.size(),
+                "result", result.name()
+        );
+    }
+
     /**
      * matchIdがmenteeIdの試合であることを検証する。
      */

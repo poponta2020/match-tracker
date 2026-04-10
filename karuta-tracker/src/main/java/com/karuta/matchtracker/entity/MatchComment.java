@@ -30,6 +30,10 @@ public class MatchComment {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Builder.Default
+    @Column(name = "line_notified", nullable = false)
+    private Boolean lineNotified = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

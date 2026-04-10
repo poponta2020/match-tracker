@@ -8,6 +8,7 @@ vi.mock('../../api/matchComments', () => ({
     createComment: vi.fn().mockResolvedValue({ data: {} }),
     updateComment: vi.fn().mockResolvedValue({ data: {} }),
     deleteComment: vi.fn().mockResolvedValue({}),
+    sendNotification: vi.fn().mockResolvedValue({ data: { result: 'SUCCESS' } }),
   },
 }));
 
@@ -69,5 +70,126 @@ describe('MatchCommentThread', () => {
     await vi.waitFor(() => {
       expect(textarea.value).toBe('');
     });
+  });
+});
+
+describe('MatchCommentThread LINE通知', () => {
+  const unnotifiedComments = [
+    { id: 1, authorId: 1, authorName: 'テスト選手', content: 'コメント1', lineNotified: false, createdAt: '2026-04-10T10:00:00' },
+    { id: 2, authorId: 1, authorName: 'テスト選手', content: 'コメント2', lineNotified: false, createdAt: '2026-04-10T10:05:00' },
+  ];
+
+  const renderWithComments = (comments = unnotifiedComments) => {
+    matchCommentsAPI.getComments.mockResolvedValue({ data: comments });
+    return render(<MatchCommentThread matchId={1} menteeId={1} />);
+  };
+
+  it('未通知コメントがあるとき通知ボタンが表示される', async () => {
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+  });
+
+  it('未通知コメントがないとき通知ボタンが表示されない', async () => {
+    const notifiedComments = [
+      { id: 1, authorId: 1, authorName: 'テスト選手', content: 'コメント1', lineNotified: true, createdAt: '2026-04-10T10:00:00' },
+    ];
+    renderWithComments(notifiedComments);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('コメント1')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/LINE通知を送信/)).not.toBeInTheDocument();
+  });
+
+  it('SUCCESS時に成功メッセージが表示される', async () => {
+    const user = userEvent.setup();
+    matchCommentsAPI.sendNotification.mockResolvedValue({ data: { result: 'SUCCESS' } });
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('LINE通知を送信（2件）'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信しました')).toBeInTheDocument();
+    });
+    expect(matchCommentsAPI.sendNotification).toHaveBeenCalledWith(1, 1);
+  });
+
+  it('SKIPPED時にエラーメッセージが表示される', async () => {
+    const user = userEvent.setup();
+    matchCommentsAPI.sendNotification.mockResolvedValue({ data: { result: 'SKIPPED' } });
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('LINE通知を送信（2件）'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信できませんでした（LINE未連携・通知設定OFF・月間上限超過の可能性があります）')).toBeInTheDocument();
+    });
+  });
+
+  it('FAILED時にエラーメッセージが表示される', async () => {
+    const user = userEvent.setup();
+    matchCommentsAPI.sendNotification.mockResolvedValue({ data: { result: 'FAILED' } });
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('LINE通知を送信（2件）'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知の送信に失敗しました。再度お試しください')).toBeInTheDocument();
+    });
+  });
+
+  it('API例外時にエラーメッセージが表示される', async () => {
+    const user = userEvent.setup();
+    matchCommentsAPI.sendNotification.mockRejectedValue({
+      response: { data: { message: 'サーバーエラー' } },
+    });
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('LINE通知を送信（2件）'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('サーバーエラー')).toBeInTheDocument();
+    });
+  });
+
+  it('送信中はボタンが無効化される', async () => {
+    const user = userEvent.setup();
+    let resolveNotification;
+    matchCommentsAPI.sendNotification.mockImplementation(
+      () => new Promise((resolve) => { resolveNotification = resolve; })
+    );
+    renderWithComments();
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('LINE通知を送信（2件）')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('LINE通知を送信（2件）'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('送信中...')).toBeInTheDocument();
+    });
+    expect(screen.getByText('送信中...').closest('button')).toBeDisabled();
+
+    resolveNotification({ data: { result: 'SUCCESS' } });
   });
 });

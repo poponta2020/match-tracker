@@ -2449,9 +2449,8 @@ public class LineNotificationService {
     }
 
     /**
-     * メンターコメント投稿時の通知。
-     * メンターがコメント → メンティーに通知。
-     * メンティーがコメント → 全メンターに通知。
+     * メンターコメント投稿時の通知（旧・即時通知）。
+     * 現在は sendMentorCommentFlexNotification() によるバッチ送信に置き換え済み。
      */
     public void sendMentorCommentNotification(Long authorId, Long menteeId, Long matchId, String commentContent) {
         Player author = playerRepository.findById(authorId).orElse(null);
@@ -2461,7 +2460,6 @@ public class LineNotificationService {
         String preview = commentContent.length() > 50 ? commentContent.substring(0, 50) + "..." : commentContent;
 
         if (authorId.equals(menteeId)) {
-            // メンティーがコメント → 全ACTIVEメンターに通知
             List<MentorRelationship> relationships = mentorRelationshipRepository
                     .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
             for (MentorRelationship rel : relationships) {
@@ -2472,6 +2470,129 @@ public class LineNotificationService {
             String message = String.format("%sさんがフィードバックコメントを投稿しました:\n%s", authorName, preview);
             sendToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, message);
         }
+    }
+
+    /**
+     * メンターコメントをまとめてFlex Messageで送信する。
+     * isMenteeAuthor=true: メンティーがコメント → 全ACTIVEメンターに送信
+     * isMenteeAuthor=false: メンターがコメント → メンティーに送信
+     */
+    public SendResult sendMentorCommentFlexNotification(Long authorId, Long menteeId,
+                                                         Match match, List<MatchComment> comments,
+                                                         boolean isMenteeAuthor) {
+        Player author = playerRepository.findById(authorId).orElse(null);
+        if (author == null) return SendResult.SKIPPED;
+
+        String authorName = author.getName();
+        String altText = String.format("%sさんがフィードバックコメントを%d件投稿しました", authorName, comments.size());
+
+        // 対戦相手名を解決
+        String opponentName = resolveOpponentName(match, menteeId);
+
+        // Flex Message構築
+        Map<String, Object> flex = buildMentorCommentFlex(authorName, match, opponentName, comments);
+
+        if (isMenteeAuthor) {
+            // メンティーがコメント → 全ACTIVEメンターに通知
+            List<MentorRelationship> relationships = mentorRelationshipRepository
+                    .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
+            if (relationships.isEmpty()) return SendResult.SKIPPED;
+
+            boolean anySuccess = false;
+            boolean anyFailed = false;
+            boolean anySkipped = false;
+            for (MentorRelationship rel : relationships) {
+                SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTOR_COMMENT, altText, flex);
+                if (r == SendResult.SUCCESS) {
+                    anySuccess = true;
+                } else if (r == SendResult.FAILED) {
+                    anyFailed = true;
+                    log.warn("メンターコメント通知 部分失敗: mentorId={}", rel.getMentorId());
+                } else {
+                    anySkipped = true;
+                }
+            }
+
+            // FAILED優先: 1件でも失敗があれば FAILED（再送可能にするため lineNotified=true にしない）
+            // SUCCESS+SKIPPED混在もSKIPPED扱い（スキップ受信者への再送を可能にする）
+            // 全員成功のときのみ SUCCESS
+            if (anyFailed) return SendResult.FAILED;
+            if (!anySuccess) return SendResult.SKIPPED;
+            if (anySkipped) return SendResult.SKIPPED;
+            return SendResult.SUCCESS;
+        } else {
+            // メンターがコメント → メンティーに通知
+            return sendFlexToPlayer(menteeId, LineNotificationType.MENTOR_COMMENT, altText, flex);
+        }
+    }
+
+    private String resolveOpponentName(Match match, Long menteeId) {
+        Long opponentId;
+        if (menteeId.equals(match.getPlayer1Id())) {
+            opponentId = match.getPlayer2Id();
+        } else {
+            opponentId = match.getPlayer1Id();
+        }
+
+        // opponentName が設定されている場合はそちらを優先
+        if (match.getOpponentName() != null && !match.getOpponentName().isEmpty()) {
+            return match.getOpponentName();
+        }
+
+        return playerRepository.findById(opponentId)
+                .map(Player::getName)
+                .orElse("不明");
+    }
+
+    private Map<String, Object> buildMentorCommentFlex(String authorName, Match match,
+                                                        String opponentName, List<MatchComment> comments) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "フィードバックコメント",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#4a6b5a",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        String matchDateStr = String.format("%d/%d", match.getMatchDate().getMonthValue(), match.getMatchDate().getDayOfMonth());
+        String matchInfo = String.format("%s 第%d試合 vs %s", matchDateStr, match.getMatchNumber(), opponentName);
+
+        List<Object> bodyContents = new java.util.ArrayList<>(List.of(
+            Map.of("type", "text", "text", authorName + "さんからのフィードバック",
+                "weight", "bold", "size", "md", "wrap", true),
+            Map.of("type", "text", "text", matchInfo,
+                "size", "sm", "color", "#888888", "margin", "sm"),
+            Map.of("type", "separator", "margin", "lg")
+        ));
+
+        for (MatchComment comment : comments) {
+            bodyContents.add(Map.of("type", "text", "text", comment.getContent(),
+                "size", "sm", "color", "#333333", "margin", "md", "wrap", true));
+            bodyContents.add(Map.of("type", "separator", "margin", "md"));
+        }
+
+        // 最後の separator を除去
+        if (!bodyContents.isEmpty()) {
+            bodyContents.remove(bodyContents.size() - 1);
+        }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
     }
 
     public enum SendResult {

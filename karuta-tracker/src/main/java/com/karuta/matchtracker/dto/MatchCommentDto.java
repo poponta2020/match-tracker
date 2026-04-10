@@ -19,6 +19,7 @@ public class MatchCommentDto {
     private String content;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Boolean lineNotified;
 
     public static MatchCommentDto fromEntity(MatchComment entity, String authorName) {
         return MatchCommentDto.builder()
@@ -30,6 +31,7 @@ public class MatchCommentDto {
                 .content(entity.getContent())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .lineNotified(entity.getLineNotified())
                 .build();
     }
 }

@@ -22,11 +22,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -100,6 +102,106 @@ class MatchCommentServiceTest {
 
             assertThatThrownBy(() -> service.createComment(100L, wrongRequest, 5L))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("sendCommentNotification")
+    class SendCommentNotification {
+
+        private MatchComment unnotifiedComment;
+
+        @BeforeEach
+        void setUp() {
+            unnotifiedComment = MatchComment.builder()
+                    .id(1L).matchId(100L).menteeId(2L).authorId(10L)
+                    .content("テストコメント").lineNotified(false).build();
+        }
+
+        @Test
+        @DisplayName("SUCCESS時のみlineNotifiedがtrueに更新される")
+        void successUpdatesLineNotified() {
+            match.setPlayer1Id(2L);
+            match.setPlayer2Id(10L);
+            MentorRelationship rel = new MentorRelationship();
+            rel.setMentorId(10L);
+            rel.setMenteeId(2L);
+
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchCommentRepository.findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(100L, 2L, 10L))
+                    .thenReturn(List.of(unnotifiedComment));
+            when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+            when(lineNotificationService.sendMentorCommentFlexNotification(
+                    eq(10L), eq(2L), any(), any(), eq(false)))
+                    .thenReturn(LineNotificationService.SendResult.SUCCESS);
+
+            Map<String, Object> result = service.sendCommentNotification(100L, 2L, 10L);
+
+            assertThat(result.get("result")).isEqualTo("SUCCESS");
+            assertThat(unnotifiedComment.getLineNotified()).isTrue();
+            verify(matchCommentRepository).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("FAILED時はlineNotifiedが更新されない")
+        void failedDoesNotUpdateLineNotified() {
+            match.setPlayer1Id(2L);
+            match.setPlayer2Id(10L);
+            MentorRelationship rel = new MentorRelationship();
+            rel.setMentorId(10L);
+            rel.setMenteeId(2L);
+
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchCommentRepository.findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(100L, 2L, 10L))
+                    .thenReturn(List.of(unnotifiedComment));
+            when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+            when(lineNotificationService.sendMentorCommentFlexNotification(
+                    eq(10L), eq(2L), any(), any(), eq(false)))
+                    .thenReturn(LineNotificationService.SendResult.FAILED);
+
+            Map<String, Object> result = service.sendCommentNotification(100L, 2L, 10L);
+
+            assertThat(result.get("result")).isEqualTo("FAILED");
+            assertThat(unnotifiedComment.getLineNotified()).isFalse();
+            verify(matchCommentRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("SKIPPED時はlineNotifiedが更新されない")
+        void skippedDoesNotUpdateLineNotified() {
+            match.setPlayer1Id(2L);
+            match.setPlayer2Id(10L);
+            MentorRelationship rel = new MentorRelationship();
+            rel.setMentorId(10L);
+            rel.setMenteeId(2L);
+
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchCommentRepository.findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(100L, 2L, 10L))
+                    .thenReturn(List.of(unnotifiedComment));
+            when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+            when(lineNotificationService.sendMentorCommentFlexNotification(
+                    eq(10L), eq(2L), any(), any(), eq(false)))
+                    .thenReturn(LineNotificationService.SendResult.SKIPPED);
+
+            Map<String, Object> result = service.sendCommentNotification(100L, 2L, 10L);
+
+            assertThat(result.get("result")).isEqualTo("SKIPPED");
+            assertThat(unnotifiedComment.getLineNotified()).isFalse();
+            verify(matchCommentRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("未通知コメントがない場合はエラー")
+        void emptyUnnotifiedThrows() {
+            when(matchCommentRepository.findUnnotifiedByMatchIdAndMenteeIdAndAuthorId(100L, 2L, 2L))
+                    .thenReturn(List.of());
+            when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+
+            assertThatThrownBy(() -> service.sendCommentNotification(100L, 2L, 2L))
+                    .isInstanceOf(IllegalStateException.class);
         }
     }
 
