@@ -35,6 +35,9 @@ import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("WaitlistPromotionService 辞退・復帰テスト")
 class WaitlistPromotionServiceTest {
@@ -316,6 +319,67 @@ class WaitlistPromotionServiceTest {
             // 新フロー通知は送信されないことを検証
             verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
             verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("トランザクション内ではafterCommitで通知が遅延実行される")
+        void cancelAfterNoon_defersNotificationToAfterCommit() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(true);
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(true);
+                txMock.when(TransactionSynchronizationManager::isSynchronizationActive).thenReturn(true);
+
+                service.cancelParticipation(1L, "HEALTH", null);
+
+                // afterCommit に登録されたため、この時点では通知未送信
+                verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
+                verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+                // registerSynchronization が呼ばれたことを検証
+                txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
+                        any(TransactionSynchronization.class)));
+            }
+        }
+
+        @Test
+        @DisplayName("トランザクション外では即座に通知が送信される")
+        void cancelAfterNoon_sendsImmediatelyOutsideTransaction() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+            Player player = Player.builder().id(10L).name("テスト選手").build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())).thenReturn(true);
+            when(playerRepository.findById(10L)).thenReturn(Optional.of(player));
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(false);
+
+                service.cancelParticipation(1L, "HEALTH", null);
+
+                // トランザクション外なので即座に通知が送信される
+                verify(lineNotificationService).sendSameDayCancelNotification(
+                        eq(session), eq(1), eq("テスト選手"), eq(10L));
+                verify(lineNotificationService).sendSameDayVacancyNotification(
+                        eq(session), eq(1), eq(10L));
+                // registerSynchronization は呼ばれない
+                txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
+                        any(TransactionSynchronization.class)), never());
+            }
         }
     }
 

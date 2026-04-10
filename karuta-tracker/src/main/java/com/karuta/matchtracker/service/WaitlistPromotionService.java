@@ -229,7 +229,8 @@ public class WaitlistPromotionService {
             // 後続処理のロールバックで CANCELLED が巻き戻っても通知だけ送信済みになる問題を防ぐ。
             final PracticeParticipant cancelledParticipant = participant;
             final PracticeSession cancelledSession = session;
-            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
                 TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
