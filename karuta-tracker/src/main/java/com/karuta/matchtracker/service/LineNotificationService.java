@@ -1825,6 +1825,58 @@ public class LineNotificationService {
     }
 
     /**
+     * 複数試合の参加通知をセッション単位でまとめて送信する。
+     * 参加した試合のWONメンバー（参加した本人除く）に「〇〇さんがX,Y,Z試合目に参加します」通知。
+     *
+     * @param session          対象セッション
+     * @param joinedMatches    参加した試合番号リスト
+     * @param joinedPlayerName 参加したプレイヤー名
+     * @param joinedPlayerId   参加したプレイヤーID
+     */
+    public void sendConsolidatedSameDayJoinNotification(PracticeSession session, List<Integer> joinedMatches,
+                                                         String joinedPlayerName, Long joinedPlayerId) {
+        if (joinedMatches.isEmpty()) return;
+
+        String matchList = joinedMatches.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+        String message = String.format("%sさんが今日の%s試合目に参加します", joinedPlayerName, matchList);
+
+        // 送信先: 参加した試合のいずれかでWONのメンバー（本人除く）
+        Set<Long> recipientSet = new java.util.LinkedHashSet<>();
+        for (int matchNumber : joinedMatches) {
+            List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+            wonParticipants.stream()
+                    .map(PracticeParticipant::getPlayerId)
+                    .filter(id -> !id.equals(joinedPlayerId))
+                    .forEach(recipientSet::add);
+        }
+
+        for (Long playerId : recipientSet) {
+            try {
+                sendToPlayer(playerId, LineNotificationType.SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated join notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        // 管理者にも送信
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send admin consolidated join notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated join notification for session {} matches {} player {}",
+                session.getId(), matchList, joinedPlayerId);
+    }
+
+    /**
      * 当日補充参加通知を送信する。
      * その試合のWONメンバー（参加した本人除く）に「〇〇さんが参加します」通知。
      */

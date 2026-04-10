@@ -369,6 +369,8 @@ public class WaitlistPromotionService {
         String playerName = joinedPlayer != null ? joinedPlayer.getName() : "不明";
 
         int joinedCount = 0;
+        List<Integer> joinedMatches = new java.util.ArrayList<>();
+        Map<Integer, Integer> vacanciesByMatch = new java.util.LinkedHashMap<>();
 
         for (int matchNumber : targetMatches) {
             // 既にWONかどうかチェック
@@ -406,9 +408,14 @@ public class WaitlistPromotionService {
             }
             practiceParticipantRepository.save(participant);
 
-            // 参加通知 + 枠状況通知
-            lineNotificationService.sendSameDayJoinNotification(session, matchNumber, playerName, playerId);
-            lineNotificationService.sendSameDayVacancyUpdateNotification(session, matchNumber, playerName, playerId);
+            joinedMatches.add(matchNumber);
+
+            // 参加登録後の空き枠数を計算（save後なので+1された状態）
+            int currentWonCount = currentWon.size() + 1; // 今登録した分を加算
+            int vacancies = Math.max(0, capacity - currentWonCount);
+            if (vacancies > 0) {
+                vacanciesByMatch.put(matchNumber, vacancies);
+            }
 
             joinedCount++;
             log.info("Same-day join all: player {} ({}) joined session {} match {}",
@@ -416,6 +423,15 @@ public class WaitlistPromotionService {
         }
 
         if (joinedCount > 0) {
+            // 参加通知をセッション単位でまとめて送信
+            lineNotificationService.sendConsolidatedSameDayJoinNotification(session, joinedMatches, playerName, playerId);
+
+            // 空き枠通知をセッション単位でまとめて送信
+            if (!vacanciesByMatch.isEmpty()) {
+                lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, playerId);
+                lineNotificationService.sendConsolidatedAdminVacancyNotification(session, vacanciesByMatch);
+            }
+
             densukeSyncService.triggerWriteAsync();
         }
 
