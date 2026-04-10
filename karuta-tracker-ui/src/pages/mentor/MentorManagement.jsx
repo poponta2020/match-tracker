@@ -38,9 +38,11 @@ export default function MentorManagement() {
       setMyMentees(menteesRes.data);
       setPendingRequests(pendingRes.data);
 
-      const playerOrgs = orgsRes.data.filter(org =>
-        currentPlayer.organizationIds?.includes(org.id)
-      );
+      // localStorageのcurrentPlayerにorganizationIdsがない場合（デプロイ前ログインユーザー）、
+      // API応答から取得してフォールバックする
+      const currentFromApi = playersRes.data.find(p => p.id === currentPlayer.id);
+      const orgIds = currentPlayer.organizationIds || currentFromApi?.organizationIds || [];
+      const playerOrgs = orgsRes.data.filter(org => orgIds.includes(org.id));
       setMyOrgs(playerOrgs);
       setAllPlayers(playersRes.data);
     } catch (e) {
@@ -48,7 +50,7 @@ export default function MentorManagement() {
     } finally {
       setLoading(false);
     }
-  }, [currentPlayer.organizationIds]);
+  }, [currentPlayer.id, currentPlayer.organizationIds]);
 
   useEffect(() => {
     fetchData();
