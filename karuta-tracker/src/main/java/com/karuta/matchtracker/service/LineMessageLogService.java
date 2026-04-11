@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
 /**
@@ -65,7 +66,7 @@ public class LineMessageLogService {
     public boolean tryAcquireSendRight(Long channelId, Long playerId, LineNotificationType type,
                                        String message, String dedupeKey) {
         return lineMessageLogRepository.tryAcquireSendRight(
-                channelId, playerId, type.name(), message, dedupeKey) > 0;
+                channelId, playerId, type.name(), message, dedupeKey, JstDateTimeUtil.now()) > 0;
     }
 
     /**
@@ -76,7 +77,7 @@ public class LineMessageLogService {
     public void markReservationFailed(Long playerId, LineNotificationType type,
                                       String dedupeKey, String errorMessage) {
         lineMessageLogRepository.markReservationFailed(
-                playerId, type.name(), dedupeKey, errorMessage);
+                playerId, type.name(), dedupeKey, errorMessage, JstDateTimeUtil.today());
     }
 }
 

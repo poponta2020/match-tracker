@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -53,12 +54,13 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
     /**
      * 原子的に送信権を確保する（INSERT ... ON CONFLICT DO NOTHING）。
      * 同一 (player_id, notification_type, dedupe_key, 日付) で SUCCESS ログが存在しない場合のみ挿入に成功する。
+     * sent_at にはサービス層から JstDateTimeUtil.now() を渡し、他のJPA保存経路と時刻基準を統一する。
      * @return 挿入された行数（1=送信権確保成功、0=既に送信済み）
      */
     @Modifying
     @Query(value = """
         INSERT INTO line_message_log (line_channel_id, player_id, notification_type, message_content, status, dedupe_key, sent_at)
-        VALUES (:channelId, :playerId, CAST(:type AS VARCHAR), :message, 'SUCCESS', :dedupeKey, NOW())
+        VALUES (:channelId, :playerId, CAST(:type AS VARCHAR), :message, 'SUCCESS', :dedupeKey, :sentAt)
         ON CONFLICT (player_id, notification_type, dedupe_key, (sent_at::date))
         WHERE status = 'SUCCESS' AND dedupe_key IS NOT NULL
         DO NOTHING
@@ -67,12 +69,14 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
                             @Param("playerId") Long playerId,
                             @Param("type") String type,
                             @Param("message") String message,
-                            @Param("dedupeKey") String dedupeKey);
+                            @Param("dedupeKey") String dedupeKey,
+                            @Param("sentAt") LocalDateTime sentAt);
 
     /**
      * 送信失敗時に予約レコードのステータスを FAILED に更新する。
      * tryAcquireSendRight で確保した SUCCESS レコードを FAILED に変更し、
      * 次回のリトライを可能にする。
+     * sentDate にはサービス層から JstDateTimeUtil.today() を渡し、JST日付基準で照合する。
      */
     @Modifying
     @Query(value = """
@@ -82,12 +86,13 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
         AND notification_type = CAST(:type AS VARCHAR)
         AND dedupe_key = :dedupeKey
         AND status = 'SUCCESS'
-        AND sent_at::date = CURRENT_DATE
+        AND sent_at::date = :sentDate
         """, nativeQuery = true)
     int markReservationFailed(@Param("playerId") Long playerId,
                               @Param("type") String type,
                               @Param("dedupeKey") String dedupeKey,
-                              @Param("errorMessage") String errorMessage);
+                              @Param("errorMessage") String errorMessage,
+                              @Param("sentDate") LocalDate sentDate);
 
     /** チャネルの当月送信成功数を集計 */
     @Query("""

@@ -8,6 +8,7 @@ CREATE INDEX IF NOT EXISTS idx_lml_dedupe
 
 -- Partial unique index: prevent duplicate SUCCESS logs for the same player+type+dedupeKey per day.
 -- Acts as a DB-level safety net against race conditions in concurrent duplicate checks.
+-- NOTE: sent_at is stored in JST (via JstDateTimeUtil.now()), so sent_at::date yields the JST date.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lml_dedupe_daily_unique
     ON line_message_log (player_id, notification_type, dedupe_key, (sent_at::date))
     WHERE status = 'SUCCESS' AND dedupe_key IS NOT NULL;
