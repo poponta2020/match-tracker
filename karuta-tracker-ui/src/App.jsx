@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { BottomNavProvider } from './context/BottomNavContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
 import RoleRoute from './components/RoleRoute';
@@ -62,6 +63,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
+        <BottomNavProvider>
         <AuthProvider>
           <Routes>
             {/* 公開ページ */}
@@ -144,6 +146,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
+        </BottomNavProvider>
       </Router>
     </ErrorBoundary>
   );
