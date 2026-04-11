@@ -69,7 +69,8 @@ public class LineMessageLog {
         ADMIN_SAME_DAY_CANCEL,
         SAME_DAY_VACANCY,
         ADMIN_SAME_DAY_CONFIRMATION,
-        MENTOR_COMMENT;
+        MENTOR_COMMENT,
+        MENTEE_MEMO_UPDATE;
 
         /** 通知種別に対応するチャネル用途を返す */
         public ChannelType getRequiredChannelType() {

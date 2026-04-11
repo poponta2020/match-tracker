@@ -47,6 +47,7 @@ public class MatchService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final MatchPersonalNoteRepository matchPersonalNoteRepository;
     private final MentorRelationshipRepository mentorRelationshipRepository;
+    private final LineNotificationService lineNotificationService;
 
     /**
      * IDで試合結果を取得
@@ -775,9 +776,26 @@ public class MatchService {
                         .playerId(playerId)
                         .build());
 
+        // Check if memo actually changed
+        String oldNotes = note.getNotes();
+        boolean memoChanged = personalNotes != null && !personalNotes.isBlank()
+                             && !personalNotes.equals(oldNotes);
+
         note.setNotes(personalNotes);
         note.setOtetsukiCount(otetsukiCount);
         matchPersonalNoteRepository.save(note);
+
+        // Send notification to mentors if memo changed
+        if (memoChanged) {
+            try {
+                Match match = matchRepository.findById(matchId).orElse(null);
+                if (match != null) {
+                    lineNotificationService.sendMemoUpdateFlexNotification(playerId, match, personalNotes);
+                }
+            } catch (Exception e) {
+                log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, playerId, e.getMessage());
+            }
+        }
     }
 
     /**
