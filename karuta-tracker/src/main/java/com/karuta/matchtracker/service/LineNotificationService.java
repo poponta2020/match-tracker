@@ -1499,16 +1499,27 @@ public class LineNotificationService {
         String altText = String.format("%s %d試合目が%d名分空いています", sessionLabel, matchNumber, vacancies);
         Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId(), true);
 
+        int sentCount = 0;
+        LocalDateTime todayStart = JstDateTimeUtil.today().atStartOfDay();
+        String dedupeKey = String.valueOf(session.getId());
+
         for (Long playerId : recipientIds) {
+            // 当日中に同じプレイヤー・同じセッションへ送信済みならスキップ
+            if (lineMessageLogService.existsSuccessfulSince(
+                    playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, todayStart)) {
+                continue;
+            }
+
             try {
-                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+                SendResult result = sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
+                if (result == SendResult.SUCCESS) sentCount++;
             } catch (Exception e) {
                 log.error("Failed to send vacancy notification to player {}: {}", playerId, e.getMessage());
             }
         }
 
-        log.info("Sent vacancy notification to {} players for session {} match {} ({} vacancies)",
-                recipientIds.size(), session.getId(), matchNumber, vacancies);
+        log.info("Sent vacancy notification to {} players (skipped {} already notified) for session {} match {} ({} vacancies)",
+                sentCount, recipientIds.size() - sentCount, session.getId(), matchNumber, vacancies);
     }
 
     /**
@@ -1613,8 +1624,8 @@ public class LineNotificationService {
                     sessionLabel, playerVacancies, session.getId(), true);
 
             try {
-                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
-                sentCount++;
+                SendResult result = sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
+                if (result == SendResult.SUCCESS) sentCount++;
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
             }
