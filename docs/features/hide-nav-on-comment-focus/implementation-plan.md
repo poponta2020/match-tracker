@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: completed
 ---
 # コメント入力時のボトムナビ非表示 実装手順書
 
@@ -14,7 +14,7 @@ status: in-progress
 - **対応Issue:** #434
 
 ### タスク2: App.jsx に Provider を追加
-- [ ] 完了
+- [x] 完了
 - **概要:** アプリ全体を `BottomNavProvider` でラップし、どのコンポーネントからでも Context にアクセスできるようにする
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/App.jsx` — `BottomNavProvider` を import し、既存の JSX ツリーの外側にラップ
@@ -22,7 +22,7 @@ status: in-progress
 - **対応Issue:** #435
 
 ### タスク3: Layout.jsx のボトムナビにスライドアニメーションを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** ボトムナビの表示/非表示を Context の `isVisible` に連動させ、CSS transition でスライドアニメーションを実装する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/components/Layout.jsx` — `useBottomNav()` を呼び出し、`<nav>` 要素に `transition-transform duration-300` と `isVisible ? 'translate-y-0' : 'translate-y-full'` を条件付与
@@ -30,7 +30,7 @@ status: in-progress
 - **対応Issue:** #436
 
 ### タスク4: MatchCommentThread.jsx に focus/blur ハンドラを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** コメント入力の textarea にフォーカス/ブラーハンドラを追加し、ボトムナビの表示状態を制御する。チラつき防止の遅延処理と unmount 時のリセットも実装する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchCommentThread.jsx` — 以下を実装:
