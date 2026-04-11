@@ -3,6 +3,7 @@ package com.karuta.matchtracker.repository;
 import com.karuta.matchtracker.entity.LineMessageLog;
 import com.karuta.matchtracker.entity.LineMessageLog.LineNotificationType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -48,6 +49,45 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
         @Param("dedupeKey") String dedupeKey,
         @Param("since") LocalDateTime since
     );
+
+    /**
+     * 原子的に送信権を確保する（INSERT ... ON CONFLICT DO NOTHING）。
+     * 同一 (player_id, notification_type, dedupe_key, 日付) で SUCCESS ログが存在しない場合のみ挿入に成功する。
+     * @return 挿入された行数（1=送信権確保成功、0=既に送信済み）
+     */
+    @Modifying
+    @Query(value = """
+        INSERT INTO line_message_log (line_channel_id, player_id, notification_type, message_content, status, dedupe_key, sent_at)
+        VALUES (:channelId, :playerId, CAST(:type AS VARCHAR), :message, 'SUCCESS', :dedupeKey, NOW())
+        ON CONFLICT (player_id, notification_type, dedupe_key, (sent_at::date))
+        WHERE status = 'SUCCESS' AND dedupe_key IS NOT NULL
+        DO NOTHING
+        """, nativeQuery = true)
+    int tryAcquireSendRight(@Param("channelId") Long channelId,
+                            @Param("playerId") Long playerId,
+                            @Param("type") String type,
+                            @Param("message") String message,
+                            @Param("dedupeKey") String dedupeKey);
+
+    /**
+     * 送信失敗時に予約レコードのステータスを FAILED に更新する。
+     * tryAcquireSendRight で確保した SUCCESS レコードを FAILED に変更し、
+     * 次回のリトライを可能にする。
+     */
+    @Modifying
+    @Query(value = """
+        UPDATE line_message_log
+        SET status = 'FAILED', error_message = :errorMessage
+        WHERE player_id = :playerId
+        AND notification_type = CAST(:type AS VARCHAR)
+        AND dedupe_key = :dedupeKey
+        AND status = 'SUCCESS'
+        AND sent_at::date = CURRENT_DATE
+        """, nativeQuery = true)
+    int markReservationFailed(@Param("playerId") Long playerId,
+                              @Param("type") String type,
+                              @Param("dedupeKey") String dedupeKey,
+                              @Param("errorMessage") String errorMessage);
 
     /** チャネルの当月送信成功数を集計 */
     @Query("""

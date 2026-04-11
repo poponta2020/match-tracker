@@ -1500,26 +1500,47 @@ public class LineNotificationService {
         Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId(), true);
 
         int sentCount = 0;
-        LocalDateTime todayStart = JstDateTimeUtil.today().atStartOfDay();
+        int alreadyNotifiedCount = 0;
+        int failedCount = 0;
+        int channelSkippedCount = 0;
         String dedupeKey = String.valueOf(session.getId());
 
         for (Long playerId : recipientIds) {
-            // 当日中に同じプレイヤー・同じセッションへ送信済みならスキップ
-            if (lineMessageLogService.existsSuccessfulSince(
-                    playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, todayStart)) {
+            // チャネル解決（通知設定OFF・チャネル未リンク等のチェック含む）
+            ResolvedChannel resolved = resolveChannel(playerId, LineNotificationType.SAME_DAY_VACANCY, altText);
+            if (resolved == null) {
+                channelSkippedCount++;
                 continue;
             }
 
+            // 原子的に送信権を確保（INSERT ... ON CONFLICT DO NOTHING）
+            if (!lineMessageLogService.tryAcquireSendRight(
+                    resolved.channel().getId(), playerId, LineNotificationType.SAME_DAY_VACANCY, altText, dedupeKey)) {
+                alreadyNotifiedCount++;
+                continue;
+            }
+
+            // 送信権を確保できた場合のみ実際に送信
             try {
-                SendResult result = sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
-                if (result == SendResult.SUCCESS) sentCount++;
+                boolean success = lineMessagingService.sendPushFlexMessage(
+                        resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
+                if (success) {
+                    sentCount++;
+                } else {
+                    lineMessageLogService.markReservationFailed(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    failedCount++;
+                }
             } catch (Exception e) {
                 log.error("Failed to send vacancy notification to player {}: {}", playerId, e.getMessage());
+                lineMessageLogService.markReservationFailed(
+                        playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                failedCount++;
             }
         }
 
-        log.info("Sent vacancy notification to {} players (skipped {} already notified) for session {} match {} ({} vacancies)",
-                sentCount, recipientIds.size() - sentCount, session.getId(), matchNumber, vacancies);
+        log.info("Sent vacancy notification for session {} match {} ({} vacancies): sent={}, alreadyNotified={}, failed={}, channelSkipped={}",
+                session.getId(), matchNumber, vacancies, sentCount, alreadyNotifiedCount, failedCount, channelSkippedCount);
     }
 
     /**
@@ -1592,16 +1613,12 @@ public class LineNotificationService {
         if (recipientIds.isEmpty()) return;
 
         int sentCount = 0;
-        LocalDateTime todayStart = JstDateTimeUtil.today().atStartOfDay();
+        int alreadyNotifiedCount = 0;
+        int failedCount = 0;
+        int channelSkippedCount = 0;
         String dedupeKey = String.valueOf(session.getId());
 
         for (Long playerId : recipientIds) {
-            // 当日中に同じプレイヤー・同じセッションへ送信済みならスキップ
-            if (lineMessageLogService.existsSuccessfulSince(
-                    playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, todayStart)) {
-                continue;
-            }
-
             // プレイヤーごとに参加可能な試合のみを抽出
             Map<Integer, Integer> playerVacancies = new LinkedHashMap<>();
             for (Map.Entry<Integer, Integer> entry : vacanciesByMatch.entrySet()) {
@@ -1620,19 +1637,44 @@ public class LineNotificationService {
                     .collect(Collectors.joining(", "));
             String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
+            // チャネル解決（通知設定OFF・チャネル未リンク等のチェック含む）
+            ResolvedChannel resolved = resolveChannel(playerId, LineNotificationType.SAME_DAY_VACANCY, altText);
+            if (resolved == null) {
+                channelSkippedCount++;
+                continue;
+            }
+
+            // 原子的に送信権を確保（INSERT ... ON CONFLICT DO NOTHING）
+            if (!lineMessageLogService.tryAcquireSendRight(
+                    resolved.channel().getId(), playerId, LineNotificationType.SAME_DAY_VACANCY, altText, dedupeKey)) {
+                alreadyNotifiedCount++;
+                continue;
+            }
+
             Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
                     sessionLabel, playerVacancies, session.getId(), true);
 
+            // 送信権を確保できた場合のみ実際に送信
             try {
-                SendResult result = sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex, dedupeKey);
-                if (result == SendResult.SUCCESS) sentCount++;
+                boolean success = lineMessagingService.sendPushFlexMessage(
+                        resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
+                if (success) {
+                    sentCount++;
+                } else {
+                    lineMessageLogService.markReservationFailed(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    failedCount++;
+                }
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
+                lineMessageLogService.markReservationFailed(
+                        playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                failedCount++;
             }
         }
 
-        log.info("Sent consolidated vacancy notification to {} players (skipped {} already notified) for session {} ({} matches)",
-                sentCount, recipientIds.size() - sentCount, session.getId(), vacanciesByMatch.size());
+        log.info("Sent consolidated vacancy notification for session {} ({} matches): sent={}, alreadyNotified={}, failed={}, channelSkipped={}",
+                session.getId(), vacanciesByMatch.size(), sentCount, alreadyNotifiedCount, failedCount, channelSkippedCount);
     }
 
     /**

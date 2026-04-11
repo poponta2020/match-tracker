@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,6 +50,8 @@ class LineNotificationServiceConsolidatedJoinTest {
     private LotteryQueryService lotteryQueryService;
     @Mock
     private VenueRepository venueRepository;
+    @Mock
+    private MentorRelationshipRepository mentorRelationshipRepository;
 
     @Spy
     @InjectMocks
@@ -58,6 +61,25 @@ class LineNotificationServiceConsolidatedJoinTest {
         return PracticeSession.builder()
                 .id(100L).sessionDate(LocalDate.of(2026, 4, 20))
                 .capacity(6).totalMatches(3).organizationId(1L).build();
+    }
+
+    private void setupChannelMocks(Long playerId) {
+        LineChannelAssignment assignment = LineChannelAssignment.builder()
+                .id(1L).lineChannelId(1L).playerId(playerId)
+                .lineUserId("U_" + playerId)
+                .channelType(ChannelType.PLAYER)
+                .status(LineChannelAssignment.AssignmentStatus.LINKED)
+                .build();
+        when(lineChannelAssignmentRepository.findByPlayerIdAndChannelTypeAndStatusIn(
+                eq(playerId), eq(ChannelType.PLAYER), anyList()))
+                .thenReturn(Optional.of(assignment));
+
+        LineChannel channel = LineChannel.builder()
+                .id(1L).channelAccessToken("test-token")
+                .status(LineChannel.ChannelStatus.LINKED)
+                .monthlyMessageCount(0)
+                .build();
+        when(lineChannelRepository.findById(1L)).thenReturn(Optional.of(channel));
     }
 
     @Nested
@@ -186,16 +208,18 @@ class LineNotificationServiceConsolidatedJoinTest {
             when(playerOrganizationRepository.findByOrganizationId(1L))
                     .thenReturn(List.of(member));
 
-            // 同一セッション・同日で送信済み → true
-            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
+            setupChannelMocks(10L);
+
+            // tryAcquireSendRight が false → 同一セッション・同日で送信済み
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
                     eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
-                    eq("100"), any())).thenReturn(true);
+                    anyString(), eq("100"))).thenReturn(false);
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
-            // スキップされるため sendFlexToPlayer は呼ばれない
-            verify(lineNotificationService, never())
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+            // スキップされるため sendPushFlexMessage は呼ばれない
+            verify(lineMessagingService, never())
+                    .sendPushFlexMessage(anyString(), anyString(), anyString(), any());
         }
 
         @Test
@@ -214,25 +238,29 @@ class LineNotificationServiceConsolidatedJoinTest {
             when(playerOrganizationRepository.findByOrganizationId(1L))
                     .thenReturn(List.of(member));
 
-            // セッション100の送信済みチェック → false（まだ送っていない）
-            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
-                    eq("100"), any())).thenReturn(false);
+            setupChannelMocks(10L);
 
-            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+            // tryAcquireSendRight が true → 未送信、送信権確保成功
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100"))).thenReturn(true);
+
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
-            // dedupeKey="100" で sendFlexToPlayer が呼ばれる
-            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
+            // dedupeKey="100" で tryAcquireSendRight が呼ばれる
+            verify(lineMessageLogService).tryAcquireSendRight(anyLong(), eq(10L),
                     eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
-                    anyString(), any(), eq("100"));
+                    anyString(), eq("100"));
+            // 実際に送信が実行される
+            verify(lineMessagingService).sendPushFlexMessage(anyString(), anyString(), anyString(), any());
         }
 
         @Test
-        @DisplayName("dedupeKeyにセッションIDが含まれ、ログに保存される")
-        void dedupeKeyPassedToSendFlexToPlayer() {
+        @DisplayName("dedupeKeyにセッションIDが含まれ、tryAcquireSendRightに渡される")
+        void dedupeKeyPassedToTryAcquireSendRight() {
             PracticeSession session = createSession(); // id=100
 
             Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
@@ -246,20 +274,21 @@ class LineNotificationServiceConsolidatedJoinTest {
             when(playerOrganizationRepository.findByOrganizationId(1L))
                     .thenReturn(List.of(member));
 
-            when(lineMessageLogService.existsSuccessfulSince(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
-                    eq("100"), any())).thenReturn(false);
+            setupChannelMocks(10L);
 
-            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
-            // 5引数版がdedupeKey="100"で呼ばれたことを確認
+            // dedupeKey="100" で tryAcquireSendRight が呼ばれたことを確認
             ArgumentCaptor<String> dedupeCaptor = ArgumentCaptor.forClass(String.class);
-            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
+            verify(lineMessageLogService).tryAcquireSendRight(anyLong(), eq(10L),
                     eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
-                    anyString(), any(), dedupeCaptor.capture());
+                    anyString(), dedupeCaptor.capture());
             assertEquals("100", dedupeCaptor.getValue());
         }
     }
@@ -291,15 +320,19 @@ class LineNotificationServiceConsolidatedJoinTest {
             when(playerOrganizationRepository.findByOrganizationId(1L))
                     .thenReturn(List.of(member));
 
-            // sendFlexToPlayerをスタブ化し、Flexペイロードをキャプチャ
-            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+
+            // sendPushFlexMessage をスタブ化し、Flexペイロードをキャプチャ
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
             ArgumentCaptor<Map<String, Object>> flexCaptor = ArgumentCaptor.forClass(Map.class);
-            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture(), any());
+            verify(lineMessagingService).sendPushFlexMessage(anyString(), anyString(), anyString(), flexCaptor.capture());
 
             Map<String, Object> flex = flexCaptor.getValue();
             Map<String, Object> body = (Map<String, Object>) flex.get("body");
@@ -337,14 +370,18 @@ class LineNotificationServiceConsolidatedJoinTest {
             when(playerOrganizationRepository.findByOrganizationId(1L))
                     .thenReturn(List.of(member));
 
-            doReturn(LineNotificationService.SendResult.SKIPPED).when(lineNotificationService)
-                    .sendFlexToPlayer(anyLong(), any(), anyString(), any(), any());
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
 
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
             ArgumentCaptor<Map<String, Object>> flexCaptor = ArgumentCaptor.forClass(Map.class);
-            verify(lineNotificationService).sendFlexToPlayer(eq(10L),
-                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), anyString(), flexCaptor.capture(), any());
+            verify(lineMessagingService).sendPushFlexMessage(anyString(), anyString(), anyString(), flexCaptor.capture());
 
             Map<String, Object> flex = flexCaptor.getValue();
             Map<String, Object> body = (Map<String, Object>) flex.get("body");

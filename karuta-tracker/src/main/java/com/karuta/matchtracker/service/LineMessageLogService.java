@@ -55,5 +55,28 @@ public class LineMessageLogService {
         return lineMessageLogRepository.existsSuccessfulSinceWithDedupeKey(
                 playerId, type, dedupeKey, since);
     }
+
+    /**
+     * 原子的に送信権を確保する。
+     * INSERT ... ON CONFLICT DO NOTHING により、同一キーで最初にINSERTできた処理のみがtrueを返す。
+     * これにより並行実行時の二重送信を防止する。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean tryAcquireSendRight(Long channelId, Long playerId, LineNotificationType type,
+                                       String message, String dedupeKey) {
+        return lineMessageLogRepository.tryAcquireSendRight(
+                channelId, playerId, type.name(), message, dedupeKey) > 0;
+    }
+
+    /**
+     * tryAcquireSendRight で確保した予約レコードを FAILED に変更する。
+     * SUCCESS → FAILED への変更により、次回リトライ時に再度送信権を確保できるようになる。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markReservationFailed(Long playerId, LineNotificationType type,
+                                      String dedupeKey, String errorMessage) {
+        lineMessageLogRepository.markReservationFailed(
+                playerId, type.name(), dedupeKey, errorMessage);
+    }
 }
 
