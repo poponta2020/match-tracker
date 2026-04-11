@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { matchCommentsAPI } from '../../api/matchComments';
 import { useAuth } from '../../context/AuthContext';
+import { useBottomNav } from '../../context/BottomNavContext';
 import { Send, Pencil, Trash2, X, Check, MessageCircle, Bell } from 'lucide-react';
 
 export default function MatchCommentThread({ matchId, menteeId }) {
@@ -15,6 +16,8 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   const [notifySuccess, setNotifySuccess] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+  const navTimerRef = useRef(null);
+  const { setVisible } = useBottomNav();
 
   const fetchComments = async () => {
     try {
@@ -113,6 +116,22 @@ export default function MatchCommentThread({ matchId, menteeId }) {
     }
   };
 
+  const handleNavFocus = useCallback(() => {
+    clearTimeout(navTimerRef.current);
+    setVisible(false);
+  }, [setVisible]);
+
+  const handleNavBlur = useCallback(() => {
+    navTimerRef.current = setTimeout(() => setVisible(true), 100);
+  }, [setVisible]);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(navTimerRef.current);
+      setVisible(true);
+    };
+  }, [setVisible]);
+
   const handleInputChange = (e) => {
     setNewComment(e.target.value);
     const textarea = textareaRef.current;
@@ -173,6 +192,8 @@ export default function MatchCommentThread({ matchId, menteeId }) {
                       <textarea
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
+                        onFocus={handleNavFocus}
+                        onBlur={handleNavBlur}
                         className="w-full border rounded p-2 text-sm text-gray-800 resize-none"
                         rows={2}
                         autoFocus
@@ -247,6 +268,8 @@ export default function MatchCommentThread({ matchId, menteeId }) {
             value={newComment}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onFocus={handleNavFocus}
+            onBlur={handleNavBlur}
             placeholder="コメントを入力..."
             rows={1}
             className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4a6b5a] resize-none overflow-y-auto"
