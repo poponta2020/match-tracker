@@ -228,9 +228,9 @@ public class LineAdminController {
             buildArea(colWidth * 2, 0, width - colWidth * 2, rowHeight,
                 Map.of("type", "postback", "data", "action=check_waitlist_status",
                     "displayText", "キャンセル待ち状況確認")),
-            // 下段左: 通知設定
+            // 下段左: 結果入力
             buildArea(0, rowHeight, colWidth, rowHeight,
-                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/settings/notifications")),
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/matches/results")),
             // 下段中: アプリを開く
             buildArea(colWidth, rowHeight, colWidth, rowHeight,
                 Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/")),
