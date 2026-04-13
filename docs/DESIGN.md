@@ -93,6 +93,7 @@ Entity Layer (JPA Entity)
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
+- `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
 
 **TODO**:
 - Spring Security + JWT導入
@@ -1909,6 +1910,12 @@ Entity Layer (JPA Entity)
 - 備考
 - 参加登録ボタン（モーダル内）: 年月を引き継いで参加登録画面に遷移
 - 編集・削除ボタン（SUPER_ADMIN のみ表示）
+
+**`openToday` パラメータによる自動ポップアップ（LINEリッチメニュー導線）**:
+- `/practice?openToday=true` でアクセスすると、当日の練習セッションがあればモーダルポップアップを自動表示する
+- パラメータ処理後、`openToday` はURLから除去される（`setSearchParams` で `replace: true`、ブラウザ履歴に残さない）
+- 処理済みフラグ（`useRef`）で重複表示を防止
+- 未ログイン時は `PrivateRoute` が `/login` へリダイレクト（`location` を `state.from` に保持）し、ログイン成功後に元URL（`/practice?openToday=true`）へ復帰する
 
 **データフロー**:
 1. `practiceAPI.getAll()` で全セッション取得
