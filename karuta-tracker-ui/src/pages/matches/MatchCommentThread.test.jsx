@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/matchComments', () => ({
@@ -18,12 +18,21 @@ vi.mock('../../context/AuthContext', () => ({
   }),
 }));
 
+const mockSetVisible = vi.fn();
+vi.mock('../../context/BottomNavContext', () => ({
+  useBottomNav: () => ({
+    isVisible: true,
+    setVisible: mockSetVisible,
+  }),
+}));
+
 import { matchCommentsAPI } from '../../api/matchComments';
 import MatchCommentThread from './MatchCommentThread';
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('MatchCommentThread', () => {
@@ -191,5 +200,75 @@ describe('MatchCommentThread LINE通知', () => {
     expect(screen.getByText('送信中...').closest('button')).toBeDisabled();
 
     resolveNotification({ data: { result: 'SUCCESS' } });
+  });
+});
+
+describe('MatchCommentThread ボトムナビ制御', () => {
+  const renderComponent = () =>
+    render(<MatchCommentThread matchId={1} menteeId={1} />);
+
+  it('textarea フォーカス時にボトムナビが非表示になる', async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    const textarea = screen.getByPlaceholderText('コメントを入力...');
+    await user.click(textarea);
+
+    expect(mockSetVisible).toHaveBeenCalledWith(false);
+  });
+
+  it('textarea ブラー時に100ms後にボトムナビが再表示される', () => {
+    vi.useFakeTimers();
+    renderComponent();
+
+    const textarea = screen.getByPlaceholderText('コメントを入力...');
+    fireEvent.focus(textarea);
+    mockSetVisible.mockClear();
+
+    fireEvent.blur(textarea);
+    expect(mockSetVisible).not.toHaveBeenCalledWith(true);
+
+    vi.advanceTimersByTime(100);
+    expect(mockSetVisible).toHaveBeenCalledWith(true);
+  });
+
+  it('unmount時にボトムナビが表示状態にリセットされる', () => {
+    const { unmount } = renderComponent();
+    mockSetVisible.mockClear();
+
+    unmount();
+
+    expect(mockSetVisible).toHaveBeenCalledWith(true);
+  });
+
+  it('textarea間フォーカス移動時にblurのタイマーがキャンセルされる', async () => {
+    matchCommentsAPI.getComments.mockResolvedValue({
+      data: [
+        { id: 1, authorId: 1, authorName: 'テスト選手', content: 'テストコメント', lineNotified: true, createdAt: '2026-04-10T10:00:00' },
+      ],
+    });
+    const { container } = render(<MatchCommentThread matchId={1} menteeId={1} />);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('テストコメント')).toBeInTheDocument();
+    });
+
+    // 編集モードにして編集用textareaを表示
+    fireEvent.click(container.querySelector('.lucide-pencil').closest('button'));
+
+    const editTextarea = screen.getByDisplayValue('テストコメント');
+    const newCommentTextarea = screen.getByPlaceholderText('コメントを入力...');
+
+    vi.useFakeTimers();
+    fireEvent.focus(newCommentTextarea);
+    mockSetVisible.mockClear();
+
+    // 新規投稿textareaからblur → 編集textareaにfocus（clearTimeoutでタイマーがキャンセルされる）
+    fireEvent.blur(newCommentTextarea);
+    fireEvent.focus(editTextarea);
+
+    // 100ms経過してもsetVisible(true)が呼ばれない
+    vi.advanceTimersByTime(100);
+    expect(mockSetVisible).not.toHaveBeenCalledWith(true);
   });
 });

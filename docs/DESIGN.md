@@ -2069,6 +2069,7 @@ Entity Layer (JPA Entity)
 
 **フロントエンド**:
 - `AuthContext` で `currentPlayer.role` を管理
+- `BottomNavContext` でボトムナビゲーションの表示/非表示を管理（`isVisible` state、デフォルト `true`）。`App.jsx` で `BottomNavProvider` として全体をラップ。`Layout.jsx` が `isVisible` を参照してスライドアニメーション（`translate-y-0` ⇔ `translate-y-full`）で切り替え
 - Axiosインターセプターで全リクエストに `X-User-Role` ヘッダー追加
 - `isSuperAdmin()`, `isAdmin()` などのヘルパー関数で条件付き表示
 - `RoleRoute` コンポーネントで管理者専用ルートを保護（`/admin/*`, `/players/*`, `/practice/new` 等）
@@ -2348,7 +2349,7 @@ Entity Layer (JPA Entity)
 | `MatchCommentService` | service/ — コメント投稿・編集・削除・アクセス権検証・バッチ通知送信 |
 | `LineNotificationService` | service/ — MENTOR_COMMENT Flex Message構築・送信 |
 | `MentorManagement.jsx` | pages/mentor/ — メンター管理画面 |
-| `MatchCommentThread.jsx` | pages/matches/ — コメントスレッドUI |
+| `MatchCommentThread.jsx` | pages/matches/ — コメントスレッドUI（textarea の focus/blur で `BottomNavContext.setVisible` を制御。blur 時 100ms 遅延でチラつき防止。unmount 時に `setVisible(true)` でリセット） |
 
 **DB変更:**
 

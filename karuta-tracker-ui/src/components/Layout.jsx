@@ -6,9 +6,11 @@ import {
   BarChart3,
   Settings,
 } from 'lucide-react';
+import { useBottomNav } from '../context/BottomNavContext';
 
 const Layout = ({ children }) => {
   const location = useLocation();
+  const { isVisible } = useBottomNav();
 
   // ボトムナビゲーションの項目定義
   const bottomNavItems = [
@@ -54,7 +56,7 @@ const Layout = ({ children }) => {
       </main>
 
       {/* ボトムナビゲーション: bottom-0固定、safe-area分は背景のみ拡張 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50 pb-[env(safe-area-inset-bottom)]">
+      <nav className={`fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50 pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}>
         <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
