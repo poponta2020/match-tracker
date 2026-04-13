@@ -454,6 +454,8 @@ public class MatchService {
             log.info("Upsert: updated existing match with id: {}", saved.getId());
         } else {
             Match match = request.toEntity();
+            match.setCreatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
+            match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
             saved = matchRepository.save(match);
             log.info("Upsert: created new match with id: {}", saved.getId());

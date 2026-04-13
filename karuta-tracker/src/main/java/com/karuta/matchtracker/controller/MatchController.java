@@ -1,9 +1,11 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.MatchCreateRequest;
 import com.karuta.matchtracker.dto.MatchDto;
 import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.MatchService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -223,6 +225,7 @@ public class MatchController {
      * @return 登録された試合結果
      */
     @PostMapping
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchDto> createMatch(@Valid @RequestBody MatchSimpleCreateRequest request,
                                                 HttpServletRequest httpRequest) {
         log.info("POST /api/matches - Creating new match (simple) on {}", request.getMatchDate());
@@ -238,6 +241,7 @@ public class MatchController {
      * @return 登録された試合結果
      */
     @PostMapping("/detailed")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchDto> createMatchDetailed(@Valid @RequestBody MatchCreateRequest request,
                                                         HttpServletRequest httpRequest) {
         log.info("POST /api/matches/detailed - Creating new match on {}", request.getMatchDate());
@@ -254,6 +258,7 @@ public class MatchController {
      * @return 更新された試合結果
      */
     @PutMapping("/{id}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchDto> updateMatchSimple(
             @PathVariable Long id,
             @Valid @RequestBody MatchSimpleCreateRequest request,
@@ -274,6 +279,7 @@ public class MatchController {
      * @return 更新された試合結果
      */
     @PutMapping("/{id}/detailed")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchDto> updateMatchDetailed(
             @PathVariable Long id,
             @RequestParam Long winnerId,

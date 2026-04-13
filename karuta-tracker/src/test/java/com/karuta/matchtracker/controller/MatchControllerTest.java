@@ -232,6 +232,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -258,6 +260,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -286,6 +290,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -318,6 +324,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(put("/api/matches/1")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -438,6 +446,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
@@ -454,6 +464,8 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
@@ -474,6 +486,8 @@ class MatchControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
                         .param("winnerId", "2")
                         .param("scoreDifference", "3")
                         .param("updatedBy", "1"))
