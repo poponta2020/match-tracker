@@ -187,7 +187,7 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, 4);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
@@ -213,7 +213,7 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, null);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
 
         PracticeParticipant cancelled = PracticeParticipant.builder()
@@ -250,7 +250,7 @@ class PracticeParticipantServiceTest {
         PracticeSession session = createSession(100L, null);
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
-        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID)).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(List.of());
@@ -420,7 +420,7 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session2, session1));
         // リクエスト先頭のセッション100(ORG_ID=1)が締切判定に使われることを検証
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
-        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session1, session2));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID)).thenReturn(List.of(session1));
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();
         request.setPlayerId(10L);
@@ -454,6 +454,75 @@ class PracticeParticipantServiceTest {
         service.registerParticipations(request);
 
         verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("SAME_DAYタイプでクロス団体のセッションがsoft-deleteされないこと")
+    void sameDay_crossOrganization_doesNotSoftDeleteOtherOrg() {
+        Long orgId2 = 2L;
+        PracticeSession session1 = createSession(100L, null); // ORG_ID=1
+        PracticeSession session2 = new PracticeSession();
+        session2.setId(200L);
+        session2.setCapacity(null);
+        session2.setOrganizationId(orgId2);
+        session2.setTotalMatches(7);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        // 団体1のセッションのみ返す（団体2のセッションは含まない）
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID))
+                .thenReturn(List.of(session1));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        // soft-deleteはORG_IDのセッション(100L)のみに対して呼ばれる
+        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(
+                eq(10L), eq(List.of(100L)), any());
+        // 団体2のセッション(200L)はsoft-deleteに含まれない
+        verify(practiceParticipantRepository, never()).softDeleteByPlayerIdAndSessionIds(
+                eq(10L), argThat(ids -> ids.contains(200L)), any());
+    }
+
+    @Test
+    @DisplayName("締切前タイプでクロス団体のセッションがsoft-deleteされないこと")
+    void beforeDeadline_crossOrganization_doesNotSoftDeleteOtherOrg() {
+        Long orgId2 = 2L;
+        PracticeSession session1 = createSession(100L, null); // ORG_ID=1
+        PracticeSession session2 = new PracticeSession();
+        session2.setId(200L);
+        session2.setCapacity(null);
+        session2.setOrganizationId(orgId2);
+        session2.setTotalMatches(7);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
+        // 団体1のセッションのみ返す
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID))
+                .thenReturn(List.of(session1));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        // soft-deleteはORG_IDのセッション(100L)のみに対して呼ばれる
+        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(
+                eq(10L), eq(List.of(100L)), any());
+        // 団体2のセッション(200L)はsoft-deleteに含まれない
+        verify(practiceParticipantRepository, never()).softDeleteByPlayerIdAndSessionIds(
+                eq(10L), argThat(ids -> ids.contains(200L)), any());
     }
 
     private PracticeParticipationRequest.SessionMatchParticipation createParticipation(Long sessionId, int matchNumber) {

@@ -153,10 +153,10 @@ public class PracticeParticipantService {
 
         if (deadlineType == com.karuta.matchtracker.entity.DeadlineType.SAME_DAY) {
             // わすらもち会: 抽選なし、常に先着順（即WON/WAITLISTED）
-            registerSameDay(request);
+            registerSameDay(request, organizationId);
         } else if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), organizationId)) {
             // 北大: 締切前はPENDING
-            registerBeforeDeadline(request);
+            registerBeforeDeadline(request, organizationId);
         } else {
             // 北大: 締切後はWON/WAITLISTED
             registerAfterDeadline(request);
@@ -168,12 +168,12 @@ public class PracticeParticipantService {
      * SAME_DAYタイプ（わすらもち会）の参加登録
      * 抽選なし・先着順: 空きあり→即WON、定員超過→即WAITLISTED
      */
-    private void registerSameDay(PracticeParticipationRequest request) {
+    private void registerSameDay(PracticeParticipationRequest request, Long organizationId) {
         Long playerId = request.getPlayerId();
 
-        // 対象月の全セッションIDを取得して既存登録を削除（月単位の一括更新）
+        // 対象団体の月内セッションIDを取得して既存登録を削除（月単位の一括更新）
         List<Long> allMonthSessionIds = practiceSessionRepository
-                .findByYearAndMonth(request.getYear(), request.getMonth()).stream()
+                .findByYearAndMonthAndOrganizationId(request.getYear(), request.getMonth(), organizationId).stream()
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
         if (!allMonthSessionIds.isEmpty()) {
@@ -211,9 +211,9 @@ public class PracticeParticipantService {
         log.info("SAME_DAY: registered {} won, {} waitlisted for player {}", registered, waitlisted, playerId);
     }
 
-    private void registerBeforeDeadline(PracticeParticipationRequest request) {
+    private void registerBeforeDeadline(PracticeParticipationRequest request, Long organizationId) {
         List<Long> allMonthSessionIds = practiceSessionRepository
-                .findByYearAndMonth(request.getYear(), request.getMonth()).stream()
+                .findByYearAndMonthAndOrganizationId(request.getYear(), request.getMonth(), organizationId).stream()
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
         if (!allMonthSessionIds.isEmpty()) {
