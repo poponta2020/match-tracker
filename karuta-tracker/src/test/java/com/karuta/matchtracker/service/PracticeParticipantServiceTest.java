@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -405,8 +406,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("複数団体のセッションに参加登録した場合、団体ごとにensureが呼ばれ、リクエスト先頭セッションの団体で締切判定される")
-    void registerParticipations_multipleOrgs_callsEnsureForEach() {
+    @DisplayName("複数団体のセッションを含むリクエストはIllegalArgumentExceptionで拒否される")
+    void registerParticipations_multipleOrgs_throwsException() {
         Long orgId2 = 2L;
         PracticeSession session1 = createSession(100L, null);
         PracticeSession session2 = new PracticeSession();
@@ -416,11 +417,7 @@ class PracticeParticipantServiceTest {
         session2.setTotalMatches(7);
 
         when(playerRepository.existsById(10L)).thenReturn(true);
-        // findAllByIdの戻り順をリクエスト順と逆にして、決定性を検証
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session2, session1));
-        // リクエスト先頭のセッション100(ORG_ID=1)が締切判定に使われることを検証
-        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
-        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID)).thenReturn(List.of(session1));
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();
         request.setPlayerId(10L);
@@ -431,13 +428,11 @@ class PracticeParticipantServiceTest {
                 createParticipation(200L, 1)
         ));
 
-        service.registerParticipations(request);
+        assertThrows(IllegalArgumentException.class, () -> service.registerParticipations(request));
 
-        // リクエスト先頭セッションの団体(ORG_ID)で締切判定が呼ばれたことを検証
-        verify(lotteryDeadlineHelper).getDeadlineType(ORG_ID);
-        verify(organizationService).ensurePlayerBelongsToOrganization(10L, ORG_ID);
-        verify(organizationService).ensurePlayerBelongsToOrganization(10L, orgId2);
-        verify(organizationService, times(2)).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
+        // 複数団体拒否のため、以降の処理は呼ばれない
+        verify(lotteryDeadlineHelper, never()).getDeadlineType(any());
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
     }
 
     @Test

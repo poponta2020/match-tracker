@@ -135,19 +135,20 @@ public class PracticeParticipantService {
             }
         }
 
-        // リクエスト先頭セッションIDから団体IDを決定（findAllByIdの戻り順に依存しない）
-        Long organizationId = null;
-        if (!sessions.isEmpty()) {
-            Map<Long, PracticeSession> sessionMap = sessions.stream()
-                    .collect(Collectors.toMap(PracticeSession::getId, s -> s));
-            organizationId = sessionMap.get(requestSessionIds.get(0)).getOrganizationId();
+        // リクエスト内セッションの団体IDを集合化し、複数団体混在を拒否
+        Set<Long> organizationIds = sessions.stream()
+                .map(PracticeSession::getOrganizationId)
+                .collect(Collectors.toSet());
+        if (organizationIds.size() > 1) {
+            throw new IllegalArgumentException("1回のリクエストで複数団体のセッションを混在させることはできません");
         }
 
-        // リクエスト内の全団体に対して未所属であれば自動的に所属させる
-        sessions.stream()
-                .map(PracticeSession::getOrganizationId)
-                .distinct()
-                .forEach(orgId -> organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), orgId));
+        Long organizationId = organizationIds.isEmpty() ? null : organizationIds.iterator().next();
+
+        // 未所属であれば自動的に所属させる
+        if (organizationId != null) {
+            organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), organizationId);
+        }
 
         com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
 

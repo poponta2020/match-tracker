@@ -271,11 +271,16 @@ public class PracticeSessionController {
      * @return レスポンスなし
      */
     @PostMapping("/participations")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<Void> registerParticipations(
             @Valid @RequestBody PracticeParticipationRequest request,
             HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        String currentUserRoleStr = (String) httpRequest.getAttribute("currentUserRole");
+        if (currentUserRoleStr == null) {
+            throw new ForbiddenException("認証情報が不足しています");
+        }
+        Role currentUserRole = Role.valueOf(currentUserRoleStr);
         if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
             throw new ForbiddenException("他の選手の参加登録は操作できません");
         }
