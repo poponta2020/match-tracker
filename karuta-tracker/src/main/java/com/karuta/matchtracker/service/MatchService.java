@@ -386,8 +386,8 @@ public class MatchService {
                 .winnerId(winnerId != null ? winnerId : 0L)
                 .scoreDifference(Math.abs(request.getScoreDifference()))
                 .opponentName(request.getOpponentName())
-                .createdBy(request.getPlayerId())
-                .updatedBy(request.getPlayerId())
+                .createdBy(currentUserId != null ? currentUserId : request.getPlayerId())
+                .updatedBy(currentUserId != null ? currentUserId : request.getPlayerId())
                 .build();
 
         // 対戦時の級位を記録
@@ -448,7 +448,7 @@ public class MatchService {
             Match match = existing.get();
             match.setWinnerId(request.getWinnerId());
             match.setScoreDifference(request.getScoreDifference());
-            match.setUpdatedBy(request.getCreatedBy());
+            match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
             saved = matchRepository.save(match);
             log.info("Upsert: updated existing match with id: {}", saved.getId());
@@ -512,7 +512,7 @@ public class MatchService {
 
         match.setWinnerId(winnerId);
         match.setScoreDifference(scoreDifference);
-        match.setUpdatedBy(updatedBy);
+        match.setUpdatedBy(currentUserId != null ? currentUserId : updatedBy);
 
         Match updated = matchRepository.save(match);
 
@@ -564,7 +564,7 @@ public class MatchService {
         match.setWinnerId(winnerId);
         match.setScoreDifference(Math.abs(request.getScoreDifference()));
         match.setOpponentName(request.getOpponentName());
-        match.setUpdatedBy(request.getPlayerId());
+        match.setUpdatedBy(currentUserId != null ? currentUserId : request.getPlayerId());
 
         // 対戦時の級位を再記録
         setPlayerKyuRanks(match);
@@ -783,7 +783,7 @@ public class MatchService {
         }
 
         // 認証ユーザーとplayerIdの一致を検証（なりすまし防止）
-        if (currentUserId != null && !currentUserId.equals(playerId)) {
+        if (currentUserId == null || !currentUserId.equals(playerId)) {
             log.warn("個人メモ保存拒否: currentUserId={}がplayerId={}と一致しません(matchId={})", currentUserId, playerId, matchId);
             return;
         }
