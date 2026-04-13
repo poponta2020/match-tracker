@@ -94,7 +94,7 @@ class MatchServiceMemoNotificationTest {
             matchService.updateMatch(1L, 1L, 5, 1L, "新しいメモ", null, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
-            verify(lineNotificationService).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("新しいメモ"));
+            verify(lineNotificationService, timeout(2000)).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("新しいメモ"));
         }
 
         @Test
@@ -108,7 +108,7 @@ class MatchServiceMemoNotificationTest {
             matchService.updateMatch(1L, 1L, 5, 1L, "更新されたメモ", null, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
-            verify(lineNotificationService).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("更新されたメモ"));
+            verify(lineNotificationService, timeout(2000)).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("更新されたメモ"));
         }
     }
 

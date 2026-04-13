@@ -28,6 +28,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -825,7 +826,7 @@ public class MatchService {
         note.setOtetsukiCount(otetsukiCount);
         matchPersonalNoteRepository.save(note);
 
-        // Send notification to mentors after transaction commit
+        // Send notification to mentors asynchronously after transaction commit
         if (memoChanged) {
             final Long notifyPlayerId = playerId;
             final String notifyMemo = personalNotes;
@@ -833,11 +834,13 @@ public class MatchService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    try {
-                        lineNotificationService.sendMemoUpdateFlexNotification(notifyPlayerId, notifyMatch, notifyMemo);
-                    } catch (Exception e) {
-                        log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, notifyPlayerId, e.getMessage());
-                    }
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            lineNotificationService.sendMemoUpdateFlexNotification(notifyPlayerId, notifyMatch, notifyMemo);
+                        } catch (Exception e) {
+                            log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, notifyPlayerId, e.getMessage());
+                        }
+                    });
                 }
             });
         }
