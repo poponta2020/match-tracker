@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
 import kaderuAPI from '../../api/kaderu';
@@ -14,6 +14,7 @@ import LoadingScreen from '../../components/LoadingScreen';
 
 const PracticeList = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentPlayer } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,8 @@ const PracticeList = () => {
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
+  // openTodayパラメータの処理済みフラグ
+  const openTodayProcessedRef = useRef(false);
 
   // データ取得を並列化して高速化
   useEffect(() => {
@@ -94,6 +97,29 @@ const PracticeList = () => {
       fetchingRef.current = false;
     };
   }, [currentDate, currentPlayer?.id]);
+
+  // openToday パラメータで今日のポップアップを自動表示（LINEリッチメニューからの遷移用）
+  useEffect(() => {
+    if (openTodayProcessedRef.current) return;
+    if (loading) return;
+    if (searchParams.get('openToday') !== 'true') return;
+
+    openTodayProcessedRef.current = true;
+
+    // URLパラメータをクリーンアップ（ブラウザ履歴に残さない）
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('openToday');
+    setSearchParams(newParams, { replace: true });
+
+    // 今日の練習セッションがあればポップアップを開く
+    const today = new Date();
+    const todayDay = today.getDate();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+    const todaySessions = sessions.filter((s) => s.sessionDate === dateStr);
+    if (todaySessions.length > 0) {
+      handleCellClick(todayDay);
+    }
+  }, [loading, sessions, searchParams]);
 
   // 同期後などの再取得用関数（軽量エンドポイント使用）
   const fetchSessions = async () => {

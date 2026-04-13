@@ -220,10 +220,9 @@ public class LineAdminController {
             // 上段左: ロゴ（何もしない）
             buildArea(0, 0, colWidth, rowHeight,
                 Map.of("type", "postback", "data", "action=noop")),
-            // 上段中: 今日の練習参加者を確認する
+            // 上段中: 今日の練習参加者を確認する（アプリの練習画面へ遷移）
             buildArea(colWidth, 0, colWidth, rowHeight,
-                Map.of("type", "postback", "data", "action=check_today_participants",
-                    "displayText", "今日の参加者")),
+                Map.of("type", "uri", "uri", "https://match-tracker-eight-gilt.vercel.app/practice?openToday=true")),
             // 上段右: キャンセル待ち状況を見る
             buildArea(colWidth * 2, 0, width - colWidth * 2, rowHeight,
                 Map.of("type", "postback", "data", "action=check_waitlist_status",
