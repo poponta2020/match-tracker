@@ -240,4 +240,35 @@ describe('MatchCommentThread ボトムナビ制御', () => {
 
     expect(mockSetVisible).toHaveBeenCalledWith(true);
   });
+
+  it('textarea間フォーカス移動時にblurのタイマーがキャンセルされる', async () => {
+    matchCommentsAPI.getComments.mockResolvedValue({
+      data: [
+        { id: 1, authorId: 1, authorName: 'テスト選手', content: 'テストコメント', lineNotified: true, createdAt: '2026-04-10T10:00:00' },
+      ],
+    });
+    const { container } = render(<MatchCommentThread matchId={1} menteeId={1} />);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('テストコメント')).toBeInTheDocument();
+    });
+
+    // 編集モードにして編集用textareaを表示
+    fireEvent.click(container.querySelector('.lucide-pencil').closest('button'));
+
+    const editTextarea = screen.getByDisplayValue('テストコメント');
+    const newCommentTextarea = screen.getByPlaceholderText('コメントを入力...');
+
+    vi.useFakeTimers();
+    fireEvent.focus(newCommentTextarea);
+    mockSetVisible.mockClear();
+
+    // 新規投稿textareaからblur → 編集textareaにfocus（clearTimeoutでタイマーがキャンセルされる）
+    fireEvent.blur(newCommentTextarea);
+    fireEvent.focus(editTextarea);
+
+    // 100ms経過してもsetVisible(true)が呼ばれない
+    vi.advanceTimersByTime(100);
+    expect(mockSetVisible).not.toHaveBeenCalledWith(true);
+  });
 });
