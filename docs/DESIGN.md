@@ -1091,7 +1091,7 @@ Entity Layer (JPA Entity)
 
 #### POST /api/practice-sessions/participations
 **説明**: 一括参加登録（月単位）
-**権限**: なし
+**権限**: PLAYER: 自分のみ / ADMIN, SUPER_ADMIN: 全選手
 **リクエスト**: `PracticeParticipationRequest`
 ```json
 {
@@ -1923,19 +1923,30 @@ Entity Layer (JPA Entity)
 **パス**: `/practice/participation`
 
 **表示内容**:
-- **年月選択（セレクトボックス）**: カレンダー画面から遷移時は年月が引き継がれる
+- **年月ナビゲーション**: 固定ヘッダーに左右矢印ボタン（ChevronLeft / ChevronRight）で月を切り替え。カレンダー画面から遷移時は年月が引き継がれる
 - **練習日一覧（テーブル形式）**
   - 日付列
   - 場所列
+  - 団体名バッジ: 各セッションの所属団体を略称（例: わすら、北大）で色付きバッジ表示。色は団体の `color` フィールドから取得
   - 試合番号チェックボックス列（1～7）
     - 既存参加状況を反映してチェック済み
+    - **参加人数バッジ**: 各試合の参加者数を表示。定員に対する割合で色分け（赤: 80%以上、橙: 60%、黄: 40%、緑: 40%未満）
+  - **抽選ステータス表示**（抽選実行済みセッション）: チェックボックスの代わりにステータスバッジを表示
+    - WON（緑）、WAITLISTED（黄・番号付き）、OFFERED（青）、PENDING（灰）、DECLINED/CANCELLED（灰）
+  - **締切後の制限**: 締切後は既存の参加登録チェックボックスを無効化（解除不可）。抽選実行済みセッションは全チェックボックスが操作不可
+- **SAME_DAYタイプ確認ダイアログ**: SAME_DAYタイプの団体で12:00以降に保存する場合、管理者への連絡確認ダイアログを表示
 - **保存ボタン**: 成功後、1秒待ってカレンダー画面に自動遷移
 
 **データフロー**:
-1. 年月選択 → `GET /api/practice-sessions/year-month`
-2. `GET /api/practice-sessions/participations/player/{playerId}` で既存参加取得
+1. ページ読み込み時に以下のAPIを並列取得:
+   - `GET /api/practice-sessions/year-month` — 月内の練習セッション一覧
+   - `GET /api/practice-sessions/participations/player/{playerId}` — 既存参加登録
+   - `GET /api/practice-sessions/participations/player/{playerId}/status` — 抽選・締切ステータス（参加状況詳細、抽選実行有無、締切前後）
+   - `GET /api/lottery/deadline` — 締切情報の表示用
+   - `GET /api/organizations` — 団体名・色・締切タイプ
+2. 取得データをもとにテーブルを描画（チェックボックス or ステータスバッジ）
 3. チェックボックス操作
-4. 保存ボタン → `POST /api/practice-sessions/participations`
+4. 保存ボタン → `POST /api/practice-sessions/participations`（PLAYERロールは自分のplayerIdのみ操作可能）
 5. 成功メッセージ表示（1秒間）
 6. `/practice`（カレンダー画面）へ自動ナビゲート
 7. カレンダー画面で自動的にデータ再取得
