@@ -3,6 +3,7 @@ package com.karuta.matchtracker.controller;
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import com.karuta.matchtracker.util.AdminScopeValidator;
@@ -271,7 +272,14 @@ public class PracticeSessionController {
      */
     @PostMapping("/participations")
     public ResponseEntity<Void> registerParticipations(
-            @Valid @RequestBody PracticeParticipationRequest request) {
+            @Valid @RequestBody PracticeParticipationRequest request,
+            HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
+            throw new ForbiddenException("他の選手の参加登録は操作できません");
+        }
+
         log.info("POST /api/practice-sessions/participations - Registering participations for player {}",
                 request.getPlayerId());
         practiceParticipantService.registerParticipations(request);
