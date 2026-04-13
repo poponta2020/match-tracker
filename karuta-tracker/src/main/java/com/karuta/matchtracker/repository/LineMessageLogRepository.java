@@ -116,6 +116,21 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
                               @Param("errorMessage") String errorMessage,
                               @Param("sentDate") LocalDate sentDate);
 
+    /**
+     * 指定時刻より古い RESERVED レコードを FAILED に解放する。
+     * プロセス障害等で markReservationSucceeded/Failed が実行されず RESERVED が残留した場合の回復経路。
+     * FAILED に変更することで、次回リトライ時に再度送信権を確保できるようになる。
+     * @return 更新された行数
+     */
+    @Modifying
+    @Query(value = """
+        UPDATE line_message_log
+        SET status = 'FAILED', error_message = 'RESERVED timeout - auto-released'
+        WHERE status = 'RESERVED'
+        AND sent_at < :cutoff
+        """, nativeQuery = true)
+    int releaseStaleReservations(@Param("cutoff") LocalDateTime cutoff);
+
     /** チャネルの当月送信成功数を集計 */
     @Query("""
         SELECT COUNT(l) FROM LineMessageLog l

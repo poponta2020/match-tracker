@@ -72,23 +72,35 @@ public class LineMessageLogService {
     /**
      * tryAcquireSendRight で確保した予約レコードを SUCCESS に変更する。
      * RESERVED → SUCCESS への変更により、送信完了を確定し重複送信を防止する。
+     * @return 更新された行数（0の場合は不整合の可能性あり）
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markReservationSucceeded(Long playerId, LineNotificationType type,
-                                          String dedupeKey) {
-        lineMessageLogRepository.markReservationSucceeded(
+    public int markReservationSucceeded(Long playerId, LineNotificationType type,
+                                         String dedupeKey) {
+        return lineMessageLogRepository.markReservationSucceeded(
                 playerId, type.name(), dedupeKey, JstDateTimeUtil.today());
     }
 
     /**
      * tryAcquireSendRight で確保した予約レコードを FAILED に変更する。
      * RESERVED → FAILED への変更により、次回リトライ時に再度送信権を確保できるようになる。
+     * @return 更新された行数（0の場合は不整合の可能性あり）
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markReservationFailed(Long playerId, LineNotificationType type,
+    public int markReservationFailed(Long playerId, LineNotificationType type,
                                       String dedupeKey, String errorMessage) {
-        lineMessageLogRepository.markReservationFailed(
+        return lineMessageLogRepository.markReservationFailed(
                 playerId, type.name(), dedupeKey, errorMessage, JstDateTimeUtil.today());
+    }
+
+    /**
+     * 指定時刻より古い RESERVED レコードを FAILED に解放する。
+     * プロセス障害等で RESERVED が残留した場合の回復経路。
+     * @return 解放された行数
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int releaseStaleReservations(LocalDateTime cutoff) {
+        return lineMessageLogRepository.releaseStaleReservations(cutoff);
     }
 }
 

@@ -294,6 +294,223 @@ class LineNotificationServiceConsolidatedJoinTest {
     }
 
     @Nested
+    @DisplayName("sendSameDayVacancyNotification - 重複防止・障害回復")
+    class SendSameDayVacancyNotificationTests {
+
+        @Test
+        @DisplayName("送信権確保成功→送信成功→markReservationSucceededが呼ばれる")
+        void acquireAndSendSuccess() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100:1"))).thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            when(lineMessageLogService.markReservationSucceeded(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), eq("100:1"))).thenReturn(1);
+
+            lineNotificationService.sendSameDayVacancyNotification(session, 1, null);
+
+            verify(lineMessageLogService).markReservationSucceeded(10L,
+                    LineMessageLog.LineNotificationType.SAME_DAY_VACANCY, "100:1");
+        }
+
+        @Test
+        @DisplayName("送信権確保失敗→スキップ（送信されない）")
+        void acquireFailedSkips() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100:1"))).thenReturn(false);
+
+            lineNotificationService.sendSameDayVacancyNotification(session, 1, null);
+
+            verify(lineMessagingService, never())
+                    .sendPushFlexMessage(anyString(), anyString(), anyString(), any());
+            verify(lineMessageLogService, never())
+                    .markReservationSucceeded(anyLong(), any(), anyString());
+        }
+
+        @Test
+        @DisplayName("送信失敗→markReservationFailedが呼ばれる")
+        void sendFailureCallsMarkFailed() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100:1"))).thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(false);
+            when(lineMessageLogService.markReservationFailed(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100:1"), anyString())).thenReturn(1);
+
+            lineNotificationService.sendSameDayVacancyNotification(session, 1, null);
+
+            verify(lineMessageLogService).markReservationFailed(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100:1"), eq("LINE API送信失敗"));
+        }
+
+        @Test
+        @DisplayName("送信例外→markReservationFailedが呼ばれる")
+        void sendExceptionCallsMarkFailed() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100:1"))).thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenThrow(new RuntimeException("Network error"));
+            when(lineMessageLogService.markReservationFailed(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100:1"), anyString())).thenReturn(1);
+
+            lineNotificationService.sendSameDayVacancyNotification(session, 1, null);
+
+            verify(lineMessageLogService).markReservationFailed(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    eq("100:1"), eq("Network error"));
+        }
+
+        @Test
+        @DisplayName("送信前にreleaseStaleReservationsが呼ばれる")
+        void releaseStaleReservationsCalledBeforeSend() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.releaseStaleReservations(any())).thenReturn(2);
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            when(lineMessageLogService.markReservationSucceeded(anyLong(), any(), anyString())).thenReturn(1);
+
+            lineNotificationService.sendSameDayVacancyNotification(session, 1, null);
+
+            verify(lineMessageLogService).releaseStaleReservations(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("sendConsolidatedSameDayVacancyNotification - RESERVED残留回復")
+    class ConsolidatedVacancyStaleReservationTests {
+
+        @Test
+        @DisplayName("送信前にreleaseStaleReservationsが呼ばれる")
+        void releaseStaleReservationsCalledBeforeSend() {
+            PracticeSession session = createSession();
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 2);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.releaseStaleReservations(any())).thenReturn(1);
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            when(lineMessageLogService.markReservationSucceeded(anyLong(), any(), anyString())).thenReturn(1);
+
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
+
+            verify(lineMessageLogService).releaseStaleReservations(any());
+        }
+
+        @Test
+        @DisplayName("markReservationSucceededが0件更新でも送信成功としてカウントされる（ログ出力のみ）")
+        void markSucceededZeroUpdateStillCountsAsSent() {
+            PracticeSession session = createSession();
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 2);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            // markReservationSucceeded が 0 を返す（不整合ケース）
+            when(lineMessageLogService.markReservationSucceeded(anyLong(), any(), anyString())).thenReturn(0);
+
+            // 例外が発生しないこと（ログ出力のみ）
+            assertDoesNotThrow(() ->
+                    lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null));
+
+            verify(lineMessageLogService).markReservationSucceeded(anyLong(), any(), anyString());
+        }
+    }
+
+    @Nested
     @DisplayName("sendConsolidatedSameDayVacancyNotification - 満枠ケース")
     class VacancyNotificationFullCapacityTests {
 

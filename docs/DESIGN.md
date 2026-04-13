@@ -684,7 +684,7 @@ Entity Layer (JPA Entity)
 2. LINE APIで送信実行
 3. 成功時: `markReservationSucceeded` で RESERVED → SUCCESS に更新
 4. 失敗時: `markReservationFailed` で RESERVED → FAILED に更新（次回リトライ可能）
-5. クラッシュ時: RESERVED が残るが SUCCESS ではないため、通知欠落を防止
+5. クラッシュ時: RESERVED が残留するため、次回送信前に `releaseStaleReservations` で10分超過のRESERVEDをFAILEDに解放し、再送信を可能にする
 
 **dedupeKeyの粒度:**
 - 試合単位通知（sendSameDayVacancyNotification）: `sessionId:matchNumber`

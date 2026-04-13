@@ -69,6 +69,7 @@ public class LineNotificationService {
     }
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
+    private static final int RESERVED_TIMEOUT_MINUTES = 10;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
 
     /**
@@ -1468,6 +1469,13 @@ public class LineNotificationService {
      * 当該セッションの非WON参加者（キャンセル本人除く）にFlex Message。
      */
     public void sendSameDayVacancyNotification(PracticeSession session, int matchNumber, Long cancelledPlayerId) {
+        // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
+        int released = lineMessageLogService.releaseStaleReservations(
+                JstDateTimeUtil.now().minusMinutes(RESERVED_TIMEOUT_MINUTES));
+        if (released > 0) {
+            log.warn("Released {} stale RESERVED log entries (timeout={}min)", released, RESERVED_TIMEOUT_MINUTES);
+        }
+
         String sessionLabel = getSessionLabel(session);
 
         // 現在のWON数と定員から空き枠数を計算
@@ -1525,18 +1533,27 @@ public class LineNotificationService {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
-                    lineMessageLogService.markReservationSucceeded(
+                    int updated = lineMessageLogService.markReservationSucceeded(
                             playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
+                    if (updated == 0) {
+                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
                     sentCount++;
                 } else {
-                    lineMessageLogService.markReservationFailed(
+                    int updated = lineMessageLogService.markReservationFailed(
                             playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    if (updated == 0) {
+                        log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
                     failedCount++;
                 }
             } catch (Exception e) {
                 log.error("Failed to send vacancy notification to player {}: {}", playerId, e.getMessage());
-                lineMessageLogService.markReservationFailed(
+                int updated = lineMessageLogService.markReservationFailed(
                         playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                if (updated == 0) {
+                    log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
                 failedCount++;
             }
         }
@@ -1587,6 +1604,13 @@ public class LineNotificationService {
                                                             Map<Integer, Integer> vacanciesByMatch,
                                                             Long cancelledPlayerId) {
         if (vacanciesByMatch.isEmpty()) return;
+
+        // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
+        int released = lineMessageLogService.releaseStaleReservations(
+                JstDateTimeUtil.now().minusMinutes(RESERVED_TIMEOUT_MINUTES));
+        if (released > 0) {
+            log.warn("Released {} stale RESERVED log entries (timeout={}min)", released, RESERVED_TIMEOUT_MINUTES);
+        }
 
         String sessionLabel = getSessionLabel(session);
 
@@ -1661,18 +1685,27 @@ public class LineNotificationService {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
-                    lineMessageLogService.markReservationSucceeded(
+                    int updated = lineMessageLogService.markReservationSucceeded(
                             playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
+                    if (updated == 0) {
+                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
                     sentCount++;
                 } else {
-                    lineMessageLogService.markReservationFailed(
+                    int updated = lineMessageLogService.markReservationFailed(
                             playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    if (updated == 0) {
+                        log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
                     failedCount++;
                 }
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
-                lineMessageLogService.markReservationFailed(
+                int updated = lineMessageLogService.markReservationFailed(
                         playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                if (updated == 0) {
+                    log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
                 failedCount++;
             }
         }
