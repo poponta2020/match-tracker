@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
 import {
@@ -9,6 +9,7 @@ import LoadingScreen from '../components/LoadingScreen';
 
 const ProfileEdit = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const isSetup = searchParams.get('setup') === 'true';
   const isChangePassword = searchParams.get('changePassword') === 'true';
@@ -173,7 +174,12 @@ const ProfileEdit = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        navigate((isSetup || isChangePassword) ? '/' : '/profile');
+        const from = location.state?.from;
+        if (from) {
+          navigate(from.pathname + (from.search || ''));
+        } else {
+          navigate((isSetup || isChangePassword) ? '/' : '/profile');
+        }
       }, 1000);
     } catch (err) {
       console.error('保存に失敗:', err);
