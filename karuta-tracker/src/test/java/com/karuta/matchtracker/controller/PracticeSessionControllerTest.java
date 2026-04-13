@@ -408,6 +408,54 @@ class PracticeSessionControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/practice-sessions/participations - ADMINが他人のplayerIdで参加登録できる（201）")
+    void testRegisterParticipationsAdminOtherIdAllowed() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(99L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then（ADMIN userId=1 が playerId=99 で登録）
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isCreated());
+
+        verify(practiceParticipantService).registerParticipations(any(PracticeParticipationRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - SUPER_ADMINが他人のplayerIdで参加登録できる（201）")
+    void testRegisterParticipationsSuperAdminOtherIdAllowed() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(99L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then（SUPER_ADMIN userId=1 が playerId=99 で登録）
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isCreated());
+
+        verify(practiceParticipantService).registerParticipations(any(PracticeParticipationRequest.class));
+    }
+
+    @Test
     @DisplayName("POST /api/practice-sessions/participations - 認証ヘッダ欠落時は403")
     void testRegisterParticipationsNoAuthHeaders() throws Exception {
         // Given
