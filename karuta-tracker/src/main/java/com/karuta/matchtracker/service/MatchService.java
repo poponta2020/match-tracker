@@ -507,6 +507,12 @@ public class MatchService {
         Match match = matchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Match", id));
 
+        // 認証ユーザーとupdatedByの一致を検証（なりすまし防止）
+        if (currentUserId != null && !currentUserId.equals(updatedBy)) {
+            throw new IllegalArgumentException("更新者IDが認証ユーザーと一致しません");
+        }
+        Long effectiveUserId = currentUserId != null ? currentUserId : updatedBy;
+
         // 勝者が対戦者のいずれかであることを確認
         if (!winnerId.equals(match.getPlayer1Id()) && !winnerId.equals(match.getPlayer2Id())) {
             throw new IllegalArgumentException("Winner must be one of the players");
@@ -514,15 +520,15 @@ public class MatchService {
 
         match.setWinnerId(winnerId);
         match.setScoreDifference(scoreDifference);
-        match.setUpdatedBy(currentUserId != null ? currentUserId : updatedBy);
+        match.setUpdatedBy(effectiveUserId);
 
         Match updated = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(updated.getId(), updatedBy, personalNotes, otetsukiCount, currentUserId);
+        upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId);
 
-        MatchDto dto = enrichMatchWithPlayerNames(updated, updatedBy);
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), updatedBy);
+        MatchDto dto = enrichMatchWithPlayerNames(updated, effectiveUserId);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), effectiveUserId);
 
         log.info("Successfully updated match with id: {}", id);
         return enriched.get(0);

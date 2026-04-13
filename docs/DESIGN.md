@@ -642,7 +642,7 @@ Entity Layer (JPA Entity)
 | same_day_cancel | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日キャンセル通知 |
 | same_day_vacancy | BOOLEAN | NOT NULL, DEFAULT TRUE | 当日空き募集通知 |
 | admin_same_day_confirmation | BOOLEAN | NOT NULL, DEFAULT TRUE | 参加者確定通知（管理者向け・SUPER_ADMIN専用） |
-| mentor_comment | BOOLEAN | NOT NULL, DEFAULT TRUE | メンターコメント通知 |
+| mentor_comment | BOOLEAN | NOT NULL, DEFAULT TRUE | メンターコメント・メモ更新通知 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 ---
@@ -2334,6 +2334,17 @@ Entity Layer (JPA Entity)
    - メンターがボタン押下 → メンティーにFlex Message送信
    ↓
 7. 送信成功時のみ line_notified = true に更新（失敗時は再送可能）
+
+[メンティーメモ更新通知フロー]
+1. メンティーが試合編集画面（/matches/:id/edit）で個人メモを更新
+   ↓
+2. PUT /api/matches/{id}/detailed or PUT /api/matches/{id} → メモ内容が変更されたか比較
+   ↓
+3. 変更あり → トランザクションコミット後に通知処理を実行
+   ↓
+4. 全ACTIVEメンターを取得 → mentor_comment トグルがONのメンターにFlex Message送信（MENTEE_MEMO_UPDATE）
+   ↓
+5. 送信結果をline_message_logに記録（通知失敗時もメモ保存は正常完了）
 ```
 
 **関連クラス:**
@@ -2346,7 +2357,7 @@ Entity Layer (JPA Entity)
 | `MatchCommentController` | controller/ — コメントCRUD + 通知送信（5エンドポイント） |
 | `MentorRelationshipService` | service/ — 指名・承認・拒否・解除のビジネスロジック |
 | `MatchCommentService` | service/ — コメント投稿・編集・削除・アクセス権検証・バッチ通知送信 |
-| `LineNotificationService` | service/ — MENTOR_COMMENT Flex Message構築・送信 |
+| `LineNotificationService` | service/ — MENTOR_COMMENT / MENTEE_MEMO_UPDATE Flex Message構築・送信 |
 | `MentorManagement.jsx` | pages/mentor/ — メンター管理画面 |
 | `MatchCommentThread.jsx` | pages/matches/ — コメントスレッドUI |
 
@@ -2359,6 +2370,8 @@ Entity Layer (JPA Entity)
 | `LineNotificationType` enum | `MENTOR_COMMENT` 追加 |
 | `line_notification_preferences` テーブル | `mentor_comment` カラム追加（DEFAULT TRUE） |
 | `line_message_log` CHECK制約 | `MENTOR_COMMENT` 追加 |
+| `LineNotificationType` enum | `MENTEE_MEMO_UPDATE` 追加 |
+| `line_message_log` CHECK制約 | `MENTEE_MEMO_UPDATE` 追加 |
 
 ### 7.7 隣室予約→会場拡張フロー
 

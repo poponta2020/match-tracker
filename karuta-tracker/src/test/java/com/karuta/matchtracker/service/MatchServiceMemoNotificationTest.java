@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -129,14 +130,16 @@ class MatchServiceMemoNotificationTest {
         }
 
         @Test
-        @DisplayName("currentUserIdとplayerIdが一致しない場合、メモ保存・通知ともスキップされる")
-        void skipsWhenCurrentUserIdDoesNotMatchPlayerId() {
-            setupCommonMocksForUpdate();
+        @DisplayName("currentUserIdとupdatedByが一致しない場合、例外がスローされる")
+        void throwsWhenCurrentUserIdDoesNotMatchUpdatedBy() {
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
 
             // updatedBy=1L(参加者)だが、currentUserId=999L(別ユーザー) → なりすまし防止
-            matchService.updateMatch(1L, 1L, 5, 1L, "なりすましメモ", null, 999L);
-            flushAfterCommitCallbacks();
+            assertThrows(IllegalArgumentException.class, () ->
+                matchService.updateMatch(1L, 1L, 5, 1L, "なりすましメモ", null, 999L)
+            );
 
+            verify(matchRepository, never()).save(any());
             verify(matchPersonalNoteRepository, never()).save(any());
             verify(lineNotificationService, never()).sendMemoUpdateFlexNotification(anyLong(), any(), anyString());
         }
