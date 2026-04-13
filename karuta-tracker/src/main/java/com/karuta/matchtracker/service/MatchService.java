@@ -8,6 +8,7 @@ import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPersonalNote;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
@@ -583,7 +584,9 @@ public class MatchService {
         upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, request.getPlayerId());
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
+        // 個人メモはcurrentUserId基準で組み立て（ADMIN/SUPER_ADMINが他人のメモを閲覧できないようにする）
+        Long noteViewerId = currentUserId != null ? currentUserId : request.getPlayerId();
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), noteViewerId);
 
         log.info("Successfully updated match with id: {}", id);
         return enriched.get(0);
@@ -793,7 +796,7 @@ public class MatchService {
         // 認証ユーザーとplayerIdの一致を検証（なりすまし防止）
         if (currentUserId == null || !currentUserId.equals(playerId)) {
             log.warn("個人メモ保存拒否: currentUserId={}がplayerId={}と一致しません(matchId={})", currentUserId, playerId, matchId);
-            return;
+            throw new ForbiddenException("個人メモを保存する権限がありません: 認証ユーザーとプレイヤーIDが一致しません");
         }
 
         MatchPersonalNote note = matchPersonalNoteRepository.findByMatchIdAndPlayerId(matchId, playerId)

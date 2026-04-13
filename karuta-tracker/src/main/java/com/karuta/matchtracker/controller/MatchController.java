@@ -6,6 +6,7 @@ import com.karuta.matchtracker.dto.MatchDto;
 import com.karuta.matchtracker.dto.MatchSimpleCreateRequest;
 import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.MatchService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -230,6 +231,10 @@ public class MatchController {
                                                 HttpServletRequest httpRequest) {
         log.info("POST /api/matches - Creating new match (simple) on {}", request.getMatchDate());
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
+            throw new ForbiddenException("他のプレイヤーとして試合を登録する権限がありません");
+        }
         MatchDto createdMatch = matchService.createMatchSimple(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
@@ -265,6 +270,10 @@ public class MatchController {
             HttpServletRequest httpRequest) {
         log.info("PUT /api/matches/{} - Updating match (simple)", id);
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
+            throw new ForbiddenException("他のプレイヤーの試合を更新する権限がありません");
+        }
         MatchDto updatedMatch = matchService.updateMatchSimple(id, request, currentUserId);
         return ResponseEntity.ok(updatedMatch);
     }
