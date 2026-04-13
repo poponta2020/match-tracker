@@ -135,34 +135,75 @@ public class PracticeParticipantService {
             }
         }
 
-        // リクエスト内セッションの団体IDを集合化し、複数団体混在を拒否
-        Set<Long> organizationIds = sessions.stream()
-                .map(PracticeSession::getOrganizationId)
-                .collect(Collectors.toSet());
-        if (organizationIds.size() > 1) {
-            throw new IllegalArgumentException("1回のリクエストで複数団体のセッションを混在させることはできません");
-        }
+        // リクエスト内セッションを団体ごとにグループ化
+        Map<Long, List<PracticeSession>> sessionsByOrg = sessions.stream()
+                .collect(Collectors.groupingBy(PracticeSession::getOrganizationId));
 
-        Long organizationId = organizationIds.isEmpty() ? null : organizationIds.iterator().next();
+        // プレイヤーが既にアクティブな参加登録を持つ団体IDを取得（全解除時のクリア対象特定用）
+        Set<Long> existingOrgIds = findPlayerActiveOrgIds(request.getPlayerId(), request.getYear(), request.getMonth());
 
-        // 未所属であれば自動的に所属させる
-        if (organizationId != null) {
-            organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), organizationId);
-        }
+        // リクエストの団体 + 既存参加の団体を処理対象とする
+        Set<Long> allOrgIds = new HashSet<>(sessionsByOrg.keySet());
+        allOrgIds.addAll(existingOrgIds);
 
-        com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(organizationId);
+        for (Long orgId : allOrgIds) {
+            // この団体に属するセッションIDを特定
+            Set<Long> orgSessionIds = sessionsByOrg.getOrDefault(orgId, List.of()).stream()
+                    .map(PracticeSession::getId).collect(Collectors.toSet());
 
-        if (deadlineType == com.karuta.matchtracker.entity.DeadlineType.SAME_DAY) {
-            // わすらもち会: 抽選なし、常に先着順（即WON/WAITLISTED）
-            registerSameDay(request, organizationId);
-        } else if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), organizationId)) {
-            // 北大: 締切前はPENDING
-            registerBeforeDeadline(request, organizationId);
-        } else {
-            // 北大: 締切後はWON/WAITLISTED
-            registerAfterDeadline(request);
+            // この団体のparticipationsだけをフィルタしてサブリクエストを構築
+            List<PracticeParticipationRequest.SessionMatchParticipation> orgParticipations =
+                    request.getParticipations().stream()
+                            .filter(p -> orgSessionIds.contains(p.getSessionId()))
+                            .collect(Collectors.toList());
+
+            PracticeParticipationRequest orgRequest = PracticeParticipationRequest.builder()
+                    .playerId(request.getPlayerId())
+                    .year(request.getYear())
+                    .month(request.getMonth())
+                    .participations(orgParticipations)
+                    .build();
+
+            // 未所属であれば自動的に所属させる（新規参加がある場合のみ）
+            if (!orgParticipations.isEmpty()) {
+                organizationService.ensurePlayerBelongsToOrganization(request.getPlayerId(), orgId);
+            }
+
+            com.karuta.matchtracker.entity.DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(orgId);
+
+            if (deadlineType == com.karuta.matchtracker.entity.DeadlineType.SAME_DAY) {
+                registerSameDay(orgRequest, orgId);
+            } else if (lotteryDeadlineHelper.isBeforeDeadline(request.getYear(), request.getMonth(), orgId)) {
+                registerBeforeDeadline(orgRequest, orgId);
+            } else if (!orgParticipations.isEmpty()) {
+                // 締切後は追加登録のみ（既存クリアなし）。新規参加がなければスキップ
+                registerAfterDeadline(orgRequest);
+            }
         }
         densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
+     * プレイヤーが指定月にアクティブな参加登録を持つ団体IDの集合を返す。
+     * 空リクエスト時にクリア対象の団体を特定するために使用する。
+     */
+    private Set<Long> findPlayerActiveOrgIds(Long playerId, int year, int month) {
+        List<PracticeSession> allMonthSessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        if (allMonthSessions.isEmpty()) return Set.of();
+
+        List<Long> allMonthSessionIds = allMonthSessions.stream()
+                .map(PracticeSession::getId).collect(Collectors.toList());
+        Map<Long, Long> sessionIdToOrgId = allMonthSessions.stream()
+                .collect(Collectors.toMap(PracticeSession::getId, PracticeSession::getOrganizationId));
+
+        return practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, allMonthSessionIds).stream()
+                .filter(p -> p.getStatus() != null
+                        && p.getStatus() != ParticipantStatus.CANCELLED
+                        && p.getStatus() != ParticipantStatus.DECLINED
+                        && p.getStatus() != ParticipantStatus.WAITLIST_DECLINED)
+                .map(p -> sessionIdToOrgId.get(p.getSessionId()))
+                .filter(orgId -> orgId != null)
+                .collect(Collectors.toSet());
     }
 
     /**

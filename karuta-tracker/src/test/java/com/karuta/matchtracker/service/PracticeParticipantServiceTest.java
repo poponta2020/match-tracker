@@ -406,8 +406,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("複数団体のセッションを含むリクエストはIllegalArgumentExceptionで拒否される")
-    void registerParticipations_multipleOrgs_throwsException() {
+    @DisplayName("複数団体のセッションを含むリクエストが団体ごとに分割処理される")
+    void registerParticipations_multipleOrgs_processedPerOrg() {
         Long orgId2 = 2L;
         PracticeSession session1 = createSession(100L, null);
         PracticeSession session2 = new PracticeSession();
@@ -417,7 +417,15 @@ class PracticeParticipantServiceTest {
         session2.setTotalMatches(7);
 
         when(playerRepository.existsById(10L)).thenReturn(true);
-        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session2, session1));
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1, session2));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.getDeadlineType(orgId2)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(orgId2))).thenReturn(true);
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID))
+                .thenReturn(List.of(session1));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, orgId2))
+                .thenReturn(List.of(session2));
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();
         request.setPlayerId(10L);
@@ -428,11 +436,16 @@ class PracticeParticipantServiceTest {
                 createParticipation(200L, 1)
         ));
 
-        assertThrows(IllegalArgumentException.class, () -> service.registerParticipations(request));
+        service.registerParticipations(request);
 
-        // 複数団体拒否のため、以降の処理は呼ばれない
-        verify(lotteryDeadlineHelper, never()).getDeadlineType(any());
-        verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
+        // 各団体のensureが呼ばれる
+        verify(organizationService).ensurePlayerBelongsToOrganization(10L, ORG_ID);
+        verify(organizationService).ensurePlayerBelongsToOrganization(10L, orgId2);
+        // 各団体ごとにsoft-deleteが呼ばれる
+        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L)), any());
+        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(eq(10L), eq(List.of(200L)), any());
+        // 各団体ごとにPENDINGで登録される
+        verify(practiceParticipantRepository, times(2)).save(any(PracticeParticipant.class));
     }
 
     @Test
@@ -448,6 +461,43 @@ class PracticeParticipantServiceTest {
 
         service.registerParticipations(request);
 
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("空リクエストで既存参加が解除される（CRITICAL回帰テスト）")
+    void registerParticipations_emptyParticipations_clearsExistingRegistrations() {
+        PracticeSession session = createSession(100L, null);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        // 月内セッションが存在する
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        // プレイヤーに既存のアクティブ参加がある
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(999L).sessionId(100L).playerId(10L).matchNumber(1)
+                .status(ParticipantStatus.PENDING).build();
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L)))
+                .thenReturn(List.of(existing));
+        // registerBeforeDeadline で使用
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(true);
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID))
+                .thenReturn(List.of(session));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of()); // 空リスト
+
+        service.registerParticipations(request);
+
+        // 既存参加のsoft-deleteが実行される
+        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(
+                eq(10L), eq(List.of(100L)), any());
+        // 新規登録はなし
+        verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        // ensureは呼ばれない（空リクエストなので）
         verify(organizationService, never()).ensurePlayerBelongsToOrganization(anyLong(), anyLong());
     }
 
