@@ -14,7 +14,7 @@ const PrivateRoute = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // プロフィール未設定チェック（kyuRankがnullなら未設定 = 初ログイン後にプロフィール未入力）

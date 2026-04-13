@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Lock, AlertCircle } from 'lucide-react';
 
@@ -9,6 +9,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
@@ -23,7 +24,8 @@ const Login = () => {
       } else if (player.firstLogin) {
         navigate('/profile/edit?setup=true');
       } else {
-        navigate('/');
+        const from = location.state?.from;
+        navigate(from ? from.pathname + (from.search || '') : '/');
       }
     } catch (err) {
       setError(err.response?.data?.message || 'ログインに失敗しました');
