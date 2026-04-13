@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #442
 
 ### タスク2: playerId検証の追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `POST /participations` エンドポイントにPLAYERロールの自己検証を追加する
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/PracticeSessionController.java`
