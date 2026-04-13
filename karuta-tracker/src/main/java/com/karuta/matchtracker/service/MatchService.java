@@ -770,6 +770,16 @@ public class MatchService {
             return;
         }
 
+        // playerIdが試合の参加者であることを検証
+        Match match = matchRepository.findById(matchId).orElse(null);
+        if (match == null) {
+            return;
+        }
+        if (!playerId.equals(match.getPlayer1Id()) && !playerId.equals(match.getPlayer2Id())) {
+            log.warn("個人メモ保存拒否: playerId={}は試合(id={})の参加者ではありません", playerId, matchId);
+            return;
+        }
+
         MatchPersonalNote note = matchPersonalNoteRepository.findByMatchIdAndPlayerId(matchId, playerId)
                 .orElse(MatchPersonalNote.builder()
                         .matchId(matchId)
@@ -788,10 +798,7 @@ public class MatchService {
         // Send notification to mentors if memo changed
         if (memoChanged) {
             try {
-                Match match = matchRepository.findById(matchId).orElse(null);
-                if (match != null) {
-                    lineNotificationService.sendMemoUpdateFlexNotification(playerId, match, personalNotes);
-                }
+                lineNotificationService.sendMemoUpdateFlexNotification(playerId, match, personalNotes);
             } catch (Exception e) {
                 log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, playerId, e.getMessage());
             }
