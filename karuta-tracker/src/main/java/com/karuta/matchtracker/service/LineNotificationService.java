@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -68,7 +69,37 @@ public class LineNotificationService {
     }
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
+    private static final int RESERVED_TIMEOUT_MINUTES = 10;
+    private static final int MARK_SUCCEEDED_MAX_RETRIES = 2;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
+
+    /**
+     * 送信成功後のステータス更新をリトライ付きで実行する。
+     * markReservationSucceeded が一時的なDB障害で失敗した場合、RESERVED が残留し
+     * releaseStaleReservations により FAILED に変更されると重複送信の原因になるため、
+     * リトライで成功率を高める。
+     */
+    private void markSucceededWithRetry(Long playerId, LineMessageLog.LineNotificationType type,
+                                        String dedupeKey) {
+        Exception lastException = null;
+        for (int attempt = 0; attempt <= MARK_SUCCEEDED_MAX_RETRIES; attempt++) {
+            try {
+                int updated = lineMessageLogService.markReservationSucceeded(playerId, type, dedupeKey);
+                if (updated == 0) {
+                    log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt < MARK_SUCCEEDED_MAX_RETRIES) {
+                    log.warn("markReservationSucceeded リトライ {}/{}: player={}, dedupeKey={}, error={}",
+                            attempt + 1, MARK_SUCCEEDED_MAX_RETRIES, playerId, dedupeKey, e.getMessage());
+                }
+            }
+        }
+        log.error("送信成功後のステータス更新が全リトライで失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
+                playerId, dedupeKey, lastException != null ? lastException.getMessage() : "unknown");
+    }
 
     /**
      * セッションのラベルを生成する（例: "4月5日（中央公民館）"）
@@ -1056,12 +1087,18 @@ public class LineNotificationService {
      */
     private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
                                          LineNotificationType notificationType, String messageForLog) {
+        return handleSendResult(success, channel, playerId, notificationType, messageForLog, null);
+    }
+
+    private SendResult handleSendResult(boolean success, LineChannel channel, Long playerId,
+                                         LineNotificationType notificationType, String messageForLog,
+                                         String dedupeKey) {
         if (success) {
-            logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null);
+            logMessage(channel.getId(), playerId, notificationType, messageForLog, MessageStatus.SUCCESS, null, dedupeKey);
             return SendResult.SUCCESS;
         } else {
             logMessage(channel.getId(), playerId, notificationType, messageForLog,
-                MessageStatus.FAILED, "LINE API送信失敗");
+                MessageStatus.FAILED, "LINE API送信失敗", dedupeKey);
             return SendResult.FAILED;
         }
     }
@@ -1461,6 +1498,13 @@ public class LineNotificationService {
      * 当該セッションの非WON参加者（キャンセル本人除く）にFlex Message。
      */
     public void sendSameDayVacancyNotification(PracticeSession session, int matchNumber, Long cancelledPlayerId) {
+        // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
+        int released = lineMessageLogService.releaseStaleReservations(
+                JstDateTimeUtil.now().minusMinutes(RESERVED_TIMEOUT_MINUTES));
+        if (released > 0) {
+            log.warn("Released {} stale RESERVED log entries (timeout={}min)", released, RESERVED_TIMEOUT_MINUTES);
+        }
+
         String sessionLabel = getSessionLabel(session);
 
         // 現在のWON数と定員から空き枠数を計算
@@ -1492,16 +1536,63 @@ public class LineNotificationService {
         String altText = String.format("%s %d試合目が%d名分空いています", sessionLabel, matchNumber, vacancies);
         Map<String, Object> flex = buildSameDayVacancyFlex(sessionLabel, matchNumber, vacancies, session.getId(), true);
 
+        int sentCount = 0;
+        int alreadyNotifiedCount = 0;
+        int failedCount = 0;
+        int channelSkippedCount = 0;
+        String dedupeKey = session.getId() + ":" + matchNumber;
+
         for (Long playerId : recipientIds) {
+            // チャネル解決（通知設定OFF・チャネル未リンク等のチェック含む）
+            ResolvedChannel resolved = resolveChannel(playerId, LineNotificationType.SAME_DAY_VACANCY, altText);
+            if (resolved == null) {
+                channelSkippedCount++;
+                continue;
+            }
+
+            // 原子的に送信権を確保（INSERT ... ON CONFLICT DO NOTHING）
+            if (!lineMessageLogService.tryAcquireSendRight(
+                    resolved.channel().getId(), playerId, LineNotificationType.SAME_DAY_VACANCY, altText, dedupeKey)) {
+                alreadyNotifiedCount++;
+                continue;
+            }
+
+            // 送信権を確保できた場合のみ実際に送信
+            boolean sent = false;
             try {
-                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+                boolean success = lineMessagingService.sendPushFlexMessage(
+                        resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
+                if (success) {
+                    sent = true;
+                    sentCount++;
+                } else {
+                    int updated = lineMessageLogService.markReservationFailed(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    if (updated == 0) {
+                        log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
+                    failedCount++;
+                }
             } catch (Exception e) {
                 log.error("Failed to send vacancy notification to player {}: {}", playerId, e.getMessage());
+                int updated = lineMessageLogService.markReservationFailed(
+                        playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                if (updated == 0) {
+                    log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
+                failedCount++;
+            }
+
+            // 送信成功後のステータス更新（リトライ付き）
+            // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
+            // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
+            if (sent) {
+                markSucceededWithRetry(playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
             }
         }
 
-        log.info("Sent vacancy notification to {} players for session {} match {} ({} vacancies)",
-                recipientIds.size(), session.getId(), matchNumber, vacancies);
+        log.info("Sent vacancy notification for session {} match {} ({} vacancies): sent={}, alreadyNotified={}, failed={}, channelSkipped={}",
+                session.getId(), matchNumber, vacancies, sentCount, alreadyNotifiedCount, failedCount, channelSkippedCount);
     }
 
     /**
@@ -1547,6 +1638,13 @@ public class LineNotificationService {
                                                             Long cancelledPlayerId) {
         if (vacanciesByMatch.isEmpty()) return;
 
+        // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
+        int released = lineMessageLogService.releaseStaleReservations(
+                JstDateTimeUtil.now().minusMinutes(RESERVED_TIMEOUT_MINUTES));
+        if (released > 0) {
+            log.warn("Released {} stale RESERVED log entries (timeout={}min)", released, RESERVED_TIMEOUT_MINUTES);
+        }
+
         String sessionLabel = getSessionLabel(session);
 
         // 試合ごとのWONプレイヤーを収集
@@ -1573,6 +1671,12 @@ public class LineNotificationService {
 
         if (recipientIds.isEmpty()) return;
 
+        int sentCount = 0;
+        int alreadyNotifiedCount = 0;
+        int failedCount = 0;
+        int channelSkippedCount = 0;
+        String dedupeKey = String.valueOf(session.getId());
+
         for (Long playerId : recipientIds) {
             // プレイヤーごとに参加可能な試合のみを抽出
             Map<Integer, Integer> playerVacancies = new LinkedHashMap<>();
@@ -1592,18 +1696,59 @@ public class LineNotificationService {
                     .collect(Collectors.joining(", "));
             String altText = String.format("%s 空き枠のお知らせ（%s）", sessionLabel, matchSummary);
 
+            // チャネル解決（通知設定OFF・チャネル未リンク等のチェック含む）
+            ResolvedChannel resolved = resolveChannel(playerId, LineNotificationType.SAME_DAY_VACANCY, altText);
+            if (resolved == null) {
+                channelSkippedCount++;
+                continue;
+            }
+
+            // 原子的に送信権を確保（INSERT ... ON CONFLICT DO NOTHING）
+            if (!lineMessageLogService.tryAcquireSendRight(
+                    resolved.channel().getId(), playerId, LineNotificationType.SAME_DAY_VACANCY, altText, dedupeKey)) {
+                alreadyNotifiedCount++;
+                continue;
+            }
+
             Map<String, Object> flex = buildConsolidatedSameDayVacancyFlex(
                     sessionLabel, playerVacancies, session.getId(), true);
 
+            // 送信権を確保できた場合のみ実際に送信
+            boolean sent = false;
             try {
-                sendFlexToPlayer(playerId, LineNotificationType.SAME_DAY_VACANCY, altText, flex);
+                boolean success = lineMessagingService.sendPushFlexMessage(
+                        resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
+                if (success) {
+                    sent = true;
+                    sentCount++;
+                } else {
+                    int updated = lineMessageLogService.markReservationFailed(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, "LINE API送信失敗");
+                    if (updated == 0) {
+                        log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
+                    failedCount++;
+                }
             } catch (Exception e) {
                 log.error("Failed to send consolidated vacancy notification to player {}: {}", playerId, e.getMessage());
+                int updated = lineMessageLogService.markReservationFailed(
+                        playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey, e.getMessage());
+                if (updated == 0) {
+                    log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
+                failedCount++;
+            }
+
+            // 送信成功後のステータス更新（リトライ付き）
+            // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
+            // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
+            if (sent) {
+                markSucceededWithRetry(playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
             }
         }
 
-        log.info("Sent consolidated vacancy notification to {} players for session {} ({} matches)",
-                recipientIds.size(), session.getId(), vacanciesByMatch.size());
+        log.info("Sent consolidated vacancy notification for session {} ({} matches): sent={}, alreadyNotified={}, failed={}, channelSkipped={}",
+                session.getId(), vacanciesByMatch.size(), sentCount, alreadyNotifiedCount, failedCount, channelSkippedCount);
     }
 
     /**
@@ -2098,6 +2243,12 @@ public class LineNotificationService {
      */
     public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
                                         String altText, Map<String, Object> flexContents) {
+        return sendFlexToPlayer(playerId, notificationType, altText, flexContents, null);
+    }
+
+    public SendResult sendFlexToPlayer(Long playerId, LineNotificationType notificationType,
+                                        String altText, Map<String, Object> flexContents,
+                                        String dedupeKey) {
         ResolvedChannel resolved = resolveChannel(playerId, notificationType, altText);
         if (resolved == null) {
             return SendResult.SKIPPED;
@@ -2106,7 +2257,7 @@ public class LineNotificationService {
         boolean success = lineMessagingService.sendPushFlexMessage(
             resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flexContents);
 
-        return handleSendResult(success, resolved.channel(), playerId, notificationType, altText);
+        return handleSendResult(success, resolved.channel(), playerId, notificationType, altText, dedupeKey);
     }
 
     /**
@@ -2161,8 +2312,13 @@ public class LineNotificationService {
 
     private void logMessage(Long channelId, Long playerId, LineNotificationType type,
                            String message, MessageStatus status, String error) {
+        logMessage(channelId, playerId, type, message, status, error, null);
+    }
+
+    private void logMessage(Long channelId, Long playerId, LineNotificationType type,
+                           String message, MessageStatus status, String error, String dedupeKey) {
         try {
-            lineMessageLogService.save(channelId, playerId, type, message, status, error);
+            lineMessageLogService.save(channelId, playerId, type, message, status, error, dedupeKey);
         } catch (Exception e) {
             log.error("Failed to save LINE message log: {}", e.getMessage());
         }
