@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.karuta.matchtracker.dto.PracticeParticipationRequest;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
@@ -354,5 +355,126 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(practiceSessionService).deleteSession(1L);
+    }
+
+    // ========== 参加登録 playerId 検証 ==========
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - PLAYERが自分のplayerIdで参加登録できる（201）")
+    void testRegisterParticipationsPlayerOwnId() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(10L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isCreated());
+
+        verify(practiceParticipantService).registerParticipations(any(PracticeParticipationRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - PLAYERが他人のplayerIdで参加登録すると403")
+    void testRegisterParticipationsPlayerOtherIdForbidden() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(99L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isForbidden());
+
+        verify(practiceParticipantService, never()).registerParticipations(any());
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - ADMINが他人のplayerIdで参加登録できる（201）")
+    void testRegisterParticipationsAdminOtherIdAllowed() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(99L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then（ADMIN userId=1 が playerId=99 で登録）
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isCreated());
+
+        verify(practiceParticipantService).registerParticipations(any(PracticeParticipationRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - SUPER_ADMINが他人のplayerIdで参加登録できる（201）")
+    void testRegisterParticipationsSuperAdminOtherIdAllowed() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(99L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then（SUPER_ADMIN userId=1 が playerId=99 で登録）
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isCreated());
+
+        verify(practiceParticipantService).registerParticipations(any(PracticeParticipationRequest.class));
+    }
+
+    @Test
+    @DisplayName("POST /api/practice-sessions/participations - 認証ヘッダ欠落時は403")
+    void testRegisterParticipationsNoAuthHeaders() throws Exception {
+        // Given
+        PracticeParticipationRequest participationRequest = PracticeParticipationRequest.builder()
+                .playerId(10L)
+                .year(2026)
+                .month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(1L).matchNumber(1).build()
+                ))
+                .build();
+
+        // When & Then（認証ヘッダなし）
+        mockMvc.perform(post("/api/practice-sessions/participations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(participationRequest)))
+                .andExpect(status().isForbidden());
+
+        verify(practiceParticipantService, never()).registerParticipations(any());
     }
 }
