@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -337,7 +339,7 @@ public class MatchService {
      * 試合結果を新規登録（簡易版：対戦相手名と結果から登録）
      */
     @Transactional
-    public MatchDto createMatchSimple(MatchSimpleCreateRequest request) {
+    public MatchDto createMatchSimple(MatchSimpleCreateRequest request, Long currentUserId) {
         log.info("Creating new match (simple) on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
         // 練習日として登録されているかチェック
@@ -394,7 +396,7 @@ public class MatchService {
         Match saved = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
+        upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
 
         // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
         MatchDto dto = enrichMatchWithPlayerNames(saved, request.getPlayerId());
@@ -409,7 +411,7 @@ public class MatchService {
      * 試合結果を新規登録
      */
     @Transactional
-    public MatchDto createMatch(MatchCreateRequest request) {
+    public MatchDto createMatch(MatchCreateRequest request, Long currentUserId) {
         log.info("Creating new match on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
         // 練習日として登録されているかチェック
@@ -458,7 +460,7 @@ public class MatchService {
         }
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(saved.getId(), request.getCreatedBy(), request.getPersonalNotes(), request.getOtetsukiCount());
+        upsertPersonalNote(saved.getId(), request.getCreatedBy(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
 
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
@@ -497,7 +499,7 @@ public class MatchService {
      * 試合結果を更新
      */
     @Transactional
-    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount) {
+    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount, Long currentUserId) {
         log.info("Updating match with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -515,7 +517,7 @@ public class MatchService {
         Match updated = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(updated.getId(), updatedBy, personalNotes, otetsukiCount);
+        upsertPersonalNote(updated.getId(), updatedBy, personalNotes, otetsukiCount, currentUserId);
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, updatedBy);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), updatedBy);
@@ -528,7 +530,7 @@ public class MatchService {
      * 試合結果を更新（簡易版）
      */
     @Transactional
-    public MatchDto updateMatchSimple(Long id, MatchSimpleCreateRequest request) {
+    public MatchDto updateMatchSimple(Long id, MatchSimpleCreateRequest request, Long currentUserId) {
         log.info("Updating match (simple) with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -570,7 +572,7 @@ public class MatchService {
         Match updated = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount());
+        upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, request.getPlayerId());
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getPlayerId());
@@ -765,7 +767,7 @@ public class MatchService {
     /**
      * 個人メモ・お手付き記録をupsert
      */
-    private void upsertPersonalNote(Long matchId, Long playerId, String personalNotes, Integer otetsukiCount) {
+    private void upsertPersonalNote(Long matchId, Long playerId, String personalNotes, Integer otetsukiCount, Long currentUserId) {
         if (playerId == null || (personalNotes == null && otetsukiCount == null)) {
             return;
         }
@@ -777,6 +779,12 @@ public class MatchService {
         }
         if (!playerId.equals(match.getPlayer1Id()) && !playerId.equals(match.getPlayer2Id())) {
             log.warn("個人メモ保存拒否: playerId={}は試合(id={})の参加者ではありません", playerId, matchId);
+            return;
+        }
+
+        // 認証ユーザーとplayerIdの一致を検証（なりすまし防止）
+        if (currentUserId != null && !currentUserId.equals(playerId)) {
+            log.warn("個人メモ保存拒否: currentUserId={}がplayerId={}と一致しません(matchId={})", currentUserId, playerId, matchId);
             return;
         }
 
@@ -795,13 +803,21 @@ public class MatchService {
         note.setOtetsukiCount(otetsukiCount);
         matchPersonalNoteRepository.save(note);
 
-        // Send notification to mentors if memo changed
+        // Send notification to mentors after transaction commit
         if (memoChanged) {
-            try {
-                lineNotificationService.sendMemoUpdateFlexNotification(playerId, match, personalNotes);
-            } catch (Exception e) {
-                log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, playerId, e.getMessage());
-            }
+            final Long notifyPlayerId = playerId;
+            final String notifyMemo = personalNotes;
+            final Match notifyMatch = match;
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        lineNotificationService.sendMemoUpdateFlexNotification(notifyPlayerId, notifyMatch, notifyMemo);
+                    } catch (Exception e) {
+                        log.warn("メモ更新通知の送信に失敗しました: matchId={}, playerId={}, error={}", matchId, notifyPlayerId, e.getMessage());
+                    }
+                }
+            });
         }
     }
 

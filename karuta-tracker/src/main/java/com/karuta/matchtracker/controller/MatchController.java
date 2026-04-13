@@ -223,9 +223,11 @@ public class MatchController {
      * @return 登録された試合結果
      */
     @PostMapping
-    public ResponseEntity<MatchDto> createMatch(@Valid @RequestBody MatchSimpleCreateRequest request) {
+    public ResponseEntity<MatchDto> createMatch(@Valid @RequestBody MatchSimpleCreateRequest request,
+                                                HttpServletRequest httpRequest) {
         log.info("POST /api/matches - Creating new match (simple) on {}", request.getMatchDate());
-        MatchDto createdMatch = matchService.createMatchSimple(request);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto createdMatch = matchService.createMatchSimple(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
 
@@ -236,9 +238,11 @@ public class MatchController {
      * @return 登録された試合結果
      */
     @PostMapping("/detailed")
-    public ResponseEntity<MatchDto> createMatchDetailed(@Valid @RequestBody MatchCreateRequest request) {
+    public ResponseEntity<MatchDto> createMatchDetailed(@Valid @RequestBody MatchCreateRequest request,
+                                                        HttpServletRequest httpRequest) {
         log.info("POST /api/matches/detailed - Creating new match on {}", request.getMatchDate());
-        MatchDto createdMatch = matchService.createMatch(request);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto createdMatch = matchService.createMatch(request, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
 
@@ -252,9 +256,11 @@ public class MatchController {
     @PutMapping("/{id}")
     public ResponseEntity<MatchDto> updateMatchSimple(
             @PathVariable Long id,
-            @Valid @RequestBody MatchSimpleCreateRequest request) {
+            @Valid @RequestBody MatchSimpleCreateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("PUT /api/matches/{} - Updating match (simple)", id);
-        MatchDto updatedMatch = matchService.updateMatchSimple(id, request);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto updatedMatch = matchService.updateMatchSimple(id, request, currentUserId);
         return ResponseEntity.ok(updatedMatch);
     }
 
@@ -274,9 +280,11 @@ public class MatchController {
             @RequestParam Integer scoreDifference,
             @RequestParam Long updatedBy,
             @RequestParam(required = false) String personalNotes,
-            @RequestParam(required = false) Integer otetsukiCount) {
+            @RequestParam(required = false) Integer otetsukiCount,
+            HttpServletRequest httpRequest) {
         log.info("PUT /api/matches/{}/detailed - Updating match (detailed)", id);
-        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount, currentUserId);
         return ResponseEntity.ok(updatedMatch);
     }
 

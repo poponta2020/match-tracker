@@ -232,7 +232,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        MatchDto result = matchService.createMatch(request);
+        MatchDto result = matchService.createMatch(request, 1L);
 
         // Then
         assertThat(result).isNotNull();
@@ -262,7 +262,7 @@ class MatchServiceTest {
         when(playerRepository.existsById(3L)).thenReturn(true);
 
         // When & Then
-        assertThatThrownBy(() -> matchService.createMatch(request))
+        assertThatThrownBy(() -> matchService.createMatch(request, 1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Winner must be one of the players");
         verify(matchRepository, never()).save(any(Match.class));
@@ -286,7 +286,7 @@ class MatchServiceTest {
         when(playerRepository.existsById(1L)).thenReturn(true);
 
         // When & Then
-        assertThatThrownBy(() -> matchService.createMatch(request))
+        assertThatThrownBy(() -> matchService.createMatch(request, 1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("cannot play against themselves");
         verify(matchRepository, never()).save(any(Match.class));
@@ -301,7 +301,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null);
+        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null, 1L);
 
         // Then
         assertThat(result).isNotNull();
@@ -750,7 +750,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
-            MatchDto result = matchService.createMatchSimple(request);
+            MatchDto result = matchService.createMatchSimple(request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -782,7 +782,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
-            MatchDto result = matchService.createMatchSimple(request);
+            MatchDto result = matchService.createMatchSimple(request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -811,7 +811,7 @@ class MatchServiceTest {
             when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(false);
 
             // When & Then
-            assertThatThrownBy(() -> matchService.createMatchSimple(request))
+            assertThatThrownBy(() -> matchService.createMatchSimple(request, 1L))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("練習日として登録されている日のみ");
 
@@ -835,7 +835,7 @@ class MatchServiceTest {
             when(playerRepository.findById(999L)).thenReturn(Optional.empty());
 
             // When & Then
-            assertThatThrownBy(() -> matchService.createMatchSimple(request))
+            assertThatThrownBy(() -> matchService.createMatchSimple(request, 1L))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Player");
 
@@ -876,7 +876,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
 
             // When
-            MatchDto result = matchService.updateMatchSimple(1L, request);
+            MatchDto result = matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -916,7 +916,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -955,7 +955,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -994,7 +994,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -1020,7 +1020,7 @@ class MatchServiceTest {
             when(matchRepository.findById(999L)).thenReturn(Optional.empty());
 
             // When & Then
-            assertThatThrownBy(() -> matchService.updateMatchSimple(999L, request))
+            assertThatThrownBy(() -> matchService.updateMatchSimple(999L, request, 1L))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Match");
 
@@ -1056,7 +1056,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -1095,7 +1095,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -1135,7 +1135,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.updateMatchSimple(1L, request);
+            matchService.updateMatchSimple(1L, request, 1L);
 
             // Then
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
@@ -1176,7 +1176,7 @@ class MatchServiceTest {
             when(playerRepository.findById(3L)).thenReturn(Optional.of(player3));
 
             // When & Then
-            assertThatThrownBy(() -> matchService.updateMatchSimple(1L, request))
+            assertThatThrownBy(() -> matchService.updateMatchSimple(1L, request, 1L))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("参加者ではありません");
 
@@ -1214,7 +1214,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.createMatch(request);
+            matchService.createMatch(request, 1L);
 
             // Then: ペアリングが自動生成される
             ArgumentCaptor<MatchPairing> captor = ArgumentCaptor.forClass(MatchPairing.class);
@@ -1255,7 +1255,7 @@ class MatchServiceTest {
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
             // When
-            matchService.createMatch(request);
+            matchService.createMatch(request, 1L);
 
             // Then: ペアリングは保存されない
             verify(matchPairingRepository, never()).save(any(MatchPairing.class));
