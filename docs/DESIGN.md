@@ -667,14 +667,28 @@ Entity Layer (JPA Entity)
 | player_id | BIGINT | NOT NULL, FK → players.id | プレイヤーID |
 | notification_type | VARCHAR(30) | NOT NULL | 通知種別 |
 | message_content | TEXT | NOT NULL | 送信メッセージ内容 |
-| status | VARCHAR(20) | NOT NULL | SUCCESS / FAILED / SKIPPED |
+| status | VARCHAR(20) | NOT NULL | SUCCESS / FAILED / SKIPPED / RESERVED |
 | error_message | TEXT | | 失敗時のエラー内容 |
+| dedupe_key | VARCHAR(100) | | 重複排除キー（セッションID等） |
 | sent_at | DATETIME | NOT NULL | 送信日時 |
 
 **インデックス**:
 - `idx_lml_channel` (line_channel_id)
 - `idx_lml_player` (player_id)
 - `idx_lml_type_sent` (notification_type, sent_at)
+- `idx_lml_dedupe` (player_id, notification_type, dedupe_key, sent_at)
+- `idx_lml_dedupe_daily_unique` (player_id, notification_type, dedupe_key, sent_at::date) WHERE status IN ('SUCCESS', 'RESERVED') — 部分ユニーク制約
+
+**重複送信防止フロー（原子的送信権確保方式）:**
+1. `tryAcquireSendRight`: dedupeKey付きで `RESERVED` ステータスのログをINSERT（ON CONFLICT DO NOTHING）
+2. LINE APIで送信実行
+3. 成功時: `markReservationSucceeded` で RESERVED → SUCCESS に更新
+4. 失敗時: `markReservationFailed` で RESERVED → FAILED に更新（次回リトライ可能）
+5. クラッシュ時: RESERVED が残るが SUCCESS ではないため、通知欠落を防止
+
+**dedupeKeyの粒度:**
+- 試合単位通知（sendSameDayVacancyNotification）: `sessionId:matchNumber`
+- セッション統合通知（sendConsolidatedSameDayVacancyNotification）: `sessionId`
 
 ---
 

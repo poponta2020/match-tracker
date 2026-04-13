@@ -53,16 +53,17 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
 
     /**
      * 原子的に送信権を確保する（INSERT ... ON CONFLICT DO NOTHING）。
-     * 同一 (player_id, notification_type, dedupe_key, 日付) で SUCCESS ログが存在しない場合のみ挿入に成功する。
+     * RESERVED ステータスで挿入し、送信成功後に markReservationSucceeded で SUCCESS に更新する。
+     * 同一 (player_id, notification_type, dedupe_key, 日付) で SUCCESS または RESERVED ログが存在する場合は挿入されない。
      * sent_at にはサービス層から JstDateTimeUtil.now() を渡し、他のJPA保存経路と時刻基準を統一する。
      * @return 挿入された行数（1=送信権確保成功、0=既に送信済み）
      */
     @Modifying
     @Query(value = """
         INSERT INTO line_message_log (line_channel_id, player_id, notification_type, message_content, status, dedupe_key, sent_at)
-        VALUES (:channelId, :playerId, CAST(:type AS VARCHAR), :message, 'SUCCESS', :dedupeKey, :sentAt)
+        VALUES (:channelId, :playerId, CAST(:type AS VARCHAR), :message, 'RESERVED', :dedupeKey, :sentAt)
         ON CONFLICT (player_id, notification_type, dedupe_key, (sent_at::date))
-        WHERE status = 'SUCCESS' AND dedupe_key IS NOT NULL
+        WHERE status IN ('SUCCESS', 'RESERVED') AND dedupe_key IS NOT NULL
         DO NOTHING
         """, nativeQuery = true)
     int tryAcquireSendRight(@Param("channelId") Long channelId,
@@ -73,8 +74,29 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
                             @Param("sentAt") LocalDateTime sentAt);
 
     /**
+     * 送信成功時に予約レコードのステータスを SUCCESS に更新する。
+     * tryAcquireSendRight で確保した RESERVED レコードを SUCCESS に変更し、
+     * 以降の重複送信を防止する。
+     * sentDate にはサービス層から JstDateTimeUtil.today() を渡し、JST日付基準で照合する。
+     */
+    @Modifying
+    @Query(value = """
+        UPDATE line_message_log
+        SET status = 'SUCCESS'
+        WHERE player_id = :playerId
+        AND notification_type = CAST(:type AS VARCHAR)
+        AND dedupe_key = :dedupeKey
+        AND status = 'RESERVED'
+        AND sent_at::date = :sentDate
+        """, nativeQuery = true)
+    int markReservationSucceeded(@Param("playerId") Long playerId,
+                                 @Param("type") String type,
+                                 @Param("dedupeKey") String dedupeKey,
+                                 @Param("sentDate") LocalDate sentDate);
+
+    /**
      * 送信失敗時に予約レコードのステータスを FAILED に更新する。
-     * tryAcquireSendRight で確保した SUCCESS レコードを FAILED に変更し、
+     * tryAcquireSendRight で確保した RESERVED レコードを FAILED に変更し、
      * 次回のリトライを可能にする。
      * sentDate にはサービス層から JstDateTimeUtil.today() を渡し、JST日付基準で照合する。
      */
@@ -85,7 +107,7 @@ public interface LineMessageLogRepository extends JpaRepository<LineMessageLog, 
         WHERE player_id = :playerId
         AND notification_type = CAST(:type AS VARCHAR)
         AND dedupe_key = :dedupeKey
-        AND status = 'SUCCESS'
+        AND status = 'RESERVED'
         AND sent_at::date = :sentDate
         """, nativeQuery = true)
     int markReservationFailed(@Param("playerId") Long playerId,

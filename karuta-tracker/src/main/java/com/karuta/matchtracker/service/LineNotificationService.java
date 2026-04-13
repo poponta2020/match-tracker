@@ -1503,7 +1503,7 @@ public class LineNotificationService {
         int alreadyNotifiedCount = 0;
         int failedCount = 0;
         int channelSkippedCount = 0;
-        String dedupeKey = String.valueOf(session.getId());
+        String dedupeKey = session.getId() + ":" + matchNumber;
 
         for (Long playerId : recipientIds) {
             // チャネル解決（通知設定OFF・チャネル未リンク等のチェック含む）
@@ -1525,6 +1525,8 @@ public class LineNotificationService {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
+                    lineMessageLogService.markReservationSucceeded(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
                     sentCount++;
                 } else {
                     lineMessageLogService.markReservationFailed(
@@ -1659,6 +1661,8 @@ public class LineNotificationService {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
+                    lineMessageLogService.markReservationSucceeded(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
                     sentCount++;
                 } else {
                     lineMessageLogService.markReservationFailed(

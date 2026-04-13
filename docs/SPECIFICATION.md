@@ -1456,9 +1456,14 @@ UNIQUE制約: (player_id, organization_id)
 | player_id | BIGINT | NOT NULL, FK | players.id |
 | notification_type | VARCHAR(30) | NOT NULL | 通知種別 |
 | message_content | TEXT | NOT NULL | メッセージ内容 |
-| status | VARCHAR(20) | NOT NULL | SUCCESS/FAILED/SKIPPED |
+| status | VARCHAR(20) | NOT NULL | SUCCESS/FAILED/SKIPPED/RESERVED |
 | error_message | TEXT | — | エラー内容 |
+| dedupe_key | VARCHAR(100) | — | 重複排除キー（セッションID等） |
 | sent_at | TIMESTAMP | NOT NULL | 送信日時 |
+
+部分ユニーク制約: `(player_id, notification_type, dedupe_key, sent_at::date) WHERE status IN ('SUCCESS', 'RESERVED')` — 同一プレイヤー・通知種別・dedupeKeyの当日重複を防止
+
+**重複送信防止方式:** RESERVED → SUCCESS の2段階ステータス遷移により、送信権の原子的確保とクラッシュ耐性を両立。dedupeKeyは試合単位通知では `sessionId:matchNumber`、セッション統合通知では `sessionId` を使用。
 
 #### mentor_relationships
 

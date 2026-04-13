@@ -70,8 +70,19 @@ public class LineMessageLogService {
     }
 
     /**
+     * tryAcquireSendRight で確保した予約レコードを SUCCESS に変更する。
+     * RESERVED → SUCCESS への変更により、送信完了を確定し重複送信を防止する。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markReservationSucceeded(Long playerId, LineNotificationType type,
+                                          String dedupeKey) {
+        lineMessageLogRepository.markReservationSucceeded(
+                playerId, type.name(), dedupeKey, JstDateTimeUtil.today());
+    }
+
+    /**
      * tryAcquireSendRight で確保した予約レコードを FAILED に変更する。
-     * SUCCESS → FAILED への変更により、次回リトライ時に再度送信権を確保できるようになる。
+     * RESERVED → FAILED への変更により、次回リトライ時に再度送信権を確保できるようになる。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markReservationFailed(Long playerId, LineNotificationType type,

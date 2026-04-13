@@ -85,7 +85,8 @@ public class LineMessageLog {
     public enum MessageStatus {
         SUCCESS,
         FAILED,
-        SKIPPED
+        SKIPPED,
+        RESERVED
     }
 
     @PrePersist
