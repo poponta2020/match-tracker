@@ -70,7 +70,36 @@ public class LineNotificationService {
 
     private static final int MONTHLY_MESSAGE_LIMIT = 200;
     private static final int RESERVED_TIMEOUT_MINUTES = 10;
+    private static final int MARK_SUCCEEDED_MAX_RETRIES = 2;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
+
+    /**
+     * 送信成功後のステータス更新をリトライ付きで実行する。
+     * markReservationSucceeded が一時的なDB障害で失敗した場合、RESERVED が残留し
+     * releaseStaleReservations により FAILED に変更されると重複送信の原因になるため、
+     * リトライで成功率を高める。
+     */
+    private void markSucceededWithRetry(Long playerId, LineMessageLog.LineNotificationType type,
+                                        String dedupeKey) {
+        Exception lastException = null;
+        for (int attempt = 0; attempt <= MARK_SUCCEEDED_MAX_RETRIES; attempt++) {
+            try {
+                int updated = lineMessageLogService.markReservationSucceeded(playerId, type, dedupeKey);
+                if (updated == 0) {
+                    log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt < MARK_SUCCEEDED_MAX_RETRIES) {
+                    log.warn("markReservationSucceeded リトライ {}/{}: player={}, dedupeKey={}, error={}",
+                            attempt + 1, MARK_SUCCEEDED_MAX_RETRIES, playerId, dedupeKey, e.getMessage());
+                }
+            }
+        }
+        log.error("送信成功後のステータス更新が全リトライで失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
+                playerId, dedupeKey, lastException != null ? lastException.getMessage() : "unknown");
+    }
 
     /**
      * セッションのラベルを生成する（例: "4月5日（中央公民館）"）
@@ -1554,20 +1583,11 @@ public class LineNotificationService {
                 failedCount++;
             }
 
-            // 送信成功後のステータス更新は別のtry-catchで行う
+            // 送信成功後のステータス更新（リトライ付き）
             // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
             // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
             if (sent) {
-                try {
-                    int updated = lineMessageLogService.markReservationSucceeded(
-                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
-                    if (updated == 0) {
-                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
-                    }
-                } catch (Exception e) {
-                    log.error("送信成功後のステータス更新に失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
-                            playerId, dedupeKey, e.getMessage());
-                }
+                markSucceededWithRetry(playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
             }
         }
 
@@ -1719,20 +1739,11 @@ public class LineNotificationService {
                 failedCount++;
             }
 
-            // 送信成功後のステータス更新は別のtry-catchで行う
+            // 送信成功後のステータス更新（リトライ付き）
             // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
             // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
             if (sent) {
-                try {
-                    int updated = lineMessageLogService.markReservationSucceeded(
-                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
-                    if (updated == 0) {
-                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
-                    }
-                } catch (Exception e) {
-                    log.error("送信成功後のステータス更新に失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
-                            playerId, dedupeKey, e.getMessage());
-                }
+                markSucceededWithRetry(playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
             }
         }
 
