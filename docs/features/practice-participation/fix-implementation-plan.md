@@ -33,7 +33,7 @@ status: completed
 - **対応Issue:** #443
 
 ### タスク3: DESIGN.md の更新
-- [ ] 完了
+- [x] 完了
 - **概要:** DESIGN.md 5.3.2（画面設計）と 4.6（API権限）を実装に合わせて更新する
 - **変更対象ファイル:**
   - `docs/DESIGN.md`
