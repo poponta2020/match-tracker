@@ -1529,15 +1529,12 @@ public class LineNotificationService {
             }
 
             // 送信権を確保できた場合のみ実際に送信
+            boolean sent = false;
             try {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
-                    int updated = lineMessageLogService.markReservationSucceeded(
-                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
-                    if (updated == 0) {
-                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
-                    }
+                    sent = true;
                     sentCount++;
                 } else {
                     int updated = lineMessageLogService.markReservationFailed(
@@ -1555,6 +1552,22 @@ public class LineNotificationService {
                     log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
                 }
                 failedCount++;
+            }
+
+            // 送信成功後のステータス更新は別のtry-catchで行う
+            // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
+            // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
+            if (sent) {
+                try {
+                    int updated = lineMessageLogService.markReservationSucceeded(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
+                    if (updated == 0) {
+                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
+                } catch (Exception e) {
+                    log.error("送信成功後のステータス更新に失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
+                            playerId, dedupeKey, e.getMessage());
+                }
             }
         }
 
@@ -1681,15 +1694,12 @@ public class LineNotificationService {
                     sessionLabel, playerVacancies, session.getId(), true);
 
             // 送信権を確保できた場合のみ実際に送信
+            boolean sent = false;
             try {
                 boolean success = lineMessagingService.sendPushFlexMessage(
                         resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), altText, flex);
                 if (success) {
-                    int updated = lineMessageLogService.markReservationSucceeded(
-                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
-                    if (updated == 0) {
-                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
-                    }
+                    sent = true;
                     sentCount++;
                 } else {
                     int updated = lineMessageLogService.markReservationFailed(
@@ -1707,6 +1717,22 @@ public class LineNotificationService {
                     log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
                 }
                 failedCount++;
+            }
+
+            // 送信成功後のステータス更新は別のtry-catchで行う
+            // 送信済みなのにFAILEDに変更すると重複送信の原因になるため、
+            // markReservationSucceededが例外を投げてもmarkReservationFailedは呼ばない
+            if (sent) {
+                try {
+                    int updated = lineMessageLogService.markReservationSucceeded(
+                            playerId, LineNotificationType.SAME_DAY_VACANCY, dedupeKey);
+                    if (updated == 0) {
+                        log.warn("markReservationSucceeded updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
+                } catch (Exception e) {
+                    log.error("送信成功後のステータス更新に失敗しました（重複送信防止のためFAILEDには変更しません）: player={}, dedupeKey={}, error={}",
+                            playerId, dedupeKey, e.getMessage());
+                }
             }
         }
 

@@ -441,6 +441,38 @@ class LineNotificationServiceConsolidatedJoinTest {
 
             verify(lineMessageLogService).releaseStaleReservations(any());
         }
+
+        @Test
+        @DisplayName("送信成功後にmarkReservationSucceededが例外→markReservationFailedは呼ばれない（重複送信防止）")
+        void sendSuccessThenMarkSucceededThrows_doesNotCallMarkFailed() {
+            PracticeSession session = createSession();
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY),
+                    anyString(), eq("100:1"))).thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            // markReservationSucceeded が例外を投げる
+            when(lineMessageLogService.markReservationSucceeded(eq(10L),
+                    eq(LineMessageLog.LineNotificationType.SAME_DAY_VACANCY), eq("100:1")))
+                    .thenThrow(new RuntimeException("DB connection lost"));
+
+            assertDoesNotThrow(() ->
+                    lineNotificationService.sendSameDayVacancyNotification(session, 1, null));
+
+            // markReservationFailed は呼ばれてはいけない（送信済みのためFAILEDにしない）
+            verify(lineMessageLogService, never()).markReservationFailed(anyLong(), any(), anyString(), anyString());
+        }
     }
 
     @Nested
@@ -475,6 +507,39 @@ class LineNotificationServiceConsolidatedJoinTest {
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null);
 
             verify(lineMessageLogService).releaseStaleReservations(any());
+        }
+
+        @Test
+        @DisplayName("送信成功後にmarkReservationSucceededが例外→markReservationFailedは呼ばれない（重複送信防止）")
+        void sendSuccessThenMarkSucceededThrows_doesNotCallMarkFailed() {
+            PracticeSession session = createSession();
+
+            Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+            vacanciesByMatch.put(1, 2);
+
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                    .thenReturn(List.of());
+
+            PlayerOrganization member = PlayerOrganization.builder()
+                    .playerId(10L).organizationId(1L).build();
+            when(playerOrganizationRepository.findByOrganizationId(1L))
+                    .thenReturn(List.of(member));
+
+            setupChannelMocks(10L);
+
+            when(lineMessageLogService.tryAcquireSendRight(anyLong(), anyLong(), any(), anyString(), anyString()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushFlexMessage(anyString(), anyString(), anyString(), any()))
+                    .thenReturn(true);
+            // markReservationSucceeded が例外を投げる
+            when(lineMessageLogService.markReservationSucceeded(anyLong(), any(), anyString()))
+                    .thenThrow(new RuntimeException("DB connection lost"));
+
+            assertDoesNotThrow(() ->
+                    lineNotificationService.sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, null));
+
+            // markReservationFailed は呼ばれてはいけない（送信済みのためFAILEDにしない）
+            verify(lineMessageLogService, never()).markReservationFailed(anyLong(), any(), anyString(), anyString());
         }
 
         @Test
