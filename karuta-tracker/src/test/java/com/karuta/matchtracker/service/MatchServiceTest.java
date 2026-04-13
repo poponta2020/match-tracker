@@ -301,7 +301,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null, 1L);
+        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null, 1L, Player.Role.PLAYER);
 
         // Then
         assertThat(result).isNotNull();

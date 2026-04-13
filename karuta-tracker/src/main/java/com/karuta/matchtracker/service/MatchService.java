@@ -7,6 +7,7 @@ import com.karuta.matchtracker.dto.MatchStatisticsDto;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPersonalNote;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
@@ -462,14 +463,17 @@ public class MatchService {
             log.info("Upsert: created new match with id: {}", saved.getId());
         }
 
+        // 認証済みユーザーIDを一貫利用（request.createdByのなりすまし防止）
+        Long effectiveUserId = currentUserId != null ? currentUserId : request.getCreatedBy();
+
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(saved.getId(), request.getCreatedBy(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
+        upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
 
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
 
-        MatchDto dto = enrichMatchWithPlayerNames(saved, request.getCreatedBy());
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), request.getCreatedBy());
+        MatchDto dto = enrichMatchWithPlayerNames(saved, effectiveUserId);
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), effectiveUserId);
         return enriched.get(0);
     }
 
@@ -502,7 +506,7 @@ public class MatchService {
      * 試合結果を更新
      */
     @Transactional
-    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount, Long currentUserId) {
+    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount, Long currentUserId, Role currentUserRole) {
         log.info("Updating match with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -513,6 +517,13 @@ public class MatchService {
             throw new IllegalArgumentException("更新者IDが認証ユーザーと一致しません");
         }
         Long effectiveUserId = currentUserId != null ? currentUserId : updatedBy;
+
+        // PLAYERは対象試合の参加者のみ更新可
+        if (currentUserRole == Role.PLAYER) {
+            if (!effectiveUserId.equals(match.getPlayer1Id()) && !effectiveUserId.equals(match.getPlayer2Id())) {
+                throw new ForbiddenException("参加していない試合を更新する権限がありません");
+            }
+        }
 
         // 勝者が対戦者のいずれかであることを確認
         if (!winnerId.equals(match.getPlayer1Id()) && !winnerId.equals(match.getPlayer2Id())) {

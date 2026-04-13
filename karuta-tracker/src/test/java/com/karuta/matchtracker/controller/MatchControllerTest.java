@@ -482,7 +482,7 @@ class MatchControllerTest {
                 .winnerId(2L)
                 .scoreDifference(3)
                 .build();
-        when(matchService.updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any())).thenReturn(updatedMatch);
+        when(matchService.updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any(), any())).thenReturn(updatedMatch);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
@@ -496,7 +496,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.winnerId").value(2))
                 .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any());
+        verify(matchService).updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any(), any());
     }
 
     @Test
