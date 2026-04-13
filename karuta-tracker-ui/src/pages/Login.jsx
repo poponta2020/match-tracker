@@ -20,9 +20,9 @@ const Login = () => {
     try {
       const player = await login(name, password);
       if (player.requirePasswordChange) {
-        navigate('/profile/edit?changePassword=true');
+        navigate('/profile/edit?changePassword=true', { state: { from: location.state?.from } });
       } else if (player.firstLogin) {
-        navigate('/profile/edit?setup=true');
+        navigate('/profile/edit?setup=true', { state: { from: location.state?.from } });
       } else {
         const from = location.state?.from;
         navigate(from ? from.pathname + (from.search || '') : '/');
