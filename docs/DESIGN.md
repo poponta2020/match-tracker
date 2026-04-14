@@ -2457,6 +2457,54 @@ Entity Layer (JPA Entity)
 | `PracticeSessionController` | `POST /{id}/confirm-reservation`, `POST /{id}/expand-venue` エンドポイント追加（ADMIN+） |
 | `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー |
 
+### 7.8 かでる予約 → 練習日自動登録フロー
+
+```
+[GitHub Actions: sync-kaderu-reservations.yml]
+  cron: */30 * * * *  または  workflow_dispatch
+  ↓
+[Node.js: scrape-mypage.js]
+1. かでる2・7サイトにPlaywright(headless)でログイン
+   - 環境変数: KADERU_USER_ID / KADERU_PASSWORD
+   ↓
+2. マイページ → 予約申込一覧ページへ遷移
+   ↓
+3. 当月+翌月のテーブルをパース
+   - 利用日時 → 日付 + 時間帯判定
+   - 利用施設 → 部屋名抽出（すずらん/はまなす/あかなら/えぞまつ）
+   ↓
+4. 夜間(17:00-21:00)のみフィルタ → JSON出力
+   ↓
+[Node.js: sync-reservations.js]
+5. JSONを受け取り、日付ごとに部屋をグルーピング
+   - 隣室ペア判定: すずらん+はまなす→拡張ID:7, あかなら+えぞまつ→拡張ID:9
+   ↓
+6. DB接続 → organizations テーブルから hokudai の ID を取得
+   ↓
+7. 日付ごとに practice_sessions を照合:
+   a. 存在しない → INSERT（venue_id, totalMatches, startTime=17:00, endTime=21:00）
+   b. 単室で既存 + 隣室が予約にある → UPDATE（拡張会場に変更, capacity更新）
+   c. それ以外 → スキップ
+   ↓
+8. 処理結果サマリーを出力
+```
+
+**関連テーブル**:
+
+| テーブル | 操作 |
+|---------|------|
+| `organizations` | SELECT（hokudai の ID 取得） |
+| `venues` | SELECT（defaultMatchCount, capacity 取得） |
+| `practice_sessions` | SELECT / INSERT / UPDATE |
+
+**スクリプトファイル**:
+
+| ファイル | 説明 |
+|---------|------|
+| `scripts/room-checker/scrape-mypage.js` | スクレイピング専用（JSON出力） |
+| `scripts/room-checker/sync-reservations.js` | DB同期（scrape-mypage.jsを子プロセスで実行） |
+| `.github/workflows/sync-kaderu-reservations.yml` | 30分cron + 手動トリガー |
+
 ---
 
 ## 8. 未実装機能・TODO
