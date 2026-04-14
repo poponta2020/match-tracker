@@ -89,6 +89,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/matches/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -189,6 +191,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", p1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -259,6 +263,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(samePlayerRequest)))
                 .andExpect(status().isBadRequest());
@@ -275,6 +281,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidWinnerRequest)))
                 .andExpect(status().isBadRequest());
@@ -292,6 +300,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(nonExistentSessionRequest)))
                 .andExpect(status().isBadRequest());
@@ -317,6 +327,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         request1.setScoreDifference(5);
 
         mockMvc.perform(post("/api/matches")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -331,6 +343,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         request2.setScoreDifference(3);
 
         mockMvc.perform(post("/api/matches")
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", player1Id.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict());

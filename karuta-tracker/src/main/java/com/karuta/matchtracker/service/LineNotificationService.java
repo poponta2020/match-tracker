@@ -2307,6 +2307,7 @@ public class LineNotificationService {
             case SAME_DAY_VACANCY -> pref.getSameDayVacancy();
             case ADMIN_SAME_DAY_CONFIRMATION -> pref.getAdminSameDayConfirmation();
             case MENTOR_COMMENT -> pref.getMentorComment();
+            case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
         };
     }
 
@@ -2736,6 +2737,91 @@ public class LineNotificationService {
         if (!bodyContents.isEmpty()) {
             bodyContents.remove(bodyContents.size() - 1);
         }
+
+        Map<String, Object> body = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", bodyContents,
+            "paddingAll", "20px"
+        );
+
+        return Map.of(
+            "type", "bubble",
+            "header", header,
+            "body", body
+        );
+    }
+
+
+    /**
+     * メンティーのメモ更新をFlex Messageで全ACTIVEメンターに通知する。
+     */
+    public SendResult sendMemoUpdateFlexNotification(Long menteeId, Match match, String memoContent) {
+        Player mentee = playerRepository.findById(menteeId).orElse(null);
+        if (mentee == null) return SendResult.SKIPPED;
+
+        String menteeName = mentee.getName();
+        String altText = String.format("%sさんが試合メモを更新しました", menteeName);
+
+        // 対戦相手名を解決
+        String opponentName = resolveOpponentName(match, menteeId);
+
+        // Flex Message構築
+        Map<String, Object> flex = buildMemoUpdateFlex(menteeName, match, opponentName, memoContent);
+
+        // 全ACTIVEメンターに通知
+        List<MentorRelationship> relationships = mentorRelationshipRepository
+                .findByMenteeIdAndStatus(menteeId, MentorRelationship.Status.ACTIVE);
+        if (relationships.isEmpty()) return SendResult.SKIPPED;
+
+        boolean anySuccess = false;
+        boolean anyFailed = false;
+        boolean anySkipped = false;
+        for (MentorRelationship rel : relationships) {
+            SendResult r = sendFlexToPlayer(rel.getMentorId(), LineNotificationType.MENTEE_MEMO_UPDATE, altText, flex);
+            if (r == SendResult.SUCCESS) {
+                anySuccess = true;
+            } else if (r == SendResult.FAILED) {
+                anyFailed = true;
+                log.warn("メモ更新通知 部分失敗: mentorId={}", rel.getMentorId());
+            } else {
+                anySkipped = true;
+            }
+        }
+
+        if (anyFailed) return SendResult.FAILED;
+        if (!anySuccess) return SendResult.SKIPPED;
+        if (anySkipped) return SendResult.SKIPPED;
+        return SendResult.SUCCESS;
+    }
+
+    private Map<String, Object> buildMemoUpdateFlex(String menteeName, Match match,
+                                                      String opponentName, String memoContent) {
+        // ヘッダー
+        Map<String, Object> header = Map.of(
+            "type", "box",
+            "layout", "vertical",
+            "contents", List.of(
+                Map.of("type", "text", "text", "メモ更新",
+                    "color", "#ffffff", "weight", "bold", "size", "md")
+            ),
+            "backgroundColor", "#4a6b5a",
+            "paddingAll", "15px"
+        );
+
+        // ボディ
+        String matchDateStr = String.format("%d/%d", match.getMatchDate().getMonthValue(), match.getMatchDate().getDayOfMonth());
+        String matchInfo = String.format("%s 第%d試合 vs %s", matchDateStr, match.getMatchNumber(), opponentName);
+
+        List<Object> bodyContents = List.of(
+            Map.of("type", "text", "text", menteeName + "さんがメモを更新しました",
+                "weight", "bold", "size", "md", "wrap", true),
+            Map.of("type", "text", "text", matchInfo,
+                "size", "sm", "color", "#888888", "margin", "sm"),
+            Map.of("type", "separator", "margin", "lg"),
+            Map.of("type", "text", "text", memoContent,
+                "size", "sm", "color", "#333333", "margin", "md", "wrap", true)
+        );
 
         Map<String, Object> body = Map.of(
             "type", "box",
