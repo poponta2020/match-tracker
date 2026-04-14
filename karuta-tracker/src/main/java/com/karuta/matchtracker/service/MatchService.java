@@ -471,7 +471,7 @@ public class MatchService {
         if (effectiveUserId.equals(saved.getPlayer1Id()) || effectiveUserId.equals(saved.getPlayer2Id())) {
             upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
         } else if (request.getPersonalNotes() != null || request.getOtetsukiCount() != null) {
-            log.info("個人メモ保存スキップ: 操作者(userId={})は試合(id={})の参加者ではないため、メモは保存されません", effectiveUserId, saved.getId());
+            throw new IllegalArgumentException("試合の非参加者は個人メモ・お手付きを保存できません");
         }
 
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
@@ -545,7 +545,7 @@ public class MatchService {
         if (effectiveUserId.equals(updated.getPlayer1Id()) || effectiveUserId.equals(updated.getPlayer2Id())) {
             upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId, currentUserRole);
         } else if (personalNotes != null || otetsukiCount != null) {
-            log.info("個人メモ保存スキップ: 操作者(userId={})は試合(id={})の参加者ではないため、メモは保存されません", effectiveUserId, updated.getId());
+            throw new IllegalArgumentException("試合の非参加者は個人メモ・お手付きを保存できません");
         }
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, effectiveUserId);
@@ -844,7 +844,7 @@ public class MatchService {
         matchPersonalNoteRepository.save(note);
 
         // Send notification to mentors asynchronously after transaction commit
-        if (memoChanged) {
+        if (memoChanged && actorId != null && actorId.equals(noteOwnerId)) {
             final Long notifyPlayerId = noteOwnerId;
             final String notifyMemo = personalNotes;
             final Match notifyMatch = match;
