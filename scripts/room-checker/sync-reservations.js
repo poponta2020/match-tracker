@@ -248,7 +248,7 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
   if (orgResult.rows.length === 0) {
     throw new Error("組織 'hokudai' が見つかりません");
   }
-  const organizationId = orgResult.rows[0].id;
+  const organizationId = Number(orgResult.rows[0].id);
   console.log(`組織ID: ${organizationId} (hokudai)`);
 
   // Venue情報を一括取得
@@ -257,7 +257,7 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
   );
   const venueMap = new Map();
   for (const row of venueResult.rows) {
-    venueMap.set(row.id, {
+    venueMap.set(Number(row.id), {
       name: row.name,
       defaultMatchCount: row.default_match_count,
       capacity: row.capacity,
@@ -288,7 +288,7 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
 
     if (existingResult.rows.length > 0) {
       const existing = existingResult.rows[0];
-      const existingVenueId = existing.venue_id;
+      const existingVenueId = Number(existing.venue_id);
 
       // 隣室拡張の判定
       const { shouldExpand, expandedVenueId } = checkExpansion(
@@ -373,13 +373,16 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const params = {};
-  for (let i = 0; i < args.length; i += 2) {
-    const key = args[i].replace(/^--/, "");
-    params[key] = args[i + 1];
+  let months = 2;
+  let dryRun = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--dry-run") {
+      dryRun = true;
+    } else if (args[i] === "--months" && args[i + 1]) {
+      months = parseInt(args[i + 1]) || 2;
+      i++;
+    }
   }
-  const months = parseInt(params.months) || 2;
-  const dryRun = args.includes("--dry-run");
 
   if (dryRun) {
     console.log("=== DRY-RUN モード（DB書き込みなし）===\n");
