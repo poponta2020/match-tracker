@@ -184,13 +184,13 @@ function groupByDateAndResolveVenue(reservations) {
         });
       } else {
         // 複数の独立した部屋がある場合（例: すずらん+あかなら）
-        // → 最初の部屋で登録（通常このケースは発生しない想定）
+        // → 誤登録防止のためスキップし、手動確認を促す
         result.set(date, {
           venueIds: ids,
-          resolvedVenueId: ids[0],
+          resolvedVenueId: null,
         });
         console.warn(
-          `${date}: 複数の独立した部屋が予約されています: ${ids.join(", ")}。最初の部屋で登録します。`
+          `${date}: 隣室ペア以外の複数部屋が予約されています: ${ids.join(", ")}。自動登録をスキップします。手動で確認してください。`
         );
       }
     }
@@ -280,6 +280,13 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
       continue;
     }
 
+    // resolvedVenueId が null の場合（隣室ペア以外の複数部屋）はスキップ
+    if (resolvedVenueId == null) {
+      details.push(`${date}: 隣室ペア以外の複数部屋のためスキップ（手動確認要: ${venueIds.join(", ")}）`);
+      stats.skipped++;
+      continue;
+    }
+
     // 既存セッションを確認
     const existingResult = await dbClient.query(
       "SELECT id, venue_id FROM practice_sessions WHERE session_date = $1 AND organization_id = $2",
@@ -288,6 +295,33 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
 
     if (existingResult.rows.length > 0) {
       const existing = existingResult.rows[0];
+
+      // venue_id が NULL の場合、予約から算出した会場で補完する
+      if (existing.venue_id == null) {
+        const venue = venueMap.get(resolvedVenueId);
+        const msg = `${date}: 会場未設定のセッションに会場を設定 → ${venue?.name || resolvedVenueId}`;
+
+        if (dryRun) {
+          details.push(`[DRY-RUN] ${msg}`);
+        } else {
+          await dbClient.query(
+            `UPDATE practice_sessions
+             SET venue_id = $1, capacity = $2, updated_by = $3, updated_at = $4
+             WHERE id = $5`,
+            [
+              resolvedVenueId,
+              venue?.capacity || null,
+              SYSTEM_USER_ID,
+              now,
+              existing.id,
+            ]
+          );
+          details.push(msg);
+        }
+        stats.expanded++;
+        continue;
+      }
+
       const existingVenueId = Number(existing.venue_id);
 
       // 隣室拡張の判定
