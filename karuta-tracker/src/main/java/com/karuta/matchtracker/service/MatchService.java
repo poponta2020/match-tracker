@@ -467,12 +467,8 @@ public class MatchService {
         // 認証済みユーザーIDを一貫利用（request.createdByのなりすまし防止）
         Long effectiveUserId = currentUserId != null ? currentUserId : request.getCreatedBy();
 
-        // 個人メモ・お手付きを保存（操作者が参加者の場合のみ）
-        if (effectiveUserId.equals(saved.getPlayer1Id()) || effectiveUserId.equals(saved.getPlayer2Id())) {
-            upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
-        } else if (request.getPersonalNotes() != null || request.getOtetsukiCount() != null) {
-            throw new IllegalArgumentException("試合の非参加者は個人メモ・お手付きを保存できません");
-        }
+        // 個人メモ・お手付きを保存（権限チェックはupsertPersonalNote内で統一）
+        upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
 
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
@@ -541,12 +537,8 @@ public class MatchService {
 
         Match updated = matchRepository.save(match);
 
-        // 個人メモ・お手付きを保存（操作者が参加者の場合のみ）
-        if (effectiveUserId.equals(updated.getPlayer1Id()) || effectiveUserId.equals(updated.getPlayer2Id())) {
-            upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId, currentUserRole);
-        } else if (personalNotes != null || otetsukiCount != null) {
-            throw new IllegalArgumentException("試合の非参加者は個人メモ・お手付きを保存できません");
-        }
+        // 個人メモ・お手付きを保存（権限チェックはupsertPersonalNote内で統一）
+        upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId, currentUserRole);
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, effectiveUserId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), effectiveUserId);
@@ -816,7 +808,7 @@ public class MatchService {
             return;
         }
         if (!noteOwnerId.equals(match.getPlayer1Id()) && !noteOwnerId.equals(match.getPlayer2Id())) {
-            throw new IllegalArgumentException(
+            throw new ForbiddenException(
                     String.format("個人メモ保存不可: playerId=%dは試合(id=%d)の参加者ではありません", noteOwnerId, matchId));
         }
 
