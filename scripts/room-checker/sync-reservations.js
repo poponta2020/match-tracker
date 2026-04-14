@@ -218,6 +218,12 @@ function checkExpansion(existingVenueId, resolvedVenueId, reservedVenueIds) {
     return { shouldExpand: false, expandedVenueId: null };
   }
 
+  // resolvedVenueId が拡張会場で、既存の単室がその拡張に含まれる場合 → 拡張
+  // （花/樹 が直接予約された場合: resolvedVenueId=7/9）
+  if (EXPANDED_INCLUDES[resolvedVenueId]?.has(existingVenueId)) {
+    return { shouldExpand: true, expandedVenueId: resolvedVenueId };
+  }
+
   // 既存が単室で、その隣室が今回の予約に含まれている場合 → 拡張
   const adjacentId = ADJACENT_MAP[existingVenueId];
   if (adjacentId && reservedVenueIds.includes(adjacentId)) {
@@ -332,11 +338,12 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
     if (dryRun) {
       details.push(`[DRY-RUN] ${msg}`);
     } else {
-      await dbClient.query(
+      const insertResult = await dbClient.query(
         `INSERT INTO practice_sessions
            (session_date, total_matches, venue_id, start_time, end_time,
             capacity, organization_id, created_by, updated_by, created_at, updated_at)
-         VALUES ($1, $2, $3, '17:00', '21:00', $4, $5, $6, $6, $7, $7)`,
+         VALUES ($1, $2, $3, '17:00', '21:00', $4, $5, $6, $6, $7, $7)
+         ON CONFLICT (session_date, organization_id) DO NOTHING`,
         [
           date,
           totalMatches,
@@ -347,6 +354,11 @@ async function syncToDb(dbClient, dateVenueMap, dryRun) {
           now,
         ]
       );
+      if (insertResult.rowCount === 0) {
+        details.push(`${date}: 競合のためスキップ（別プロセスが先に作成）`);
+        stats.skipped++;
+        continue;
+      }
       details.push(msg);
     }
     stats.created++;
