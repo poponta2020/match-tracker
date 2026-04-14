@@ -226,7 +226,7 @@ class MatchControllerTest {
         simpleRequest.setResult("勝ち");
         simpleRequest.setScoreDifference(5);
 
-        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any()))
+        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any()))
                 .thenReturn(testMatchDto);
 
         // When & Then
@@ -241,7 +241,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.matchNumber").value(1))
                 .andExpect(jsonPath("$.scoreDifference").value(5));
 
-        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any());
+        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any());
     }
 
     @Test
@@ -268,7 +268,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.message").value("バリデーションエラー"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(matchService, never()).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any());
+        verify(matchService, never()).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any());
     }
 
     @Test
@@ -284,7 +284,7 @@ class MatchControllerTest {
         simpleRequest.setResult("勝ち");
         simpleRequest.setScoreDifference(5);
 
-        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any()))
+        when(matchService.createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any()))
                 .thenThrow(new IllegalArgumentException("練習日として登録されている日のみ登録可能です"));
 
         // When & Then
@@ -297,7 +297,7 @@ class MatchControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any());
+        verify(matchService).createMatchSimple(any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any());
     }
 
     @Test
@@ -318,7 +318,7 @@ class MatchControllerTest {
                 .matchDate(today)
                 .scoreDifference(3)
                 .build();
-        when(matchService.updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any()))
+        when(matchService.updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any()))
                 .thenReturn(updatedMatch);
 
         // When & Then
@@ -332,7 +332,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any());
+        verify(matchService).updateMatchSimple(eq(1L), any(com.karuta.matchtracker.dto.MatchSimpleCreateRequest.class), any(), any());
     }
 
     @Test
@@ -441,7 +441,7 @@ class MatchControllerTest {
         request.setResult("勝ち");
         request.setScoreDifference(5);
 
-        when(matchService.createMatchSimple(any(), any())).thenReturn(testMatchDto);
+        when(matchService.createMatchSimple(any(), any(), any())).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(post("/api/matches")
@@ -452,14 +452,14 @@ class MatchControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(matchService).createMatchSimple(any(), any());
+        verify(matchService).createMatchSimple(any(), any(), any());
     }
 
     @Test
     @DisplayName("POST /api/matches/detailed - 詳細版で試合結果を登録できる")
     void testCreateMatchDetailed() throws Exception {
         // Given
-        when(matchService.createMatch(any(MatchCreateRequest.class), any())).thenReturn(testMatchDto);
+        when(matchService.createMatch(any(MatchCreateRequest.class), any(), any())).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(post("/api/matches/detailed")
@@ -470,7 +470,7 @@ class MatchControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(matchService).createMatch(any(MatchCreateRequest.class), any());
+        verify(matchService).createMatch(any(MatchCreateRequest.class), any(), any());
     }
 
     @Test

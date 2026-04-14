@@ -342,7 +342,7 @@ public class MatchService {
      * 試合結果を新規登録（簡易版：対戦相手名と結果から登録）
      */
     @Transactional
-    public MatchDto createMatchSimple(MatchSimpleCreateRequest request, Long currentUserId) {
+    public MatchDto createMatchSimple(MatchSimpleCreateRequest request, Long currentUserId, Role currentUserRole) {
         log.info("Creating new match (simple) on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
         // 練習日として登録されているかチェック
@@ -399,7 +399,7 @@ public class MatchService {
         Match saved = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
+        upsertPersonalNote(saved.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
 
         // DTOに変換（対戦相手名はfromEntityで、結果はenrichMatchWithPlayerNamesで設定）
         MatchDto dto = enrichMatchWithPlayerNames(saved, request.getPlayerId());
@@ -414,7 +414,7 @@ public class MatchService {
      * 試合結果を新規登録
      */
     @Transactional
-    public MatchDto createMatch(MatchCreateRequest request, Long currentUserId) {
+    public MatchDto createMatch(MatchCreateRequest request, Long currentUserId, Role currentUserRole) {
         log.info("Creating new match on {} (match #{})", request.getMatchDate(), request.getMatchNumber());
 
         // 練習日として登録されているかチェック
@@ -467,8 +467,12 @@ public class MatchService {
         // 認証済みユーザーIDを一貫利用（request.createdByのなりすまし防止）
         Long effectiveUserId = currentUserId != null ? currentUserId : request.getCreatedBy();
 
-        // 個人メモ・お手付きを保存
-        upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
+        // 個人メモ・お手付きを保存（操作者が参加者の場合のみ）
+        if (effectiveUserId.equals(saved.getPlayer1Id()) || effectiveUserId.equals(saved.getPlayer2Id())) {
+            upsertPersonalNote(saved.getId(), effectiveUserId, request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
+        } else if (request.getPersonalNotes() != null || request.getOtetsukiCount() != null) {
+            log.info("個人メモ保存スキップ: 操作者(userId={})は試合(id={})の参加者ではないため、メモは保存されません", effectiveUserId, saved.getId());
+        }
 
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
@@ -537,8 +541,12 @@ public class MatchService {
 
         Match updated = matchRepository.save(match);
 
-        // 個人メモ・お手付きを保存
-        upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId);
+        // 個人メモ・お手付きを保存（操作者が参加者の場合のみ）
+        if (effectiveUserId.equals(updated.getPlayer1Id()) || effectiveUserId.equals(updated.getPlayer2Id())) {
+            upsertPersonalNote(updated.getId(), effectiveUserId, personalNotes, otetsukiCount, currentUserId, currentUserRole);
+        } else if (personalNotes != null || otetsukiCount != null) {
+            log.info("個人メモ保存スキップ: 操作者(userId={})は試合(id={})の参加者ではないため、メモは保存されません", effectiveUserId, updated.getId());
+        }
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, effectiveUserId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), effectiveUserId);
@@ -551,7 +559,7 @@ public class MatchService {
      * 試合結果を更新（簡易版）
      */
     @Transactional
-    public MatchDto updateMatchSimple(Long id, MatchSimpleCreateRequest request, Long currentUserId) {
+    public MatchDto updateMatchSimple(Long id, MatchSimpleCreateRequest request, Long currentUserId, Role currentUserRole) {
         log.info("Updating match (simple) with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -593,7 +601,7 @@ public class MatchService {
         Match updated = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
-        upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId);
+        upsertPersonalNote(updated.getId(), request.getPlayerId(), request.getPersonalNotes(), request.getOtetsukiCount(), currentUserId, currentUserRole);
 
         MatchDto dto = enrichMatchWithPlayerNames(updated, request.getPlayerId());
         // 個人メモはcurrentUserId基準で組み立て（ADMIN/SUPER_ADMINが他人のメモを閲覧できないようにする）
@@ -789,32 +797,41 @@ public class MatchService {
 
     /**
      * 個人メモ・お手付き記録をupsert
+     *
+     * @param matchId 試合ID
+     * @param noteOwnerId メモの所有者（試合参加者）のプレイヤーID
+     * @param personalNotes メモ内容
+     * @param otetsukiCount お手付き回数
+     * @param actorId 操作を行うユーザーのID
+     * @param actorRole 操作を行うユーザーのロール
      */
-    private void upsertPersonalNote(Long matchId, Long playerId, String personalNotes, Integer otetsukiCount, Long currentUserId) {
-        if (playerId == null || (personalNotes == null && otetsukiCount == null)) {
+    private void upsertPersonalNote(Long matchId, Long noteOwnerId, String personalNotes, Integer otetsukiCount, Long actorId, Role actorRole) {
+        if (noteOwnerId == null || (personalNotes == null && otetsukiCount == null)) {
             return;
         }
 
-        // playerIdが試合の参加者であることを検証
+        // noteOwnerIdが試合の参加者であることを検証
         Match match = matchRepository.findById(matchId).orElse(null);
         if (match == null) {
             return;
         }
-        if (!playerId.equals(match.getPlayer1Id()) && !playerId.equals(match.getPlayer2Id())) {
-            log.warn("個人メモ保存拒否: playerId={}は試合(id={})の参加者ではありません", playerId, matchId);
-            return;
+        if (!noteOwnerId.equals(match.getPlayer1Id()) && !noteOwnerId.equals(match.getPlayer2Id())) {
+            throw new IllegalArgumentException(
+                    String.format("個人メモ保存不可: playerId=%dは試合(id=%d)の参加者ではありません", noteOwnerId, matchId));
         }
 
-        // 認証ユーザーとplayerIdの一致を検証（なりすまし防止）
-        if (currentUserId == null || !currentUserId.equals(playerId)) {
-            log.warn("個人メモ保存拒否: currentUserId={}がplayerId={}と一致しません(matchId={})", currentUserId, playerId, matchId);
-            throw new ForbiddenException("個人メモを保存する権限がありません: 認証ユーザーとプレイヤーIDが一致しません");
+        // 権限チェック: ADMIN/SUPER_ADMINは他者のメモを保存可能、PLAYERは本人のみ
+        if (actorRole != Role.SUPER_ADMIN && actorRole != Role.ADMIN) {
+            if (actorId == null || !actorId.equals(noteOwnerId)) {
+                log.warn("個人メモ保存拒否: actorId={}がnoteOwnerId={}と一致しません(matchId={})", actorId, noteOwnerId, matchId);
+                throw new ForbiddenException("個人メモを保存する権限がありません: 認証ユーザーとプレイヤーIDが一致しません");
+            }
         }
 
-        MatchPersonalNote note = matchPersonalNoteRepository.findByMatchIdAndPlayerId(matchId, playerId)
+        MatchPersonalNote note = matchPersonalNoteRepository.findByMatchIdAndPlayerId(matchId, noteOwnerId)
                 .orElse(MatchPersonalNote.builder()
                         .matchId(matchId)
-                        .playerId(playerId)
+                        .playerId(noteOwnerId)
                         .build());
 
         // Check if memo actually changed
@@ -828,7 +845,7 @@ public class MatchService {
 
         // Send notification to mentors asynchronously after transaction commit
         if (memoChanged) {
-            final Long notifyPlayerId = playerId;
+            final Long notifyPlayerId = noteOwnerId;
             final String notifyMemo = personalNotes;
             final Match notifyMatch = match;
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

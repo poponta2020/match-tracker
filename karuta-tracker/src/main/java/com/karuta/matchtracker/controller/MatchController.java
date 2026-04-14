@@ -235,7 +235,7 @@ public class MatchController {
         if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
             throw new ForbiddenException("他のプレイヤーとして試合を登録する権限がありません");
         }
-        MatchDto createdMatch = matchService.createMatchSimple(request, currentUserId);
+        MatchDto createdMatch = matchService.createMatchSimple(request, currentUserId, currentUserRole);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
 
@@ -260,7 +260,7 @@ public class MatchController {
                 throw new ForbiddenException("参加していない試合を登録する権限がありません");
             }
         }
-        MatchDto createdMatch = matchService.createMatch(request, currentUserId);
+        MatchDto createdMatch = matchService.createMatch(request, currentUserId, currentUserRole);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
 
@@ -283,7 +283,7 @@ public class MatchController {
         if (currentUserRole == Role.PLAYER && !request.getPlayerId().equals(currentUserId)) {
             throw new ForbiddenException("他のプレイヤーの試合を更新する権限がありません");
         }
-        MatchDto updatedMatch = matchService.updateMatchSimple(id, request, currentUserId);
+        MatchDto updatedMatch = matchService.updateMatchSimple(id, request, currentUserId, currentUserRole);
         return ResponseEntity.ok(updatedMatch);
     }
 
