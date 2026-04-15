@@ -2445,7 +2445,13 @@ Entity Layer (JPA Entity)
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. レスポンス: 200 OK + 更新後のセッション情報
+14. WAITLISTED・OFFERED状態の参加者を全員WONに繰り上げ
+   - WAITLISTED → WON（waitlistNumber をクリア）
+   - OFFERED → WON（waitlistNumber, offeredAt, offerDeadline, respondedAt をクリア）
+   - dirty=true をセット（伝助同期対象にする）
+   - 対象が0件の場合は saveAll をスキップ
+   ↓
+15. レスポンス: 200 OK + 更新後のセッション情報
 ```
 
 **変更対象テーブル・コード**:

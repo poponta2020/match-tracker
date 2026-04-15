@@ -142,17 +142,32 @@ public class AdjacentRoomService {
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
                 sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
 
-        // キャンセル待ちの参加者を全員WONに繰り上げ
+        // キャンセル待ち・オファー中の参加者を全員WONに繰り上げ
         List<PracticeParticipant> waitlisted = practiceParticipantRepository
                 .findBySessionIdAndStatus(sessionId, ParticipantStatus.WAITLISTED);
+        List<PracticeParticipant> offered = practiceParticipantRepository
+                .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
+
         for (PracticeParticipant p : waitlisted) {
             p.setStatus(ParticipantStatus.WON);
             p.setWaitlistNumber(null);
             p.setDirty(true);
         }
-        if (!waitlisted.isEmpty()) {
-            practiceParticipantRepository.saveAll(waitlisted);
-            log.info("Promoted {} waitlisted participants to WON for session {}", waitlisted.size(), sessionId);
+        for (PracticeParticipant p : offered) {
+            p.setStatus(ParticipantStatus.WON);
+            p.setWaitlistNumber(null);
+            p.setOfferedAt(null);
+            p.setOfferDeadline(null);
+            p.setRespondedAt(null);
+            p.setDirty(true);
+        }
+
+        List<PracticeParticipant> promoted = new java.util.ArrayList<>(waitlisted);
+        promoted.addAll(offered);
+        if (!promoted.isEmpty()) {
+            practiceParticipantRepository.saveAll(promoted);
+            log.info("Promoted {} participants (waitlisted={}, offered={}) to WON for session {}",
+                    promoted.size(), waitlisted.size(), offered.size(), sessionId);
         }
     }
 }

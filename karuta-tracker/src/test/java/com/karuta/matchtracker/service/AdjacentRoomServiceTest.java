@@ -1,10 +1,13 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.AdjacentRoomStatusDto;
+import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.RoomAvailabilityCache;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
@@ -18,6 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -29,6 +35,8 @@ class AdjacentRoomServiceTest {
 
     @Mock
     private RoomAvailabilityCacheRepository roomAvailabilityCacheRepository;
+    @Mock
+    private PracticeParticipantRepository practiceParticipantRepository;
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
     @Mock
@@ -148,6 +156,10 @@ class AdjacentRoomServiceTest {
                 .thenReturn(Optional.of(cache));
         when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
         when(practiceSessionRepository.save(any())).thenReturn(session);
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
+                .thenReturn(Collections.emptyList());
 
         adjacentRoomService.expandVenue(1L, 100L);
 
@@ -156,6 +168,109 @@ class AdjacentRoomServiceTest {
         assertEquals(100L, session.getUpdatedBy());
         assertNull(session.getReservationConfirmedAt()); // 拡張後にクリアされる
         verify(practiceSessionRepository).save(session);
+    }
+
+    @Test
+    @DisplayName("会場拡張 - WAITLISTEDがWONに繰り上げられる")
+    void expandVenue_promotesWaitlisted() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
+
+        PracticeParticipant w1 = PracticeParticipant.builder()
+                .id(10L).sessionId(1L).playerId(201L)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+        PracticeParticipant w2 = PracticeParticipant.builder()
+                .id(11L).sessionId(1L).playerId(202L)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
+                .thenReturn(List.of(w1, w2));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
+                .thenReturn(Collections.emptyList());
+
+        adjacentRoomService.expandVenue(1L, 100L);
+
+        assertEquals(ParticipantStatus.WON, w1.getStatus());
+        assertNull(w1.getWaitlistNumber());
+        assertTrue(w1.isDirty());
+        assertEquals(ParticipantStatus.WON, w2.getStatus());
+        assertNull(w2.getWaitlistNumber());
+        verify(practiceParticipantRepository).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("会場拡張 - OFFEREDがWONに繰り上げられ、オファー関連フィールドがクリアされる")
+    void expandVenue_promotesOffered() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
+
+        PracticeParticipant offered = PracticeParticipant.builder()
+                .id(12L).sessionId(1L).playerId(203L)
+                .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                .offeredAt(LocalDateTime.of(2026, 4, 11, 12, 0))
+                .offerDeadline(LocalDateTime.of(2026, 4, 12, 12, 0))
+                .build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
+                .thenReturn(List.of(offered));
+
+        adjacentRoomService.expandVenue(1L, 100L);
+
+        assertEquals(ParticipantStatus.WON, offered.getStatus());
+        assertNull(offered.getWaitlistNumber());
+        assertNull(offered.getOfferedAt());
+        assertNull(offered.getOfferDeadline());
+        assertNull(offered.getRespondedAt());
+        assertTrue(offered.isDirty());
+        verify(practiceParticipantRepository).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 昇格対象0件時はsaveAllしない")
+    void expandVenue_noPromotionTarget() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
+                .thenReturn(Collections.emptyList());
+
+        adjacentRoomService.expandVenue(1L, 100L);
+
+        verify(practiceParticipantRepository, never()).saveAll(anyList());
     }
 
     @Test

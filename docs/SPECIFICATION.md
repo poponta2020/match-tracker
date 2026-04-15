@@ -1675,7 +1675,7 @@ UNIQUE制約: (player_id, organization_id)
 | POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
 | POST | `/{id}/confirm-reservation` | ADMIN+ | 隣室予約完了を記録（`reservation_confirmed_at` をセット） |
-| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提） |
+| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時にWAITLISTED・OFFERED状態の参加者を全員WONに繰り上げ（OFFEREDはオファー関連フィールドもクリア） |
 
 ### 7.7 伝助連携 (`/api/practice-sessions`)
 
