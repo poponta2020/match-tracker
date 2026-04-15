@@ -2,10 +2,13 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.config.AdjacentRoomConfig;
 import com.karuta.matchtracker.dto.AdjacentRoomStatusDto;
+import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.RoomAvailabilityCache;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 隣室空き確認・会場拡張サービス
@@ -29,6 +33,7 @@ import java.time.LocalDate;
 public class AdjacentRoomService {
 
     private final RoomAvailabilityCacheRepository roomAvailabilityCacheRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final VenueRepository venueRepository;
 
@@ -136,5 +141,33 @@ public class AdjacentRoomService {
 
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
                 sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
+
+        // キャンセル待ち・オファー中の参加者を全員WONに繰り上げ
+        List<PracticeParticipant> waitlisted = practiceParticipantRepository
+                .findBySessionIdAndStatus(sessionId, ParticipantStatus.WAITLISTED);
+        List<PracticeParticipant> offered = practiceParticipantRepository
+                .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
+
+        for (PracticeParticipant p : waitlisted) {
+            p.setStatus(ParticipantStatus.WON);
+            p.setWaitlistNumber(null);
+            p.setDirty(true);
+        }
+        for (PracticeParticipant p : offered) {
+            p.setStatus(ParticipantStatus.WON);
+            p.setWaitlistNumber(null);
+            p.setOfferedAt(null);
+            p.setOfferDeadline(null);
+            p.setRespondedAt(null);
+            p.setDirty(true);
+        }
+
+        List<PracticeParticipant> promoted = new java.util.ArrayList<>(waitlisted);
+        promoted.addAll(offered);
+        if (!promoted.isEmpty()) {
+            practiceParticipantRepository.saveAll(promoted);
+            log.info("Promoted {} participants (waitlisted={}, offered={}) to WON for session {}",
+                    promoted.size(), waitlisted.size(), offered.size(), sessionId);
+        }
     }
 }
