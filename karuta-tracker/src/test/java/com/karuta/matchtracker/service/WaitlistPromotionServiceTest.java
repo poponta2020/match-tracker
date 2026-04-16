@@ -230,6 +230,56 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
+        @DisplayName("応答期限が既に過ぎている場合はOptional.emptyを返しオファーを発行しない")
+        void promoteNextWaitlisted_deadlineAlreadyPast_returnsEmpty() {
+            PracticeParticipant waitlist1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+            when(practiceParticipantRepository
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            100L, 1, ParticipantStatus.WAITLISTED))
+                    .thenReturn(Optional.of(waitlist1));
+            // 期限を過去に設定
+            when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                    .thenReturn(JstDateTimeUtil.now().minusHours(1));
+
+            Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
+                    100L, 1, LocalDate.of(2026, 5, 1));
+
+            assertThat(promoted).isEmpty();
+            verify(practiceParticipantRepository, never()).save(any());
+            verify(notificationService, never()).createOfferNotification(any());
+        }
+
+        @Test
+        @DisplayName("応答期限がちょうど現在時刻と同じ場合もオファーを発行しない（境界値）")
+        void promoteNextWaitlisted_deadlineEqualsNow_returnsEmpty() {
+            LocalDateTime fixedNow = LocalDateTime.of(2026, 5, 1, 12, 0, 0);
+            PracticeParticipant waitlist1 = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::now).thenReturn(fixedNow);
+
+                when(practiceParticipantRepository
+                        .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                                100L, 1, ParticipantStatus.WAITLISTED))
+                        .thenReturn(Optional.of(waitlist1));
+                // deadline == now（ちょうど同じ時刻）
+                when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                        .thenReturn(fixedNow);
+
+                Optional<PracticeParticipant> promoted = service.promoteNextWaitlisted(
+                        100L, 1, LocalDate.of(2026, 5, 1));
+
+                assertThat(promoted).isEmpty();
+                verify(practiceParticipantRepository, never()).save(any());
+                verify(notificationService, never()).createOfferNotification(any());
+            }
+        }
+
+        @Test
         @DisplayName("複数OFFERED存在時に離脱しても番号が重複しない（再採番で整合性維持）")
         void respondToOffer_multipleOffered_renumbersCorrectly() {
             // OFFERED#1 Aさん, OFFERED#2 Bさん, WAITLISTED#3 Cさん
