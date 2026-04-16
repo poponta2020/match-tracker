@@ -491,6 +491,8 @@ public class WaitlistPromotionService {
                 session, sorted, playerName, playerId);
 
         // 2. 空き募集通知（セッション統合）
+        // 同日内で別プレイヤーが連続してキャンセルするケースでも 2 件目以降が重複排除でスキップされないよう、
+        // dedupe キーを「sessionId : cancelledPlayerId : sortedMatchNumbers」でイベント粒度に一意化する。
         Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
         int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
         for (int matchNumber : sorted) {
@@ -502,8 +504,12 @@ public class WaitlistPromotionService {
             }
         }
         if (!vacanciesByMatch.isEmpty()) {
+            String matchNumbersJoined = sorted.stream()
+                    .map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(","));
+            String dedupeKey = session.getId() + ":" + playerId + ":" + matchNumbersJoined;
             lineNotificationService.sendConsolidatedSameDayVacancyNotification(
-                    session, vacanciesByMatch, playerId);
+                    session, vacanciesByMatch, playerId, dedupeKey);
         }
 
         // 3. 管理者通知（セッション単位のバッチ送信）

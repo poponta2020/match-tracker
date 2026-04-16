@@ -33,6 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -295,7 +297,7 @@ class WaitlistPromotionServiceTest {
                     eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
             // 空き募集通知（統合版）が送信されたことを検証
             verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
-                    eq(session), anyMap(), eq(10L));
+                    eq(session), anyMap(), eq(10L), anyString());
             // 個別版は呼ばれないことを検証
             verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
             verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
@@ -324,6 +326,7 @@ class WaitlistPromotionServiceTest {
             verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
             verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
@@ -349,6 +352,7 @@ class WaitlistPromotionServiceTest {
 
                 // afterCommit に登録されたため、この時点では通知未送信
                 verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+                verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
                 verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
                 // registerSynchronization が呼ばれたことを検証
                 txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
@@ -392,7 +396,7 @@ class WaitlistPromotionServiceTest {
             verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
                     eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
             verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
-                    eq(session), anyMap(), eq(10L));
+                    eq(session), anyMap(), eq(10L), anyString());
         }
 
         @Test
@@ -427,6 +431,7 @@ class WaitlistPromotionServiceTest {
 
             // 通知は送信されないことを検証
             verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
@@ -455,7 +460,7 @@ class WaitlistPromotionServiceTest {
                 verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
                         eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
                 verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
-                        eq(session), anyMap(), eq(10L));
+                        eq(session), anyMap(), eq(10L), anyString());
                 // registerSynchronization は呼ばれない
                 txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
                         any(TransactionSynchronization.class)), never());
@@ -497,8 +502,9 @@ class WaitlistPromotionServiceTest {
                 // 2試合が1通に統合されて送信される（2回ではなく1回）
                 verify(lineNotificationService, times(1)).sendConsolidatedSameDayCancelNotification(
                         eq(session), eq(List.of(1, 3)), eq("テスト選手"), eq(10L));
+                // dedupeKey は sessionId:playerId:matchNumbers 形式で一意化される
                 verify(lineNotificationService, times(1)).sendConsolidatedSameDayVacancyNotification(
-                        eq(session), anyMap(), eq(10L));
+                        eq(session), anyMap(), eq(10L), eq("100:10:1,3"));
             }
         }
 
@@ -535,6 +541,12 @@ class WaitlistPromotionServiceTest {
                         eq(session), eq(List.of(1)), eq("選手A"), eq(10L));
                 verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
                         eq(session), eq(List.of(2)), eq("選手B"), eq(20L));
+                // 空き枠通知の dedupeKey はプレイヤー・試合番号ごとに別となり、
+                // LineMessageLog の重複排除で 2 件目以降がスキップされないことを保証する
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(10L), eq("100:10:1"));
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(20L), eq("100:20:2"));
             }
         }
     }
@@ -668,6 +680,7 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
@@ -683,6 +696,7 @@ class WaitlistPromotionServiceTest {
             service.expireOfferedForSameDayConfirmation(session);
 
             verify(practiceParticipantRepository, never()).save(any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
             verify(densukeSyncService, never()).triggerWriteAsync();
         }

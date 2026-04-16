@@ -1672,6 +1672,9 @@ public class LineNotificationService {
      * セッション単位で空き枠通知を統合して送信する（選手向け）。
      * 複数試合の空き枠情報を1通のFlex Messageにまとめる。
      *
+     * dedupeKey はデフォルトで session.getId() のみ（0:00スケジューラ等、1日1回想定）。
+     * 当日キャンセル経由で同日に複数回発火しうる場合は、イベント粒度で dedupeKey を指定するオーバーロードを利用する。
+     *
      * @param session           対象セッション
      * @param vacanciesByMatch  試合番号 → 空き枠数のマップ（空き枠 > 0 のもののみ）
      * @param cancelledPlayerId キャンセルしたプレイヤーのID（除外対象、nullの場合は除外なし）
@@ -1679,6 +1682,21 @@ public class LineNotificationService {
     public void sendConsolidatedSameDayVacancyNotification(PracticeSession session,
                                                             Map<Integer, Integer> vacanciesByMatch,
                                                             Long cancelledPlayerId) {
+        sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, cancelledPlayerId,
+                String.valueOf(session.getId()));
+    }
+
+    /**
+     * セッション単位で空き枠通知を統合して送信する（選手向け、dedupeKey 指定版）。
+     * 同日内で複数回発火する場合に、イベント粒度で dedupeKey を指定することで
+     * 同一受信者に対する 2 件目以降の通知が LineMessageLog の重複排除でスキップされるのを防ぐ。
+     *
+     * @param dedupeKey 重複送信判定用のキー（例: "sessionId:cancelledPlayerId:matchNumbers"）
+     */
+    public void sendConsolidatedSameDayVacancyNotification(PracticeSession session,
+                                                            Map<Integer, Integer> vacanciesByMatch,
+                                                            Long cancelledPlayerId,
+                                                            String dedupeKey) {
         if (vacanciesByMatch.isEmpty()) return;
 
         // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
@@ -1718,7 +1736,6 @@ public class LineNotificationService {
         int alreadyNotifiedCount = 0;
         int failedCount = 0;
         int channelSkippedCount = 0;
-        String dedupeKey = String.valueOf(session.getId());
 
         for (Long playerId : recipientIds) {
             // プレイヤーごとに参加可能な試合のみを抽出
