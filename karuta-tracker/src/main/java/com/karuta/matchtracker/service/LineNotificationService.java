@@ -1494,6 +1494,49 @@ public class LineNotificationService {
     }
 
     /**
+     * 当日キャンセル通知（統合版）を送信する。
+     * 同一セッション×同一プレイヤーで複数試合を同時キャンセルした場合に、
+     * 試合番号を1通にまとめて送信する。
+     */
+    public void sendConsolidatedSameDayCancelNotification(PracticeSession session, List<Integer> matchNumbers,
+                                                          String cancelledPlayerName, Long cancelledPlayerId) {
+        if (matchNumbers == null || matchNumbers.isEmpty()) return;
+
+        List<Integer> sorted = matchNumbers.stream().distinct().sorted().toList();
+        String joined = sorted.stream().map(String::valueOf).collect(Collectors.joining("、"));
+        String message = String.format("%sさんが今日の%s試合目をキャンセルしました", cancelledPlayerName, joined);
+
+        List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                .findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
+
+        List<Long> recipientIds = wonParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .filter(id -> !id.equals(cancelledPlayerId))
+                .toList();
+
+        for (Long playerId : recipientIds) {
+            try {
+                sendToPlayer(playerId, LineNotificationType.SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated same-day cancel notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated admin cancel notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated same-day cancel notification to {} players and {} admins for session {} matches {}",
+                recipientIds.size(), adminRecipients.size(), session.getId(), sorted);
+    }
+
+    /**
      * 空き募集通知を送信する。
      * 当該セッションの非WON参加者（キャンセル本人除く）にFlex Message。
      */

@@ -252,16 +252,22 @@ public class LotteryController {
         }
 
         List<String> results = new ArrayList<>();
-        List<AdminWaitlistNotificationData> notificationDataList = new ArrayList<>();
+        List<AdminWaitlistNotificationData> rawList = new ArrayList<>();
 
         for (Long pid : ids) {
             AdminWaitlistNotificationData notifData = waitlistPromotionService.cancelParticipationSuppressed(
                     pid, request.getCancelReason(), request.getCancelReasonDetail());
             results.add(pid + ":CANCELLED");
             if (notifData != null) {
-                notificationDataList.add(notifData);
+                rawList.add(notifData);
             }
         }
+
+        // 当日12:00以降キャンセル分は (sessionId, playerId) 単位で集約し、
+        // 当日キャンセル発生通知・空き枠通知・管理者通知を1通ずつに統合送信する。
+        // 戻り値は通常の繰り上げ通知用データ（sameDayCancelContext == null）のみ。
+        List<AdminWaitlistNotificationData> notificationDataList =
+                waitlistPromotionService.dispatchSameDayCancelNotifications(rawList);
 
         // セッションIDでグルーピングしてまとめ通知
         if (!notificationDataList.isEmpty()) {
