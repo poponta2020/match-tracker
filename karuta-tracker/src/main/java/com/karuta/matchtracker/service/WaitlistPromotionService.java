@@ -531,10 +531,11 @@ public class WaitlistPromotionService {
 
         // OFFEREDに変更し、応答期限を設定
         LocalDateTime deadline = lotteryDeadlineHelper.calculateOfferDeadline(sessionDate);
+        LocalDateTime now = JstDateTimeUtil.now();
 
         // 応答期限が既に過ぎている場合はオファーを発行しない
         // （当日12:00以降は SameDayConfirmationScheduler による当日補充フローに移行する）
-        if (deadline.isBefore(JstDateTimeUtil.now())) {
+        if (!deadline.isAfter(now)) {
             log.info("Skip promotion for session {} match {}: offer deadline {} is already past",
                     sessionId, matchNumber, deadline);
             return Optional.empty();
@@ -544,7 +545,7 @@ public class WaitlistPromotionService {
 
         next.setStatus(ParticipantStatus.OFFERED);
         next.setDirty(true);
-        next.setOfferedAt(JstDateTimeUtil.now());
+        next.setOfferedAt(now);
         next.setOfferDeadline(deadline);
         practiceParticipantRepository.save(next);
 
