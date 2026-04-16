@@ -171,7 +171,7 @@ class AdjacentRoomServiceTest {
     }
 
     @Test
-    @DisplayName("会場拡張 - WAITLISTEDがWONに繰り上げられる")
+    @DisplayName("会場拡張 - WAITLISTEDがOFFEREDに繰り上げられる（応答期限なし）")
     void expandVenue_promotesWaitlisted() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
@@ -200,16 +200,20 @@ class AdjacentRoomServiceTest {
 
         adjacentRoomService.expandVenue(1L, 100L);
 
-        assertEquals(ParticipantStatus.WON, w1.getStatus());
+        assertEquals(ParticipantStatus.OFFERED, w1.getStatus());
         assertNull(w1.getWaitlistNumber());
+        assertNotNull(w1.getOfferedAt());
+        assertNull(w1.getOfferDeadline());
         assertTrue(w1.isDirty());
-        assertEquals(ParticipantStatus.WON, w2.getStatus());
+        assertEquals(ParticipantStatus.OFFERED, w2.getStatus());
         assertNull(w2.getWaitlistNumber());
+        assertNotNull(w2.getOfferedAt());
+        assertNull(w2.getOfferDeadline());
         verify(practiceParticipantRepository).saveAll(anyList());
     }
 
     @Test
-    @DisplayName("会場拡張 - OFFEREDがWONに繰り上げられ、オファー関連フィールドがクリアされる")
+    @DisplayName("会場拡張 - OFFEREDの応答期限がクリアされる")
     void expandVenue_promotesOffered() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
@@ -238,11 +242,9 @@ class AdjacentRoomServiceTest {
 
         adjacentRoomService.expandVenue(1L, 100L);
 
-        assertEquals(ParticipantStatus.WON, offered.getStatus());
-        assertNull(offered.getWaitlistNumber());
-        assertNull(offered.getOfferedAt());
+        assertEquals(ParticipantStatus.OFFERED, offered.getStatus());
+        assertNotNull(offered.getOfferedAt()); // 元のofferedAtは維持される
         assertNull(offered.getOfferDeadline());
-        assertNull(offered.getRespondedAt());
         assertTrue(offered.isDirty());
         verify(practiceParticipantRepository).saveAll(anyList());
     }
