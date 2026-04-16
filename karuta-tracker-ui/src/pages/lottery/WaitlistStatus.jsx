@@ -68,14 +68,16 @@ export default function WaitlistStatus() {
                     <span className={`px-2 py-1 rounded text-xs font-bold ${statusInfo.color}`}>
                       {statusInfo.text}
                     </span>
-                    <div className="text-sm text-gray-500 mt-1">
-                      待ち番号: {entry.waitlistNumber}番
-                    </div>
+                    {entry.waitlistNumber != null && (
+                      <div className="text-sm text-gray-500 mt-1">
+                        待ち番号: {entry.waitlistNumber}番
+                      </div>
+                    )}
                   </div>
                 </div>
-                {entry.status === 'OFFERED' && entry.offerDeadline && (
+                {entry.status === 'OFFERED' && (
                   <div className="mt-2 p-2 bg-blue-50 rounded text-sm text-blue-700">
-                    応答期限: {new Date(entry.offerDeadline).toLocaleString('ja-JP')}
+                    応答期限: {entry.offerDeadline ? new Date(entry.offerDeadline).toLocaleString('ja-JP') : '期限なし'}
                     <a href={`/lottery/offer-response?id=${entry.participantId}`}
                       className="ml-2 font-bold underline">応答する</a>
                   </div>
