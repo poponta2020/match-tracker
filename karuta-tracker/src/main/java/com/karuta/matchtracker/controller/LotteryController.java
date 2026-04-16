@@ -254,49 +254,70 @@ public class LotteryController {
         List<String> results = new ArrayList<>();
         List<AdminWaitlistNotificationData> rawList = new ArrayList<>();
 
-        for (Long pid : ids) {
-            AdminWaitlistNotificationData notifData = waitlistPromotionService.cancelParticipationSuppressed(
-                    pid, request.getCancelReason(), request.getCancelReasonDetail());
-            results.add(pid + ":CANCELLED");
-            if (notifData != null) {
-                rawList.add(notifData);
+        // cancelParticipationSuppressed は個別 TX でコミットされるため、
+        // ループ途中で例外が起きても先に成功した分の DB 更新は既にコミット済みになる。
+        // 成功分の当日キャンセル通知・繰り上げ通知が取りこぼされないよう、
+        // 通知集約処理は finally 節で必ず実行する。
+        try {
+            for (Long pid : ids) {
+                AdminWaitlistNotificationData notifData = waitlistPromotionService.cancelParticipationSuppressed(
+                        pid, request.getCancelReason(), request.getCancelReasonDetail());
+                results.add(pid + ":CANCELLED");
+                if (notifData != null) {
+                    rawList.add(notifData);
+                }
             }
-        }
-
-        // 当日12:00以降キャンセル分は (sessionId, playerId) 単位で集約し、
-        // 当日キャンセル発生通知・空き枠通知・管理者通知を1通ずつに統合送信する。
-        // 戻り値は通常の繰り上げ通知用データ（sameDayCancelContext == null）のみ。
-        List<AdminWaitlistNotificationData> notificationDataList =
-                waitlistPromotionService.dispatchSameDayCancelNotifications(rawList);
-
-        // セッションIDでグルーピングしてまとめ通知
-        if (!notificationDataList.isEmpty()) {
-            notificationDataList.stream()
-                    .collect(java.util.stream.Collectors.groupingBy(AdminWaitlistNotificationData::getSessionId))
-                    .forEach((sessionId, dataList) -> {
-                        PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
-                        if (session != null) {
-                            waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
-
-                            // プレイヤー向けオファー統合通知: promotedParticipantをプレイヤーIDでグルーピング
-                            dataList.stream()
-                                    .filter(d -> d.getPromotedParticipant() != null)
-                                    .collect(java.util.stream.Collectors.groupingBy(
-                                            d -> d.getPromotedParticipant().getPlayerId()))
-                                    .forEach((offeredPlayerId, playerDataList) -> {
-                                        List<PracticeParticipant> offeredParticipants = playerDataList.stream()
-                                                .map(AdminWaitlistNotificationData::getPromotedParticipant)
-                                                .collect(java.util.stream.Collectors.toList());
-                                        AdminWaitlistNotificationData first = playerDataList.get(0);
-                                        lineNotificationService.sendConsolidatedWaitlistOfferNotification(
-                                                offeredParticipants, session, first.getTriggerAction(),
-                                                first.getTriggerPlayerId());
-                                    });
-                        }
-                    });
+        } finally {
+            dispatchCancelNotifications(rawList);
         }
 
         return ResponseEntity.ok(Map.of("status", "CANCELLED", "results", results));
+    }
+
+    /**
+     * 蓄積された cancelParticipationSuppressed 結果を通知集約に流す。
+     *
+     * - 当日12:00以降キャンセル分は (sessionId, playerId) 単位で集約し、
+     *   当日キャンセル発生通知・空き枠通知・管理者通知を1通ずつに統合送信する。
+     * - 通常の繰り上げ通知はセッション単位にグルーピングして送信する。
+     *
+     * 呼び出し元ループで例外が起きても成功分の通知取りこぼしが生じないよう、
+     * {@code try/finally} の finally 節から呼び出される想定。
+     */
+    private void dispatchCancelNotifications(List<AdminWaitlistNotificationData> rawList) {
+        if (rawList.isEmpty()) return;
+
+        // 戻り値は通常の繰り上げ通知用データ（sameDayCancelContext == null）のみ。
+        // 当日キャンセル分は本メソッド内で afterCommit 登録される。
+        List<AdminWaitlistNotificationData> notificationDataList =
+                waitlistPromotionService.dispatchSameDayCancelNotifications(rawList);
+
+        if (notificationDataList.isEmpty()) return;
+
+        // セッションIDでグルーピングしてまとめ通知
+        notificationDataList.stream()
+                .collect(java.util.stream.Collectors.groupingBy(AdminWaitlistNotificationData::getSessionId))
+                .forEach((sessionId, dataList) -> {
+                    PracticeSession session = practiceSessionRepository.findById(sessionId).orElse(null);
+                    if (session != null) {
+                        waitlistPromotionService.sendBatchedAdminWaitlistNotifications(dataList, session);
+
+                        // プレイヤー向けオファー統合通知: promotedParticipantをプレイヤーIDでグルーピング
+                        dataList.stream()
+                                .filter(d -> d.getPromotedParticipant() != null)
+                                .collect(java.util.stream.Collectors.groupingBy(
+                                        d -> d.getPromotedParticipant().getPlayerId()))
+                                .forEach((offeredPlayerId, playerDataList) -> {
+                                    List<PracticeParticipant> offeredParticipants = playerDataList.stream()
+                                            .map(AdminWaitlistNotificationData::getPromotedParticipant)
+                                            .collect(java.util.stream.Collectors.toList());
+                                    AdminWaitlistNotificationData first = playerDataList.get(0);
+                                    lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                                            offeredParticipants, session, first.getTriggerAction(),
+                                            first.getTriggerPlayerId());
+                                });
+                    }
+                });
     }
 
     /**

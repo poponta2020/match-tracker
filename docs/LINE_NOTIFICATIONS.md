@@ -133,12 +133,12 @@
 |------|------|
 | **発火条件A（キャンセル）** | 当日12:00以降のキャンセル時 |
 | **発火条件B（参加）** | 空き募集ボタンで参加登録時 / アプリ経由で当日12:00以降にWON登録時 |
-| **トリガーA** | `WaitlistPromotionService.handleSameDayCancelAndRecruit()` → `sendSameDayCancelNotification()` |
+| **トリガーA** | `WaitlistPromotionService.cancelParticipationInternal()` が `SameDayCancelContext` 付き通知データを返却 → 呼び出し元（`LotteryController` / `DensukeImportService` / `cancelParticipation` 単体版）が `dispatchSameDayCancelNotifications()` で (sessionId, playerId) 単位に集約 → `handleSameDayCancelAndRecruitBatch()` から `sendConsolidatedSameDayCancelNotification()` を afterCommit 実行 |
 | **トリガーB** | `WaitlistPromotionService.handleSameDayJoin()` / `PracticeParticipantService.notifySameDayJoinIfApplicable()` → `sendSameDayJoinNotification()` |
-| **送信先** | 当該セッション（or試合）の全WON参加者（本人除く） |
+| **送信先** | 当該セッションの全WON参加者（本人除く） |
 | **チャネル** | PLAYER |
 | **トグル** | `sameDayCancel` |
-| **内容A** | テキスト「{名前}さんが今日の{N}試合目をキャンセルしました」 |
+| **内容A** | テキスト「{名前}さんが今日の{N}試合目をキャンセルしました」。同一セッション×同一プレイヤーで複数試合を同時にキャンセルした場合は試合番号を集約して「{名前}さんが今日の1、3試合目をキャンセルしました」のように1通にまとまる。異なるプレイヤーのキャンセルはプレイヤー単位で別通知 |
 | **内容B** | テキスト「{名前}さんが今日の{N}試合目に参加します」 |
 
 > **注**: `sendSameDayJoinNotification()` が `SAME_DAY_CANCEL` タイプを流用している
@@ -150,16 +150,20 @@
 | **発火条件A（空き募集）** | 当日12:00以降のキャンセル時（空き枠あり） / 12:00確定時にOFFERED期限切れ後の空き枠あり |
 | **発火条件B（枠状況更新）** | 空き募集ボタンで参加登録後 / 伝助同期で当日12:00以降にWON登録後 |
 | **発火条件C（0:00空き枠）** | 毎日0:00 JST、当日セッションで抽選実行済み・WON数＜定員・WAITLISTED＝0の試合がある場合 |
-| **トリガーA** | `WaitlistPromotionService` → `sendSameDayVacancyNotification()` |
+| **トリガーA** | `WaitlistPromotionService.handleSameDayCancelAndRecruitBatch()` → `sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, cancelledPlayerId, dedupeKey)` を afterCommit 実行。12:00確定時は `expireOfferedForSameDayConfirmation()` → 既存3引数版 |
 | **トリガーB** | `WaitlistPromotionService.handleSameDayJoin()` / `DensukeImportService.notifyVacancyUpdateIfNeeded()` → `sendSameDayVacancyUpdateNotification()` |
-| **トリガーC** | `SameDayVacancyScheduler`（新規） → `sendSameDayVacancyNotification()` |
+| **トリガーC** | `SameDayVacancyScheduler`（毎日0:00 JST） → `sendConsolidatedSameDayVacancyNotification()` 3引数版 |
 | **送信先** | 当該セッションの団体に所属する全プレイヤー（該当試合のWON参加者を除く） |
 | **チャネル** | PLAYER |
 | **トグル** | `sameDayVacancy` |
-| **内容A** | Flex Message（オレンジヘッダー「空き枠のお知らせ」+「参加する」ボタン） |
+| **内容A** | Flex Message（オレンジヘッダー「空き枠のお知らせ」、セッション内の複数空き試合を1通に集約 +「参加する」ボタン）。同一セッション×同一プレイヤーの複数試合キャンセルは1通にまとまる |
 | **内容B（空きあり）** | Flex Message（オレンジ「{名前}さんが参加登録。残り{N}名」+「参加する」ボタン） |
 | **内容B（定員達成）** | Flex Message（グレー「{N}試合目は定員に達しました！」ボタンなし） |
-| **内容C** | 内容Aと同じ（オレンジヘッダー「空き枠のお知らせ」+「参加する」ボタン） |
+| **内容C** | 内容Aと同じ（セッション内の複数空き試合を1通に集約、「参加する」ボタン付き） |
+
+> **dedupe key**: `LineMessageLog` は `(player_id, notification_type, dedupe_key, sent_at::date)` で重複排除するため、同日複数回発火する可能性のある経路では dedupe key をイベント粒度で一意化する。
+> - **0:00スケジューラ / 12:00確定**（1日1回想定）: `sessionId`
+> - **当日キャンセル経路**（同日複数回・別プレイヤー発火）: `sessionId:cancelledPlayerId:sortedMatchNumbers` で別プレイヤー間の通知が重複排除でスキップされないよう保証する
 
 ### 12. ADMIN_SAME_DAY_CONFIRMATION（管理者向け12:00確定通知）
 
