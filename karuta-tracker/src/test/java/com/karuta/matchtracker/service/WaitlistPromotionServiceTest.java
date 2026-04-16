@@ -33,6 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -340,12 +342,15 @@ class WaitlistPromotionServiceTest {
             assertThat(result).isEqualTo(ParticipantStatus.CANCELLED);
             assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
 
-            // キャンセル通知が送信されたことを検証
-            verify(lineNotificationService).sendSameDayCancelNotification(
-                    eq(session), eq(1), eq("テスト選手"), eq(10L));
-            // 空き募集通知が送信されたことを検証
-            verify(lineNotificationService).sendSameDayVacancyNotification(
-                    eq(session), eq(1), eq(10L));
+            // キャンセル通知（統合版）が送信されたことを検証
+            verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
+                    eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
+            // 空き募集通知（統合版）が送信されたことを検証
+            verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                    eq(session), anyMap(), eq(10L), anyString());
+            // 個別版は呼ばれないことを検証
+            verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
+            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
             // 従来の繰り上げフローは発動しないことを検証
             verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
         }
@@ -370,6 +375,9 @@ class WaitlistPromotionServiceTest {
             // 新フロー通知は送信されないことを検証
             verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
             verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
         @Test
@@ -393,8 +401,9 @@ class WaitlistPromotionServiceTest {
                 service.cancelParticipation(1L, "HEALTH", null);
 
                 // afterCommit に登録されたため、この時点では通知未送信
-                verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
-                verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+                verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+                verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
+                verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
                 // registerSynchronization が呼ばれたことを検証
                 txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
                         any(TransactionSynchronization.class)));
@@ -431,13 +440,13 @@ class WaitlistPromotionServiceTest {
                         TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
             }
 
-            // afterCommit() を手動実行 → 通知が送信されることを検証
+            // afterCommit() を手動実行 → 統合版通知が送信されることを検証
             syncCaptor.getValue().afterCommit();
 
-            verify(lineNotificationService).sendSameDayCancelNotification(
-                    eq(session), eq(1), eq("テスト選手"), eq(10L));
-            verify(lineNotificationService).sendSameDayVacancyNotification(
-                    eq(session), eq(1), eq(10L));
+            verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
+                    eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
+            verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                    eq(session), anyMap(), eq(10L), anyString());
         }
 
         @Test
@@ -471,8 +480,9 @@ class WaitlistPromotionServiceTest {
             syncCaptor.getValue().afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
 
             // 通知は送信されないことを検証
-            verify(lineNotificationService, never()).sendSameDayCancelNotification(any(), anyInt(), any(), any());
-            verify(lineNotificationService, never()).sendSameDayVacancyNotification(any(), anyInt(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
         @Test
@@ -496,14 +506,97 @@ class WaitlistPromotionServiceTest {
 
                 service.cancelParticipation(1L, "HEALTH", null);
 
-                // トランザクション外なので即座に通知が送信される
-                verify(lineNotificationService).sendSameDayCancelNotification(
-                        eq(session), eq(1), eq("テスト選手"), eq(10L));
-                verify(lineNotificationService).sendSameDayVacancyNotification(
-                        eq(session), eq(1), eq(10L));
+                // トランザクション外なので即座に通知が送信される（統合版）
+                verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
+                        eq(session), eq(List.of(1)), eq("テスト選手"), eq(10L));
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(10L), anyString());
                 // registerSynchronization は呼ばれない
                 txMock.verify(() -> TransactionSynchronizationManager.registerSynchronization(
                         any(TransactionSynchronization.class)), never());
+            }
+        }
+
+        @Test
+        @DisplayName("dispatchSameDayCancelNotifications: 同一セッション×同一プレイヤーの複数試合が1通にまとまる")
+        void dispatchSameDayCancelNotifications_aggregatesBySessionAndPlayer() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+
+            com.karuta.matchtracker.dto.SameDayCancelContext ctx1 =
+                    com.karuta.matchtracker.dto.SameDayCancelContext.builder()
+                            .session(session).playerId(10L).playerName("テスト選手").matchNumber(1).build();
+            com.karuta.matchtracker.dto.SameDayCancelContext ctx2 =
+                    com.karuta.matchtracker.dto.SameDayCancelContext.builder()
+                            .session(session).playerId(10L).playerName("テスト選手").matchNumber(3).build();
+
+            com.karuta.matchtracker.dto.AdminWaitlistNotificationData d1 =
+                    com.karuta.matchtracker.dto.AdminWaitlistNotificationData.builder()
+                            .triggerAction("キャンセル（当日補充）").triggerPlayerId(10L)
+                            .sessionId(100L).matchNumber(1).sameDayCancelContext(ctx1).build();
+            com.karuta.matchtracker.dto.AdminWaitlistNotificationData d2 =
+                    com.karuta.matchtracker.dto.AdminWaitlistNotificationData.builder()
+                            .triggerAction("キャンセル（当日補充）").triggerPlayerId(10L)
+                            .sessionId(100L).matchNumber(3).sameDayCancelContext(ctx2).build();
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(false);
+
+                List<com.karuta.matchtracker.dto.AdminWaitlistNotificationData> remaining =
+                        service.dispatchSameDayCancelNotifications(List.of(d1, d2));
+
+                // sameDayCancelContext 付きは通常用リストに残らない
+                assertThat(remaining).isEmpty();
+
+                // 2試合が1通に統合されて送信される（2回ではなく1回）
+                verify(lineNotificationService, times(1)).sendConsolidatedSameDayCancelNotification(
+                        eq(session), eq(List.of(1, 3)), eq("テスト選手"), eq(10L));
+                // dedupeKey は sessionId:playerId:matchNumbers 形式で一意化される
+                verify(lineNotificationService, times(1)).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(10L), eq("100:10:1,3"));
+            }
+        }
+
+        @Test
+        @DisplayName("dispatchSameDayCancelNotifications: 異なるプレイヤーのキャンセルはプレイヤー単位で別通知")
+        void dispatchSameDayCancelNotifications_separateByPlayer() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+
+            com.karuta.matchtracker.dto.SameDayCancelContext ctxA =
+                    com.karuta.matchtracker.dto.SameDayCancelContext.builder()
+                            .session(session).playerId(10L).playerName("選手A").matchNumber(1).build();
+            com.karuta.matchtracker.dto.SameDayCancelContext ctxB =
+                    com.karuta.matchtracker.dto.SameDayCancelContext.builder()
+                            .session(session).playerId(20L).playerName("選手B").matchNumber(2).build();
+
+            com.karuta.matchtracker.dto.AdminWaitlistNotificationData dA =
+                    com.karuta.matchtracker.dto.AdminWaitlistNotificationData.builder()
+                            .triggerAction("キャンセル（当日補充）").triggerPlayerId(10L)
+                            .sessionId(100L).matchNumber(1).sameDayCancelContext(ctxA).build();
+            com.karuta.matchtracker.dto.AdminWaitlistNotificationData dB =
+                    com.karuta.matchtracker.dto.AdminWaitlistNotificationData.builder()
+                            .triggerAction("キャンセル（当日補充）").triggerPlayerId(20L)
+                            .sessionId(100L).matchNumber(2).sameDayCancelContext(ctxB).build();
+
+            try (MockedStatic<TransactionSynchronizationManager> txMock =
+                         mockStatic(TransactionSynchronizationManager.class)) {
+                txMock.when(TransactionSynchronizationManager::isActualTransactionActive).thenReturn(false);
+
+                service.dispatchSameDayCancelNotifications(List.of(dA, dB));
+
+                // プレイヤー単位に別々に送信される
+                verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
+                        eq(session), eq(List.of(1)), eq("選手A"), eq(10L));
+                verify(lineNotificationService).sendConsolidatedSameDayCancelNotification(
+                        eq(session), eq(List.of(2)), eq("選手B"), eq(20L));
+                // 空き枠通知の dedupeKey はプレイヤー・試合番号ごとに別となり、
+                // LineMessageLog の重複排除で 2 件目以降がスキップされないことを保証する
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(10L), eq("100:10:1"));
+                verify(lineNotificationService).sendConsolidatedSameDayVacancyNotification(
+                        eq(session), anyMap(), eq(20L), eq("100:20:2"));
             }
         }
     }
@@ -637,6 +730,7 @@ class WaitlistPromotionServiceTest {
 
             service.expireOfferedForSameDayConfirmation(session);
 
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
         }
 
@@ -652,6 +746,7 @@ class WaitlistPromotionServiceTest {
             service.expireOfferedForSameDayConfirmation(session);
 
             verify(practiceParticipantRepository, never()).save(any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
             verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any());
             verify(densukeSyncService, never()).triggerWriteAsync();
         }

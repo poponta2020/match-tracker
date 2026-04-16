@@ -31,4 +31,13 @@ public class AdminWaitlistNotificationData {
 
     /** 繰り上げオファーを送った参加者（null=繰り上げ対象なし） */
     private PracticeParticipant promotedParticipant;
+
+    /**
+     * 当日12:00以降キャンセル時に設定される通知コンテキスト。
+     * 非nullの場合、このレコードは「通常の繰り上げ通知」ではなく
+     * 「当日キャンセル発生通知／空き枠通知」用であることを表す。
+     * 呼び出し元で (sessionId, playerId) 単位に集約し、
+     * {@code handleSameDayCancelAndRecruitBatch} にまとめて渡す。
+     */
+    private SameDayCancelContext sameDayCancelContext;
 }

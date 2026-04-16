@@ -786,8 +786,15 @@ public class DensukeImportService {
 
     /**
      * 蓄積された通知データをセッション×トリガー×プレイヤーでグルーピングしてまとめ送信する。
+     *
+     * 当日12:00以降キャンセル分は (sessionId, playerId) 単位で集約し、
+     * 当日キャンセル発生通知・空き枠通知・管理者通知を1通ずつに統合して afterCommit で送信する。
      */
     private void sendPendingNotifications(List<AdminWaitlistNotificationData> pendingNotifications) {
+        // 当日キャンセル分はセッション×プレイヤーで集約し、通常の繰り上げ通知から分離する
+        pendingNotifications = waitlistPromotionService.dispatchSameDayCancelNotifications(pendingNotifications);
+        if (pendingNotifications.isEmpty()) return;
+
         // セッションID×トリガー×プレイヤーIDでグルーピング
         pendingNotifications.stream()
                 .collect(Collectors.groupingBy(d -> d.getSessionId() + ":" + d.getTriggerAction() + ":" + d.getTriggerPlayerId()))

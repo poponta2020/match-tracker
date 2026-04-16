@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.ExpireOfferResult;
+import com.karuta.matchtracker.dto.SameDayCancelContext;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -163,9 +164,16 @@ public class WaitlistPromotionService {
         AdminWaitlistNotificationData notifData = cancelParticipationInternal(participantId, cancelReason, cancelReasonDetail);
 
         if (notifData != null) {
-            PracticeSession session = practiceSessionRepository.findById(notifData.getSessionId())
-                    .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", notifData.getSessionId()));
-            sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+            if (notifData.getSameDayCancelContext() != null) {
+                // 当日12:00以降キャンセル: afterCommit で統合通知フローを実行（1試合分）
+                SameDayCancelContext ctx = notifData.getSameDayCancelContext();
+                registerSameDayCancelAfterCommit(ctx.getSession(), ctx.getPlayerId(),
+                        ctx.getPlayerName(), List.of(ctx.getMatchNumber()));
+            } else {
+                PracticeSession session = practiceSessionRepository.findById(notifData.getSessionId())
+                        .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", notifData.getSessionId()));
+                sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+            }
         }
 
         densukeSyncService.triggerWriteAsync();
@@ -221,26 +229,28 @@ public class WaitlistPromotionService {
 
         // 当日12:00以降のキャンセル → 新フロー（全体募集＋先着ボタン方式）
         if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
-            log.info("Same-day after-noon cancel: triggering vacancy recruitment for session {} match {}",
+            log.info("Same-day after-noon cancel: marking for consolidated recruitment notification on session {} match {}",
                     session.getId(), participant.getMatchNumber());
 
-            // LINE通知はトランザクションコミット後に送信する。
-            // importFromDensuke 等の @Transactional メソッド内で呼ばれた場合、
-            // 後続処理のロールバックで CANCELLED が巻き戻っても通知だけ送信済みになる問題を防ぐ。
-            final PracticeParticipant cancelledParticipant = participant;
-            final PracticeSession cancelledSession = session;
-            if (TransactionSynchronizationManager.isActualTransactionActive()
-                    && TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        handleSameDayCancelAndRecruit(cancelledParticipant, cancelledSession);
-                    }
-                });
-            } else {
-                handleSameDayCancelAndRecruit(participant, session);
-            }
-            return null; // 当日補充は独自の通知フローを持つ
+            // 同一セッション×同一プレイヤーで複数試合キャンセルされた場合に
+            // 呼び出し元で集約できるよう、通知に必要な情報を SameDayCancelContext として返す。
+            // 通知送信は呼び出し元側（または cancelParticipation 単体版）が afterCommit で行う。
+            Player cancelledPlayer = playerRepository.findById(participant.getPlayerId()).orElse(null);
+            String playerName = cancelledPlayer != null ? cancelledPlayer.getName() : "不明";
+            SameDayCancelContext ctx = SameDayCancelContext.builder()
+                    .session(session)
+                    .playerId(participant.getPlayerId())
+                    .playerName(playerName)
+                    .matchNumber(participant.getMatchNumber())
+                    .build();
+            return AdminWaitlistNotificationData.builder()
+                    .triggerAction("キャンセル（当日補充）")
+                    .triggerPlayerId(participant.getPlayerId())
+                    .sessionId(participant.getSessionId())
+                    .matchNumber(participant.getMatchNumber())
+                    .promotedParticipant(null)
+                    .sameDayCancelContext(ctx)
+                    .build();
         }
 
         // 当日12:00より前のキャンセル → 従来通りwaitlistNumberに基づく繰り上げフロー
@@ -462,31 +472,133 @@ public class WaitlistPromotionService {
     }
 
     /**
-     * 当日12:00以降のキャンセル時に、キャンセル通知＋空き募集通知を送信する。
+     * 当日12:00以降のキャンセル時に、キャンセル発生通知＋空き募集通知＋管理者通知を
+     * セッション×プレイヤー単位でまとめて送信する。
+     *
+     * @param session       対象セッション
+     * @param playerId      キャンセルしたプレイヤーID
+     * @param playerName    キャンセルしたプレイヤー名
+     * @param matchNumbers  キャンセルした試合番号リスト（同一セッション×同一プレイヤー）
      */
-    private void handleSameDayCancelAndRecruit(PracticeParticipant cancelledParticipant, PracticeSession session) {
-        Player cancelledPlayer = playerRepository.findById(cancelledParticipant.getPlayerId()).orElse(null);
-        String playerName = cancelledPlayer != null ? cancelledPlayer.getName() : "不明";
+    public void handleSameDayCancelAndRecruitBatch(PracticeSession session, Long playerId,
+                                                    String playerName, List<Integer> matchNumbers) {
+        if (matchNumbers == null || matchNumbers.isEmpty()) return;
 
-        // 1. キャンセル通知 → 当該セッションの全WON参加者（キャンセル本人除く）
-        lineNotificationService.sendSameDayCancelNotification(
-                session, cancelledParticipant.getMatchNumber(), playerName, cancelledParticipant.getPlayerId());
+        List<Integer> sorted = matchNumbers.stream().distinct().sorted().toList();
 
-        // 2. 空き募集通知 → 当該セッションの非WON参加者（キャンセル本人除く）
-        lineNotificationService.sendSameDayVacancyNotification(
-                session, cancelledParticipant.getMatchNumber(), cancelledParticipant.getPlayerId());
+        // 1. 当日キャンセル発生通知（セッション統合）
+        lineNotificationService.sendConsolidatedSameDayCancelNotification(
+                session, sorted, playerName, playerId);
 
-        // 3. 管理者通知
-        AdminWaitlistNotificationData notifData = AdminWaitlistNotificationData.builder()
-                .triggerAction("キャンセル（当日補充）")
-                .triggerPlayerId(cancelledParticipant.getPlayerId())
-                .sessionId(cancelledParticipant.getSessionId())
-                .matchNumber(cancelledParticipant.getMatchNumber())
-                .promotedParticipant(null)
-                .build();
-        sendBatchedAdminWaitlistNotifications(List.of(notifData), session);
+        // 2. 空き募集通知（セッション統合）
+        // 同日内で別プレイヤーが連続してキャンセルするケースでも 2 件目以降が重複排除でスキップされないよう、
+        // dedupe キーを「sessionId : cancelledPlayerId : sortedMatchNumbers」でイベント粒度に一意化する。
+        Map<Integer, Integer> vacanciesByMatch = new LinkedHashMap<>();
+        int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
+        for (int matchNumber : sorted) {
+            List<PracticeParticipant> currentWon = practiceParticipantRepository
+                    .findBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WON);
+            int vacancies = Math.max(0, capacity - currentWon.size());
+            if (vacancies > 0) {
+                vacanciesByMatch.put(matchNumber, vacancies);
+            }
+        }
+        if (!vacanciesByMatch.isEmpty()) {
+            String matchNumbersJoined = sorted.stream()
+                    .map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(","));
+            String dedupeKey = session.getId() + ":" + playerId + ":" + matchNumbersJoined;
+            lineNotificationService.sendConsolidatedSameDayVacancyNotification(
+                    session, vacanciesByMatch, playerId, dedupeKey);
+        }
+
+        // 3. 管理者通知（セッション単位のバッチ送信）
+        List<AdminWaitlistNotificationData> notifDataList = new ArrayList<>();
+        for (int matchNumber : sorted) {
+            notifDataList.add(AdminWaitlistNotificationData.builder()
+                    .triggerAction("キャンセル（当日補充）")
+                    .triggerPlayerId(playerId)
+                    .sessionId(session.getId())
+                    .matchNumber(matchNumber)
+                    .promotedParticipant(null)
+                    .build());
+        }
+        sendBatchedAdminWaitlistNotifications(notifDataList, session);
 
         densukeSyncService.triggerWriteAsync();
+    }
+
+    /**
+     * 当日キャンセル通知フローを afterCommit で登録する（トランザクション未起動時は即時実行）。
+     * {@link #cancelParticipation} 単体呼び出し時、または呼び出し元が集約後にまとめて
+     * 通知を送信したい場合に利用する。
+     */
+    public void registerSameDayCancelAfterCommit(PracticeSession session, Long playerId,
+                                                 String playerName, List<Integer> matchNumbers) {
+        if (matchNumbers == null || matchNumbers.isEmpty()) return;
+        final PracticeSession finalSession = session;
+        final Long finalPlayerId = playerId;
+        final String finalPlayerName = playerName;
+        final List<Integer> finalMatchNumbers = List.copyOf(matchNumbers);
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    handleSameDayCancelAndRecruitBatch(finalSession, finalPlayerId, finalPlayerName, finalMatchNumbers);
+                }
+            });
+        } else {
+            handleSameDayCancelAndRecruitBatch(finalSession, finalPlayerId, finalPlayerName, finalMatchNumbers);
+        }
+    }
+
+    /**
+     * 複数の cancelParticipationSuppressed 結果から当日キャンセル分を分離し、
+     * セッション×プレイヤー単位でまとめて afterCommit に通知送信を登録する。
+     * 戻り値は通常の繰り上げ通知用データ（sameDayCancelContext が null のもの）のリスト。
+     * 呼び出し元は戻り値を従来通り {@link #sendBatchedAdminWaitlistNotifications} に渡す。
+     */
+    public List<AdminWaitlistNotificationData> dispatchSameDayCancelNotifications(
+            List<AdminWaitlistNotificationData> input) {
+        if (input == null || input.isEmpty()) return List.of();
+
+        List<AdminWaitlistNotificationData> normal = new ArrayList<>();
+        // キー: (sessionId, playerId) / 値: (session, playerName, matchNumbers)
+        Map<String, SameDayCancelAggregate> groups = new LinkedHashMap<>();
+
+        for (AdminWaitlistNotificationData data : input) {
+            SameDayCancelContext ctx = data.getSameDayCancelContext();
+            if (ctx == null) {
+                normal.add(data);
+                continue;
+            }
+            String key = ctx.getSession().getId() + ":" + ctx.getPlayerId();
+            SameDayCancelAggregate agg = groups.computeIfAbsent(key,
+                    k -> new SameDayCancelAggregate(ctx.getSession(), ctx.getPlayerId(),
+                            ctx.getPlayerName(), new ArrayList<>()));
+            agg.matchNumbers.add(ctx.getMatchNumber());
+        }
+
+        for (SameDayCancelAggregate agg : groups.values()) {
+            registerSameDayCancelAfterCommit(agg.session, agg.playerId, agg.playerName, agg.matchNumbers);
+        }
+
+        return normal;
+    }
+
+    private static class SameDayCancelAggregate {
+        final PracticeSession session;
+        final Long playerId;
+        final String playerName;
+        final List<Integer> matchNumbers;
+
+        SameDayCancelAggregate(PracticeSession session, Long playerId, String playerName, List<Integer> matchNumbers) {
+            this.session = session;
+            this.playerId = playerId;
+            this.playerName = playerName;
+            this.matchNumbers = matchNumbers;
+        }
     }
 
     /**

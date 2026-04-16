@@ -1494,6 +1494,49 @@ public class LineNotificationService {
     }
 
     /**
+     * 当日キャンセル通知（統合版）を送信する。
+     * 同一セッション×同一プレイヤーで複数試合を同時キャンセルした場合に、
+     * 試合番号を1通にまとめて送信する。
+     */
+    public void sendConsolidatedSameDayCancelNotification(PracticeSession session, List<Integer> matchNumbers,
+                                                          String cancelledPlayerName, Long cancelledPlayerId) {
+        if (matchNumbers == null || matchNumbers.isEmpty()) return;
+
+        List<Integer> sorted = matchNumbers.stream().distinct().sorted().toList();
+        String joined = sorted.stream().map(String::valueOf).collect(Collectors.joining("、"));
+        String message = String.format("%sさんが今日の%s試合目をキャンセルしました", cancelledPlayerName, joined);
+
+        List<PracticeParticipant> wonParticipants = practiceParticipantRepository
+                .findBySessionIdAndStatus(session.getId(), ParticipantStatus.WON);
+
+        List<Long> recipientIds = wonParticipants.stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .filter(id -> !id.equals(cancelledPlayerId))
+                .toList();
+
+        for (Long playerId : recipientIds) {
+            try {
+                sendToPlayer(playerId, LineNotificationType.SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated same-day cancel notification to player {}: {}", playerId, e.getMessage());
+            }
+        }
+
+        List<Player> adminRecipients = getAdminRecipientsForSession(session);
+        for (Player admin : adminRecipients) {
+            try {
+                sendToPlayer(admin.getId(), LineNotificationType.ADMIN_SAME_DAY_CANCEL, message);
+            } catch (Exception e) {
+                log.error("Failed to send consolidated admin cancel notification to player {}: {}", admin.getId(), e.getMessage());
+            }
+        }
+
+        log.info("Sent consolidated same-day cancel notification to {} players and {} admins for session {} matches {}",
+                recipientIds.size(), adminRecipients.size(), session.getId(), sorted);
+    }
+
+    /**
      * 空き募集通知を送信する。
      * 当該セッションの非WON参加者（キャンセル本人除く）にFlex Message。
      */
@@ -1629,6 +1672,9 @@ public class LineNotificationService {
      * セッション単位で空き枠通知を統合して送信する（選手向け）。
      * 複数試合の空き枠情報を1通のFlex Messageにまとめる。
      *
+     * dedupeKey はデフォルトで session.getId() のみ（0:00スケジューラ等、1日1回想定）。
+     * 当日キャンセル経由で同日に複数回発火しうる場合は、イベント粒度で dedupeKey を指定するオーバーロードを利用する。
+     *
      * @param session           対象セッション
      * @param vacanciesByMatch  試合番号 → 空き枠数のマップ（空き枠 > 0 のもののみ）
      * @param cancelledPlayerId キャンセルしたプレイヤーのID（除外対象、nullの場合は除外なし）
@@ -1636,6 +1682,21 @@ public class LineNotificationService {
     public void sendConsolidatedSameDayVacancyNotification(PracticeSession session,
                                                             Map<Integer, Integer> vacanciesByMatch,
                                                             Long cancelledPlayerId) {
+        sendConsolidatedSameDayVacancyNotification(session, vacanciesByMatch, cancelledPlayerId,
+                String.valueOf(session.getId()));
+    }
+
+    /**
+     * セッション単位で空き枠通知を統合して送信する（選手向け、dedupeKey 指定版）。
+     * 同日内で複数回発火する場合に、イベント粒度で dedupeKey を指定することで
+     * 同一受信者に対する 2 件目以降の通知が LineMessageLog の重複排除でスキップされるのを防ぐ。
+     *
+     * @param dedupeKey 重複送信判定用のキー（例: "sessionId:cancelledPlayerId:matchNumbers"）
+     */
+    public void sendConsolidatedSameDayVacancyNotification(PracticeSession session,
+                                                            Map<Integer, Integer> vacanciesByMatch,
+                                                            Long cancelledPlayerId,
+                                                            String dedupeKey) {
         if (vacanciesByMatch.isEmpty()) return;
 
         // RESERVED残留の回復: タイムアウトしたRESERVEDをFAILEDに解放
@@ -1675,7 +1736,6 @@ public class LineNotificationService {
         int alreadyNotifiedCount = 0;
         int failedCount = 0;
         int channelSkippedCount = 0;
-        String dedupeKey = String.valueOf(session.getId());
 
         for (Long playerId : recipientIds) {
             // プレイヤーごとに参加可能な試合のみを抽出

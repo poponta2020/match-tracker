@@ -2266,16 +2266,26 @@ Entity Layer (JPA Entity)
 3. WON参加者にメンバーリストFlex Message（青ヘッダー）をLINE送信
    - 通知トグル: sameDayConfirmation
 
-[当日キャンセル→補充フェーズ — WaitlistPromotionService.cancelParticipation()]
+[当日キャンセル→補充フェーズ — WaitlistPromotionService.cancelParticipation() / dispatchSameDayCancelNotifications()]
 1. 12:00以降にWON参加者がキャンセル
    ↓
 2. LotteryDeadlineHelper.isAfterSameDayNoon() で12:00以降判定
    ↓
-3. WON参加者にキャンセル通知送信（通知トグル: sameDayCancel）
+3. cancelParticipationInternal が SameDayCancelContext 付き AdminWaitlistNotificationData を返却
    ↓
-4. 非WON参加者に空き募集Flex Message送信（オレンジヘッダー、「参加する」ボタン付き）
+4. 呼び出し元（LotteryController / DensukeImportService / cancelParticipation 単体版）で
+   (sessionId, playerId) 単位に集約し、afterCommit で handleSameDayCancelAndRecruitBatch を実行
+   ↓
+5. キャンセル発生通知（統合版）: 「〇〇さんが今日の1、3試合目をキャンセルしました」
+   - 同一セッション×同一プレイヤーの複数試合は1通にまとまる（通知トグル: sameDayCancel）
+   - 異なるプレイヤーはプレイヤー単位で別通知
+   ↓
+6. 空き募集通知（統合版）: sendConsolidatedSameDayVacancyNotification
+   - セッション内の複数空き試合を1通のFlex Messageに集約（通知トグル: sameDayVacancy）
    - postback: action=same_day_join&sessionId={id}&matchNumber={num}
-   - 通知トグル: sameDayVacancy
+   ↓
+7. 管理者通知: sendBatchedAdminWaitlistNotifications
+   - セッション単位で1通にまとまる
 
 [先着参加フェーズ — LINEボタン or アプリ]
 1. LINEボタンpostback → LineWebhookController（same_day_joinアクション）
