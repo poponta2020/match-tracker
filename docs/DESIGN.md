@@ -2445,9 +2445,9 @@ Entity Layer (JPA Entity)
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. WAITLISTED・OFFERED状態の参加者を全員WONに繰り上げ
-   - WAITLISTED → WON（waitlistNumber をクリア）
-   - OFFERED → WON（waitlistNumber, offeredAt, offerDeadline, respondedAt をクリア）
+14. WAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア
+   - WAITLISTED → OFFERED（waitlistNumber をクリア、offeredAt=現在時刻、offerDeadline=null）
+   - OFFERED → offerDeadline をnullにクリア（ステータス・offeredAt等はそのまま）
    - dirty=true をセット（伝助同期対象にする）
    - 対象が0件の場合は saveAll をスキップ
    ↓

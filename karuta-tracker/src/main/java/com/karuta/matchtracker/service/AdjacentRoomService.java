@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -142,23 +143,22 @@ public class AdjacentRoomService {
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
                 sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
 
-        // キャンセル待ち・オファー中の参加者を全員WONに繰り上げ
+        // キャンセル待ち→OFFERED（応答期限なし）、既存OFFERED→応答期限をクリア
+        LocalDateTime now = JstDateTimeUtil.now();
         List<PracticeParticipant> waitlisted = practiceParticipantRepository
                 .findBySessionIdAndStatus(sessionId, ParticipantStatus.WAITLISTED);
         List<PracticeParticipant> offered = practiceParticipantRepository
                 .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
 
         for (PracticeParticipant p : waitlisted) {
-            p.setStatus(ParticipantStatus.WON);
+            p.setStatus(ParticipantStatus.OFFERED);
             p.setWaitlistNumber(null);
+            p.setOfferedAt(now);
+            p.setOfferDeadline(null);
             p.setDirty(true);
         }
         for (PracticeParticipant p : offered) {
-            p.setStatus(ParticipantStatus.WON);
-            p.setWaitlistNumber(null);
-            p.setOfferedAt(null);
             p.setOfferDeadline(null);
-            p.setRespondedAt(null);
             p.setDirty(true);
         }
 
@@ -166,7 +166,7 @@ public class AdjacentRoomService {
         promoted.addAll(offered);
         if (!promoted.isEmpty()) {
             practiceParticipantRepository.saveAll(promoted);
-            log.info("Promoted {} participants (waitlisted={}, offered={}) to WON for session {}",
+            log.info("Promoted {} participants (waitlisted={}, offered={}) to OFFERED for session {}",
                     promoted.size(), waitlisted.size(), offered.size(), sessionId);
         }
     }
