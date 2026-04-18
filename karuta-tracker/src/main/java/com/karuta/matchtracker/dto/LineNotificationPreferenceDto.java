@@ -26,6 +26,7 @@ public class LineNotificationPreferenceDto {
     private boolean adminSameDayConfirmation;
     private boolean adminSameDayCancel;
     private boolean mentorComment;
+    private boolean densukePageCreated;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -44,6 +45,7 @@ public class LineNotificationPreferenceDto {
             .adminSameDayConfirmation(entity.getAdminSameDayConfirmation())
             .adminSameDayCancel(entity.getAdminSameDayCancel())
             .mentorComment(entity.getMentorComment())
+            .densukePageCreated(entity.getDensukePageCreated())
             .build();
     }
 }

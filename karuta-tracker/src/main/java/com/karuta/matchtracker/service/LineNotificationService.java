@@ -2368,6 +2368,7 @@ public class LineNotificationService {
             case ADMIN_SAME_DAY_CONFIRMATION -> pref.getAdminSameDayConfirmation();
             case MENTOR_COMMENT -> pref.getMentorComment();
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
+            case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
         };
     }
 
@@ -2694,6 +2695,51 @@ public class LineNotificationService {
      * isMenteeAuthor=true: メンティーがコメント → 全ACTIVEメンターに送信
      * isMenteeAuthor=false: メンターがコメント → メンティーに送信
      */
+    /**
+     * 伝助ページ作成完了通知を、指定団体に所属する PLAYER ロールのメンバーへ LINE 送信する。
+     * ADMIN / SUPER_ADMIN は対象外。個別送信の失敗は警告ログに残し、他メンバーへの送信は継続する。
+     *
+     * メッセージ本文は呼び出し側で組み立てる。タイトル行 + 本文 の改行連結が前提。
+     *
+     * @param organizationId 対象団体 ID
+     * @param message 送信メッセージ全文
+     */
+    public void sendDensukePageCreatedNotification(Long organizationId, String message) {
+        List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
+        if (memberships.isEmpty()) {
+            log.info("DENSUKE_PAGE_CREATED: no members in organization {}", organizationId);
+            return;
+        }
+
+        List<Long> playerIds = memberships.stream()
+                .map(PlayerOrganization::getPlayerId)
+                .toList();
+
+        List<Player> targetPlayers = playerRepository.findAllById(playerIds).stream()
+                .filter(p -> p.getDeletedAt() == null)
+                .filter(p -> p.getRole() == Player.Role.PLAYER)
+                .toList();
+
+        int sent = 0;
+        int failed = 0;
+        for (Player player : targetPlayers) {
+            try {
+                SendResult result = sendToPlayer(player.getId(), LineNotificationType.DENSUKE_PAGE_CREATED, message);
+                if (result == SendResult.SUCCESS) {
+                    sent++;
+                } else if (result == SendResult.FAILED) {
+                    failed++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send DENSUKE_PAGE_CREATED to player {}: {}", player.getId(), e.getMessage());
+                failed++;
+            }
+        }
+
+        log.info("DENSUKE_PAGE_CREATED: organizationId={}, targetCount={}, sent={}, failed={}",
+                organizationId, targetPlayers.size(), sent, failed);
+    }
+
     public SendResult sendMentorCommentFlexNotification(Long authorId, Long menteeId,
                                                          Match match, List<MatchComment> comments,
                                                          boolean isMenteeAuthor) {

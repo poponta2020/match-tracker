@@ -39,6 +39,14 @@ public class DensukeUrl {
     @Column(name = "organization_id", nullable = false)
     private Long organizationId;
 
+    /**
+     * 伝助の編集用シークレット (sd)。
+     * アプリから自動作成した伝助ページでのみ値が入り、手動登録 URL は NULL。
+     * 将来の編集・削除 API で必要になる想定で保存する。
+     */
+    @Column(name = "densuke_sd", length = 32)
+    private String densukeSd;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

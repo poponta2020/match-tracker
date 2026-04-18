@@ -16,6 +16,7 @@ const PLAYER_NOTIFICATION_TYPES = [
   { key: 'sameDayConfirmation', label: '当日確認通知' },
   { key: 'sameDayCancel', label: '当日キャンセル通知' },
   { key: 'sameDayVacancy', label: '当日空き通知' },
+  { key: 'densukePageCreated', label: '伝助ページ作成通知' },
 ];
 
 /** 管理者用通知種別 */

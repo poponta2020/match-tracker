@@ -77,7 +77,7 @@ docker-compose -f docker-compose-dev.yml up   # PostgreSQL + アプリ起動
 - バックエンド起動時に以下の環境変数の設定が必須:
   - `DB_URL=jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297`
   - `DB_USERNAME=karuta`
-  - `DB_PASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal`
+  - `DB_PASSWORD=9wvobIcnZknsLP5owc9bQDKOWHmiekNE`
 - 環境変数なしで起動すると `localhost:5432` に接続しようとして失敗する
 - MySQL 8.0 は CI でのみ使用
 - 論理削除パターン: `deleted_at` カラムで管理

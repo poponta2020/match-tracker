@@ -525,11 +525,30 @@ Entity Layer (JPA Entity)
 | month | INT | NOT NULL | 対象月 |
 | url | VARCHAR(500) | NOT NULL | 伝助URL |
 | organization_id | BIGINT | NOT NULL, FK | 団体ID（organizations.id） |
+| densuke_sd | VARCHAR(32) | | 伝助の編集用シークレット (sd)。アプリから自動作成した URL のみ値が入る。手動登録は NULL。将来の編集・削除 API で使用想定 |
 | created_at | DATETIME | NOT NULL | 作成日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
 **制約**:
 - UNIQUE (year, month, organization_id)
+
+---
+
+#### densuke_templates（伝助ページ作成テンプレート）
+団体ごとに1レコード保持。伝助ページ自動作成時のタイトル・説明・連絡先メアドのデフォルト値を保存する。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | ID |
+| organization_id | BIGINT | NOT NULL, UNIQUE, FK | 団体ID（organizations.id） |
+| title_template | VARCHAR(200) | NOT NULL | タイトルテンプレート（プレースホルダー `{year}`、`{month}`、`{organization_name}` を置換） |
+| description | TEXT | | 伝助イベント説明文 |
+| contact_email | VARCHAR(255) | | 主催者連絡先メアド（伝助の `email` フィールドに送信。控えメールの受信先） |
+| created_at | DATETIME | NOT NULL | 作成日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE (organization_id)
 
 ---
 
@@ -2660,6 +2679,16 @@ Entity Layer (JPA Entity)
 - **権限**: ADMINは自団体の伝助URLのみ操作可能。SUPER_ADMINは全団体操作可能
 - **未登録者通知**: ADMINは自団体の未登録者のみ通知。SUPER_ADMINは全団体分を通知
 - **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（スケジューラーのDB負荷軽減）
+- **伝助ページ自動作成（DensukePageCreateService）**: アプリ側に登録された練習日（`practice_sessions` × `venues` × `venue_match_schedules`）から densuke.biz にページを新規発行
+  - エンドポイント: `POST /api/practice-sessions/densuke/create-page`（ADMIN以上）
+  - 送信先: `POST https://www.densuke.biz/create`（`/confirm` はスキップ可能、認証不要）
+  - schedule 文字列は `{M}/{D}({曜}) {HH:MM}～{会場名} {N}試合目` 形式で改行区切り（既存 `DensukeScraper` が読める形）
+  - 固定パラメータ: `eventchoice=1`（○△×）、`pw=0`（パスワードなし）
+  - レスポンス 302 Location から `cd` と `sd` を抽出、`densuke_urls` に保存
+  - バリデーション: ①既存URL重複、②practice_sessions 0件、③venue_match_schedules 不足、④会場未登録
+  - 作成成功後、`@TransactionalEventListener(AFTER_COMMIT)` 相当の同期で団体所属 PLAYER ロールメンバー（ADMIN/SUPER_ADMIN 除外）に LINE 通知（`DENSUKE_PAGE_CREATED`）を送信
+  - テンプレート: `densuke_templates` テーブルで団体ごとにタイトル・説明・連絡先メアドのデフォルト値を保持。作成ダイアログで編集可能
+  - 作成後は既存の `DensukeSyncScheduler` が次回サイクル（最長5分）で新URLを自動取り込み
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し

@@ -35,6 +35,7 @@ public class PracticeSessionController {
     private final com.karuta.matchtracker.service.DensukeImportService densukeImportService;
     private final com.karuta.matchtracker.service.DensukeWriteService densukeWriteService;
     private final com.karuta.matchtracker.service.DensukeSyncService densukeSyncService;
+    private final com.karuta.matchtracker.service.DensukePageCreateService densukePageCreateService;
     private final com.karuta.matchtracker.service.AdjacentRoomService adjacentRoomService;
 
     /**
@@ -577,5 +578,30 @@ public class PracticeSessionController {
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の書き込み状況は取得できません");
         return ResponseEntity.ok(densukeWriteService.getStatus(organizationId));
+    }
+
+    /**
+     * 指定年月の伝助ページを自動作成する。
+     * アプリ側の練習日データ（会場 × 日付 × 試合時刻）を元に densuke.biz にページを新規発行する。
+     */
+    @PostMapping("/densuke/create-page")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> createDensukePage(
+            @Valid @RequestBody DensukePageCreateRequest request,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        AdminScopeValidator.validateScope(role, adminOrgId, request.getOrganizationId(),
+                "他団体の伝助ページは作成できません");
+
+        log.info("POST /api/practice-sessions/densuke/create-page - year={}, month={}, orgId={}",
+                request.getYear(), request.getMonth(), request.getOrganizationId());
+
+        try {
+            DensukePageCreateResponse response = densukePageCreateService.createPage(request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 }

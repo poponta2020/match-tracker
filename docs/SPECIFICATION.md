@@ -796,6 +796,50 @@ SUPER_ADMIN のみ操作可能。
 - `writeAllForLotteryConfirmation` で全マッピング済みプレイヤーを対象に書き込む（dirtyフィルタなし）
 - アクティブステータス（WON/WAITLISTED/OFFERED/PENDING）のみ書き戻し、CANCELLED/DECLINED/未登録はスキップ（伝助の既存値を維持）
 
+#### 4.1.7 伝助ページ自動作成（DensukePageCreateService）
+
+アプリ側に登録された練習日データから densuke.biz に出欠ページを**新規発行**する機能。ADMIN 以上が伝助管理画面の「伝助ページ作成」ボタンから手動実行する。
+
+**ユースケース:**
+- 月初に管理者が翌月の練習日を一通り登録し終えたタイミングで、メンバー周知用の伝助ページを 1 クリックで作成
+- 従来は伝助側に手動でページを作成し、日付・会場・試合枠を手入力していたが、アプリのマスタデータ（`practice_sessions` / `venues` / `venue_match_schedules`）をそのまま流用して自動化する
+
+**使い方:**
+1. `/admin/densuke` で対象年月を選択（当月＋未来2ヶ月まで）
+2. 団体カードの「伝助ページ作成」ボタン → 作成モーダル表示
+3. テンプレートから読み込んだタイトル・説明・連絡先メアドを必要に応じて編集
+4. 「作成」ボタンで POST `/api/practice-sessions/densuke/create-page` 実行
+
+**処理フロー:**
+1. バリデーション: 既存URL重複 / 練習日 0 件 / 会場未登録 / `venue_match_schedules` の不足をチェック、いずれかあれば `IllegalStateException`
+2. テンプレート (`densuke_templates`) 取得 + オーバーライド適用 + プレースホルダー置換 (`{year}` / `{month}` / `{organization_name}`)
+3. schedule 文字列組み立て: `{M}/{D}({曜}) {HH:MM}～{会場名} {N}試合目` 形式で練習日×試合枠ぶんを改行連結
+4. densuke.biz に `POST https://www.densuke.biz/create` を送信（UTF-8, `application/x-www-form-urlencoded`, `eventchoice=1` 固定）
+5. 302 レスポンスの `Location` ヘッダーから `cd` と `sd` を正規表現で抽出
+6. `densuke_urls` に新レコードを保存（`url` と `densuke_sd` を含む）
+7. トランザクションコミット後に LINE 通知発火
+
+**通知:**
+- 団体所属 PLAYER ロールのメンバー全員に LINE 通知（`DENSUKE_PAGE_CREATED` 種別）
+- ADMIN / SUPER_ADMIN は通知対象外（作成者なので不要）
+- タイトル: `{month}月の練習日程が出ました`、本文には伝助 URL を含める
+- `line_notification_preferences.densuke_page_created` が `FALSE` のメンバーはスキップ
+- 通知送信失敗は作成 API の成功に影響させない（警告ログのみ）
+
+**テンプレート管理:**
+- `GET / PUT /api/densuke-templates/{organizationId}`（ADMIN以上）
+- 団体ごとに 1 レコード。未登録団体にはデフォルト値（タイトル = `{year}年{month}月 練習出欠`）を返却
+- 伝助管理画面の「テンプレート編集」ボタンからモーダルで編集
+
+**設計上の固定値:**
+- `eventchoice = 1`（○△×）— 既存 `DensukeScraper` の判定ロジック（`col3`=○, `col2`=△）と整合
+- `pw = 0`（パスワードなし）— 運用上パスワード不要
+
+**セキュリティ / 副作用:**
+- densuke.biz への POST は認証不要（匿名作成）
+- `densuke_sd`（編集用シークレット）を保存するが、将来の編集・削除 API 実装時に使用予定
+- 作成後は既存の `DensukeSyncScheduler` が次回サイクル（最長 5 分）で新 URL を自動取り込みし、以降の双方向同期へ合流
+
 **未入力保護:**
 - 伝助上で「未入力」のまま残しているマスをアプリの同期が×に上書きしないよう保護する
 - 通常同期ではdirty行のみ送信し、アプリに未登録のマスは送信しない

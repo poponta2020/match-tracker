@@ -5,8 +5,10 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdmin } from '../../utils/auth';
 import {
   ArrowLeft, RefreshCw, Link2, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle, UserPlus, Loader2
+  AlertCircle, CheckCircle, UserPlus, Loader2, Plus, Settings
 } from 'lucide-react';
+import DensukePageCreateModal from './DensukePageCreateModal';
+import DensukeTemplateModal from './DensukeTemplateModal';
 
 const DensukeManagement = () => {
   const navigate = useNavigate();
@@ -205,6 +207,27 @@ const DensukeManagement = () => {
     }
   };
 
+  // 作成可能な年月か判定（当月 + 未来2ヶ月まで）
+  const monthDiff = (year - now.getFullYear()) * 12 + (month - (now.getMonth() + 1));
+  const canCreatePage = monthDiff >= 0 && monthDiff <= 2;
+
+  // モーダル制御
+  const openCreateModal = (orgId) => updateOrgState(orgId, { showCreateModal: true });
+  const closeCreateModal = (orgId) => updateOrgState(orgId, { showCreateModal: false });
+  const handleCreateSuccess = (orgId, result) => {
+    updateOrgState(orgId, {
+      showCreateModal: false,
+      savedUrl: result.url,
+      url: result.url,
+      success: `伝助ページを作成しました: ${result.url}`,
+    });
+    fetchWriteStatus(orgId);
+    setTimeout(() => updateOrgState(orgId, { success: '' }), 5000);
+  };
+
+  const openTemplateModal = (orgId) => updateOrgState(orgId, { showTemplateModal: true });
+  const closeTemplateModal = (orgId) => updateOrgState(orgId, { showTemplateModal: false });
+
   if (!currentPlayer || !isAdmin()) return null;
 
   return (
@@ -316,6 +339,27 @@ const DensukeManagement = () => {
                             <RefreshCw className="w-4 h-4" />
                           )}
                           {state.syncing ? '同期中...' : '同期実行'}
+                        </button>
+                      </div>
+
+                      {/* 伝助ページ作成 + テンプレート編集 */}
+                      <div className="mt-2 flex gap-2">
+                        {canCreatePage && !state.savedUrl && (
+                          <button
+                            onClick={() => openCreateModal(org.id)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-white rounded-lg font-medium"
+                            style={{ backgroundColor: orgColor }}
+                          >
+                            <Plus className="w-4 h-4" />
+                            伝助ページ作成
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openTemplateModal(org.id)}
+                          className={`${canCreatePage && !state.savedUrl ? 'flex-1' : 'w-full'} flex items-center justify-center gap-1.5 py-2 text-sm border border-[#d4ddd7] rounded-lg font-medium text-[#374151] hover:bg-[#f9f6f2]`}
+                        >
+                          <Settings className="w-4 h-4" />
+                          テンプレート編集
                         </button>
                       </div>
                     </>
@@ -460,6 +504,25 @@ const DensukeManagement = () => {
                   </div>
                 )}
               </div>
+
+              {/* モーダル */}
+              <DensukePageCreateModal
+                isOpen={!!state.showCreateModal}
+                onClose={() => closeCreateModal(org.id)}
+                year={year}
+                month={month}
+                organizationId={org.id}
+                orgName={org.name}
+                orgColor={orgColor}
+                onSuccess={(result) => handleCreateSuccess(org.id, result)}
+              />
+              <DensukeTemplateModal
+                isOpen={!!state.showTemplateModal}
+                onClose={() => closeTemplateModal(org.id)}
+                organizationId={org.id}
+                orgName={org.name}
+                orgColor={orgColor}
+              />
             </div>
           );
         })}
