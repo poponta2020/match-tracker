@@ -2,6 +2,7 @@ package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.entity.DensukeMemberMapping;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,4 +16,7 @@ public interface DensukeMemberMappingRepository extends JpaRepository<DensukeMem
     List<DensukeMemberMapping> findByDensukeUrlId(Long densukeUrlId);
 
     Optional<DensukeMemberMapping> findByDensukeUrlIdAndDensukeMemberId(Long densukeUrlId, String densukeMemberId);
+
+    @Modifying
+    void deleteByDensukeUrlId(Long densukeUrlId);
 }

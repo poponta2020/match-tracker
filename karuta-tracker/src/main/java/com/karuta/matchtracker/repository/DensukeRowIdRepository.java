@@ -2,6 +2,7 @@ package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.entity.DensukeRowId;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -15,4 +16,7 @@ public interface DensukeRowIdRepository extends JpaRepository<DensukeRowId, Long
             Long densukeUrlId, LocalDate sessionDate, Integer matchNumber);
 
     List<DensukeRowId> findByDensukeUrlId(Long densukeUrlId);
+
+    @Modifying
+    void deleteByDensukeUrlId(Long densukeUrlId);
 }

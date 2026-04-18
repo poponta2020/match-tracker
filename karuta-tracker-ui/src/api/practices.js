@@ -81,6 +81,10 @@ export const practiceAPI = {
   saveDensukeUrl: (year, month, url, organizationId) =>
     apiClient.put('/practice-sessions/densuke-url', { year, month, url, organizationId }),
 
+  // 伝助URL削除（作り直し用途: densuke.biz 側の既存ページは残存する）
+  deleteDensukeUrl: (year, month, organizationId) =>
+    apiClient.delete('/practice-sessions/densuke-url', { params: { year, month, organizationId } }),
+
   // 伝助同期（月・団体指定）
   syncDensuke: (year, month, organizationId) =>
     apiClient.post('/practice-sessions/sync-densuke', { year, month, organizationId }),

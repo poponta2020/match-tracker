@@ -13,6 +13,8 @@ import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.entity.DensukeUrl;
+import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
+import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -52,6 +54,8 @@ public class PracticeSessionService {
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
     private final OrganizationService organizationService;
     private final DensukeUrlRepository densukeUrlRepository;
+    private final DensukeRowIdRepository densukeRowIdRepository;
+    private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeSyncService densukeSyncService;
     private final AdjacentRoomService adjacentRoomService;
 
@@ -749,5 +753,29 @@ public class PracticeSessionService {
         // 上書きしたケースで旧 sd が残留して整合性が崩れないよう、明示的にクリアする。
         entity.setDensukeSd(null);
         return densukeUrlRepository.save(entity);
+    }
+
+    /**
+     * 指定年月・団体の伝助URLレコードを削除する（作り直し用途）。
+     *
+     * densuke.biz 側の既存ページは削除できないため残存するが、アプリ側の densuke_urls 行を
+     * 消すことで「作成可能な状態」に戻し、UI から再度 createPage を走らせられるようにする。
+     * 自動作成 (densuke_sd あり) / 手動入力 (densuke_sd NULL) どちらのレコードでも同じ扱いで消せる
+     * （権限チェックは Controller 層で実施）。
+     *
+     * @return 削除に成功した場合 true、該当レコードが存在しなかった場合 false
+     */
+    @Transactional
+    public boolean deleteDensukeUrl(int year, int month, Long organizationId) {
+        return densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                .map(entity -> {
+                    // densuke_row_ids / densuke_member_mappings は densuke_url_id を外部キー参照しているため、
+                    // 同期実績のある URL を作り直す場合、親より先に子を削除しないと FK 制約違反で 500 になる。
+                    densukeRowIdRepository.deleteByDensukeUrlId(entity.getId());
+                    densukeMemberMappingRepository.deleteByDensukeUrlId(entity.getId());
+                    densukeUrlRepository.delete(entity);
+                    return true;
+                })
+                .orElse(false);
     }
 }

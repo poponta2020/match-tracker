@@ -10,6 +10,8 @@ import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
+import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -67,6 +69,12 @@ class PracticeSessionServiceTest {
 
     @Mock
     private DensukeUrlRepository densukeUrlRepository;
+
+    @Mock
+    private DensukeRowIdRepository densukeRowIdRepository;
+
+    @Mock
+    private DensukeMemberMappingRepository densukeMemberMappingRepository;
 
     @Mock
     private DensukeSyncService densukeSyncService;
@@ -438,5 +446,57 @@ class PracticeSessionServiceTest {
 
         assertThat(result.getUrl()).isEqualTo("https://densuke.biz/list?cd=newXYZ");
         assertThat(result.getDensukeSd()).isNull();
+    }
+
+    @Test
+    @DisplayName("deleteDensukeUrl: 既存レコードを削除し true を返す（自動作成レコードでも同じ扱い）")
+    void deleteDensukeUrl_removesExistingRecord() {
+        DensukeUrl existing = DensukeUrl.builder()
+                .id(42L).year(2026).month(5).organizationId(10L)
+                .url("https://densuke.biz/list?cd=autoABC")
+                .densukeSd("secret-sd")
+                .build();
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.of(existing));
+
+        boolean result = practiceSessionService.deleteDensukeUrl(2026, 5, 10L);
+
+        assertThat(result).isTrue();
+        verify(densukeUrlRepository).delete(existing);
+    }
+
+    @Test
+    @DisplayName("deleteDensukeUrl: 子テーブル(row_ids, member_mappings)を親より先に削除する（FK制約違反防止）")
+    void deleteDensukeUrl_deletesChildrenBeforeParent() {
+        DensukeUrl existing = DensukeUrl.builder()
+                .id(42L).year(2026).month(5).organizationId(10L)
+                .url("https://densuke.biz/list?cd=autoABC")
+                .densukeSd("secret-sd")
+                .build();
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.of(existing));
+
+        boolean result = practiceSessionService.deleteDensukeUrl(2026, 5, 10L);
+
+        assertThat(result).isTrue();
+        // 削除順が「子 → 親」であることを検証（逆順だと FK 制約違反で 500 になる）
+        var inOrder = inOrder(densukeRowIdRepository, densukeMemberMappingRepository, densukeUrlRepository);
+        inOrder.verify(densukeRowIdRepository).deleteByDensukeUrlId(42L);
+        inOrder.verify(densukeMemberMappingRepository).deleteByDensukeUrlId(42L);
+        inOrder.verify(densukeUrlRepository).delete(existing);
+    }
+
+    @Test
+    @DisplayName("deleteDensukeUrl: 該当レコードが存在しない場合は false を返し delete は呼ばれない")
+    void deleteDensukeUrl_returnsFalse_whenNoRecord() {
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.empty());
+
+        boolean result = practiceSessionService.deleteDensukeUrl(2026, 5, 10L);
+
+        assertThat(result).isFalse();
+        verify(densukeUrlRepository, never()).delete(any(DensukeUrl.class));
+        verify(densukeRowIdRepository, never()).deleteByDensukeUrlId(any());
+        verify(densukeMemberMappingRepository, never()).deleteByDensukeUrlId(any());
     }
 }

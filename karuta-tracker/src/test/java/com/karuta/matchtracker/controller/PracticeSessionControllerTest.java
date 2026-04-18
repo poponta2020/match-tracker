@@ -548,4 +548,37 @@ class PracticeSessionControllerTest {
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isBadRequest());
     }
+
+    // ===== DELETE /api/practice-sessions/densuke-url テスト =====
+
+    @Test
+    @DisplayName("DELETE /densuke-url: 既存レコード削除成功で 204 No Content")
+    void deleteDensukeUrl_returns204_onSuccess() throws Exception {
+        when(practiceSessionService.deleteDensukeUrl(2026, 5, 1L)).thenReturn(true);
+
+        mockMvc.perform(delete("/api/practice-sessions/densuke-url")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("organizationId", "1")
+                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Id", "1"))
+                .andExpect(status().isNoContent());
+
+        verify(practiceSessionService).deleteDensukeUrl(2026, 5, 1L);
+    }
+
+    @Test
+    @DisplayName("DELETE /densuke-url: 該当レコードが存在しない場合は 404 を返す")
+    void deleteDensukeUrl_returns404_whenNotFound() throws Exception {
+        when(practiceSessionService.deleteDensukeUrl(2026, 5, 1L)).thenReturn(false);
+
+        mockMvc.perform(delete("/api/practice-sessions/densuke-url")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("organizationId", "1")
+                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Id", "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("2026年5月の伝助URLは登録されていません"));
+    }
 }
