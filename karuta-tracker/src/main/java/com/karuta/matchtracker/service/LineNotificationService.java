@@ -1034,6 +1034,7 @@ public class LineNotificationService {
         pref.setAdminSameDayConfirmation(dto.isAdminSameDayConfirmation());
         pref.setAdminSameDayCancel(dto.isAdminSameDayCancel());
         pref.setMentorComment(dto.isMentorComment());
+        pref.setDensukePageCreated(dto.isDensukePageCreated());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -2722,7 +2723,15 @@ public class LineNotificationService {
 
         int sent = 0;
         int failed = 0;
+        int skipped = 0;
         for (Player player : targetPlayers) {
+            // 対象団体の通知設定を直接参照（sendToPlayer 内の anyMatch 判定だと他団体のONに引きずられるため）
+            Optional<LineNotificationPreference> prefOpt = lineNotificationPreferenceRepository
+                    .findByPlayerIdAndOrganizationId(player.getId(), organizationId);
+            if (prefOpt.isPresent() && Boolean.FALSE.equals(prefOpt.get().getDensukePageCreated())) {
+                skipped++;
+                continue;
+            }
             try {
                 SendResult result = sendToPlayer(player.getId(), LineNotificationType.DENSUKE_PAGE_CREATED, message);
                 if (result == SendResult.SUCCESS) {
@@ -2736,8 +2745,8 @@ public class LineNotificationService {
             }
         }
 
-        log.info("DENSUKE_PAGE_CREATED: organizationId={}, targetCount={}, sent={}, failed={}",
-                organizationId, targetPlayers.size(), sent, failed);
+        log.info("DENSUKE_PAGE_CREATED: organizationId={}, targetCount={}, sent={}, failed={}, skipped={}",
+                organizationId, targetPlayers.size(), sent, failed, skipped);
     }
 
     public SendResult sendMentorCommentFlexNotification(Long authorId, Long menteeId,
