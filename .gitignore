@@ -18,6 +18,7 @@ __pycache__/
 # 認証情報を含むドキュメント
 DEPLOY_PLAN.md
 backup.sql
+CLAUDE.local.md
 
 # IDE
 .vscode/
