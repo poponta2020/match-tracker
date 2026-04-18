@@ -98,6 +98,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean mentorComment = true;
 
+    /** 伝助ページ作成通知 */
+    @Column(name = "densuke_page_created", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
+    @Builder.Default
+    private Boolean densukePageCreated = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

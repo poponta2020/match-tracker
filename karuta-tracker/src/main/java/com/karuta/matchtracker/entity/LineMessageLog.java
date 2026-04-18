@@ -75,7 +75,8 @@ public class LineMessageLog {
         SAME_DAY_VACANCY,
         ADMIN_SAME_DAY_CONFIRMATION,
         MENTOR_COMMENT,
-        MENTEE_MEMO_UPDATE;
+        MENTEE_MEMO_UPDATE,
+        DENSUKE_PAGE_CREATED;
 
         /** 通知種別に対応するチャネル用途を返す */
         public ChannelType getRequiredChannelType() {

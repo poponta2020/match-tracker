@@ -66,6 +66,9 @@ class PracticeSessionControllerTest {
     @MockitoBean
     private com.karuta.matchtracker.service.AdjacentRoomService adjacentRoomService;
 
+    @MockitoBean
+    private com.karuta.matchtracker.service.DensukePageCreateService densukePageCreateService;
+
     private PracticeSessionDto testSessionDto;
     private PracticeSessionCreateRequest createRequest;
     private LocalDate today;
@@ -476,5 +479,73 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isForbidden());
 
         verify(practiceParticipantService, never()).registerParticipations(any());
+    }
+
+    // ===== POST /api/practice-sessions/densuke/create-page テスト =====
+
+    @Test
+    @DisplayName("POST /densuke/create-page: 正常作成で 200 とレスポンス DTO を返す")
+    void createDensukePage_returns200() throws Exception {
+        com.karuta.matchtracker.dto.DensukePageCreateRequest req =
+                new com.karuta.matchtracker.dto.DensukePageCreateRequest();
+        req.setYear(2026);
+        req.setMonth(5);
+        req.setOrganizationId(1L);
+
+        com.karuta.matchtracker.dto.DensukePageCreateResponse res =
+                com.karuta.matchtracker.dto.DensukePageCreateResponse.builder()
+                        .cd("wAeAQgkBpAAgeMrK")
+                        .url("https://densuke.biz/list?cd=wAeAQgkBpAAgeMrK")
+                        .createdDateCount(4)
+                        .createdMatchSlotCount(12)
+                        .build();
+        when(densukePageCreateService.createPage(any())).thenReturn(res);
+
+        mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
+                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cd").value("wAeAQgkBpAAgeMrK"))
+                .andExpect(jsonPath("$.url").value("https://densuke.biz/list?cd=wAeAQgkBpAAgeMrK"))
+                .andExpect(jsonPath("$.createdDateCount").value(4))
+                .andExpect(jsonPath("$.createdMatchSlotCount").value(12));
+    }
+
+    @Test
+    @DisplayName("POST /densuke/create-page: IllegalStateException は 400 で message を返す")
+    void createDensukePage_returns400_onIllegalState() throws Exception {
+        com.karuta.matchtracker.dto.DensukePageCreateRequest req =
+                new com.karuta.matchtracker.dto.DensukePageCreateRequest();
+        req.setYear(2026);
+        req.setMonth(5);
+        req.setOrganizationId(1L);
+
+        when(densukePageCreateService.createPage(any()))
+                .thenThrow(new IllegalStateException("2026年5月に練習日が登録されていません"));
+
+        mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
+                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("2026年5月に練習日が登録されていません"));
+    }
+
+    @Test
+    @DisplayName("POST /densuke/create-page: year/month/organizationId が無いと 400")
+    void createDensukePage_returns400_whenRequiredFieldsMissing() throws Exception {
+        com.karuta.matchtracker.dto.DensukePageCreateRequest req =
+                new com.karuta.matchtracker.dto.DensukePageCreateRequest();
+        // 空リクエスト → @NotNull 違反
+
+        mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
+                        .header("X-User-Role", "SUPER_ADMIN")
+                        .header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
     }
 }

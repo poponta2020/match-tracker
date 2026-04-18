@@ -149,7 +149,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 37 | `/admin/densuke` | `DensukeManagement.jsx` | 月ナビゲーション、団体別ブロック（URL入力・同期ボタン・書き込み状況・同期結果・未登録者チェックリスト） | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者確認・一括登録。ADMINは自団体のみ表示、SUPER_ADMINは全団体を並べて表示。各団体ブロックに団体カラーのアクセント付き |
+| 37 | `/admin/densuke` | `DensukeManagement.jsx` | 月ナビゲーション、団体別ブロック（URL入力・同期ボタン・書き込み状況・同期結果・未登録者チェックリスト・**伝助ページ作成ボタン**・**テンプレート編集ボタン**）、`DensukePageCreateModal`、`DensukeTemplateModal` | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者確認・一括登録・**伝助ページ自動作成**（アプリの練習日データから densuke.biz にページを新規発行。当月+未来2ヶ月まで作成可能、既に URL 登録済みの月は作成ボタン非表示）・**テンプレート編集**（団体ごとのタイトル・説明・連絡先メアドのデフォルト値、プレースホルダー `{year}` / `{month}` / `{organization_name}` 対応）。ADMINは自団体のみ表示、SUPER_ADMINは全団体を並べて表示。各団体ブロックに団体カラーのアクセント付き |
 
 ---
 
@@ -261,7 +261,9 @@ karuta-tracker-ui/src/
     │   ├── WaitlistStatus.jsx
     │   └── OfferResponse.jsx
     ├── densuke/
-    │   └── DensukeManagement.jsx
+    │   ├── DensukeManagement.jsx
+    │   ├── DensukePageCreateModal.jsx
+    │   └── DensukeTemplateModal.jsx
     ├── line/
     │   ├── LineSettings.jsx
     │   ├── LineChannelAdmin.jsx
