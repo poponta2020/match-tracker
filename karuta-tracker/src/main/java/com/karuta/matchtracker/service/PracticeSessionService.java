@@ -745,6 +745,9 @@ public class PracticeSessionService {
         DensukeUrl entity = densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
                 .orElse(DensukeUrl.builder().year(year).month(month).organizationId(organizationId).build());
         entity.setUrl(url);
+        // 手動保存経路では sd（編集用シークレット）を持たない。自動作成済みレコードを手動 URL で
+        // 上書きしたケースで旧 sd が残留して整合性が崩れないよう、明示的にクリアする。
+        entity.setDensukeSd(null);
         return densukeUrlRepository.save(entity);
     }
 }

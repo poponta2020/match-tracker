@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.dto.PracticeSessionUpdateRequest;
+import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -403,5 +404,39 @@ class PracticeSessionServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(5L);
+    }
+
+    @Test
+    @DisplayName("saveDensukeUrl は手動 URL 更新時に densuke_sd を NULL にクリアする（自動作成→手動上書きの整合性）")
+    void saveDensukeUrl_clearsDensukeSd_onManualOverwrite() {
+        // 自動作成済みレコード（sd 保持）を手動 URL で上書きするケース
+        DensukeUrl existing = DensukeUrl.builder()
+                .id(1L).year(2026).month(5).organizationId(10L)
+                .url("https://densuke.biz/list?cd=auto123")
+                .densukeSd("secret-sd-456")
+                .build();
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.of(existing));
+        when(densukeUrlRepository.save(any(DensukeUrl.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DensukeUrl result = practiceSessionService.saveDensukeUrl(
+                2026, 5, "https://densuke.biz/list?cd=manualABC", 10L);
+
+        assertThat(result.getUrl()).isEqualTo("https://densuke.biz/list?cd=manualABC");
+        assertThat(result.getDensukeSd()).isNull();
+    }
+
+    @Test
+    @DisplayName("saveDensukeUrl は新規レコード作成時にも densuke_sd を NULL のままにする")
+    void saveDensukeUrl_newRecord_hasNullDensukeSd() {
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 6, 10L))
+                .thenReturn(Optional.empty());
+        when(densukeUrlRepository.save(any(DensukeUrl.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DensukeUrl result = practiceSessionService.saveDensukeUrl(
+                2026, 6, "https://densuke.biz/list?cd=newXYZ", 10L);
+
+        assertThat(result.getUrl()).isEqualTo("https://densuke.biz/list?cd=newXYZ");
+        assertThat(result.getDensukeSd()).isNull();
     }
 }

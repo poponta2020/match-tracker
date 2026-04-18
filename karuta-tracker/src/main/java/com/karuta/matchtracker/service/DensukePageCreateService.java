@@ -4,8 +4,10 @@ import com.karuta.matchtracker.dto.DensukePageCreateRequest;
 import com.karuta.matchtracker.dto.DensukePageCreateResponse;
 import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.repository.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -18,9 +20,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -70,7 +74,10 @@ public class DensukePageCreateService {
         int month = request.getMonth();
         Long organizationId = request.getOrganizationId();
 
-        // 1. 既存 URL の重複チェック
+        // 0. 作成対象年月の範囲チェック（当月〜+2ヶ月のみ。UI の canCreatePage と同等の制約を API 側にも強制）
+        validateYearMonth(year, month, YearMonth.now(JstDateTimeUtil.JST));
+
+        // 1. 既存 URL の重複チェック（早期失敗）
         if (densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId).isPresent()) {
             throw new IllegalStateException(year + "年" + month + "月の伝助URLは既に登録されています");
         }
@@ -103,7 +110,24 @@ public class DensukePageCreateService {
         // 5. テンプレート + overrides の解決
         ResolvedTemplate resolved = resolveTemplate(organizationId, year, month, request.getOverrides());
 
-        // 6. densuke.biz に新規作成 POST
+        // 6. 排他制御のための仮レコード先行確保
+        //    densuke_urls の UNIQUE(year, month, organization_id) により、同時実行された2つ目の
+        //    トランザクションは 1つ目がコミット/ロールバックするまでブロックされ、その後ユニーク違反で失敗する。
+        //    これにより densuke.biz への二重 POST（オーファンページ発生）を防ぐ。
+        DensukeUrl urlEntity = DensukeUrl.builder()
+                .year(year)
+                .month(month)
+                .organizationId(organizationId)
+                .url(DENSUKE_LIST_URL_PREFIX + "pending")
+                .build();
+        try {
+            densukeUrlRepository.saveAndFlush(urlEntity);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalStateException(
+                    year + "年" + month + "月の伝助URLは既に登録されています", e);
+        }
+
+        // 7. densuke.biz に新規作成 POST（失敗時はロールバックで仮レコードも消える）
         CdSdPair cdSd;
         try {
             cdSd = postCreateRequest(resolved.title, built.scheduleText,
@@ -119,17 +143,12 @@ public class DensukePageCreateService {
 
         String densukeUrl = DENSUKE_LIST_URL_PREFIX + cdSd.cd;
 
-        // 7. densuke_urls に保存
-        DensukeUrl urlEntity = DensukeUrl.builder()
-                .year(year)
-                .month(month)
-                .organizationId(organizationId)
-                .url(densukeUrl)
-                .densukeSd(cdSd.sd)
-                .build();
+        // 8. 仮レコードを実 URL / sd で更新
+        urlEntity.setUrl(densukeUrl);
+        urlEntity.setDensukeSd(cdSd.sd);
         densukeUrlRepository.save(urlEntity);
 
-        // 8. AFTER_COMMIT で LINE 通知発火
+        // 9. AFTER_COMMIT で LINE 通知発火
         String lineMessage = buildLineMessage(resolved.organizationName, year, month, densukeUrl);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -152,6 +171,30 @@ public class DensukePageCreateService {
                 .createdDateCount(sessions.size())
                 .createdMatchSlotCount(built.matchSlotCount)
                 .build();
+    }
+
+    // ========================================================================
+    // 年月バリデーション
+    // ========================================================================
+
+    /**
+     * 作成対象年月が「当月〜+2ヶ月」の範囲内にあることを検証する。
+     * 範囲外（過去月・3ヶ月以上先）は IllegalStateException として 400 を返す。
+     *
+     * package-private としてテストから任意の「現在年月」を注入できるようにしている。
+     */
+    static void validateYearMonth(int year, int month, YearMonth current) {
+        YearMonth target;
+        try {
+            target = YearMonth.of(year, month);
+        } catch (DateTimeException e) {
+            throw new IllegalStateException("年月の指定が不正です: " + year + "/" + month, e);
+        }
+        YearMonth maxAllowed = current.plusMonths(2);
+        if (target.isBefore(current) || target.isAfter(maxAllowed)) {
+            throw new IllegalStateException(
+                    year + "年" + month + "月は作成可能範囲外です（当月〜+2ヶ月のみ作成可能）");
+        }
     }
 
     // ========================================================================
