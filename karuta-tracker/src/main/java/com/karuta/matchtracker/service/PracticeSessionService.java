@@ -750,4 +750,24 @@ public class PracticeSessionService {
         entity.setDensukeSd(null);
         return densukeUrlRepository.save(entity);
     }
+
+    /**
+     * 指定年月・団体の伝助URLレコードを削除する（作り直し用途）。
+     *
+     * densuke.biz 側の既存ページは削除できないため残存するが、アプリ側の densuke_urls 行を
+     * 消すことで「作成可能な状態」に戻し、UI から再度 createPage を走らせられるようにする。
+     * 自動作成 (densuke_sd あり) / 手動入力 (densuke_sd NULL) どちらのレコードでも同じ扱いで消せる
+     * （権限チェックは Controller 層で実施）。
+     *
+     * @return 削除に成功した場合 true、該当レコードが存在しなかった場合 false
+     */
+    @Transactional
+    public boolean deleteDensukeUrl(int year, int month, Long organizationId) {
+        return densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                .map(entity -> {
+                    densukeUrlRepository.delete(entity);
+                    return true;
+                })
+                .orElse(false);
+    }
 }

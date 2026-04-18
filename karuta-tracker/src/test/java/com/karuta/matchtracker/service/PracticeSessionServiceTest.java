@@ -439,4 +439,33 @@ class PracticeSessionServiceTest {
         assertThat(result.getUrl()).isEqualTo("https://densuke.biz/list?cd=newXYZ");
         assertThat(result.getDensukeSd()).isNull();
     }
+
+    @Test
+    @DisplayName("deleteDensukeUrl: 既存レコードを削除し true を返す（自動作成レコードでも同じ扱い）")
+    void deleteDensukeUrl_removesExistingRecord() {
+        DensukeUrl existing = DensukeUrl.builder()
+                .id(42L).year(2026).month(5).organizationId(10L)
+                .url("https://densuke.biz/list?cd=autoABC")
+                .densukeSd("secret-sd")
+                .build();
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.of(existing));
+
+        boolean result = practiceSessionService.deleteDensukeUrl(2026, 5, 10L);
+
+        assertThat(result).isTrue();
+        verify(densukeUrlRepository).delete(existing);
+    }
+
+    @Test
+    @DisplayName("deleteDensukeUrl: 該当レコードが存在しない場合は false を返し delete は呼ばれない")
+    void deleteDensukeUrl_returnsFalse_whenNoRecord() {
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 10L))
+                .thenReturn(Optional.empty());
+
+        boolean result = practiceSessionService.deleteDensukeUrl(2026, 5, 10L);
+
+        assertThat(result).isFalse();
+        verify(densukeUrlRepository, never()).delete(any(DensukeUrl.class));
+    }
 }

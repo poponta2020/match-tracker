@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdmin } from '../../utils/auth';
 import {
   ArrowLeft, RefreshCw, Link2, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle, UserPlus, Loader2, Plus, Settings
+  AlertCircle, CheckCircle, UserPlus, Loader2, Plus, Settings, RotateCcw
 } from 'lucide-react';
 import DensukePageCreateModal from './DensukePageCreateModal';
 import DensukeTemplateModal from './DensukeTemplateModal';
@@ -228,6 +228,32 @@ const DensukeManagement = () => {
   const openTemplateModal = (orgId) => updateOrgState(orgId, { showTemplateModal: true });
   const closeTemplateModal = (orgId) => updateOrgState(orgId, { showTemplateModal: false });
 
+  // 作り直し: 既存の densuke_urls レコードを削除して、作成モーダルを開く
+  // 注意: densuke.biz 側の旧ページはそのまま残る（意図通り）
+  const handleRecreate = async (orgId) => {
+    const confirmMsg =
+      '現在登録されている伝助URLを削除し、新しい伝助ページを作成します。\n' +
+      '※ 伝助.biz 側に作成済みの旧ページはそのまま残りますが、アプリ側では参照されなくなります。\n\n' +
+      '続行してよろしいですか？';
+    if (!window.confirm(confirmMsg)) return;
+
+    updateOrgState(orgId, { urlSaving: true, error: '', success: '' });
+    try {
+      await practiceAPI.deleteDensukeUrl(year, month, orgId);
+      updateOrgState(orgId, {
+        url: '',
+        savedUrl: '',
+        urlSaving: false,
+        showCreateModal: true,
+      });
+    } catch (err) {
+      updateOrgState(orgId, {
+        urlSaving: false,
+        error: err.response?.data?.message || 'URLの削除に失敗しました',
+      });
+    }
+  };
+
   if (!currentPlayer || !isAdmin()) return null;
 
   return (
@@ -342,7 +368,7 @@ const DensukeManagement = () => {
                         </button>
                       </div>
 
-                      {/* 伝助ページ作成 + テンプレート編集 */}
+                      {/* 伝助ページ作成 / 作り直す + テンプレート編集 */}
                       <div className="mt-2 flex gap-2">
                         {canCreatePage && !state.savedUrl && (
                           <button
@@ -354,9 +380,20 @@ const DensukeManagement = () => {
                             伝助ページ作成
                           </button>
                         )}
+                        {canCreatePage && state.savedUrl && (
+                          <button
+                            onClick={() => handleRecreate(org.id)}
+                            disabled={state.urlSaving}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: orgColor }}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            {state.urlSaving ? '処理中...' : '作り直す'}
+                          </button>
+                        )}
                         <button
                           onClick={() => openTemplateModal(org.id)}
-                          className={`${canCreatePage && !state.savedUrl ? 'flex-1' : 'w-full'} flex items-center justify-center gap-1.5 py-2 text-sm border border-[#d4ddd7] rounded-lg font-medium text-[#374151] hover:bg-[#f9f6f2]`}
+                          className={`${canCreatePage ? 'flex-1' : 'w-full'} flex items-center justify-center gap-1.5 py-2 text-sm border border-[#d4ddd7] rounded-lg font-medium text-[#374151] hover:bg-[#f9f6f2]`}
                         >
                           <Settings className="w-4 h-4" />
                           テンプレート編集

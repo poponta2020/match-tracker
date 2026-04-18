@@ -2691,6 +2691,7 @@ Entity Layer (JPA Entity)
   - 作成成功後、`@TransactionalEventListener(AFTER_COMMIT)` 相当の同期で団体所属 PLAYER ロールメンバー（ADMIN/SUPER_ADMIN 除外）に LINE 通知（`DENSUKE_PAGE_CREATED`）を送信
   - テンプレート: `densuke_templates` テーブルで団体ごとにタイトル・説明・連絡先メアドのデフォルト値を保持。作成ダイアログで編集可能
   - 作成後は既存の `DensukeSyncScheduler` が次回サイクル（最長5分）で新URLを自動取り込み
+  - 作り直し: `DELETE /api/practice-sessions/densuke-url?year=&month=&organizationId=`（ADMIN以上、自団体のみ）で `densuke_urls` 行を物理削除して作成ロックを解除。densuke.biz 側の旧ページは残るが、アプリからの参照は断たれる。UI では「作り直す」ボタン → 確認ダイアログ → DELETE → 作成モーダル自動オープン、の一連フローで提供
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し

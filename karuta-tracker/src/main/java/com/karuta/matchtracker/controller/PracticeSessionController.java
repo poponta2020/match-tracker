@@ -524,6 +524,32 @@ public class PracticeSessionController {
     }
 
     /**
+     * 伝助URLを削除（作り直し用途）
+     *
+     * densuke.biz 側の既存ページはそのまま残存する。アプリ側の densuke_urls 行のみ消して
+     * 作成可能な状態に戻す。同月同団体で再度 createDensukePage を呼べるようにするための操作。
+     */
+    @DeleteMapping("/densuke-url")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<?> deleteDensukeUrl(@RequestParam int year,
+                                                @RequestParam int month,
+                                                @RequestParam Long organizationId,
+                                                HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        AdminScopeValidator.validateScope(role, adminOrgId, organizationId, "他団体の伝助URLは削除できません");
+
+        boolean removed = practiceSessionService.deleteDensukeUrl(year, month, organizationId);
+        if (!removed) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", year + "年" + month + "月の伝助URLは登録されていません"));
+        }
+        log.info("DELETE /api/practice-sessions/densuke-url - year={}, month={}, orgId={}",
+                year, month, organizationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * 指定年月の伝助データを同期（URLはDBから取得）
      */
     @PostMapping("/sync-densuke")
