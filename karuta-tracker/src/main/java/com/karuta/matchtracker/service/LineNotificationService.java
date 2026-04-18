@@ -10,6 +10,7 @@ import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -2702,51 +2703,64 @@ public class LineNotificationService {
      *
      * メッセージ本文は呼び出し側で組み立てる。タイトル行 + 本文 の改行連結が前提。
      *
+     * <p>
+     * 非同期実行（{@link Async}）。呼び出し元 API のレスポンス時間が団体人数や LINE API
+     * レイテンシに引きずられないよう、Spring の TaskExecutor 上で fire-and-forget で走らせる。
+     * 例外は {@code @Async} により呼び出しスレッドには伝播しないため、メソッド全体を try/catch で
+     * 包んで必ずログに残す（LINE API 失敗でも作成トランザクションはコミット済みで巻き戻せないため）。
+     *
      * @param organizationId 対象団体 ID
      * @param message 送信メッセージ全文
      */
+    @Async
     public void sendDensukePageCreatedNotification(Long organizationId, String message) {
-        List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
-        if (memberships.isEmpty()) {
-            log.info("DENSUKE_PAGE_CREATED: no members in organization {}", organizationId);
-            return;
-        }
-
-        List<Long> playerIds = memberships.stream()
-                .map(PlayerOrganization::getPlayerId)
-                .toList();
-
-        List<Player> targetPlayers = playerRepository.findAllById(playerIds).stream()
-                .filter(p -> p.getDeletedAt() == null)
-                .filter(p -> p.getRole() == Player.Role.PLAYER)
-                .toList();
-
-        int sent = 0;
-        int failed = 0;
-        int skipped = 0;
-        for (Player player : targetPlayers) {
-            // 対象団体の通知設定を直接参照（sendToPlayer 内の anyMatch 判定だと他団体のONに引きずられるため）
-            Optional<LineNotificationPreference> prefOpt = lineNotificationPreferenceRepository
-                    .findByPlayerIdAndOrganizationId(player.getId(), organizationId);
-            if (prefOpt.isPresent() && Boolean.FALSE.equals(prefOpt.get().getDensukePageCreated())) {
-                skipped++;
-                continue;
+        try {
+            List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
+            if (memberships.isEmpty()) {
+                log.info("DENSUKE_PAGE_CREATED: no members in organization {}", organizationId);
+                return;
             }
-            try {
-                SendResult result = sendToPlayer(player.getId(), LineNotificationType.DENSUKE_PAGE_CREATED, message);
-                if (result == SendResult.SUCCESS) {
-                    sent++;
-                } else if (result == SendResult.FAILED) {
+
+            List<Long> playerIds = memberships.stream()
+                    .map(PlayerOrganization::getPlayerId)
+                    .toList();
+
+            List<Player> targetPlayers = playerRepository.findAllById(playerIds).stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .filter(p -> p.getRole() == Player.Role.PLAYER)
+                    .toList();
+
+            int sent = 0;
+            int failed = 0;
+            int skipped = 0;
+            for (Player player : targetPlayers) {
+                // 対象団体の通知設定を直接参照（sendToPlayer 内の anyMatch 判定だと他団体のONに引きずられるため）
+                Optional<LineNotificationPreference> prefOpt = lineNotificationPreferenceRepository
+                        .findByPlayerIdAndOrganizationId(player.getId(), organizationId);
+                if (prefOpt.isPresent() && Boolean.FALSE.equals(prefOpt.get().getDensukePageCreated())) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    SendResult result = sendToPlayer(player.getId(), LineNotificationType.DENSUKE_PAGE_CREATED, message);
+                    if (result == SendResult.SUCCESS) {
+                        sent++;
+                    } else if (result == SendResult.FAILED) {
+                        failed++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to send DENSUKE_PAGE_CREATED to player {}: {}", player.getId(), e.getMessage());
                     failed++;
                 }
-            } catch (Exception e) {
-                log.warn("Failed to send DENSUKE_PAGE_CREATED to player {}: {}", player.getId(), e.getMessage());
-                failed++;
             }
-        }
 
-        log.info("DENSUKE_PAGE_CREATED: organizationId={}, targetCount={}, sent={}, failed={}, skipped={}",
-                organizationId, targetPlayers.size(), sent, failed, skipped);
+            log.info("DENSUKE_PAGE_CREATED: organizationId={}, targetCount={}, sent={}, failed={}, skipped={}",
+                    organizationId, targetPlayers.size(), sent, failed, skipped);
+        } catch (Exception e) {
+            // @Async のスレッドで失敗しても呼び出し元には伝播しないため、ここで必ずログに落とす
+            log.warn("Async DENSUKE_PAGE_CREATED dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
     }
 
     public SendResult sendMentorCommentFlexNotification(Long authorId, Long menteeId,

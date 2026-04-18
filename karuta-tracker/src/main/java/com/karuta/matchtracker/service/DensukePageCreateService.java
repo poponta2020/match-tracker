@@ -147,7 +147,12 @@ public class DensukePageCreateService {
         urlEntity.setDensukeSd(cdSd.sd);
         densukeUrlRepository.save(urlEntity);
 
-        // 9. AFTER_COMMIT で LINE 通知発火
+        // 9. AFTER_COMMIT で LINE 通知を非同期ディスパッチ
+        //    sendDensukePageCreatedNotification は @Async 指定で TaskExecutor 上に fire-and-forget
+        //    される。afterCommit 内で呼ぶのは「コミット前の未反映レコードを非同期スレッドが読んで
+        //    しまう」のを避けるため。ここでの try/catch は @Async ディスパッチ自体が失敗した場合の
+        //    保険（通常発生しないが、エグゼキューター満杯等で RejectedExecutionException が出ると
+        //    呼び出し元に伝播してしまうため握りつぶしてログ化する）。
         String lineMessage = buildLineMessage(resolved.organizationName, year, month, densukeUrl);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -155,7 +160,7 @@ public class DensukePageCreateService {
                 try {
                     lineNotificationService.sendDensukePageCreatedNotification(organizationId, lineMessage);
                 } catch (Exception e) {
-                    log.warn("DENSUKE_PAGE_CREATED notification failed: org={}, err={}",
+                    log.warn("DENSUKE_PAGE_CREATED async dispatch failed: org={}, err={}",
                             organizationId, e.getMessage());
                 }
             }
