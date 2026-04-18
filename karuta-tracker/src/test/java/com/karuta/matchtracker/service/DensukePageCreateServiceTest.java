@@ -26,8 +26,10 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -196,6 +198,95 @@ class DensukePageCreateServiceTest {
         assertThatThrownBy(() -> service.createPage(baseRequest))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("既に登録されています");
+    }
+
+    @Test
+    @DisplayName("buildScheduleText: 1セッション3試合 → 1試合目行に日付+会場、2/3試合目は試合番号のみ（時刻は含めない）")
+    void buildScheduleText_singleSession_headerThenBareMatches() {
+        // 2026/4/20(月) すずらん 3試合
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(LocalDate.of(2026, 4, 20))
+                .venueId(10L).totalMatches(3).organizationId(1L)
+                .build();
+        Venue venue = Venue.builder().id(10L).name("すずらん").defaultMatchCount(3).build();
+        Map<Integer, VenueMatchSchedule> vms = Map.of(
+                1, VenueMatchSchedule.builder().venueId(10L).matchNumber(1)
+                        .startTime(LocalTime.of(17, 20)).endTime(LocalTime.of(18, 40)).build(),
+                2, VenueMatchSchedule.builder().venueId(10L).matchNumber(2)
+                        .startTime(LocalTime.of(18, 45)).endTime(LocalTime.of(20, 5)).build(),
+                3, VenueMatchSchedule.builder().venueId(10L).matchNumber(3)
+                        .startTime(LocalTime.of(20, 10)).endTime(LocalTime.of(21, 30)).build()
+        );
+
+        DensukePageCreateService.BuildResult result = service.buildScheduleText(
+                List.of(session), Map.of(10L, venue), Map.of(10L, vms));
+
+        assertThat(result.scheduleText()).isEqualTo(
+                "4/20(月) すずらん 1試合目\n" +
+                "2試合目\n" +
+                "3試合目\n");
+        assertThat(result.matchSlotCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("buildScheduleText: 複数日・複数会場 → セッションごとにヘッダー行、同日同会場の2試合目以降は試合番号のみ")
+    void buildScheduleText_multipleSessions_eachSessionStartsFreshHeader() {
+        PracticeSession s1 = PracticeSession.builder()
+                .id(1L).sessionDate(LocalDate.of(2026, 4, 2))
+                .venueId(10L).totalMatches(2).organizationId(1L).build();
+        PracticeSession s2 = PracticeSession.builder()
+                .id(2L).sessionDate(LocalDate.of(2026, 4, 4))
+                .venueId(20L).totalMatches(3).organizationId(1L).build();
+
+        Venue azuma = Venue.builder().id(10L).name("東全室").defaultMatchCount(2).build();
+        Venue ezomatsu = Venue.builder().id(20L).name("えぞまつ").defaultMatchCount(3).build();
+
+        Map<Integer, VenueMatchSchedule> azumaSchedules = Map.of(
+                1, VenueMatchSchedule.builder().venueId(10L).matchNumber(1)
+                        .startTime(LocalTime.of(17, 0)).endTime(LocalTime.of(18, 0)).build(),
+                2, VenueMatchSchedule.builder().venueId(10L).matchNumber(2)
+                        .startTime(LocalTime.of(18, 5)).endTime(LocalTime.of(19, 5)).build()
+        );
+        Map<Integer, VenueMatchSchedule> ezoSchedules = Map.of(
+                1, VenueMatchSchedule.builder().venueId(20L).matchNumber(1)
+                        .startTime(LocalTime.of(17, 20)).endTime(LocalTime.of(18, 40)).build(),
+                2, VenueMatchSchedule.builder().venueId(20L).matchNumber(2)
+                        .startTime(LocalTime.of(18, 45)).endTime(LocalTime.of(20, 5)).build(),
+                3, VenueMatchSchedule.builder().venueId(20L).matchNumber(3)
+                        .startTime(LocalTime.of(20, 10)).endTime(LocalTime.of(21, 30)).build()
+        );
+
+        DensukePageCreateService.BuildResult result = service.buildScheduleText(
+                List.of(s1, s2),
+                Map.of(10L, azuma, 20L, ezomatsu),
+                Map.of(10L, azumaSchedules, 20L, ezoSchedules));
+
+        assertThat(result.scheduleText()).isEqualTo(
+                "4/2(木) 東全室 1試合目\n" +
+                "2試合目\n" +
+                "4/4(土) えぞまつ 1試合目\n" +
+                "2試合目\n" +
+                "3試合目\n");
+        assertThat(result.matchSlotCount()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("buildScheduleText: 1試合セッションは単独で1行（ヘッダーのみ、試合番号のみ行は出ない）")
+    void buildScheduleText_singleMatchSession_onlyHeaderLine() {
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(LocalDate.of(2026, 5, 3))
+                .venueId(10L).totalMatches(1).organizationId(1L).build();
+        Venue venue = Venue.builder().id(10L).name("あかなら").defaultMatchCount(1).build();
+        Map<Integer, VenueMatchSchedule> vms = Map.of(
+                1, VenueMatchSchedule.builder().venueId(10L).matchNumber(1)
+                        .startTime(LocalTime.of(10, 0)).endTime(LocalTime.of(11, 20)).build()
+        );
+
+        DensukePageCreateService.BuildResult result = service.buildScheduleText(
+                List.of(session), Map.of(10L, venue), Map.of(10L, vms));
+
+        assertThat(result.scheduleText()).isEqualTo("5/3(日) あかなら 1試合目\n");
+        assertThat(result.matchSlotCount()).isEqualTo(1);
     }
 
     @Test

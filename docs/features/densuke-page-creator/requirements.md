@@ -318,19 +318,21 @@ api/
 
 既存 [`DensukeScraper`](../../karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeScraper.java) の正規表現と整合させるため、以下の形式を厳守:
 
-```
-{M}/{D}({曜日}) {HH:MM}～{会場名} {N}試合目
-```
+- 各セッション（日付 × 会場）の **1試合目行**: `{M}/{D}({曜日}) {会場名} 1試合目`
+- 同じセッションの **2試合目以降**: `{N}試合目` のみ
+- **時刻は含めない**（混入すると `VENUE_PATTERN` が時刻込み文字列を会場名として拾うため）
 
-各練習日について `total_matches`（未設定時は `venues.default_match_count`）の回数ループし、`venue_match_schedules` の `start_time` を時刻として使う。
+`DensukeScraper` は `currentDate` / `currentVenue` を前行から引き継ぐので、2試合目以降で日付・会場を省略しても同期は成立する。
 
-**例（1日3試合の場合）:**
+各練習日について `total_matches`（未設定時は `venues.default_match_count`）の回数ループ。`venue_match_schedules` は「`total_matches` 分のレコードがあるか」という整合性チェックのためにロードするのみで、`start_time` は densuke 送信文字列には含めない。
+
+**例（1日3試合 × 2日）:**
 ```
-4/20(月) 17:20～すずらん 1試合目
-4/20(月) 18:45～すずらん 2試合目
-4/20(月) 20:10～すずらん 3試合目
-4/22(水) 17:20～はまなす 1試合目
-...
+4/20(月) すずらん 1試合目
+2試合目
+3試合目
+4/22(水) はまなす 1試合目
+2試合目
 ```
 
 #### レスポンス

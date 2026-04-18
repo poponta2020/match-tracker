@@ -109,23 +109,23 @@ Java の標準ライブラリ（`java.net.http.HttpClient`, Spring `RestTemplate
 
 つまり、伝助ページ側の各行は**以下のフォーマットで組み立てる必要がある**:
 
-```
-{M}/{D}({曜日}) {HH:MM}～{会場名} {N}試合目
-```
+- 各セッション（= 日付 × 会場）の **1試合目行** は `{M}/{D}({曜日}) {会場名} 1試合目`
+- 同じセッションの **2試合目以降** は `{N}試合目` のみ（`DensukeScraper` は `currentDate` / `currentVenue` を前行から引き継ぐため、省略しても同期に支障なし）
+- **時刻は含めない**（時刻を混入させると `VENUE_PATTERN` が会場名として時刻込み文字列を拾い、同期時に会場解決が崩れるため）
 
-**具体例（1日3試合の場合）:**
+**具体例（1日3試合 × 2日）:**
 ```
-4/20(月) 17:20～すずらん 1試合目
-4/20(月) 18:45～すずらん 2試合目
-4/20(月) 20:10～すずらん 3試合目
-4/22(水) 17:20～はまなす 1試合目
-4/22(水) 18:45～はまなす 2試合目
+4/20(月) すずらん 1試合目
+2試合目
+3試合目
+4/22(水) はまなす 1試合目
+2試合目
 ```
 
 ### アプリ側の実装方針
-- 対象月の `practice_sessions` を全件取得
+- 対象月の `practice_sessions` を `session_date ASC` で取得
 - 各セッションについて、`total_matches`（未設定時は `venues.default_match_count`）の回数ループ
-- 試合ごとに `venue_match_schedules` の `start_time` を時刻として使う
+- 試合時刻の整合チェックは `venue_match_schedules` に全試合分のレコードがあるかで判定（時刻自体は densuke には送信しない）
 - 曜日は Java の `DayOfWeek` から日本語短縮名にマッピング（日/月/火/水/木/金/土）
 - 複数の練習日を改行で連結して `schedule` パラメータに入れる
 
@@ -137,7 +137,7 @@ Java の標準ライブラリ（`java.net.http.HttpClient`, Spring `RestTemplate
 urlenc() { printf '%s' "$1" | od -An -t x1 | tr -d ' \n' | sed 's/../%&/g'; }
 
 EVENTNAME=$(urlenc "2026年5月練習出欠")
-SCHEDULE=$(urlenc $'5/5(火) 17:20～すずらん 1試合目\n5/5(火) 18:45～すずらん 2試合目')
+SCHEDULE=$(urlenc $'5/5(火) すずらん 1試合目\n2試合目')
 EXPLAIN=$(urlenc "5月の練習日程")
 
 curl -X POST \
@@ -218,7 +218,7 @@ String densukeUrl = "https://densuke.biz/list?cd=" + cd;
 
 1. **eventchoice は必ず `1`（○△×）で固定** — 既存 scraper のロジック（`col3`=○, `col2`+△ 判定）と整合
 2. **pw は `0`（パスワードなし）で固定** — 運用上パスワード不要
-3. **日程文字列は `{M}/{D}({曜}) {HH:MM}～{会場} {N}試合目` 厳守** — scraper のパターンに依存
+3. **日程文字列は「1試合目行のみ `{M}/{D}({曜}) {会場} 1試合目`、2試合目以降は `{N}試合目` 単独」の2段形式で組み立てる** — scraper の `VENUE_PATTERN` に時刻が混入するのを避け、`currentDate`/`currentVenue` 引き継ぎに依拠する
 4. **Java からの送信は `URLEncoder.encode(value, UTF_8)` で問題なし** — curl の bug は Java には影響しない
 5. **302 の Location ヘッダーから cd を取得** — `HttpClient` は `redirect(NEVER)` 相当で初期化
 6. **`densuke_urls` テーブルには `cd` と `sd` 両方保存を検討** — sd は将来の編集機能で必要になる可能性

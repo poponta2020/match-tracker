@@ -813,11 +813,13 @@ SUPER_ADMIN のみ操作可能。
 **処理フロー:**
 1. バリデーション: 既存URL重複 / 練習日 0 件 / 会場未登録 / `venue_match_schedules` の不足をチェック、いずれかあれば `IllegalStateException`
 2. テンプレート (`densuke_templates`) 取得 + オーバーライド適用 + プレースホルダー置換 (`{year}` / `{month}` / `{organization_name}`)
-3. schedule 文字列組み立て: `{M}/{D}({曜}) {HH:MM}～{会場名} {N}試合目` 形式で練習日×試合枠ぶんを改行連結
-4. densuke.biz に `POST https://www.densuke.biz/create` を送信（UTF-8, `application/x-www-form-urlencoded`, `eventchoice=1` 固定）
-5. 302 レスポンスの `Location` ヘッダーから `cd` と `sd` を正規表現で抽出
-6. `densuke_urls` に新レコードを保存（`url` と `densuke_sd` を含む）
-7. トランザクションコミット後に LINE 通知発火
+3. schedule 文字列組み立て: 各セッション（日付×会場）の先頭行は `{M}/{D}({曜}) {会場名} 1試合目`、2 試合目以降は `{N}試合目` 単独で改行連結（時刻は含めない）
+4. 年月範囲チェック: JST 基準で当月〜+2 ヶ月以外は `IllegalStateException`（UI の `canCreatePage` と同等の制約を API 側にも適用）
+5. `densuke_urls` に仮レコードを `saveAndFlush` で先行確保（UNIQUE 制約による同時作成の直列化）。ユニーク違反時は「既に登録されています」で 400 を返し、densuke.biz への二重 POST を防止
+6. densuke.biz に `POST https://www.densuke.biz/create` を送信（UTF-8, `application/x-www-form-urlencoded`, `eventchoice=1` 固定）
+7. 302 レスポンスの `Location` ヘッダーから `cd` と `sd` を正規表現で抽出
+8. 仮レコードを実 URL / `sd` で更新
+9. トランザクションコミット後に LINE 通知発火
 
 **通知:**
 - 団体所属 PLAYER ロールのメンバー全員に LINE 通知（`DENSUKE_PAGE_CREATED` 種別）

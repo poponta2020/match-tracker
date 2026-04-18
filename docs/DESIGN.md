@@ -2682,10 +2682,12 @@ Entity Layer (JPA Entity)
 - **伝助ページ自動作成（DensukePageCreateService）**: アプリ側に登録された練習日（`practice_sessions` × `venues` × `venue_match_schedules`）から densuke.biz にページを新規発行
   - エンドポイント: `POST /api/practice-sessions/densuke/create-page`（ADMIN以上）
   - 送信先: `POST https://www.densuke.biz/create`（`/confirm` はスキップ可能、認証不要）
-  - schedule 文字列は `{M}/{D}({曜}) {HH:MM}～{会場名} {N}試合目` 形式で改行区切り（既存 `DensukeScraper` が読める形）
+  - schedule 文字列は「セッションの 1 試合目行は `{M}/{D}({曜}) {会場名} 1試合目`、2 試合目以降は `{N}試合目` のみ」の 2 段形式で改行連結（時刻は含めない）。既存 `DensukeScraper` は `currentDate`/`currentVenue` を前行から引き継ぐため、日付・会場の省略行も正しくパースできる
   - 固定パラメータ: `eventchoice=1`（○△×）、`pw=0`（パスワードなし）
   - レスポンス 302 Location から `cd` と `sd` を抽出、`densuke_urls` に保存
-  - バリデーション: ①既存URL重複、②practice_sessions 0件、③venue_match_schedules 不足、④会場未登録
+  - バリデーション: ①年月範囲（JST 当月〜+2 ヶ月）、②既存URL重複、③practice_sessions 0件、④venue_match_schedules 不足、⑤会場未登録
+  - 排他制御: `densuke_urls` に仮レコードを `saveAndFlush` で先行確保し UNIQUE 制約で同時作成を直列化。ユニーク違反時は 400（「既に登録されています」）を返し densuke.biz への二重 POST を防止
+  - 手動 URL 上書き経路（`saveDensukeUrl`）では `densuke_sd` を明示的に NULL クリアし、自動作成済みレコードの sd が残留しないよう保証
   - 作成成功後、`@TransactionalEventListener(AFTER_COMMIT)` 相当の同期で団体所属 PLAYER ロールメンバー（ADMIN/SUPER_ADMIN 除外）に LINE 通知（`DENSUKE_PAGE_CREATED`）を送信
   - テンプレート: `densuke_templates` テーブルで団体ごとにタイトル・説明・連絡先メアドのデフォルト値を保持。作成ダイアログで編集可能
   - 作成後は既存の `DensukeSyncScheduler` が次回サイクル（最長5分）で新URLを自動取り込み

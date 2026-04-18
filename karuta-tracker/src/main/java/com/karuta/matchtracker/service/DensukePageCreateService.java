@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -201,9 +200,10 @@ public class DensukePageCreateService {
     // schedule 組み立てとバリデーション
     // ========================================================================
 
-    private BuildResult buildScheduleText(List<PracticeSession> sessions,
-                                           Map<Long, Venue> venueMap,
-                                           Map<Long, Map<Integer, VenueMatchSchedule>> scheduleMap) {
+    // package-private: フォーマットの回帰テストから直接呼び出せるよう可視性を広げている
+    BuildResult buildScheduleText(List<PracticeSession> sessions,
+                                   Map<Long, Venue> venueMap,
+                                   Map<Long, Map<Integer, VenueMatchSchedule>> scheduleMap) {
         StringBuilder sb = new StringBuilder();
         int matchSlotCount = 0;
 
@@ -236,13 +236,19 @@ public class DensukePageCreateService {
             int d = date.getDayOfMonth();
             String weekday = WEEKDAY_JP[date.getDayOfWeek().getValue() % 7];
 
+            // 新フォーマット:
+            //   1試合目行:      「M/D(曜) 会場名 1試合目」（日付・会場のヘッダーを兼ねる）
+            //   2試合目以降:   「N試合目」のみ（DensukeScraper は currentDate/currentVenue を
+            //                                    前行から引き継ぐため、日付・会場省略でも同期可能）
             for (int mn = 1; mn <= totalMatches; mn++) {
-                LocalTime startTime = venueSchedules.get(mn).getStartTime();
-                sb.append(m).append('/').append(d)
-                        .append('(').append(weekday).append(") ")
-                        .append(String.format("%02d:%02d", startTime.getHour(), startTime.getMinute()))
-                        .append('～')
-                        .append(venue.getName()).append(' ').append(mn).append("試合目\n");
+                if (mn == 1) {
+                    sb.append(m).append('/').append(d)
+                            .append('(').append(weekday).append(") ")
+                            .append(venue.getName()).append(' ')
+                            .append(mn).append("試合目\n");
+                } else {
+                    sb.append(mn).append("試合目\n");
+                }
                 matchSlotCount++;
             }
         }
@@ -355,7 +361,7 @@ public class DensukePageCreateService {
     // 内部データクラス
     // ========================================================================
 
-    private record BuildResult(String scheduleText, int matchSlotCount) {}
+    record BuildResult(String scheduleText, int matchSlotCount) {}
 
     private record ResolvedTemplate(String title, String description, String contactEmail, String organizationName) {}
 
