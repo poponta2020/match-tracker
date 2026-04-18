@@ -13,6 +13,8 @@ import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.entity.DensukeUrl;
+import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
+import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -52,6 +54,8 @@ public class PracticeSessionService {
     private final VenueMatchScheduleRepository venueMatchScheduleRepository;
     private final OrganizationService organizationService;
     private final DensukeUrlRepository densukeUrlRepository;
+    private final DensukeRowIdRepository densukeRowIdRepository;
+    private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeSyncService densukeSyncService;
     private final AdjacentRoomService adjacentRoomService;
 
@@ -765,6 +769,10 @@ public class PracticeSessionService {
     public boolean deleteDensukeUrl(int year, int month, Long organizationId) {
         return densukeUrlRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
                 .map(entity -> {
+                    // densuke_row_ids / densuke_member_mappings は densuke_url_id を外部キー参照しているため、
+                    // 同期実績のある URL を作り直す場合、親より先に子を削除しないと FK 制約違反で 500 になる。
+                    densukeRowIdRepository.deleteByDensukeUrlId(entity.getId());
+                    densukeMemberMappingRepository.deleteByDensukeUrlId(entity.getId());
                     densukeUrlRepository.delete(entity);
                     return true;
                 })

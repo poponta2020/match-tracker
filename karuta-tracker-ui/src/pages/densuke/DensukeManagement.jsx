@@ -240,11 +240,16 @@ const DensukeManagement = () => {
     updateOrgState(orgId, { urlSaving: true, error: '', success: '' });
     try {
       await practiceAPI.deleteDensukeUrl(year, month, orgId);
+      // 削除成功時は旧 URL 由来の同期結果・未登録者選択・書き込み状況もリセットしないと、
+      // 作成モーダルを開いた時点で「登録して再同期」ボタンが残り、URL 未登録エラーの導線が残る。
       updateOrgState(orgId, {
         url: '',
         savedUrl: '',
         urlSaving: false,
         showCreateModal: true,
+        syncResult: null,
+        selectedNames: [],
+        writeStatus: null,
       });
     } catch (err) {
       updateOrgState(orgId, {
