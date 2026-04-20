@@ -58,6 +58,13 @@ public class DensukeScraper {
                 .timeout(10000)
                 .get();
 
+        return parse(doc, year);
+    }
+
+    /**
+     * Jsoup Document から伝助データをパースする。ネットワーク I/O を持たないのでユニットテスト可能。
+     */
+    DensukeData parse(Document doc, int year) throws IOException {
         Element table = doc.selectFirst("table.listtbl");
         if (table == null) {
             throw new IOException("伝助のテーブルが見つかりません");
@@ -68,17 +75,23 @@ public class DensukeScraper {
             throw new IOException("テーブルにデータがありません");
         }
 
-        // 1行目: ヘッダー行 — 列4以降が参加者名
+        // 1行目: ヘッダー行。先頭の凡例列数はページ設定 (○/△/× の3択 or ○/× の2択) で変わるため、
+        // 「memberdata アンカーを持つ最初のセル」を動的に検出してメンバー列の開始位置を求める。
         Element headerRow = rows.get(0);
         Elements headerCells = headerRow.select("td");
+        int memberStartIdx = findMemberStartIndex(headerCells);
+        if (memberStartIdx < 0) {
+            throw new IOException("伝助のメンバー列が見つかりません");
+        }
+
         List<String> memberNames = new ArrayList<>();
-        for (int i = 4; i < headerCells.size(); i++) {
+        for (int i = memberStartIdx; i < headerCells.size(); i++) {
             Element cell = headerCells.get(i);
             Element link = cell.selectFirst("a");
             String name = stripLeadingEmoji(link != null ? link.text() : cell.text());
             memberNames.add(name);
         }
-        log.info("Found {} members in densuke", memberNames.size());
+        log.info("Found {} members in densuke (memberStartIdx={})", memberNames.size(), memberStartIdx);
 
         // 2行目以降: 日程データ
         DensukeData data = new DensukeData();
@@ -117,15 +130,15 @@ public class DensukeScraper {
                 matchNumber = Integer.parseInt(matchMatcher.group(1));
             }
 
-            // 列4以降が各参加者の出欠データ
+            // memberStartIdx 以降が各参加者の出欠データ
             ScheduleEntry entry = new ScheduleEntry();
             entry.setDate(currentDate);
             entry.setMatchNumber(matchNumber);
             entry.setVenueName(currentVenue);
             entry.setRawLabel(label);
 
-            for (int colIdx = 4; colIdx < cells.size(); colIdx++) {
-                int memberIdx = colIdx - 4;
+            for (int colIdx = memberStartIdx; colIdx < cells.size(); colIdx++) {
+                int memberIdx = colIdx - memberStartIdx;
                 if (memberIdx >= memberNames.size()) break;
 
                 Element cell = cells.get(colIdx);
@@ -149,6 +162,19 @@ public class DensukeScraper {
 
         log.info("Scraped {} schedule entries from densuke", data.getEntries().size());
         return data;
+    }
+
+    /**
+     * ヘッダー行セルから、最初の「memberdata アンカー（参加者名リンク）」を含むセルの index を返す。
+     * 見つからなければ -1。
+     */
+    static int findMemberStartIndex(Elements headerCells) {
+        for (int i = 0; i < headerCells.size(); i++) {
+            if (headerCells.get(i).selectFirst("a[href*=memberdata]") != null) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
