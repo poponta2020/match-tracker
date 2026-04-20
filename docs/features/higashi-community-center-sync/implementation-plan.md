@@ -58,7 +58,7 @@ status: completed
 - **依存タスク:** タスク1 (#473)
 
 ### タスク3: GitHub Actions ワークフロー追加
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #475
 - **概要:** 30分おきに同期スクリプトを実行する GitHub Actions ワークフローを追加する。`sync-kaderu-reservations.yml` をベースに作成。
 - **変更対象ファイル:**
