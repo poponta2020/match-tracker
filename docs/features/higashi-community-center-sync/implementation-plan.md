@@ -29,7 +29,7 @@ status: completed
 - **依存タスク:** なし
 
 ### タスク2: 同期スクリプト実装 (`sync-higashi-reservations.js`)
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #474
 - **概要:** スクレイパーを子プロセス実行して予約JSONを取得し、`practice_sessions` に UPSERT する Node.js スクリプトを実装する。Kaderu の `sync-reservations.js` を参考にする。
 - **変更対象ファイル:**
