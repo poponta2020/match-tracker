@@ -629,7 +629,12 @@ const PairingGenerator = () => {
       }
 
       // 待機リストに追加
-      setWaitingPlayers([...waitingPlayers, { id: player.id, name: player.name }]);
+      const newWaiting = [...waitingPlayers, { id: player.id, name: player.name }];
+      setWaitingPlayers(newWaiting);
+      // 未保存ドラフトがあれば同期更新（useEffectのドラフト復元で上書きされるのを防ぐ）
+      if (unsavedDraft.current && unsavedDraft.current.matchNumber === matchNumber) {
+        saveDraft(pairings, newWaiting, isEditingExisting);
+      }
       setSelectedPlayerId('');
       setShowAddPlayer(false);
       setError('');
