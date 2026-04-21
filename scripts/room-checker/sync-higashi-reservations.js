@@ -56,6 +56,9 @@ const FIXED_END_TIME = "21:00";
 /** システムユーザーID（DensukeImportService.SYSTEM_USER_ID と同じ） */
 const SYSTEM_USER_ID = 0;
 
+/** 同期対象ステータス（allow-list — scrape-higashi-history.js と一致させる） */
+const ACTIVE_STATUSES = new Set(["予約済", "利用済"]);
+
 // ============================================================
 // DB接続
 // ============================================================
@@ -118,11 +121,11 @@ function runScraper(months) {
  * @returns {Map<string, {rooms: string[], resolvedVenueId: number|null}>}
  */
 function groupByDateAndResolveVenue(reservations) {
-  // scrape-higashi-history.js 側で取消済は除外済みだが念のため
-  const active = reservations.filter((r) => !String(r.status || "").includes("取消"));
+  // scrape-higashi-history.js 側で allow-list フィルタ済だが念のため再適用
+  const active = reservations.filter((r) => ACTIVE_STATUSES.has(String(r.status || "")));
   if (active.length !== reservations.length) {
     console.log(
-      `ステータスフィルタ: ${reservations.length}件 → ${active.length}件（取消${reservations.length - active.length}件除外）`
+      `ステータスフィルタ: ${reservations.length}件 → ${active.length}件（対象外${reservations.length - active.length}件除外）`
     );
   }
 

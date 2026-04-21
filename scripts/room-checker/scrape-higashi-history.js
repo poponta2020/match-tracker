@@ -37,6 +37,8 @@ const LOGIN_URL = "https://sapporo-community.jp/UserWebApp/Form/UserLogin.aspx";
 const TARGET_FACILITY = "札幌市東区民センター";
 // 対象部屋（正規化後）
 const TARGET_ROOMS = ["さくら", "かっこう", "和室全室"];
+// 同期対象ステータス（allow-list — サイト側で新しい状態が増えても誤同期しない）
+const ACTIVE_STATUSES = new Set(["予約済", "利用済"]);
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -258,8 +260,8 @@ async function main() {
     // 5. フィルタ・整形
     const reservations = [];
     for (const row of allRows) {
-      // 取消済は除外
-      if (row.statusText.includes("取消")) continue;
+      // 同期対象ステータス（予約済 / 利用済）のみ取り込む
+      if (!ACTIVE_STATUSES.has(row.statusText)) continue;
       // 東区民センター以外は除外（+ 部屋名正規化）
       const room = extractRoomName(row.rawContent);
       if (!room) continue;
