@@ -1,0 +1,40 @@
+name: Sync Higashi Community Center Reservations to Practice Sessions
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: higashi-reservation-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./scripts/room-checker
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./scripts/room-checker
+        run: npx playwright install --with-deps chromium
+
+      - name: Sync reservations to practice sessions
+        working-directory: ./scripts/room-checker
+        run: node sync-higashi-reservations.js --months 2
+        env:
+          SAPPORO_COMMUNITY_USER_ID: ${{ secrets.SAPPORO_COMMUNITY_USER_ID }}
+          SAPPORO_COMMUNITY_PASSWORD: ${{ secrets.SAPPORO_COMMUNITY_PASSWORD }}
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
