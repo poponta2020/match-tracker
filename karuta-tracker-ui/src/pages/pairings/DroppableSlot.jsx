@@ -1,6 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 
-const DroppableSlot = ({ id, data, children, isDragActive = false }) => {
+const DroppableSlot = ({ id, data, children, isDragActive = false, onClick }) => {
   const { setNodeRef, isOver } = useDroppable({
     id,
     data,
@@ -12,8 +12,17 @@ const DroppableSlot = ({ id, data, children, isDragActive = false }) => {
       ? 'bg-[#eef3f0] rounded-lg'
       : '';
 
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (onClick) onClick(e);
+  };
+
   return (
-    <div ref={setNodeRef} className={`flex-1 min-w-0 transition-colors ${highlightClass}`}>
+    <div
+      ref={setNodeRef}
+      onClick={handleClick}
+      className={`flex-1 min-w-0 transition-colors ${highlightClass}`}
+    >
       {children}
     </div>
   );

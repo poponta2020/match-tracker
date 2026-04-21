@@ -2001,13 +2001,21 @@ Entity Layer (JPA Entity)
 - 試合番号選択（1～7）
 - 参加者一覧（チェックボックス）
 - 「自動マッチング」ボタン → `POST /api/match-pairings/auto-match`
-- 提案されたペア一覧（ドラッグ&ドロップ対応）
+- 提案されたペア一覧（ドラッグ&ドロップ / タップ選択対応）
   - 選手カード（DraggablePlayerChip）を長押し/クリックでドラッグして入れ替え
+  - 選手カードをシングルタップで選択 → 別カード/空き枠/待機/新規ペアゾーンをタップして配置（タップ選択モード）
   - 最近の対戦履歴（日付、何日前）
 - 手動調整: 選手カード同士のスワップ、待機リストとの入れ替え
-- 新規ペアリング作成ドロップゾーン（待機選手をドロップして新規行作成）
+- 新規ペアリング作成ドロップゾーン（待機選手をドロップ/タップして新規行作成、待機選手選択時のみ表示）
 - 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化）
 - 待機者リスト（DroppableSlot、選手はDraggablePlayerChip）
+
+**タップ選択モードの state 設計**:
+- `selectedPlayer`: `{ playerId, playerName, source }` 形式（`source` は `DraggablePlayerChip.data.source` と同形）
+- `handleChipClick` / `handleSlotClick` でクリック発火、`executePlacement(dest)` 共通関数で `computeDragResult` 呼出し〜state 更新〜`fetchPairHistory` 発火までを実行
+- `handleDragStart` 冒頭で `setSelectedPlayer(null)` を呼び、D&D との状態不整合を防止
+- `selectedPlayer` が非 null の時のみ `document` クリックリスナーを張り、チップ/スロット以外のクリックで選択解除（チップ/スロット側は `e.stopPropagation()` で伝播停止）
+- 編集モード時のみ有効（`isReadOnly` / `isViewMode` / `hasResult` 時は早期 return）
 
 **アルゴリズム**:
 - 過去30日の対戦履歴取得

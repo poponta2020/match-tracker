@@ -64,6 +64,8 @@ const PairingGenerator = () => {
   const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
   const sensors = useSensors(pointerSensor, touchSensor);
   const [activeDragItem, setActiveDragItem] = useState(null);
+  // タップ選択モード用: 選択中の選手 { playerId, playerName, source }
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
 
   // ペアの直近対戦履歴を取得し、該当ペアのrecentMatchesを更新するヘルパー
   const fetchPairHistory = useCallback(async (pairingIndex, player1Id, player2Id) => {
@@ -467,20 +469,8 @@ const PairingGenerator = () => {
     }
   };
 
-  // ドラッグ＆ドロップハンドラー
-  const handleDragStart = (event) => {
-    setActiveDragItem(event.active.data.current);
-  };
-
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-    setActiveDragItem(null);
-
-    if (!over) return;
-
-    const source = active.data.current.source;
-    const dest = over.data.current;
-
+  // 配置実行（ドラッグ＆ドロップとタップ選択モードで共通）
+  const executePlacement = useCallback((source, dest, draggedPlayerId, draggedPlayerName) => {
     if (!source || !dest) return;
 
     // ロック済みペアリングへのドロップを防止
@@ -491,8 +481,8 @@ const PairingGenerator = () => {
     const result = computeDragResult({
       source,
       dest,
-      draggedPlayerId: active.data.current.playerId,
-      draggedPlayerName: active.data.current.playerName,
+      draggedPlayerId,
+      draggedPlayerName,
       pairings,
       waitingPlayers,
     });
@@ -510,11 +500,87 @@ const PairingGenerator = () => {
         fetchPairHistory(idx, result.pairings[idx].player1Id, result.pairings[idx].player2Id);
       }
     });
+  }, [pairings, waitingPlayers, saveDraft, isEditingExisting, fetchPairHistory]);
+
+  // ドラッグ＆ドロップハンドラー
+  const handleDragStart = (event) => {
+    setSelectedPlayer(null);
+    setActiveDragItem(event.active.data.current);
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveDragItem(null);
+
+    if (!over) return;
+
+    executePlacement(
+      active.data.current.source,
+      over.data.current,
+      active.data.current.playerId,
+      active.data.current.playerName,
+    );
   };
 
   const handleDragCancel = () => {
     setActiveDragItem(null);
   };
+
+  // タップ選択モード: チップタップ
+  const handleChipClick = useCallback((playerId, playerName, source) => {
+    if (isReadOnly || isViewMode) return;
+    // ロック済みペアリングのチップは選択・操作不可
+    if (source.type === 'pairing' && pairings[source.pairingIndex]?.hasResult) return;
+
+    // 未選択 → 選択開始
+    if (!selectedPlayer) {
+      setSelectedPlayer({ playerId, playerName, source });
+      return;
+    }
+
+    // 同じプレイヤー再タップ → 選択解除
+    if (selectedPlayer.playerId === playerId) {
+      setSelectedPlayer(null);
+      return;
+    }
+
+    // 別プレイヤーのチップ → source からスワップ先を導出
+    let dest;
+    if (source.type === 'pairing') {
+      dest = {
+        slotType: source.position === 1 ? 'pairing-player1' : 'pairing-player2',
+        pairingIndex: source.pairingIndex,
+      };
+    } else if (source.type === 'waiting') {
+      dest = { slotType: 'waiting-list' };
+    }
+
+    if (dest) {
+      executePlacement(selectedPlayer.source, dest, selectedPlayer.playerId, selectedPlayer.playerName);
+    }
+    setSelectedPlayer(null);
+  }, [selectedPlayer, isReadOnly, isViewMode, pairings, executePlacement]);
+
+  // タップ選択モード: スロットタップ
+  const handleSlotClick = useCallback((slotData, e) => {
+    if (isReadOnly || isViewMode) return;
+    if (!selectedPlayer) return;
+    // 待機行の活動プルダウン等、フォーム要素由来のクリックは誤配置防止のため無視
+    if (e?.target?.closest?.('select, input, textarea, option')) return;
+    // ロック済みペアリングへの配置を防止
+    if (slotData.slotType?.startsWith('pairing-') && pairings[slotData.pairingIndex]?.hasResult) return;
+
+    executePlacement(selectedPlayer.source, slotData, selectedPlayer.playerId, selectedPlayer.playerName);
+    setSelectedPlayer(null);
+  }, [selectedPlayer, isReadOnly, isViewMode, pairings, executePlacement]);
+
+  // 選択中は画面他領域タップで選択解除
+  useEffect(() => {
+    if (!selectedPlayer) return;
+    const handleDocClick = () => setSelectedPlayer(null);
+    document.addEventListener('click', handleDocClick);
+    return () => document.removeEventListener('click', handleDocClick);
+  }, [selectedPlayer]);
 
   const handleAddPlayer = async () => {
     if (!selectedPlayerId) {
@@ -859,22 +925,36 @@ const PairingGenerator = () => {
                 ) : (
                   /* 編集モード: ドラッグ＆ドロップ */
                   <div className="flex items-center gap-2">
-                    <DroppableSlot id={`slot-pairing-${index}-player1`} data={{ slotType: 'pairing-player1', pairingIndex: index }} isDragActive={!!activeDragItem}>
+                    <DroppableSlot
+                      id={`slot-pairing-${index}-player1`}
+                      data={{ slotType: 'pairing-player1', pairingIndex: index }}
+                      isDragActive={!!activeDragItem || !!selectedPlayer}
+                      onClick={(e) => handleSlotClick({ slotType: 'pairing-player1', pairingIndex: index }, e)}
+                    >
                       {pairing.player1Id ? (
                         <DraggablePlayerChip
                           id={`pairing-${index}-player1`}
                           data={{ playerId: pairing.player1Id, playerName: pairing.player1Name, kyuRank: participants.find(p => p.id === pairing.player1Id)?.kyuRank, source: { type: 'pairing', pairingIndex: index, position: 1 } }}
+                          onClick={() => handleChipClick(pairing.player1Id, pairing.player1Name, { type: 'pairing', pairingIndex: index, position: 1 })}
+                          isSelected={selectedPlayer?.playerId === pairing.player1Id}
                         />
                       ) : (
                         <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
                       )}
                     </DroppableSlot>
                     <span className="text-[#a5b4aa] text-xs flex-shrink-0">vs</span>
-                    <DroppableSlot id={`slot-pairing-${index}-player2`} data={{ slotType: 'pairing-player2', pairingIndex: index }} isDragActive={!!activeDragItem}>
+                    <DroppableSlot
+                      id={`slot-pairing-${index}-player2`}
+                      data={{ slotType: 'pairing-player2', pairingIndex: index }}
+                      isDragActive={!!activeDragItem || !!selectedPlayer}
+                      onClick={(e) => handleSlotClick({ slotType: 'pairing-player2', pairingIndex: index }, e)}
+                    >
                       {pairing.player2Id ? (
                         <DraggablePlayerChip
                           id={`pairing-${index}-player2`}
                           data={{ playerId: pairing.player2Id, playerName: pairing.player2Name, kyuRank: participants.find(p => p.id === pairing.player2Id)?.kyuRank, source: { type: 'pairing', pairingIndex: index, position: 2 } }}
+                          onClick={() => handleChipClick(pairing.player2Id, pairing.player2Name, { type: 'pairing', pairingIndex: index, position: 2 })}
+                          isSelected={selectedPlayer?.playerId === pairing.player2Id}
                         />
                       ) : (
                         <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
@@ -894,9 +974,14 @@ const PairingGenerator = () => {
             ))}
           </div>
 
-          {!isReadOnly && !isViewMode && waitingPlayers.length > 0 && (
-            <DroppableSlot id="slot-new-pairing" data={{ slotType: 'new-pairing' }} isDragActive={!!activeDragItem}>
-              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${activeDragItem?.source?.type === 'waiting' ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
+          {!isReadOnly && !isViewMode && (waitingPlayers.length > 0 || selectedPlayer?.source?.type === 'waiting') && (
+            <DroppableSlot
+              id="slot-new-pairing"
+              data={{ slotType: 'new-pairing' }}
+              isDragActive={!!activeDragItem || !!selectedPlayer}
+              onClick={(e) => handleSlotClick({ slotType: 'new-pairing' }, e)}
+            >
+              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${(activeDragItem?.source?.type === 'waiting' || selectedPlayer?.source?.type === 'waiting') ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
                 ここにドロップして新しい組み合わせを作成
               </div>
             </DroppableSlot>
@@ -918,7 +1003,12 @@ const PairingGenerator = () => {
                   </button>
                 </div>
               </div>
-              <DroppableSlot id="slot-waiting-list" data={{ slotType: 'waiting-list' }} isDragActive={!!activeDragItem}>
+              <DroppableSlot
+                id="slot-waiting-list"
+                data={{ slotType: 'waiting-list' }}
+                isDragActive={!!activeDragItem || !!selectedPlayer}
+                onClick={(e) => handleSlotClick({ slotType: 'waiting-list' }, e)}
+              >
                 {waitingPlayers.length > 0 ? (
                   <div className="space-y-2">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
@@ -926,6 +1016,8 @@ const PairingGenerator = () => {
                         <DraggablePlayerChip
                           id={`waiting-${player.id}`}
                           data={{ playerId: player.id, playerName: player.name, kyuRank: player.kyuRank || participants.find(p => p.id === player.id)?.kyuRank, source: { type: 'waiting' } }}
+                          onClick={() => handleChipClick(player.id, player.name, { type: 'waiting' })}
+                          isSelected={selectedPlayer?.playerId === player.id}
                         />
                         <select
                           value={waitingActivities[player.id]?.activityType || ''}
