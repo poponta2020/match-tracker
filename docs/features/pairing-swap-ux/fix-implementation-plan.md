@@ -62,7 +62,7 @@ status: completed
 
 ### タスク4: Integration テストの追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** タップ選択モードの動作を統合テストでカバーする。既存の `pairingDragLogic.test.js` はロジック変更なしのため対象外。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.integration.test.jsx`
