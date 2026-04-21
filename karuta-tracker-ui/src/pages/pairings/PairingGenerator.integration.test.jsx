@@ -117,6 +117,115 @@ describe('DragOverlay 表示ロジック', () => {
   });
 });
 
+describe('選手追加後のドラフト同期ロジック（#485 回帰防止）', () => {
+  // handleAddPlayer の「waitingPlayers更新＋ドラフト同期」部分を再現
+  const addPlayerAndSyncDraft = ({
+    waitingPlayers,
+    newPlayer,
+    unsavedDraftRef,
+    matchNumber,
+    pairings,
+    isEditingExisting,
+  }) => {
+    const newWaiting = [...waitingPlayers, newPlayer];
+    if (unsavedDraftRef.current && unsavedDraftRef.current.matchNumber === matchNumber) {
+      unsavedDraftRef.current = {
+        matchNumber,
+        pairings,
+        waitingPlayers: newWaiting,
+        isEditingExisting,
+      };
+    }
+    return newWaiting;
+  };
+
+  // useEffect のドラフト復元ロジックを再現（PairingGenerator.jsx L250-256）
+  const restoreFromDraft = (unsavedDraftRef, matchNumber) => {
+    if (unsavedDraftRef.current && unsavedDraftRef.current.matchNumber === matchNumber) {
+      return {
+        pairings: unsavedDraftRef.current.pairings,
+        waitingPlayers: unsavedDraftRef.current.waitingPlayers,
+        isEditingExisting: unsavedDraftRef.current.isEditingExisting,
+      };
+    }
+    return null;
+  };
+
+  it('未保存ドラフトがある状態で選手追加後、useEffect復元を通しても新規選手が待機リストに残る', () => {
+    const matchNumber = 1;
+    const initialWaiting = [{ id: 10, name: '既存選手A' }];
+    const initialPairings = [{ player1Id: 1, player2Id: 2, player1Name: '山田', player2Name: '佐藤' }];
+    const unsavedDraftRef = {
+      current: {
+        matchNumber,
+        pairings: initialPairings,
+        waitingPlayers: initialWaiting,
+        isEditingExisting: true,
+      },
+    };
+
+    // 選手追加 → ドラフトも同期
+    const newPlayer = { id: 99, name: '新規選手' };
+    const afterAddWaiting = addPlayerAndSyncDraft({
+      waitingPlayers: initialWaiting,
+      newPlayer,
+      unsavedDraftRef,
+      matchNumber,
+      pairings: initialPairings,
+      isEditingExisting: true,
+    });
+    expect(afterAddWaiting).toHaveLength(2);
+    expect(afterAddWaiting[1].id).toBe(99);
+
+    // setCurrentSession による useEffect 再実行 → ドラフトから復元
+    const restored = restoreFromDraft(unsavedDraftRef, matchNumber);
+    expect(restored).not.toBeNull();
+    // 復元後の waitingPlayers に新規選手が残っていること（これが本修正のコア）
+    expect(restored.waitingPlayers).toHaveLength(2);
+    expect(restored.waitingPlayers.find(p => p.id === 99)).toBeDefined();
+  });
+
+  it('ドラフトがない場合（初回状態）はドラフト同期をスキップし、waitingPlayers更新のみ行う', () => {
+    const matchNumber = 1;
+    const unsavedDraftRef = { current: null };
+    const newPlayer = { id: 99, name: '新規選手' };
+    const afterAddWaiting = addPlayerAndSyncDraft({
+      waitingPlayers: [],
+      newPlayer,
+      unsavedDraftRef,
+      matchNumber,
+      pairings: [],
+      isEditingExisting: false,
+    });
+    expect(afterAddWaiting).toEqual([newPlayer]);
+    expect(unsavedDraftRef.current).toBeNull();
+  });
+
+  it('ドラフトが別の試合番号のものの場合は同期しない（readOnly状態への誤書き込み防止）', () => {
+    const matchNumber = 2;  // 追加先
+    const otherDraft = {
+      matchNumber: 1,  // ドラフトは別試合
+      pairings: [],
+      waitingPlayers: [{ id: 20, name: '別試合の待機者' }],
+      isEditingExisting: true,
+    };
+    const unsavedDraftRef = { current: { ...otherDraft } };
+    const newPlayer = { id: 99, name: '新規選手' };
+
+    addPlayerAndSyncDraft({
+      waitingPlayers: [],
+      newPlayer,
+      unsavedDraftRef,
+      matchNumber,
+      pairings: [],
+      isEditingExisting: false,
+    });
+
+    // 別試合のドラフトは改変されない
+    expect(unsavedDraftRef.current).toEqual(otherDraft);
+  });
+});
+
 describe('PlayerSearchCombobox', () => {
   const testPlayers = [
     { id: 1, name: '山田太郎', kyuRank: 'A級' },
