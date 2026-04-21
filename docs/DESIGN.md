@@ -2540,6 +2540,66 @@ Entity Layer (JPA Entity)
 | `scripts/room-checker/sync-reservations.js` | DB同期（scrape-mypage.jsを子プロセスで実行） |
 | `.github/workflows/sync-kaderu-reservations.yml` | 30分cron + 手動トリガー |
 
+### 7.9 東区民センター予約 → 練習日自動登録フロー
+
+```
+[GitHub Actions: sync-higashi-reservations.yml]
+  cron: */30 * * * *  または  workflow_dispatch
+  ↓
+[Node.js: scrape-higashi-history.js]
+1. sapporo-community.jp にPlaywright(headless)でログイン
+   - 環境変数: SAPPORO_COMMUNITY_USER_ID / SAPPORO_COMMUNITY_PASSWORD
+   ↓
+2. メニュー → 申込履歴・結果ページへ遷移
+   ↓
+3. 履歴テーブル（#ctl00_cphMain_gvView）の全ページをパース
+   - 7列行のみデータ行として採用
+   - 申込内容に「札幌市東区民センター」を含む行のみ抽出
+   - 和暦 → 西暦変換、部屋名正規化（さくら/かっこう/和室全室）
+   - 取消済は除外
+   ↓
+4. 夜間(開始時刻 17:00 以降)のみフィルタ → JSON出力
+   ↓
+[Node.js: sync-higashi-reservations.js]
+5. JSONを受け取り、日付ごとに部屋をグルーピング
+   - 和室全室 or (さくら + かっこう) → 東全室(ID:10)
+   - さくら のみ → 東🌸(ID:6)
+   - かっこう のみ → 警告ログを出しスキップ
+   ↓
+6. DB接続 → organizations テーブルから hokudai の ID を取得
+   ↓
+7. 日付ごとに practice_sessions を照合:
+   a. 存在しない → INSERT（venue_id, totalMatches, startTime=18:00, endTime=21:00）
+   b. 既存 venue_id=NULL → 算出会場で UPDATE（venue_id, capacity 補完）
+   c. 既存 venue_id=6 + 算出 10 → UPDATE（東全室に昇格, capacity 更新）
+   d. 既存 venue_id=10 → スキップ（ダウングレード無し）
+   e. 既存 venue_id=3/4/7/8/9/11（かでる系） → スキップ（1日併存しない前提）
+   ↓
+8. 処理結果サマリー（created / expanded / skipped 件数）を出力
+```
+
+**関連テーブル**:
+
+| テーブル | 操作 |
+|---------|------|
+| `organizations` | SELECT（hokudai の ID 取得） |
+| `venues` | SELECT（defaultMatchCount, capacity 取得） |
+| `practice_sessions` | SELECT / INSERT / UPDATE |
+
+**スクリプトファイル**:
+
+| ファイル | 説明 |
+|---------|------|
+| `scripts/room-checker/scrape-higashi-history.js` | スクレイピング専用（JSON出力） |
+| `scripts/room-checker/sync-higashi-reservations.js` | DB同期（scrape-higashi-history.jsを子プロセスで実行） |
+| `.github/workflows/sync-higashi-reservations.yml` | 30分cron + 手動トリガー |
+
+**かでる同期との関係**:
+
+- 同一 Render PostgreSQL を共有（secret `KADERU_DATABASE_URL` を流用）
+- concurrency group (`higashi-reservation-sync`) が別なので cron 同時起動でも競合しない
+- 1日に両センターの予約が併存しない前提（Q13）。既存セッションがかでる系会場の場合、東区民センター同期側からは触らない
+
 ---
 
 ## 8. 未実装機能・TODO
