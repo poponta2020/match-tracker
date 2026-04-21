@@ -328,9 +328,11 @@ describe('タップ選択モードの状態遷移ロジック', () => {
   };
 
   // PairingGenerator.handleSlotClick のロジック再現
-  const handleSlotClick = ({ selectedPlayer, slotData, pairings, isReadOnly, isViewMode }) => {
+  const handleSlotClick = ({ selectedPlayer, slotData, pairings, isReadOnly, isViewMode, event }) => {
     if (isReadOnly || isViewMode) return { action: 'no-op' };
     if (!selectedPlayer) return { action: 'no-op' };
+    // 待機行の活動プルダウン等、フォーム要素由来のクリックは誤配置防止のため無視
+    if (event?.target?.closest?.('select, input, textarea, option')) return { action: 'no-op' };
     if (slotData.slotType?.startsWith('pairing-') && pairings[slotData.pairingIndex]?.hasResult) return { action: 'no-op' };
     return {
       action: 'execute',
@@ -507,6 +509,53 @@ describe('タップ選択モードの状態遷移ロジック', () => {
         pairings: basePairings, isReadOnly: false, isViewMode: true,
       });
       expect(result.action).toBe('no-op');
+    });
+
+    it('<select> 由来クリック（待機行の活動プルダウン等）→ no-op（誤配置防止）', () => {
+      const select = document.createElement('select');
+      const result = handleSlotClick({
+        selectedPlayer: { playerId: 1, playerName: 'A', source: { type: 'pairing', pairingIndex: 0, position: 1 } },
+        slotData: { slotType: 'waiting-list' },
+        pairings: basePairings, isReadOnly: false, isViewMode: false,
+        event: { target: select },
+      });
+      expect(result.action).toBe('no-op');
+    });
+
+    it('<input> 由来クリック（待機行のその他自由入力等）→ no-op', () => {
+      const input = document.createElement('input');
+      const result = handleSlotClick({
+        selectedPlayer: { playerId: 1, playerName: 'A', source: { type: 'pairing', pairingIndex: 0, position: 1 } },
+        slotData: { slotType: 'waiting-list' },
+        pairings: basePairings, isReadOnly: false, isViewMode: false,
+        event: { target: input },
+      });
+      expect(result.action).toBe('no-op');
+    });
+
+    it('<select> の子孫要素（option 等）由来クリック → no-op', () => {
+      const select = document.createElement('select');
+      const option = document.createElement('option');
+      select.appendChild(option);
+      const result = handleSlotClick({
+        selectedPlayer: { playerId: 1, playerName: 'A', source: { type: 'pairing', pairingIndex: 0, position: 1 } },
+        slotData: { slotType: 'waiting-list' },
+        pairings: basePairings, isReadOnly: false, isViewMode: false,
+        event: { target: option },
+      });
+      expect(result.action).toBe('no-op');
+    });
+
+    it('フォーム要素以外（div 等）由来クリック → 通常通り実行', () => {
+      const div = document.createElement('div');
+      const result = handleSlotClick({
+        selectedPlayer: { playerId: 1, playerName: 'A', source: { type: 'pairing', pairingIndex: 0, position: 1 } },
+        slotData: { slotType: 'waiting-list' },
+        pairings: basePairings, isReadOnly: false, isViewMode: false,
+        event: { target: div },
+      });
+      expect(result.action).toBe('execute');
+      expect(result.dest).toEqual({ slotType: 'waiting-list' });
     });
   });
 });

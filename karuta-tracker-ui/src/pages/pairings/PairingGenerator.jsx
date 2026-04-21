@@ -562,9 +562,11 @@ const PairingGenerator = () => {
   }, [selectedPlayer, isReadOnly, isViewMode, pairings, executePlacement]);
 
   // タップ選択モード: スロットタップ
-  const handleSlotClick = useCallback((slotData) => {
+  const handleSlotClick = useCallback((slotData, e) => {
     if (isReadOnly || isViewMode) return;
     if (!selectedPlayer) return;
+    // 待機行の活動プルダウン等、フォーム要素由来のクリックは誤配置防止のため無視
+    if (e?.target?.closest?.('select, input, textarea, option')) return;
     // ロック済みペアリングへの配置を防止
     if (slotData.slotType?.startsWith('pairing-') && pairings[slotData.pairingIndex]?.hasResult) return;
 
@@ -927,7 +929,7 @@ const PairingGenerator = () => {
                       id={`slot-pairing-${index}-player1`}
                       data={{ slotType: 'pairing-player1', pairingIndex: index }}
                       isDragActive={!!activeDragItem || !!selectedPlayer}
-                      onClick={() => handleSlotClick({ slotType: 'pairing-player1', pairingIndex: index })}
+                      onClick={(e) => handleSlotClick({ slotType: 'pairing-player1', pairingIndex: index }, e)}
                     >
                       {pairing.player1Id ? (
                         <DraggablePlayerChip
@@ -945,7 +947,7 @@ const PairingGenerator = () => {
                       id={`slot-pairing-${index}-player2`}
                       data={{ slotType: 'pairing-player2', pairingIndex: index }}
                       isDragActive={!!activeDragItem || !!selectedPlayer}
-                      onClick={() => handleSlotClick({ slotType: 'pairing-player2', pairingIndex: index })}
+                      onClick={(e) => handleSlotClick({ slotType: 'pairing-player2', pairingIndex: index }, e)}
                     >
                       {pairing.player2Id ? (
                         <DraggablePlayerChip
@@ -977,7 +979,7 @@ const PairingGenerator = () => {
               id="slot-new-pairing"
               data={{ slotType: 'new-pairing' }}
               isDragActive={!!activeDragItem || !!selectedPlayer}
-              onClick={() => handleSlotClick({ slotType: 'new-pairing' })}
+              onClick={(e) => handleSlotClick({ slotType: 'new-pairing' }, e)}
             >
               <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${(activeDragItem?.source?.type === 'waiting' || selectedPlayer?.source?.type === 'waiting') ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
                 ここにドロップして新しい組み合わせを作成
@@ -1005,7 +1007,7 @@ const PairingGenerator = () => {
                 id="slot-waiting-list"
                 data={{ slotType: 'waiting-list' }}
                 isDragActive={!!activeDragItem || !!selectedPlayer}
-                onClick={() => handleSlotClick({ slotType: 'waiting-list' })}
+                onClick={(e) => handleSlotClick({ slotType: 'waiting-list' }, e)}
               >
                 {waitingPlayers.length > 0 ? (
                   <div className="space-y-2">
