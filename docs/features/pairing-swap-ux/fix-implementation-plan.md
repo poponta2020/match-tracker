@@ -22,7 +22,7 @@ status: completed
 
 ### タスク2: DroppableSlot のタップ選択対応
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `DroppableSlot` に `onClick` prop を追加し、選択モード中のスロットタップを受け付ける。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/DroppableSlot.jsx`
