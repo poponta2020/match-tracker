@@ -37,7 +37,7 @@ status: completed
 
 ### タスク3: PairingGenerator へのタップ選択モード統合
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `selectedPlayer` state を追加し、チップ/スロットのタップハンドラを実装して既存 `computeDragResult` で状態更新する。D&D との共存、画面他領域タップでの解除も実装する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx`
