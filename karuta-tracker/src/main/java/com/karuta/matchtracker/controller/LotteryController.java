@@ -57,6 +57,30 @@ public class LotteryController {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
+     * 月次参加希望者一覧取得（優先選手指定UI用）
+     *
+     * 対象月・団体で参加希望を出している選手を一意化し級順で返す。
+     */
+    @GetMapping("/monthly-applicants")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> getMonthlyApplicants(
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long orgId = organizationId;
+        if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId,
+                    "他団体の参加希望者一覧は取得できません");
+            orgId = adminOrgId;
+        }
+
+        List<MonthlyApplicantDto> applicants = lotteryService.getMonthlyApplicants(year, month, orgId);
+        return ResponseEntity.ok(Map.of("applicants", applicants));
+    }
+
+    /**
      * 締め切り日時取得
      */
     @GetMapping("/deadline")
@@ -81,11 +105,12 @@ public class LotteryController {
         int year = request.getYear();
         int month = request.getMonth();
 
-        // ADMINは自団体に強制
+        // ADMINは自団体に強制（スコープ違反は403）
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long orgId = request.getOrganizationId();
         if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId, "他団体の抽選はプレビューできません");
             orgId = adminOrgId;
         }
 
@@ -101,7 +126,11 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
 
-        var preview = lotteryService.previewLottery(year, month, orgId);
+        // 優先選手バリデーション（他団体・参加希望なしを拒否）
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
+        var preview = lotteryService.previewLottery(year, month, orgId, priorityPlayerIds);
         Map<String, Object> response = new HashMap<>();
         response.put("results", preview.results());
         response.put("seed", preview.seed());
@@ -145,9 +174,12 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に実行済みです。再抽選が必要な場合はセッション単位で実行してください。", year, month));
         }
 
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong());
+                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong(), priorityPlayerIds);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -157,13 +189,16 @@ public class LotteryController {
     @PostMapping("/re-execute/{sessionId}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LotteryExecution> reExecuteLottery(@PathVariable Long sessionId,
+                                                                @RequestBody(required = false) com.karuta.matchtracker.dto.ReLotteryRequest request,
                                                                 HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         validateAdminScopeBySessionId(sessionId, role, adminOrgId);
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId);
+        // request が null（ボディなし）の場合 priorityPlayerIds も null → 直近の抽選から引き継ぐ
+        List<Long> priorityPlayerIds = request != null ? request.getPriorityPlayerIds() : null;
+        LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId, priorityPlayerIds);
         return ResponseEntity.ok(result);
     }
 
@@ -723,7 +758,12 @@ public class LotteryController {
         if (seed == null) {
             throw new IllegalStateException("シード値が指定されていません。プレビューを先に実行してください。");
         }
-        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed);
+
+        // 優先選手バリデーション（他団体・参加希望なしを拒否）
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
+        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
         return ResponseEntity.ok(result);
     }
 

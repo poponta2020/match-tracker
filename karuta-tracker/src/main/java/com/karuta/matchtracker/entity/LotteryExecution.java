@@ -1,9 +1,13 @@
 package com.karuta.matchtracker.entity;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * 抽選実行履歴エンティティ
@@ -68,6 +72,37 @@ public class LotteryExecution {
     /** 団体ID */
     @Column(name = "organization_id")
     private Long organizationId;
+
+    /** 管理者指定優先選手IDのJSON配列文字列（例: "[1,7,12]"） */
+    @Column(name = "priority_player_ids", columnDefinition = "TEXT")
+    private String priorityPlayerIdsJson;
+
+    private static final ObjectMapper PRIORITY_IDS_MAPPER = new ObjectMapper();
+
+    @Transient
+    public List<Long> getPriorityPlayerIds() {
+        if (priorityPlayerIdsJson == null || priorityPlayerIdsJson.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            return PRIORITY_IDS_MAPPER.readValue(priorityPlayerIdsJson, new TypeReference<List<Long>>() {});
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    @Transient
+    public void setPriorityPlayerIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            this.priorityPlayerIdsJson = null;
+            return;
+        }
+        try {
+            this.priorityPlayerIdsJson = PRIORITY_IDS_MAPPER.writeValueAsString(ids);
+        } catch (Exception e) {
+            this.priorityPlayerIdsJson = null;
+        }
+    }
 
     public enum ExecutionType {
         AUTO,

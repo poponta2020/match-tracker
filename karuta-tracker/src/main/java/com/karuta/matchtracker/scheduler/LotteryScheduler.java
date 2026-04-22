@@ -93,7 +93,7 @@ public class LotteryScheduler {
         }
 
         log.info("Executing lottery for {}-{} (orgId={})", year, month, organizationId);
-        LotteryExecution result = lotteryService.executeLottery(year, month, null, ExecutionType.AUTO, organizationId, new java.util.Random().nextLong());
+        LotteryExecution result = lotteryService.executeLottery(year, month, null, ExecutionType.AUTO, organizationId, new java.util.Random().nextLong(), java.util.List.of());
 
         if (result.getStatus() == ExecutionStatus.SUCCESS) {
             log.info("Lottery for {}-{} completed successfully", year, month);
