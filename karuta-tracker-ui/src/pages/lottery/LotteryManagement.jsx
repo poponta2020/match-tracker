@@ -251,7 +251,7 @@ export default function LotteryManagement() {
           <div className="flex flex-wrap gap-2">
             {applicants.map((applicant) => {
               const isSelected = priorityPlayerIds.includes(applicant.playerId);
-              const isDisabled = phase === 'confirmed' || phase === 'preview';
+              const isDisabled = phase === 'confirmed';
               return (
                 <button
                   key={applicant.playerId}
