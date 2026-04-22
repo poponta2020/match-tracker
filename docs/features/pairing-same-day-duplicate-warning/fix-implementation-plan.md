@@ -31,7 +31,7 @@ status: completed
 ---
 
 ### タスク3: バックエンドテスト - 当日他試合検知の動作確認
-- [ ] 完了
+- [x] 完了
 - **概要:** `getPairRecentMatches` / `enrichWithRecentMatches` / `autoMatch` について、「試合3編集中に試合1・試合2・試合4・試合5のペアを検知する」ケースのテストを追加（存在しないメソッドについては新規追加、既存テストで近いケースがあれば拡張）。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/MatchPairingServiceTest.java` — テストケース追加
@@ -44,7 +44,7 @@ status: completed
 ---
 
 ### タスク4: フロントエンドテスト確認・必要に応じて調整
-- [ ] 完了
+- [x] 完了
 - **概要:** `PairingGenerator.integration.test.jsx` の既存アサーションで表示形式に依存しているものがないか確認。あれば調整。必要に応じて「当日ペアで `⚠今日` が表示される」ケースを追加。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.integration.test.jsx` — 必要に応じて修正/追加
@@ -54,7 +54,7 @@ status: completed
 ---
 
 ### タスク5: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.md のドキュメント更新ルールに従い、改修内容を仕様書・設計書・画面一覧に反映する。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 対戦組み合わせ画面の「直近対戦日表示」仕様に「当日重複ペアは ⚠今日 表示」と「同日他試合全体を検知対象とする」旨を追記

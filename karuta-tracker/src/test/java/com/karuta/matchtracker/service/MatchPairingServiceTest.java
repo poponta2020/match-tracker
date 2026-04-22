@@ -1196,4 +1196,114 @@ class MatchPairingServiceTest {
             }));
         }
     }
+
+    @Nested
+    @DisplayName("同日他試合検知の境界テスト（getPairRecentMatches）")
+    class SameDayOtherMatchDetectionTests {
+
+        @Test
+        @DisplayName("同日の後方試合番号で組まれたペアが当日として検知される")
+        void shouldDetectPairFromLaterMatchNumber() {
+            // Given: 試合3を編集中、試合5で player1 vs player2 が既に組まれている
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer currentMatchNumber = 3;
+            List<MatchPairing> sameDayPairings = Arrays.asList(
+                    createMatchPairing(10L, sessionDate, 5, 1L, 2L)
+            );
+
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(sameDayPairings);
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            List<AutoMatchingResult.MatchHistory> result =
+                    matchPairingService.getPairRecentMatches(1L, 2L, sessionDate, currentMatchNumber);
+
+            // Then: 当日として検知される
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getMatchDate()).isEqualTo(sessionDate);
+        }
+
+        @Test
+        @DisplayName("同日の自分の試合番号で組まれたペアは検知されない")
+        void shouldExcludeOwnMatchNumberPair() {
+            // Given: 試合3を編集中、同じ試合3で player1 vs player2 が入っているだけ
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer currentMatchNumber = 3;
+            List<MatchPairing> sameDayPairings = Arrays.asList(
+                    createMatchPairing(10L, sessionDate, 3, 1L, 2L)
+            );
+
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(sameDayPairings);
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            List<AutoMatchingResult.MatchHistory> result =
+                    matchPairingService.getPairRecentMatches(1L, 2L, sessionDate, currentMatchNumber);
+
+            // Then: 自分の試合番号は除外されるため履歴なし
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("matchNumber=1 でも同日他試合のペアを検知する")
+        void shouldDetectSameDayWhenMatchNumberIsOne() {
+            // Given: 試合1を編集中、試合2・試合3に同ペアが存在
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer currentMatchNumber = 1;
+            List<MatchPairing> sameDayPairings = Arrays.asList(
+                    createMatchPairing(10L, sessionDate, 2, 1L, 2L),
+                    createMatchPairing(11L, sessionDate, 3, 1L, 2L)
+            );
+
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(sameDayPairings);
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            List<AutoMatchingResult.MatchHistory> result =
+                    matchPairingService.getPairRecentMatches(1L, 2L, sessionDate, currentMatchNumber);
+
+            // Then: 当日として1件検知される（同一日付の重複はマージされる）
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getMatchDate()).isEqualTo(sessionDate);
+        }
+
+        @Test
+        @DisplayName("前方・後方両方の試合番号のペアをまとめて検知する（試合3編集中に試合1と試合5で組まれた同ペア）")
+        void shouldDetectBothForwardAndBackwardMatchNumbers() {
+            // Given: 試合3を編集中、試合1と試合5に同ペア
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer currentMatchNumber = 3;
+            List<MatchPairing> sameDayPairings = Arrays.asList(
+                    createMatchPairing(10L, sessionDate, 1, 1L, 2L),
+                    createMatchPairing(11L, sessionDate, 5, 1L, 2L)
+            );
+
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(sameDayPairings);
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            List<AutoMatchingResult.MatchHistory> result =
+                    matchPairingService.getPairRecentMatches(1L, 2L, sessionDate, currentMatchNumber);
+
+            // Then: 当日として1件（日付単位では重複排除）
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getMatchDate()).isEqualTo(sessionDate);
+        }
+    }
 }

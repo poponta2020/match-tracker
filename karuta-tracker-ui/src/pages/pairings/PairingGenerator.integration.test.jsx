@@ -605,3 +605,36 @@ describe('新規ペア作成ゾーンの表示条件', () => {
     })).toBe(false);
   });
 });
+
+describe('直近対戦日表示ロジック', () => {
+  // PairingGenerator.jsx の L963-L972 ブロックの分岐を再現
+  const classify = (recentMatches, sessionDate) => {
+    if (recentMatches === null) return { kind: 'loading', text: '...' };
+    if (!recentMatches || recentMatches.length === 0) return { kind: 'first', text: '初' };
+    if (recentMatches[0].matchDate === sessionDate) return { kind: 'today', text: '⚠今日' };
+    return { kind: 'past', text: recentMatches[0].matchDate.split('-').slice(1).join('/') };
+  };
+
+  it('recentMatches が null（履歴取得中）→ loading 表示', () => {
+    expect(classify(null, '2026-04-23')).toEqual({ kind: 'loading', text: '...' });
+  });
+
+  it('空配列（初対戦）→ 初 表示', () => {
+    expect(classify([], '2026-04-23')).toEqual({ kind: 'first', text: '初' });
+  });
+
+  it('先頭履歴が sessionDate と一致（当日重複）→ ⚠今日 表示', () => {
+    const recentMatches = [{ matchDate: '2026-04-23', daysAgo: 0 }];
+    expect(classify(recentMatches, '2026-04-23')).toEqual({ kind: 'today', text: '⚠今日' });
+  });
+
+  it('先頭履歴が過去日（MM/DD フォーマット）→ past 表示', () => {
+    const recentMatches = [{ matchDate: '2026-04-21', daysAgo: 2 }];
+    expect(classify(recentMatches, '2026-04-23')).toEqual({ kind: 'past', text: '04/21' });
+  });
+
+  it('sessionDate と先頭履歴が別日なら past（当日以外は従来表示）', () => {
+    const recentMatches = [{ matchDate: '2026-03-05', daysAgo: 49 }];
+    expect(classify(recentMatches, '2026-04-23')).toEqual({ kind: 'past', text: '03/05' });
+  });
+});
