@@ -83,7 +83,7 @@ parent_issue: 489
 
 ### タスク6: Controller の preview/confirm を優先選手対応に変更
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `previewLottery` / `confirmLottery`（`executeAndConfirmLottery`）でリクエストの `priorityPlayerIds` を受け取り、バリデーション + Serviceへの伝搬を行う。`previewLottery` には `AdminScopeValidator.validateScope` を新たに追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/LotteryController.java`

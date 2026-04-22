@@ -105,11 +105,12 @@ public class LotteryController {
         int year = request.getYear();
         int month = request.getMonth();
 
-        // ADMINは自団体に強制
+        // ADMINは自団体に強制（スコープ違反は403）
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long orgId = request.getOrganizationId();
         if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId, "他団体の抽選はプレビューできません");
             orgId = adminOrgId;
         }
 
@@ -125,7 +126,11 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
 
-        var preview = lotteryService.previewLottery(year, month, orgId, List.of());
+        // 優先選手バリデーション（他団体・参加希望なしを拒否）
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
+        var preview = lotteryService.previewLottery(year, month, orgId, priorityPlayerIds);
         Map<String, Object> response = new HashMap<>();
         response.put("results", preview.results());
         response.put("seed", preview.seed());
@@ -747,7 +752,12 @@ public class LotteryController {
         if (seed == null) {
             throw new IllegalStateException("シード値が指定されていません。プレビューを先に実行してください。");
         }
-        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, List.of());
+
+        // 優先選手バリデーション（他団体・参加希望なしを拒否）
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
+        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
         return ResponseEntity.ok(result);
     }
 

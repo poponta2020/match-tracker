@@ -154,6 +154,7 @@ public class LotteryService {
             return execution;
         }
 
+        execution.setPriorityPlayerIds(priorityPlayerIds);
         execution.setConfirmedAt(JstDateTimeUtil.now());
         execution.setConfirmedBy(executedBy);
         lotteryExecutionRepository.save(execution);
