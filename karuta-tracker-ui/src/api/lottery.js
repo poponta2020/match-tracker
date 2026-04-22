@@ -5,9 +5,10 @@ export const lotteryAPI = {
   execute: (year, month) =>
     apiClient.post('/lottery/execute', { year, month }),
 
-  // セッション再抽選
-  reExecute: (sessionId) =>
-    apiClient.post(`/lottery/re-execute/${sessionId}`),
+  // セッション再抽選（priorityPlayerIds: null=直近から引き継ぎ, []=明示クリア, [...]= 上書き指定）
+  reExecute: (sessionId, priorityPlayerIds = null) =>
+    apiClient.post(`/lottery/re-execute/${sessionId}`,
+      priorityPlayerIds !== null ? { priorityPlayerIds } : undefined),
 
   // 月別抽選結果取得
   getResults: (year, month) =>
@@ -74,12 +75,16 @@ export const lotteryAPI = {
     apiClient.post('/lottery/rejoin-waitlist', { sessionId, playerId }),
 
   // 抽選結果確定（伝助一括書き戻しトリガー）
-  confirm: (year, month, organizationId, seed) =>
-    apiClient.post('/lottery/confirm', { year, month, organizationId, seed }),
+  confirm: (year, month, organizationId, seed, priorityPlayerIds = []) =>
+    apiClient.post('/lottery/confirm', { year, month, organizationId, seed, priorityPlayerIds }),
 
   // 抽選プレビュー（DB保存なし）
-  preview: (year, month, organizationId) =>
-    apiClient.post('/lottery/preview', { year, month, organizationId }),
+  preview: (year, month, organizationId, priorityPlayerIds = []) =>
+    apiClient.post('/lottery/preview', { year, month, organizationId, priorityPlayerIds }),
+
+  // 対象月・団体で参加希望を出している選手の一覧取得（優先選手指定UI用）
+  getMonthlyApplicants: (year, month, organizationId) =>
+    apiClient.get('/lottery/monthly-applicants', { params: { year, month, organizationId } }),
 
   // キャンセル待ちのみに通知送信
   notifyWaitlisted: (year, month, organizationId) =>
