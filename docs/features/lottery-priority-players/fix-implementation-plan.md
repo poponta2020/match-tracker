@@ -125,7 +125,7 @@ parent_issue: 489
 
 ### タスク9: LotteryManagement 画面に優先選手指定UIを追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選管理画面に「参加希望者一覧（優先選手指定）」セクションを追加する。チップUIで選手名を表示、クリックで選択切り替え、選択済み人数を表示、sessionStorageに保存。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/lottery/LotteryManagement.jsx`
