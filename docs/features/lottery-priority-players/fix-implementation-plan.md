@@ -55,7 +55,7 @@ parent_issue: 489
 
 ### タスク4: 優先選手バリデーションロジックの実装
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `priorityPlayerIds` が「参加希望なし選手」「他団体選手」を含む場合に明示的にエラーを返すバリデーション関数を追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryService.java` — `validatePriorityPlayerIds(List<Long> ids, int year, int month, Long organizationId)` メソッドを新設。対象月の `LotteryParticipant` の `playerId` 集合と突き合わせ、未参加のIDは `IllegalArgumentException`、`Player.organizationId != organizationId` は `SecurityException`（Controller層で403へマップ）

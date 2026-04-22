@@ -14,8 +14,10 @@ import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -61,6 +63,7 @@ public class LotteryService {
     private final DensukeWriteService densukeWriteService;
     private final ObjectMapper objectMapper;
     private final LotteryQueryService lotteryQueryService;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
 
     // details JSON 用の内部レコード
     record LotteryDetails(List<SessionDetail> sessions) {}
@@ -511,29 +514,7 @@ public class LotteryService {
      */
     @Transactional(readOnly = true)
     public List<MonthlyApplicantDto> getMonthlyApplicants(int year, int month, Long organizationId) {
-        List<PracticeSession> sessions = organizationId != null
-                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
-                : practiceSessionRepository.findByYearAndMonth(year, month);
-
-        if (sessions.isEmpty()) {
-            return List.of();
-        }
-
-        List<Long> sessionIds = sessions.stream()
-                .map(PracticeSession::getId)
-                .collect(Collectors.toList());
-
-        Set<Long> applicantPlayerIds = practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
-                .filter(p -> {
-                    ParticipantStatus s = p.getStatus();
-                    return s == ParticipantStatus.PENDING
-                            || s == ParticipantStatus.WON
-                            || s == ParticipantStatus.WAITLISTED
-                            || s == ParticipantStatus.OFFERED;
-                })
-                .map(PracticeParticipant::getPlayerId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
+        Set<Long> applicantPlayerIds = loadApplicantPlayerIds(year, month, organizationId);
         if (applicantPlayerIds.isEmpty()) {
             return List.of();
         }
@@ -547,6 +528,81 @@ public class LotteryService {
                         .name(p.getName())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 優先選手指定リクエストのバリデーション。
+     *
+     * - 指定選手が対象団体に所属していない場合は {@link ForbiddenException}（403）
+     * - 指定選手が対象月・団体で参加希望を出していない場合は {@link IllegalArgumentException}（400）
+     *
+     * 団体所属の判定は {@link PlayerOrganizationRepository} の中間テーブルで行う。
+     * SUPER_ADMIN が全団体対象で呼び出す場合（organizationId == null）は団体所属チェックを省略し、
+     * 参加希望チェックのみを行う。
+     *
+     * @param ids            優先指定された選手ID一覧
+     * @param year           対象年
+     * @param month          対象月
+     * @param organizationId 対象団体ID（nullの場合は全団体モード）
+     * @throws ForbiddenException       指定選手に他団体所属のものが含まれる場合
+     * @throws IllegalArgumentException 指定選手に参加希望未提出のものが含まれる場合
+     */
+    @Transactional(readOnly = true)
+    public void validatePriorityPlayerIds(List<Long> ids, int year, int month, Long organizationId) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+
+        // 1) 団体所属チェック（他団体所属の選手は403）
+        if (organizationId != null) {
+            List<Long> foreignIds = ids.stream()
+                    .filter(id -> !playerOrganizationRepository
+                            .existsByPlayerIdAndOrganizationId(id, organizationId))
+                    .collect(Collectors.toList());
+            if (!foreignIds.isEmpty()) {
+                throw new ForbiddenException(
+                        "他団体の選手を優先選手に指定することはできません: playerIds=" + foreignIds);
+            }
+        }
+
+        // 2) 参加希望チェック（希望未提出の選手は400）
+        Set<Long> applicantPlayerIds = loadApplicantPlayerIds(year, month, organizationId);
+        List<Long> missingIds = ids.stream()
+                .filter(id -> !applicantPlayerIds.contains(id))
+                .collect(Collectors.toList());
+        if (!missingIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "参加希望を出していない選手が含まれています: playerIds=" + missingIds);
+        }
+    }
+
+    /**
+     * 対象月・団体で参加希望を出している選手IDの集合を取得する。
+     * 有効な参加希望ステータスは PENDING / WON / WAITLISTED / OFFERED のみ。
+     */
+    private Set<Long> loadApplicantPlayerIds(int year, int month, Long organizationId) {
+        List<PracticeSession> sessions = organizationId != null
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
+
+        if (sessions.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+
+        return practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                .filter(p -> {
+                    ParticipantStatus s = p.getStatus();
+                    return s == ParticipantStatus.PENDING
+                            || s == ParticipantStatus.WON
+                            || s == ParticipantStatus.WAITLISTED
+                            || s == ParticipantStatus.OFFERED;
+                })
+                .map(PracticeParticipant::getPlayerId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**
