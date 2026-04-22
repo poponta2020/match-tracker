@@ -142,7 +142,7 @@ parent_issue: 489
 
 ### タスク10: ドキュメント更新
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `docs/SPECIFICATION.md`, `docs/SCREEN_LIST.md`, `docs/DESIGN.md` に本機能の内容を反映する。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 抽選機能の仕様に「管理者指定優先選手」の項目追加、API仕様表に `GET /monthly-applicants` 追加、`preview`/`confirm`/`re-execute` のリクエスト項目更新、DBスキーマ表に `lottery_executions.priority_player_ids` 追加

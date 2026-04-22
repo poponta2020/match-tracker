@@ -510,6 +510,7 @@ SUPER_ADMIN のみ操作可能。
 
 - **連鎖落選**: 同セッション内で先行試合に落選した人は、後続試合で低優先度扱い。定員超過時は優先的に落選するが、空き枠があれば当選する
 - **優先当選**: 同月内の別セッションで落選経験がある人は、次の抽選で当選が保証される
+- **管理者指定優先選手**: 管理者が指定した選手は抽選の最優先枠として扱われる。優先順位: **管理者指定優先 > 連続落選救済 > 一般枠**。優先選手同士でも定員超過時は抽選（全員当選とは限らない）。希望を出しているセッションのみ適用。優先選手が落選した場合、キャンセル待ちの最上位に入る
 - **一般枠最低保証**: 優先当選者と一般参加者が共存する場合、定員の一定割合（システム設定 `lottery_normal_reserve_percent`、デフォルト30%）を一般枠として確保する。優先当選者だけで定員が埋まることを防ぎ、新規参加者にも機会を保証する
 - **キャンセル待ち順番の引き継ぎ**: 連続する試合番号（第N試合→第N+1試合）では、前試合のキャンセル待ち順番を維持する。新規落選者はランダムに末尾へ追加される
 - **応答期限**: min(通知から24時間, 練習日前日23:59) の早い方。期限超過後の応答はバックエンドで拒否される
@@ -532,6 +533,8 @@ SUPER_ADMIN のみ操作可能。
 | `confirmedAt` | LocalDateTime | 確定日時（NULL = 未確定） |
 | `confirmedBy` | Long | 確定者のプレイヤーID |
 | `organizationId` | Long | 団体ID |
+| `seed` | Long | 抽選シード値（再現性担保） |
+| `priorityPlayerIds` | List<Long> | 管理者指定優先選手IDリスト（JSON形式で保存）。確定時に記録 |
 
 **Notification（アプリ内通知）:**
 
@@ -1515,6 +1518,8 @@ venues ──< venue_match_schedules (venueId)
 | confirmed_at | TIMESTAMP | — | 確定日時（NULL = 未確定） |
 | confirmed_by | BIGINT | — | 確定者のプレイヤーID |
 | organization_id | BIGINT | — | 団体ID |
+| seed | BIGINT | — | 抽選シード値 |
+| priority_player_ids | TEXT | — | 管理者指定優先選手IDリスト（JSON配列文字列） |
 
 #### notifications
 
@@ -1841,7 +1846,10 @@ UNIQUE制約: (player_id, organization_id)
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
 | POST | `/execute` | ADMIN+ | 手動抽選実行（年月指定、ADMINは自団体のみ） |
-| POST | `/re-execute/{sessionId}` | ADMIN+ | セッション再抽選 |
+| POST | `/preview` | ADMIN+ | 抽選プレビュー（DB保存なし。priorityPlayerIds省略可） |
+| POST | `/confirm` | ADMIN+ | 抽選結果確定（ADMINは自団体のみ。priorityPlayerIds省略可） |
+| POST | `/re-execute/{sessionId}` | ADMIN+ | セッション再抽選（priorityPlayerIds: null=直近引き継ぎ、[]=クリア） |
+| GET | `/monthly-applicants?year=&month=&organizationId=` | ADMIN+ | 対象月・団体の参加希望選手一覧（優先選手指定UI用） |
 | GET | `/results?year=&month=` | ALL | 月別抽選結果取得 |
 | GET | `/results/{sessionId}` | ALL | セッション別抽選結果 |
 | GET | `/my-results?year=&month=&playerId=` | ALL | 自分の抽選結果 |
@@ -1852,7 +1860,6 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/session-offers/{sessionId}` | ALL | セッション内の自分のOFFERED一覧取得 |
 | GET | `/waitlist-status?playerId=` | ALL | キャンセル待ち状況 |
 | PUT | `/admin/edit-participants` | ADMIN+ | 管理者による手動編集 |
-| POST | `/confirm` | ADMIN+ | 抽選結果確定（ADMINは自団体のみ） |
 | GET | `/executions?year=&month=` | ALL | 抽選実行履歴 |
 | POST | `/same-day-join` | ALL | 当日先着参加（sessionId, matchNumber, playerId）。先着1名がWON。枠なし時は409 Conflict |
 

@@ -1290,8 +1290,12 @@ Entity Layer (JPA Entity)
 **レスポンス**: `LotteryExecution`
 
 #### POST /api/lottery/re-execute/{sessionId}
-**説明**: セッション再抽選
+**説明**: セッション再抽選。リクエストボディ省略時は直近実行時の `priorityPlayerIds` を引き継ぐ。`priorityPlayerIds: []` で明示クリア可能
 **権限**: SUPER_ADMIN, ADMIN
+**リクエスト** (任意):
+```json
+{ "priorityPlayerIds": [10, 20] }
+```
 **レスポンス**: `LotteryExecution`
 
 #### GET /api/lottery/results?year={year}&month={month}
@@ -1450,16 +1454,28 @@ Entity Layer (JPA Entity)
 **リクエスト**: `AdminEditParticipantsRequest`
 
 #### POST /api/lottery/confirm
-**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by` を設定。団体単位で確定状態を管理
+**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by`/`priority_player_ids`/`seed` を記録。団体単位で確定状態を管理
 **権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
-**リクエスト**: `LotteryExecutionRequest` (year, month, organizationId)
+**リクエスト**: `LotteryExecutionRequest`
+```json
+{ "year": 2026, "month": 5, "organizationId": 1, "seed": 12345, "priorityPlayerIds": [10, 20] }
+```
 **レスポンス**: `LotteryExecution`
 
 #### POST /api/lottery/preview
-**説明**: 抽選プレビュー。抽選アルゴリズムを実行するがDBには保存しない。締め切り前チェック・確定済みチェックあり
+**説明**: 抽選プレビュー。抽選アルゴリズムを実行するがDBには保存しない。締め切り前チェック・確定済みチェック・AdminScopeValidation・priorityPlayerIdsバリデーションあり
 **権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
-**リクエスト**: `LotteryExecutionRequest` (year, month, organizationId)
+**リクエスト**: `LotteryExecutionRequest`
+```json
+{ "year": 2026, "month": 5, "organizationId": 1, "priorityPlayerIds": [10, 20] }
+```
 **レスポンス**: `List<LotteryResultDto>`
+
+#### GET /api/lottery/monthly-applicants
+**説明**: 対象月・団体で参加希望を出している選手一覧を取得（優先選手指定UI用）。重複排除・級順ソート済み
+**権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
+**クエリパラメータ**: `year`, `month`, `organizationId`
+**レスポンス**: `List<MonthlyApplicantDto>` (`playerId`, `name`)
 
 #### POST /api/lottery/notify-waitlisted
 **説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信
@@ -2253,9 +2269,12 @@ Entity Layer (JPA Entity)
    ↓
 4. 定員超過判定（capacity vs 参加希望者数）
    ↓
-5. 定員内 → 全員WON、定員超過 → ランダム抽選
+5. 定員内 → 全員WON、定員超過 → 3層優先抽選
+   - **層1（管理者指定優先）**: 管理者が指定した選手を優先枠で抽選。定員を超えた場合は優先選手同士で抽選
+   - **層2（連続落選救済）**: 同月内の別セッションで落選経験のある選手を救済枠で抽選（normalReservePercent考慮）
+   - **層3（一般枠）**: 残り定員に対して通常抽選
    - 当選者: status = WON
-   - 落選者: status = WAITLISTED + waitlist_number付与
+   - 落選者: status = WAITLISTED + waitlist_number付与（優先落選 → 救済落選 → 一般落選の順で番号付与）
    ↓
 6. 通知作成（LOTTERY_WON / LOTTERY_WAITLISTED）
    ↓
