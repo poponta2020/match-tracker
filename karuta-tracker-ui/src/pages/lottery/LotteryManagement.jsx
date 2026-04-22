@@ -93,6 +93,12 @@ export default function LotteryManagement() {
     setPriorityPlayerIds(prev =>
       prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
     );
+    // プレビュー中に優先選手が変わったら、プレビュー結果が実行条件と食い違うのを防ぐため idle に戻して再プレビューを必須にする
+    if (phase === 'preview') {
+      setPhase('idle');
+      setPreviewResults([]);
+      setLotterySeed(null);
+    }
   };
 
   const changeMonth = (delta) => {

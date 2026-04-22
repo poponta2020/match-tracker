@@ -115,6 +115,7 @@ public class LotteryService {
             if (sessions.isEmpty()) {
                 log.info("No sessions found for {}-{}", year, month);
                 execution.setDetails(toJson(new MessageDetail("No sessions found")));
+                execution.setPriorityPlayerIds(priorityPlayerIds);
                 return lotteryExecutionRepository.save(execution);
             }
 
@@ -130,6 +131,7 @@ public class LotteryService {
             }
 
             execution.setDetails(toJson(new LotteryDetails(sessionDetails)));
+            execution.setPriorityPlayerIds(priorityPlayerIds);
 
             log.info("Lottery completed for {}-{}: {} sessions processed", year, month, sessions.size());
 
