@@ -174,9 +174,12 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に実行済みです。再抽選が必要な場合はセッション単位で実行してください。", year, month));
         }
 
+        List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
+        lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong(), List.of());
+                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong(), priorityPlayerIds);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 

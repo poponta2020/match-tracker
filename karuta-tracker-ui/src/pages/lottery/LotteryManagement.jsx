@@ -62,20 +62,25 @@ export default function LotteryManagement() {
 
   useEffect(() => {
     setApplicants([]);
-    if (!organizationId) {
-      setPriorityPlayerIds([]);
-      return;
-    }
+    setPriorityPlayerIds([]);
+    if (!organizationId) return;
+
     const key = `lottery-priority-${currentDate.year}-${currentDate.month}-${organizationId}`;
     const stored = sessionStorage.getItem(key);
     let restoredIds = [];
     if (stored) {
       try { restoredIds = JSON.parse(stored); } catch { /* ignore */ }
     }
-    setPriorityPlayerIds(restoredIds);
 
     lotteryAPI.getMonthlyApplicants(currentDate.year, currentDate.month, organizationId)
-      .then(res => setApplicants(res.data.applicants ?? []))
+      .then(res => {
+        const fetchedApplicants = res.data.applicants ?? [];
+        setApplicants(fetchedApplicants);
+        const applicantPlayerIds = fetchedApplicants.map(a => a.playerId);
+        const filteredIds = restoredIds.filter(id => applicantPlayerIds.includes(id));
+        setPriorityPlayerIds(filteredIds);
+        sessionStorage.setItem(key, JSON.stringify(filteredIds));
+      })
       .catch(() => setApplicants([]));
   }, [currentDate.year, currentDate.month, organizationId]);
 
