@@ -8,6 +8,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 手動抽選実行リクエスト
  */
@@ -31,4 +34,10 @@ public class LotteryExecutionRequest {
      * 抽選シード値（プレビュー時に生成され、確定時に同じ値を送る）
      */
     private Long seed;
+
+    /**
+     * 管理者が指定する優先選手のIDリスト（任意、デフォルト空リスト）
+     */
+    @Builder.Default
+    private List<Long> priorityPlayerIds = new ArrayList<>();
 }
