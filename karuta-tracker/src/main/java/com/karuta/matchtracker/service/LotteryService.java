@@ -69,7 +69,7 @@ public class LotteryService {
     record LotteryDetails(List<SessionDetail> sessions) {}
     record SessionDetail(Long sessionId, LocalDate date, List<MatchDetail> matches) {}
     record MatchDetail(int match, int applicants, int winners, int waitlisted) {}
-    record ReLotteryDetails(Long sessionId, int promotedKept, int relotteryTargets) {}
+    record ReLotteryDetails(Long sessionId, int promotedKept, int relotteryTargets, long seed, int priorityPlayerCount) {}
     record ErrorDetail(String error) {}
     record MessageDetail(String message) {}
 
@@ -731,13 +731,17 @@ public class LotteryService {
      * - それ以外の当選者・キャンセル待ちをリセットして再抽選
      * - 同月内の他セッションの落選者は優先当選の対象
      */
+    /**
+     * @param priorityPlayerIds 優先選手IDリスト。null の場合は直近の抽選実行から引き継ぐ。空リストは明示的なクリア。
+     */
     @Transactional
-    public LotteryExecution reExecuteLottery(Long sessionId, Long executedBy) {
+    public LotteryExecution reExecuteLottery(Long sessionId, Long executedBy, List<Long> priorityPlayerIds) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
         int year = session.getSessionDate().getYear();
         int month = session.getSessionDate().getMonthValue();
+        Long orgId = session.getOrganizationId();
 
         log.info("Re-executing lottery for session {} (date: {})", sessionId, session.getSessionDate());
 
@@ -746,6 +750,7 @@ public class LotteryService {
                 .targetMonth(month)
                 .executionType(ExecutionType.MANUAL_RELOTTERY)
                 .sessionId(sessionId)
+                .organizationId(orgId)
                 .executedBy(executedBy)
                 .executedAt(JstDateTimeUtil.now())
                 .status(ExecutionStatus.SUCCESS)
@@ -755,6 +760,31 @@ public class LotteryService {
         lotteryExecutionRepository.save(execution);
 
         try {
+            // 優先選手IDの解決：null = 直近の抽選から引き継ぐ
+            List<Long> resolvedPriorityPlayerIds;
+            if (priorityPlayerIds != null) {
+                // 空リストは明示的クリア、非空リストはバリデーションして使用
+                if (!priorityPlayerIds.isEmpty()) {
+                    validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+                }
+                resolvedPriorityPlayerIds = priorityPlayerIds;
+            } else {
+                // 直近の成功した抽選実行から priorityPlayerIds を引き継ぐ
+                LotteryExecution latest = orgId != null
+                        ? lotteryExecutionRepository
+                                .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                                        year, month, orgId, ExecutionStatus.SUCCESS)
+                                .orElse(null)
+                        : lotteryExecutionRepository
+                                .findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
+                                        year, month, ExecutionStatus.SUCCESS)
+                                .orElse(null);
+                resolvedPriorityPlayerIds = latest != null ? latest.getPriorityPlayerIds() : List.of();
+                log.debug("Re-lottery inheriting {} priority players from latest execution",
+                        resolvedPriorityPlayerIds.size());
+            }
+            Set<Long> adminPrioritySet = new HashSet<>(resolvedPriorityPlayerIds);
+
             // このセッションの全参加者を取得
             List<PracticeParticipant> allParticipants = practiceParticipantRepository
                     .findBySessionId(sessionId);
@@ -798,6 +828,8 @@ public class LotteryService {
 
             // セッション内落選者を追跡
             Set<Long> sessionLosers = new HashSet<>();
+            long seed = new Random().nextLong();
+            Random random = new Random(seed);
 
             // 繰り上がり者の試合番号ごとのカウントを考慮して定員調整
             Map<Integer, Long> promotedCountByMatch = promoted.stream()
@@ -832,7 +864,7 @@ public class LotteryService {
 
                 processMatch(session, matchNumber, entry.getValue(),
                         sessionLosers, monthlyLosers, execution.getId(),
-                        inheritedOrder, currentWaitlistOrder, Set.of(), true, new Random());
+                        inheritedOrder, currentWaitlistOrder, adminPrioritySet, true, random);
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;
@@ -841,11 +873,12 @@ public class LotteryService {
                 session.setCapacity(originalCapacity);
             }
 
+            execution.setPriorityPlayerIds(resolvedPriorityPlayerIds);
             execution.setDetails(toJson(new ReLotteryDetails(
-                    sessionId, promoted.size(), reLotteryTargets.size())));
+                    sessionId, promoted.size(), reLotteryTargets.size(), seed, resolvedPriorityPlayerIds.size())));
 
-            log.info("Re-lottery completed for session {}: {} promoted kept, {} re-lotteried",
-                    sessionId, promoted.size(), reLotteryTargets.size());
+            log.info("Re-lottery completed for session {}: {} promoted kept, {} re-lotteried, {} priority players",
+                    sessionId, promoted.size(), reLotteryTargets.size(), resolvedPriorityPlayerIds.size());
 
         } catch (Exception e) {
             log.error("Re-lottery failed for session {}", sessionId, e);

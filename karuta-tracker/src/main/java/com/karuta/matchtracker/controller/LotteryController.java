@@ -186,13 +186,16 @@ public class LotteryController {
     @PostMapping("/re-execute/{sessionId}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LotteryExecution> reExecuteLottery(@PathVariable Long sessionId,
+                                                                @RequestBody(required = false) com.karuta.matchtracker.dto.ReLotteryRequest request,
                                                                 HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         validateAdminScopeBySessionId(sessionId, role, adminOrgId);
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId);
+        // request が null（ボディなし）の場合 priorityPlayerIds も null → 直近の抽選から引き継ぐ
+        List<Long> priorityPlayerIds = request != null ? request.getPriorityPlayerIds() : null;
+        LotteryExecution result = lotteryService.reExecuteLottery(sessionId, currentUserId, priorityPlayerIds);
         return ResponseEntity.ok(result);
     }
 

@@ -96,7 +96,7 @@ parent_issue: 489
 
 ### タスク7: 再抽選の優先選手対応
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `reExecuteLottery` で初回の `priorityPlayerIds` を引き継ぎ、リクエストで上書き指定された場合はそれを使う。再抽選履歴にも記録する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryService.java`

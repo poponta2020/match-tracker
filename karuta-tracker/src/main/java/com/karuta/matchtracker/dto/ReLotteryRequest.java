@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -19,8 +18,8 @@ public class ReLotteryRequest {
 
     /**
      * 管理者が指定する優先選手のIDリスト（任意）。
-     * 省略時は初回抽選時の priorityPlayerIds を引き継ぐ。
+     * null の場合は直近の抽選実行時の priorityPlayerIds を引き継ぐ。
+     * 空リスト [] の場合は優先選手なし（明示的クリア）として扱う。
      */
-    @Builder.Default
-    private List<Long> priorityPlayerIds = new ArrayList<>();
+    private List<Long> priorityPlayerIds;
 }
