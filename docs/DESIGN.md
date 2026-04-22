@@ -2724,6 +2724,15 @@ Entity Layer (JPA Entity)
 - 同日既存対戦を除外
 - シャッフル + 貪欲法で最適ペアリング
 
+#### 直近対戦履歴（recentMatches）生成ロジック
+- `MatchPairingService` の `getPairRecentMatches` / `enrichWithRecentMatches` / `autoMatch` の3経路で表示用 `recentMatches` を生成する
+- ソース: `MatchPairingテーブル`（ペアリング履歴）+ `Matchテーブル`（試合履歴）を過去30日分マージ
+- 同日の他試合（自分の試合番号以外すべて）で組まれたペアは当日日付として `recentMatches` に含める
+  - 前方試合番号（例: 試合3編集中の試合1・2）だけでなく、後方試合番号（例: 試合4・5）も検知対象
+  - 自分と同じ試合番号のペアは `recentMatches` から除外（編集中の自分自身を警告対象にしない）
+- フロントエンドは `recentMatches[0].matchDate === sessionDate` の場合に `⚠今日` を赤字太字で警告表示
+- ※ 自動マッチングのペナルティ計算（`calculatePairScore`）と除外判定（`getTodayPairings`）は表示用ロジックとは別責務で、現状「前の試合番号のみ」を見ている（将来的な改修候補）
+
 #### 管理者登録時の自動試合参加
 - 管理者が練習日に参加者を登録すると、その参加者は全試合に自動参加
 - 理由: 運用の簡便性を優先（初期設定の手間を削減）
