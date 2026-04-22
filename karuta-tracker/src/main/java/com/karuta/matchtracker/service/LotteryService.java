@@ -83,7 +83,7 @@ public class LotteryService {
      * @return 抽選実行履歴
      */
     @Transactional
-    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type, Long organizationId, Long seed) {
+    public LotteryExecution executeLottery(int year, int month, Long executedBy, ExecutionType type, Long organizationId, Long seed, List<Long> priorityPlayerIds) {
         log.info("Starting lottery for {}-{} (type: {})", year, month, type);
 
         LotteryExecution execution = LotteryExecution.builder()
@@ -122,9 +122,10 @@ public class LotteryService {
             Set<Long> monthlyLosers = new HashSet<>();
             List<SessionDetail> sessionDetails = new ArrayList<>();
             Random random = new Random(seed);
+            Set<Long> adminPrioritySet = priorityPlayerIds != null ? new HashSet<>(priorityPlayerIds) : Set.of();
 
             for (PracticeSession session : sessions) {
-                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), true, random);
+                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), adminPrioritySet, true, random);
                 sessionDetails.add(sessionDetail);
             }
 
@@ -146,8 +147,8 @@ public class LotteryService {
      * executeLottery + confirmLottery を1回の抽選実行で行う。
      */
     @Transactional
-    public LotteryExecution executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed) {
-        LotteryExecution execution = executeLottery(year, month, executedBy, ExecutionType.MANUAL, organizationId, seed);
+    public LotteryExecution executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
+        LotteryExecution execution = executeLottery(year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
 
         if (execution.getStatus() != ExecutionStatus.SUCCESS) {
             return execution;
@@ -174,7 +175,7 @@ public class LotteryService {
     /**
      * 1セッション（1日）の全試合を処理する
      */
-    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, boolean saveResults, Random random) {
+    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, Set<Long> adminPriorityPlayers, boolean saveResults, Random random) {
         // セッションに定員が未設定の場合、会場の定員にフォールバック
         if (session.getCapacity() == null && session.getVenueId() != null) {
             venueRepository.findById(session.getVenueId())
@@ -218,7 +219,7 @@ public class LotteryService {
             Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
 
             MatchDetail detail = processMatch(session, matchNumber, applicants,
-                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, saveResults, random);
+                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, adminPriorityPlayers, saveResults, random);
             matchDetails.add(detail);
 
             prevWaitlistOrder = currentWaitlistOrder;
@@ -229,14 +230,17 @@ public class LotteryService {
     }
 
     /**
-     * 1試合の抽選を処理する
+     * 1試合の抽選を処理する（3層優先: 管理者優先 > 連続落選救済 > 一般）
+     *
+     * package-private にすることでユニットテストから直接呼び出し可能にしている。
      */
-    private MatchDetail processMatch(PracticeSession session, int matchNumber,
+    MatchDetail processMatch(PracticeSession session, int matchNumber,
                                 List<PracticeParticipant> applicants,
                                 Set<Long> sessionLosers, Set<Long> monthlyLosers,
                                 Long lotteryId,
                                 Map<Long, Integer> previousMatchWaitlistOrder,
                                 Map<Long, Integer> currentMatchWaitlistOrder,
+                                Set<Long> adminPriorityPlayers,
                                 boolean saveResults, Random random) {
 
         Integer capacity = session.getCapacity();
@@ -268,7 +272,6 @@ public class LotteryService {
 
         for (PracticeParticipant p : applicants) {
             if (sessionLosers.contains(p.getPlayerId())) {
-                // 同セッション内で既に落選 → 低優先度（空きがあれば当選）
                 cascadeCandidates.add(p);
             } else {
                 remaining.add(p);
@@ -278,83 +281,104 @@ public class LotteryService {
         log.debug("Match {}: {} cascade candidates (low priority), {} remaining",
                 matchNumber, cascadeCandidates.size(), remaining.size());
 
-        // Step 2: remainingの参加者で抽選
+        // Step 2: remaining を3層（管理者優先・連続落選救済・一般）に分類して抽選
         List<PracticeParticipant> winners = new ArrayList<>();
-        List<PracticeParticipant> lotteryLosers = new ArrayList<>();
+        List<PracticeParticipant> adminLosers = new ArrayList<>();
+        List<PracticeParticipant> rescueLosers = new ArrayList<>();
+        List<PracticeParticipant> generalLosers = new ArrayList<>();
 
         if (remaining.size() <= capacity) {
-            // remaining全員当選
             winners.addAll(remaining);
         } else {
-            // 優先当選者の決定（同月内の別セッションで落選経験がある人）
-            List<PracticeParticipant> priorityApplicants = new ArrayList<>();
-            List<PracticeParticipant> normalApplicants = new ArrayList<>();
+            List<PracticeParticipant> adminPriorityApplicants = new ArrayList<>();
+            List<PracticeParticipant> rescueApplicants = new ArrayList<>();
+            List<PracticeParticipant> generalApplicants = new ArrayList<>();
 
             for (PracticeParticipant p : remaining) {
-                if (monthlyLosers.contains(p.getPlayerId())) {
-                    priorityApplicants.add(p);
+                if (adminPriorityPlayers.contains(p.getPlayerId())) {
+                    adminPriorityApplicants.add(p);
+                } else if (monthlyLosers.contains(p.getPlayerId())) {
+                    rescueApplicants.add(p);
                 } else {
-                    normalApplicants.add(p);
+                    generalApplicants.add(p);
                 }
             }
 
-            log.debug("Match {}: {} priority, {} normal applicants",
-                    matchNumber, priorityApplicants.size(), normalApplicants.size());
+            log.debug("Match {}: {} admin-priority, {} rescue, {} general applicants",
+                    matchNumber, adminPriorityApplicants.size(), rescueApplicants.size(), generalApplicants.size());
 
-            // 一般枠の最低保証を計算（セッションのorganizationIdを使用）
-            int normalReservePercent = systemSettingService.getLotteryNormalReservePercent(session.getOrganizationId());
-            int normalReserve = 0;
-            if (normalReservePercent > 0 && !normalApplicants.isEmpty() && !priorityApplicants.isEmpty()) {
-                normalReserve = Math.max(1, (int) Math.ceil(capacity * normalReservePercent / 100.0));
-                // 一般申込者数を超えないようにする
-                normalReserve = Math.min(normalReserve, normalApplicants.size());
-                // 定員を超えないようにする
-                normalReserve = Math.min(normalReserve, capacity);
-            }
-            int prioritySlots = capacity - normalReserve;
-
-            if (priorityApplicants.size() >= prioritySlots && normalReserve > 0) {
-                // 優先枠と一般枠に分けて抽選
-                Collections.shuffle(priorityApplicants, random);
-                winners.addAll(priorityApplicants.subList(0, prioritySlots));
-                lotteryLosers.addAll(priorityApplicants.subList(prioritySlots, priorityApplicants.size()));
-
-                Collections.shuffle(normalApplicants, random);
-                winners.addAll(normalApplicants.subList(0, normalReserve));
-                if (normalApplicants.size() > normalReserve) {
-                    lotteryLosers.addAll(normalApplicants.subList(normalReserve, normalApplicants.size()));
-                }
-            } else if (priorityApplicants.size() >= capacity) {
-                // 一般枠なし（一般申込者0 or 設定0%）で優先者が定員以上
-                Collections.shuffle(priorityApplicants, random);
-                winners.addAll(priorityApplicants.subList(0, capacity));
-                lotteryLosers.addAll(priorityApplicants.subList(capacity, priorityApplicants.size()));
-                lotteryLosers.addAll(normalApplicants);
+            // Step 2a: 管理者優先枠（最高優先度）から埋める
+            if (adminPriorityApplicants.size() <= capacity) {
+                winners.addAll(adminPriorityApplicants);
             } else {
-                // 優先当選者は全員当選 + 残り枠を一般からランダム
-                winners.addAll(priorityApplicants);
-                int remainingSlots = capacity - priorityApplicants.size();
+                Collections.shuffle(adminPriorityApplicants, random);
+                winners.addAll(adminPriorityApplicants.subList(0, capacity));
+                adminLosers.addAll(adminPriorityApplicants.subList(capacity, adminPriorityApplicants.size()));
+            }
 
-                Collections.shuffle(normalApplicants, random);
-                winners.addAll(normalApplicants.subList(0, Math.min(remainingSlots, normalApplicants.size())));
-                if (normalApplicants.size() > remainingSlots) {
-                    lotteryLosers.addAll(normalApplicants.subList(remainingSlots, normalApplicants.size()));
+            // Step 2b: 残り枠で連続落選救済 + 一般を2層抽選
+            int slotsAfterAdmin = capacity - winners.size();
+            if (slotsAfterAdmin > 0) {
+                if (rescueApplicants.size() + generalApplicants.size() <= slotsAfterAdmin) {
+                    winners.addAll(rescueApplicants);
+                    winners.addAll(generalApplicants);
+                } else {
+                    // 一般枠最低保証を残り枠ベースで計算
+                    int normalReservePercent = systemSettingService.getLotteryNormalReservePercent(session.getOrganizationId());
+                    int normalReserve = 0;
+                    if (normalReservePercent > 0 && !generalApplicants.isEmpty() && !rescueApplicants.isEmpty()) {
+                        normalReserve = Math.max(1, (int) Math.ceil(slotsAfterAdmin * normalReservePercent / 100.0));
+                        normalReserve = Math.min(normalReserve, generalApplicants.size());
+                        normalReserve = Math.min(normalReserve, slotsAfterAdmin);
+                    }
+                    int rescueSlots = slotsAfterAdmin - normalReserve;
+
+                    if (rescueApplicants.size() >= rescueSlots && normalReserve > 0) {
+                        // 救済枠 + 一般枠に分けて抽選
+                        Collections.shuffle(rescueApplicants, random);
+                        winners.addAll(rescueApplicants.subList(0, rescueSlots));
+                        rescueLosers.addAll(rescueApplicants.subList(rescueSlots, rescueApplicants.size()));
+
+                        Collections.shuffle(generalApplicants, random);
+                        winners.addAll(generalApplicants.subList(0, normalReserve));
+                        if (generalApplicants.size() > normalReserve) {
+                            generalLosers.addAll(generalApplicants.subList(normalReserve, generalApplicants.size()));
+                        }
+                    } else if (rescueApplicants.size() >= slotsAfterAdmin) {
+                        // 一般申込者0 or 設定0% で救済者が残り枠以上
+                        Collections.shuffle(rescueApplicants, random);
+                        winners.addAll(rescueApplicants.subList(0, slotsAfterAdmin));
+                        rescueLosers.addAll(rescueApplicants.subList(slotsAfterAdmin, rescueApplicants.size()));
+                        generalLosers.addAll(generalApplicants);
+                    } else {
+                        // 救済者全員当選 + 残り枠を一般からランダム
+                        winners.addAll(rescueApplicants);
+                        int remainingForGeneral = slotsAfterAdmin - rescueApplicants.size();
+
+                        Collections.shuffle(generalApplicants, random);
+                        winners.addAll(generalApplicants.subList(0, Math.min(remainingForGeneral, generalApplicants.size())));
+                        if (generalApplicants.size() > remainingForGeneral) {
+                            generalLosers.addAll(generalApplicants.subList(remainingForGeneral, generalApplicants.size()));
+                        }
+                    }
                 }
+            } else {
+                // 残り枠なし → 救済・一般は全員落選
+                rescueLosers.addAll(rescueApplicants);
+                generalLosers.addAll(generalApplicants);
             }
         }
 
-        // Step 2b: 余り枠があれば前試合落選者を当選させる
+        // Step 2c: 余り枠があれば前試合落選者を当選させる
         List<PracticeParticipant> cascadeLosers = new ArrayList<>();
         int leftoverSlots = capacity - winners.size();
 
         if (leftoverSlots > 0 && !cascadeCandidates.isEmpty()) {
             if (cascadeCandidates.size() <= leftoverSlots) {
-                // 全員当選
                 winners.addAll(cascadeCandidates);
                 log.debug("Match {}: all {} cascade candidates win (leftover slots: {})",
                         matchNumber, cascadeCandidates.size(), leftoverSlots);
             } else {
-                // 余り枠分をランダム抽選で当選
                 Collections.shuffle(cascadeCandidates, random);
                 winners.addAll(cascadeCandidates.subList(0, leftoverSlots));
                 cascadeLosers.addAll(cascadeCandidates.subList(leftoverSlots, cascadeCandidates.size()));
@@ -362,7 +386,6 @@ public class LotteryService {
                         matchNumber, leftoverSlots, cascadeLosers.size(), leftoverSlots);
             }
         } else {
-            // 余り枠なし → 全員落選
             cascadeLosers.addAll(cascadeCandidates);
             if (!cascadeCandidates.isEmpty()) {
                 log.debug("Match {}: all {} cascade candidates lose (no leftover slots)",
@@ -377,33 +400,51 @@ public class LotteryService {
             p.setLotteryId(lotteryId);
         }
 
-        // Step 4: 落選者（連鎖落選 + 抽選落選）にキャンセル待ち番号を付与
+        // Step 4: 落選者にキャンセル待ち番号を付与
+        // 管理者優先落選 → 救済落選 → 一般落選 → 連鎖落選 の順で優先
         List<PracticeParticipant> allLosers = new ArrayList<>();
+        allLosers.addAll(adminLosers);
+        allLosers.addAll(rescueLosers);
+        allLosers.addAll(generalLosers);
         allLosers.addAll(cascadeLosers);
-        allLosers.addAll(lotteryLosers);
 
         // キャンセル待ち番号を割り当て（連続試合では前試合の順番を引き継ぐ）
+        // 前試合の順番を持つ選手は維持、新規落選は優先度順かつグループ内ランダム
         List<PracticeParticipant> withPrevOrder = new ArrayList<>();
-        List<PracticeParticipant> withoutPrevOrder = new ArrayList<>();
+        List<PracticeParticipant> newAdminLosers = new ArrayList<>();
+        List<PracticeParticipant> newRescueLosers = new ArrayList<>();
+        List<PracticeParticipant> newGeneralLosers = new ArrayList<>();
+        List<PracticeParticipant> newCascadeLosers = new ArrayList<>();
 
-        for (PracticeParticipant p : allLosers) {
-            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) {
-                withPrevOrder.add(p);
-            } else {
-                withoutPrevOrder.add(p);
-            }
+        for (PracticeParticipant p : adminLosers) {
+            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
+            else newAdminLosers.add(p);
+        }
+        for (PracticeParticipant p : rescueLosers) {
+            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
+            else newRescueLosers.add(p);
+        }
+        for (PracticeParticipant p : generalLosers) {
+            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
+            else newGeneralLosers.add(p);
+        }
+        for (PracticeParticipant p : cascadeLosers) {
+            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
+            else newCascadeLosers.add(p);
         }
 
-        // 前試合の順番を維持
         withPrevOrder.sort(Comparator.comparingInt(p -> previousMatchWaitlistOrder.get(p.getPlayerId())));
+        Collections.shuffle(newAdminLosers, random);
+        Collections.shuffle(newRescueLosers, random);
+        Collections.shuffle(newGeneralLosers, random);
+        Collections.shuffle(newCascadeLosers, random);
 
-        // 新規落選者はランダム
-        Collections.shuffle(withoutPrevOrder, random);
-
-        // 結合して連番を付与
         List<PracticeParticipant> orderedLosers = new ArrayList<>();
         orderedLosers.addAll(withPrevOrder);
-        orderedLosers.addAll(withoutPrevOrder);
+        orderedLosers.addAll(newAdminLosers);
+        orderedLosers.addAll(newRescueLosers);
+        orderedLosers.addAll(newGeneralLosers);
+        orderedLosers.addAll(newCascadeLosers);
 
         for (int i = 0; i < orderedLosers.size(); i++) {
             PracticeParticipant p = orderedLosers.get(i);
@@ -448,7 +489,7 @@ public class LotteryService {
     public record LotteryPreviewResult(List<LotteryResultDto> results, long seed) {}
 
     @Transactional(readOnly = true)
-    public LotteryPreviewResult previewLottery(int year, int month, Long organizationId) {
+    public LotteryPreviewResult previewLottery(int year, int month, Long organizationId, List<Long> priorityPlayerIds) {
         long seed = new Random().nextLong();
         log.info("Previewing lottery for {}-{} (orgId: {}, seed: {})", year, month, organizationId, seed);
 
@@ -473,6 +514,7 @@ public class LotteryService {
         // セッションごとに処理された参加者を保持（DTO組み立て用）
         Map<Long, List<PracticeParticipant>> participantsBySession = new LinkedHashMap<>();
         Random random = new Random(seed);
+        Set<Long> adminPrioritySet = priorityPlayerIds != null ? new HashSet<>(priorityPlayerIds) : Set.of();
 
         for (PracticeSession session : sessions) {
             // PENDING参加者を取得
@@ -481,7 +523,7 @@ public class LotteryService {
             participants.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
             // 抽選アルゴリズムを実行（DB保存なし）
-            processSession(session, monthlyLosers, null, false, random);
+            processSession(session, monthlyLosers, null, adminPrioritySet, false, random);
 
             // 処理後の参加者（ステータスがインメモリで更新済み）を保持
             participantsBySession.put(session.getId(), participants);
@@ -789,7 +831,7 @@ public class LotteryService {
 
                 processMatch(session, matchNumber, entry.getValue(),
                         sessionLosers, monthlyLosers, execution.getId(),
-                        inheritedOrder, currentWaitlistOrder, true, new Random());
+                        inheritedOrder, currentWaitlistOrder, Set.of(), true, new Random());
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;

@@ -64,7 +64,7 @@ parent_issue: 489
 
 ### タスク5: 抽選アルゴリズムの3層分類化
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `processMatch` を管理者指定優先 > 連続落選救済 > 一般の3層分類に変更する。キャンセル待ち順も3層順（優先落選→救済落選→一般落選）にする。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryService.java`

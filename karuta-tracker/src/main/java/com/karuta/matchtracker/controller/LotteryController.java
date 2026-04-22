@@ -125,7 +125,7 @@ public class LotteryController {
                     String.format("%d年%d月の抽選は既に確定済みです。", year, month));
         }
 
-        var preview = lotteryService.previewLottery(year, month, orgId);
+        var preview = lotteryService.previewLottery(year, month, orgId, List.of());
         Map<String, Object> response = new HashMap<>();
         response.put("results", preview.results());
         response.put("seed", preview.seed());
@@ -171,7 +171,7 @@ public class LotteryController {
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         LotteryExecution result = lotteryService.executeLottery(
-                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong());
+                year, month, currentUserId, ExecutionType.MANUAL, orgId, new Random().nextLong(), List.of());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -747,7 +747,7 @@ public class LotteryController {
         if (seed == null) {
             throw new IllegalStateException("シード値が指定されていません。プレビューを先に実行してください。");
         }
-        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed);
+        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, List.of());
         return ResponseEntity.ok(result);
     }
 
