@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.AdminEditParticipantsRequest;
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.LotteryResultDto;
+import com.karuta.matchtracker.dto.MonthlyApplicantDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionType;
@@ -495,6 +496,57 @@ public class LotteryService {
 
         log.info("Lottery preview completed for {}-{}: {} sessions", year, month, results.size());
         return new LotteryPreviewResult(results, seed);
+    }
+
+    /**
+     * 対象月・団体で参加希望を出している選手の一意リストを級順で取得する。
+     *
+     * 優先選手指定UI用の参照データ。集計対象は「実質的に参加希望を維持している」ステータス
+     * （PENDING / WON / WAITLISTED / OFFERED）で、CANCELLED / DECLINED / WAITLIST_DECLINED は除外する。
+     *
+     * @param year           対象年
+     * @param month          対象月
+     * @param organizationId 団体ID（nullの場合は全団体）
+     * @return 一意な選手DTOのリスト（級位→段位→あいうえお順）
+     */
+    @Transactional(readOnly = true)
+    public List<MonthlyApplicantDto> getMonthlyApplicants(int year, int month, Long organizationId) {
+        List<PracticeSession> sessions = organizationId != null
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
+
+        if (sessions.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+
+        Set<Long> applicantPlayerIds = practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                .filter(p -> {
+                    ParticipantStatus s = p.getStatus();
+                    return s == ParticipantStatus.PENDING
+                            || s == ParticipantStatus.WON
+                            || s == ParticipantStatus.WAITLISTED
+                            || s == ParticipantStatus.OFFERED;
+                })
+                .map(PracticeParticipant::getPlayerId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (applicantPlayerIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Player> players = playerRepository.findAllById(applicantPlayerIds);
+        players.sort(PlayerSortHelper.playerComparator());
+
+        return players.stream()
+                .map(p -> MonthlyApplicantDto.builder()
+                        .playerId(p.getId())
+                        .name(p.getName())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     /**

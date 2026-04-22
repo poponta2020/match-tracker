@@ -57,6 +57,30 @@ public class LotteryController {
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
+     * 月次参加希望者一覧取得（優先選手指定UI用）
+     *
+     * 対象月・団体で参加希望を出している選手を一意化し級順で返す。
+     */
+    @GetMapping("/monthly-applicants")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> getMonthlyApplicants(
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long orgId = organizationId;
+        if ("ADMIN".equals(role)) {
+            AdminScopeValidator.validateScope(role, adminOrgId, orgId,
+                    "他団体の参加希望者一覧は取得できません");
+            orgId = adminOrgId;
+        }
+
+        List<MonthlyApplicantDto> applicants = lotteryService.getMonthlyApplicants(year, month, orgId);
+        return ResponseEntity.ok(Map.of("applicants", applicants));
+    }
+
+    /**
      * 締め切り日時取得
      */
     @GetMapping("/deadline")
