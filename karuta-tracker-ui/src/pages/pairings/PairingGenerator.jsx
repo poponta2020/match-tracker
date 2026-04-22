@@ -960,11 +960,13 @@ const PairingGenerator = () => {
                         <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
                       )}
                     </DroppableSlot>
-                    <span className="text-xs text-[#6b7280] flex-shrink-0 w-12 text-right">
+                    <span className="text-xs flex-shrink-0 w-14 text-right">
                       {pairing.recentMatches === null
                         ? <span className="text-gray-300">...</span>
                         : pairing.recentMatches && pairing.recentMatches.length > 0
-                          ? pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')
+                          ? pairing.recentMatches[0].matchDate === sessionDate
+                            ? <span className="text-red-600 font-bold">⚠今日</span>
+                            : <span className="text-[#6b7280]">{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
                           : <span className="text-[#4a6b5a]">初</span>
                       }
                     </span>

@@ -381,11 +381,11 @@ public class MatchPairingService {
         // 過去の組み合わせ履歴
         Map<String, List<LocalDate>> historyMap = getPairingHistory(playerIds, startDate, sessionDate);
 
-        // 同日の前の試合の組み合わせも含める
-        if (matchNumber != null && matchNumber > 1) {
+        // 同日の他試合（自分以外の試合番号）の組み合わせも含める
+        if (matchNumber != null) {
             List<MatchPairing> sameDayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
             for (MatchPairing mp : sameDayPairings) {
-                if (mp.getMatchNumber() < matchNumber) {
+                if (!mp.getMatchNumber().equals(matchNumber)) {
                     String pairKey = getPairKey(mp.getPlayer1Id(), mp.getPlayer2Id());
                     historyMap.computeIfAbsent(pairKey, k -> new ArrayList<>());
                     List<LocalDate> dates = historyMap.get(pairKey);
@@ -521,11 +521,11 @@ public class MatchPairingService {
             }
         }
 
-        // 同日の前の試合の組み合わせ履歴もmatchHistoryMapに追加（recentMatches表示用）
-        if (matchNumber > 1) {
+        // 同日の他試合（自分以外の試合番号）の組み合わせ履歴もmatchHistoryMapに追加（recentMatches表示用）
+        if (matchNumber != null) {
             List<MatchPairing> sameDayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
             for (MatchPairing mp : sameDayPairings) {
-                if (mp.getMatchNumber() < matchNumber) {
+                if (!mp.getMatchNumber().equals(matchNumber)) {
                     String pairKey = getPairKey(mp.getPlayer1Id(), mp.getPlayer2Id());
                     matchHistoryMap.computeIfAbsent(pairKey, k -> new ArrayList<>());
                     List<LocalDate> dates = matchHistoryMap.get(pairKey);
@@ -818,11 +818,11 @@ public class MatchPairingService {
         LocalDate startDate = sessionDate.minusDays(MATCH_HISTORY_DAYS);
         Map<String, List<LocalDate>> pairingHistoryMap = getPairingHistory(playerIds, startDate, sessionDate);
 
-        // 同日の組み合わせ履歴も取得（currentMatchNumberより前の試合番号のみ）
-        if (currentMatchNumber != null && currentMatchNumber > 1) {
+        // 同日の他試合（自分以外の試合番号）の組み合わせ履歴も取得
+        if (currentMatchNumber != null) {
             List<MatchPairing> sameDayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
             for (MatchPairing mp : sameDayPairings) {
-                if (mp.getMatchNumber() < currentMatchNumber) {
+                if (!mp.getMatchNumber().equals(currentMatchNumber)) {
                     String pairKey = getPairKey(mp.getPlayer1Id(), mp.getPlayer2Id());
                     pairingHistoryMap.computeIfAbsent(pairKey, k -> new ArrayList<>());
                     List<LocalDate> dates = pairingHistoryMap.get(pairKey);
