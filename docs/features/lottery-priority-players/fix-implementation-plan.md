@@ -112,7 +112,7 @@ parent_issue: 489
 
 ### タスク8: フロントエンドAPIクライアントの更新
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `api/lottery.js` に `getMonthlyApplicants` を追加し、`preview` / `confirm` / `reExecute` のシグネチャを `priorityPlayerIds` を含むように拡張する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/lottery.js`
