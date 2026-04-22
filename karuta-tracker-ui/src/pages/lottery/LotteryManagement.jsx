@@ -41,6 +41,8 @@ export default function LotteryManagement() {
   const [lotterySeed, setLotterySeed] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(currentPlayer?.organizationId || null);
+  const [applicants, setApplicants] = useState([]);
+  const [priorityPlayerIds, setPriorityPlayerIds] = useState([]);
 
   useEffect(() => {
     if (isSuperAdmin()) {
@@ -54,6 +56,39 @@ export default function LotteryManagement() {
   }, []);
 
   const organizationId = isSuperAdmin() ? selectedOrgId : (currentPlayer?.organizationId || null);
+  const sessionStorageKey = organizationId
+    ? `lottery-priority-${currentDate.year}-${currentDate.month}-${organizationId}`
+    : null;
+
+  useEffect(() => {
+    setApplicants([]);
+    if (!organizationId) {
+      setPriorityPlayerIds([]);
+      return;
+    }
+    const key = `lottery-priority-${currentDate.year}-${currentDate.month}-${organizationId}`;
+    const stored = sessionStorage.getItem(key);
+    let restoredIds = [];
+    if (stored) {
+      try { restoredIds = JSON.parse(stored); } catch { /* ignore */ }
+    }
+    setPriorityPlayerIds(restoredIds);
+
+    lotteryAPI.getMonthlyApplicants(currentDate.year, currentDate.month, organizationId)
+      .then(res => setApplicants(res.data))
+      .catch(() => setApplicants([]));
+  }, [currentDate.year, currentDate.month, organizationId]);
+
+  useEffect(() => {
+    if (!sessionStorageKey) return;
+    sessionStorage.setItem(sessionStorageKey, JSON.stringify(priorityPlayerIds));
+  }, [priorityPlayerIds, sessionStorageKey]);
+
+  const togglePriorityPlayer = (playerId) => {
+    setPriorityPlayerIds(prev =>
+      prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+    );
+  };
 
   const changeMonth = (delta) => {
     setCurrentDate((prev) => {
@@ -76,7 +111,7 @@ export default function LotteryManagement() {
     setError(null);
     setNotifyResult(null);
     try {
-      const res = await lotteryAPI.preview(currentDate.year, currentDate.month, organizationId);
+      const res = await lotteryAPI.preview(currentDate.year, currentDate.month, organizationId, priorityPlayerIds);
       const { results, seed } = res.data;
       setPreviewResults(results);
       setLotterySeed(seed);
@@ -102,7 +137,8 @@ export default function LotteryManagement() {
     setProcessing('confirm');
     setError(null);
     try {
-      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed);
+      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds);
+      if (sessionStorageKey) sessionStorage.removeItem(sessionStorageKey);
       setPhase('confirmed');
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || '確定処理に失敗しました';
@@ -195,6 +231,38 @@ export default function LotteryManagement() {
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {/* 参加希望者一覧（優先選手指定） */}
+      {applicants.length > 0 && (
+        <div className="mb-6 bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-sm text-[#374151]">優先選手指定</h2>
+            {priorityPlayerIds.length > 0 && (
+              <span className="text-xs text-blue-600 font-semibold">{priorityPlayerIds.length}名選択中</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {applicants.map((applicant) => {
+              const isSelected = priorityPlayerIds.includes(applicant.playerId);
+              const isDisabled = phase === 'confirmed';
+              return (
+                <button
+                  key={applicant.playerId}
+                  onClick={() => !isDisabled && togglePriorityPlayer(applicant.playerId)}
+                  disabled={isDisabled}
+                  className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                    isSelected
+                      ? 'bg-blue-100 border-blue-400 text-blue-800'
+                      : 'bg-gray-100 border-gray-300 text-[#374151]'
+                  } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}`}
+                >
+                  {applicant.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
