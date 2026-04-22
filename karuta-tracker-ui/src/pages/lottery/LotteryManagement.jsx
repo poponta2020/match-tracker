@@ -75,7 +75,7 @@ export default function LotteryManagement() {
     setPriorityPlayerIds(restoredIds);
 
     lotteryAPI.getMonthlyApplicants(currentDate.year, currentDate.month, organizationId)
-      .then(res => setApplicants(res.data))
+      .then(res => setApplicants(res.data.applicants ?? []))
       .catch(() => setApplicants([]));
   }, [currentDate.year, currentDate.month, organizationId]);
 
@@ -246,7 +246,7 @@ export default function LotteryManagement() {
           <div className="flex flex-wrap gap-2">
             {applicants.map((applicant) => {
               const isSelected = priorityPlayerIds.includes(applicant.playerId);
-              const isDisabled = phase === 'confirmed';
+              const isDisabled = phase === 'confirmed' || phase === 'preview';
               return (
                 <button
                   key={applicant.playerId}

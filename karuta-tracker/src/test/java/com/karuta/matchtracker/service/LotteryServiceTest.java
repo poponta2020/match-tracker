@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
@@ -195,5 +196,40 @@ class LotteryServiceTest {
         long waitlistedCount = applicants.stream().filter(p -> p.getStatus() == ParticipantStatus.WAITLISTED).count();
         assertThat(wonCount).isEqualTo(1);
         assertThat(waitlistedCount).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("reExecuteLottery: priorityPlayerIds が null のとき、save前の直前実行から引き継がれる")
+    void reExecuteLottery_nullPriorityPlayerIds_inheritsFromPreviousExecution() throws Exception {
+        Long sessionId = 100L;
+
+        PracticeSession session = new PracticeSession();
+        session.setId(sessionId);
+        session.setOrganizationId(ORG_ID);
+        session.setCapacity(2);
+        session.setSessionDate(LocalDate.of(2026, 4, 1));
+
+        // 前回の実行（優先選手 10, 20 を持つ）
+        LotteryExecution prevExecution = LotteryExecution.builder().id(50L).build();
+        prevExecution.setPriorityPlayerIds(List.of(10L, 20L));
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(lotteryExecutionRepository
+            .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                2026, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS))
+            .thenReturn(Optional.of(prevExecution));
+        when(lotteryExecutionRepository.save(any())).thenAnswer(inv -> {
+            LotteryExecution ex = inv.getArgument(0);
+            if (ex.getId() == null) ex.setId(51L);
+            return ex;
+        });
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(List.of());
+        when(practiceParticipantRepository.findMonthlyLoserPlayerIds(2026, 4, sessionId)).thenReturn(List.of());
+        when(practiceParticipantRepository.saveAll(any())).thenReturn(List.of());
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+
+        LotteryExecution result = lotteryService.reExecuteLottery(sessionId, 1L, null);
+
+        assertThat(result.getPriorityPlayerIds()).containsExactlyInAnyOrder(10L, 20L);
     }
 }

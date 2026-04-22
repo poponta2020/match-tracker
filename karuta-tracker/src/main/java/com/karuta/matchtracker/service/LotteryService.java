@@ -745,6 +745,31 @@ public class LotteryService {
 
         log.info("Re-executing lottery for session {} (date: {})", sessionId, session.getSessionDate());
 
+        // 優先選手IDの解決：null = 直近の抽選から引き継ぐ（save前に実行してself除外）
+        List<Long> resolvedPriorityPlayerIds;
+        if (priorityPlayerIds != null) {
+            // 空リストは明示的クリア、非空リストはバリデーションして使用
+            if (!priorityPlayerIds.isEmpty()) {
+                validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+            }
+            resolvedPriorityPlayerIds = priorityPlayerIds;
+        } else {
+            // 直近の成功した抽選実行から priorityPlayerIds を引き継ぐ
+            LotteryExecution latest = orgId != null
+                    ? lotteryExecutionRepository
+                            .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                                    year, month, orgId, ExecutionStatus.SUCCESS)
+                            .orElse(null)
+                    : lotteryExecutionRepository
+                            .findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
+                                    year, month, ExecutionStatus.SUCCESS)
+                            .orElse(null);
+            resolvedPriorityPlayerIds = latest != null ? latest.getPriorityPlayerIds() : List.of();
+            log.debug("Re-lottery inheriting {} priority players from latest execution",
+                    resolvedPriorityPlayerIds.size());
+        }
+        Set<Long> adminPrioritySet = new HashSet<>(resolvedPriorityPlayerIds);
+
         LotteryExecution execution = LotteryExecution.builder()
                 .targetYear(year)
                 .targetMonth(month)
@@ -760,31 +785,6 @@ public class LotteryService {
         lotteryExecutionRepository.save(execution);
 
         try {
-            // 優先選手IDの解決：null = 直近の抽選から引き継ぐ
-            List<Long> resolvedPriorityPlayerIds;
-            if (priorityPlayerIds != null) {
-                // 空リストは明示的クリア、非空リストはバリデーションして使用
-                if (!priorityPlayerIds.isEmpty()) {
-                    validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
-                }
-                resolvedPriorityPlayerIds = priorityPlayerIds;
-            } else {
-                // 直近の成功した抽選実行から priorityPlayerIds を引き継ぐ
-                LotteryExecution latest = orgId != null
-                        ? lotteryExecutionRepository
-                                .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
-                                        year, month, orgId, ExecutionStatus.SUCCESS)
-                                .orElse(null)
-                        : lotteryExecutionRepository
-                                .findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
-                                        year, month, ExecutionStatus.SUCCESS)
-                                .orElse(null);
-                resolvedPriorityPlayerIds = latest != null ? latest.getPriorityPlayerIds() : List.of();
-                log.debug("Re-lottery inheriting {} priority players from latest execution",
-                        resolvedPriorityPlayerIds.size());
-            }
-            Set<Long> adminPrioritySet = new HashSet<>(resolvedPriorityPlayerIds);
-
             // このセッションの全参加者を取得
             List<PracticeParticipant> allParticipants = practiceParticipantRepository
                     .findBySessionId(sessionId);
