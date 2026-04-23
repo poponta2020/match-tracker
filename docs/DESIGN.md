@@ -2471,9 +2471,11 @@ Entity Layer (JPA Entity)
 2. 「隣室を予約」ボタンクリック
    ↓
 [フロントエンド: PracticeList.jsx]
-3. kaderuAPI.openReserve() でかでる2・7の予約画面を開く
+3. Kaderu 和室(venueId ∈ {3,4,8,11}) → kaderuAPI.openReserve() で予約画面を自動起動
+   東区民センター 東🌸(venueId=6) → 初期状態から「予約完了を報告」ボタンを表示
+   （KADERU_VENUE_IDS 判定で分岐）
    ↓
-4a. 成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
+4a. Kaderu 自動起動成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
 4b. DISABLED時 → 同じく「予約完了を報告」ボタンを表示（手動予約を案内）
    ↓
 [ユーザー操作]
@@ -2517,7 +2519,11 @@ Entity Layer (JPA Entity)
 | `practice_sessions` テーブル | `reservation_confirmed_at` カラム追加 |
 | `AdjacentRoomService` | `confirmReservation()`, `expandVenue()` メソッド追加 |
 | `PracticeSessionController` | `POST /{id}/confirm-reservation`, `POST /{id}/expand-venue` エンドポイント追加（ADMIN+） |
-| `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー |
+| `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー。`KADERU_VENUE_IDS` でない venue は「隣室を予約」ボタンをスキップ |
+| `AdjacentRoomConfig` | `isKaderuRoom` と独立した `isAdjacentCheckTarget` を導入（かでる4部屋 + 東🌸）、`getNightTimeLabel(venueId)` で会場別時間帯ラベル、ROOM_MAP に東🌸(6)↔かっこう(12) / 東全室(10, 定員18) を追加 |
+| `AdjacentRoomNotificationScheduler` | セッションフィルタを `isAdjacentCheckTarget` に切替、通知の時間帯表記を動的化（かでる: 17-21 / 東🌸: 18-21） |
+| `scripts/room-checker/sync-higashi-availability-to-db.js` | 東区民センター かっこう の月表示ページから夜間(18-21)空き状況を `room_availability_cache` に UPSERT |
+| `.github/workflows/scrape-higashi-availability.yml` | 30分間隔で上記スクレイパを実行（`concurrency.group=higashi-availability-check`） |
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 
