@@ -12,6 +12,9 @@ import YearMonthPicker from '../../components/YearMonthPicker';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import LoadingScreen from '../../components/LoadingScreen';
 
+// Kaderu 自動予約API対応の会場 ID（隣室を予約ボタンの表示条件）
+const KADERU_VENUE_IDS = new Set([3, 4, 8, 11]);
+
 const PracticeList = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -629,7 +632,7 @@ const PracticeList = () => {
                             >
                               会場を拡張
                             </button>
-                          ) : reservationReady[selectedSession.id] === 'manual_pending' ? (
+                          ) : (reservationReady[selectedSession.id] === 'manual_pending' || !KADERU_VENUE_IDS.has(selectedSession.venueId)) ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

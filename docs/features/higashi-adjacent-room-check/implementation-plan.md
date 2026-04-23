@@ -86,7 +86,7 @@ status: completed
 - **対応Issue:** #507
 
 ### タスク7: フロントエンド — 隣室状況表示・拡張ボタン対象拡大
-- [ ] 完了
+- [x] 完了
 - **概要:** カレンダーポップアップの隣室表示・会場拡張ボタンの表示条件に venue_id=6（東🌸）を追加
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeList.jsx`
