@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #504
 
 ### タスク4: GitHub Actions ワークフロー追加
-- [ ] 完了
+- [x] 完了
 - **概要:** タスク3のスクリプトを30分間隔で実行するワークフローを追加
 - **変更対象ファイル:**
   - `.github/workflows/check-higashi-availability.yml` — 新規。`check-kaderu-availability.yml` を複製して以下を変更:
