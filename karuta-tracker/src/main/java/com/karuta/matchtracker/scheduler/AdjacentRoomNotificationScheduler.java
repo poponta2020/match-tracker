@@ -30,8 +30,9 @@ import java.util.List;
 /**
  * 隣室空き通知スケジューラー
  *
- * 30分間隔で実行し、かでる和室を利用する未来のセッションについて
- * 定員接近時（残り4人以下）に隣室の空き状況を管理者に段階的に通知する。
+ * 30分間隔で実行し、隣室チェック対象の会場（かでる2・7の和室、東区民センター 東🌸）を
+ * 利用する未来のセッションについて、定員接近時（残り4人以下）に隣室の空き状況を
+ * 管理者に段階的に通知する。
  */
 @Slf4j
 @Component
@@ -57,20 +58,20 @@ public class AdjacentRoomNotificationScheduler {
         LocalDate endDate = today.plusDays(40);
         List<PracticeSession> sessions = practiceSessionRepository.findByDateRange(startDate, endDate);
 
-        // かでる和室のセッションのみフィルタ
-        List<PracticeSession> kaderuSessions = sessions.stream()
-                .filter(s -> AdjacentRoomConfig.isKaderuRoom(s.getVenueId()))
+        // 隣室チェック対象のセッションのみフィルタ（かでる和室 + 東🌸）
+        List<PracticeSession> targetSessions = sessions.stream()
+                .filter(s -> AdjacentRoomConfig.isAdjacentCheckTarget(s.getVenueId()))
                 .toList();
 
-        if (kaderuSessions.isEmpty()) {
-            log.debug("No kaderu room sessions found for adjacent room check");
+        if (targetSessions.isEmpty()) {
+            log.debug("No adjacent check target sessions found");
             return;
         }
 
-        log.info("Adjacent room check started for {} kaderu session(s)", kaderuSessions.size());
+        log.info("Adjacent room check started for {} target session(s)", targetSessions.size());
 
         int notifiedCount = 0;
-        for (PracticeSession session : kaderuSessions) {
+        for (PracticeSession session : targetSessions) {
             try {
                 Integer result = transactionTemplate.execute(status -> processSession(session));
                 notifiedCount += (result != null ? result : 0);
@@ -136,17 +137,18 @@ public class AdjacentRoomNotificationScheduler {
         String dateStr = session.getSessionDate().format(DATE_FORMAT);
         String venueName = AdjacentRoomConfig.getSiteRoomName(session.getVenueId());
         String adjacentRoomName = adjacentRoom.getAdjacentRoomName();
+        String timeLabel = AdjacentRoomConfig.getNightTimeLabel(session.getVenueId());
 
         String title;
         String message;
         if (remaining == 0) {
             title = "定員到達 — 隣室空きあり";
-            message = String.format("%s %sの試合%dが定員に達しました。隣室（%s）は夜間(17-21)空きです。",
-                    dateStr, venueName, closestMatchNumber, adjacentRoomName);
+            message = String.format("%s %sの試合%dが定員に達しました。隣室（%s）は夜間(%s)空きです。",
+                    dateStr, venueName, closestMatchNumber, adjacentRoomName, timeLabel);
         } else {
             title = String.format("定員まで残り%d人 — 隣室空きあり", remaining);
-            message = String.format("%s %sの試合%dが定員まで残り%d人です。隣室（%s）は夜間(17-21)空きです。",
-                    dateStr, venueName, closestMatchNumber, remaining, adjacentRoomName);
+            message = String.format("%s %sの試合%dが定員まで残り%d人です。隣室（%s）は夜間(%s)空きです。",
+                    dateStr, venueName, closestMatchNumber, remaining, adjacentRoomName, timeLabel);
         }
 
         // 通知対象: SUPER_ADMIN全員 + 該当セッションの団体のADMIN

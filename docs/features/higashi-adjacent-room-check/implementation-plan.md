@@ -74,7 +74,7 @@ status: completed
 - **対応Issue:** #506
 
 ### タスク6: AdjacentRoomNotificationScheduler 拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 東🌸のセッションも隣室チェック対象に含め、通知メッセージの時間帯を会場別に切り替え
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/AdjacentRoomNotificationScheduler.java`
