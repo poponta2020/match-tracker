@@ -15,6 +15,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 新機能追加・既存機能の変更・画面の追加や変更があった場合、該当するドキュメントに漏れなく反映する
 - ドキュメントの更新は実装コードと同じコミットに含める
 
+## DBマイグレーション適用ルール（最重要）
+
+**`database/` 配下にSQLファイルを追加・変更した場合、必ず本番DB（Render PostgreSQL）にも適用すること。**
+
+過去に PR #500 で `priority_player_ids` カラム追加SQLを書いたが本番適用を忘れ、本番500エラー（Issue #518）が発生した。同種の事故を再発させないため、以下を厳守する。
+
+### 必須手順
+
+1. **PRに `database/*.sql` の追加・変更が含まれているか確認**（マージ前）
+2. 含まれている場合、**マージ前後のいずれかで本番DBに適用**
+3. 適用は `CLAUDE.local.md` の接続情報を使い `psql` で実行:
+   ```bash
+   PGPASSWORD='<password>' psql -h <host> -U <user> -d <dbname> -f database/<新規SQL>
+   ```
+4. 適用後、関連テーブルの `\d <table>` で変更が反映されたことを確認
+5. アプリ側（Render）が起動済みの場合、Hibernateのキャッシュ等の影響を考慮し、必要なら**Renderダッシュボードからアプリ再起動**
+
+### 禁止事項
+
+- entity（`@Column`）に新カラムを追加したのに対応するマイグレーションSQLを書かない
+- マイグレーションSQLを書いたのに本番DB適用を忘れる
+- 「次のデプロイで一緒にやろう」と先送りする（必ず忘れる）
+
+### Claudeへの指示
+
+ユーザーがDBスキーマ変更を伴う実装を依頼した場合、Claudeは以下を必ず行う:
+- entity変更とマイグレーションSQLを**同じPRに含める**
+- PR作成時に「本番DB適用が必要」とユーザーに明示する
+- ユーザーから本番適用の指示があれば、`CLAUDE.local.md` の接続情報で psql 経由で適用する
+
 ## プロジェクト概要
 
 競技かるたの対戦記録管理アプリ（Match Tracker）。Java Spring Boot バックエンド + React フロントエンドのモノレポ構成。
