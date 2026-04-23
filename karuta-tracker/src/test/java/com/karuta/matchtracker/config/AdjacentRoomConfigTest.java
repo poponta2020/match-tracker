@@ -74,12 +74,12 @@ class AdjacentRoomConfigTest {
     }
 
     @Test
-    @DisplayName("かでるサイト上の部屋名の取得")
-    void getKaderuRoomName() {
-        assertEquals("すずらん", AdjacentRoomConfig.getKaderuRoomName(3L));
-        assertEquals("はまなす", AdjacentRoomConfig.getKaderuRoomName(11L));
-        assertEquals("あかなら", AdjacentRoomConfig.getKaderuRoomName(4L));
-        assertEquals("えぞまつ", AdjacentRoomConfig.getKaderuRoomName(8L));
+    @DisplayName("サイト上の部屋名の取得")
+    void getSiteRoomName() {
+        assertEquals("すずらん", AdjacentRoomConfig.getSiteRoomName(3L));
+        assertEquals("はまなす", AdjacentRoomConfig.getSiteRoomName(11L));
+        assertEquals("あかなら", AdjacentRoomConfig.getSiteRoomName(4L));
+        assertEquals("えぞまつ", AdjacentRoomConfig.getSiteRoomName(8L));
     }
 
     @Test
@@ -114,9 +114,79 @@ class AdjacentRoomConfigTest {
     void nonExistentVenueReturnsNull() {
         assertNull(AdjacentRoomConfig.getAdjacentVenueId(99L));
         assertNull(AdjacentRoomConfig.getExpandedVenueId(99L));
-        assertNull(AdjacentRoomConfig.getKaderuRoomName(99L));
+        assertNull(AdjacentRoomConfig.getSiteRoomName(99L));
         assertNull(AdjacentRoomConfig.getAdjacentRoomName(99L));
         assertNull(AdjacentRoomConfig.getExpandedVenueName(99L));
         assertNull(AdjacentRoomConfig.getExpandedCapacity(99L));
+    }
+
+    // ------------------------------------------------------------
+    // 東区民センター（東🌸=6 / かっこう=12 / 東全室=10）
+    // ------------------------------------------------------------
+
+    @Test
+    @DisplayName("東🌸(6)はかでる和室ではないが隣室チェック対象")
+    void higashi_sakura_isNotKaderu_butIsAdjacentCheckTarget() {
+        assertFalse(AdjacentRoomConfig.isKaderuRoom(6L));
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(6L));
+    }
+
+    @Test
+    @DisplayName("かっこう(12)は隣室チェック対象外（単独運用対象外）")
+    void kakkou_isNotAdjacentCheckTarget() {
+        assertFalse(AdjacentRoomConfig.isKaderuRoom(12L));
+        assertFalse(AdjacentRoomConfig.isAdjacentCheckTarget(12L));
+    }
+
+    @Test
+    @DisplayName("隣室チェック対象はかでる4部屋 + 東🌸")
+    void isAdjacentCheckTarget_coversKaderuAndHigashi() {
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(3L));
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(11L));
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(4L));
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(8L));
+        assertTrue(AdjacentRoomConfig.isAdjacentCheckTarget(6L));
+        assertFalse(AdjacentRoomConfig.isAdjacentCheckTarget(1L));
+        assertFalse(AdjacentRoomConfig.isAdjacentCheckTarget(99L));
+        assertFalse(AdjacentRoomConfig.isAdjacentCheckTarget(null));
+    }
+
+    @Test
+    @DisplayName("夜間時間帯ラベル - かでる和室は17-21、東🌸は18-21")
+    void getNightTimeLabel_returnsVenueSpecificLabel() {
+        assertEquals("17-21", AdjacentRoomConfig.getNightTimeLabel(3L));
+        assertEquals("17-21", AdjacentRoomConfig.getNightTimeLabel(11L));
+        assertEquals("17-21", AdjacentRoomConfig.getNightTimeLabel(4L));
+        assertEquals("17-21", AdjacentRoomConfig.getNightTimeLabel(8L));
+        assertEquals("18-21", AdjacentRoomConfig.getNightTimeLabel(6L));
+        assertNull(AdjacentRoomConfig.getNightTimeLabel(12L)); // かっこうは対象外
+        assertNull(AdjacentRoomConfig.getNightTimeLabel(99L));
+    }
+
+    @Test
+    @DisplayName("東区民センターの隣室ペア - 東🌸↔かっこう")
+    void higashi_adjacentPair() {
+        assertEquals(12L, AdjacentRoomConfig.getAdjacentVenueId(6L));
+        assertEquals(6L, AdjacentRoomConfig.getAdjacentVenueId(12L));
+        assertEquals("かっこう", AdjacentRoomConfig.getAdjacentRoomName(6L));
+        assertEquals("さくら", AdjacentRoomConfig.getAdjacentRoomName(12L));
+    }
+
+    @Test
+    @DisplayName("東区民センターの拡張後会場 - 東全室(10) / 定員18")
+    void higashi_expandedVenue() {
+        assertEquals(10L, AdjacentRoomConfig.getExpandedVenueId(6L));
+        assertEquals(10L, AdjacentRoomConfig.getExpandedVenueId(12L));
+        assertEquals("東全室", AdjacentRoomConfig.getExpandedVenueName(6L));
+        assertEquals("東全室", AdjacentRoomConfig.getExpandedVenueName(12L));
+        assertEquals(18, AdjacentRoomConfig.getExpandedCapacity(6L));
+        assertEquals(18, AdjacentRoomConfig.getExpandedCapacity(12L));
+    }
+
+    @Test
+    @DisplayName("東区民センターのサイト部屋名")
+    void higashi_siteRoomName() {
+        assertEquals("さくら", AdjacentRoomConfig.getSiteRoomName(6L));
+        assertEquals("かっこう", AdjacentRoomConfig.getSiteRoomName(12L));
     }
 }

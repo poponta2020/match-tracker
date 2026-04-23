@@ -1,0 +1,38 @@
+name: Scrape Higashi Community Center Room Availability
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: higashi-availability-check
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./scripts/room-checker
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./scripts/room-checker
+        run: npx playwright install --with-deps chromium
+
+      - name: Run scraping
+        working-directory: ./scripts/room-checker
+        run: node sync-higashi-availability-to-db.js --months 2
+        env:
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}

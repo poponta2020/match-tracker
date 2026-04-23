@@ -53,7 +53,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal` | ALL | 練習日程一覧（月別カレンダー表示）。同一日に複数団体のセッションがある場合はカレンダーセルに団体ごとに表示。`?openToday=true` パラメータ付きアクセス時は当日セッションのポップアップを自動表示（LINEリッチメニューからの導線）。ADMIN+は「抽選結果を通知」ボタンでアプリ内+LINE通知を一括送信可能。ADMIN+は隣室が空きの場合「隣室を予約」→「予約完了を報告」→「会場を拡張」の3段階操作で会場拡張が可能 |
+| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal` | ALL | 練習日程一覧（月別カレンダー表示）。同一日に複数団体のセッションがある場合はカレンダーセルに団体ごとに表示。`?openToday=true` パラメータ付きアクセス時は当日セッションのポップアップを自動表示（LINEリッチメニューからの導線）。ADMIN+は「抽選結果を通知」ボタンでアプリ内+LINE通知を一括送信可能。ADMIN+は隣室チェック対象会場（かでる和室4部屋 + 東🌸）で隣室が空きの場合「隣室を予約」→「予約完了を報告」→「会場を拡張」の3段階操作で会場拡張が可能（東🌸はKaderu自動予約APIの対象外なので「隣室を予約」をスキップし初期状態から「予約完了を報告」を表示） |
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |

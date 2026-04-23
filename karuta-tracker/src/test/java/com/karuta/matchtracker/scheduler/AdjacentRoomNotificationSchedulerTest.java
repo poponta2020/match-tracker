@@ -209,4 +209,54 @@ class AdjacentRoomNotificationSchedulerTest {
 
         verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
     }
+
+    @Test
+    @DisplayName("東🌸(venue 6)セッションも隣室チェック対象、通知に18-21ラベル")
+    void notify_higashiSakura_uses18to21TimeLabel() {
+        PracticeSession session = PracticeSession.builder()
+                .id(1L)
+                .sessionDate(LocalDate.now().plusDays(3))
+                .venueId(6L) // 東🌸
+                .capacity(14).totalMatches(1).organizationId(1L)
+                .build();
+        when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
+
+        // 11人参加 → 残り3人
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.WON))
+                .thenReturn(11L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
+                .thenReturn(0L);
+
+        AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
+                .adjacentRoomName("かっこう").status("○").available(true)
+                .expandedVenueId(10L).expandedVenueName("東全室").expandedCapacity(18)
+                .build();
+        when(adjacentRoomService.getAdjacentRoomAvailability(6L, session.getSessionDate())).thenReturn(status);
+
+        Player admin = buildAdmin(10L);
+        when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(List.of(admin));
+        when(playerRepository.findByRoleAndAdminOrganizationIdAndActive(Player.Role.ADMIN, 1L)).thenReturn(List.of());
+
+        scheduler.checkCapacityAndNotify();
+
+        verify(notificationService).createAndPush(eq(10L), eq(NotificationType.ADJACENT_ROOM_AVAILABLE),
+                contains("残り3人"),
+                contains("夜間(18-21)"),
+                eq("PRACTICE_SESSION"), eq(1L), eq("/practice"), eq(1L));
+    }
+
+    @Test
+    @DisplayName("かっこう(venue 12)セッションはスキップ（単独運用対象外）")
+    void skip_kakkouSession() {
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(LocalDate.now().plusDays(3))
+                .venueId(12L)
+                .capacity(4).totalMatches(1).organizationId(1L)
+                .build();
+        when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
+
+        scheduler.checkCapacityAndNotify();
+
+        verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
+    }
 }
