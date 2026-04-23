@@ -97,7 +97,7 @@ status: completed
 - **対応Issue:** #508
 
 ### タスク8: ユニットテスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 拡張後の Config・Scheduler の動作確認テスト
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/config/AdjacentRoomConfigTest.java` — 既存テストに東🌸↔かっこうのケース追加、`getNightTimeLabel` / `isAdjacentCheckTarget` のテスト追加
