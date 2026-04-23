@@ -59,7 +59,7 @@ status: completed
 - **対応Issue:** #505
 
 ### タスク5: AdjacentRoomConfig 拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** 隣室ペアマップに「東🌸(6) ↔ かっこう(K_ID)」を追加し、時間帯ラベルを会場別に返すメソッドを追加
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/config/AdjacentRoomConfig.java`

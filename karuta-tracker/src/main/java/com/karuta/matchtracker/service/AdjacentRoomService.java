@@ -45,11 +45,11 @@ public class AdjacentRoomService {
      *
      * @param venueId 現在の会場ID
      * @param date 対象日付
-     * @return 隣室の空き状況DTO（かでる和室でない場合はnull）
+     * @return 隣室の空き状況DTO（隣室チェック対象外の場合はnull）
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public AdjacentRoomStatusDto getAdjacentRoomAvailability(Long venueId, LocalDate date) {
-        if (!AdjacentRoomConfig.isKaderuRoom(venueId)) {
+        if (!AdjacentRoomConfig.isAdjacentCheckTarget(venueId)) {
             return null;
         }
 
@@ -89,7 +89,7 @@ public class AdjacentRoomService {
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
         Long currentVenueId = session.getVenueId();
-        if (!AdjacentRoomConfig.isKaderuRoom(currentVenueId)) {
+        if (!AdjacentRoomConfig.isAdjacentCheckTarget(currentVenueId)) {
             throw new IllegalStateException("この会場は隣室予約の対象外です");
         }
 
@@ -113,7 +113,7 @@ public class AdjacentRoomService {
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
 
         Long currentVenueId = session.getVenueId();
-        if (!AdjacentRoomConfig.isKaderuRoom(currentVenueId)) {
+        if (!AdjacentRoomConfig.isAdjacentCheckTarget(currentVenueId)) {
             throw new IllegalStateException("この会場は拡張できません");
         }
 

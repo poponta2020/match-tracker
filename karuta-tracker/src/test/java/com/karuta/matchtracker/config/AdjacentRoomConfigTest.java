@@ -74,12 +74,12 @@ class AdjacentRoomConfigTest {
     }
 
     @Test
-    @DisplayName("かでるサイト上の部屋名の取得")
-    void getKaderuRoomName() {
-        assertEquals("すずらん", AdjacentRoomConfig.getKaderuRoomName(3L));
-        assertEquals("はまなす", AdjacentRoomConfig.getKaderuRoomName(11L));
-        assertEquals("あかなら", AdjacentRoomConfig.getKaderuRoomName(4L));
-        assertEquals("えぞまつ", AdjacentRoomConfig.getKaderuRoomName(8L));
+    @DisplayName("サイト上の部屋名の取得")
+    void getSiteRoomName() {
+        assertEquals("すずらん", AdjacentRoomConfig.getSiteRoomName(3L));
+        assertEquals("はまなす", AdjacentRoomConfig.getSiteRoomName(11L));
+        assertEquals("あかなら", AdjacentRoomConfig.getSiteRoomName(4L));
+        assertEquals("えぞまつ", AdjacentRoomConfig.getSiteRoomName(8L));
     }
 
     @Test
@@ -114,7 +114,7 @@ class AdjacentRoomConfigTest {
     void nonExistentVenueReturnsNull() {
         assertNull(AdjacentRoomConfig.getAdjacentVenueId(99L));
         assertNull(AdjacentRoomConfig.getExpandedVenueId(99L));
-        assertNull(AdjacentRoomConfig.getKaderuRoomName(99L));
+        assertNull(AdjacentRoomConfig.getSiteRoomName(99L));
         assertNull(AdjacentRoomConfig.getAdjacentRoomName(99L));
         assertNull(AdjacentRoomConfig.getExpandedVenueName(99L));
         assertNull(AdjacentRoomConfig.getExpandedCapacity(99L));

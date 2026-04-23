@@ -242,7 +242,7 @@ public class KaderuReservationService {
             return ReservationResult.error("NOT_KADERU_ROOM",
                     "かでる2・7の部屋ではありません: venueId=" + venueId);
         }
-        String roomName = AdjacentRoomConfig.getKaderuRoomName(venueId);
+        String roomName = AdjacentRoomConfig.getSiteRoomName(venueId);
         return openReservationPage(roomName, date, slotIndex);
     }
 

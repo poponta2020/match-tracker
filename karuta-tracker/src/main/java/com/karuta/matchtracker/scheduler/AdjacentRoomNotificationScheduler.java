@@ -134,7 +134,7 @@ public class AdjacentRoomNotificationScheduler {
 
         // 通知メッセージを作成
         String dateStr = session.getSessionDate().format(DATE_FORMAT);
-        String venueName = AdjacentRoomConfig.getKaderuRoomName(session.getVenueId());
+        String venueName = AdjacentRoomConfig.getSiteRoomName(session.getVenueId());
         String adjacentRoomName = adjacentRoom.getAdjacentRoomName();
 
         String title;
