@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:** #503
 
 ### タスク3: スクレイピングスクリプト作成
-- [ ] 完了
+- [x] 完了
 - **概要:** 東区民センター かっこうの空き状況を月単位で取得し、`room_availability_cache` に UPSERT するNode.jsスクリプト
 - **変更対象ファイル:**
   - `scripts/room-checker/sync-higashi-availability-to-db.js` — 新規。
