@@ -20,7 +20,7 @@ status: completed
 - **対応Issue:** #502
 
 ### タスク2: スクレイピングページのDOM実地調査
-- [ ] 完了
+- [x] 完了
 - **概要:** `SsfSvrRoomAvailabilityMonth.aspx` の月表示ページにアクセスし、かっこうの空き状況を取得するためのDOM構造・URL パラメータ・施設/部屋コードを実地調査する
 - **変更対象ファイル:**
   - `scripts/room-checker/explore-higashi-availability.js` — 新規（一時的な探査用スクリプト、最終的にはコミット不要だが調査結果をタスク3で利用）
