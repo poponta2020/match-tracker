@@ -30,6 +30,9 @@ const TIME_SLOT = "evening";
 /** 列インデックス（月表示テーブル）: 0=日付, 1=曜日, 2=午前, 3=昼食, 4=午後, 5=夕食, 6=夜間, 7=延長 */
 const NIGHT_COL_INDEX = 6;
 
+/** 月内の最小想定日数。どの月も28日以上あるため、これ未満なら DOM 変更等の異常とみなす */
+const MIN_ROWS_PER_MONTH = 28;
+
 function parseArgs(argv) {
   const args = { months: 2 };
   for (let i = 2; i < argv.length; i++) {
@@ -210,6 +213,11 @@ async function main() {
     let { year, month } = jstToday();
     for (let i = 0; i < months; i++) {
       const rows = await extractMonthStatuses(page);
+      if (rows.length < MIN_ROWS_PER_MONTH) {
+        throw new Error(
+          `${year}-${String(month).padStart(2, "0")} の抽出行数が ${rows.length} 件（最低 ${MIN_ROWS_PER_MONTH} 件を想定）。DOM構造変化の可能性あり`
+        );
+      }
       for (const { day, status } of rows) {
         const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         await upsertStatus(db, dateStr, status);
