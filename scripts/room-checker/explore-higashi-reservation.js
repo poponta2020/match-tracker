@@ -161,8 +161,18 @@ async function preflightCheck(args) {
     );
   }
 
-  if (args.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
-    errors.push(`--date の形式が不正です: '${args.date}' (YYYY-MM-DD)`);
+  // --date: 形式 + 実在日付の二段検証
+  if (args.date != null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
+      errors.push(`--date の形式が不正です: '${args.date}' (YYYY-MM-DD)`);
+    } else {
+      const [y, m, d] = args.date.split("-").map((v) => parseInt(v, 10));
+      const parsed = new Date(Date.UTC(y, m - 1, d));
+      const roundtrip = `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
+      if (roundtrip !== args.date) {
+        errors.push(`--date の値が実在しない日付です: '${args.date}'`);
+      }
+    }
   }
 
   if (errors.length > 0) {
@@ -180,6 +190,24 @@ async function preflightCheck(args) {
     console.warn(
       "[警告] 探索日が実行日と同日です。実申込発生リスクを避けるため数日後を推奨します。"
     );
+  }
+
+  // 過去日・遠すぎる将来日はサイトへの大量リクエスト（翌月連打）を招くので拒否。
+  // 予約システムの公開範囲は通常 2〜3ヶ月先までのため、安全側で +3ヶ月を上限とする。
+  const MAX_FUTURE_MONTHS = 3;
+  const [ty, tm] = args.date.split("-").map((v) => parseInt(v, 10));
+  const todayJst = jstNow();
+  const monthDiff =
+    (ty - todayJst.getFullYear()) * 12 + (tm - (todayJst.getMonth() + 1));
+  if (monthDiff < 0) {
+    console.error(`[エラー] --date は過去の月です: '${args.date}'`);
+    process.exit(1);
+  }
+  if (monthDiff > MAX_FUTURE_MONTHS) {
+    console.error(
+      `[エラー] --date は実行月から ${MAX_FUTURE_MONTHS} ヶ月以内にしてください: '${args.date}' (${monthDiff}ヶ月先)`
+    );
+    process.exit(1);
   }
 
   // 出力ディレクトリ
@@ -285,13 +313,17 @@ function summarizeViewStateField(value, previousHash) {
  * ステップを記録する。HTML / PNG / JSON の3点セットを保存し summary に追加する。
  */
 async function recordStep(ctx, stepNumber, stepName, nextActionHint) {
-  const { page, outputDir, summary, previousViewStateHashes } = ctx;
+  const { page, outputDir, summary, previousViewStateHashes, responseMetaByUrl } = ctx;
 
   const url = page.url();
   const title = await page.title();
   const html = await page.content();
   const screenshot = await page.screenshot({ fullPage: true });
   const meta = await capturePageMeta(page);
+
+  // 現在のページURLに対応するメインドキュメントレスポンスのヘッダ情報を引き当てる。
+  // 無い場合（client-side のみの postback 等）は null。
+  const responseMeta = responseMetaByUrl ? (responseMetaByUrl.get(url) || null) : null;
 
   const stepPad = String(stepNumber).padStart(2, "0");
   const safeName = fileSafeStepName(stepName);
@@ -323,6 +355,7 @@ async function recordStep(ctx, stepNumber, stepName, nextActionHint) {
     forms: meta.forms,
     viewStates: vsSummary,
     cookieKeys: meta.cookieKeys,
+    responseMeta,
     actionButtonCandidates: meta.actionButtonCandidates,
     files: {
       html: `${basename}.html`,
@@ -353,17 +386,20 @@ async function recordStep(ctx, stepNumber, stepName, nextActionHint) {
 }
 
 /**
- * エラーページ（サービス時間外・HTTPエラー）を検出したら即時終了する。
+ * エラーページ（サービス時間外・HTTPエラー・セッション切れ等）を検出したら例外を投げる。
+ * 呼び出し側の try/catch/finally でスナップショット保存・ブラウザ終了・summary.json 書き出しに
+ * 正しく到達させるため、ここでは `process.exit` を呼ばない。
  */
 function assertNotErrorPage(page) {
   const url = page.url();
   if (url.includes("OutsideServiceTime.html")) {
-    console.error(`[エラー] サービス時間外: ${url}`);
-    process.exit(1);
+    throw new Error(`サービス時間外画面に遷移しました: ${url}`);
   }
   if (url.includes("HttpClientError.html")) {
-    console.error(`[エラー] HTTPエラーページ: ${url}`);
-    process.exit(1);
+    throw new Error(`HTTPエラーページに遷移しました: ${url}`);
+  }
+  if (url.includes("NoneSessionInfo.html")) {
+    throw new Error(`セッション無効画面に遷移しました: ${url}`);
   }
 }
 
@@ -644,13 +680,45 @@ async function main() {
   });
   const page = await context.newPage();
 
+  // メインドキュメント（ナビゲーション）レスポンスの content-type と Set-Cookie の
+  // cookie 名のみを保持する。値は記録しない（機密情報露出防止）。
+  // 直近 1 件のみ保持し、recordStep 時に該当するレスポンスを引き当てる。
+  const responseMetaByUrl = new Map();
+  page.on("response", async (response) => {
+    try {
+      const request = response.request();
+      if (!request.isNavigationRequest()) return;
+      const headers = response.headers();
+      const setCookieRaw = headers["set-cookie"] || "";
+      // set-cookie ヘッダは改行区切りで複数の Cookie が連結されることがある。
+      // cookie の name 部（'=' まで）だけを抽出し、値は保持しない。
+      const setCookieNames = setCookieRaw
+        .split(/\r?\n/)
+        .map((line) => line.split("=")[0].trim())
+        .filter(Boolean);
+      responseMetaByUrl.set(response.url(), {
+        status: response.status(),
+        contentType: headers["content-type"] || null,
+        setCookieNames,
+      });
+    } catch (_) {
+      // レスポンスイベントは副次情報なので失敗時は無視
+    }
+  });
+
   const summary = [];
   const previousViewStateHashes = {
     viewState: null,
     eventValidation: null,
     viewStateGenerator: null,
   };
-  const ctx = { page, outputDir: args.outputDir, summary, previousViewStateHashes };
+  const ctx = {
+    page,
+    outputDir: args.outputDir,
+    summary,
+    previousViewStateHashes,
+    responseMetaByUrl,
+  };
 
   let exitCode = 0;
   let finalSubmitInfo = null;

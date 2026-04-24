@@ -177,7 +177,7 @@ async function recordStep(page, stepNumber, stepName) {
   const forms = await page.evaluate(() => /* form構造取得 */);
   const viewState = await page.evaluate(() => /* __VIEWSTATE関連取得 */);
   const cookieKeys = /* document.cookie からkey一覧 */;
-  
+
   // ファイル保存
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.html`, html);
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.png`, screenshot);
@@ -197,7 +197,7 @@ async function recordStep(page, stepNumber, stepName) {
   };
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.json`, JSON.stringify(meta, null, 2));
   summary.push(meta);
-  
+
   console.log(`[step ${stepNumber}] ${stepName}: ${title} (${url})`);
   console.log(`  次の操作: ${nextActionHint}`);
 }
