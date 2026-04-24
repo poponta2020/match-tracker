@@ -9,7 +9,10 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -25,6 +28,12 @@ public class DensukeScraper {
     public static class DensukeData {
         private List<ScheduleEntry> entries = new ArrayList<>();
         private List<String> memberNames = new ArrayList<>();
+        /**
+         * 伝助ヘッダの各メンバーリンクの title 属性（"M/d HH:mm"）を
+         * LocalDateTime（scrape 年固定）に変換したもの。
+         * title が空 or parse 不可なメンバーは entry を持たない（Issue #544）。
+         */
+        private Map<String, LocalDateTime> memberLastChangeTimes = new LinkedHashMap<>();
     }
 
     /**
@@ -44,6 +53,8 @@ public class DensukeScraper {
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})\\([^)]+\\)");
     // 試合番号パターン: "1試合目" or "2試合目"
     private static final Pattern MATCH_PATTERN = Pattern.compile("(\\d+)試合目");
+    // 伝助 title 属性: "M/d HH:mm" 例: "4/23 18:07"
+    private static final Pattern DENSUKE_TITLE_PATTERN = Pattern.compile("^\\s*(\\d{1,2})/(\\d{1,2})\\s+(\\d{1,2}):(\\d{2})\\s*$");
     // 会場名パターン: 日付の後、試合番号or時間の前の文字列 例: "4/1(水)すずらん 1試合目 17:20~"
     private static final Pattern VENUE_PATTERN = Pattern.compile("\\([^)]+\\)(.+?)[\\s\u3000]+\\d+試合目");
 
@@ -85,17 +96,27 @@ public class DensukeScraper {
         }
 
         List<String> memberNames = new ArrayList<>();
+        Map<String, LocalDateTime> memberLastChangeTimes = new LinkedHashMap<>();
         for (int i = memberStartIdx; i < headerCells.size(); i++) {
             Element cell = headerCells.get(i);
             Element link = cell.selectFirst("a");
             String name = stripLeadingEmoji(link != null ? link.text() : cell.text());
             memberNames.add(name);
+
+            if (link != null) {
+                LocalDateTime titleTime = parseDensukeTitleAsDateTime(link.attr("title"), year);
+                if (titleTime != null) {
+                    memberLastChangeTimes.put(name, titleTime);
+                }
+            }
         }
-        log.info("Found {} members in densuke (memberStartIdx={})", memberNames.size(), memberStartIdx);
+        log.info("Found {} members in densuke (memberStartIdx={}, withTitleTime={})",
+                memberNames.size(), memberStartIdx, memberLastChangeTimes.size());
 
         // 2行目以降: 日程データ
         DensukeData data = new DensukeData();
         data.setMemberNames(memberNames);
+        data.setMemberLastChangeTimes(memberLastChangeTimes);
         LocalDate currentDate = null;
         String currentVenue = null;
 
@@ -162,6 +183,27 @@ public class DensukeScraper {
 
         log.info("Scraped {} schedule entries from densuke", data.getEntries().size());
         return data;
+    }
+
+    /**
+     * 伝助ヘッダの `<a title="M/d HH:mm">` 属性を LocalDateTime に変換する。
+     * 年は呼び出し元（scrape 年）を採用する（年跨ぎは今回のスコープ外）。
+     *
+     * @return parse 成功時 LocalDateTime、title が null/空/フォーマット不一致/日付不正なら null
+     */
+    static LocalDateTime parseDensukeTitleAsDateTime(String title, int year) {
+        if (title == null) return null;
+        Matcher m = DENSUKE_TITLE_PATTERN.matcher(title);
+        if (!m.matches()) return null;
+        try {
+            int month = Integer.parseInt(m.group(1));
+            int day = Integer.parseInt(m.group(2));
+            int hour = Integer.parseInt(m.group(3));
+            int minute = Integer.parseInt(m.group(4));
+            return LocalDateTime.of(LocalDate.of(year, month, day), LocalTime.of(hour, minute));
+        } catch (DateTimeException | NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

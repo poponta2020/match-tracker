@@ -9,6 +9,7 @@ import org.jsoup.nodes.Document;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -165,6 +166,94 @@ class DensukeScraperTest {
         assertThatThrownBy(() -> scraper.parse(doc, 2026))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("メンバー列");
+    }
+
+    // ====================================================================
+    // parseDensukeTitleAsDateTime: title 属性パース (Issue #544)
+    // ====================================================================
+
+    @Test
+    @DisplayName("parseDensukeTitleAsDateTime: 正常系 M/d HH:mm が LocalDateTime に変換される")
+    void testParseTitleValid() {
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("4/23 18:07", 2026))
+                .isEqualTo(LocalDateTime.of(2026, 4, 23, 18, 7));
+        // 1桁の月・日も許容
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("1/5 09:30", 2026))
+                .isEqualTo(LocalDateTime.of(2026, 1, 5, 9, 30));
+        // 2桁の月・日
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("12/31 23:59", 2026))
+                .isEqualTo(LocalDateTime.of(2026, 12, 31, 23, 59));
+    }
+
+    @Test
+    @DisplayName("parseDensukeTitleAsDateTime: null / 空文字 は null を返す")
+    void testParseTitleNullOrEmpty() {
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime(null, 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("   ", 2026)).isNull();
+    }
+
+    @Test
+    @DisplayName("parseDensukeTitleAsDateTime: フォーマット不一致は null を返す（例外を投げない）")
+    void testParseTitleInvalidFormat() {
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("xxx", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("2026/04/23 18:07", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("4-23 18:07", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("4/23", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("18:07", 2026)).isNull();
+    }
+
+    @Test
+    @DisplayName("parseDensukeTitleAsDateTime: 不正な日付（2/30 等）は null を返す")
+    void testParseTitleInvalidDate() {
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("2/30 10:00", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("13/1 10:00", 2026)).isNull();
+        assertThat(DensukeScraper.parseDensukeTitleAsDateTime("4/23 25:00", 2026)).isNull();
+    }
+
+    @Test
+    @DisplayName("parse: ヘッダー title 属性が memberLastChangeTimes に格納される")
+    void testParsePopulatesMemberLastChangeTimes() throws IOException {
+        // 田中: title="4/23 18:07" → parse 成功
+        // 鈴木: title="" → 無視（map に入らない）
+        // 佐藤: title="xxx" → parse 失敗で無視
+        // 高橋: title="4/24 12:05" → parse 成功
+        String html = "<table class=\"listtbl\">"
+                + "<tr>"
+                + "<td> </td>"
+                + "<td class=\"rline\"><div align=\"center\">○</div></td>"
+                + "<td class=\"rline\"><div align=\"center\">×</div></td>"
+                + "<td nowrap><a href=\"javascript:memberdata(1);\" title=\"4/23 18:07\">田中</a></td>"
+                + "<td nowrap><a href=\"javascript:memberdata(2);\" title=\"\">鈴木</a></td>"
+                + "<td nowrap><a href=\"javascript:memberdata(3);\" title=\"xxx\">佐藤</a></td>"
+                + "<td nowrap><a href=\"javascript:memberdata(4);\" title=\"4/24 12:05\">高橋</a></td>"
+                + "</tr>"
+                + "</table>";
+        Document doc = Jsoup.parse(html);
+        DensukeData data = scraper.parse(doc, 2026);
+
+        assertThat(data.getMemberNames()).containsExactly("田中", "鈴木", "佐藤", "高橋");
+        assertThat(data.getMemberLastChangeTimes())
+                .containsEntry("田中", LocalDateTime.of(2026, 4, 23, 18, 7))
+                .containsEntry("高橋", LocalDateTime.of(2026, 4, 24, 12, 5))
+                .doesNotContainKey("鈴木")
+                .doesNotContainKey("佐藤")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("parse: title 属性がないヘッダは memberLastChangeTimes が空になる（既存挙動と互換）")
+    void testParseWithoutTitleAttributes() throws IOException {
+        String html = buildDensukeHtml(
+                new String[]{"○", "×"},
+                new String[]{"田中", "鈴木"},
+                new DataRow("5/1(金) 会場 1試合目", new String[]{"col3:○", "col1:×"})
+        );
+        Document doc = Jsoup.parse(html);
+        DensukeData data = scraper.parse(doc, 2026);
+
+        assertThat(data.getMemberNames()).containsExactly("田中", "鈴木");
+        assertThat(data.getMemberLastChangeTimes()).isEmpty();
     }
 
     // ====================================================================
