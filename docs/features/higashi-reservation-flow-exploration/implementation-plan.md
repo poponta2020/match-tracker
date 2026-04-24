@@ -19,7 +19,7 @@ status: completed
 - **完了条件:** `git check-ignore scripts/room-checker/exploration-output/test` が hit する
 
 ### タスク2: 探索スクリプト実装
-- [ ] 完了
+- [x] 完了
 - **概要:** 東区民センター予約フローを辿る Playwright スクリプトを新規作成する。ログインから「申込確定ボタン押下直前」まで進め、各ステップの HTML/PNG/JSON を保存する。申込確定処理はコード上に書かない。
 - **変更対象ファイル:**
   - `scripts/room-checker/explore-higashi-reservation.js` — 新規作成
