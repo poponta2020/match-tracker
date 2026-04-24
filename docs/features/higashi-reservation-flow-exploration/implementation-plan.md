@@ -54,9 +54,9 @@ status: completed
     - 申込ボタンが見つからない → 詰まった時点の状態を保存 + summary に記録 + 正常終了扱い（情報が取れただけでも成果）
   - コメントに明示: 「申込確定ボタンクリック処理はここに書かない。絶対に追加しないこと」
 - **参考実装:**
-  - [scripts/room-checker/scrape-higashi-history.js](scripts/room-checker/scrape-higashi-history.js) — ログインフロー
-  - [scripts/room-checker/sync-higashi-availability-to-db.js](scripts/room-checker/sync-higashi-availability-to-db.js) — 施設/部屋/月/日付遷移
-  - [scripts/room-checker/explore-higashi-availability.js](scripts/room-checker/explore-higashi-availability.js) — 探索スクリプトの構成
+  - [scripts/room-checker/scrape-higashi-history.js](../../../scripts/room-checker/scrape-higashi-history.js) — ログインフロー
+  - [scripts/room-checker/sync-higashi-availability-to-db.js](../../../scripts/room-checker/sync-higashi-availability-to-db.js) — 施設/部屋/月/日付遷移
+  - [scripts/room-checker/explore-higashi-availability.js](../../../scripts/room-checker/explore-higashi-availability.js) — 探索スクリプトの構成
 - **依存タスク:** タスク1 (#539)
 - **対応Issue:** #540
 - **完了条件:**

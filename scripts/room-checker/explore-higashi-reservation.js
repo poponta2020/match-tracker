@@ -819,8 +819,15 @@ async function main() {
     await recordStep(ctx, 10, "after-cell-click", "○セルクリック後の画面 — 利用申込フォームが出ていればダミー値で入力");
 
     // ---- step11-12: 利用申込フォームが出ていたらダミー値で入力 → 確認画面へ ----
+    // 安全ガード:
+    //   - `#ctl00_cphMain_btnReg` は「利用申込画面」では value="利用申込確認" だが
+    //     「利用申込確認画面」では value="はい" (=申込確定ボタン) として再利用される。
+    //     URL の includes だけでは両画面にマッチしてしまうため、pathname 厳密一致 +
+    //     クリック直前に btnReg の value を検証して「利用申込確認」でなければクリック
+    //     せずに final-submit-detected として停止する。
     let stepCounter = 11;
-    if (page.url().includes("SsfrApplyForUseEntry")) {
+    const currentPathname = new URL(page.url()).pathname;
+    if (currentPathname.endsWith("/Foau/SsfrApplyForUseEntry.aspx")) {
       await fillApplicationForm(page, args.slot);
       await recordStep(
         ctx,
@@ -829,18 +836,48 @@ async function main() {
         "ダミー値で入力完了 — 「利用申込確認」ボタンをクリックして確認画面へ"
       );
 
-      await Promise.all([
-        page.waitForLoadState("networkidle").catch(() => {}),
-        page.click("#ctl00_cphMain_btnReg"),
-      ]);
-      await page.waitForTimeout(2000);
-      assertNotErrorPage(page);
-      await recordStep(
-        ctx,
-        stepCounter++,
-        "after-apply-confirm-click",
-        "利用申込確認ボタン押下後の画面 — 申込確定ボタンを検出して停止することを期待"
-      );
+      // クリック直前に btnReg の value を実機検証する（二重安全装置）
+      const btnRegValue = await page.evaluate(() => {
+        const el = document.querySelector("#ctl00_cphMain_btnReg");
+        return el ? (el.value || "").trim() : null;
+      });
+      const EXPECTED_BTN_VALUE = "利用申込確認";
+      if (btnRegValue !== EXPECTED_BTN_VALUE) {
+        console.warn(
+          `\n[安全停止] #ctl00_cphMain_btnReg の value が想定と異なります: 実際="${btnRegValue}" 期待="${EXPECTED_BTN_VALUE}"`
+        );
+        console.warn(`  【重要】クリックせず final-submit-detected として終了します。`);
+        finalSubmitInfo = {
+          matched: true,
+          keyword: "value-mismatch-safety-stop",
+          tag: "INPUT",
+          id: "ctl00_cphMain_btnReg",
+          name: "ctl00$cphMain$btnReg",
+          value: btnRegValue,
+          selector: "#ctl00_cphMain_btnReg",
+          text: btnRegValue,
+        };
+        await recordStep(
+          ctx,
+          stepCounter++,
+          "btn-value-mismatch-stop",
+          `btnReg value mismatch: 実="${btnRegValue}" 期待="${EXPECTED_BTN_VALUE}" — クリックせず終了`
+        );
+        terminationReason = "final-submit-detected";
+      } else {
+        await Promise.all([
+          page.waitForLoadState("networkidle").catch(() => {}),
+          page.click("#ctl00_cphMain_btnReg"),
+        ]);
+        await page.waitForTimeout(2000);
+        assertNotErrorPage(page);
+        await recordStep(
+          ctx,
+          stepCounter++,
+          "after-apply-confirm-click",
+          "利用申込確認ボタン押下後の画面 — 申込確定ボタンを検出して停止することを期待"
+        );
+      }
     }
 
     // ---- 探索ループ（申込確定系ボタン検出で停止） ----

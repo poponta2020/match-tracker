@@ -153,7 +153,7 @@ scripts/room-checker/exploration-output/higashi-reservation-YYYYMMDD-HHMMSS/
 ### 4.1 スクリプト構成
 - **単一ファイル** `scripts/room-checker/explore-higashi-reservation.js`
 - 外部モジュール依存: `playwright`, `node:fs/promises`, `node:path`, `node:crypto`（SHA256用）
-- 既存 [sync-higashi-availability-to-db.js](scripts/room-checker/sync-higashi-availability-to-db.js) / [scrape-higashi-history.js](scripts/room-checker/scrape-higashi-history.js) の以下を流用:
+- 既存 [sync-higashi-availability-to-db.js](../../../scripts/room-checker/sync-higashi-availability-to-db.js) / [scrape-higashi-history.js](../../../scripts/room-checker/scrape-higashi-history.js) の以下を流用:
   - ログインフロー（scrape-higashi-history.js）
   - メニュー→施設→部屋→空き状況画面までの遷移（sync-higashi-availability-to-db.js）
   - `○` セルのDOM判定ロジック（sync-higashi-availability-to-db.js の `NIGHT_COL_INDEX`, `Available` クラス判定）
