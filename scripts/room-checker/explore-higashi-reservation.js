@@ -44,6 +44,8 @@ const SLOT_COL_INDEX = {
 };
 
 // 「申込確定」系ボタンのキーワード。検出したら絶対クリックせず記録だけ行う。
+// 東区民センター (sapporo-community.jp) の確認画面は「申込内容でよろしいですか？」
+// ダイアログ形式で、確定ボタンの value="はい" となっている。
 const FINAL_SUBMIT_KEYWORDS = [
   "申込確定",
   "申込を確定",
@@ -53,6 +55,7 @@ const FINAL_SUBMIT_KEYWORDS = [
   "申込完了",
   "送信",
   "確定する",
+  "はい",
 ];
 
 // 前進系ボタンのキーワード。これに該当するボタンはクリック対象。
@@ -557,6 +560,55 @@ async function clickBySelector(page, selector) {
   await page.waitForTimeout(1500);
 }
 
+/**
+ * 利用申込画面 (SsfrApplyForUseEntry.aspx) のフォームをダミー値で入力する。
+ * ここで入力する値は「確認画面 (=申込確定ボタンの1画面前) に到達させる」ためだけの値。
+ * 確認画面に到達したらスクリプトの FINAL_SUBMIT_KEYWORDS 検出機構が働いて申込確定前で停止する。
+ * 実際の申込は絶対に発生させない設計。
+ */
+async function fillApplicationForm(page, slot) {
+  console.log(`\n  [フォーム入力] ダミー値で入力中...`);
+
+  const slotCheckboxId = {
+    morning: "#ctl00_cphMain_wucTimeKbn_cbTimeAm",
+    afternoon: "#ctl00_cphMain_wucTimeKbn_cbTimePm",
+    night: "#ctl00_cphMain_wucTimeKbn_cbTimeNt",
+  }[slot];
+  if (!slotCheckboxId) throw new Error(`未対応のスロット: ${slot}`);
+
+  // 時間区分チェックボックスは AutoPostBack を発火するため、クリック後に
+  // networkidle まで待ってから次のフィールドへ進む。
+  await Promise.all([
+    page.waitForLoadState("networkidle").catch(() => {}),
+    page.check(slotCheckboxId),
+  ]);
+  await page.waitForTimeout(1000);
+
+  // 利用人数（半角数字、maxlength=3）
+  await page.fill("#ctl00_cphMain_tbUserNumber", "2");
+
+  // 担当者氏名（全角、苗字と名の間に全角スペース）
+  await page.fill("#ctl00_cphMain_tbContactName", "テスト　太郎");
+
+  // 電話番号（3分割）
+  await page.fill("#ctl00_cphMain_tbTelno1", "090");
+  await page.fill("#ctl00_cphMain_tbTelno2", "0000");
+  await page.fill("#ctl00_cphMain_tbTelno3", "0000");
+
+  // メールアドレス
+  await page.fill("#ctl00_cphMain_tbMailAddress", "test@example.com");
+
+  // 利用目的（value="16" = 会議・会合）
+  // ddlIntendedUse も AutoPostBack の可能性があるため安全側で待機
+  await Promise.all([
+    page.waitForLoadState("networkidle").catch(() => {}),
+    page.selectOption("#ctl00_cphMain_ddlIntendedUse", "16"),
+  ]);
+  await page.waitForTimeout(1000);
+
+  console.log(`  [フォーム入力] 完了`);
+}
+
 async function saveFailureSnapshot(ctx, stepNumber, label, error) {
   try {
     await recordStep(ctx, stepNumber, `error-${label}`, `エラー発生: ${error?.message || error}`);
@@ -629,10 +681,10 @@ async function main() {
     await recordStep(ctx, 3, "menu-after-login", "空室検索 (VacantRoomsSearchLogout) をクリック");
 
     // ---- step04: 空室検索 → 施設選択 → 部屋選択 → 月表示 ----
-    // 4a: 空室検索ボタン（ログイン後は ...Logout 側 ID）
+    // 4a: 空室検索ボタン（ログイン済メニューは ...Login 側 ID。Logout 側は未ログイン用）
     await Promise.all([
       page.waitForLoadState("networkidle").catch(() => {}),
-      page.click("#ctl00_cphMain_wucImgBtnVacantRoomsSearchLogout_imgbtnMain"),
+      page.click("#ctl00_cphMain_wucImgBtnVacantRoomsSearchLogin_imgbtnMain"),
     ]);
     await page.waitForTimeout(1000);
     assertNotErrorPage(page);
@@ -696,10 +748,34 @@ async function main() {
 
     await clickTargetCell(page, day, colIdx);
     assertNotErrorPage(page);
-    await recordStep(ctx, 10, "after-cell-click", "○セルクリック後の画面 — 次の前進ボタンを探索");
+    await recordStep(ctx, 10, "after-cell-click", "○セルクリック後の画面 — 利用申込フォームが出ていればダミー値で入力");
 
-    // ---- step06+: 探索ループ（申込確定の手前まで） ----
+    // ---- step11-12: 利用申込フォームが出ていたらダミー値で入力 → 確認画面へ ----
     let stepCounter = 11;
+    if (page.url().includes("SsfrApplyForUseEntry")) {
+      await fillApplicationForm(page, args.slot);
+      await recordStep(
+        ctx,
+        stepCounter++,
+        "form-filled",
+        "ダミー値で入力完了 — 「利用申込確認」ボタンをクリックして確認画面へ"
+      );
+
+      await Promise.all([
+        page.waitForLoadState("networkidle").catch(() => {}),
+        page.click("#ctl00_cphMain_btnReg"),
+      ]);
+      await page.waitForTimeout(2000);
+      assertNotErrorPage(page);
+      await recordStep(
+        ctx,
+        stepCounter++,
+        "after-apply-confirm-click",
+        "利用申込確認ボタン押下後の画面 — 申込確定ボタンを検出して停止することを期待"
+      );
+    }
+
+    // ---- 探索ループ（申込確定系ボタン検出で停止） ----
     for (let i = 0; i < MAX_EXPLORATION_STEPS; i++) {
       // 申込確定系ボタンの検出 — 見つけたら絶対クリックしない
       const finalBtn = await findFinalSubmitButton(page);
