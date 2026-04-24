@@ -28,17 +28,26 @@ status: completed
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` —
     - 定数 `DRIFT_WARN_THRESHOLD_MINUTES = 10` を追加
     - `processPhase1` / `processPhase3` の signature に `Map<String, LocalDateTime> memberLastChangeTimes` 追加
-    - `processPhase3Maru` / `processPhase3Sankaku` / `processPhase3Batsu` 等の下位メソッドに同 map を伝搬
-    - private helper `formatDriftLog(...)`, `warnIfDrifted(...)` を追加
+    - `processPhase3Maru` / `processPhase3Sankaku` / `processPhase3Batsu` 等の下位メソッドに同 map + `playerIdMap` を伝搬
+    - **package-private** helper `formatDriftLog(...)`, `warnIfDrifted(...)` を追加（単体テスト可能にするため）
     - 既存の INFO ログ（`Phase1: removed`, `Phase1: reactivated`, `Phase3-A6`, `Phase3-A8`, `Phase3-B2`, `Phase3-C2`, `Phase3-C4`, `Phase3-C6`）を `formatDriftLog` 呼び出しに変更
-    - 各状態遷移時に `warnIfDrifted` で 10分超の drift を WARN
+    - Phase3 系の下位ログ（`Phase3: registered/reactivated player ... as WON/WAITLISTED`）も同様に drift 情報付与
+    - 各状態遷移時に `warnIfDrifted` で 10分超の drift を WARN（Phase1 含む全状態遷移で一貫）
+    - `detectedAt` は `processPhase1` / `processPhase3` の入口で **1回** `JstDateTimeUtil.now()` を取得し引数渡し
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/DensukeImportServiceTest.java` ほか関連テスト — ログ assert がある場合は新フォーマットに合わせて更新
+  - `formatDriftLog` / `warnIfDrifted` の単体テストを追加（正常系、title未取得、drift>10分WARN発火、drift<=10分WARN抑制）
 - **依存タスク:** タスク1 (#544)
 - **完了条件:**
   - Phase3系の全 INFO ログが `densukeTitle=... detectedAt=... drift=Nm` 形式を含む
   - `driftMinutes > 10` のケースで `WARN Densuke change-time drift detected:` ログが出る
   - title が取れないメンバーは `densukeTitle=(unknown)` と表示され WARN 抑制
-  - `./gradlew test` が全 PASS
+  - `./gradlew test --tests "*DensukeImportService*"` が全 PASS
+
+### 設計決定事項（タスク2）
+
+**Q1 → A**: Phase3 下位ログ（`registerNewParticipant` / `createWaitlisted` / `reactivateAsNewParticipant` / `reactivateAsWaitlisted` 内の `Phase3: registered/reactivated` 系 INFO ログ）も上位ログと同様に drift 情報を付与し、WARN 対象とする（一貫性優先）
+
+**Q2 → A**: `formatDriftLog` / `warnIfDrifted` は **package-private** にして `DensukeImportServiceTest` から直接呼べるようにする（単体テスト容易性）
 
 ## 実装順序
 1. **タスク1**: DensukeScraper で title を parse して map を持たせる（依存なし）
