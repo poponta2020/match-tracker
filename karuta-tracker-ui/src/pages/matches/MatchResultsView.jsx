@@ -350,6 +350,7 @@ const MatchResultsView = () => {
       pairedNames.add(p.player2Name);
     });
     return matchParticipants
+      .filter(p => typeof p === 'string' || p.status === 'WON')
       .map(p => typeof p === 'string' ? p : p.name)
       .filter(name => !pairedNames.has(name));
   };

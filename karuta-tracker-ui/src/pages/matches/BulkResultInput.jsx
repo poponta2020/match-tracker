@@ -51,7 +51,9 @@ const BulkResultInput = () => {
       const pairedIds = new Set();
       matchPairings.forEach(p => { pairedIds.add(p.player1Id); pairedIds.add(p.player2Id); });
       const matchPartEntries = sessionData.matchParticipants?.[String(num)] || [];
-      const matchPartNames = matchPartEntries.map(p => typeof p === 'string' ? p : p.name);
+      const matchPartNames = matchPartEntries
+        .filter(p => typeof p === 'string' || p.status === 'WON')
+        .map(p => typeof p === 'string' ? p : p.name);
       const bye = allParticipants
         .filter(p => matchPartNames.includes(p.name) && !pairedIds.has(p.id));
       if (bye.length > 0) {
