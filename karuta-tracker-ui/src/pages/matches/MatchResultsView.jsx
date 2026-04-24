@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { getByePlayerNamesForMatch } from './byePlayersLogic';
 
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
@@ -340,19 +341,10 @@ const MatchResultsView = () => {
   const totalMatches = session?.totalMatches || 0;
 
   // 対戦組み合わせに含まれていない参加者（抜けの選手）を算出
+  // （byePlayersLogic.js の純粋関数に委譲）
   const getByePlayersForMatch = (matchNumber) => {
     const matchParticipants = session?.matchParticipants?.[matchNumber] || [];
-    if (matchParticipants.length === 0) return [];
-    const matchPairings = getPairingsForMatch(matchNumber);
-    const pairedNames = new Set();
-    matchPairings.forEach(p => {
-      pairedNames.add(p.player1Name);
-      pairedNames.add(p.player2Name);
-    });
-    return matchParticipants
-      .filter(p => typeof p === 'string' || p.status === 'WON')
-      .map(p => typeof p === 'string' ? p : p.name)
-      .filter(name => !pairedNames.has(name));
+    return getByePlayerNamesForMatch(matchParticipants, getPairingsForMatch(matchNumber));
   };
 
   const currentByePlayers = getByePlayersForMatch(currentMatchNumber);

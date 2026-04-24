@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { Save, AlertCircle, Pencil, X, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { computeByePlayersByMatch } from './byePlayersLogic';
 
 const BulkResultInput = () => {
   const { sessionId } = useParams();
@@ -42,26 +43,9 @@ const BulkResultInput = () => {
     { value: 'ABSENT', label: '休み' },
   ];
 
-  // 抜け番選手の算出（共通関数）
-  const computeByePlayers = (sessionData, allPairings, allParticipants) => {
-    const totalMatches = sessionData?.totalMatches || 0;
-    const result = {};
-    for (let num = 1; num <= totalMatches; num++) {
-      const matchPairings = allPairings.filter(p => p.matchNumber === num);
-      const pairedIds = new Set();
-      matchPairings.forEach(p => { pairedIds.add(p.player1Id); pairedIds.add(p.player2Id); });
-      const matchPartEntries = sessionData.matchParticipants?.[String(num)] || [];
-      const matchPartNames = matchPartEntries
-        .filter(p => typeof p === 'string' || p.status === 'WON')
-        .map(p => typeof p === 'string' ? p : p.name);
-      const bye = allParticipants
-        .filter(p => matchPartNames.includes(p.name) && !pairedIds.has(p.id));
-      if (bye.length > 0) {
-        result[num] = bye.map(p => ({ id: p.id, name: p.name }));
-      }
-    }
-    return result;
-  };
+  // 抜け番選手の算出（byePlayersLogic.js に切り出し済みの純粋関数を使用）
+  const computeByePlayers = (sessionData, allPairings, allParticipants) =>
+    computeByePlayersByMatch(sessionData, allPairings, allParticipants);
 
   // 権限チェック
   useEffect(() => {

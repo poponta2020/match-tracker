@@ -419,6 +419,12 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 
 奇数参加者の練習で対戦相手がいない選手（抜け番）の活動を試合番号ごとに記録する機能。
 
+**抜け番の判定ルール:**
+- 抜け番 = 「その試合番号の WON 参加者」のうち、組み合わせ（MatchPairing）に含まれない選手
+- `PracticeSessionDto.matchParticipants` には `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/`OFFERED`/`CANCELLED`）が含まれるため、**抜け番候補を算出する際は必ず `status === 'WON'` でフィルタすること**
+- キャンセル済み（`CANCELLED`）・キャンセル待ち（`WAITLISTED`/`OFFERED`）の選手は抜け番として扱わない
+- 対象画面: `PairingGenerator` / `BulkResultInput` / `MatchResultsView` いずれも同じルールで算出する
+
 **活動種別:**
 
 | Enum値 | 表示名 | 説明 |
