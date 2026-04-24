@@ -2722,6 +2722,9 @@ Entity Layer (JPA Entity)
 - `PracticeParticipant.matchNumber` により、各練習日の各試合ごとに参加登録可能
 - フロントエンドで試合ごとのチェックボックスを実装
 - `PracticeSessionDto.matchParticipants` で試合ごとの参加者名リスト提供
+  - バックエンド（`PracticeSessionService.enrichDtoWithMatchDetails`）は `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON` / `PENDING` / `WAITLISTED` / `OFFERED` / `CANCELLED`）を含めて返す
+  - 各エントリは `status` フィールドを持ち、フロント側で用途に応じてフィルタする責務を持つ
+  - **抜け番算出時は `status === 'WON'` で絞ったうえで、ペア済み選手を除外すること**（`PairingGenerator.jsx` / `BulkResultInput.jsx` / `MatchResultsView.jsx` の3画面で同一ルール）
 
 #### 自動マッチングアルゴリズム
 - 過去30日の対戦履歴を基にスコアリング
