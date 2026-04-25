@@ -19,8 +19,14 @@ status: completed
 ### 実装タスク
 
 #### タスク1: 既存Kaderu関連コードの未使用確認と削除前調査
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #524 (旧名: 既存Kaderu関連コードの未使用確認と削除前調査)
+- **調査結果:** Issue #524 のコメント参照。要点:
+  - Backend (Controller / Service / Test) と `scripts/room-checker/open-reserve.js`、`application.properties` の `kaderu.*` 5項目は削除可
+  - `karuta-tracker-ui/src/api/kaderu.js` は Task 10/11 で参照外し後に削除
+  - **Playwright 依存 (`scripts/room-checker/package.json`) は higashi 系スクリプトが使用中のため削除不可** — Task 12 の該当 bullet を訂正
+  - `KADERU_USER_ID` / `KADERU_PASSWORD` は新システムで再利用するため Render から削除しない
+  - `venueResolver.js` の `KADERU_VENUE_IDS` は既存値 `[3, 4, 8, 11]` を踏襲
 - **概要:** 削除予定の既存Kaderu関連コード (Controller / Service / open-reserve.js / kaderu.js 等) が他箇所から参照されていないことを grep で確認し、削除可能性を検証する。参照が残っていれば削除前に依存を外す計画を立てる。
 - **変更対象ファイル:** なし (調査のみ。結果をタスク内コメントとして記録)
 - **調査対象:**
@@ -200,7 +206,7 @@ status: completed
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/KaderuReservationServiceTest.java` (もし存在すれば)
   - `karuta-tracker-ui/src/api/kaderu.js`
   - `scripts/room-checker/open-reserve.js`
-  - `package.json` の Playwright 依存 (他で使っていなければ)
+  - ~~`package.json` の Playwright 依存~~ (Task 1 調査で higashi 系スクリプトが使用中と判明したため削除しない)
 - **変更対象ファイル (編集):**
   - `karuta-tracker/src/main/resources/application.yml` — `kaderu.*` 設定値 (`kaderu.enabled`, `kaderu.user-id`, `kaderu.password`, `kaderu.script-path`, `kaderu.node-command`) を削除
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/controller/PracticeSessionControllerTest.java` — kaderu 関連テストがあれば削除
