@@ -12,6 +12,7 @@ import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSens
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
+import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 
 
@@ -249,11 +250,12 @@ const PairingGenerator = () => {
     };
 
     // 未保存ドラフトの試合に戻ってきた場合はドラフトを復元
-    if (unsavedDraft.current && unsavedDraft.current.matchNumber === matchNumber) {
-      setPairings(unsavedDraft.current.pairings);
-      setWaitingPlayers(unsavedDraft.current.waitingPlayers);
-      setIsEditingExisting(unsavedDraft.current.isEditingExisting);
-      setIsViewMode(false); // ドラフトは編集中なので閲覧モードではない
+    const restored = restoreDraftIfMatches(unsavedDraft.current, matchNumber);
+    if (restored) {
+      setPairings(restored.pairings);
+      setWaitingPlayers(restored.waitingPlayers);
+      setIsEditingExisting(restored.isEditingExisting);
+      setIsViewMode(restored.isViewMode);
       return;
     }
 
@@ -628,13 +630,17 @@ const PairingGenerator = () => {
         updateParticipantsForMatch(sessionRes.data, matchNumber);
       }
 
-      // 待機リストに追加
-      const newWaiting = [...waitingPlayers, { id: player.id, name: player.name }];
+      // 待機リストに追加。未保存ドラフトがあれば同期更新（useEffectのドラフト復元で上書きされるのを防ぐ）
+      const { newWaiting, newDraft } = syncDraftAfterAddingPlayer({
+        waitingPlayers,
+        newPlayer: { id: player.id, name: player.name },
+        currentDraft: unsavedDraft.current,
+        matchNumber,
+        pairings,
+        isEditingExisting,
+      });
       setWaitingPlayers(newWaiting);
-      // 未保存ドラフトがあれば同期更新（useEffectのドラフト復元で上書きされるのを防ぐ）
-      if (unsavedDraft.current && unsavedDraft.current.matchNumber === matchNumber) {
-        saveDraft(pairings, newWaiting, isEditingExisting);
-      }
+      unsavedDraft.current = newDraft;
       setSelectedPlayerId('');
       setShowAddPlayer(false);
       setError('');
