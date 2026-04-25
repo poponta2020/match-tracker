@@ -418,11 +418,6 @@ public class PracticeSessionService {
 
         PracticeSession updated = practiceSessionRepository.save(session);
 
-        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（応答期限なし、定員までに制限）
-        if (isCapacityExpanded(oldCapacity, newCapacity)) {
-            waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(id);
-        }
-
         // 差分更新: 既存参加者のdirty値を保持しつつ、参加者の追加・削除を行う
         int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
         List<PracticeParticipant> existingParticipants = practiceParticipantRepository.findBySessionId(id);
@@ -478,6 +473,13 @@ public class PracticeSessionService {
 
         if (!newParticipants.isEmpty()) {
             practiceParticipantRepository.saveAll(newParticipants);
+        }
+
+        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（応答期限なし、定員までに制限）
+        // 参加者の差分更新（キャンセル・削除・追加）の後に実行することで、
+        // 最終状態の WON / OFFERED 数を基準に昇格数が決まる。
+        if (isCapacityExpanded(oldCapacity, newCapacity)) {
+            waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(id);
         }
 
         log.info("Successfully updated practice session id: {}", id);
