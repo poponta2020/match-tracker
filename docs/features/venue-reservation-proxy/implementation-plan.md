@@ -155,7 +155,7 @@ status: completed
   - `venue: "HIGASHI"` で呼ぶと HTTP 400 + `VENUE_NOT_SUPPORTED` が返る (Phase 1 では `enabled=false`)
 
 #### タスク9: フロントエンド API クライアント + venueResolver 新規作成
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #532 (旧名: フロントエンド API クライアント新規作成)
 - **概要:** React フロント側のプロキシ API クライアントと venue 判別ユーティリティを新規作成する。
 - **変更対象ファイル (新規):**
@@ -166,6 +166,7 @@ status: completed
     - `KADERU_VENUE_IDS` / `HIGASHI_VENUE_IDS` 定数を export
 - **依存タスク:** タスク8 (#531)
 - **完了条件:** API 呼び出し試験 (バックエンドのモック/実機に対して) と venueResolver の単体テスト
+- **実装メモ:** `venueReservationProxyAPI.createSession` を追加し、`src/api/index.js` からも export。`resolveVenue` は `venueId` / `venue_id` を受け取り、Phase 1 では既存の Kaderu 会場 ID `[3, 4, 8, 11]` のみ `KADERU` にマッピングする。`HIGASHI_VENUE_IDS` は Phase 2 で埋める前提の空 Set。
 
 #### タスク10: PracticeList.jsx の改修
 - [ ] 完了
@@ -192,7 +193,7 @@ status: completed
     - `kaderuAPI.openReserve` テストケースを `venueReservationProxyAPI.createSession` 用に書き直し
     - 新フローの成功/失敗ケースを網羅 (KADERU 成功 / `VENUE_NOT_SUPPORTED` / `LOGIN_FAILED` 等)
     - BroadcastChannel 経由の即時反映テストを追加
-  - `karuta-tracker-ui/src/utils/venueResolver.test.js` (新規)
+  - `karuta-tracker-ui/src/utils/venueResolver.test.js` (タスク9で新規作成済み。必要に応じて追加)
     - venue_id → VenueId のマッピングを網羅
 - **依存タスク:** タスク10 (#533)
 - **完了条件:** `npm test` 全テスト通過
