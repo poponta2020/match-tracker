@@ -13,7 +13,8 @@ const PracticeEditForm = ({ id }) => {
     sessionDate: '',
     venueId: null,
     totalMatches: 10,
-    notes: ''
+    notes: '',
+    capacity: null
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,7 +32,8 @@ const PracticeEditForm = ({ id }) => {
           sessionDate: session.sessionDate,
           venueId: session.venueId || null,
           totalMatches: session.totalMatches,
-          notes: session.notes || ''
+          notes: session.notes || '',
+          capacity: session.capacity ?? null
         });
       } catch (err) {
         console.error('Error fetching data:', err);

@@ -367,6 +367,45 @@ class PracticeSessionServiceTest {
     }
 
     @Test
+    @DisplayName("updateSession: capacity 未指定（null）の通常編集ではキャンセル待ち昇格が実行されない")
+    void testUpdateSession_capacityNotSpecified_doesNotPromoteWaitlisted() {
+        // Given: capacity=10 の既存セッション、編集フォームから capacity 未指定で他項目だけ更新するケース
+        // PracticeForm の通常編集（日付・会場・メモ等の更新）では request.capacity が null になるため、
+        // 「制限解除」と誤判定して昇格処理が走らないことを保証する。
+        Long sessionId = 1L;
+        PracticeSession session = PracticeSession.builder()
+                .id(sessionId).sessionDate(today).totalMatches(1).capacity(10)
+                .organizationId(1L).build();
+
+        PracticeParticipant pp1 = PracticeParticipant.builder()
+                .id(100L).sessionId(sessionId).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        List<PracticeParticipant> existingParticipants = new ArrayList<>(List.of(pp1));
+
+        Player p1 = new Player(); p1.setId(1L); p1.setName("選手1");
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(existingParticipants);
+        when(playerRepository.findAllById(List.of(1L))).thenReturn(List.of(p1));
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(session);
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // capacity を含めずメモだけ更新するリクエスト（通常の編集フロー）
+        PracticeSessionUpdateRequest request = PracticeSessionUpdateRequest.builder()
+                .sessionDate(today)
+                .totalMatches(1)
+                .notes("メモを更新")
+                .participantIds(List.of(1L))
+                .build();
+
+        // When
+        practiceSessionService.updateSession(sessionId, request, 1L);
+
+        // Then: capacity 未指定では昇格処理が呼ばれない
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(any());
+    }
+
+    @Test
     @DisplayName("updateSession: 定員拡張+参加者削除時、削除反映後にキャンセル待ち昇格が実行される")
     void testUpdateSession_capacityExpandWithParticipantRemoval_promotionRunsAfterCancellation() {
         // Given: capacity=10 / totalMatches=1 / 既存 WON 3名

@@ -489,13 +489,18 @@ public class PracticeSessionService {
 
     /**
      * capacity が拡張されたか（拡張時にキャンセル待ち昇格処理を呼ぶ判定）。
-     * - non-null → null（制限解除）：拡張扱い
-     * - non-null → non-null で増加：拡張扱い
-     * - それ以外（同値・縮小・null→non-null）：拡張ではない
+     * 「明示的な定員増加」が確認できる場合のみ true を返す（= 旧・新ともに非nullで増加した場合）。
+     *
+     * リクエストの capacity が null の場合は「未指定」とみなし拡張扱いしない。
+     * 編集フォームから capacity を送らない既存ケース（PracticeForm の通常編集）でも
+     * 意図せず昇格処理が走らないようにするため。
+     *
+     * 「制限解除（明示的に capacity を null にする）」を拡張扱いしたい場合は、
+     * 未指定と明示 null を区別できる DTO（PATCH 用 DTO、JsonNullable、capacityUnlimited フラグ等）を
+     * 導入してから判定する必要がある。
      */
     private boolean isCapacityExpanded(Integer oldCapacity, Integer newCapacity) {
-        if (oldCapacity == null) return false;
-        if (newCapacity == null) return true;
+        if (oldCapacity == null || newCapacity == null) return false;
         return newCapacity > oldCapacity;
     }
 
