@@ -236,12 +236,24 @@ async function capturePageMeta(page) {
       name: f.name || null,
       action: f.action || null,
       method: f.method || null,
-      inputs: Array.from(f.querySelectorAll("input")).map((i) => ({
-        name: i.name || null,
-        id: i.id || null,
-        type: i.type || null,
-        value: i.type === "hidden" ? `[hidden:len=${(i.value || "").length}]` : (i.value || ""),
-      })),
+      inputs: Array.from(f.querySelectorAll("input")).map((i) => {
+        // 認証情報・個人情報が JSON に残らないよう、値そのものは保存せず長さ・有無のみ記録する。
+        // ログイン失敗・予期せぬ遷移・例外発生時のスナップショットに tbUserno / tbPassword 等の
+        // 生値が残ることを防ぐ。exploration の目的（フォーム構造把握）には生値は不要。
+        const val = i.value || "";
+        const type = i.type || null;
+        return {
+          name: i.name || null,
+          id: i.id || null,
+          type,
+          value:
+            type === "hidden"
+              ? `[hidden:len=${val.length}]`
+              : val.length > 0
+              ? `[len=${val.length}]`
+              : "",
+        };
+      }),
       selects: Array.from(f.querySelectorAll("select")).map((s) => ({
         name: s.name || null,
         id: s.id || null,
