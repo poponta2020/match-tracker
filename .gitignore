@@ -20,6 +20,9 @@ DEPLOY_PLAN.md
 backup.sql
 CLAUDE.local.md
 
+# exploration output (contains sensitive session/auth data)
+scripts/room-checker/exploration-output/
+
 # IDE
 .vscode/
 .idea/
