@@ -1,52 +1,111 @@
-import { useState, useEffect, useMemo } from 'react';
-import { systemSettingsAPI } from '../../api';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { systemSettingsAPI, organizationAPI } from '../../api';
 import { Settings, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
 
 const SystemSettings = () => {
   const { currentPlayer } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
 
   // 設定値
   const [deadlineDays, setDeadlineDays] = useState(0);
   const [noDeadline, setNoDeadline] = useState(false);
   const [reservePercent, setReservePercent] = useState(30);
+  const isSuperAdminUser = currentPlayer?.role === 'SUPER_ADMIN';
+  const targetOrgId = isSuperAdminUser ? selectedOrgId : currentPlayer?.adminOrganizationId;
+  const requestedOrgId = Number(searchParams.get('organizationId'));
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async (organizationId) => {
     try {
       setLoading(true);
-      const res = await systemSettingsAPI.getAll();
+      const res = await systemSettingsAPI.getAll(organizationId);
       const settings = res.data || [];
+      let nextNoDeadline = false;
+      let nextDeadlineDays = 0;
+      let nextReservePercent = 30;
       for (const s of settings) {
         if (s.settingKey === 'lottery_deadline_days_before') {
           const val = parseInt(s.settingValue, 10);
           if (val === -1) {
-            setNoDeadline(true);
-            setDeadlineDays(0);
+            nextNoDeadline = true;
+            nextDeadlineDays = 0;
           } else {
-            setNoDeadline(false);
-            setDeadlineDays(val);
+            nextNoDeadline = false;
+            nextDeadlineDays = val;
           }
         }
         if (s.settingKey === 'lottery_normal_reserve_percent') {
-          setReservePercent(parseInt(s.settingValue, 10));
+          nextReservePercent = parseInt(s.settingValue, 10);
         }
       }
+      setNoDeadline(nextNoDeadline);
+      setDeadlineDays(nextDeadlineDays);
+      setReservePercent(nextReservePercent);
     } catch {
       setError('設定の取得に失敗しました');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // 対象団体
+  useEffect(() => {
+    if (!currentPlayer) return;
+
+    if (!isSuperAdminUser) {
+      setOrganizations([]);
+      setSelectedOrgId(currentPlayer?.adminOrganizationId || null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchOrganizations = async () => {
+      try {
+        const res = await organizationAPI.getAll();
+        if (cancelled) return;
+        const orgs = res.data || [];
+        setOrganizations(orgs);
+        const requestedExists = requestedOrgId > 0 && orgs.some(org => org.id === requestedOrgId);
+        const nextOrgId = requestedExists ? requestedOrgId : (orgs[0]?.id || null);
+        setSelectedOrgId(nextOrgId);
+        if (!nextOrgId) {
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setOrganizations([]);
+          setSelectedOrgId(null);
+          setLoading(false);
+          setError('団体の取得に失敗しました');
+        }
+      }
+    };
+
+    fetchOrganizations();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPlayer, isSuperAdminUser, requestedOrgId]);
+
+  useEffect(() => {
+    if (!currentPlayer) return;
+    if (!targetOrgId) {
+      if (!isSuperAdminUser) {
+        setLoading(false);
+      }
+      return;
+    }
+    fetchSettings(targetOrgId);
+  }, [currentPlayer, isSuperAdminUser, targetOrgId, fetchSettings]);
 
   // 締め切りプレビュー
   const deadlinePreview = useMemo(() => {
@@ -73,11 +132,14 @@ const SystemSettings = () => {
     setError(null);
     setSuccess(null);
     try {
+      if (!targetOrgId) {
+        setError('団体を選択してください');
+        return;
+      }
       const deadlineValue = noDeadline ? '-1' : String(deadlineDays);
-      const orgId = currentPlayer?.adminOrganizationId;
       await Promise.all([
-        systemSettingsAPI.update('lottery_deadline_days_before', deadlineValue, orgId),
-        systemSettingsAPI.update('lottery_normal_reserve_percent', String(reservePercent), orgId),
+        systemSettingsAPI.update('lottery_deadline_days_before', deadlineValue, targetOrgId),
+        systemSettingsAPI.update('lottery_normal_reserve_percent', String(reservePercent), targetOrgId),
       ]);
       setSuccess('保存しました');
       setTimeout(() => setSuccess(null), 3000);
@@ -102,6 +164,17 @@ const SystemSettings = () => {
     }
   };
 
+  const handleOrganizationChange = (e) => {
+    const orgId = Number(e.target.value);
+    const nextOrgId = orgId > 0 ? orgId : null;
+    setSelectedOrgId(nextOrgId);
+    setError(null);
+    setSuccess(null);
+    if (nextOrgId) {
+      setSearchParams({ organizationId: String(nextOrgId) });
+    }
+  };
+
   if (loading) return <LoadingScreen />;
 
   return (
@@ -122,6 +195,27 @@ const SystemSettings = () => {
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
           <Check className="h-5 w-5 text-green-600" />
           <p className="text-green-800 text-sm">{success}</p>
+        </div>
+      )}
+
+      {/* 対象団体 */}
+      {isSuperAdminUser && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-2">
+          <label htmlFor="system-settings-organization" className="block text-sm font-medium text-gray-700">
+            対象団体
+          </label>
+          <select
+            id="system-settings-organization"
+            value={selectedOrgId || ''}
+            onChange={handleOrganizationChange}
+            disabled={saving}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            <option value="">団体を選択</option>
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
         </div>
       )}
 

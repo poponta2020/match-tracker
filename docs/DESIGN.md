@@ -1723,6 +1723,7 @@ Entity Layer (JPA Entity)
 #### GET /api/system-settings
 **説明**: 全設定取得
 **権限**: SUPER_ADMIN, ADMIN
+**クエリパラメータ**: `organizationId`（任意。SUPER_ADMINが団体別設定を取得する場合に指定。ADMINは自団体に固定）
 
 #### GET /api/system-settings/{key}
 **説明**: 設定値取得
@@ -1734,14 +1735,17 @@ Entity Layer (JPA Entity)
 **リクエスト**:
 ```json
 {
-  "value": "3"
+  "value": "3",
+  "organizationId": "1"
 }
 ```
+`organizationId` は SUPER_ADMIN が団体別設定を更新する場合に必須。ADMINはリクエスト値に関わらず自団体に固定される。
 
 **利用可能な設定キー**:
 | キー | 説明 | デフォルト値 |
 |------|------|-------------|
 | `lottery_deadline_days_before` | 締切日数（月初から何日前） | `0` |
+| `lottery_normal_reserve_percent` | 一般枠の最低保証割合（%） | `30` |
 
 ### 4.16 メンター関係API (`/api/mentor-relationships`)
 

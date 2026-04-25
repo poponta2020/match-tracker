@@ -23,6 +23,7 @@ const formatRank = (p) => {
 export default function LotteryManagement() {
   const { currentPlayer } = useAuth();
   const navigate = useNavigate();
+  const adminOrgId = currentPlayer?.adminOrganizationId || currentPlayer?.organizationId || null;
 
   // デフォルト: 翌月
   const [currentDate, setCurrentDate] = useState(() => {
@@ -40,7 +41,7 @@ export default function LotteryManagement() {
   const [notifyResult, setNotifyResult] = useState(null);
   const [lotterySeed, setLotterySeed] = useState(null);
   const [organizations, setOrganizations] = useState([]);
-  const [selectedOrgId, setSelectedOrgId] = useState(currentPlayer?.organizationId || null);
+  const [selectedOrgId, setSelectedOrgId] = useState(adminOrgId);
   const [applicants, setApplicants] = useState([]);
   const [priorityPlayerIds, setPriorityPlayerIds] = useState([]);
 
@@ -48,14 +49,12 @@ export default function LotteryManagement() {
     if (isSuperAdmin()) {
       organizationAPI.getAll().then(res => {
         setOrganizations(res.data);
-        if (!selectedOrgId && res.data.length > 0) {
-          setSelectedOrgId(res.data[0].id);
-        }
+        setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
       });
     }
   }, []);
 
-  const organizationId = isSuperAdmin() ? selectedOrgId : (currentPlayer?.organizationId || null);
+  const organizationId = isSuperAdmin() ? selectedOrgId : adminOrgId;
   const sessionStorageKey = organizationId
     ? `lottery-priority-${currentDate.year}-${currentDate.month}-${organizationId}`
     : null;
@@ -202,7 +201,7 @@ export default function LotteryManagement() {
           <h1 className="text-xl font-bold text-[#374151]">抽選管理</h1>
         </div>
         <button
-          onClick={() => navigate('/admin/settings')}
+          onClick={() => navigate(organizationId ? `/admin/settings?organizationId=${organizationId}` : '/admin/settings')}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
         >
           <Settings size={14} />
