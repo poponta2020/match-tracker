@@ -21,7 +21,7 @@ status: completed
   - `./gradlew test --tests "*DensukeScraper*"` が全 PASS
 
 ### タスク2: Phase1/Phase3 状態遷移ログを drift 情報付きに拡張 + 10分超WARN
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #545
 - **概要:** `DensukeImportService` の Phase1/Phase3 で状態遷移を INFO ログ出力している各箇所に、`densukeTitleTime` / `detectedAt` / `driftMinutes` を追記する。10 分を超える drift は独立した WARN ログも出す。
 - **変更対象ファイル:**

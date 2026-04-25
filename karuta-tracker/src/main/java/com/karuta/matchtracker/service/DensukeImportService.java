@@ -18,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -57,6 +60,12 @@ public class DensukeImportService {
 
     public static final Long SYSTEM_USER_ID = 0L;
 
+    /**
+     * 伝助ヘッダ title 由来の最終変更時刻と、アプリが検出した時刻との乖離を WARN する閾値（分）。
+     * DensukeSyncScheduler の fixedDelay=300000ms（5分）の約2倍を目安とする。
+     */
+    static final long DRIFT_WARN_THRESHOLD_MINUTES = 10;
+
     private enum ImportPhase { PHASE1, PHASE2, PHASE3 }
 
     @Transactional
@@ -64,6 +73,8 @@ public class DensukeImportService {
         int year = targetDate != null ? targetDate.getYear() : JstDateTimeUtil.today().getYear();
 
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);
+        LocalDateTime detectedAt = JstDateTimeUtil.now();
+        Map<String, LocalDateTime> memberLastChangeTimes = scraped.getMemberLastChangeTimes();
 
         Map<String, Long> playerNameMap = playerService.findAllPlayersRaw().stream()
                 .filter(p -> p.getDeletedAt() == null)
@@ -114,14 +125,15 @@ public class DensukeImportService {
             // --- フェーズ別処理 ---
             switch (phase) {
                 case PHASE1 -> processPhase1(entry, session, deadlineType, playerNameMap, playerIdMap,
-                        unmatchedNameSet, result);
+                        unmatchedNameSet, result, memberLastChangeTimes, detectedAt);
                 case PHASE2 -> {
                     result.getDetails().add(String.format("%s 第%d試合: 締切後・抽選確定前のためスキップ",
                             entry.getDate(), entry.getMatchNumber()));
                     result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
                 }
                 case PHASE3 -> processPhase3(entry, session, scraped.getMemberNames(),
-                        playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications, vacancyChangedSessions);
+                        playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications,
+                        vacancyChangedSessions, memberLastChangeTimes, detectedAt);
             }
         }
 
@@ -175,7 +187,9 @@ public class DensukeImportService {
     private void processPhase1(DensukeScraper.ScheduleEntry entry, PracticeSession session,
                                DeadlineType deadlineType,
                                Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
-                               Set<String> unmatchedNameSet, ImportResult result) {
+                               Set<String> unmatchedNameSet, ImportResult result,
+                               Map<String, LocalDateTime> memberLastChangeTimes,
+                               LocalDateTime detectedAt) {
         List<PracticeParticipant> existing =
                 practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
         Map<Long, PracticeParticipant> existingByPlayerId = existing.stream()
@@ -195,8 +209,11 @@ public class DensukeImportService {
             if (!markedPlayerIds.contains(p.getPlayerId()) && !p.isDirty()) {
                 practiceParticipantRepository.delete(p);
                 result.setRemovedCount(result.getRemovedCount() + 1);
-                log.info("Phase1: removed non-○ participant {} from session {} match {}",
-                        playerIdMap.get(p.getPlayerId()), entry.getDate(), entry.getMatchNumber());
+                log.info("Phase1: removed non-○ participant {} from session {} match {} ({})",
+                        playerIdMap.get(p.getPlayerId()), entry.getDate(), entry.getMatchNumber(),
+                        formatDriftLog(p.getPlayerId(), playerIdMap, memberLastChangeTimes, detectedAt));
+                warnIfDrifted("Phase1-removed", session.getId(), entry.getMatchNumber(), p.getPlayerId(),
+                        playerIdMap, memberLastChangeTimes, detectedAt);
             }
         }
 
@@ -217,8 +234,11 @@ public class DensukeImportService {
                     reactivatePhase1(existingParticipant, deadlineType, session, entry.getMatchNumber());
                     result.setRegisteredCount(result.getRegisteredCount() + 1);
                     matchRegistered++;
-                    log.info("Phase1: reactivated {} ({}) for session {} match {}",
-                            name, existingParticipant.getStatus(), entry.getDate(), entry.getMatchNumber());
+                    log.info("Phase1: reactivated {} ({}) for session {} match {} ({})",
+                            name, existingParticipant.getStatus(), entry.getDate(), entry.getMatchNumber(),
+                            formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                    warnIfDrifted("Phase1-reactivated", session.getId(), entry.getMatchNumber(), playerId,
+                            playerIdMap, memberLastChangeTimes, detectedAt);
                 }
                 continue; // 1-B, 1-C: アクティブな既存レコードはスキップ
             }
@@ -268,7 +288,9 @@ public class DensukeImportService {
                                Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
                                Set<String> unmatchedNameSet, ImportResult result,
                                List<AdminWaitlistNotificationData> pendingNotifications,
-                               Set<PracticeSession> vacancyChangedSessions) {
+                               Set<PracticeSession> vacancyChangedSessions,
+                               Map<String, LocalDateTime> memberLastChangeTimes,
+                               LocalDateTime detectedAt) {
         // 既存参加者をマップ化
         List<PracticeParticipant> existing =
                 practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), entry.getMatchNumber());
@@ -299,7 +321,8 @@ public class DensukeImportService {
         // --- ○ の処理 (3-A) ---
         for (Long playerId : markedIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Maru(playerId, p, session, entry.getMatchNumber(), vacancyChangedSessions)) {
+            if (processPhase3Maru(playerId, p, session, entry.getMatchNumber(), vacancyChangedSessions,
+                    playerIdMap, memberLastChangeTimes, detectedAt)) {
                 processed++;
             }
         }
@@ -307,7 +330,8 @@ public class DensukeImportService {
         // --- △ の処理 (3-B) ---
         for (Long playerId : maybeIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber(), pendingNotifications)) {
+            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber(), pendingNotifications,
+                    playerIdMap, memberLastChangeTimes, detectedAt)) {
                 processed++;
             }
         }
@@ -315,7 +339,8 @@ public class DensukeImportService {
         // --- ×/空白 の処理 (3-C) ---
         for (Long playerId : absentIds) {
             PracticeParticipant p = existingByPlayerId.get(playerId);
-            if (processPhase3Batsu(playerId, p, session, entry.getMatchNumber(), pendingNotifications)) {
+            if (processPhase3Batsu(playerId, p, session, entry.getMatchNumber(), pendingNotifications,
+                    playerIdMap, memberLastChangeTimes, detectedAt)) {
                 processed++;
             }
         }
@@ -329,10 +354,14 @@ public class DensukeImportService {
      * 3-A: 伝助○の処理
      */
     private boolean processPhase3Maru(Long playerId, PracticeParticipant existing,
-                                      PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
+                                      PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions,
+                                      Map<Long, String> playerIdMap,
+                                      Map<String, LocalDateTime> memberLastChangeTimes,
+                                      LocalDateTime detectedAt) {
         if (existing == null) {
             // 3-A1/A2/A3: 未登録 → 定員判定して登録
-            registerNewParticipant(playerId, session, matchNumber, vacancyChangedSessions);
+            registerNewParticipant(playerId, session, matchNumber, vacancyChangedSessions,
+                    playerIdMap, memberLastChangeTimes, detectedAt);
             return true;
         }
         if (existing.isDirty()) return false; // dirty保護
@@ -356,8 +385,10 @@ public class DensukeImportService {
                         if (oldWaitlistNumber != null) {
                             practiceParticipantRepository.decrementWaitlistNumbersAfter(session.getId(), matchNumber, oldWaitlistNumber);
                         }
-                        log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available)",
-                                playerId);
+                        log.info("Phase3-A6: promoted WAITLISTED player {} to WON (same-day after noon, vacancy available) ({})",
+                                playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                        warnIfDrifted("Phase3-A6", session.getId(), matchNumber, playerId,
+                                playerIdMap, memberLastChangeTimes, detectedAt);
                         vacancyChangedSessions.add(session);
                         return true;
                     }
@@ -365,19 +396,28 @@ public class DensukeImportService {
                 // 3-A6: 12:00前または空き枠なし → 抽選バイパス不可。dirty=trueにして△で書き戻す
                 existing.setDirty(true);
                 practiceParticipantRepository.save(existing);
-                log.info("Phase3-A6: WAITLISTED player {} set dirty for △ write-back", playerId);
+                log.info("Phase3-A6: WAITLISTED player {} set dirty for △ write-back ({})",
+                        playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                warnIfDrifted("Phase3-A6", session.getId(), matchNumber, playerId,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             case OFFERED -> {
                 // 3-A8: オファー期限内なら承諾
                 if (existing.getOfferDeadline() != null
                         && JstDateTimeUtil.now().isAfter(existing.getOfferDeadline())) {
-                    log.info("Phase3-A8: offer expired for player {}, skipping", playerId);
+                    log.info("Phase3-A8: offer expired for player {}, skipping ({})",
+                            playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                    warnIfDrifted("Phase3-A8", session.getId(), matchNumber, playerId,
+                            playerIdMap, memberLastChangeTimes, detectedAt);
                     return false;
                 }
                 try {
                     waitlistPromotionService.respondToOffer(existing.getId(), true);
-                    log.info("Phase3-A8: accepted offer for player {} via densuke", playerId);
+                    log.info("Phase3-A8: accepted offer for player {} via densuke ({})",
+                            playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                    warnIfDrifted("Phase3-A8", session.getId(), matchNumber, playerId,
+                            playerIdMap, memberLastChangeTimes, detectedAt);
                 } catch (Exception e) {
                     log.warn("Phase3-A8: failed to accept offer for player {}: {}", playerId, e.getMessage());
                 }
@@ -385,7 +425,8 @@ public class DensukeImportService {
             }
             case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
                 // 3-A10/A11: 既存レコードを再利用して再登録（一意制約違反を防ぐ）
-                reactivateAsNewParticipant(existing, session, matchNumber, vacancyChangedSessions);
+                reactivateAsNewParticipant(existing, session, matchNumber, vacancyChangedSessions,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             default -> { return false; }
@@ -397,10 +438,14 @@ public class DensukeImportService {
      */
     private boolean processPhase3Sankaku(Long playerId, PracticeParticipant existing,
                                          PracticeSession session, int matchNumber,
-                                         List<AdminWaitlistNotificationData> pendingNotifications) {
+                                         List<AdminWaitlistNotificationData> pendingNotifications,
+                                         Map<Long, String> playerIdMap,
+                                         Map<String, LocalDateTime> memberLastChangeTimes,
+                                         LocalDateTime detectedAt) {
         if (existing == null) {
             // 3-B1: 未登録 → WAITLISTED（最後尾）
-            createWaitlisted(playerId, session, matchNumber);
+            createWaitlisted(playerId, session, matchNumber,
+                    playerIdMap, memberLastChangeTimes, detectedAt);
             return true;
         }
         if (existing.isDirty()) return false; // dirty保護
@@ -413,13 +458,17 @@ public class DensukeImportService {
                 if (notifData != null) {
                     pendingNotifications.add(notifData);
                 }
-                log.info("Phase3-B2: demoted WON player {} to waitlist via densuke", playerId);
+                log.info("Phase3-B2: demoted WON player {} to waitlist via densuke ({})",
+                        playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                warnIfDrifted("Phase3-B2", session.getId(), matchNumber, playerId,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             case WAITLISTED, OFFERED -> { return false; } // 3-B4/B6: 一致、スキップ
             case CANCELLED, DECLINED, WAITLIST_DECLINED -> {
                 // 3-B8: 既存レコードを再利用してキャンセル待ちに復帰（一意制約違反を防ぐ）
-                reactivateAsWaitlisted(existing, session, matchNumber);
+                reactivateAsWaitlisted(existing, session, matchNumber,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             default -> { return false; }
@@ -431,7 +480,10 @@ public class DensukeImportService {
      */
     private boolean processPhase3Batsu(Long playerId, PracticeParticipant existing,
                                        PracticeSession session, int matchNumber,
-                                       List<AdminWaitlistNotificationData> pendingNotifications) {
+                                       List<AdminWaitlistNotificationData> pendingNotifications,
+                                       Map<Long, String> playerIdMap,
+                                       Map<String, LocalDateTime> memberLastChangeTimes,
+                                       LocalDateTime detectedAt) {
         if (existing == null) return false; // 3-C1: 一致、何もしない
         if (existing.isDirty()) return false; // dirty保護
 
@@ -444,7 +496,10 @@ public class DensukeImportService {
                 if (notifData != null) {
                     pendingNotifications.add(notifData);
                 }
-                log.info("Phase3-C2: cancelled WON player {} via densuke", playerId);
+                log.info("Phase3-C2: cancelled WON player {} via densuke ({})",
+                        playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                warnIfDrifted("Phase3-C2", session.getId(), matchNumber, playerId,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             case WAITLISTED -> {
@@ -458,7 +513,10 @@ public class DensukeImportService {
                 if (oldNumber != null) {
                     practiceParticipantRepository.decrementWaitlistNumbersAfter(session.getId(), matchNumber, oldNumber);
                 }
-                log.info("Phase3-C4: WAITLISTED player {} declined via densuke", playerId);
+                log.info("Phase3-C4: WAITLISTED player {} declined via densuke ({})",
+                        playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                warnIfDrifted("Phase3-C4", session.getId(), matchNumber, playerId,
+                        playerIdMap, memberLastChangeTimes, detectedAt);
                 return true;
             }
             case OFFERED -> {
@@ -468,7 +526,10 @@ public class DensukeImportService {
                     if (notifData != null) {
                         pendingNotifications.add(notifData);
                     }
-                    log.info("Phase3-C6: OFFERED player {} declined via densuke", playerId);
+                    log.info("Phase3-C6: OFFERED player {} declined via densuke ({})",
+                            playerId, formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+                    warnIfDrifted("Phase3-C6", session.getId(), matchNumber, playerId,
+                            playerIdMap, memberLastChangeTimes, detectedAt);
                 } catch (Exception e) {
                     log.warn("Phase3-C6: failed to decline offer for player {}: {}", playerId, e.getMessage());
                 }
@@ -483,40 +544,62 @@ public class DensukeImportService {
     // ヘルパーメソッド
     // ========================================================================
 
-    private void registerNewParticipant(Long playerId, PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
+    private void registerNewParticipant(Long playerId, PracticeSession session, int matchNumber,
+                                        Set<PracticeSession> vacancyChangedSessions,
+                                        Map<Long, String> playerIdMap,
+                                        Map<String, LocalDateTime> memberLastChangeTimes,
+                                        LocalDateTime detectedAt) {
         if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
             practiceParticipantRepository.save(PracticeParticipant.builder()
                     .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
                     .status(ParticipantStatus.WON).dirty(true).build());
-            log.info("Phase3: registered player {} as WON for session {} match {}", playerId, session.getId(), matchNumber);
+            log.info("Phase3: registered player {} as WON for session {} match {} ({})",
+                    playerId, session.getId(), matchNumber,
+                    formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+            warnIfDrifted("Phase3-registered-WON", session.getId(), matchNumber, playerId,
+                    playerIdMap, memberLastChangeTimes, detectedAt);
             vacancyChangedSessions.add(session);
         } else {
-            createWaitlisted(playerId, session, matchNumber);
+            createWaitlisted(playerId, session, matchNumber,
+                    playerIdMap, memberLastChangeTimes, detectedAt);
         }
     }
 
-    private void createWaitlisted(Long playerId, PracticeSession session, int matchNumber) {
+    private void createWaitlisted(Long playerId, PracticeSession session, int matchNumber,
+                                  Map<Long, String> playerIdMap,
+                                  Map<String, LocalDateTime> memberLastChangeTimes,
+                                  LocalDateTime detectedAt) {
         int maxNumber = practiceParticipantRepository
                 .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
         practiceParticipantRepository.save(PracticeParticipant.builder()
                 .sessionId(session.getId()).playerId(playerId).matchNumber(matchNumber)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(maxNumber + 1)
                 .dirty(true).build());
-        log.info("Phase3: registered player {} as WAITLISTED #{} for session {} match {}",
-                playerId, maxNumber + 1, session.getId(), matchNumber);
+        log.info("Phase3: registered player {} as WAITLISTED #{} for session {} match {} ({})",
+                playerId, maxNumber + 1, session.getId(), matchNumber,
+                formatDriftLog(playerId, playerIdMap, memberLastChangeTimes, detectedAt));
+        warnIfDrifted("Phase3-registered-WAITLISTED", session.getId(), matchNumber, playerId,
+                playerIdMap, memberLastChangeTimes, detectedAt);
     }
 
     /**
      * CANCELLED/DECLINED/WAITLIST_DECLINED の既存レコードを再利用して WON or WAITLISTED に復帰させる。
      * 新規INSERTではなく既存レコードのUPDATEにすることで一意制約違反を防ぐ。
      */
-    private void reactivateAsNewParticipant(PracticeParticipant existing, PracticeSession session, int matchNumber, Set<PracticeSession> vacancyChangedSessions) {
+    private void reactivateAsNewParticipant(PracticeParticipant existing, PracticeSession session, int matchNumber,
+                                            Set<PracticeSession> vacancyChangedSessions,
+                                            Map<Long, String> playerIdMap,
+                                            Map<String, LocalDateTime> memberLastChangeTimes,
+                                            LocalDateTime detectedAt) {
         clearCancelledFields(existing);
         if (practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)) {
             existing.setStatus(ParticipantStatus.WON);
             existing.setWaitlistNumber(null);
-            log.info("Phase3: reactivated player {} as WON for session {} match {}",
-                    existing.getPlayerId(), session.getId(), matchNumber);
+            log.info("Phase3: reactivated player {} as WON for session {} match {} ({})",
+                    existing.getPlayerId(), session.getId(), matchNumber,
+                    formatDriftLog(existing.getPlayerId(), playerIdMap, memberLastChangeTimes, detectedAt));
+            warnIfDrifted("Phase3-reactivated-WON", session.getId(), matchNumber, existing.getPlayerId(),
+                    playerIdMap, memberLastChangeTimes, detectedAt);
             practiceParticipantRepository.save(existing);
             vacancyChangedSessions.add(session);
         } else {
@@ -524,8 +607,11 @@ public class DensukeImportService {
                     .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
             existing.setStatus(ParticipantStatus.WAITLISTED);
             existing.setWaitlistNumber(maxNumber + 1);
-            log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
-                    existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+            log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {} ({})",
+                    existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber,
+                    formatDriftLog(existing.getPlayerId(), playerIdMap, memberLastChangeTimes, detectedAt));
+            warnIfDrifted("Phase3-reactivated-WAITLISTED", session.getId(), matchNumber, existing.getPlayerId(),
+                    playerIdMap, memberLastChangeTimes, detectedAt);
             practiceParticipantRepository.save(existing);
         }
     }
@@ -533,15 +619,21 @@ public class DensukeImportService {
     /**
      * CANCELLED/DECLINED/WAITLIST_DECLINED の既存レコードを再利用して WAITLISTED に復帰させる。
      */
-    private void reactivateAsWaitlisted(PracticeParticipant existing, PracticeSession session, int matchNumber) {
+    private void reactivateAsWaitlisted(PracticeParticipant existing, PracticeSession session, int matchNumber,
+                                        Map<Long, String> playerIdMap,
+                                        Map<String, LocalDateTime> memberLastChangeTimes,
+                                        LocalDateTime detectedAt) {
         clearCancelledFields(existing);
         int maxNumber = practiceParticipantRepository
                 .findMaxWaitlistNumber(session.getId(), matchNumber).orElse(0);
         existing.setStatus(ParticipantStatus.WAITLISTED);
         existing.setWaitlistNumber(maxNumber + 1);
         practiceParticipantRepository.save(existing);
-        log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {}",
-                existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber);
+        log.info("Phase3: reactivated player {} as WAITLISTED #{} for session {} match {} ({})",
+                existing.getPlayerId(), maxNumber + 1, session.getId(), matchNumber,
+                formatDriftLog(existing.getPlayerId(), playerIdMap, memberLastChangeTimes, detectedAt));
+        warnIfDrifted("Phase3-reactivated-WAITLISTED", session.getId(), matchNumber, existing.getPlayerId(),
+                playerIdMap, memberLastChangeTimes, detectedAt);
     }
 
     /**
@@ -605,6 +697,68 @@ public class DensukeImportService {
         return status == ParticipantStatus.CANCELLED
                 || status == ParticipantStatus.DECLINED
                 || status == ParticipantStatus.WAITLIST_DECLINED;
+    }
+
+    // ========================================================================
+    // Drift ロギング（Issue #545）
+    // ========================================================================
+
+    /**
+     * 伝助 title 由来の最終変更時刻と、アプリ検出時刻の乖離を文字列化する。
+     * ログの末尾に付与することで、事後解析で「いつ densuke 側で変更されたか」が追えるようにする。
+     *
+     * 形式: "densukeTitle=2026-04-23T12:45 detectedAt=2026-04-23T12:50:56 drift=5m"
+     *       title 未取得の場合: "densukeTitle=(unknown) detectedAt=2026-04-23T12:50:56 drift=(unknown)"
+     *
+     * package-private: {@code DensukeImportServiceTest} から直接呼んで単体テスト可能にするため。
+     */
+    String formatDriftLog(Long playerId, Map<Long, String> playerIdMap,
+                          Map<String, LocalDateTime> memberLastChangeTimes,
+                          LocalDateTime detectedAt) {
+        LocalDateTime detectedSec = detectedAt.truncatedTo(ChronoUnit.SECONDS);
+        LocalDateTime titleTime = lookupTitleTime(playerId, playerIdMap, memberLastChangeTimes);
+        if (titleTime == null) {
+            return String.format("densukeTitle=(unknown) detectedAt=%s drift=(unknown)", detectedSec);
+        }
+        long drift = Duration.between(titleTime, detectedSec).toMinutes();
+        return String.format("densukeTitle=%s detectedAt=%s drift=%dm", titleTime, detectedSec, drift);
+    }
+
+    /**
+     * 乖離が {@link #DRIFT_WARN_THRESHOLD_MINUTES} 分を超える場合に WARN ログを出力する。
+     * title 未取得の場合は WARN を抑制する（通常運用で title が取れないメンバーで大量WARNを避けるため）。
+     *
+     * 形式: "WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 player=20 (鮎川知佳)
+     *        densukeTitle=2026-04-22T22:06 detectedAt=2026-04-23T12:50:56 driftMinutes=884"
+     *
+     * package-private: 単体テスト容易性のため。
+     */
+    void warnIfDrifted(String phase, Long sessionId, int matchNumber, Long playerId,
+                       Map<Long, String> playerIdMap,
+                       Map<String, LocalDateTime> memberLastChangeTimes,
+                       LocalDateTime detectedAt) {
+        LocalDateTime titleTime = lookupTitleTime(playerId, playerIdMap, memberLastChangeTimes);
+        if (titleTime == null) return; // title未取得はWARN抑制
+
+        LocalDateTime detectedSec = detectedAt.truncatedTo(ChronoUnit.SECONDS);
+        long drift = Duration.between(titleTime, detectedSec).toMinutes();
+        if (drift <= DRIFT_WARN_THRESHOLD_MINUTES) return;
+
+        String playerName = playerIdMap != null ? playerIdMap.getOrDefault(playerId, "unknown") : "unknown";
+        log.warn("Densuke change-time drift detected: phase={} session={} match={} player={} ({}) densukeTitle={} detectedAt={} driftMinutes={}",
+                phase, sessionId, matchNumber, playerId, playerName, titleTime, detectedSec, drift);
+    }
+
+    /**
+     * playerId → densuke メンバー名 → title 時刻 の逆引き。
+     * 引数 null / 名前未解決 / title 未取得 はいずれも null を返す。
+     */
+    private LocalDateTime lookupTitleTime(Long playerId, Map<Long, String> playerIdMap,
+                                          Map<String, LocalDateTime> memberLastChangeTimes) {
+        if (playerIdMap == null || memberLastChangeTimes == null) return null;
+        String name = playerIdMap.get(playerId);
+        if (name == null) return null;
+        return memberLastChangeTimes.get(name);
     }
 
     /**
