@@ -138,7 +138,7 @@ status: completed
 - **完了条件:** 単体テストでビジネスロジック分岐 (venue dispatch, enabled=false 拒否, completion 検知時の cleanup 等) がカバーされる
 
 #### タスク8: VenueReservationProxyController 実装
-- [ ] 完了
+- [x] 完了（2026-04-25）
 - **対応Issue:** #531 (旧名: KaderuProxyController 実装)
 - **概要:** `/api/venue-reservation-proxy/*` の3エンドポイントを公開する。
 - **変更対象ファイル (新規):**

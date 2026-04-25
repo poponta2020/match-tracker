@@ -2528,10 +2528,11 @@ Entity Layer (JPA Entity)
 
 **会場予約プロキシ（実装中）**:
 
-現在の画面導線は従来の `kaderuAPI.openReserve()` フローのままだが、後続タスクで `/api/venue-reservation-proxy/*` に置き換えるため、バックエンドサービス層に `VenueReservationProxyService` を追加済み。
+現在の画面導線は従来の `kaderuAPI.openReserve()` フローのままだが、後続タスクで `/api/venue-reservation-proxy/*` に置き換えるため、バックエンドに `VenueReservationProxyController` と `VenueReservationProxyService` を追加済み。
 
 | コンポーネント | 役割 |
 |---------------|------|
+| `VenueReservationProxyController` | `/api/venue-reservation-proxy/session`、`/view`、`/fetch/**` を公開。ADMIN+ の `@RequireRole` と venue proxy 固有例外の `{errorCode, message, venue}` レスポンスを担当 |
 | `VenueReservationProxyService` | Controller から呼ばれるファサード。`createSession` / `view` / `fetch` を統括し、会場別 client / config / rewrite strategy を `EnumMap<VenueId, ...>` で dispatch |
 | `VenueReservationSessionStore` | `ProxySession` を JVM メモリで管理。token、会場、CookieStore、hiddenFields、申込トレイHTML、完了状態を保持 |
 | `VenueReservationClient` | 会場別 HTTP クライアント契約。Phase 1 は `KaderuReservationClient` |
@@ -2539,6 +2540,8 @@ Entity Layer (JPA Entity)
 | `VenueReservationCompletionDetector` | 会場別 `VenueCompletionStrategy` で申込完了を検知し、`reservation_confirmed_at` を初回検知時刻で固定 |
 
 `fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、完了検知時は `X-VRP-Completed: true` を付与する。
+
+公開 API は `POST /api/venue-reservation-proxy/session`、`GET /api/venue-reservation-proxy/view?token=...`、`ANY /api/venue-reservation-proxy/fetch/**?token=...`。いずれも ADMIN+ のみ利用可能。
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 
