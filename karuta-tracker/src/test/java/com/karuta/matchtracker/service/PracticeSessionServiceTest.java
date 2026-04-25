@@ -82,6 +82,9 @@ class PracticeSessionServiceTest {
     @Mock
     private AdjacentRoomService adjacentRoomService;
 
+    @Mock
+    private WaitlistPromotionService waitlistPromotionService;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 

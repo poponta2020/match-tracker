@@ -58,6 +58,7 @@ public class PracticeSessionService {
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeSyncService densukeSyncService;
     private final AdjacentRoomService adjacentRoomService;
+    private final WaitlistPromotionService waitlistPromotionService;
 
     /**
      * IDで練習日を取得
@@ -401,6 +402,10 @@ public class PracticeSessionService {
             }
         }
 
+        // 容量変更検知のため変更前 capacity を保持
+        Integer oldCapacity = session.getCapacity();
+        Integer newCapacity = request.getCapacity();
+
         // セッション情報を更新
         session.setSessionDate(request.getSessionDate());
         session.setTotalMatches(request.getTotalMatches());
@@ -408,10 +413,15 @@ public class PracticeSessionService {
         session.setNotes(request.getNotes());
         session.setStartTime(request.getStartTime());
         session.setEndTime(request.getEndTime());
-        session.setCapacity(request.getCapacity());
+        session.setCapacity(newCapacity);
         session.setUpdatedBy(currentUserId);
 
         PracticeSession updated = practiceSessionRepository.save(session);
+
+        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（応答期限なし、定員までに制限）
+        if (isCapacityExpanded(oldCapacity, newCapacity)) {
+            waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(id);
+        }
 
         // 差分更新: 既存参加者のdirty値を保持しつつ、参加者の追加・削除を行う
         int totalMatches = request.getTotalMatches() != null ? request.getTotalMatches() : 7;
@@ -473,6 +483,18 @@ public class PracticeSessionService {
         log.info("Successfully updated practice session id: {}", id);
         densukeSyncService.triggerWriteAsync();
         return enrichSessionWithParticipants(updated);
+    }
+
+    /**
+     * capacity が拡張されたか（拡張時にキャンセル待ち昇格処理を呼ぶ判定）。
+     * - non-null → null（制限解除）：拡張扱い
+     * - non-null → non-null で増加：拡張扱い
+     * - それ以外（同値・縮小・null→non-null）：拡張ではない
+     */
+    private boolean isCapacityExpanded(Integer oldCapacity, Integer newCapacity) {
+        if (oldCapacity == null) return false;
+        if (newCapacity == null) return true;
+        return newCapacity > oldCapacity;
     }
 
     /**

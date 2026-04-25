@@ -1,13 +1,10 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.AdjacentRoomStatusDto;
-import com.karuta.matchtracker.entity.ParticipantStatus;
-import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.RoomAvailabilityCache;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
@@ -22,8 +19,6 @@ import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,11 +31,11 @@ class AdjacentRoomServiceTest {
     @Mock
     private RoomAvailabilityCacheRepository roomAvailabilityCacheRepository;
     @Mock
-    private PracticeParticipantRepository practiceParticipantRepository;
-    @Mock
     private PracticeSessionRepository practiceSessionRepository;
     @Mock
     private VenueRepository venueRepository;
+    @Mock
+    private WaitlistPromotionService waitlistPromotionService;
 
     @InjectMocks
     private AdjacentRoomService adjacentRoomService;
@@ -141,12 +136,12 @@ class AdjacentRoomServiceTest {
     }
 
     @Test
-    @DisplayName("会場拡張 - 正常系（予約確認済み）")
+    @DisplayName("会場拡張 - 正常系（予約確認済み・WaitlistPromotionServiceに昇格処理を委譲）")
     void expandVenue_success() {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
                 .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
         Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
         RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
                 .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
@@ -156,10 +151,6 @@ class AdjacentRoomServiceTest {
                 .thenReturn(Optional.of(cache));
         when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
         when(practiceSessionRepository.save(any())).thenReturn(session);
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
-                .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
-                .thenReturn(Collections.emptyList());
 
         adjacentRoomService.expandVenue(1L, 100L);
 
@@ -168,111 +159,7 @@ class AdjacentRoomServiceTest {
         assertEquals(100L, session.getUpdatedBy());
         assertNull(session.getReservationConfirmedAt()); // 拡張後にクリアされる
         verify(practiceSessionRepository).save(session);
-    }
-
-    @Test
-    @DisplayName("会場拡張 - WAITLISTEDがOFFEREDに繰り上げられる（応答期限なし）")
-    void expandVenue_promotesWaitlisted() {
-        LocalDate date = LocalDate.of(2026, 4, 12);
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
-        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
-        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
-                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
-
-        PracticeParticipant w1 = PracticeParticipant.builder()
-                .id(10L).sessionId(1L).playerId(201L)
-                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
-        PracticeParticipant w2 = PracticeParticipant.builder()
-                .id(11L).sessionId(1L).playerId(202L)
-                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
-
-        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
-        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
-                .thenReturn(Optional.of(cache));
-        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
-        when(practiceSessionRepository.save(any())).thenReturn(session);
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
-                .thenReturn(List.of(w1, w2));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
-                .thenReturn(Collections.emptyList());
-
-        adjacentRoomService.expandVenue(1L, 100L);
-
-        assertEquals(ParticipantStatus.OFFERED, w1.getStatus());
-        assertNull(w1.getWaitlistNumber());
-        assertNotNull(w1.getOfferedAt());
-        assertNull(w1.getOfferDeadline());
-        assertTrue(w1.isDirty());
-        assertEquals(ParticipantStatus.OFFERED, w2.getStatus());
-        assertNull(w2.getWaitlistNumber());
-        assertNotNull(w2.getOfferedAt());
-        assertNull(w2.getOfferDeadline());
-        verify(practiceParticipantRepository).saveAll(anyList());
-    }
-
-    @Test
-    @DisplayName("会場拡張 - OFFEREDの応答期限がクリアされる")
-    void expandVenue_promotesOffered() {
-        LocalDate date = LocalDate.of(2026, 4, 12);
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
-        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
-        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
-                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
-
-        PracticeParticipant offered = PracticeParticipant.builder()
-                .id(12L).sessionId(1L).playerId(203L)
-                .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                .offeredAt(LocalDateTime.of(2026, 4, 11, 12, 0))
-                .offerDeadline(LocalDateTime.of(2026, 4, 12, 12, 0))
-                .build();
-
-        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
-        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
-                .thenReturn(Optional.of(cache));
-        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
-        when(practiceSessionRepository.save(any())).thenReturn(session);
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
-                .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of(offered));
-
-        adjacentRoomService.expandVenue(1L, 100L);
-
-        assertEquals(ParticipantStatus.OFFERED, offered.getStatus());
-        assertNotNull(offered.getOfferedAt()); // 元のofferedAtは維持される
-        assertNull(offered.getOfferDeadline());
-        assertTrue(offered.isDirty());
-        verify(practiceParticipantRepository).saveAll(anyList());
-    }
-
-    @Test
-    @DisplayName("会場拡張 - 昇格対象0件時はsaveAllしない")
-    void expandVenue_noPromotionTarget() {
-        LocalDate date = LocalDate.of(2026, 4, 12);
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
-        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
-        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
-                .roomName("はまなす").targetDate(date).timeSlot("evening").status("○").build();
-
-        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
-        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
-                .thenReturn(Optional.of(cache));
-        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
-        when(practiceSessionRepository.save(any())).thenReturn(session);
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.WAITLISTED))
-                .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findBySessionIdAndStatus(1L, ParticipantStatus.OFFERED))
-                .thenReturn(Collections.emptyList());
-
-        adjacentRoomService.expandVenue(1L, 100L);
-
-        verify(practiceParticipantRepository, never()).saveAll(anyList());
+        verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(1L);
     }
 
     @Test
@@ -288,6 +175,7 @@ class AdjacentRoomServiceTest {
                 () -> adjacentRoomService.expandVenue(1L, 100L));
         assertEquals("隣室の予約が確認されていません。先に予約を完了してください", ex.getMessage());
         verify(practiceSessionRepository, never()).save(any());
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(anyLong());
     }
 
     @Test
@@ -298,6 +186,7 @@ class AdjacentRoomServiceTest {
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
 
         assertThrows(IllegalStateException.class, () -> adjacentRoomService.expandVenue(1L, 100L));
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(anyLong());
     }
 
     @Test
@@ -306,6 +195,7 @@ class AdjacentRoomServiceTest {
         when(practiceSessionRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> adjacentRoomService.expandVenue(999L, 100L));
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(anyLong());
     }
 
     @Test
@@ -314,7 +204,7 @@ class AdjacentRoomServiceTest {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
                 .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
         RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
                 .roomName("はまなす").targetDate(date).timeSlot("evening").status("×").build();
 
@@ -326,6 +216,7 @@ class AdjacentRoomServiceTest {
                 () -> adjacentRoomService.expandVenue(1L, 100L));
         assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
         verify(practiceSessionRepository, never()).save(any());
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(anyLong());
     }
 
     @Test
@@ -334,7 +225,7 @@ class AdjacentRoomServiceTest {
         LocalDate date = LocalDate.of(2026, 4, 12);
         PracticeSession session = PracticeSession.builder()
                 .id(1L).venueId(3L).capacity(14).sessionDate(date)
-                .reservationConfirmedAt(java.time.LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
 
         when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
         when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
@@ -344,5 +235,6 @@ class AdjacentRoomServiceTest {
                 () -> adjacentRoomService.expandVenue(1L, 100L));
         assertEquals("隣室が空いていないため、会場を拡張できません", ex.getMessage());
         verify(practiceSessionRepository, never()).save(any());
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(anyLong());
     }
 }

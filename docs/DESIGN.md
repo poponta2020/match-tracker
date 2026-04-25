@@ -2503,11 +2503,12 @@ Entity Layer (JPA Entity)
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. WAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア
-   - WAITLISTED → OFFERED（waitlistNumber をクリア、offeredAt=現在時刻、offerDeadline=null）
-   - OFFERED → offerDeadline をnullにクリア（ステータス・offeredAt等はそのまま）
-   - dirty=true をセット（伝助同期対象にする）
-   - 対象が0件の場合は saveAll をスキップ
+14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し
+   - 既存 OFFERED の offerDeadline を null にクリア（拡張で参加確定）
+   - match_number ごとに `(capacity - WON - 既存OFFERED)` 名分だけ、WAITLISTED を waitlist_number 昇順に OFFERED 化（offeredAt=現在時刻、offerDeadline=null）
+   - 余り枠を超える WAITLISTED は据え置き（status・waitlist_number そのまま）
+   - 全件 dirty=true、最後に renumberRemainingWaitlist で 1..N に再採番
+   - 練習編集 (PracticeSessionService.updateSession) で capacity を増加させた場合も同じメソッドが呼ばれる
    ↓
 15. レスポンス: 200 OK + 更新後のセッション情報
 ```
