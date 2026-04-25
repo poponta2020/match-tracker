@@ -9,6 +9,7 @@
 | `VenueId` enum | `KADERU` |
 | 表示名 (`VenueConfig.displayName`) | かでる2・7 |
 | ベースURL (`VenueConfig.baseUrl`) | `https://k2.p-kashikan.jp` |
+| エントリポイント | `/kaderu27/index.php` |
 | 技術スタック | PHP |
 | WAF / CDN | なし (推定) |
 | セッション識別 cookie | `PHPSESSID` |
@@ -22,16 +23,29 @@
 
 | # | ステップ | 概要 |
 |---|---------|-----|
-| 1 | ログイン | `POST /` のログインフォーム送信 |
-| 2 | マイページ遷移 | ログイン直後のリダイレクト先 |
-| 3 | 空き状況ページ遷移 | 月表示画面まで遷移 |
-| 4 | 月合わせ (必要時) | 対象日付の月までページング |
-| 5 | 日付クリック | 該当セルの POST (`p=date_select` 相当) |
-| 6 | スロット選択 + 申込トレイへ | `setAppStatus` 相当 → `requestBtn` 相当の連続 POST |
+| 1 | ログイン | `GET /kaderu27/index.php` で `PHPSESSID` を取得し、`p=my_page`, `loginID`, `loginPwd`, `loginBtn=ログイン` を `POST /kaderu27/index.php` に送信。本文に「マイページ」または「ログアウト」があれば成功 |
+| 2 | マイページ遷移 | `p=my_page` を `POST /kaderu27/index.php` に送信 |
+| 3 | 空き状況ページ遷移 | `p=srch_sst`, `UseYM=YYYYMM` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
+| 4 | 月合わせ | `p=srch_sst`, `UseYear=YYYY`, `UseMonth=MM` を `POST /kaderu27/index.php` に送信 |
+| 5 | 日付クリック | `p=date_select`, `UseDate=YYYYMMDD` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
+| 6 | スロット選択 + 申込トレイへ | `p=date_select`, `setAppStatus=1`, `facilityCode`, `useDate=YYYY/MM/DD`, `slotIndex`, `timeRange` を送信後、`p=rsv_search`, `requestBtn=申込トレイに入れる` を送信。本文に「申込トレイ」があれば成功 |
 
-**省略するステップ**: 既存 [open-reserve.js:142-184](scripts/room-checker/open-reserve.js#L142-L184) の「スロット状態確認」DOM verification (1-2秒短縮)。
+**省略するステップ**: 旧 Playwright 実装にあった「スロット状態確認」の DOM verification は行わない。会場側がスロット選択時に返すエラー文言で `NOT_AVAILABLE` を判定する。
 
-**参考実装**: [scripts/room-checker/open-reserve.js](scripts/room-checker/open-reserve.js) — Playwright 版を Apache HttpClient で再実装する。
+### 2.1 部屋コード / 時間帯
+
+| 部屋名 | `facilityCode` |
+|---|---|
+| すずらん | `001|018|01|2|2|0` |
+| はまなす | `001|018|02|3|2|0` |
+| あかなら | `001|017|02|3|2|0` |
+| えぞまつ | `001|017|01|2|2|0` |
+
+| `slotIndex` | `timeRange` | 時間帯 |
+|---|---|---|
+| 0 | `09001200` | 午前 |
+| 1 | `13001600` | 午後 |
+| 2 | `17002100` | 夜間 |
 
 ## 3. エラーコード体系
 
@@ -44,8 +58,9 @@
 | `NOT_AVAILABLE` | スロット選択時に会場側がエラーを返す (キャッシュ古く実は埋まっていた等) |
 | `TRAY_NAVIGATION_FAILED` | ステップ1〜5 で予期しない応答 |
 | `TIMEOUT` | 個別 HTTP リクエストが `request-timeout-seconds` を超過 |
+| `SCRIPT_ERROR` | 想定外の I/O エラー、session venue 不一致、プロキシ内部エラー |
 
-詳細なエラー判定ロジックは既存 [KaderuReservationService.java](karuta-tracker/src/main/java/com/karuta/matchtracker/service/KaderuReservationService.java) のコード体系を参照。
+`NOT_AVAILABLE` は、スロット選択後の HTML に「既に予約されています」「予約できません」「空きがありません」のいずれかが含まれる場合に発生する。
 
 ## 4. HTML 書き換え戦略 (KaderuRewriteStrategy)
 
@@ -53,36 +68,39 @@
 標準の `VenueReservationHtmlRewriter` のコア処理 (`<a href>` `<form action>` `<img src>` `<link href>` `<script src>`) で十分。Kaderu 固有の書き換えは原則不要。
 
 ### 4.2 注入スクリプトへの追記
-Kaderu は通常の form POST + JavaScript 程度なので、コア注入スクリプト (Location/fetch/XHR フック) のみで動作する見込み。`KaderuRewriteStrategy.injectScript()` は空文字 or no-op で開始し、実機検証で問題が見つかれば追記する。
+Kaderu は通常の form POST + JavaScript 程度なので、コア注入スクリプト (Location/fetch/XHR フック) のみで動作する。`KaderuRewriteStrategy.injectScript()` は空文字の no-op。
 
 ### 4.3 hidden field の特記事項
 Kaderu の form は hidden field が少ない (0-2個程度。CSRF token 等)。標準の `<input type=hidden>` をそのまま echo すれば足りる。
 
 ## 5. 申込完了検知 (KaderuCompletionStrategy)
 
-### 5.1 URL 条件 (暫定)
-- パスや query に `rsv_comp` / `complete` 等のパターンを含む
-- **正確なパターンは Phase 1 実装時の実機検証で確定する**
+### 5.1 URL 条件
+- リクエスト URL または `Location` ヘッダに `p=rsv_comp` を含む
+- リクエスト URL または `Location` ヘッダに `p=fix_comp` を含む
+- リクエスト URL または `Location` ヘッダに `/complete` を含む
 
-### 5.2 HTML 文言条件 (暫定)
+### 5.2 HTML 文言条件
 - 「申込みを受け付けました」
 - 「申込番号」
-- **正確な文言は Phase 1 実装時の実機検証で確定する**
+- 「予約を受付ました」
+- 「予約完了」
 
 ### 5.3 検知時の動作
-- `practice_sessions.reservation_confirmed_at` を `now()` で更新
+- `practice_sessions.reservation_confirmed_at` を `JstDateTimeUtil.now()` で更新
+- `reservation_confirmed_at` に既存値がある場合は上書きしない
 - `ProxySession.completed = true` にセットして次のクリーンアップで削除対象に
-- BroadcastChannel `venue-reservation-proxy` に `{type: 'reservation-completed', practiceSessionId, venue: 'KADERU'}` をポスト
+- `fetch` レスポンスに `X-VRP-Completed: true` を付与
+- 注入バナーが `X-VRP-Completed: true` を検知し、BroadcastChannel `venue-reservation-proxy` に `{type: 'reservation-completed', practiceSessionId, venue: 'KADERU', token}` をポスト
 
 ## 6. PracticeList の venue 判別 (venueResolver.js)
 
 ```js
-const KADERU_VENUE_IDS = [
-  // venue マスタの id を実装時に確定 (例: 1, 5, ...)
-];
+export const KADERU_VENUE_IDS = new Set([3, 4, 8, 11]);
+export const HIGASHI_VENUE_IDS = new Set();
 ```
 
-`practice_session.venue_id` がこの配列に含まれれば `KADERU` を返す。実 venue_id は実装時に管理画面 / DB から確認して埋める。
+`practiceSession.venueId` または `practiceSession.venue_id` が `KADERU_VENUE_IDS` に含まれれば `KADERU` を返す。`HIGASHI_VENUE_IDS` は Phase 2 で設定する。
 
 ## 7. 既知の制約 / 運用上の留意点
 

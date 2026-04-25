@@ -69,7 +69,7 @@ status: completed
 #### タスク4: VenueReservationClient interface + KaderuReservationClient 実装
 - [x] 完了（2026-04-25、既存コミット 76fb66f の実装を確認して進捗反映）
 - **対応Issue:** #527 (旧名: KaderuProxyClient 実装)
-- **概要:** 会場別 HTTP クライアントの契約を `VenueReservationClient` interface として定義し、Phase 1 で必要な `KaderuReservationClient` 実装をかでる用に作成する。Apache HttpClient ベースで、ログイン→マイページ→空き状況→月合わせ→日付クリック→スロット選択→申込トレイまでを順次実行する。既存 [open-reserve.js](scripts/room-checker/open-reserve.js) のロジックを Java に移植。空き状況verificationはスキップ。
+- **概要:** 会場別 HTTP クライアントの契約を `VenueReservationClient` interface として定義し、Phase 1 で必要な `KaderuReservationClient` 実装をかでる用に作成する。Apache HttpClient ベースで、ログイン→マイページ→空き状況→月合わせ→日付クリック→スロット選択→申込トレイまでを順次実行する。旧 `scripts/room-checker/open-reserve.js` のロジックを Java に移植。空き状況verificationはスキップ。
 - **変更対象ファイル (新規):**
   - `service/proxy/VenueReservationClient.java` (interface) — `venue()`, `prepareReservationTray(ProxySession)`, `fetch(ProxySession, HttpRequest)`
   - `service/proxy/VenueReservationProxyException.java` — `errorCode` + `message` + `venue`
@@ -78,9 +78,9 @@ status: completed
   - `service/proxy/venue/kaderu/KaderuReservationClient.java` — VenueReservationClient impl
     - CookieStore を ProxySession ごとに分離
     - エラーコード体系 (LOGIN_FAILED / ROOM_NOT_FOUND / NOT_AVAILABLE / TRAY_NAVIGATION_FAILED / TIMEOUT 等)
-- **参考実装:**
-  - [scripts/room-checker/open-reserve.js](scripts/room-checker/open-reserve.js) — ナビゲーションのステップ構造
-  - [KaderuReservationService.java](karuta-tracker/src/main/java/com/karuta/matchtracker/service/KaderuReservationService.java) — エラーコード体系
+- **参考実装（Task 12 で削除済みの旧実装）:**
+  - `scripts/room-checker/open-reserve.js` — ナビゲーションのステップ構造
+  - `KaderuReservationService.java` — エラーコード体系
   - [venues/kaderu.md](venues/kaderu.md) — Kaderu 固有の URL / DOM / ナビゲーション (ドキュメント整備時に充実化)
 - **依存タスク:** タスク3 (#526)
 - **完了条件:**
@@ -220,7 +220,7 @@ status: completed
 - **実装メモ:** 旧 `/api/kaderu/*` Controller / Service / ServiceTest、React `api/kaderu.js`、Playwright 版 `scripts/room-checker/open-reserve.js`、旧 `kaderu.*` 設定を削除。Playwright 依存本体は higashi 系スクリプトで使用中のため維持。`KADERU_USER_ID` / `KADERU_PASSWORD` は `venue-reservation-proxy.venues.kaderu.*` で引き続き利用する。
 
 #### タスク13: ドキュメント更新
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #536 (旧名: ドキュメント更新)
 - **概要:** [CLAUDE.md](../../../CLAUDE.md) のルール「実装が完了したら、以下のドキュメントを必ず最新の状態に更新すること」に従い、関連ドキュメントを更新する。
 - **変更対象ファイル:**
@@ -230,6 +230,7 @@ status: completed
   - [docs/features/venue-reservation-proxy/venues/kaderu.md](venues/kaderu.md) — 実装で確定した URL / DOM / 完了パターンを反映
 - **依存タスク:** タスク12 (#535)
 - **完了条件:** 4ドキュメントすべてに本機能の内容が反映されている
+- **実装メモ:** `SPECIFICATION.md` / `SCREEN_LIST.md` / `DESIGN.md` の venue-reservation-proxy 記述を Phase 1 実装済みの内容へ更新し、旧 `/api/kaderu/*` 導線削除後の状態に合わせた。`venues/kaderu.md` は `KaderuReservationClient` / `KaderuCompletionStrategy` の実装に合わせ、`/kaderu27/index.php` への form 等価 POST、部屋コード、時間帯、エラー判定、完了検知 URL / 本文トークン、`reservation_confirmed_at` の冪等更新を反映した。
 
 #### タスク14: E2E手動検証 + PR作成
 - [ ] 完了
