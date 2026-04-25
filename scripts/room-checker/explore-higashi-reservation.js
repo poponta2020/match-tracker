@@ -881,66 +881,72 @@ async function main() {
     }
 
     // ---- 探索ループ（申込確定系ボタン検出で停止） ----
-    for (let i = 0; i < MAX_EXPLORATION_STEPS; i++) {
-      // 申込確定系ボタンの検出 — 見つけたら絶対クリックしない
-      const finalBtn = await findFinalSubmitButton(page);
-      if (finalBtn.matched) {
-        console.log(`\n[検出] 申込確定系ボタンを発見しました: "${finalBtn.text}" (keyword="${finalBtn.keyword}")`);
-        console.log(`  selector: ${finalBtn.selector || "(id/name なし)"}`);
-        console.log(`  【重要】クリックせずに終了します。`);
-        finalSubmitInfo = finalBtn;
+    // 安全ガード: value-mismatch 等で既に finalSubmitInfo が設定済みの場合は、
+    // 「想定外時は申込確定方向へ進めない」の要件を守るためループへ入らない。
+    // findForwardButton() が FINAL_SUBMIT_KEYWORDS に一致しない前進ボタン
+    // （例: 次へ / 進む / 選択）を拾ってクリックしてしまうのを防ぐ。
+    if (!finalSubmitInfo) {
+      for (let i = 0; i < MAX_EXPLORATION_STEPS; i++) {
+        // 申込確定系ボタンの検出 — 見つけたら絶対クリックしない
+        const finalBtn = await findFinalSubmitButton(page);
+        if (finalBtn.matched) {
+          console.log(`\n[検出] 申込確定系ボタンを発見しました: "${finalBtn.text}" (keyword="${finalBtn.keyword}")`);
+          console.log(`  selector: ${finalBtn.selector || "(id/name なし)"}`);
+          console.log(`  【重要】クリックせずに終了します。`);
+          finalSubmitInfo = finalBtn;
+          await recordStep(
+            ctx,
+            stepCounter++,
+            "final-submit-visible",
+            `申込確定ボタン検出: selector=${finalBtn.selector} keyword=${finalBtn.keyword} — クリックせず終了`
+          );
+          terminationReason = "final-submit-detected";
+          break;
+        }
+
+        // 前進ボタン検索
+        const fwd = await findForwardButton(page);
+        if (!fwd.matched) {
+          console.log(`\n[停止] 前進ボタンが見つかりません。dead-end として終了します。`);
+          await recordStep(
+            ctx,
+            stepCounter++,
+            "dead-end",
+            "前進ボタンが見つからない。探索はここで終了。"
+          );
+          terminationReason = "dead-end-no-forward-button";
+          break;
+        }
+
+        if (!fwd.selector) {
+          console.log(`\n[停止] 前進ボタン候補 "${fwd.text}" は id/name がなくセレクタ決定不可。探索を終了します。`);
+          await recordStep(
+            ctx,
+            stepCounter++,
+            "forward-button-unselectable",
+            `前進ボタン候補: "${fwd.text}" は selector を特定できない`
+          );
+          terminationReason = "forward-button-unselectable";
+          break;
+        }
+
+        console.log(`\n  前進: "${fwd.text}" (keyword="${fwd.keyword}") → ${fwd.selector}`);
+        try {
+          await clickBySelector(page, fwd.selector);
+        } catch (e) {
+          console.error(`[エラー] 前進ボタンクリック失敗: ${e.message}`);
+          await saveFailureSnapshot(ctx, stepCounter++, "forward-click-failed", e);
+          terminationReason = "forward-click-failed";
+          throw e;
+        }
+        assertNotErrorPage(page);
         await recordStep(
           ctx,
           stepCounter++,
-          "final-submit-visible",
-          `申込確定ボタン検出: selector=${finalBtn.selector} keyword=${finalBtn.keyword} — クリックせず終了`
+          `forward-step-${i + 1}`,
+          `前進ボタン "${fwd.text}" クリック後`
         );
-        terminationReason = "final-submit-detected";
-        break;
       }
-
-      // 前進ボタン検索
-      const fwd = await findForwardButton(page);
-      if (!fwd.matched) {
-        console.log(`\n[停止] 前進ボタンが見つかりません。dead-end として終了します。`);
-        await recordStep(
-          ctx,
-          stepCounter++,
-          "dead-end",
-          "前進ボタンが見つからない。探索はここで終了。"
-        );
-        terminationReason = "dead-end-no-forward-button";
-        break;
-      }
-
-      if (!fwd.selector) {
-        console.log(`\n[停止] 前進ボタン候補 "${fwd.text}" は id/name がなくセレクタ決定不可。探索を終了します。`);
-        await recordStep(
-          ctx,
-          stepCounter++,
-          "forward-button-unselectable",
-          `前進ボタン候補: "${fwd.text}" は selector を特定できない`
-        );
-        terminationReason = "forward-button-unselectable";
-        break;
-      }
-
-      console.log(`\n  前進: "${fwd.text}" (keyword="${fwd.keyword}") → ${fwd.selector}`);
-      try {
-        await clickBySelector(page, fwd.selector);
-      } catch (e) {
-        console.error(`[エラー] 前進ボタンクリック失敗: ${e.message}`);
-        await saveFailureSnapshot(ctx, stepCounter++, "forward-click-failed", e);
-        terminationReason = "forward-click-failed";
-        throw e;
-      }
-      assertNotErrorPage(page);
-      await recordStep(
-        ctx,
-        stepCounter++,
-        `forward-step-${i + 1}`,
-        `前進ボタン "${fwd.text}" クリック後`
-      );
     }
 
     if (!finalSubmitInfo && terminationReason === "unknown") {
