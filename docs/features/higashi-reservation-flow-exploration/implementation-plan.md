@@ -54,9 +54,9 @@ status: completed
     - 申込ボタンが見つからない → 詰まった時点の状態を保存 + summary に記録 + 正常終了扱い（情報が取れただけでも成果）
   - コメントに明示: 「申込確定ボタンクリック処理はここに書かない。絶対に追加しないこと」
 - **参考実装:**
-  - [scripts/room-checker/scrape-higashi-history.js](scripts/room-checker/scrape-higashi-history.js) — ログインフロー
-  - [scripts/room-checker/sync-higashi-availability-to-db.js](scripts/room-checker/sync-higashi-availability-to-db.js) — 施設/部屋/月/日付遷移
-  - [scripts/room-checker/explore-higashi-availability.js](scripts/room-checker/explore-higashi-availability.js) — 探索スクリプトの構成
+  - [scripts/room-checker/scrape-higashi-history.js](../../../scripts/room-checker/scrape-higashi-history.js) — ログインフロー
+  - [scripts/room-checker/sync-higashi-availability-to-db.js](../../../scripts/room-checker/sync-higashi-availability-to-db.js) — 施設/部屋/月/日付遷移
+  - [scripts/room-checker/explore-higashi-availability.js](../../../scripts/room-checker/explore-higashi-availability.js) — 探索スクリプトの構成
 - **依存タスク:** タスク1 (#539)
 - **対応Issue:** #540
 - **完了条件:**
@@ -65,7 +65,7 @@ status: completed
   - 構文エラーなくロードできる（`node --check scripts/room-checker/explore-higashi-reservation.js`）
 
 ### タスク3: ユーザーによる探索実行（手動タスク）
-- [ ] 完了
+- [x] 完了（2026-04-24 20:24 JST 実行、かっこう（和室）・夜間・2026-04-27 で確認画面到達）
 - **概要:** タスク2で作成したスクリプトをユーザーがローカル環境で実際に実行し、探索データを取得する。
 - **変更対象ファイル:** なし（実行のみ）
 - **作業手順:**
@@ -87,7 +87,7 @@ status: completed
   - 「申込トレイ相当の画面」または「申込確定ボタン直前の画面」まで到達できている（到達できなかった場合も、どこで止まったかが記録されている）
 
 ### タスク4: findings.md 執筆（Claudeによる分析）
-- [ ] 完了
+- [x] 完了
 - **概要:** タスク3で得られた探索データ（summary.json + HTML + PNG）を Claude が読み込み、分析ドキュメントを執筆する。このドキュメントが後続 higashi-reservation-proxy 機能の要件定義のインプットとなる。
 - **変更対象ファイル:**
   - `docs/features/higashi-reservation-flow-exploration/findings.md` — 新規作成

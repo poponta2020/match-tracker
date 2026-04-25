@@ -153,7 +153,7 @@ scripts/room-checker/exploration-output/higashi-reservation-YYYYMMDD-HHMMSS/
 ### 4.1 スクリプト構成
 - **単一ファイル** `scripts/room-checker/explore-higashi-reservation.js`
 - 外部モジュール依存: `playwright`, `node:fs/promises`, `node:path`, `node:crypto`（SHA256用）
-- 既存 [sync-higashi-availability-to-db.js](scripts/room-checker/sync-higashi-availability-to-db.js) / [scrape-higashi-history.js](scripts/room-checker/scrape-higashi-history.js) の以下を流用:
+- 既存 [sync-higashi-availability-to-db.js](../../../scripts/room-checker/sync-higashi-availability-to-db.js) / [scrape-higashi-history.js](../../../scripts/room-checker/scrape-higashi-history.js) の以下を流用:
   - ログインフロー（scrape-higashi-history.js）
   - メニュー→施設→部屋→空き状況画面までの遷移（sync-higashi-availability-to-db.js）
   - `○` セルのDOM判定ロジック（sync-higashi-availability-to-db.js の `NIGHT_COL_INDEX`, `Available` クラス判定）
@@ -177,7 +177,7 @@ async function recordStep(page, stepNumber, stepName) {
   const forms = await page.evaluate(() => /* form構造取得 */);
   const viewState = await page.evaluate(() => /* __VIEWSTATE関連取得 */);
   const cookieKeys = /* document.cookie からkey一覧 */;
-  
+
   // ファイル保存
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.html`, html);
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.png`, screenshot);
@@ -197,7 +197,7 @@ async function recordStep(page, stepNumber, stepName) {
   };
   await fs.writeFile(`${outputDir}/step-${stepNumber}-${stepName}.json`, JSON.stringify(meta, null, 2));
   summary.push(meta);
-  
+
   console.log(`[step ${stepNumber}] ${stepName}: ${title} (${url})`);
   console.log(`  次の操作: ${nextActionHint}`);
 }
