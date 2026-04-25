@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { systemSettingsAPI, organizationAPI } from '../../api';
 import { Settings, AlertCircle, Check } from 'lucide-react';
@@ -23,11 +23,14 @@ const SystemSettings = () => {
   const isSuperAdminUser = currentPlayer?.role === 'SUPER_ADMIN';
   const targetOrgId = isSuperAdminUser ? selectedOrgId : currentPlayer?.adminOrganizationId;
   const requestedOrgId = Number(searchParams.get('organizationId'));
+  const latestSettingsRequestIdRef = useRef(0);
 
   const fetchSettings = useCallback(async (organizationId) => {
+    const requestId = ++latestSettingsRequestIdRef.current;
+    setLoading(true);
     try {
-      setLoading(true);
       const res = await systemSettingsAPI.getAll(organizationId);
+      if (latestSettingsRequestIdRef.current !== requestId) return;
       const settings = res.data || [];
       let nextNoDeadline = false;
       let nextDeadlineDays = 0;
@@ -51,9 +54,12 @@ const SystemSettings = () => {
       setDeadlineDays(nextDeadlineDays);
       setReservePercent(nextReservePercent);
     } catch {
+      if (latestSettingsRequestIdRef.current !== requestId) return;
       setError('設定の取得に失敗しました');
     } finally {
-      setLoading(false);
+      if (latestSettingsRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, []);
 
