@@ -588,6 +588,27 @@ public class LotteryController {
     }
 
     /**
+     * 指定年月・団体の抽選が確定済みかどうかを返す
+     */
+    @GetMapping("/is-confirmed")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> getLotteryConfirmationStatus(
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            organizationId = adminOrgId;
+        }
+
+        boolean confirmed = lotteryService.isLotteryConfirmed(year, month, organizationId);
+        return ResponseEntity.ok(Map.of("confirmed", confirmed));
+    }
+
+    /**
      * 抽選結果通知の送信済みチェック
      */
     @GetMapping("/notify-status")

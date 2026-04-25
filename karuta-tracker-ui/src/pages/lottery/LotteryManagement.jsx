@@ -20,6 +20,14 @@ const formatRank = (p) => {
   return '';
 };
 
+// 表示中の (year, month) が現在の年月以降か（=その月がまだ終わっていないか）を判定
+const isMonthOngoing = (year, month) => {
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1;
+  return year > nowYear || (year === nowYear && month >= nowMonth);
+};
+
 export default function LotteryManagement() {
   const { currentPlayer } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +51,7 @@ export default function LotteryManagement() {
   const [selectedOrgId, setSelectedOrgId] = useState(currentPlayer?.organizationId || null);
   const [applicants, setApplicants] = useState([]);
   const [priorityPlayerIds, setPriorityPlayerIds] = useState([]);
+  const [confirmedLotteryExists, setConfirmedLotteryExists] = useState(false);
 
   useEffect(() => {
     if (isSuperAdmin()) {
@@ -88,6 +97,17 @@ export default function LotteryManagement() {
     if (!sessionStorageKey) return;
     sessionStorage.setItem(sessionStorageKey, JSON.stringify(priorityPlayerIds));
   }, [priorityPlayerIds, sessionStorageKey]);
+
+  // 月・団体切り替え時に「その月の抽選が確定済みか」を取得
+  useEffect(() => {
+    if (!organizationId) {
+      setConfirmedLotteryExists(false);
+      return;
+    }
+    lotteryAPI.isConfirmed(currentDate.year, currentDate.month, organizationId)
+      .then(res => setConfirmedLotteryExists(res.data?.confirmed === true))
+      .catch(() => setConfirmedLotteryExists(false));
+  }, [currentDate.year, currentDate.month, organizationId]);
 
   const togglePriorityPlayer = (playerId) => {
     setPriorityPlayerIds(prev =>
@@ -151,6 +171,7 @@ export default function LotteryManagement() {
       await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds);
       if (sessionStorageKey) sessionStorage.removeItem(sessionStorageKey);
       setPhase('confirmed');
+      setConfirmedLotteryExists(true);
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || '確定処理に失敗しました';
       setError(typeof msg === 'string' ? msg : '確定処理に失敗しました');
@@ -384,49 +405,52 @@ export default function LotteryManagement() {
             </div>
           )}
 
-          {/* 通知送信ボタン（確定後） */}
-          {phase === 'confirmed' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-green-50 text-green-800 border border-green-200 rounded-lg text-sm text-center">
-                抽選結果を確定しました。伝助への書き戻しが実行されました。
-              </div>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={handleNotifyAll}
-                  disabled={!!processing}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-[#4a6b5a] hover:bg-[#3d5a4c] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  <Bell size={16} />
-                  {processing === 'notifyAll' ? '送信中...' : '全員に通知送信'}
-                </button>
-                <button
-                  onClick={handleNotifyWaitlisted}
-                  disabled={!!processing}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  <BellRing size={16} />
-                  {processing === 'notifyWaitlisted' ? '送信中...' : 'キャンセル待ちのみ通知'}
-                </button>
-              </div>
+        </div>
+      )}
 
-              {/* 通知送信結果 */}
-              {notifyResult && (
-                <div className="p-3 bg-white rounded-lg shadow text-sm">
-                  <div className="font-semibold text-[#374151] mb-1">
-                    通知送信結果（{notifyResult.type === 'all' ? '全員' : 'キャンセル待ちのみ'}）
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[#6b7280]">
-                    <span>アプリ内通知:</span>
-                    <span>{notifyResult.inAppCount}件</span>
-                    <span>LINE送信成功:</span>
-                    <span>{notifyResult.lineSent}名</span>
-                    <span>LINE送信失敗:</span>
-                    <span>{notifyResult.lineFailed}名</span>
-                    <span>LINEスキップ:</span>
-                    <span>{notifyResult.lineSkipped}名</span>
-                  </div>
-                </div>
-              )}
+      {/* 通知送信ボタン（抽選確定後 - その月が終わるまで表示し続ける） */}
+      {(phase === 'confirmed' || (confirmedLotteryExists && isMonthOngoing(currentDate.year, currentDate.month))) && (
+        <div className="space-y-3 mb-6">
+          {phase === 'confirmed' && (
+            <div className="p-3 bg-green-50 text-green-800 border border-green-200 rounded-lg text-sm text-center">
+              抽選結果を確定しました。伝助への書き戻しが実行されました。
+            </div>
+          )}
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={handleNotifyAll}
+              disabled={!!processing}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#4a6b5a] hover:bg-[#3d5a4c] text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              <Bell size={16} />
+              {processing === 'notifyAll' ? '送信中...' : '全員に通知送信'}
+            </button>
+            <button
+              onClick={handleNotifyWaitlisted}
+              disabled={!!processing}
+              className="flex items-center gap-2 px-4 py-2.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              <BellRing size={16} />
+              {processing === 'notifyWaitlisted' ? '送信中...' : 'キャンセル待ちのみ通知'}
+            </button>
+          </div>
+
+          {/* 通知送信結果 */}
+          {notifyResult && (
+            <div className="p-3 bg-white rounded-lg shadow text-sm">
+              <div className="font-semibold text-[#374151] mb-1">
+                通知送信結果（{notifyResult.type === 'all' ? '全員' : 'キャンセル待ちのみ'}）
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[#6b7280]">
+                <span>アプリ内通知:</span>
+                <span>{notifyResult.inAppCount}件</span>
+                <span>LINE送信成功:</span>
+                <span>{notifyResult.lineSent}名</span>
+                <span>LINE送信失敗:</span>
+                <span>{notifyResult.lineFailed}名</span>
+                <span>LINEスキップ:</span>
+                <span>{notifyResult.lineSkipped}名</span>
+              </div>
             </div>
           )}
         </div>

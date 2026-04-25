@@ -1404,6 +1404,14 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 **レスポンス**: `WaitlistStatusDto`
 
+#### GET /api/lottery/is-confirmed?year={year}&month={month}&organizationId={organizationId}
+**説明**: 指定年月・団体の抽選が確定済みかどうかを返す（ADMINは自団体に強制）
+**権限**: SUPER_ADMIN, ADMIN
+**レスポンス**:
+```json
+{ "confirmed": true }
+```
+
 #### GET /api/lottery/notify-status?year={year}&month={month}
 **説明**: 抽選結果通知の送信済みチェック
 **権限**: SUPER_ADMIN, ADMIN
