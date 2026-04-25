@@ -15,20 +15,23 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 2026-04-24 に取得した densuke 実ページスナップショット (snapshot-2026-04-24.html) に対する
+ * 匿名化済みの合成 densuke ページスナップショット (snapshot-2026-04-24.html) に対する
  * スクレイパーの出力を検証する回帰テスト。
  *
  * Issue #521 調査: 4/23 12:51 の 3名同時キャンセル通知の原因特定において、
  * 本番スクレイパーが × (col1) を正しく absent として扱うことを確認する目的で作成。
+ *
+ * フィクスチャは個人情報・ページコード等を含む実ページではなく、
+ * 必要なシナリオを再現する最小構成の合成 HTML を使用する。
  */
-@DisplayName("DensukeScraper 実ページスナップショットテスト")
+@DisplayName("DensukeScraper スナップショットテスト")
 class DensukeScraperLiveSnapshotTest {
 
     private final DensukeScraper scraper = new DensukeScraper();
 
     @Test
-    @DisplayName("2026-04-23 1試合目: 鮎川知佳が × → absent、participants にも maybeParticipants にも含まれない")
-    void verifyAyukawaNotInMarkedLists() throws IOException {
+    @DisplayName("4/23 1試合目: メンバーFが × → absent、participants にも maybeParticipants にも含まれない")
+    void verifyAbsentMemberNotInMarkedListsMatch1() throws IOException {
         DensukeData data = parseSnapshot();
 
         ScheduleEntry match1 = data.getEntries().stream()
@@ -36,13 +39,13 @@ class DensukeScraperLiveSnapshotTest {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("4/23 1試合目 が見つからない"));
 
-        assertThat(match1.getParticipants()).doesNotContain("鮎川知佳");
-        assertThat(match1.getMaybeParticipants()).doesNotContain("鮎川知佳");
+        assertThat(match1.getParticipants()).doesNotContain("メンバーF");
+        assertThat(match1.getMaybeParticipants()).doesNotContain("メンバーF");
     }
 
     @Test
-    @DisplayName("2026-04-23 2試合目: 深井世奈が × → absent、participants にも maybeParticipants にも含まれない")
-    void verifyFukaiNotInMarkedLists() throws IOException {
+    @DisplayName("4/23 2試合目: メンバーDが × → absent、participants にも maybeParticipants にも含まれない")
+    void verifyAbsentMemberNotInMarkedListsMatch2() throws IOException {
         DensukeData data = parseSnapshot();
 
         ScheduleEntry match2 = data.getEntries().stream()
@@ -50,13 +53,13 @@ class DensukeScraperLiveSnapshotTest {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("4/23 2試合目 が見つからない"));
 
-        assertThat(match2.getParticipants()).doesNotContain("深井世奈");
-        assertThat(match2.getMaybeParticipants()).doesNotContain("深井世奈");
+        assertThat(match2.getParticipants()).doesNotContain("メンバーD");
+        assertThat(match2.getMaybeParticipants()).doesNotContain("メンバーD");
     }
 
     @Test
-    @DisplayName("2026-04-23 2試合目: 森保滉大が ○ → participants に含まれる（再参加後の現状）")
-    void verifyMorihoInParticipants() throws IOException {
+    @DisplayName("4/23 2試合目: メンバーCが ○ → participants に含まれる")
+    void verifyPresentMemberInParticipants() throws IOException {
         DensukeData data = parseSnapshot();
 
         ScheduleEntry match2 = data.getEntries().stream()
@@ -64,14 +67,15 @@ class DensukeScraperLiveSnapshotTest {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("4/23 2試合目 が見つからない"));
 
-        assertThat(match2.getParticipants()).contains("森保滉大");
+        assertThat(match2.getParticipants()).contains("メンバーC");
     }
 
     @Test
-    @DisplayName("memberNames に 鮎川知佳・深井世奈・森保滉大 が含まれる（行整列の基盤確認）")
+    @DisplayName("memberNames に メンバーA〜F が含まれる（行整列の基盤確認）")
     void verifyMemberNamesContainTargets() throws IOException {
         DensukeData data = parseSnapshot();
-        assertThat(data.getMemberNames()).contains("鮎川知佳", "深井世奈", "森保滉大");
+        assertThat(data.getMemberNames())
+                .contains("メンバーA", "メンバーB", "メンバーC", "メンバーD", "メンバーE", "メンバーF");
     }
 
     @Test
@@ -80,19 +84,19 @@ class DensukeScraperLiveSnapshotTest {
         DensukeData data = parseSnapshot();
 
         assertThat(data.getMemberLastChangeTimes())
-                .as("Issue #521 調査対象の 鮎川知佳・深井世奈 は共に title=4/23 12:51")
-                .containsEntry("鮎川知佳", LocalDateTime.of(2026, 4, 23, 12, 51))
-                .containsEntry("深井世奈", LocalDateTime.of(2026, 4, 23, 12, 51))
-                .containsEntry("森保滉大", LocalDateTime.of(2026, 4, 23, 15, 28))
-                .containsEntry("高橋叶愛", LocalDateTime.of(2026, 4, 24, 12, 5))
-                .containsEntry("佐藤彩乃", LocalDateTime.of(2026, 4, 23, 18, 7));
+                .as("Issue #521 調査対象に相当する メンバーD・メンバーF は共に title=4/23 12:51")
+                .containsEntry("メンバーD", LocalDateTime.of(2026, 4, 23, 12, 51))
+                .containsEntry("メンバーF", LocalDateTime.of(2026, 4, 23, 12, 51))
+                .containsEntry("メンバーC", LocalDateTime.of(2026, 4, 23, 15, 28))
+                .containsEntry("メンバーA", LocalDateTime.of(2026, 4, 24, 12, 5))
+                .containsEntry("メンバーB", LocalDateTime.of(2026, 4, 23, 18, 7));
 
-        // スナップショット上、1名（中野大空）だけ title="" のため map に入らず、残りは全員 entry を持つ
+        // フィクスチャ上、メンバーE のみ title="" のため map に入らず、残りは全員 entry を持つ
         assertThat(data.getMemberLastChangeTimes())
                 .as("title が空のメンバーは map に含まれない")
-                .doesNotContainKey("中野大空");
+                .doesNotContainKey("メンバーE");
         assertThat(data.getMemberLastChangeTimes().size())
-                .as("title がある全メンバー分 entry が作られる（53件 = 全54名 − 空title 1名）")
+                .as("title がある全メンバー分 entry が作られる（全メンバー数 − 空title 1名）")
                 .isEqualTo(data.getMemberNames().size() - 1);
     }
 

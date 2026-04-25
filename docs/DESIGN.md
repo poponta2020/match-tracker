@@ -2797,6 +2797,16 @@ Entity Layer (JPA Entity)
   - テンプレート: `densuke_templates` テーブルで団体ごとにタイトル・説明・連絡先メアドのデフォルト値を保持。作成ダイアログで編集可能
   - 作成後は既存の `DensukeSyncScheduler` が次回サイクル（最長5分）で新URLを自動取り込み
   - 作り直し: `DELETE /api/practice-sessions/densuke-url?year=&month=&organizationId=`（ADMIN以上、自団体のみ）で `densuke_urls` 行を物理削除して作成ロックを解除。densuke.biz 側の旧ページは残るが、アプリからの参照は断たれる。UI では「作り直す」ボタン → 確認ダイアログ → DELETE → 作成モーダル自動オープン、の一連フローで提供
+- **メンバー最終変更時刻の取得と drift ログ（observability only / Issue #543, #544, #545）**:
+  - `DensukeScraper` がヘッダ各メンバーの `<a title="M/d HH:mm">` 属性をパースして `DensukeData.memberLastChangeTimes`（`Map<String, LocalDateTime>`）に格納（Issue #544）
+    - パースは `DensukeScraper.parseDensukeTitleAsDateTime(title, year)`（`^\\s*(\\d{1,2})/(\\d{1,2})\\s+(\\d{1,2}):(\\d{2})\\s*$`）。年は scrape 時引数を採用、年跨ぎはスコープ外
+    - `title` が null / 空 / フォーマット不一致 / 不正日付（`2/30`, `13/1`, `25:00`）の場合は map に entry を持たない
+  - `DensukeImportService` は Phase1（DB差分検出）と Phase3（伝助→アプリ同期）の状態遷移ログ末尾に、`formatDriftLog()` で生成した drift 情報を付与（Issue #545）
+    - 形式: `densukeTitle=<title時刻> detectedAt=<検出時刻(秒丸め)> drift=<分>m`、未取得時は `densukeTitle=(unknown) ... drift=(unknown)`
+    - `detectedAt` はインポート 1 回分で固定（インポート開始時刻、`ChronoUnit.SECONDS` で丸め）
+  - `warnIfDrifted()` で drift が `DRIFT_WARN_THRESHOLD_MINUTES = 10` 分を超える場合に WARN を出力。`title` 未取得時は WARN 抑制（空 title メンバーでの大量 WARN 防止）
+    - 形式: `WARN Densuke change-time drift detected: phase=<Phase> session=<id> match=<n> player=<id> (<name>) densukeTitle=... detectedAt=... driftMinutes=<n>`
+  - **DB / API / UI 変更なし** — ログのみで提供。drift 履歴の永続化やフロント表示は将来検討
 
 #### Google Calendar連携
 - OAuth2アクセストークンベースでGoogle Calendar APIを呼び出し

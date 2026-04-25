@@ -908,6 +908,39 @@ SUPER_ADMIN のみ操作可能。
 - 既存DBに絵文字付きで登録されているプレイヤーは変更されない（再登録は不要）
 - **除去対象外の例外**: バリエーションセレクター（U+FE0F / U+FE0E）や ZWJ（U+200D）は除去対象カテゴリに含まれないため除去されない。例えば `❤️田中`（`❤` + U+FE0F）の場合、`❤`（`OTHER_SYMBOL`）は除去されるが U+FE0F が先頭に残存し、プレイヤー突合が失敗する可能性がある。実用上この種の絵文字が名前先頭に使われることは極めてまれであるため、現仕様では対処しない
 
+#### 4.1.8 メンバー最終変更時刻の取得と drift ログ（Issue #543 / #544 / #545）
+
+**目的（observability only）:**
+伝助上で各メンバーが最後に出欠を変更した時刻と、アプリ側がその変更を検出した時刻の乖離（drift）を可視化し、同期遅延・スケジューラ間隔の影響・不審な大幅遅延ケースを事後解析できるようにする。**DB / API / UI には変更なし**。ログのみで提供する。
+
+**メンバー title 属性のパース:**
+- 伝助ヘッダの各メンバーリンク `<a title="M/d HH:mm">` 属性を `DensukeScraper` がパースし、`DensukeData.memberLastChangeTimes`（`Map<String, LocalDateTime>`）に格納する
+- 年は scrape 時の指定年（呼び出し元 `DensukeImportService` が渡す）を採用。年跨ぎは現スコープ外
+- `title` が `null` / 空文字 / フォーマット不一致 / 不正日付（例: `2/30`, `13/1`, `25:00`）の場合は map に entry を持たない（黙ってスキップ）
+
+**drift ログ形式:**
+`DensukeImportService` の Phase1（DB差分検出）/ Phase3（伝助→アプリ同期）の状態遷移ログ末尾に、以下の形式で drift 情報を付与する:
+- 取得成功時: `densukeTitle=2026-04-23T12:45 detectedAt=2026-04-23T12:50:56 drift=5m`
+- 取得失敗時: `densukeTitle=(unknown) detectedAt=2026-04-23T12:50:56 drift=(unknown)`
+
+`detectedAt` はインポート 1 回分で固定の値（インポート開始時刻、秒単位に丸め）。`drift` は分単位（負値もあり得る — title 時刻 > 検出時刻となるエッジケース）。
+
+**10分超 WARN:**
+drift が **10分（`DensukeImportService.DRIFT_WARN_THRESHOLD_MINUTES`）** を超えた場合、状態遷移ログに加えて WARN レベルでサマリーを出力する。これにより監視ツールでの絞り込み・アラート化を可能にする。
+
+形式:
+```
+WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 player=20 (山田太郎) densukeTitle=2026-04-22T22:06 detectedAt=2026-04-23T12:50:56 driftMinutes=884
+```
+
+`title` 未取得（map に entry 無し）の場合は WARN を抑制する — title が空のメンバーで大量 WARN が出るのを防ぐため。
+
+**スコープ外:**
+- DB スキーマ変更（drift 履歴の永続化はしない）
+- API レスポンス追加（フロントへ drift 情報を返さない）
+- UI 表示（管理画面に drift 列を追加しない）
+- アラート通知（ログから外部監視で拾う運用）
+
 ### 4.2 Google カレンダー同期
 
 #### 4.2.1 概要
