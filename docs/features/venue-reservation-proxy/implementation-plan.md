@@ -50,7 +50,7 @@ status: completed
 - **完了条件:** `./gradlew build` が成功する (既存ビルドが既に成功している前提のためスキップ)
 
 #### タスク3: 共通骨組み (Config / SessionStore / DTO / VenueId) 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 62b2ebc の実装を確認して進捗反映）
 - **対応Issue:** #526 (旧名: DTO・Config・SessionStore 骨組み実装)
 - **概要:** プロキシセッション管理の会場非依存な骨組み (ProxySession・ConcurrentHashMap ストア・設定クラス・DTO・VenueId enum) を作成する。タイムアウトクリーンアップの @Scheduled ジョブもここで実装。
 - **変更対象ファイル (新規):**
@@ -67,7 +67,7 @@ status: completed
 - **完了条件:** 単体テストで SessionStore の CRUD・タイムアウト削除・複数 venue のセッション分離が動作する
 
 #### タスク4: VenueReservationClient interface + KaderuReservationClient 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 76fb66f の実装を確認して進捗反映）
 - **対応Issue:** #527 (旧名: KaderuProxyClient 実装)
 - **概要:** 会場別 HTTP クライアントの契約を `VenueReservationClient` interface として定義し、Phase 1 で必要な `KaderuReservationClient` 実装をかでる用に作成する。Apache HttpClient ベースで、ログイン→マイページ→空き状況→月合わせ→日付クリック→スロット選択→申込トレイまでを順次実行する。既存 [open-reserve.js](scripts/room-checker/open-reserve.js) のロジックを Java に移植。空き状況verificationはスキップ。
 - **変更対象ファイル (新規):**
@@ -89,7 +89,7 @@ status: completed
 - **Phase 2 への布石:** `VenueReservationClient` interface を切ったことで、higashi 実装時は `HigashiReservationClient` を追加するだけで Spring DI が拾う
 
 #### タスク5: VenueReservationHtmlRewriter + VenueRewriteStrategy + KaderuRewriteStrategy 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 22644a0 の実装を確認して進捗反映）
 - **対応Issue:** #528 (旧名: KaderuHtmlRewriter 実装)
 - **概要:** 会場サイトからの応答 HTML を書き換える会場非依存コアと、会場別 strategy を実装する。URL書き換え、ヘッダーバナー注入、Location/fetch/XHR フック用スクリプト注入、BroadcastChannel 発信ロジック、申込完了ダイアログロジックを含む。
 - **変更対象ファイル (新規):**
@@ -111,7 +111,7 @@ status: completed
 - **Phase 2 への布石:** higashi では `HigashiRewriteStrategy` で `__doPostBack` のフックを `injectScript()` に追加するだけで対応できる
 
 #### タスク6: VenueReservationCompletionDetector + VenueCompletionStrategy + KaderuCompletionStrategy 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 3ec956b の実装を確認して進捗反映）
 - **対応Issue:** #529 (旧名: KaderuReservationCompletionDetector 実装)
 - **概要:** プロキシ経由の各レスポンスを監視し、申込完了画面到達を検知する。会場非依存コアが strategy に判定を委譲する設計。検知時は `practice_sessions.reservation_confirmed_at` を更新し、`ProxySession.completed = true` にセット。
 - **変更対象ファイル (新規):**
@@ -126,7 +126,7 @@ status: completed
 - **完了条件:** 単体テスト: 完了画面サンプル / 非完了画面サンプルで判定が期待通り動作する。複数 venue を登録した状態で正しい strategy が呼ばれる
 
 #### タスク7: VenueReservationProxyService 実装 (統括ロジック)
-- [ ] 完了
+- [x] 完了（2026-04-25）
 - **対応Issue:** #530 (旧名: KaderuProxyService 実装)
 - **概要:** Controller から呼ばれるファサード的サービス。`createSession` / `view` / `fetch` の3つのユースケースを統括する。会場別 client / strategy を `Map<VenueId, ...>` で DI し、リクエストの venue で dispatch する。
 - **変更対象ファイル (新規):**

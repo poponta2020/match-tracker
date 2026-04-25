@@ -52,6 +52,7 @@
 - Google Calendar API v3（カレンダー同期）
 - Web Push（nl.martijndwars:web-push:5.1.1 + Bouncy Castle）
 - Testcontainers（テスト用PostgreSQL）
+- Apache HttpClient 4.5（会場予約プロキシの会場サイト中継）
 
 **フロントエンド**:
 - React 19
@@ -2524,6 +2525,20 @@ Entity Layer (JPA Entity)
 | `AdjacentRoomNotificationScheduler` | セッションフィルタを `isAdjacentCheckTarget` に切替、通知の時間帯表記を動的化（かでる: 17-21 / 東🌸: 18-21） |
 | `scripts/room-checker/sync-higashi-availability-to-db.js` | 東区民センター かっこう の月表示ページから夜間(18-21)空き状況を `room_availability_cache` に UPSERT |
 | `.github/workflows/scrape-higashi-availability.yml` | 30分間隔で上記スクレイパを実行（`concurrency.group=higashi-availability-check`） |
+
+**会場予約プロキシ（実装中）**:
+
+現在の画面導線は従来の `kaderuAPI.openReserve()` フローのままだが、後続タスクで `/api/venue-reservation-proxy/*` に置き換えるため、バックエンドサービス層に `VenueReservationProxyService` を追加済み。
+
+| コンポーネント | 役割 |
+|---------------|------|
+| `VenueReservationProxyService` | Controller から呼ばれるファサード。`createSession` / `view` / `fetch` を統括し、会場別 client / config / rewrite strategy を `EnumMap<VenueId, ...>` で dispatch |
+| `VenueReservationSessionStore` | `ProxySession` を JVM メモリで管理。token、会場、CookieStore、hiddenFields、申込トレイHTML、完了状態を保持 |
+| `VenueReservationClient` | 会場別 HTTP クライアント契約。Phase 1 は `KaderuReservationClient` |
+| `VenueReservationHtmlRewriter` | HTMLのURLを `/api/venue-reservation-proxy/fetch/**?token=...` に書き換え、バナーと注入スクリプトを挿入 |
+| `VenueReservationCompletionDetector` | 会場別 `VenueCompletionStrategy` で申込完了を検知し、`reservation_confirmed_at` を初回検知時刻で固定 |
+
+`fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、完了検知時は `X-VRP-Completed: true` を付与する。
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 
