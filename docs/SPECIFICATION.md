@@ -1267,6 +1267,8 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 
 `VenueReservationProxyException` は Controller 内の例外ハンドラで `{errorCode, message, venue}` に変換する。`VENUE_NOT_SUPPORTED` 等の利用者操作・会場状態由来のエラーは 400、`SCRIPT_ERROR` は 500 を返す。
 
+旧 `POST /api/kaderu/open-reserve` / `POST /api/kaderu/open-reserve-by-venue` と、Node.js + Playwright 版 `open-reserve.js` を起動する旧サービスは削除済み。Kaderu 認証情報は `venue-reservation-proxy.venues.kaderu.user-id/password` で引き続き利用する。
+
 #### 4.7.5 フロントエンド補助層
 
 | ファイル | 役割 |

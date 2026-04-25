@@ -2472,12 +2472,12 @@ Entity Layer (JPA Entity)
 2. 「隣室を予約」ボタンクリック
    ↓
 [フロントエンド: PracticeList.jsx]
-3. Kaderu 和室(venueId ∈ {3,4,8,11}) → kaderuAPI.openReserve() で予約画面を自動起動
-   東区民センター 東🌸(venueId=6) → 初期状態から「予約完了を報告」ボタンを表示
-   （KADERU_VENUE_IDS 判定で分岐）
+3. Kaderu 和室(venueId ∈ {3,4,8,11}) → venueReservationProxyAPI.createSession() でプロキシ予約画面を新規タブに表示
+   東区民センター 東🌸(venueId=6) → Phase 1 ではプロキシ未対応のため初期状態から「予約完了を報告」ボタンを表示
+   （venueResolver / KADERU_VENUE_IDS 判定で分岐）
    ↓
-4a. Kaderu 自動起動成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
-4b. DISABLED時 → 同じく「予約完了を報告」ボタンを表示（手動予約を案内）
+4a. プロキシ画面表示成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
+4b. プロキシが申込完了を自動検知した場合 → BroadcastChannel 経由で元タブへ通知し、該当セッションを再取得して「会場を拡張」ボタンを表示
    ↓
 [ユーザー操作]
 5. かでる2・7サイトで予約を完了
@@ -2528,7 +2528,7 @@ Entity Layer (JPA Entity)
 
 **会場予約プロキシ（実装中）**:
 
-`PracticeList.jsx` の隣室予約導線は `/api/venue-reservation-proxy/*` に接続済み。旧 `kaderuAPI.openReserve()` フローは後続タスクでテスト更新と既存コード削除を行う。
+`PracticeList.jsx` の隣室予約導線は `/api/venue-reservation-proxy/*` に接続済み。旧 `/api/kaderu/*` Controller / Service、旧 React API クライアント、Playwright 版 `open-reserve.js` は削除済み。
 
 | コンポーネント | 役割 |
 |---------------|------|

@@ -201,7 +201,7 @@ status: completed
 - **実装メモ:** `AdjacentRoomFlow.test.jsx` を新プロキシフローに全面更新。`venueReservationProxyAPI.createSession`、事前 `window.open`、`VENUE_NOT_SUPPORTED` / `LOGIN_FAILED`、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信、既存 `reservationConfirmedAt` 復元を検証する。`npm test` は 8 files / 111 tests 通過。
 
 #### タスク12: 既存Kaderu関連コードの削除
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #535 (旧名: 既存Kaderu関連コードの削除)
 - **概要:** タスク1の調査で「削除可能」と判定された既存コードを実際に削除する。
 - **変更対象ファイル (削除):**
@@ -217,6 +217,7 @@ status: completed
   - Render 環境変数 (手動) — `KADERU_ENABLED`, `KADERU_SCRIPT_PATH`, `KADERU_NODE_COMMAND` を削除
 - **依存タスク:** タスク10 (#533), 11 (#534)
 - **完了条件:** `./gradlew build` と `npm run build` が成功する
+- **実装メモ:** 旧 `/api/kaderu/*` Controller / Service / ServiceTest、React `api/kaderu.js`、Playwright 版 `scripts/room-checker/open-reserve.js`、旧 `kaderu.*` 設定を削除。Playwright 依存本体は higashi 系スクリプトで使用中のため維持。`KADERU_USER_ID` / `KADERU_PASSWORD` は `venue-reservation-proxy.venues.kaderu.*` で引き続き利用する。
 
 #### タスク13: ドキュメント更新
 - [ ] 完了
