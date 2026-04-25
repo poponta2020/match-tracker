@@ -233,7 +233,7 @@ status: completed
 - **実装メモ:** `SPECIFICATION.md` / `SCREEN_LIST.md` / `DESIGN.md` の venue-reservation-proxy 記述を Phase 1 実装済みの内容へ更新し、旧 `/api/kaderu/*` 導線削除後の状態に合わせた。`venues/kaderu.md` は `KaderuReservationClient` / `KaderuCompletionStrategy` の実装に合わせ、`/kaderu27/index.php` への form 等価 POST、部屋コード、時間帯、エラー判定、完了検知 URL / 本文トークン、`reservation_confirmed_at` の冪等更新を反映した。
 
 #### タスク14: E2E手動検証 + PR作成
-- [ ] 完了
+- [x] 完了 (2026-04-25、PR #556 作成)
 - **対応Issue:** #537 (旧名: E2E手動検証 + PR作成)
 - **概要:** 本番 (Render) の環境変数設定を確認し、実機で E2E 検証を実施。問題なければ PR 作成。
 - **作業手順:**
@@ -244,6 +244,7 @@ status: completed
   - PR作成・レビュー依頼
 - **依存タスク:** タスク13 (#536)
 - **完了条件:** PR がマージ可能な状態になる
+- **実装メモ:** PR #556 (`feat: venue reservation proxy`) を作成し、GitHub 上の `mergeable` は `MERGEABLE`。機械検証は `./gradlew build`、`./gradlew test --rerun-tasks`、`npm run test -- --reporter=verbose`、`npm run build`、変更対象系の限定 ESLint、`git diff --check` が成功。`npm run lint` は既存の unrelated 44 errors / 14 warnings で失敗。Render 環境変数確認と Kaderu 実機E2Eは、この環境に Render CLI / Kaderu 認証情報 / DB 接続情報がなく、実申込の副作用もあるため未実施として PR の Test plan に明記。
 
 ### 実装順序
 
