@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { practiceAPI, lotteryAPI } from '../../api';
+import { practiceAPI, lotteryAPI, venueReservationProxyAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
-import kaderuAPI from '../../api/kaderu';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
 import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle, Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -10,10 +9,17 @@ import MatchParticipantsEditModal from '../../components/MatchParticipantsEditMo
 import PlayerChip from '../../components/PlayerChip';
 import YearMonthPicker from '../../components/YearMonthPicker';
 import { sortPlayersByRank } from '../../utils/playerSort';
+import { KADERU_VENUE_IDS, resolveVenue } from '../../utils/venueResolver';
 import LoadingScreen from '../../components/LoadingScreen';
 
-// Kaderu 自動予約API対応の会場 ID（隣室を予約ボタンの表示条件）
-const KADERU_VENUE_IDS = new Set([3, 4, 8, 11]);
+const RESERVATION_SLOT_INDEX = 2;
+const RESERVATION_PROXY_CHANNEL = 'venue-reservation-proxy';
+
+const resolveProxyViewUrl = (viewUrl) => {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+  const apiBase = new URL(apiBaseUrl, window.location.origin);
+  return new URL(viewUrl, apiBase.origin).toString();
+};
 
 const PracticeList = () => {
   const navigate = useNavigate();
@@ -42,6 +48,7 @@ const PracticeList = () => {
   const fetchingRef = useRef(false);
   // openTodayパラメータの処理済みフラグ
   const openTodayProcessedRef = useRef(false);
+  const selectedSessionRef = useRef(null);
 
   // データ取得を並列化して高速化
   useEffect(() => {
@@ -101,6 +108,10 @@ const PracticeList = () => {
     };
   }, [currentDate, currentPlayer?.id]);
 
+  useEffect(() => {
+    selectedSessionRef.current = selectedSession;
+  }, [selectedSession]);
+
   // openToday パラメータで今日のポップアップを自動表示（LINEリッチメニューからの遷移用）
   useEffect(() => {
     if (openTodayProcessedRef.current) return;
@@ -139,6 +150,43 @@ const PracticeList = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.BroadcastChannel !== 'function') {
+      return undefined;
+    }
+
+    const channel = new window.BroadcastChannel(RESERVATION_PROXY_CHANNEL);
+    channel.onmessage = async (event) => {
+      const message = event?.data;
+      if (message?.type !== 'reservation-completed') {
+        return;
+      }
+
+      const sessionId = Number(message.practiceSessionId);
+      if (!Number.isInteger(sessionId) || sessionId <= 0) {
+        return;
+      }
+
+      setReservationReady(prev => ({ ...prev, [sessionId]: true }));
+
+      try {
+        const response = await practiceAPI.getById(sessionId);
+        setSessions(prev => prev.map(session =>
+          session.id === sessionId ? { ...session, ...response.data } : session
+        ));
+        if (selectedSessionRef.current?.id === sessionId) {
+          setSelectedSession(response.data);
+        }
+      } catch (err) {
+        console.error('Error refreshing completed reservation session:', err);
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, []);
 
   const handleDelete = async (id) => {
     if (!window.confirm('この練習記録を削除してもよろしいですか?')) {
@@ -279,19 +327,54 @@ const PracticeList = () => {
     setExpandedMatches({}); // アコーディオンの状態をリセット
   };
 
-  // 隣室を予約（かでる2・7の予約画面を開く）
-  const handleReserveAdjacentRoom = async (sessionId, adjacentRoomName, sessionDate) => {
+  // Open the proxied reservation page in a new tab.
+  const handleReserveAdjacentRoom = async (practiceSession) => {
+    const sessionId = practiceSession?.id;
+    const adjacentRoomName = practiceSession?.adjacentRoomStatus?.adjacentRoomName;
+    const sessionDate = practiceSession?.sessionDate;
+    let placeholderTab = null;
+
     setReservationLoading(true);
     try {
-      await kaderuAPI.openReserve(adjacentRoomName, sessionDate);
-      // 予約画面を開いただけでは確認済みにしない。ユーザーが予約完了を明示的に報告するまで待機
+      placeholderTab = window.open('about:blank', '_blank');
+      if (!placeholderTab) {
+        alert('予約画面のタブを開けませんでした。ブラウザのポップアップブロック設定を確認してください。');
+        return;
+      }
+
+      const venue = resolveVenue(practiceSession);
+      if (!venue) {
+        placeholderTab.close();
+        alert('この会場は現在プロキシ予約に対応していません。会場サイトで直接予約してください。');
+        return;
+      }
+
+      const response = await venueReservationProxyAPI.createSession({
+        venue,
+        practiceSessionId: sessionId,
+        roomName: adjacentRoomName,
+        date: sessionDate,
+        slotIndex: RESERVATION_SLOT_INDEX,
+      });
+      const viewUrl = response.data?.viewUrl;
+      if (!viewUrl) {
+        throw new Error('予約画面URLが返されませんでした');
+      }
+
+      placeholderTab.location.href = resolveProxyViewUrl(viewUrl);
+      // Opening the reservation page is not confirmation; keep manual fallback visible.
       setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
-      alert('予約画面を開きました。利用目的を入力し予約を完了してください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
     } catch (err) {
+      if (placeholderTab) {
+        try {
+          placeholderTab.close();
+        } catch (closeErr) {
+          console.warn('Failed to close reservation tab:', closeErr);
+        }
+      }
       const errorCode = err.response?.data?.errorCode;
-      if (errorCode === 'DISABLED') {
-        alert('自動予約機能は現在利用できません。\nかでる2・7のサイトで直接予約を行ってください。\n予約完了後に「予約完了を報告」ボタンを押してください。');
-        setReservationReady(prev => ({ ...prev, [sessionId]: 'manual_pending' }));
+      if (errorCode === 'VENUE_NOT_SUPPORTED') {
+        alert('この会場は現在プロキシ予約に対応していません。会場サイトで直接予約してください。');
       } else {
         alert('予約画面の表示に失敗しました: ' + (err.response?.data?.message || err.message));
       }
@@ -647,11 +730,7 @@ const PracticeList = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleReserveAdjacentRoom(
-                                  selectedSession.id,
-                                  selectedSession.adjacentRoomStatus.adjacentRoomName,
-                                  selectedSession.sessionDate
-                                );
+                                handleReserveAdjacentRoom(selectedSession);
                               }}
                               disabled={reservationLoading}
                               className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"

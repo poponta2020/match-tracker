@@ -2528,7 +2528,7 @@ Entity Layer (JPA Entity)
 
 **会場予約プロキシ（実装中）**:
 
-現在の画面導線は従来の `kaderuAPI.openReserve()` フローのままだが、後続タスクで `/api/venue-reservation-proxy/*` に置き換えるため、バックエンドに `VenueReservationProxyController` / `VenueReservationProxyService`、フロントエンドに `venueReservationProxyAPI` / `venueResolver` を追加済み。
+`PracticeList.jsx` の隣室予約導線は `/api/venue-reservation-proxy/*` に接続済み。旧 `kaderuAPI.openReserve()` フローは後続タスクでテスト更新と既存コード削除を行う。
 
 | コンポーネント | 役割 |
 |---------------|------|
@@ -2540,6 +2540,7 @@ Entity Layer (JPA Entity)
 | `VenueReservationCompletionDetector` | 会場別 `VenueCompletionStrategy` で申込完了を検知し、`reservation_confirmed_at` を初回検知時刻で固定 |
 | `venueReservationProxyAPI` | React 側の API クライアント。`createSession` で `POST /api/venue-reservation-proxy/session` を呼び、後続の `PracticeList.jsx` 改修から利用する |
 | `venueResolver` | `PracticeSessionDto` の `venueId` を `KADERU` / `HIGASHI` / `null` に変換する。Phase 1 は Kaderu 会場 ID `[3, 4, 8, 11]` のみを `KADERU` に解決する |
+| `PracticeList.jsx` | 「隣室を予約」クリック直後に空タブを確保し、venue 判別、プロキシセッション作成、`viewUrl` 遷移を行う。`BroadcastChannel('venue-reservation-proxy')` の完了通知で該当セッションを再取得して UI を予約済みに更新 |
 
 `fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、完了検知時は `X-VRP-Completed: true` を付与する。
 

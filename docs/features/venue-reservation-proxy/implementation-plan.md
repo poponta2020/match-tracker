@@ -169,7 +169,7 @@ status: completed
 - **実装メモ:** `venueReservationProxyAPI.createSession` を追加し、`src/api/index.js` からも export。`resolveVenue` は `venueId` / `venue_id` を受け取り、Phase 1 では既存の Kaderu 会場 ID `[3, 4, 8, 11]` のみ `KADERU` にマッピングする。`HIGASHI_VENUE_IDS` は Phase 2 で埋める前提の空 Set。
 
 #### タスク10: PracticeList.jsx の改修
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #533 (旧名: PracticeList.jsx の改修)
 - **概要:** 既存の `handleReserveAdjacentRoom` を新プロキシフローに置き換え、venue 判別ロジックと BroadcastChannel 受信ロジックを追加する。
 - **変更対象ファイル:**
@@ -182,6 +182,7 @@ status: completed
     - component unmount 時に channel.close()
 - **依存タスク:** タスク9 (#532)
 - **完了条件:** 手動テストで本番と同一フローの予約操作が完了する
+- **実装メモ:** `PracticeList.jsx` の「隣室を予約」を `venueReservationProxyAPI.createSession` に差し替え。クリック直後に空タブを確保し、`resolveVenue` で `KADERU` を判別してプロキシ `viewUrl` へ遷移する。成功時は自動検知漏れに備えて既存の手動報告ボタンを表示し、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信で該当セッションを再取得して UI を予約済みに更新する。既存 `AdjacentRoomFlow.test.jsx` の更新はタスク11に残す。
 
 #### タスク11: フロントエンドテスト更新
 - [ ] 完了
