@@ -625,26 +625,24 @@ public class LotteryController {
             organizationId = adminOrgId;
         }
 
-        // 対象月のセッションに紐づく参加者IDを一括取得（N+1対策）
+        // 対象月・団体のセッションIDを取得し、それを参照する抽選結果通知の有無を確認する。
+        // NotificationService.createLotteryResultNotifications() は LOTTERY_WAITLISTED /
+        // LOTTERY_ALL_WON / LOTTERY_REMAINING_WON すべてに referenceId としてセッションIDを設定するため、
+        // セッションIDで横断的に重複送信を判定できる。
         List<PracticeSession> sessions = organizationId != null
                 ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
                 : practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
-        List<Long> participantIds = sessionIds.isEmpty()
-                ? List.of()
-                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
-                        .map(PracticeParticipant::getId)
-                        .collect(Collectors.toList());
 
-        if (participantIds.isEmpty()) {
+        if (sessionIds.isEmpty()) {
             return ResponseEntity.ok(Map.of("sent", false, "sentCount", 0));
         }
 
         long sentCount = notificationRepository.countByReferenceIdInAndTypeIn(
-                participantIds,
-                List.of(NotificationType.LOTTERY_WON, NotificationType.LOTTERY_WAITLISTED,
+                sessionIds,
+                List.of(NotificationType.LOTTERY_WAITLISTED,
                         NotificationType.LOTTERY_ALL_WON, NotificationType.LOTTERY_REMAINING_WON));
 
         return ResponseEntity.ok(Map.of("sent", sentCount > 0, "sentCount", sentCount));
