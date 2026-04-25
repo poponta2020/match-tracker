@@ -180,14 +180,28 @@ export default function LotteryManagement() {
     }
   };
 
+  // 既送信チェック（重複送信防止のため、再送信時に件数付きで確認）
+  const confirmIfAlreadySent = async (firstPrompt) => {
+    try {
+      const statusRes = await lotteryAPI.notifyStatus(currentDate.year, currentDate.month, organizationId);
+      if (statusRes.data?.sent) {
+        const count = statusRes.data.sentCount ?? 0;
+        return confirm(`既に${count}件の通知を送信済みです。再送信しますか？`);
+      }
+    } catch {
+      // 送信済みチェックが失敗した場合はそのまま通常確認に進む
+    }
+    return confirm(firstPrompt);
+  };
+
   // 全員に通知送信
   const handleNotifyAll = async () => {
-    if (!confirm('全員（当選者＋キャンセル待ち）に通知を送信しますか？')) return;
+    if (!(await confirmIfAlreadySent('全員（当選者＋キャンセル待ち）に通知を送信しますか？'))) return;
 
     setProcessing('notifyAll');
     setError(null);
     try {
-      const res = await lotteryAPI.notifyResults(currentDate.year, currentDate.month);
+      const res = await lotteryAPI.notifyResults(currentDate.year, currentDate.month, organizationId);
       setNotifyResult({ type: 'all', ...res.data });
     } catch {
       setError('通知送信に失敗しました');
@@ -198,7 +212,7 @@ export default function LotteryManagement() {
 
   // キャンセル待ちのみに通知送信
   const handleNotifyWaitlisted = async () => {
-    if (!confirm('キャンセル待ちの人にだけ通知を送信しますか？')) return;
+    if (!(await confirmIfAlreadySent('キャンセル待ちの人にだけ通知を送信しますか？'))) return;
 
     setProcessing('notifyWaitlisted');
     setError(null);

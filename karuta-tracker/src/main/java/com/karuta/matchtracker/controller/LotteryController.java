@@ -684,8 +684,8 @@ public class LotteryController {
                         .collect(Collectors.toList());
         int inAppCount = notificationService.createLotteryResultNotifications(allParticipants);
 
-        // LINE通知を送信
-        var lineResult = lineNotificationService.sendLotteryResults(year, month);
+        // LINE通知を送信（団体スコープを適用）
+        var lineResult = lineNotificationService.sendLotteryResults(year, month, organizationId);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("inAppCount", inAppCount);
@@ -730,8 +730,8 @@ public class LotteryController {
         // アプリ内通知を生成
         int inAppCount = notificationService.createLotteryResultNotifications(waitlistedParticipants);
 
-        // LINE通知を送信（WAITLISTEDのみ）
-        var lineResult = lineNotificationService.sendLotteryResultsWaitlistedOnly(year, month);
+        // LINE通知を送信（WAITLISTEDのみ・団体スコープを適用）
+        var lineResult = lineNotificationService.sendLotteryResultsWaitlistedOnly(year, month, organizationId);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("inAppCount", inAppCount);
