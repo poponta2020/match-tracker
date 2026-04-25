@@ -185,7 +185,7 @@ status: completed
 - **実装メモ:** `PracticeList.jsx` の「隣室を予約」を `venueReservationProxyAPI.createSession` に差し替え。クリック直後に空タブを確保し、`resolveVenue` で `KADERU` を判別してプロキシ `viewUrl` へ遷移する。成功時は自動検知漏れに備えて既存の手動報告ボタンを表示し、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信で該当セッションを再取得して UI を予約済みに更新する。既存 `AdjacentRoomFlow.test.jsx` の更新はタスク11に残す。
 
 #### タスク11: フロントエンドテスト更新
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #534 (旧名: フロントエンドテスト更新)
 - **概要:** 既存の `AdjacentRoomFlow.test.jsx` を新プロキシフロー用に書き直す。
 - **変更対象ファイル:**
@@ -198,6 +198,7 @@ status: completed
     - venue_id → VenueId のマッピングを網羅
 - **依存タスク:** タスク10 (#533)
 - **完了条件:** `npm test` 全テスト通過
+- **実装メモ:** `AdjacentRoomFlow.test.jsx` を新プロキシフローに全面更新。`venueReservationProxyAPI.createSession`、事前 `window.open`、`VENUE_NOT_SUPPORTED` / `LOGIN_FAILED`、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信、既存 `reservationConfirmedAt` 復元を検証する。`npm test` は 8 files / 111 tests 通過。
 
 #### タスク12: 既存Kaderu関連コードの削除
 - [ ] 完了
