@@ -142,9 +142,8 @@ class VenueReservationProxyControllerTest {
 
         // 会場 HTML 内の <link href> や <script src> はブラウザ自動 GET になり認可ヘッダーが付かない。
         // token があれば 200 を返すこと。
-        mockMvc.perform(get("/api/venue-reservation-proxy/fetch/kaderu27/index.php")
-                        .param("token", TOKEN)
-                        .param("p", "apply"))
+        // token はクエリ文字列に含めて渡す (controller は queryString から手動抽出するため)。
+        mockMvc.perform(get("/api/venue-reservation-proxy/fetch/kaderu27/index.php?token=" + TOKEN + "&p=apply"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-VRP-Completed", "true"))
                 .andExpect(content().bytes(body));
@@ -162,9 +161,9 @@ class VenueReservationProxyControllerTest {
                         .contentType(MediaType.TEXT_HTML)
                         .body(body));
 
-        mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php")
-                        .param("token", TOKEN)
-                        .param("p", "apply")
+        // POST 時は token をクエリ文字列で渡す。controller が parameter map (= body parsing 経由)
+        // を介さずに token を取得することで、リクエストボディが消費されないまま下流に渡る (Issue #573)。
+        mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php?token=" + TOKEN + "&p=apply")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                         .content("name=value"))
                 .andExpect(status().isOk())
@@ -172,6 +171,29 @@ class VenueReservationProxyControllerTest {
                 .andExpect(content().bytes(body));
 
         verify(venueReservationProxyService).fetch(eq(TOKEN), any(HttpServletRequest.class));
+    }
+
+    @Test
+    @DisplayName("extractTokenFromQuery: token 値抽出のエッジケース")
+    void extractTokenFromQuery_edgeCases() {
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery(null))
+                .isNull();
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery(""))
+                .isNull();
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("token=abc"))
+                .isEqualTo("abc");
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("p=apply&token=abc&x=1"))
+                .isEqualTo("abc");
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("p=apply&x=1"))
+                .isNull();
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("token=a%20b"))
+                .isEqualTo("a b");
+        // 末尾区切り
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("token=abc&"))
+                .isEqualTo("abc");
+        // 値なし key (=なし) は無視
+        org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery("token&p=apply"))
+                .isNull();
     }
 
     @Test
