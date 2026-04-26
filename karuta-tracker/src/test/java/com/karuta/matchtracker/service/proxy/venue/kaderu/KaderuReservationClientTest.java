@@ -6,6 +6,7 @@ import com.karuta.matchtracker.config.VenueReservationProxyConfig;
 import com.karuta.matchtracker.service.proxy.ProxySession;
 import com.karuta.matchtracker.service.proxy.VenueId;
 import com.karuta.matchtracker.service.proxy.VenueReservationProxyException;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicCookieStore;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -524,5 +526,89 @@ class KaderuReservationClientTest {
     @DisplayName("KaderuVenueConfig: entryPath は /kaderu27/index.php を返す (相対URL解決の基準)")
     void venueConfig_entryPathIsKaderu27IndexPhp() {
         assertThat(venueConfig.entryPath()).isEqualTo("/kaderu27/index.php");
+    }
+
+    // ===== Issue #562 関連: hidden field 抽出とログイン POST への転送 =====
+
+    @Test
+    @DisplayName("回帰テスト (Issue #562): ログインフォームの hidden field (op など) がログイン POST に含まれる")
+    void prepareReservationTray_includesHiddenFieldsInLoginPost() {
+        // 初期 GET 応答に hidden field op を含むログインフォームHTMLを返す
+        String loginFormHtml =
+                "<html><body>"
+                + "<form name=\"form1\" method=\"post\" action=\"\">"
+                + "  <input type=\"hidden\" name=\"op\" value=\"login\">"
+                + "  <input type=\"text\" name=\"loginID\">"
+                + "  <input type=\"password\" name=\"loginPwd\">"
+                + "  <button name=\"loginBtn\">ログイン</button>"
+                + "</form></body></html>";
+
+        wireMock.stubFor(get(urlPathEqualTo(ENTRY_PATH))
+                .willReturn(aResponse().withStatus(200).withBody(loginFormHtml)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*loginID=testuser.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(LOGGED_IN_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*requestBtn=.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(TRAY_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(AVAILABILITY_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .atPriority(10)
+                .willReturn(aResponse().withStatus(200).withBody(LOGGED_IN_HTML
+                        + "<table><tr><td>" + ROOM_NAME + "</td></tr></table>")));
+
+        ProxySession session = newSession();
+        client.prepareReservationTray(session);
+
+        // ログイン POST に op=login と loginID=testuser の両方が含まれている
+        wireMock.verify(WireMock.postRequestedFor(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching("(?s).*op=login.*"))
+                .withRequestBody(matching("(?s).*loginID=testuser.*")));
+    }
+
+    @Test
+    @DisplayName("extractHiddenFields: 属性順 type/name/value のいずれが先でも hidden を抽出できる")
+    void extractHiddenFields_variousAttributeOrders() {
+        String html =
+                "<input type='hidden' name='a' value='1'>"
+                + "<input name='b' type='hidden' value='2'>"
+                + "<input value='3' name='c' type='hidden'>"
+                + "<input type=\"text\" name=\"d\" value=\"4\">"; // hidden ではないので除外
+
+        List<NameValuePair> result = KaderuReservationClient.extractHiddenFields(html);
+
+        assertThat(result).extracting(NameValuePair::getName)
+                .containsExactly("a", "b", "c");
+        assertThat(result).extracting(NameValuePair::getValue)
+                .containsExactly("1", "2", "3");
+    }
+
+    @Test
+    @DisplayName("extractHiddenFields: value 属性なしは空文字、name なしは無視、同名は最初のみ採用")
+    void extractHiddenFields_edgeCases() {
+        String html =
+                "<input type='hidden' name='a'>"            // value なし → ""
+                + "<input type='hidden' value='nope'>"        // name なし → 無視
+                + "<input type='hidden' name='a' value='2'>"  // 同名 → 最初のみ採用
+                + "<input type='hidden' name='b' value=''>";  // 明示的に空
+
+        List<NameValuePair> result = KaderuReservationClient.extractHiddenFields(html);
+
+        assertThat(result).extracting(NameValuePair::getName)
+                .containsExactly("a", "b");
+        assertThat(result).extracting(NameValuePair::getValue)
+                .containsExactly("", "");
+    }
+
+    @Test
+    @DisplayName("extractHiddenFields: null / 空文字 は空リストを返す")
+    void extractHiddenFields_nullOrEmpty() {
+        assertThat(KaderuReservationClient.extractHiddenFields(null)).isEmpty();
+        assertThat(KaderuReservationClient.extractHiddenFields("")).isEmpty();
     }
 }
