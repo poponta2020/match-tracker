@@ -1839,6 +1839,7 @@ UNIQUE制約: (player_id, organization_id)
 - レスポンス形式: JSON
 - 認証: `X-User-Id` / `X-User-Role` ヘッダー（プロトタイプ）
 - CORS: `app.cors.allowed-origins` プロパティで設定
+- リバースプロキシ配下デプロイ: `server.forward-headers-strategy=framework` を有効化し、`X-Forwarded-Proto` / `X-Forwarded-Host` / `X-Forwarded-Port` を解釈する。これがないと TLS 終端サービス (Render 等) 配下で `request.getScheme()` などが内部値を返し、会場予約プロキシ画面の same-origin form POST が CORS で誤拒否される。
 - エラーレスポンス: `{ "message": "エラーメッセージ" }`
 
 ### 7.2 選手管理 (`/api/players`)
