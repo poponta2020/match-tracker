@@ -1527,10 +1527,13 @@ venues ──< venue_match_schedules (venueId)
 | カラム | 型 | 制約 | 説明 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO | — |
-| setting_key | VARCHAR(100) | NOT NULL, UNIQUE | 設定キー |
+| setting_key | VARCHAR(100) | NOT NULL | 設定キー |
 | setting_value | VARCHAR(255) | NOT NULL | 設定値 |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID |
 | updated_at | TIMESTAMP | NOT NULL | — |
 | updated_by | BIGINT | — | 更新者ID |
+
+一意制約: `(setting_key, organization_id)`
 
 初期データ: `lottery_deadline_days_before` = `0`
 

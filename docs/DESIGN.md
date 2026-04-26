@@ -314,10 +314,13 @@ Entity Layer (JPA Entity)
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT | PK, AUTO_INCREMENT | 設定ID |
-| setting_key | VARCHAR(100) | NOT NULL, UNIQUE | 設定キー |
+| setting_key | VARCHAR(100) | NOT NULL | 設定キー |
 | setting_value | VARCHAR(255) | NOT NULL | 設定値 |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 | updated_by | BIGINT | | 更新者ID |
+
+一意制約: `(setting_key, organization_id)`
 
 **初期データ**:
 - `lottery_deadline_days_before` = `0`（締切日数：月初から何日前。0=前月末日の0時）
