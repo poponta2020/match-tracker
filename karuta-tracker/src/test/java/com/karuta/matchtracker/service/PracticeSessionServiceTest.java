@@ -19,6 +19,7 @@ import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -93,7 +94,11 @@ class PracticeSessionServiceTest {
 
     @BeforeEach
     void setUp() {
-        today = LocalDate.now();
+        // production コード (PracticeSessionService) は JstDateTimeUtil.today() を使うため、
+        // テスト側も JST 基準の今日を取得しないと UTC 15:00〜23:59 (= JST 0:00〜8:59) の
+        // 時間帯で日付が1日ずれ、Mockito 厳格スタブが PotentialStubbingProblem を投げる
+        // (Issue #575)。
+        today = JstDateTimeUtil.today();
         testSession = PracticeSession.builder()
                 .id(1L)
                 .sessionDate(today)
