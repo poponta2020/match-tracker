@@ -376,6 +376,14 @@ class VenueReservationProxyServiceTest {
             request.addHeader("Sec-Fetch-Mode", "cors");
             request.addHeader("Sec-Fetch-Dest", "empty");
             request.addHeader("Sec-Fetch-User", "?1");
+            // ユーザのブラウザ UA は upstream に転送しない (Issue #577)。
+            // Kaderu はセッションを UA に紐付けて検証するため、サーバ側 Chrome デスクトップ UA で
+            // 確立したセッションに Mobile Safari の UA で POST すると Kaderu はセッションを
+            // 無効化してログイン画面に飛ばす。HttpClient の setUserAgent デフォルトに任せる。
+            request.addHeader("User-Agent",
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+                            + "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                            + "Version/17.5 Mobile/15E148 Safari/604.1");
 
             ResponseEntity<byte[]> response = service.fetch(TOKEN, request);
 
@@ -397,6 +405,9 @@ class VenueReservationProxyServiceTest {
             assertThat(proxied.getFirstHeader("Sec-Fetch-Mode")).isNull();
             assertThat(proxied.getFirstHeader("Sec-Fetch-Dest")).isNull();
             assertThat(proxied.getFirstHeader("Sec-Fetch-User")).isNull();
+            assertThat(proxied.getFirstHeader("User-Agent"))
+                    .as("ユーザの UA は upstream に転送しない (Issue #577)")
+                    .isNull();
             assertThat(proxied).isInstanceOf(HttpEntityEnclosingRequest.class);
             String proxiedBody = EntityUtils.toString(
                     ((HttpEntityEnclosingRequest) proxied).getEntity(),
