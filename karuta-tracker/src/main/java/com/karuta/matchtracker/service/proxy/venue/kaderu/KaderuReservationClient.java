@@ -236,6 +236,7 @@ public class KaderuReservationClient implements VenueReservationClient {
                     VenueReservationProxyException.LOGIN_FAILED, VenueId.KADERU,
                     "Kaderu login failed (response did not show マイページ/ログアウト)");
         }
+        rememberHiddenFields(session, body);
     }
 
     // ===== HTML フォームヘルパー =====
@@ -297,20 +298,45 @@ public class KaderuReservationClient implements VenueReservationClient {
         form.add(new BasicNameValuePair(name, value));
     }
 
+    private static void rememberHiddenFields(ProxySession session, String html) {
+        session.setHiddenFields(toFieldMap(extractHiddenFields(html)));
+    }
+
+    private static List<NameValuePair> currentFormFields(ProxySession session) {
+        Map<String, String> fields = session.getHiddenFields();
+        if (fields == null || fields.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<NameValuePair> form = new ArrayList<>(fields.size());
+        for (Map.Entry<String, String> field : fields.entrySet()) {
+            form.add(new BasicNameValuePair(field.getKey(), field.getValue()));
+        }
+        return form;
+    }
+
+    private static Map<String, String> toFieldMap(List<NameValuePair> fields) {
+        LinkedHashMap<String, String> result = new LinkedHashMap<>();
+        for (NameValuePair field : fields) {
+            result.put(field.getName(), field.getValue());
+        }
+        return result;
+    }
+
     private void navigateMyPage(ProxySession session) {
-        List<NameValuePair> form = List.of(new BasicNameValuePair("op", PAGE_MY_PAGE));
+        List<NameValuePair> form = currentFormFields(session);
+        upsertField(form, "op", PAGE_MY_PAGE);
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
-        executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
+        String body = executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to navigate to kaderu my page");
+        rememberHiddenFields(session, body);
     }
 
     private void navigateAvailability(ProxySession session, LocalDate date) {
         // gotoPage('srch_sst') 等価。月パラメータは UseYM=YYYYMM。
         String useYm = String.format(Locale.ROOT, "%04d%02d", date.getYear(), date.getMonthValue());
-        List<NameValuePair> form = List.of(
-                new BasicNameValuePair("op", PAGE_AVAILABILITY),
-                new BasicNameValuePair("UseYM", useYm)
-        );
+        List<NameValuePair> form = currentFormFields(session);
+        upsertField(form, "op", PAGE_AVAILABILITY);
+        upsertField(form, "UseYM", useYm);
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
         String body = executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to navigate to kaderu availability page");
@@ -319,29 +345,30 @@ public class KaderuReservationClient implements VenueReservationClient {
                     VenueReservationProxyException.ROOM_NOT_FOUND, VenueId.KADERU,
                     "Kaderu availability page does not contain room: " + session.getRoomName());
         }
+        rememberHiddenFields(session, body);
     }
 
     private void ensureMonth(ProxySession session, LocalDate date) {
-        // showCalendar(y, m) 等価。既に同じ月であれば現状の HTML には対象月が表示されている前提で
-        // POST 自体を省略してもよいが、ステートレスに毎回送って同月を再確認する方が安全。
-        List<NameValuePair> form = List.of(
-                new BasicNameValuePair("op", PAGE_AVAILABILITY),
-                new BasicNameValuePair("UseYear", String.valueOf(date.getYear())),
-                new BasicNameValuePair("UseMonth", String.format(Locale.ROOT, "%02d", date.getMonthValue()))
-        );
-        HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
-        executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
-                "Failed to switch kaderu month");
+        // showCalendar(y, m) はクライアント側で UseYM を更新するだけで submit しない。
+        List<NameValuePair> form = currentFormFields(session);
+        upsertField(form, "UseYM", String.format(Locale.ROOT, "%04d%02d",
+                date.getYear(), date.getMonthValue()));
+        session.setHiddenFields(toFieldMap(form));
     }
 
     private void clickDay(ProxySession session, LocalDate date) {
-        // clickDay(d) 等価。POST op=date_select + UseDate=YYYYMMDD
+        // clickDay(d) は forma.op=srch_sst を維持し、日付 hidden field を更新して submit する。
+        String useYm = String.format(Locale.ROOT, "%04d%02d",
+                date.getYear(), date.getMonthValue());
+        String useDay = String.valueOf(date.getDayOfMonth());
         String useDate = String.format(Locale.ROOT, "%04d%02d%02d",
                 date.getYear(), date.getMonthValue(), date.getDayOfMonth());
-        List<NameValuePair> form = List.of(
-                new BasicNameValuePair("op", PAGE_DATE_SELECT),
-                new BasicNameValuePair("UseDate", useDate)
-        );
+        List<NameValuePair> form = currentFormFields(session);
+        upsertField(form, "op", PAGE_AVAILABILITY);
+        upsertField(form, "UseYM", useYm);
+        upsertField(form, "UseDay", useDay);
+        upsertField(form, "UseDate", useDate);
+        upsertField(form, "ShisetsuCode", "001");
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
         String body = executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to select kaderu date");
@@ -350,6 +377,7 @@ public class KaderuReservationClient implements VenueReservationClient {
                     VenueReservationProxyException.ROOM_NOT_FOUND, VenueId.KADERU,
                     "Kaderu date page does not contain room: " + session.getRoomName());
         }
+        rememberHiddenFields(session, body);
     }
 
     private String enterTray(ProxySession session, String facilityCode,
@@ -357,15 +385,12 @@ public class KaderuReservationClient implements VenueReservationClient {
         String dateFormatted = String.format(Locale.ROOT, "%04d/%02d/%02d",
                 date.getYear(), date.getMonthValue(), date.getDayOfMonth());
 
-        // setAppStatus 等価。スロット選択フォーム送信。
-        List<NameValuePair> selectForm = new ArrayList<>();
-        selectForm.add(new BasicNameValuePair("op", PAGE_DATE_SELECT));
-        selectForm.add(new BasicNameValuePair("setAppStatus", "1"));
-        selectForm.add(new BasicNameValuePair("facilityCode", facilityCode));
-        selectForm.add(new BasicNameValuePair("useDate", dateFormatted));
-        selectForm.add(new BasicNameValuePair("slotIndex", String.valueOf(slotIndex)));
-        selectForm.add(new BasicNameValuePair("timeRange", timeRange));
-
+        // setAppStatus() はセル選択後、サーバー側の空き再確認 AJAX を送る。
+        List<NameValuePair> selectForm = List.of(
+                new BasicNameValuePair("op", PAGE_AVAILABILITY),
+                new BasicNameValuePair("chk_rsv",
+                        facilityCode + "#" + dateFormatted + "#" + slotIndex + "#" + timeRange)
+        );
         HttpPost selectPost = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, selectForm);
         String afterSelect = executeForHtml(session, selectPost,
                 VenueReservationProxyException.NOT_AVAILABLE,
@@ -376,11 +401,15 @@ public class KaderuReservationClient implements VenueReservationClient {
                     "Kaderu slot is not available (likely already taken)");
         }
 
-        // requestBtn 押下等価。申込トレイ画面への遷移。
-        List<NameValuePair> trayForm = List.of(
-                new BasicNameValuePair("op", PAGE_REQUEST_TRAY),
-                new BasicNameValuePair("requestBtn", "申込トレイに入れる")
-        );
+        // requestBtn は forma.op=apply と rsv_chk hidden input を submit する。
+        List<NameValuePair> trayForm = currentFormFields(session);
+        upsertField(trayForm, "op", "apply");
+        upsertField(trayForm, "ShisetsuCode", "001");
+        upsertField(trayForm, "disp_span", "0");
+        upsertField(trayForm,
+                String.format(Locale.ROOT, "rsv_chk[%s][%s][%d]", facilityCode, dateFormatted, slotIndex),
+                timeRange);
+        upsertField(trayForm, "requestBtn", "申込トレイに入れる");
         HttpPost trayPost = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, trayForm);
         String trayHtml = executeForHtml(session, trayPost,
                 VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
