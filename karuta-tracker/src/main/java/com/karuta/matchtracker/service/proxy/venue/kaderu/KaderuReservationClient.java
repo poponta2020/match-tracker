@@ -8,6 +8,7 @@ import com.karuta.matchtracker.service.proxy.VenueReservationProxyException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.config.CookieSpecs;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -94,10 +95,16 @@ public class KaderuReservationClient implements VenueReservationClient {
     @PostConstruct
     void initHttpClient() {
         int timeoutMs = proxyConfig.getRequestTimeoutSeconds() * 1000;
+        // CookieSpecs.STANDARD (RFC6265 lax) を明示指定。
+        // デフォルトの DefaultCookieSpec は expires 属性付き Set-Cookie を NetscapeDraftSpec
+        // (2桁年: "EEE, dd-MMM-yy HH:mm:ss z") で処理するため、kaderu が返す
+        // expires=Wed, 19 Aug 2082 22:51:22 GMT のような4桁年・RFC1123 形式を拒否し、
+        // セッション Cookie (ARKADERU27PC) を保存できず LOGIN_FAILED となる (Issue #559)。
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(timeoutMs)
                 .setSocketTimeout(timeoutMs)
                 .setConnectionRequestTimeout(timeoutMs)
+                .setCookieSpec(CookieSpecs.STANDARD)
                 .build();
         this.httpClient = HttpClientBuilder.create()
                 .setDefaultRequestConfig(requestConfig)
