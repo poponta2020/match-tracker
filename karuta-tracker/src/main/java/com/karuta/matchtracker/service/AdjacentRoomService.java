@@ -2,13 +2,9 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.config.AdjacentRoomConfig;
 import com.karuta.matchtracker.dto.AdjacentRoomStatusDto;
-import com.karuta.matchtracker.entity.ParticipantStatus;
-import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.entity.RoomAvailabilityCache;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
-import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.RoomAvailabilityCacheRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
@@ -22,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 隣室空き確認・会場拡張サービス
@@ -34,9 +28,9 @@ import java.util.List;
 public class AdjacentRoomService {
 
     private final RoomAvailabilityCacheRepository roomAvailabilityCacheRepository;
-    private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
     private final VenueRepository venueRepository;
+    private final WaitlistPromotionService waitlistPromotionService;
 
     private static final String TIME_SLOT_EVENING = "evening";
 
@@ -143,31 +137,7 @@ public class AdjacentRoomService {
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
                 sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
 
-        // キャンセル待ち→OFFERED（応答期限なし）、既存OFFERED→応答期限をクリア
-        LocalDateTime now = JstDateTimeUtil.now();
-        List<PracticeParticipant> waitlisted = practiceParticipantRepository
-                .findBySessionIdAndStatus(sessionId, ParticipantStatus.WAITLISTED);
-        List<PracticeParticipant> offered = practiceParticipantRepository
-                .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
-
-        for (PracticeParticipant p : waitlisted) {
-            p.setStatus(ParticipantStatus.OFFERED);
-            p.setWaitlistNumber(null);
-            p.setOfferedAt(now);
-            p.setOfferDeadline(null);
-            p.setDirty(true);
-        }
-        for (PracticeParticipant p : offered) {
-            p.setOfferDeadline(null);
-            p.setDirty(true);
-        }
-
-        List<PracticeParticipant> promoted = new java.util.ArrayList<>(waitlisted);
-        promoted.addAll(offered);
-        if (!promoted.isEmpty()) {
-            practiceParticipantRepository.saveAll(promoted);
-            log.info("Promoted {} participants (waitlisted={}, offered={}) to OFFERED for session {}",
-                    promoted.size(), waitlisted.size(), offered.size(), sessionId);
-        }
+        // キャンセル待ち→OFFERED（応答期限なし、定員までに制限）／既存OFFERED→応答期限クリア
+        waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId);
     }
 }

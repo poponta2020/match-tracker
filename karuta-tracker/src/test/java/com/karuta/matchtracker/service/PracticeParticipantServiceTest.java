@@ -113,9 +113,9 @@ class PracticeParticipantServiceTest {
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
         when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
-                .thenReturn(false);
-        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
                 .thenReturn(false);
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();
@@ -147,9 +147,9 @@ class PracticeParticipantServiceTest {
                 .thenReturn(false);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
         when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
-                .thenReturn(false);
-        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
                 .thenReturn(false);
 
         PracticeParticipant cancelled = PracticeParticipant.builder()
@@ -389,9 +389,9 @@ class PracticeParticipantServiceTest {
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(0L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
         when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WAITLISTED))
-                .thenReturn(false);
-        when(practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
                 .thenReturn(false);
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();

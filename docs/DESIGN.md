@@ -1731,6 +1731,7 @@ Entity Layer (JPA Entity)
 #### GET /api/system-settings
 **説明**: 全設定取得
 **権限**: SUPER_ADMIN, ADMIN
+**クエリパラメータ**: `organizationId`（任意。SUPER_ADMINが団体別設定を取得する場合に指定。ADMINは自団体に固定）
 
 #### GET /api/system-settings/{key}
 **説明**: 設定値取得
@@ -1742,14 +1743,17 @@ Entity Layer (JPA Entity)
 **リクエスト**:
 ```json
 {
-  "value": "3"
+  "value": "3",
+  "organizationId": "1"
 }
 ```
+`organizationId` は SUPER_ADMIN が団体別設定を更新する場合に必須。ADMINはリクエスト値に関わらず自団体に固定される。
 
 **利用可能な設定キー**:
 | キー | 説明 | デフォルト値 |
 |------|------|-------------|
 | `lottery_deadline_days_before` | 締切日数（月初から何日前） | `0` |
+| `lottery_normal_reserve_percent` | 一般枠の最低保証割合（%） | `30` |
 
 ### 4.16 メンター関係API (`/api/mentor-relationships`)
 
@@ -2511,11 +2515,12 @@ Entity Layer (JPA Entity)
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. WAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア
-   - WAITLISTED → OFFERED（waitlistNumber をクリア、offeredAt=現在時刻、offerDeadline=null）
-   - OFFERED → offerDeadline をnullにクリア（ステータス・offeredAt等はそのまま）
-   - dirty=true をセット（伝助同期対象にする）
-   - 対象が0件の場合は saveAll をスキップ
+14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し
+   - 既存 OFFERED の offerDeadline を null にクリア（拡張で参加確定）
+   - match_number ごとに `(capacity - WON - 既存OFFERED)` 名分だけ、WAITLISTED を waitlist_number 昇順に OFFERED 化（offeredAt=現在時刻、offerDeadline=null）
+   - 余り枠を超える WAITLISTED は据え置き（status・waitlist_number そのまま）
+   - 全件 dirty=true、最後に renumberRemainingWaitlist で 1..N に再採番
+   - 練習編集 (PracticeSessionService.updateSession) で capacity を増加させた場合も同じメソッドが呼ばれる
    ↓
 15. レスポンス: 200 OK + 更新後のセッション情報
 ```

@@ -383,9 +383,11 @@ public class PracticeParticipantService {
         if (session.getCapacity() == null) return true;
         long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                 session.getId(), matchNumber, ParticipantStatus.WON);
-        if (wonCount >= session.getCapacity()) return false;
-        return !practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.WAITLISTED)
-            && !practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(session.getId(), matchNumber, ParticipantStatus.OFFERED);
+        long offeredCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                session.getId(), matchNumber, ParticipantStatus.OFFERED);
+        if (wonCount + offeredCount >= session.getCapacity()) return false;
+        return !practiceParticipantRepository.existsBySessionIdAndMatchNumberAndStatus(
+                session.getId(), matchNumber, ParticipantStatus.WAITLISTED);
     }
 
     @Transactional(readOnly = true)

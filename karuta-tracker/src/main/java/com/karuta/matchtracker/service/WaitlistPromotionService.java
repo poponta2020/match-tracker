@@ -23,6 +23,7 @@ import com.karuta.matchtracker.dto.SameDayCancelContext;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * キャンセル・繰り上げサービス
@@ -1276,6 +1278,109 @@ public class WaitlistPromotionService {
         } catch (Exception e) {
             log.error("Failed to send batched waitlist change notifications: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * 容量拡張に伴い、キャンセル待ちを応答期限なしの OFFERED に昇格する。
+     *
+     * 各試合について WON + 既存OFFERED が capacity に達するまで、waitlist_number 昇順で
+     * WAITLISTED を OFFERED（offer_deadline=null）に変更する。空き枠を超えた分の WAITLISTED は
+     * そのまま残す（waitlist_number も維持）。
+     * 既存OFFERED の応答期限は一律 null にクリアする（容量拡張で参加が確定したため）。
+     *
+     * @param sessionId 対象セッションID
+     */
+    @Transactional
+    public void promoteWaitlistedAfterCapacityIncrease(Long sessionId) {
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        LocalDateTime now = JstDateTimeUtil.now();
+
+        // 既存OFFERED は応答期限を一律クリア（拡張で参加確定）
+        List<PracticeParticipant> existingOffered = practiceParticipantRepository
+                .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
+        for (PracticeParticipant p : existingOffered) {
+            if (p.getOfferDeadline() != null) {
+                p.setOfferDeadline(null);
+                p.setDirty(true);
+            }
+        }
+        if (!existingOffered.isEmpty()) {
+            practiceParticipantRepository.saveAll(existingOffered);
+        }
+
+        Integer capacity = session.getCapacity();
+
+        // 容量制限なし／match_number 別の WAITLISTED を waitlist_number 昇順で処理
+        List<PracticeParticipant> waitlisted = practiceParticipantRepository
+                .findBySessionIdAndStatus(sessionId, ParticipantStatus.WAITLISTED);
+        if (waitlisted.isEmpty()) {
+            log.info("promoteWaitlistedAfterCapacityIncrease: session {} has no WAITLISTED to promote", sessionId);
+            return;
+        }
+
+        Map<Integer, List<PracticeParticipant>> waitlistedByMatch = waitlisted.stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber));
+
+        int totalPromoted = 0;
+        int totalRemained = 0;
+        List<PracticeParticipant> toSave = new ArrayList<>();
+
+        for (Map.Entry<Integer, List<PracticeParticipant>> entry : waitlistedByMatch.entrySet()) {
+            Integer matchNumber = entry.getKey();
+            List<PracticeParticipant> matchWaitlisted = new ArrayList<>(entry.getValue());
+            matchWaitlisted.sort(Comparator.comparing(p ->
+                    p.getWaitlistNumber() == null ? Integer.MAX_VALUE : p.getWaitlistNumber()));
+
+            long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                    sessionId, matchNumber, ParticipantStatus.WON);
+            long offeredCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                    sessionId, matchNumber, ParticipantStatus.OFFERED);
+
+            long availableSlots;
+            if (capacity == null) {
+                // 容量無制限：全員昇格
+                availableSlots = matchWaitlisted.size();
+            } else {
+                availableSlots = (long) capacity - wonCount - offeredCount;
+            }
+
+            if (availableSlots <= 0) {
+                log.info("Skip match {} in session {}: no available slot (won={}, offered={}, capacity={})",
+                        matchNumber, sessionId, wonCount, offeredCount, capacity);
+                totalRemained += matchWaitlisted.size();
+                continue;
+            }
+
+            int promoteCount = (int) Math.min(availableSlots, matchWaitlisted.size());
+            for (int i = 0; i < promoteCount; i++) {
+                PracticeParticipant p = matchWaitlisted.get(i);
+                p.setStatus(ParticipantStatus.OFFERED);
+                p.setOfferedAt(now);
+                p.setOfferDeadline(null);
+                p.setDirty(true);
+                toSave.add(p);
+            }
+            totalPromoted += promoteCount;
+            totalRemained += matchWaitlisted.size() - promoteCount;
+            log.info("Promoted {} WAITLISTED to OFFERED for session {} match {} (won={}, offered_before={}, capacity={}, remained={})",
+                    promoteCount, sessionId, matchNumber, wonCount, offeredCount, capacity,
+                    matchWaitlisted.size() - promoteCount);
+        }
+
+        if (!toSave.isEmpty()) {
+            practiceParticipantRepository.saveAll(toSave);
+        }
+
+        // 影響試合ごとに waitlist_number を 1..N で再採番
+        for (Integer matchNumber : waitlistedByMatch.keySet()) {
+            renumberRemainingWaitlist(sessionId, matchNumber);
+        }
+
+        log.info("promoteWaitlistedAfterCapacityIncrease completed for session {}: promoted={}, remainedAsWaitlisted={}",
+                sessionId, totalPromoted, totalRemained);
     }
 
     /**
