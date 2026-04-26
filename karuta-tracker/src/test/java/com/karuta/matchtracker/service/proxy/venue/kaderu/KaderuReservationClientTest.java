@@ -199,6 +199,48 @@ class KaderuReservationClientTest {
     }
 
     @Test
+    @DisplayName("回帰テスト (Issue #559): 4桁年・遠い未来の expires 属性付き Cookie も拒否されず保存される")
+    void prepareReservationTray_persistsCookieWithFarFutureExpires() {
+        // 実機 kaderu が返すのと同じ形式の Set-Cookie (RFC1123 4桁年 + Max-Age + secure + HttpOnly)。
+        // Apache HttpClient のデフォルト Cookie spec (DefaultCookieSpec→NetscapeDraftSpec) は
+        // 2桁年のみ受け付けるため、CookieSpecs.STANDARD への切替で初めて保存される。
+        wireMock.stubFor(get(urlPathEqualTo(ENTRY_PATH))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Set-Cookie",
+                                "ARKADERU27PC=k6pss2v5nbdeko4hi5nrpcrrd2; "
+                                + "expires=Wed, 19 Aug 2082 22:51:22 GMT; "
+                                + "Max-Age=1777204541; path=/; secure; HttpOnly")
+                        .withBody("<html><body>ログインページ</body></html>")));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*loginID=testuser.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(LOGGED_IN_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*requestBtn=.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(TRAY_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(200).withBody(AVAILABILITY_HTML)));
+        wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
+                .atPriority(10)
+                .willReturn(aResponse().withStatus(200).withBody(LOGGED_IN_HTML
+                        + "<table><tr><td>" + ROOM_NAME + "</td></tr></table>")));
+
+        ProxySession session = newSession();
+        client.prepareReservationTray(session);
+
+        boolean hasArKaderuCookie = session.getCookies().getCookies().stream()
+                .anyMatch(c -> "ARKADERU27PC".equals(c.getName())
+                        && "k6pss2v5nbdeko4hi5nrpcrrd2".equals(c.getValue()));
+        assertThat(hasArKaderuCookie)
+                .as("Cookie with 4-digit-year expires must be parsed and stored")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("ログイン失敗 → LOGIN_FAILED")
     void prepareReservationTray_loginFailed_throwsLoginFailed() {
         // 初期 GET は成功
