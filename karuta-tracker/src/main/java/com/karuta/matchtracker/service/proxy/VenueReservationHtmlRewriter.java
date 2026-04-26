@@ -60,6 +60,11 @@ public class VenueReservationHtmlRewriter {
     private static final Pattern CSS_URL = Pattern.compile(
             "url\\(\\s*([\"']?)([^)\"']+)([\"']?)\\s*\\)");
 
+    /** CSS の @import "..." 書き換え用正規表現。@import url(...) は CSS_URL 側で処理する。 */
+    private static final Pattern CSS_IMPORT_QUOTED = Pattern.compile(
+            "(@import\\s+)([\"'])([^\"']+)([\"'])",
+            Pattern.CASE_INSENSITIVE);
+
     private final String injectorTemplate;
     private final String bannerTemplate;
 
@@ -129,6 +134,26 @@ public class VenueReservationHtmlRewriter {
         injectBannerIntoBody(doc, session, venueConfig);
 
         return doc.outerHtml();
+    }
+
+    /**
+     * 外部 CSS レスポンス内の {@code @import} / {@code url(...)} をプロキシ URL に書き換える。
+     *
+     * <p>Kaderu の {@code css/style.css} は {@code @import url(color_local.css?...)}
+     * で実体CSSを読み込むため、HTML内の {@code <link>} だけを書き換えても後続CSSが
+     * token なしでプロキシに到達して失敗する。CSSレスポンスはこのメソッドで
+     * CSSファイル自身の上流URLを基準に相対URLを解決する。</p>
+     */
+    public String rewriteCss(String css, String currentUpstreamUrl,
+                             ProxySession session, VenueConfig venueConfig) {
+        if (css == null || css.isEmpty()) {
+            return css == null ? "" : css;
+        }
+        String upstreamUrl = currentUpstreamUrl != null && !currentUpstreamUrl.isBlank()
+                ? currentUpstreamUrl
+                : defaultEntryUrl(venueConfig);
+        String afterCssUrl = rewriteCssUrls(css, venueConfig.baseUrl(), upstreamUrl, session.getToken());
+        return rewriteQuotedCssImports(afterCssUrl, venueConfig.baseUrl(), upstreamUrl, session.getToken());
     }
 
     private static String defaultEntryUrl(VenueConfig venueConfig) {
@@ -307,13 +332,26 @@ public class VenueReservationHtmlRewriter {
             String openQuote = m.group(1);
             String url = m.group(2).trim();
             String closeQuote = m.group(3);
-            if (url.startsWith(baseUrl)
-                    || url.startsWith("/") && !url.startsWith("//")) {
-                String rewritten = rewriteUrl(url, baseUrl, upstreamUrl, token);
-                sb.append("url(").append(openQuote).append(rewritten).append(closeQuote).append(")");
-            } else {
-                sb.append(m.group(0));
-            }
+            String rewritten = rewriteUrl(url, baseUrl, upstreamUrl, token);
+            sb.append("url(").append(openQuote).append(rewritten).append(closeQuote).append(")");
+            last = m.end();
+        }
+        sb.append(body, last, body.length());
+        return sb.toString();
+    }
+
+    private String rewriteQuotedCssImports(String body, String baseUrl, String upstreamUrl, String token) {
+        Matcher m = CSS_IMPORT_QUOTED.matcher(body);
+        StringBuilder sb = new StringBuilder(body.length());
+        int last = 0;
+        while (m.find()) {
+            sb.append(body, last, m.start());
+            String prefix = m.group(1);
+            String openQuote = m.group(2);
+            String url = m.group(3).trim();
+            String closeQuote = m.group(4);
+            String rewritten = rewriteUrl(url, baseUrl, upstreamUrl, token);
+            sb.append(prefix).append(openQuote).append(rewritten).append(closeQuote);
             last = m.end();
         }
         sb.append(body, last, body.length());

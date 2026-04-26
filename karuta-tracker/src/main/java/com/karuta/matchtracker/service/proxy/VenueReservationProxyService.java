@@ -78,6 +78,7 @@ public class VenueReservationProxyService {
     private static final String REFERRER_POLICY_NO_REFERRER = "no-referrer";
     private static final String CSP_HEADER = "Content-Security-Policy";
     private static final MediaType TEXT_HTML_UTF8 = new MediaType("text", "html", StandardCharsets.UTF_8);
+    private static final MediaType TEXT_CSS_UTF8 = new MediaType("text", "css", StandardCharsets.UTF_8);
 
     /**
      * Phase 1 で許可する slotIndex。要件定義書では「夜間のみ自動予約対象」と決定済み。
@@ -312,6 +313,7 @@ public class VenueReservationProxyService {
 
         String currentUpstreamUrl = upstreamRequest.getURI().toString();
         boolean html = isHtml(contentType);
+        boolean css = isCss(contentType);
         String responseLocation = firstHeaderValue(upstreamResponse, HttpHeaders.LOCATION);
         // 完了検知は HTML レスポンスのみに限定する。CSS/JS/画像等のサブリソースで URL に
         // /complete 等のサブストリングが含まれる場合の誤陽性を防ぐ (KaderuCompletionStrategy
@@ -341,6 +343,15 @@ public class VenueReservationProxyService {
             }
             responseBody = rewritten.getBytes(StandardCharsets.UTF_8);
             responseContentType = TEXT_HTML_UTF8;
+        } else if (css) {
+            String cssBody = new String(body, charset);
+            String rewritten = htmlRewriter.rewriteCss(
+                    cssBody,
+                    currentUpstreamUrl,
+                    session,
+                    venueConfig);
+            responseBody = rewritten.getBytes(StandardCharsets.UTF_8);
+            responseContentType = TEXT_CSS_UTF8;
         } else {
             responseBody = body;
         }
@@ -783,6 +794,13 @@ public class VenueReservationProxyService {
         }
         String lower = contentType.toLowerCase(Locale.ROOT);
         return lower.contains("text/html") || lower.contains("application/xhtml+xml");
+    }
+
+    private static boolean isCss(String contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        return contentType.toLowerCase(Locale.ROOT).contains("text/css");
     }
 
     private static MediaType parseMediaType(String contentType) {
