@@ -59,12 +59,16 @@ export const lotteryAPI = {
     apiClient.get('/lottery/executions', { params: { year, month } }),
 
   // 抽選結果通知の送信済みチェック
-  notifyStatus: (year, month) =>
-    apiClient.get('/lottery/notify-status', { params: { year, month } }),
+  notifyStatus: (year, month, organizationId) =>
+    apiClient.get('/lottery/notify-status', { params: { year, month, organizationId } }),
+
+  // 指定年月・団体の抽選が確定済みかどうかチェック
+  isConfirmed: (year, month, organizationId) =>
+    apiClient.get('/lottery/is-confirmed', { params: { year, month, organizationId } }),
 
   // 抽選結果通知の統合送信（アプリ内 + LINE）
-  notifyResults: (year, month) =>
-    apiClient.post('/lottery/notify-results', { year, month }),
+  notifyResults: (year, month, organizationId) =>
+    apiClient.post('/lottery/notify-results', { year, month, organizationId }),
 
   // キャンセル待ち辞退（セッション単位）
   declineWaitlist: (sessionId, playerId) =>

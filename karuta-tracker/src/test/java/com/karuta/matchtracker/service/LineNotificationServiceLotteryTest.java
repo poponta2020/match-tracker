@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -154,6 +155,112 @@ class LineNotificationServiceLotteryTest {
                         argThat(list -> list.size() == 1 && list.get(0).getSessionId() == 200L),
                         eq(session200), isNull(), (Player) isNull());
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("sendLotteryResults 団体スコープテスト")
+    class SendLotteryResultsOrganizationScopeTests {
+
+        @Test
+        @DisplayName("organizationId指定時は findByYearAndMonthAndOrganizationId を使い他団体は対象外")
+        void organizationIdSpecified_scopesToOrganization() {
+            // 自団体（org=1）のセッション
+            PracticeSession orgSession = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 20))
+                    .capacity(6).totalMatches(2).organizationId(1L).build();
+            // 自団体に所属するプレイヤーの当選参加
+            PracticeParticipant won = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(50L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, 1L))
+                    .thenReturn(List.of(orgSession));
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                    .thenReturn(List.of(won));
+            when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(50L, 1L))
+                    .thenReturn(true);
+            // sendToPlayer 全当選パスを通すのでスタブ化
+            doReturn(LineNotificationService.SendResult.SUCCESS).when(lineNotificationService)
+                    .sendToPlayer(anyLong(), any(), anyString());
+
+            var result = lineNotificationService.sendLotteryResults(2026, 4, 1L);
+
+            // 団体スコープのリポジトリメソッドが呼ばれた
+            verify(practiceSessionRepository).findByYearAndMonthAndOrganizationId(2026, 4, 1L);
+            // 全団体取得メソッドは呼ばれていない
+            verify(practiceParticipantRepository, never()).findBySessionDateYearAndMonth(anyInt(), anyInt());
+            // 自団体プレイヤーに送信された
+            assertThat(result.getSentPlayerCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("organizationId指定時に他団体所属のプレイヤーはスキップされる")
+        void organizationIdSpecified_skipsPlayersNotInOrganization() {
+            PracticeSession orgSession = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 20))
+                    .capacity(6).totalMatches(2).organizationId(1L).build();
+            PracticeParticipant won = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(50L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, 1L))
+                    .thenReturn(List.of(orgSession));
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                    .thenReturn(List.of(won));
+            // プレイヤーは指定団体に所属していない（他団体所属のセッション参加者など）
+            when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(50L, 1L))
+                    .thenReturn(false);
+
+            var result = lineNotificationService.sendLotteryResults(2026, 4, 1L);
+
+            // 送信されない（skipped扱い）
+            assertThat(result.getSentPlayerCount()).isZero();
+            assertThat(result.getSkippedPlayerCount()).isEqualTo(1);
+            verify(lineNotificationService, never()).sendToPlayer(anyLong(), any(), anyString());
+        }
+
+        @Test
+        @DisplayName("organizationId=null時は全団体対象（findBySessionDateYearAndMonth を使用）")
+        void organizationIdNull_usesGlobalQuery() {
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 4, 20))
+                    .capacity(6).totalMatches(2).organizationId(1L).build();
+            PracticeParticipant won = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(50L).matchNumber(1)
+                    .status(ParticipantStatus.WON).build();
+
+            when(practiceParticipantRepository.findBySessionDateYearAndMonth(2026, 4))
+                    .thenReturn(List.of(won));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+            when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(50L, 1L))
+                    .thenReturn(true);
+            doReturn(LineNotificationService.SendResult.SUCCESS).when(lineNotificationService)
+                    .sendToPlayer(anyLong(), any(), anyString());
+
+            var result = lineNotificationService.sendLotteryResults(2026, 4, null);
+
+            // 全団体取得メソッドが呼ばれた
+            verify(practiceParticipantRepository).findBySessionDateYearAndMonth(2026, 4);
+            // 団体スコープメソッドは呼ばれていない
+            verify(practiceSessionRepository, never())
+                    .findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), anyLong());
+            assertThat(result.getSentPlayerCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("organizationId指定 + 該当セッションなし → 送信0件で早期return")
+        void organizationIdSpecified_noSessions_returnsZero() {
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, 1L))
+                    .thenReturn(List.of());
+
+            var result = lineNotificationService.sendLotteryResults(2026, 4, 1L);
+
+            assertThat(result.getSentPlayerCount()).isZero();
+            assertThat(result.getFailedPlayerCount()).isZero();
+            assertThat(result.getSkippedPlayerCount()).isZero();
+            // セッションがないので findBySessionIdIn は呼ばれない
+            verify(practiceParticipantRepository, never()).findBySessionIdIn(anyList());
         }
     }
 }
