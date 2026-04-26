@@ -32,13 +32,13 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * かでる2・7 会場のリバースプロキシ用 HTTP クライアント実装。
@@ -210,86 +210,91 @@ public class KaderuReservationClient implements VenueReservationClient {
     // ===== private steps =====
 
     private void login(ProxySession session, String userId, String password) {
-        // ===== 診断ログ (Issue #562, 切り分け後に撤去) =====
-        log.info("[#562] Kaderu login start: userIdLen={} passwordLen={}",
-                userId.length(), password.length());
-
-        // ログインフォームへ初期 GET (PHPSESSID 取得 + 隠しフィールド取得を兼ねる)
+        // ログインフォームへ初期 GET (PHPSESSID 取得 + hidden フィールド取得を兼ねる)
         HttpGet initial = new HttpGet(venueConfig.baseUrl() + ENTRY_PATH);
         String entryHtml = executeForHtml(session, initial,
                 VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to fetch kaderu entry page");
-        log.info("[#562] Entry GET: htmlLen={} hiddenFields={} cookies={}",
-                entryHtml.length(), extractHiddenFieldNames(entryHtml), cookieNames(session));
 
         // ログインフォーム POST。kaderu の gotoPage('my_page') 経由で到達するログイン画面の
         // <button name="loginBtn"> 押下と等価。
-        List<NameValuePair> form = new ArrayList<>();
-        form.add(new BasicNameValuePair("p", PAGE_MY_PAGE));
-        form.add(new BasicNameValuePair("loginID", userId));
-        form.add(new BasicNameValuePair("loginPwd", password));
-        form.add(new BasicNameValuePair("loginBtn", "ログイン"));
+        // フォームの hidden field (op など) はブラウザ submit と同様にすべて転送する。
+        // これを送らないとサーバはログインを拒否してフォーム画面を返す (Issue #562)。
+        List<NameValuePair> form = new ArrayList<>(extractHiddenFields(entryHtml));
+        upsertField(form, "p", PAGE_MY_PAGE);
+        upsertField(form, "loginID", userId);
+        upsertField(form, "loginPwd", password);
+        upsertField(form, "loginBtn", "ログイン");
 
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
         String body = executeForHtml(session, post, VenueReservationProxyException.LOGIN_FAILED,
                 "Kaderu login HTTP error");
 
-        boolean hasMyPage = body.contains("マイページ");
-        boolean hasLogout = body.contains("ログアウト");
-        log.info("[#562] Login POST response: htmlLen={} hasMyPage={} hasLogout={} cookies={}",
-                body.length(), hasMyPage, hasLogout, cookieNames(session));
-
         // ログイン成功検知 (open-reserve.js:107-110 と同等。"マイページ" or "ログアウト" が含まれる)
-        if (!hasMyPage && !hasLogout) {
-            log.warn("[#562] Login failed body head (1000 chars): {}",
-                    truncateForLog(body, 1000));
+        if (!body.contains("マイページ") && !body.contains("ログアウト")) {
             throw new VenueReservationProxyException(
                     VenueReservationProxyException.LOGIN_FAILED, VenueId.KADERU,
                     "Kaderu login failed (response did not show マイページ/ログアウト)");
         }
     }
 
-    // ===== 診断ヘルパー (Issue #562, 切り分け後に撤去) =====
+    // ===== HTML フォームヘルパー =====
 
-    /** name属性が type の前/後どちらでも拾えるよう2パターンの正規表現で hidden field 名を抽出。 */
-    private static final Pattern HIDDEN_PATTERN_TYPE_FIRST = Pattern.compile(
-            "<input[^>]*type=[\"']hidden[\"'][^>]*name=[\"']([^\"']+)[\"']",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern HIDDEN_PATTERN_NAME_FIRST = Pattern.compile(
-            "<input[^>]*name=[\"']([^\"']+)[\"'][^>]*type=[\"']hidden[\"']",
-            Pattern.CASE_INSENSITIVE);
+    /** {@code <input ...>} タグ全体を1キャプチャグループで切り出す。 */
+    private static final Pattern INPUT_TAG_PATTERN = Pattern.compile(
+            "<input\\b([^>]*?)/?>", Pattern.CASE_INSENSITIVE);
 
-    private static List<String> extractHiddenFieldNames(String html) {
+    /** input タグ内の {@code key="value"} / {@code key='value'} 属性を抽出する。 */
+    private static final Pattern INPUT_ATTR_PATTERN = Pattern.compile(
+            "(\\w+)\\s*=\\s*[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * HTML 内の {@code <input type="hidden" name="..." value="...">} を全部抽出する。
+     * 属性順 (type/name/value のどれが先か) に依存せず取り出せる。
+     * 同じ name が複数回出現した場合は最初に登場したものを採用する。
+     */
+    static List<NameValuePair> extractHiddenFields(String html) {
         if (html == null || html.isEmpty()) {
             return List.of();
         }
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        Matcher m1 = HIDDEN_PATTERN_TYPE_FIRST.matcher(html);
-        while (m1.find()) {
-            names.add(m1.group(1));
+        LinkedHashMap<String, String> nameToValue = new LinkedHashMap<>();
+        Matcher tagMatcher = INPUT_TAG_PATTERN.matcher(html);
+        while (tagMatcher.find()) {
+            Map<String, String> attrs = parseAttributes(tagMatcher.group(1));
+            if (!"hidden".equalsIgnoreCase(attrs.get("type"))) {
+                continue;
+            }
+            String name = attrs.get("name");
+            if (name == null || name.isEmpty()) {
+                continue;
+            }
+            nameToValue.putIfAbsent(name, attrs.getOrDefault("value", ""));
         }
-        Matcher m2 = HIDDEN_PATTERN_NAME_FIRST.matcher(html);
-        while (m2.find()) {
-            names.add(m2.group(1));
+        List<NameValuePair> result = new ArrayList<>(nameToValue.size());
+        for (Map.Entry<String, String> e : nameToValue.entrySet()) {
+            result.add(new BasicNameValuePair(e.getKey(), e.getValue()));
         }
-        return new ArrayList<>(names);
+        return result;
     }
 
-    private static List<String> cookieNames(ProxySession session) {
-        if (session == null || session.getCookies() == null) {
-            return List.of();
+    private static Map<String, String> parseAttributes(String attrFragment) {
+        Map<String, String> attrs = new HashMap<>();
+        Matcher m = INPUT_ATTR_PATTERN.matcher(attrFragment);
+        while (m.find()) {
+            attrs.put(m.group(1).toLowerCase(Locale.ROOT), m.group(2));
         }
-        return session.getCookies().getCookies().stream()
-                .map(c -> c.getName())
-                .collect(Collectors.toList());
+        return attrs;
     }
 
-    private static String truncateForLog(String s, int max) {
-        if (s == null) {
-            return "";
+    /** form 内の同名フィールドがあれば値を上書き、なければ末尾に追加する。 */
+    private static void upsertField(List<NameValuePair> form, String name, String value) {
+        for (int i = 0; i < form.size(); i++) {
+            if (name.equals(form.get(i).getName())) {
+                form.set(i, new BasicNameValuePair(name, value));
+                return;
+            }
         }
-        String collapsed = s.replaceAll("\\s+", " ");
-        return collapsed.length() > max ? collapsed.substring(0, max) : collapsed;
+        form.add(new BasicNameValuePair(name, value));
     }
 
     private void navigateMyPage(ProxySession session) {
