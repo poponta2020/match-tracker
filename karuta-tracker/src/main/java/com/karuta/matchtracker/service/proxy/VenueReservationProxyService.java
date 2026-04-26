@@ -108,11 +108,12 @@ public class VenueReservationProxyService {
     private final Map<VenueId, VenueConfig> venueConfigs;
     private final Map<VenueId, VenueRewriteStrategy> rewriteStrategies;
     /**
-     * {@code returnUrl} の host に許可するセット。{@code app.cors.allowed-origins} から
-     * 起動時に算出する。空セットの場合は returnUrl の URL 形式 (http/https) のみ検証する
-     * フェイルクローズに倒すため、createSession で必ず非空チェックを行う。
+     * {@code returnUrl} に許可する origin (scheme + host + (port)) のセット。
+     * {@code app.cors.allowed-origins} から起動時に算出する。host のみではなく scheme/port も
+     * 含めて比較することで、HTTPS の本番に HTTP の returnUrl を渡されたケース等で
+     * CORS 設定の意図と一致しない通過を防ぐ。
      */
-    private final Set<String> allowedReturnUrlHosts;
+    private final Set<String> allowedReturnOrigins;
 
     public VenueReservationProxyService(VenueReservationProxyConfig proxyConfig,
                                         VenueReservationSessionStore sessionStore,
@@ -131,7 +132,7 @@ public class VenueReservationProxyService {
         this.clients = toVenueMap(clients, VenueReservationClient::venue, "VenueReservationClient");
         this.venueConfigs = toVenueMap(venueConfigs, VenueConfig::venue, "VenueConfig");
         this.rewriteStrategies = toVenueMap(rewriteStrategies, VenueRewriteStrategy::venue, "VenueRewriteStrategy");
-        this.allowedReturnUrlHosts = parseAllowedHosts(allowedOriginsRaw);
+        this.allowedReturnOrigins = parseAllowedOrigins(allowedOriginsRaw);
     }
 
     /**
@@ -383,11 +384,16 @@ public class VenueReservationProxyService {
 
     private static boolean containsTraversal(String path) {
         if (path == null) return false;
-        String lower = path.toLowerCase(Locale.ROOT);
-        return lower.contains("..")
-                || lower.contains("//")
-                || lower.contains("%2e%2e")
-                || lower.contains("%2f%2f");
+        // 単純な文字列マッチでは `%2e.` / `.%2E` / `%2E%2E` などの混在エンコーディングや大小文字変種を
+        // 取りこぼすため、まず 1 回 URL デコードしてから `..` / `//` の有無を検査する。
+        // デコード自体に失敗した時点で fail-closed (拒否) する。
+        String decoded;
+        try {
+            decoded = URLDecoder.decode(path, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
+        return decoded.contains("..") || decoded.contains("//");
     }
 
     private void copyRequestHeaders(HttpServletRequest request, RequestBuilder builder) {
@@ -498,7 +504,8 @@ public class VenueReservationProxyService {
      * <ul>
      *   <li>未指定 (null/blank) は OK (banner は同一オリジン構成にフォールバック)</li>
      *   <li>scheme は {@code http} または {@code https}</li>
-     *   <li>host は {@code app.cors.allowed-origins} に列挙された origin のいずれかと一致</li>
+     *   <li>scheme + host (+ port) を結合した origin が
+     *       {@code app.cors.allowed-origins} に列挙された origin のいずれかと一致</li>
      * </ul>
      */
     private void validateReturnUrl(CreateVenueProxySessionRequest request) {
@@ -530,11 +537,13 @@ public class VenueReservationProxyService {
                     request.getVenue(),
                     "returnUrl に host がありません: " + returnUrl);
         }
-        if (!allowedReturnUrlHosts.contains(host.toLowerCase(Locale.ROOT))) {
+        String origin = scheme.toLowerCase(Locale.ROOT) + "://" + host.toLowerCase(Locale.ROOT)
+                + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+        if (!allowedReturnOrigins.contains(origin)) {
             throw new VenueReservationProxyException(
                     VenueReservationProxyException.INVALID_REQUEST,
                     request.getVenue(),
-                    "returnUrl の host が allowed-origins に含まれていません: " + host);
+                    "returnUrl の origin が allowed-origins に含まれていません: " + origin);
         }
     }
 
@@ -592,12 +601,13 @@ public class VenueReservationProxyService {
 
     /**
      * {@code app.cors.allowed-origins} (例: {@code http://localhost:5173,https://app.example.com})
-     * を解析し、host のセットに変換する。空 / 不正値はスキップしつつ警告ログを残す。
+     * を解析し、{@code scheme://host[:port]} 形式の origin セットに変換する。
+     * 空 / scheme もしくは host を欠く / URI として不正な値はスキップしつつ警告ログを残す。
      */
-    private static Set<String> parseAllowedHosts(String allowedOriginsRaw) {
-        Set<String> hosts = new HashSet<>();
+    private static Set<String> parseAllowedOrigins(String allowedOriginsRaw) {
+        Set<String> origins = new HashSet<>();
         if (allowedOriginsRaw == null || allowedOriginsRaw.isBlank()) {
-            return hosts;
+            return origins;
         }
         for (String origin : allowedOriginsRaw.split(",")) {
             String trimmed = origin.trim();
@@ -606,17 +616,21 @@ public class VenueReservationProxyService {
             }
             try {
                 URI uri = new URI(trimmed);
+                String scheme = uri.getScheme();
                 String host = uri.getHost();
-                if (host != null && !host.isBlank()) {
-                    hosts.add(host.toLowerCase(Locale.ROOT));
+                if (scheme != null && !scheme.isBlank() && host != null && !host.isBlank()) {
+                    String normalized = scheme.toLowerCase(Locale.ROOT) + "://"
+                            + host.toLowerCase(Locale.ROOT)
+                            + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+                    origins.add(normalized);
                 } else {
-                    log.warn("CORS allowed-origins entry has no host: {}", trimmed);
+                    log.warn("CORS allowed-origins entry has no scheme/host: {}", trimmed);
                 }
             } catch (URISyntaxException e) {
                 log.warn("CORS allowed-origins entry is not a valid URI: {}", trimmed);
             }
         }
-        return hosts;
+        return origins;
     }
 
     private static <T> Map<VenueId, T> toVenueMap(List<T> beans,

@@ -6,6 +6,7 @@ import com.karuta.matchtracker.service.proxy.VenueId;
 import com.karuta.matchtracker.service.proxy.VenueReservationClient;
 import com.karuta.matchtracker.service.proxy.VenueReservationProxyException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -15,6 +16,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.conn.ConnectTimeoutException;
+import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
@@ -25,6 +27,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -346,15 +349,21 @@ public class KaderuReservationClient implements VenueReservationClient {
     /**
      * リクエストを送信し、応答 Body 文字列を返す。HTTP エラー / I/O エラーは
      * 指定した errorCode の {@link VenueReservationProxyException} に変換する。
+     *
+     * <p>応答本文の charset は {@code Content-Type} ヘッダの charset 属性を尊重する
+     * ({@link VenueReservationProxyService#toResponseEntity} と同じ方針)。kaderu は現状
+     * UTF-8 で安定しているが、将来 SJIS 等に切り替わった場合に「マイページ」「申込トレイ」等の
+     * 文字列判定が静かに失敗するのを避けるための保険。</p>
      */
     private String executeForHtml(ProxySession session, HttpUriRequest request,
                                   String errorCodeOnFailure, String message) {
         try (CloseableHttpResponse response =
                      httpClient.execute(request, buildContext(session))) {
             int status = response.getStatusLine().getStatusCode();
-            String body = response.getEntity() == null
+            HttpEntity entity = response.getEntity();
+            String body = entity == null
                     ? ""
-                    : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                    : EntityUtils.toString(entity, resolveCharset(entity));
             if (status >= 400) {
                 throw new VenueReservationProxyException(
                         errorCodeOnFailure, VenueId.KADERU,
@@ -370,6 +379,18 @@ public class KaderuReservationClient implements VenueReservationClient {
                     errorCodeOnFailure, VenueId.KADERU,
                     message + " (I/O: " + e.getMessage() + ")", e);
         }
+    }
+
+    /**
+     * 応答 entity の Content-Type ヘッダから charset を抽出する。指定が無い場合は UTF-8 にフォールバック。
+     */
+    private static Charset resolveCharset(HttpEntity entity) {
+        if (entity == null) {
+            return StandardCharsets.UTF_8;
+        }
+        ContentType contentType = ContentType.get(entity);
+        Charset charset = contentType == null ? null : contentType.getCharset();
+        return charset == null ? StandardCharsets.UTF_8 : charset;
     }
 
     /** テスト容易性のための setter。production では PostConstruct 経由で生成される。 */
