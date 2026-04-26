@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * 会場予約リバースプロキシのエンドポイント。
  *
@@ -72,10 +75,41 @@ public class VenueReservationProxyController {
     /**
      * 会場サイトへの中継エンドポイント。
      * 認可は {@code token} (capability) のみ。{@code @RequireRole} は付けない。
+     *
+     * <p><strong>token は {@link #extractTokenFromQuery} で URL クエリ文字列から手動で抽出する</strong>。
+     * {@code @RequestParam} を使うと Spring が {@code request.getParameterValues("token")} を呼び、
+     * Tomcat が {@code application/x-www-form-urlencoded} POST のリクエストボディをパースして
+     * parameter map に統合してしまう。これによりリクエストボディの InputStream が枯渇し、
+     * 後続の {@link com.karuta.matchtracker.service.proxy.VenueReservationProxyService#fetch}
+     * 内の {@code readRequestBody} が空 body を読み取り、Kaderu に空 POST が転送されて
+     * トップ画面に飛ばされる (Issue #573)。</p>
      */
     @RequestMapping("/fetch/**")
-    public ResponseEntity<byte[]> fetch(@RequestParam String token, HttpServletRequest request) {
+    public ResponseEntity<byte[]> fetch(HttpServletRequest request) {
+        String token = extractTokenFromQuery(request.getQueryString());
         return venueReservationProxyService.fetch(token, request);
+    }
+
+    /**
+     * クエリ文字列から {@code token} の値を取り出す。
+     * {@code request.getParameter*} 系メソッドはリクエストボディの parsing を誘発するので
+     * 使ってはいけない。
+     */
+    static String extractTokenFromQuery(String queryString) {
+        if (queryString == null || queryString.isBlank()) {
+            return null;
+        }
+        for (String pair : queryString.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            String key = pair.substring(0, eq);
+            if ("token".equals(URLDecoder.decode(key, StandardCharsets.UTF_8))) {
+                return URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(VenueReservationProxyException.class)
