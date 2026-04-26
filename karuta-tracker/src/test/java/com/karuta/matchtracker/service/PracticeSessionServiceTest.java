@@ -82,6 +82,9 @@ class PracticeSessionServiceTest {
     @Mock
     private AdjacentRoomService adjacentRoomService;
 
+    @Mock
+    private WaitlistPromotionService waitlistPromotionService;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 
@@ -315,6 +318,137 @@ class PracticeSessionServiceTest {
         // BYEは除外されるため、ステータスが変更されない
         assertThat(byePp.getStatus()).isEqualTo(ParticipantStatus.WON);
         assertThat(byePp.isDirty()).isFalse();
+    }
+
+    @Test
+    @DisplayName("updateSession: 定員拡張+参加者追加時、新規参加者の保存後にキャンセル待ち昇格が実行される")
+    void testUpdateSession_capacityExpandWithNewParticipants_promotionRunsAfterSaveAll() {
+        // Given: capacity=10 / totalMatches=1 / 既存 WON 2名
+        Long sessionId = 1L;
+        PracticeSession session = PracticeSession.builder()
+                .id(sessionId).sessionDate(today).totalMatches(1).capacity(10)
+                .organizationId(1L).build();
+
+        PracticeParticipant pp1 = PracticeParticipant.builder()
+                .id(100L).sessionId(sessionId).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        PracticeParticipant pp2 = PracticeParticipant.builder()
+                .id(101L).sessionId(sessionId).playerId(2L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        List<PracticeParticipant> existingParticipants = new ArrayList<>(List.of(pp1, pp2));
+
+        Player p1 = new Player(); p1.setId(1L); p1.setName("選手1");
+        Player p2 = new Player(); p2.setId(2L); p2.setName("選手2");
+        Player p3 = new Player(); p3.setId(3L); p3.setName("選手3");
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(existingParticipants);
+        when(playerRepository.findAllById(List.of(1L, 2L, 3L))).thenReturn(List.of(p1, p2, p3));
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(session);
+        when(practiceParticipantRepository.saveAll(anyList())).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // capacity 10 → 12 + player3 を追加
+        PracticeSessionUpdateRequest request = PracticeSessionUpdateRequest.builder()
+                .sessionDate(today)
+                .totalMatches(1)
+                .capacity(12)
+                .participantIds(List.of(1L, 2L, 3L))
+                .build();
+
+        // When
+        practiceSessionService.updateSession(sessionId, request, 1L);
+
+        // Then: 新規参加者の saveAll が先 → 昇格処理が後の順で呼ばれる
+        // 先に昇格すると、新規参加者の WON カウント前に昇格数が決まり定員超過の原因となる
+        var ordered = inOrder(practiceParticipantRepository, waitlistPromotionService);
+        ordered.verify(practiceParticipantRepository).saveAll(anyList());
+        ordered.verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(sessionId);
+    }
+
+    @Test
+    @DisplayName("updateSession: capacity 未指定（null）の通常編集ではキャンセル待ち昇格が実行されない")
+    void testUpdateSession_capacityNotSpecified_doesNotPromoteWaitlisted() {
+        // Given: capacity=10 の既存セッション、編集フォームから capacity 未指定で他項目だけ更新するケース
+        // PracticeForm の通常編集（日付・会場・メモ等の更新）では request.capacity が null になるため、
+        // 「制限解除」と誤判定して昇格処理が走らないことを保証する。
+        Long sessionId = 1L;
+        PracticeSession session = PracticeSession.builder()
+                .id(sessionId).sessionDate(today).totalMatches(1).capacity(10)
+                .organizationId(1L).build();
+
+        PracticeParticipant pp1 = PracticeParticipant.builder()
+                .id(100L).sessionId(sessionId).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        List<PracticeParticipant> existingParticipants = new ArrayList<>(List.of(pp1));
+
+        Player p1 = new Player(); p1.setId(1L); p1.setName("選手1");
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(existingParticipants);
+        when(playerRepository.findAllById(List.of(1L))).thenReturn(List.of(p1));
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(session);
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // capacity を含めずメモだけ更新するリクエスト（通常の編集フロー）
+        PracticeSessionUpdateRequest request = PracticeSessionUpdateRequest.builder()
+                .sessionDate(today)
+                .totalMatches(1)
+                .notes("メモを更新")
+                .participantIds(List.of(1L))
+                .build();
+
+        // When
+        practiceSessionService.updateSession(sessionId, request, 1L);
+
+        // Then: capacity 未指定では昇格処理が呼ばれない
+        verify(waitlistPromotionService, never()).promoteWaitlistedAfterCapacityIncrease(any());
+    }
+
+    @Test
+    @DisplayName("updateSession: 定員拡張+参加者削除時、削除反映後にキャンセル待ち昇格が実行される")
+    void testUpdateSession_capacityExpandWithParticipantRemoval_promotionRunsAfterCancellation() {
+        // Given: capacity=10 / totalMatches=1 / 既存 WON 3名
+        Long sessionId = 1L;
+        PracticeSession session = PracticeSession.builder()
+                .id(sessionId).sessionDate(today).totalMatches(1).capacity(10)
+                .organizationId(1L).build();
+
+        PracticeParticipant pp1 = PracticeParticipant.builder()
+                .id(100L).sessionId(sessionId).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        PracticeParticipant pp2 = PracticeParticipant.builder()
+                .id(101L).sessionId(sessionId).playerId(2L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        PracticeParticipant pp3 = PracticeParticipant.builder()
+                .id(102L).sessionId(sessionId).playerId(3L).matchNumber(1)
+                .status(ParticipantStatus.WON).dirty(false).build();
+        List<PracticeParticipant> existingParticipants = new ArrayList<>(List.of(pp1, pp2, pp3));
+
+        Player p1 = new Player(); p1.setId(1L); p1.setName("選手1");
+        Player p2 = new Player(); p2.setId(2L); p2.setName("選手2");
+
+        when(practiceSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(existingParticipants);
+        when(playerRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(p1, p2));
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(session);
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // capacity 10 → 12 + player3 を削除
+        PracticeSessionUpdateRequest request = PracticeSessionUpdateRequest.builder()
+                .sessionDate(today)
+                .totalMatches(1)
+                .capacity(12)
+                .participantIds(List.of(1L, 2L))
+                .build();
+
+        // When
+        practiceSessionService.updateSession(sessionId, request, 1L);
+
+        // Then: 削除対象の player3 が CANCELLED に変更された後で昇格処理が呼ばれる
+        // （昇格処理が先だと、削除分の空き枠が昇格対象に含まれない）
+        assertThat(pp3.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(sessionId);
     }
 
     @Test

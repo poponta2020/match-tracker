@@ -113,12 +113,14 @@ public class NotificationService {
                     .collect(Collectors.toList());
 
             if (waitlisted.isEmpty() && !won.isEmpty()) {
-                // 全当選
+                // 全当選（referenceId は当選セッションのうち1つ。送信済み判定で対象月のセッション群と突合できるようにする）
                 notifications.add(Notification.builder()
                         .playerId(playerId)
                         .type(NotificationType.LOTTERY_ALL_WON)
                         .title("抽選結果: 全当選")
                         .message("申し込んだ練習はすべて当選しました")
+                        .referenceType("PRACTICE_SESSION")
+                        .referenceId(won.get(0).getSessionId())
                         .build());
             } else if (!waitlisted.isEmpty()) {
                 // セッション別にキャンセル待ち通知を作成
@@ -149,13 +151,15 @@ public class NotificationService {
                             .build());
                 }
 
-                // 当選分がある場合のみ、まとめ通知を追加
+                // 当選分がある場合のみ、まとめ通知を追加（referenceId は当選セッションのうち1つ）
                 if (!won.isEmpty()) {
                     notifications.add(Notification.builder()
                             .playerId(playerId)
                             .type(NotificationType.LOTTERY_REMAINING_WON)
                             .title("抽選結果: その他は当選")
                             .message("上記以外の申し込みはすべて当選しています")
+                            .referenceType("PRACTICE_SESSION")
+                            .referenceId(won.get(0).getSessionId())
                             .build());
                 }
             }

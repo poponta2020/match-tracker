@@ -588,6 +588,27 @@ public class LotteryController {
     }
 
     /**
+     * 指定年月・団体の抽選が確定済みかどうかを返す
+     */
+    @GetMapping("/is-confirmed")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<Map<String, Object>> getLotteryConfirmationStatus(
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+
+        // ADMINは自団体に強制
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        if ("ADMIN".equals(role)) {
+            organizationId = adminOrgId;
+        }
+
+        boolean confirmed = lotteryService.isLotteryConfirmed(year, month, organizationId);
+        return ResponseEntity.ok(Map.of("confirmed", confirmed));
+    }
+
+    /**
      * 抽選結果通知の送信済みチェック
      */
     @GetMapping("/notify-status")
@@ -604,26 +625,24 @@ public class LotteryController {
             organizationId = adminOrgId;
         }
 
-        // 対象月のセッションに紐づく参加者IDを一括取得（N+1対策）
+        // 対象月・団体のセッションIDを取得し、それを参照する抽選結果通知の有無を確認する。
+        // NotificationService.createLotteryResultNotifications() は LOTTERY_WAITLISTED /
+        // LOTTERY_ALL_WON / LOTTERY_REMAINING_WON すべてに referenceId としてセッションIDを設定するため、
+        // セッションIDで横断的に重複送信を判定できる。
         List<PracticeSession> sessions = organizationId != null
                 ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
                 : practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
-        List<Long> participantIds = sessionIds.isEmpty()
-                ? List.of()
-                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
-                        .map(PracticeParticipant::getId)
-                        .collect(Collectors.toList());
 
-        if (participantIds.isEmpty()) {
+        if (sessionIds.isEmpty()) {
             return ResponseEntity.ok(Map.of("sent", false, "sentCount", 0));
         }
 
         long sentCount = notificationRepository.countByReferenceIdInAndTypeIn(
-                participantIds,
-                List.of(NotificationType.LOTTERY_WON, NotificationType.LOTTERY_WAITLISTED,
+                sessionIds,
+                List.of(NotificationType.LOTTERY_WAITLISTED,
                         NotificationType.LOTTERY_ALL_WON, NotificationType.LOTTERY_REMAINING_WON));
 
         return ResponseEntity.ok(Map.of("sent", sentCount > 0, "sentCount", sentCount));
@@ -663,8 +682,8 @@ public class LotteryController {
                         .collect(Collectors.toList());
         int inAppCount = notificationService.createLotteryResultNotifications(allParticipants);
 
-        // LINE通知を送信
-        var lineResult = lineNotificationService.sendLotteryResults(year, month);
+        // LINE通知を送信（団体スコープを適用）
+        var lineResult = lineNotificationService.sendLotteryResults(year, month, organizationId);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("inAppCount", inAppCount);
@@ -709,8 +728,8 @@ public class LotteryController {
         // アプリ内通知を生成
         int inAppCount = notificationService.createLotteryResultNotifications(waitlistedParticipants);
 
-        // LINE通知を送信（WAITLISTEDのみ）
-        var lineResult = lineNotificationService.sendLotteryResultsWaitlistedOnly(year, month);
+        // LINE通知を送信（WAITLISTEDのみ・団体スコープを適用）
+        var lineResult = lineNotificationService.sendLotteryResultsWaitlistedOnly(year, month, organizationId);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("inAppCount", inAppCount);

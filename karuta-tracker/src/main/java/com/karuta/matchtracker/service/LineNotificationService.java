@@ -418,19 +418,32 @@ public class LineNotificationService {
      * - 全当選: テキスト1通
      * - 一部落選: イントロテキスト + セッション別Flex + クロージングテキスト
      * - 全落選: イントロテキスト + セッション別Flexのみ
+     *
+     * @param organizationId 団体IDを指定すると該当団体のセッションのみ対象とする。null時は全団体対象
      */
     @Transactional
-    public LineSendResultResponse sendLotteryResults(int year, int month) {
+    public LineSendResultResponse sendLotteryResults(int year, int month, Long organizationId) {
         int sentPlayers = 0, failedPlayers = 0, skippedPlayers = 0;
 
-        List<PracticeParticipant> participants = practiceParticipantRepository
-            .findBySessionDateYearAndMonth(year, month);
-
-        // セッション情報をキャッシュ
+        // 団体IDが指定されている場合は、該当団体のセッションに紐づく参加者のみを対象とする
         Map<Long, PracticeSession> sessionCache = new HashMap<>();
-        for (PracticeParticipant p : participants) {
-            sessionCache.computeIfAbsent(p.getSessionId(),
-                id -> practiceSessionRepository.findById(id).orElse(null));
+        List<PracticeParticipant> participants;
+        if (organizationId != null) {
+            List<PracticeSession> orgSessions = practiceSessionRepository
+                .findByYearAndMonthAndOrganizationId(year, month, organizationId);
+            for (PracticeSession s : orgSessions) sessionCache.put(s.getId(), s);
+            List<Long> sessionIds = orgSessions.stream()
+                .map(PracticeSession::getId).collect(Collectors.toList());
+            participants = sessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(sessionIds);
+        } else {
+            participants = practiceParticipantRepository
+                .findBySessionDateYearAndMonth(year, month);
+            for (PracticeParticipant p : participants) {
+                sessionCache.computeIfAbsent(p.getSessionId(),
+                    id -> practiceSessionRepository.findById(id).orElse(null));
+            }
         }
 
         // WON/WAITLISTED のみ対象、プレイヤーごとにグルーピング
@@ -521,19 +534,32 @@ public class LineNotificationService {
 
     /**
      * キャンセル待ちの参加者のみに抽選結果をLINE送信する
+     *
+     * @param organizationId 団体IDを指定すると該当団体のセッションのみ対象とする。null時は全団体対象
      */
     @Transactional
-    public LineSendResultResponse sendLotteryResultsWaitlistedOnly(int year, int month) {
+    public LineSendResultResponse sendLotteryResultsWaitlistedOnly(int year, int month, Long organizationId) {
         int sentPlayers = 0, failedPlayers = 0, skippedPlayers = 0;
 
-        List<PracticeParticipant> participants = practiceParticipantRepository
-            .findBySessionDateYearAndMonth(year, month);
-
-        // セッション情報をキャッシュ
+        // 団体IDが指定されている場合は、該当団体のセッションに紐づく参加者のみを対象とする
         Map<Long, PracticeSession> sessionCache = new HashMap<>();
-        for (PracticeParticipant p : participants) {
-            sessionCache.computeIfAbsent(p.getSessionId(),
-                id -> practiceSessionRepository.findById(id).orElse(null));
+        List<PracticeParticipant> participants;
+        if (organizationId != null) {
+            List<PracticeSession> orgSessions = practiceSessionRepository
+                .findByYearAndMonthAndOrganizationId(year, month, organizationId);
+            for (PracticeSession s : orgSessions) sessionCache.put(s.getId(), s);
+            List<Long> sessionIds = orgSessions.stream()
+                .map(PracticeSession::getId).collect(Collectors.toList());
+            participants = sessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(sessionIds);
+        } else {
+            participants = practiceParticipantRepository
+                .findBySessionDateYearAndMonth(year, month);
+            for (PracticeParticipant p : participants) {
+                sessionCache.computeIfAbsent(p.getSessionId(),
+                    id -> practiceSessionRepository.findById(id).orElse(null));
+            }
         }
 
         // WAITLISTED のみ対象、プレイヤーごとにグルーピング

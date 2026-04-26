@@ -315,10 +315,13 @@ Entity Layer (JPA Entity)
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | BIGINT | PK, AUTO_INCREMENT | 設定ID |
-| setting_key | VARCHAR(100) | NOT NULL, UNIQUE | 設定キー |
+| setting_key | VARCHAR(100) | NOT NULL | 設定キー |
 | setting_value | VARCHAR(255) | NOT NULL | 設定値 |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 | updated_by | BIGINT | | 更新者ID |
+
+一意制約: `(setting_key, organization_id)`
 
 **初期データ**:
 - `lottery_deadline_days_before` = `0`（締切日数：月初から何日前。0=前月末日の0時）
@@ -1405,8 +1408,16 @@ Entity Layer (JPA Entity)
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 **レスポンス**: `WaitlistStatusDto`
 
-#### GET /api/lottery/notify-status?year={year}&month={month}
-**説明**: 抽選結果通知の送信済みチェック
+#### GET /api/lottery/is-confirmed?year={year}&month={month}&organizationId={organizationId}
+**説明**: 指定年月・団体の抽選が確定済みかどうかを返す（ADMINは自団体に強制）
+**権限**: SUPER_ADMIN, ADMIN
+**レスポンス**:
+```json
+{ "confirmed": true }
+```
+
+#### GET /api/lottery/notify-status?year={year}&month={month}&organizationId={organizationId}
+**説明**: 抽選結果通知の送信済みチェック（ADMINは自団体に強制）。対象月・団体の練習セッションIDを引き当て、`LOTTERY_WAITLISTED` / `LOTTERY_ALL_WON` / `LOTTERY_REMAINING_WON` 通知のうち `referenceId` が該当セッションに紐づくレコード数を返す
 **権限**: SUPER_ADMIN, ADMIN
 **レスポンス**:
 ```json
@@ -1414,11 +1425,11 @@ Entity Layer (JPA Entity)
 ```
 
 #### POST /api/lottery/notify-results
-**説明**: 抽選結果通知の統合送信（アプリ内通知 + LINE通知を一括送信）
+**説明**: 抽選結果通知の統合送信（アプリ内通知 + LINE通知を一括送信）。ADMINは自団体に強制
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**:
 ```json
-{ "year": 2026, "month": 4 }
+{ "year": 2026, "month": 4, "organizationId": 1 }
 ```
 **レスポンス**:
 ```json
@@ -1479,7 +1490,7 @@ Entity Layer (JPA Entity)
 **レスポンス**: `List<MonthlyApplicantDto>` (`playerId`, `name`)
 
 #### POST /api/lottery/notify-waitlisted
-**説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信
+**説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信。ADMINは自団体に強制
 **権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
 **リクエスト**: `{ year, month, organizationId }`
 **レスポンス**: `{ inAppCount, lineSent, lineFailed, lineSkipped }`
@@ -1724,6 +1735,7 @@ Entity Layer (JPA Entity)
 #### GET /api/system-settings
 **説明**: 全設定取得
 **権限**: SUPER_ADMIN, ADMIN
+**クエリパラメータ**: `organizationId`（任意。SUPER_ADMINが団体別設定を取得する場合に指定。ADMINは自団体に固定）
 
 #### GET /api/system-settings/{key}
 **説明**: 設定値取得
@@ -1735,14 +1747,17 @@ Entity Layer (JPA Entity)
 **リクエスト**:
 ```json
 {
-  "value": "3"
+  "value": "3",
+  "organizationId": "1"
 }
 ```
+`organizationId` は SUPER_ADMIN が団体別設定を更新する場合に必須。ADMINはリクエスト値に関わらず自団体に固定される。
 
 **利用可能な設定キー**:
 | キー | 説明 | デフォルト値 |
 |------|------|-------------|
 | `lottery_deadline_days_before` | 締切日数（月初から何日前） | `0` |
+| `lottery_normal_reserve_percent` | 一般枠の最低保証割合（%） | `30` |
 
 ### 4.16 メンター関係API (`/api/mentor-relationships`)
 
@@ -2504,11 +2519,12 @@ Entity Layer (JPA Entity)
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. WAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア
-   - WAITLISTED → OFFERED（waitlistNumber をクリア、offeredAt=現在時刻、offerDeadline=null）
-   - OFFERED → offerDeadline をnullにクリア（ステータス・offeredAt等はそのまま）
-   - dirty=true をセット（伝助同期対象にする）
-   - 対象が0件の場合は saveAll をスキップ
+14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し
+   - 既存 OFFERED の offerDeadline を null にクリア（拡張で参加確定）
+   - match_number ごとに `(capacity - WON - 既存OFFERED)` 名分だけ、WAITLISTED を waitlist_number 昇順に OFFERED 化（offeredAt=現在時刻、offerDeadline=null）
+   - 余り枠を超える WAITLISTED は据え置き（status・waitlist_number そのまま）
+   - 全件 dirty=true、最後に renumberRemainingWaitlist で 1..N に再採番
+   - 練習編集 (PracticeSessionService.updateSession) で capacity を増加させた場合も同じメソッドが呼ばれる
    ↓
 15. レスポンス: 200 OK + 更新後のセッション情報
 ```

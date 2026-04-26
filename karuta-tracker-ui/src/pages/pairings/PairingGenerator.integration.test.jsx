@@ -6,6 +6,7 @@ import PlayerChip from '../../components/PlayerChip';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
+import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 
 afterEach(cleanup);
 
@@ -114,6 +115,99 @@ describe('DragOverlay 表示ロジック', () => {
       </div>
     );
     expect(screen.queryByText('佐藤花子')).not.toBeInTheDocument();
+  });
+});
+
+describe('選手追加後のドラフト同期ロジック（#485 回帰防止）', () => {
+  // PairingGenerator.jsx の handleAddPlayer / useEffect ドラフト復元と同じ
+  // pairingDraftLogic.js の純粋関数を import して直接テストする。
+  // テスト用に再実装すると本番コード側で関数呼び出しが消えても気付けないため、
+  // production と test で「同じ実装」を共有する。
+
+  it('未保存ドラフトがある状態で選手追加後、useEffect復元を通しても新規選手が待機リストに残る', () => {
+    const matchNumber = 1;
+    const initialWaiting = [{ id: 10, name: '既存選手A' }];
+    const initialPairings = [{ player1Id: 1, player2Id: 2, player1Name: '山田', player2Name: '佐藤' }];
+    const initialDraft = {
+      matchNumber,
+      pairings: initialPairings,
+      waitingPlayers: initialWaiting,
+      isEditingExisting: true,
+    };
+
+    // 選手追加 → ドラフトも同期（handleAddPlayer 内の syncDraftAfterAddingPlayer 呼び出しと同じ）
+    const newPlayer = { id: 99, name: '新規選手' };
+    const { newWaiting, newDraft } = syncDraftAfterAddingPlayer({
+      waitingPlayers: initialWaiting,
+      newPlayer,
+      currentDraft: initialDraft,
+      matchNumber,
+      pairings: initialPairings,
+      isEditingExisting: true,
+    });
+    expect(newWaiting).toHaveLength(2);
+    expect(newWaiting[1].id).toBe(99);
+
+    // setCurrentSession 等による useEffect 再実行 → ドラフトから復元
+    // （PairingGenerator.jsx の useEffect 内 restoreDraftIfMatches 呼び出しと同じ）
+    const restored = restoreDraftIfMatches(newDraft, matchNumber);
+    expect(restored).not.toBeNull();
+    // 復元後の waitingPlayers に新規選手が残っていること（これが本修正のコア）
+    expect(restored.waitingPlayers).toHaveLength(2);
+    expect(restored.waitingPlayers.find(p => p.id === 99)).toBeDefined();
+    expect(restored.isViewMode).toBe(false);
+  });
+
+  it('ドラフトがない場合（初回状態）はドラフト同期をスキップし、waitingPlayers更新のみ行う', () => {
+    const matchNumber = 1;
+    const newPlayer = { id: 99, name: '新規選手' };
+    const { newWaiting, newDraft } = syncDraftAfterAddingPlayer({
+      waitingPlayers: [],
+      newPlayer,
+      currentDraft: null,
+      matchNumber,
+      pairings: [],
+      isEditingExisting: false,
+    });
+    expect(newWaiting).toEqual([newPlayer]);
+    expect(newDraft).toBeNull();
+  });
+
+  it('ドラフトが別の試合番号のものの場合は同期しない（readOnly状態への誤書き込み防止）', () => {
+    const matchNumber = 2;  // 追加先
+    const otherDraft = {
+      matchNumber: 1,  // ドラフトは別試合
+      pairings: [],
+      waitingPlayers: [{ id: 20, name: '別試合の待機者' }],
+      isEditingExisting: true,
+    };
+    const newPlayer = { id: 99, name: '新規選手' };
+
+    const { newDraft } = syncDraftAfterAddingPlayer({
+      waitingPlayers: [],
+      newPlayer,
+      currentDraft: otherDraft,
+      matchNumber,
+      pairings: [],
+      isEditingExisting: false,
+    });
+
+    // 別試合のドラフトは改変されない
+    expect(newDraft).toBe(otherDraft);
+  });
+
+  it('restoreDraftIfMatches: ドラフトが別 matchNumber の場合は null（誤復元しない）', () => {
+    const draft = {
+      matchNumber: 1,
+      pairings: [],
+      waitingPlayers: [],
+      isEditingExisting: false,
+    };
+    expect(restoreDraftIfMatches(draft, 2)).toBeNull();
+  });
+
+  it('restoreDraftIfMatches: ドラフトが null の場合は null', () => {
+    expect(restoreDraftIfMatches(null, 1)).toBeNull();
   });
 });
 

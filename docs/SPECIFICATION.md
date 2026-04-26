@@ -510,8 +510,9 @@ SUPER_ADMIN のみ操作可能。
 3. **結果確定**: 定員超過の試合では当選（`WON`）・キャンセル待ち（`WAITLISTED`、番号付き）に振り分け
 4. **キャンセル→繰り上げ**: 当選者がキャンセル専用ページから理由付きでキャンセルするとキャンセル待ち1番に通知。応答期限内に承諾/辞退。PLAYERロールは過去の練習日のキャンセル不可（ADMIN+はデータ修正目的で可能）。**定員未達（キャンセル待ちなし）の場合は繰り上げ・管理者通知ともに送信しない**
 5. **キャンセル待ち辞退**: キャンセル待ち中のプレイヤーはセッション単位でキャンセル待ちを辞退可能（`WAITLISTED`→`WAITLIST_DECLINED`）。辞退時に後続のキャンセル待ち番号は自動繰り上げ。辞退後の復帰も可能（最後尾番号が付与される）
-6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、定員超過なら`WAITLISTED`（最後尾）、空きがあれば即`WON`で登録
-7. **締切後の登録解除禁止**: 締切後は参加登録画面から既存登録のチェックを外すことができない（チェックボックスが disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）から行う。未登録試合への追加登録は締切後でも可能
+6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、`(WON + OFFERED) < capacity` かつ既存の `WAITLISTED` がなければ即 `WON` で登録、定員超過または `WAITLISTED` 残存時は `WAITLISTED`（最後尾）。`OFFERED`（応答待ち）も定員カウントに含めることで、待機中の枠を新規申込が横取りしないようにする
+7. **容量拡張時の昇格**: 会場拡張 (`POST /{id}/expand-venue`) や練習編集での `capacity` 増加時、その時点の `WAITLISTED` を `waitlist_number` 昇順に `OFFERED`（応答期限なし）へ昇格。新定員 `capacity - (WON + 既存OFFERED)` に収まらない超過分は `WAITLISTED` のまま据え置き。既存 `OFFERED` は応答期限を一律クリア
+8. **締切後の登録解除禁止**: 締切後は参加登録画面から既存登録のチェックを外すことができない（チェックボックスが disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）から行う。未登録試合への追加登録は締切後でも可能
 
 #### 3.7.2 抽選アルゴリズムの特徴
 
@@ -600,6 +601,11 @@ SUPER_ADMIN のみ操作可能。
 
 管理者（ADMIN / SUPER_ADMIN）がシステム設定をUI上で確認・変更できる画面。パス: `/admin/settings`
 
+**対象団体:**
+- ADMIN は自団体の設定のみ確認・変更できる
+- SUPER_ADMIN は対象団体を選択して、団体別の設定を確認・変更できる
+- 抽選管理画面から遷移する場合は、選択中の団体IDを `organizationId` クエリで引き継ぐ
+
 **設定項目（初期リリース）:**
 
 | 項目 | 設定キー | バリデーション | 説明 |
@@ -651,11 +657,18 @@ SUPER_ADMIN のみ操作可能。
 - 未実行（idle）: 操作部のみ表示
 - プレビュー中（preview）: セッション別・試合別の当選/キャンセル待ち一覧 + 「確定」ボタン。DB未保存状態
 - 確定済み（confirmed）: 確定完了メッセージ + 「全員に通知送信」ボタン + 「キャンセル待ちのみ通知送信」ボタン
+- 該当月が未終了かつ確定済みの抽選が存在する場合は、再表示時にも通知ボタンを表示し続ける（カレンダー画面に独立した通知導線は持たない）
 
 **API:**
 - `POST /api/lottery/preview`: 抽選プレビュー（DB保存なし）。締め切り前チェック・確定済みチェックあり
 - `POST /api/lottery/confirm`: 抽選確定（DB保存 + 伝助書き戻し）
-- `POST /api/lottery/notify-waitlisted`: キャンセル待ちのみにアプリ内通知 + LINE通知を送信
+- `GET /api/lottery/is-confirmed`: 指定年月・団体の抽選が確定済みかを返す（通知ボタンの再表示判定に使用）
+- `GET /api/lottery/notify-status`: 指定年月・団体の通知が既送信かを返す（重複送信防止の事前確認）
+- `POST /api/lottery/notify-results`: 全員（当選者＋キャンセル待ち）にアプリ内通知 + LINE通知を送信（団体スコープ適用）
+- `POST /api/lottery/notify-waitlisted`: キャンセル待ちのみにアプリ内通知 + LINE通知を送信（団体スコープ適用）
+
+**通知送信時の重複防止:**
+- 「全員に通知送信」「キャンセル待ちのみ通知送信」押下時に `notify-status` を呼び、既に通知が送信済みであれば「既にN件の通知を送信済みです。再送信しますか？」と件数付きで確認ダイアログを表示する
 
 **バリデーション:**
 - 締め切り前は抽選実行不可（「締め切りなし」モードの場合はいつでも実行可能）
@@ -1553,10 +1566,13 @@ venues ──< venue_match_schedules (venueId)
 | カラム | 型 | 制約 | 説明 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO | — |
-| setting_key | VARCHAR(100) | NOT NULL, UNIQUE | 設定キー |
+| setting_key | VARCHAR(100) | NOT NULL | 設定キー |
 | setting_value | VARCHAR(255) | NOT NULL | 設定値 |
+| organization_id | BIGINT | NOT NULL, FK | 団体ID |
 | updated_at | TIMESTAMP | NOT NULL | — |
 | updated_by | BIGINT | — | 更新者ID |
+
+一意制約: `(setting_key, organization_id)`
 
 初期データ: `lottery_deadline_days_before` = `0`
 
@@ -1920,7 +1936,7 @@ UNIQUE制約: (player_id, organization_id)
 | POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
 | POST | `/{id}/confirm-reservation` | ADMIN+ | 隣室予約完了を記録（`reservation_confirmed_at` をセット） |
-| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時にWAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア |
+| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時に WAITLISTED を waitlist_number 昇順で OFFERED（応答期限なし）に昇格。新定員に収まらない超過分は WAITLISTED のまま据え置き。既存 OFFERED の応答期限をクリア。練習編集 (`PUT /api/practice-sessions/{id}`) で capacity を増やした場合も同じ昇格処理を実行 |
 
 ### 7.7 伝助連携 (`/api/practice-sessions`)
 

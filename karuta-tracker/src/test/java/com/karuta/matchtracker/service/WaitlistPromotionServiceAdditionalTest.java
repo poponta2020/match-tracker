@@ -184,4 +184,132 @@ class WaitlistPromotionServiceAdditionalTest {
         // OFFERED#1と重複せず#2が割り当てられる
         assertThat(declined.getWaitlistNumber()).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 定員内なら全WAITLISTED→OFFERED（応答期限なし）")
+    void promoteOnExpand_allWithinCapacity() {
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
+        PracticeParticipant w1 = PracticeParticipant.builder()
+                .id(10L).sessionId(100L).playerId(201L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+        PracticeParticipant w2 = PracticeParticipant.builder()
+                .id(11L).sessionId(100L).playerId(202L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                .thenReturn(List.of());
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
+                .thenReturn(List.of(w1, w2));
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(14L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
+        when(practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                .thenReturn(List.of(w1, w2));
+
+        service.promoteWaitlistedAfterCapacityIncrease(100L);
+
+        assertThat(w1.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        assertThat(w1.getOfferDeadline()).isNull();
+        assertThat(w1.getOfferedAt()).isNotNull();
+        assertThat(w1.isDirty()).isTrue();
+        assertThat(w2.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        assertThat(w2.getOfferDeadline()).isNull();
+        assertThat(w2.getOfferedAt()).isNotNull();
+        assertThat(w2.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 定員超過分はWAITLISTEDのまま（waitlist_number順で昇格）")
+    void promoteOnExpand_partialPromotion() {
+        // capacity=20, WON=18 → 残2枠。WAITLISTED 4人のうち #1,#2 のみ OFFERED、#3,#4 は据え置き
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(20).build();
+        PracticeParticipant w1 = PracticeParticipant.builder()
+                .id(10L).sessionId(100L).playerId(201L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+        PracticeParticipant w2 = PracticeParticipant.builder()
+                .id(11L).sessionId(100L).playerId(202L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
+        PracticeParticipant w3 = PracticeParticipant.builder()
+                .id(12L).sessionId(100L).playerId(203L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
+        PracticeParticipant w4 = PracticeParticipant.builder()
+                .id(13L).sessionId(100L).playerId(204L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).build();
+
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                .thenReturn(List.of());
+        // 入力順をシャッフルしても waitlist_number 順で処理されることを確認
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
+                .thenReturn(List.of(w3, w1, w4, w2));
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(18L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
+        // renumberRemainingWaitlist 用：OFFERED→#1,#2、残WAITLISTED→#3,#4 の並び
+        when(practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
+                        eq(100L), eq(1), eq(List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED))))
+                .thenReturn(List.of(w1, w2, w3, w4));
+
+        service.promoteWaitlistedAfterCapacityIncrease(100L);
+
+        assertThat(w1.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        assertThat(w2.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        assertThat(w3.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(w4.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        // waitlist_number は再採番で 1..N に保たれる
+        assertThat(w1.getWaitlistNumber()).isEqualTo(1);
+        assertThat(w2.getWaitlistNumber()).isEqualTo(2);
+        assertThat(w3.getWaitlistNumber()).isEqualTo(3);
+        assertThat(w4.getWaitlistNumber()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 既存OFFEREDの offer_deadline をクリア")
+    void promoteOnExpand_clearsExistingOfferDeadline() {
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
+        PracticeParticipant existingOffered = PracticeParticipant.builder()
+                .id(20L).sessionId(100L).playerId(301L).matchNumber(1)
+                .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                .offerDeadline(java.time.LocalDateTime.of(2026, 5, 1, 12, 0))
+                .build();
+
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                .thenReturn(List.of(existingOffered));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
+                .thenReturn(List.of());
+
+        service.promoteWaitlistedAfterCapacityIncrease(100L);
+
+        assertThat(existingOffered.getOfferDeadline()).isNull();
+        assertThat(existingOffered.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: WAITLISTED 0件なら何もしない")
+    void promoteOnExpand_noWaitlistedNoop() {
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
+
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
+                .thenReturn(List.of());
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
+                .thenReturn(List.of());
+
+        service.promoteWaitlistedAfterCapacityIncrease(100L);
+
+        // count 系は呼ばれない
+        verify(practiceParticipantRepository, never())
+                .countBySessionIdAndMatchNumberAndStatus(eq(100L), org.mockito.ArgumentMatchers.anyInt(), eq(ParticipantStatus.WON));
+    }
 }
