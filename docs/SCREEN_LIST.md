@@ -60,7 +60,7 @@
 | 17 | `/practice/participation` | `PracticeParticipation.jsx` | 月ナビゲーション、試合番号チェックボックス、抽選ステータスバッジ、締め切り表示 | ALL | 参加登録（抽選済みセッションはステータス表示のみ）。締め切り前は「締め切り: ○月○日（あと○日）」を表示（締め切り後・締め切りなし時は非表示）。締め切り後は既存登録のチェックボックスがdisabled（グレーアウト）になり解除不可。未登録の試合への追加登録は可能 |
 | 18 | `/practice/cancel` | `PracticeCancelPage.jsx` | キャンセル専用カレンダー、試合選択チェックボックス、キャンセル理由ラジオボタン、当日12:00以降確認ダイアログ | ALL | 参加キャンセル（WON登録日をハイライトしたカレンダー→試合選択→理由選択→確認ダイアログ）。当日12:00（JST）以降のキャンセル時は「当日キャンセルとなります。補充募集が行われます。」の追加警告を確認ダイアログに表示 |
 
-補足: `venue-reservation-proxy` はバックエンド Controller / Service 層、フロントエンド API クライアント / venue 判別ユーティリティ、`/practice` の隣室予約導線接続まで実装済み。新規フロントエンドルートは追加されていないが、予約操作時は新規タブで `/api/venue-reservation-proxy/view?token=...` のプロキシ画面を開く。旧 `/api/kaderu/*` 導線は削除済み。
+補足: `venue-reservation-proxy` はバックエンド Controller / Service 層、フロントエンド API クライアント / venue 判別ユーティリティ、`/practice` の隣室予約導線接続まで実装済み。新規フロントエンドルートは追加されていないが、予約操作時は新規タブで `/api/venue-reservation-proxy/view?token=...` のプロキシ画面を開く。Kaderu は会場サイトの hidden field を引き継いで申込トレイ画面を準備する。旧 `/api/kaderu/*` 導線は削除済み。
 
 ---
 

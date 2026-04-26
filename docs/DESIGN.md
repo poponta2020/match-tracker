@@ -2562,7 +2562,7 @@ Entity Layer (JPA Entity)
 
 公開 API は `POST /api/venue-reservation-proxy/session`、`GET /api/venue-reservation-proxy/view?token=...`、`ANY /api/venue-reservation-proxy/fetch/**?token=...`。いずれも ADMIN+ のみ利用可能。
 
-Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、実サイトの `gotoPage(op)` と同じく `op=my_page` ログイン、`op=srch_sst` 空き状況、`op=date_select` 日付/スロット選択、`op=rsv_search` 申込トレイ遷移を行う。申込完了検知は URL / Location の `op=rsv_comp` / `p=rsv_comp`、`op=fix_comp` / `p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
+Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、実サイトの `gotoPage(op)` / `showCalendar(y,m)` / `clickDay(d)` / `setAppStatus(...)` と同じ form 状態を再現する。各応答 HTML から hidden field を `ProxySession.hiddenFields` に保存し、次の POST は保存済み field をベースに必要項目だけを上書きする。日付選択は `op=srch_sst` を維持して `UseYM` / `UseDay` / `UseDate` を更新し、申込トレイ投入は `setAppStatus` の `chk_rsv` 空き再確認後に `op=apply` + `rsv_chk[facilityCode][YYYY/MM/DD][slotIndex]=timeRange` + `requestBtn=申込トレイに入れる` を送信する。申込完了検知は URL / Location の `op=rsv_comp` / `p=rsv_comp`、`op=fix_comp` / `p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 

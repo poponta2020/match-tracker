@@ -136,17 +136,17 @@ class KaderuReservationClientTest {
                         .withStatus(200)
                         .withBody(TRAY_HTML)));
 
-        // ステップ 6 (前段): setAppStatus を含む POST → 空きあり (エラー文言なし)
+        // ステップ 6 (前段): setAppStatus の AJAX 空き再確認 → 空きあり (エラー文言なし)
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .withRequestBody(matching(".*chk_rsv=.*"))
                 .atPriority(1)
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withBody(AVAILABILITY_HTML)));
 
-        // ステップ 5: clickDay 等価 (op=date_select 単独)
+        // ステップ 5: clickDay 等価 (op=srch_sst + UseDate)
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching("op=date_select(?!.*setAppStatus).*"))
+                .withRequestBody(matching(".*op=srch_sst.*UseDate=.*"))
                 .atPriority(2)
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -202,6 +202,30 @@ class KaderuReservationClientTest {
     }
 
     @Test
+    @DisplayName("回帰テスト (Issue #566): 日付選択とトレイ投入は実サイト form と同じ op/hidden field で送信する")
+    void prepareReservationTray_usesBrowserEquivalentFormFieldsAfterAvailabilityPage() {
+        stubSuccessfulFlow();
+        ProxySession session = newSession();
+
+        client.prepareReservationTray(session);
+
+        wireMock.verify(WireMock.postRequestedFor(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching("(?s).*op=srch_sst.*"))
+                .withRequestBody(matching("(?s).*UseYM=202604.*"))
+                .withRequestBody(matching("(?s).*UseDay=12.*"))
+                .withRequestBody(matching("(?s).*UseDate=20260412.*"))
+                .withRequestBody(notMatching("(?s).*op=date_select.*")));
+
+        wireMock.verify(WireMock.postRequestedFor(urlPathEqualTo(ENTRY_PATH))
+                .withRequestBody(matching("(?s).*op=apply.*"))
+                .withRequestBody(matching("(?s).*ShisetsuCode=001.*"))
+                .withRequestBody(matching("(?s).*disp_span=0.*"))
+                .withRequestBody(matching("(?s).*rsv_chk%5B001%7C018%7C02%7C3%7C2%7C0%5D%5B2026%2F04%2F12%5D%5B2%5D=17002100.*"))
+                .withRequestBody(matching("(?s).*requestBtn=.*"))
+                .withRequestBody(notMatching("(?s).*op=rsv_search.*")));
+    }
+
+    @Test
     @DisplayName("回帰テスト (Issue #559): 4桁年・遠い未来の expires 属性付き Cookie も拒否されず保存される")
     void prepareReservationTray_persistsCookieWithFarFutureExpires() {
         // 実機 kaderu が返すのと同じ形式の Set-Cookie (RFC1123 4桁年 + Max-Age + secure + HttpOnly)。
@@ -224,7 +248,7 @@ class KaderuReservationClientTest {
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(TRAY_HTML)));
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .withRequestBody(matching(".*chk_rsv=.*"))
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(AVAILABILITY_HTML)));
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
@@ -306,12 +330,12 @@ class KaderuReservationClientTest {
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(LOGGED_IN_HTML)));
 
-        // setAppStatus POST は「既に予約されています」を含むHTMLを返す
+        // setAppStatus の AJAX 空き再確認は「既に予約されています」を含むHTMLを返す
         String slotErrorHtml =
                 "<html><body>マイページ ログアウト " + ROOM_NAME
                 + " 既に予約されています</body></html>";
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .withRequestBody(matching(".*chk_rsv=.*"))
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(slotErrorHtml)));
 
@@ -555,7 +579,7 @@ class KaderuReservationClientTest {
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(TRAY_HTML)));
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching(".*setAppStatus=1.*"))
+                .withRequestBody(matching(".*chk_rsv=.*"))
                 .atPriority(1)
                 .willReturn(aResponse().withStatus(200).withBody(AVAILABILITY_HTML)));
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
