@@ -509,8 +509,9 @@ SUPER_ADMIN のみ操作可能。
 3. **結果確定**: 定員超過の試合では当選（`WON`）・キャンセル待ち（`WAITLISTED`、番号付き）に振り分け
 4. **キャンセル→繰り上げ**: 当選者がキャンセル専用ページから理由付きでキャンセルするとキャンセル待ち1番に通知。応答期限内に承諾/辞退。PLAYERロールは過去の練習日のキャンセル不可（ADMIN+はデータ修正目的で可能）。**定員未達（キャンセル待ちなし）の場合は繰り上げ・管理者通知ともに送信しない**
 5. **キャンセル待ち辞退**: キャンセル待ち中のプレイヤーはセッション単位でキャンセル待ちを辞退可能（`WAITLISTED`→`WAITLIST_DECLINED`）。辞退時に後続のキャンセル待ち番号は自動繰り上げ。辞退後の復帰も可能（最後尾番号が付与される）
-6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、定員超過なら`WAITLISTED`（最後尾）、空きがあれば即`WON`で登録
-7. **締切後の登録解除禁止**: 締切後は参加登録画面から既存登録のチェックを外すことができない（チェックボックスが disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）から行う。未登録試合への追加登録は締切後でも可能
+6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、`(WON + OFFERED) < capacity` かつ既存の `WAITLISTED` がなければ即 `WON` で登録、定員超過または `WAITLISTED` 残存時は `WAITLISTED`（最後尾）。`OFFERED`（応答待ち）も定員カウントに含めることで、待機中の枠を新規申込が横取りしないようにする
+7. **容量拡張時の昇格**: 会場拡張 (`POST /{id}/expand-venue`) や練習編集での `capacity` 増加時、その時点の `WAITLISTED` を `waitlist_number` 昇順に `OFFERED`（応答期限なし）へ昇格。新定員 `capacity - (WON + 既存OFFERED)` に収まらない超過分は `WAITLISTED` のまま据え置き。既存 `OFFERED` は応答期限を一律クリア
+8. **締切後の登録解除禁止**: 締切後は参加登録画面から既存登録のチェックを外すことができない（チェックボックスが disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）から行う。未登録試合への追加登録は締切後でも可能
 
 #### 3.7.2 抽選アルゴリズムの特徴
 
@@ -1881,7 +1882,7 @@ UNIQUE制約: (player_id, organization_id)
 | POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
 | POST | `/{id}/confirm-reservation` | ADMIN+ | 隣室予約完了を記録（`reservation_confirmed_at` をセット） |
-| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時にWAITLISTED→OFFERED（応答期限なし）、既存OFFEREDの応答期限をクリア |
+| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時に WAITLISTED を waitlist_number 昇順で OFFERED（応答期限なし）に昇格。新定員に収まらない超過分は WAITLISTED のまま据え置き。既存 OFFERED の応答期限をクリア。練習編集 (`PUT /api/practice-sessions/{id}`) で capacity を増やした場合も同じ昇格処理を実行 |
 
 ### 7.7 伝助連携 (`/api/practice-sessions`)
 

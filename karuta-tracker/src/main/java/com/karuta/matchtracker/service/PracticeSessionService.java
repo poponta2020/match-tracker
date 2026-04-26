@@ -58,6 +58,7 @@ public class PracticeSessionService {
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeSyncService densukeSyncService;
     private final AdjacentRoomService adjacentRoomService;
+    private final WaitlistPromotionService waitlistPromotionService;
 
     /**
      * IDで練習日を取得
@@ -401,6 +402,10 @@ public class PracticeSessionService {
             }
         }
 
+        // 容量変更検知のため変更前 capacity を保持
+        Integer oldCapacity = session.getCapacity();
+        Integer newCapacity = request.getCapacity();
+
         // セッション情報を更新
         session.setSessionDate(request.getSessionDate());
         session.setTotalMatches(request.getTotalMatches());
@@ -408,7 +413,7 @@ public class PracticeSessionService {
         session.setNotes(request.getNotes());
         session.setStartTime(request.getStartTime());
         session.setEndTime(request.getEndTime());
-        session.setCapacity(request.getCapacity());
+        session.setCapacity(newCapacity);
         session.setUpdatedBy(currentUserId);
 
         PracticeSession updated = practiceSessionRepository.save(session);
@@ -470,9 +475,33 @@ public class PracticeSessionService {
             practiceParticipantRepository.saveAll(newParticipants);
         }
 
+        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（応答期限なし、定員までに制限）
+        // 参加者の差分更新（キャンセル・削除・追加）の後に実行することで、
+        // 最終状態の WON / OFFERED 数を基準に昇格数が決まる。
+        if (isCapacityExpanded(oldCapacity, newCapacity)) {
+            waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(id);
+        }
+
         log.info("Successfully updated practice session id: {}", id);
         densukeSyncService.triggerWriteAsync();
         return enrichSessionWithParticipants(updated);
+    }
+
+    /**
+     * capacity が拡張されたか（拡張時にキャンセル待ち昇格処理を呼ぶ判定）。
+     * 「明示的な定員増加」が確認できる場合のみ true を返す（= 旧・新ともに非nullで増加した場合）。
+     *
+     * リクエストの capacity が null の場合は「未指定」とみなし拡張扱いしない。
+     * 編集フォームから capacity を送らない既存ケース（PracticeForm の通常編集）でも
+     * 意図せず昇格処理が走らないようにするため。
+     *
+     * 「制限解除（明示的に capacity を null にする）」を拡張扱いしたい場合は、
+     * 未指定と明示 null を区別できる DTO（PATCH 用 DTO、JsonNullable、capacityUnlimited フラグ等）を
+     * 導入してから判定する必要がある。
+     */
+    private boolean isCapacityExpanded(Integer oldCapacity, Integer newCapacity) {
+        if (oldCapacity == null || newCapacity == null) return false;
+        return newCapacity > oldCapacity;
     }
 
     /**
