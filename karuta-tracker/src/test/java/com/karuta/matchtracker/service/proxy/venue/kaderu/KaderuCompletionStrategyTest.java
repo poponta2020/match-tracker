@@ -36,6 +36,13 @@ class KaderuCompletionStrategyTest {
         }
 
         @Test
+        @DisplayName("requestUrl 縺ｫ ?op=rsv_comp 繧貞性繧縺ｨ true")
+        void requestUrlRsvCompWithOp() {
+            String url = "https://k2.p-kashikan.jp/kaderu27/index.php?op=rsv_comp";
+            assertThat(strategy.isCompletion(url, null, null)).isTrue();
+        }
+
+        @Test
         @DisplayName("requestUrl に ?p=fix_comp を含むと true")
         void requestUrlFixComp() {
             String url = "https://k2.p-kashikan.jp/kaderu27/index.php?p=fix_comp";
@@ -53,6 +60,14 @@ class KaderuCompletionStrategyTest {
         @DisplayName("responseLocation に完了 URL を含むと true (リダイレクト経由)")
         void responseLocationMatches() {
             String location = "/kaderu27/index.php?p=rsv_comp&id=12345";
+            assertThat(strategy.isCompletion("https://k2.p-kashikan.jp/kaderu27/index.php", location, null))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("responseLocation 縺ｫ op 螳御ｺ・URL 繧貞性繧縺ｨ true")
+        void responseLocationMatchesWithOp() {
+            String location = "/kaderu27/index.php?op=rsv_comp&id=12345";
             assertThat(strategy.isCompletion("https://k2.p-kashikan.jp/kaderu27/index.php", location, null))
                     .isTrue();
         }
