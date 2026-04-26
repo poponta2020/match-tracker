@@ -64,7 +64,10 @@ export default function LotteryManagement() {
     }
   }, []);
 
-  const organizationId = isSuperAdmin() ? selectedOrgId : (currentPlayer?.organizationId || null);
+  // ADMIN は LoginResponse の adminOrganizationId を使う（organizationId は LoginResponse に存在しない）
+  const organizationId = isSuperAdmin()
+    ? selectedOrgId
+    : (currentPlayer?.adminOrganizationId ?? currentPlayer?.organizationId ?? null);
   const sessionStorageKey = organizationId
     ? `lottery-priority-${currentDate.year}-${currentDate.month}-${organizationId}`
     : null;
@@ -99,14 +102,22 @@ export default function LotteryManagement() {
   }, [priorityPlayerIds, sessionStorageKey]);
 
   // 月・団体切り替え時に「その月の抽選が確定済みか」を取得
+  // 取得中は古いフラグで別月の通知ボタンが残らないよう、まず false にリセットしてから問い合わせる。
+  // 非同期レスポンスの順序は保証されないため、cancelled フラグで現在のリクエストだけ反映する。
   useEffect(() => {
-    if (!organizationId) {
-      setConfirmedLotteryExists(false);
-      return;
-    }
+    setConfirmedLotteryExists(false);
+    if (!organizationId) return;
+    let cancelled = false;
     lotteryAPI.isConfirmed(currentDate.year, currentDate.month, organizationId)
-      .then(res => setConfirmedLotteryExists(res.data?.confirmed === true))
-      .catch(() => setConfirmedLotteryExists(false));
+      .then(res => {
+        if (cancelled) return;
+        setConfirmedLotteryExists(res.data?.confirmed === true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConfirmedLotteryExists(false);
+      });
+    return () => { cancelled = true; };
   }, [currentDate.year, currentDate.month, organizationId]);
 
   const togglePriorityPlayer = (playerId) => {
@@ -129,11 +140,12 @@ export default function LotteryManagement() {
       if (newMonth < 1) { newMonth = 12; newYear--; }
       return { year: newYear, month: newMonth };
     });
-    // 月変更時にリセット
+    // 月変更時にリセット（confirmedLotteryExists も同期的にクリアし、新しい is-confirmed 取得までの間に古い通知ボタンが残らないようにする）
     setPhase('idle');
     setPreviewResults([]);
     setError(null);
     setNotifyResult(null);
+    setConfirmedLotteryExists(false);
   };
 
   // 抽選プレビュー実行
@@ -263,6 +275,7 @@ export default function LotteryManagement() {
               setPreviewResults([]);
               setError(null);
               setNotifyResult(null);
+              setConfirmedLotteryExists(false);
             }}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-[#374151]"
           >
