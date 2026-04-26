@@ -368,6 +368,14 @@ class VenueReservationProxyServiceTest {
             request.setContent("name=value".getBytes(StandardCharsets.UTF_8));
             request.addHeader("Host", "app.example.local");
             request.addHeader("X-Test", "yes");
+            // ブラウザがプロキシ HTML (= API オリジン) 基準で付与する値。
+            // 上流に転送すると会場側が CSRF 対策などで POST を拒否する余地があるため除去する。
+            request.addHeader("Origin", "https://app.example.com");
+            request.addHeader("Referer", "https://app.example.com/practice");
+            request.addHeader("Sec-Fetch-Site", "cross-site");
+            request.addHeader("Sec-Fetch-Mode", "cors");
+            request.addHeader("Sec-Fetch-Dest", "empty");
+            request.addHeader("Sec-Fetch-User", "?1");
 
             ResponseEntity<byte[]> response = service.fetch(TOKEN, request);
 
@@ -379,6 +387,16 @@ class VenueReservationProxyServiceTest {
                     .isEqualTo(BASE_URL + "/kaderu27/index.php?p=apply&x=1");
             assertThat(proxied.getFirstHeader("Host")).isNull();
             assertThat(proxied.getFirstHeader("X-Test").getValue()).isEqualTo("yes");
+            assertThat(proxied.getFirstHeader("Origin"))
+                    .as("Origin はブラウザが API オリジンを基準に付けるため上流へ転送しない")
+                    .isNull();
+            assertThat(proxied.getFirstHeader("Referer"))
+                    .as("Referer もブラウザコンテキスト由来のため上流へ転送しない")
+                    .isNull();
+            assertThat(proxied.getFirstHeader("Sec-Fetch-Site")).isNull();
+            assertThat(proxied.getFirstHeader("Sec-Fetch-Mode")).isNull();
+            assertThat(proxied.getFirstHeader("Sec-Fetch-Dest")).isNull();
+            assertThat(proxied.getFirstHeader("Sec-Fetch-User")).isNull();
             assertThat(proxied).isInstanceOf(HttpEntityEnclosingRequest.class);
             String proxiedBody = EntityUtils.toString(
                     ((HttpEntityEnclosingRequest) proxied).getEntity(),

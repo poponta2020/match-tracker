@@ -85,13 +85,32 @@ public class VenueReservationProxyService {
      */
     private static final int EXPECTED_NIGHT_SLOT = 2;
 
+    /**
+     * 上流 (会場サイト) へ転送しないリクエストヘッダ。
+     *
+     * <p>{@code host} / {@code content-length} / {@code transfer-encoding} はホップ単位で
+     * Apache HttpClient が再計算するため、ブラウザ値をそのまま渡すと不整合になる。</p>
+     *
+     * <p>{@code origin} / {@code referer} / {@code sec-fetch-*} はブラウザがプロキシ HTML の
+     * オリジン (= API オリジン) を基準に付ける値で、上流に転送すると会場側が
+     * Origin / Fetch Metadata を見て CSRF 対策などで POST を拒否する可能性がある。
+     * プロキシは server-to-server で通信するので、これらは除去する方が会場側の通常リクエストに近い。
+     * Referer をどうしても付けたい場合は、ブラウザ値ではなくサーバ側で
+     * {@code currentUpstreamUrl} を改めて設定するのが安全。</p>
+     */
     private static final Set<String> REQUEST_HEADERS_SKIP = Set.of(
             "host",
             "cookie",
             "content-length",
             "connection",
             "transfer-encoding",
-            "accept-encoding"
+            "accept-encoding",
+            "origin",
+            "referer",
+            "sec-fetch-site",
+            "sec-fetch-mode",
+            "sec-fetch-dest",
+            "sec-fetch-user"
     );
 
     private static final Set<String> RESPONSE_HEADERS_SKIP = Set.of(
