@@ -109,22 +109,45 @@ class VenueReservationProxyControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/venue-reservation-proxy/view: text/html を返す")
-    void view_returnsHtml() throws Exception {
+    @DisplayName("GET /api/venue-reservation-proxy/view: 認可ヘッダーなしの新規タブ遷移でも token 認証で 200 を返す")
+    void view_returnsHtmlWithoutAuthHeaders() throws Exception {
         when(venueReservationProxyService.view(TOKEN))
                 .thenReturn(ResponseEntity.ok()
                         .contentType(new MediaType("text", "html", java.nio.charset.StandardCharsets.UTF_8))
                         .body("<html>rewritten</html>"));
 
+        // X-User-Role / X-User-Id ヘッダー無しでも token があれば 200 を返すこと。
+        // 新規タブの直接 GET 遷移では axios interceptor 由来の認可ヘッダーが届かないため、
+        // token (UUID) を capability として検証する設計を担保する回帰テスト。
         mockMvc.perform(get("/api/venue-reservation-proxy/view")
-                        .param("token", TOKEN)
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1"))
+                        .param("token", TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("text/html;charset=UTF-8"))
                 .andExpect(content().string("<html>rewritten</html>"));
 
         verify(venueReservationProxyService).view(TOKEN);
+    }
+
+    @Test
+    @DisplayName("ANY /api/venue-reservation-proxy/fetch/**: 認可ヘッダーなしの GET でも token 認証で service に委譲する")
+    void fetch_getDelegatesWithoutAuthHeaders() throws Exception {
+        byte[] body = "<html>proxied</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        when(venueReservationProxyService.fetch(eq(TOKEN), any(HttpServletRequest.class)))
+                .thenReturn(ResponseEntity.ok()
+                        .header("X-VRP-Completed", "true")
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(body));
+
+        // 会場 HTML 内の <link href> や <script src> はブラウザ自動 GET になり認可ヘッダーが付かない。
+        // token があれば 200 を返すこと。
+        mockMvc.perform(get("/api/venue-reservation-proxy/fetch/kaderu27/index.php")
+                        .param("token", TOKEN)
+                        .param("p", "apply"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-VRP-Completed", "true"))
+                .andExpect(content().bytes(body));
+
+        verify(venueReservationProxyService).fetch(eq(TOKEN), any(HttpServletRequest.class));
     }
 
     @Test
@@ -140,8 +163,6 @@ class VenueReservationProxyControllerTest {
         mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php")
                         .param("token", TOKEN)
                         .param("p", "apply")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                         .content("name=value"))
                 .andExpect(status().isOk())
@@ -181,9 +202,7 @@ class VenueReservationProxyControllerTest {
                         "Unexpected proxy error"));
 
         mockMvc.perform(get("/api/venue-reservation-proxy/view")
-                        .param("token", TOKEN)
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "1"))
+                        .param("token", TOKEN))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("SCRIPT_ERROR"))
                 .andExpect(jsonPath("$.message").value("Unexpected proxy error"))

@@ -173,13 +173,14 @@ describe('adjacent room reservation proxy flow', () => {
 
     await waitFor(() => {
       expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
-      expect(venueReservationProxyAPI.createSession).toHaveBeenCalledWith({
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalledWith(expect.objectContaining({
         venue: 'KADERU',
         practiceSessionId: 1,
         roomName: 'hamanasu',
         date: '2026-04-12',
         slotIndex: 2,
-      });
+        returnUrl: expect.stringMatching(/\/practice$/),
+      }));
       expect(openedTab.location.href).toBe('http://localhost:8080/api/venue-reservation-proxy/view?token=token-123');
       expect(screen.getByText('予約完了を報告')).toBeInTheDocument();
     });

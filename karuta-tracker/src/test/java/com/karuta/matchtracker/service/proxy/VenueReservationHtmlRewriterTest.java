@@ -166,6 +166,35 @@ class VenueReservationHtmlRewriterTest {
             Document out = rewritten(wrap("<a id='x' href='" + already + "'>link</a>"));
             assertThat(out.selectFirst("#x").attr("href")).isEqualTo(already);
         }
+
+        @Test
+        @DisplayName("currentUpstreamUrl 指定時: 相対 URL (ファイル名のみ) は会場ページのディレクトリ基準で解決する")
+        void relativeFileResolvedAgainstUpstreamPage() {
+            String upstream = BASE_URL + "/kaderu27/index.php";
+            String html = wrap(
+                    "<form id='f' action='index.php' method='POST'></form>"
+                  + "<script id='s' src='script/default.js?v=1'></script>"
+                  + "<link id='l' href='css/style.css?v=2' rel='stylesheet'>");
+            String out = rewriter.rewrite(html, upstream, session, venueConfig, noopStrategy);
+            Document doc = Jsoup.parse(out);
+            assertThat(doc.selectFirst("#f").attr("action"))
+                    .isEqualTo(expectedProxy("/kaderu27/index.php"));
+            assertThat(doc.selectFirst("#s").attr("src"))
+                    .isEqualTo(PROXY_PREFIX + "/kaderu27/script/default.js?v=1&token=" + token);
+            assertThat(doc.selectFirst("#l").attr("href"))
+                    .isEqualTo(PROXY_PREFIX + "/kaderu27/css/style.css?v=2&token=" + token);
+        }
+
+        @Test
+        @DisplayName("currentUpstreamUrl 指定時: 親ディレクトリへの ../ も会場ページ基準で解決する")
+        void relativeParentDirectoryResolved() {
+            String upstream = BASE_URL + "/kaderu27/sub/page.php";
+            Document out = Jsoup.parse(rewriter.rewrite(
+                    wrap("<a id='x' href='../shared/main.css'>x</a>"),
+                    upstream, session, venueConfig, noopStrategy));
+            assertThat(out.selectFirst("#x").attr("href"))
+                    .isEqualTo(expectedProxy("/kaderu27/shared/main.css"));
+        }
     }
 
     @Nested
@@ -232,6 +261,20 @@ class VenueReservationHtmlRewriterTest {
             assertThat(body).doesNotContain("{{token}}");
             assertThat(body).doesNotContain("{{baseUrl}}");
             assertThat(body).doesNotContain("{{proxyPrefix}}");
+            assertThat(body).doesNotContain("{{currentUpstreamUrl}}");
+        }
+
+        @Test
+        @DisplayName("currentUpstreamUrl が注入スクリプトに埋め込まれる")
+        void injectorContainsUpstreamUrl() {
+            String upstream = BASE_URL + "/kaderu27/index.php";
+            String out = rewriter.rewrite(
+                    "<html><head></head><body></body></html>",
+                    upstream, session, venueConfig, noopStrategy);
+            Document doc = Jsoup.parse(out);
+            String body = doc.selectFirst("head script.vrp-injector").data();
+            assertThat(body).contains("kaderu27/index.php");
+            assertThat(body).doesNotContain("{{currentUpstreamUrl}}");
         }
 
         @Test

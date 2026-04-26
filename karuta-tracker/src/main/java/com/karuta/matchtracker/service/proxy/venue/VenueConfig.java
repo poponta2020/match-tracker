@@ -25,6 +25,20 @@ public interface VenueConfig {
     String displayName();
 
     /**
+     * 会場サイトの「エントリーポイント パス」(baseUrl 配下からの相対)。
+     * プロキシ画面 (/view) に返すキャッシュHTMLが取得された URL を再構築するために使用する。
+     *
+     * <p>例: かでる2・7 では {@code /kaderu27/index.php}。これにより HTML 内の
+     * {@code action="index.php"} や {@code src="script/default.js"} のような
+     * 相対 URL が、ドメイン直下ではなく {@code /kaderu27/} 基準で解決される。</p>
+     *
+     * <p>デフォルトは {@code /} (ドメイン直下)。</p>
+     */
+    default String entryPath() {
+        return "/";
+    }
+
+    /**
      * プロキシセッションのタイムアウト。デフォルトは要件定義書 §3.2.2 に従い 15 分。
      * 会場別に上書きしたい場合は実装側で override する。
      */

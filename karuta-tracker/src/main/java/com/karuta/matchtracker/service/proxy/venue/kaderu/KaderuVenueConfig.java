@@ -45,6 +45,16 @@ public class KaderuVenueConfig implements VenueConfig {
         return "かでる2・7";
     }
 
+    /**
+     * かでる2・7 の予約システムは {@code /kaderu27/} 配下にデプロイされている。
+     * 申込トレイ画面の HTML 内の相対 URL ({@code action="index.php"} 等) は
+     * このエントリーポイントを基準に解決する。
+     */
+    @Override
+    public String entryPath() {
+        return KaderuReservationClient.ENTRY_PATH;
+    }
+
     @Override
     public Duration sessionTimeout() {
         return Duration.ofMinutes(proxyConfig.getSessionTimeoutMinutes());

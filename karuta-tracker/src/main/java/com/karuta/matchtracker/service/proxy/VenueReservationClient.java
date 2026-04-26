@@ -1,6 +1,6 @@
 package com.karuta.matchtracker.service.proxy;
 
-import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
 
 /**
@@ -39,12 +39,13 @@ public interface VenueReservationClient {
      * 完了検知や HTML 書き換えは呼び出し側 (Task 6/7 のサービス) が担当するため、本メソッドは
      * 純粋な HTTP リレーのみを行う。</p>
      *
-     * <p>応答 Body のストリームは呼び出し側の責任で読み切る/閉じる必要がある。</p>
+     * <p>戻り値は {@link CloseableHttpResponse}。呼び出し側は try-with-resources 等で必ず close すること。
+     * close を怠ると HTTP コネクションプールが枯渇する。</p>
      *
      * @param session 対象セッション (cookies が attach される)
      * @param request 会場サイトへのリクエスト (URL は事前に {@code VenueConfig.baseUrl} 配下に解決済みであること)
-     * @return 会場サイトからの応答
+     * @return 会場サイトからの応答 (呼び出し側で close する)
      * @throws VenueReservationProxyException I/O エラー / タイムアウト等
      */
-    HttpResponse fetch(ProxySession session, HttpUriRequest request) throws VenueReservationProxyException;
+    CloseableHttpResponse fetch(ProxySession session, HttpUriRequest request) throws VenueReservationProxyException;
 }

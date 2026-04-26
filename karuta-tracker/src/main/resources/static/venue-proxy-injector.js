@@ -7,14 +7,17 @@
   var TOKEN = "{{token}}";
   var BASE_URL = "{{baseUrl}}";
   var PROXY_PREFIX = "{{proxyPrefix}}";
+  // 会場サイト上での「現在ページ」絶対 URL。HTML を /view または /fetch から返した時点で
+  // サーバ側が決定する。フロント JS が動的に生成する相対 URL は、ブラウザ既定の
+  // window.location ではなく、ここで埋め込まれた会場側 URL を基準に解決する必要がある。
+  // (proxy 配下では window.location.pathname がプロキシ URL になり、相対パス解決が破綻するため)
+  var CURRENT_UPSTREAM_URL = "{{currentUpstreamUrl}}";
 
-  function isVenueUrl(url) {
-    if (!url) return false;
-    if (url.indexOf(BASE_URL) === 0) return true;
-    if (url.charAt(0) === "/" && url.indexOf("/" + PROXY_PREFIX.split("/").filter(Boolean)[0]) !== 0) {
-      return true;
-    }
-    return false;
+  var venueOrigin;
+  try {
+    venueOrigin = new URL(BASE_URL).origin;
+  } catch (e) {
+    venueOrigin = BASE_URL;
   }
 
   function isAlreadyProxied(url) {
@@ -23,41 +26,62 @@
       || url.indexOf(window.location.origin + PROXY_PREFIX) === 0;
   }
 
-  function appendToken(url) {
-    if (!url) return url;
-    var sep = url.indexOf("?") >= 0 ? "&" : "?";
-    return url + sep + "token=" + encodeURIComponent(TOKEN);
+  function appendToken(urlStr) {
+    try {
+      var u = new URL(urlStr, window.location.href);
+      u.searchParams.delete('token');
+      u.searchParams.set('token', TOKEN);
+      // 入力が絶対 URL なら絶対 URL のまま、相対なら path+query+fragment で返す。
+      if (/^https?:/i.test(urlStr)) {
+        return u.toString();
+      }
+      return u.pathname + u.search + u.hash;
+    } catch (e) {
+      var sep = urlStr.indexOf('?') >= 0 ? '&' : '?';
+      return urlStr + sep + 'token=' + encodeURIComponent(TOKEN);
+    }
   }
 
-  function rewriteUrl(url) {
-    if (!url) return url;
-    try {
-      if (isAlreadyProxied(url)) return url;
-      if (url.indexOf("javascript:") === 0
-          || url.indexOf("mailto:") === 0
-          || url.indexOf("data:") === 0
-          || url.indexOf("about:") === 0
-          || url.indexOf("blob:") === 0) {
-        return url;
-      }
-      var path;
-      if (url.indexOf(BASE_URL) === 0) {
-        path = url.substring(BASE_URL.length);
-        if (path.charAt(0) !== "/") path = "/" + path;
-      } else if (url.charAt(0) === "/") {
-        path = url;
-      } else if (/^https?:\/\//i.test(url)) {
-        return url;
-      } else {
-        var base = window.location.pathname || "/";
-        var lastSlash = base.lastIndexOf("/");
-        var dir = lastSlash >= 0 ? base.substring(0, lastSlash + 1) : "/";
-        path = dir + url;
-      }
-      return appendToken(PROXY_PREFIX + path);
-    } catch (e) {
-      return url;
+  function rewriteUrl(input) {
+    if (!input) return input;
+    if (typeof input !== 'string') {
+      try { input = String(input); } catch (e) { return input; }
     }
+
+    var lower = input.toLowerCase();
+    if (lower.indexOf('javascript:') === 0
+        || lower.indexOf('mailto:') === 0
+        || lower.indexOf('data:') === 0
+        || lower.indexOf('about:') === 0
+        || lower.indexOf('blob:') === 0
+        || input.charAt(0) === '#') {
+      return input;
+    }
+
+    if (isAlreadyProxied(input)) {
+      return appendToken(input);
+    }
+
+    // 相対 URL は会場サイト上での「現在ページ」を基準に解決する。
+    // 絶対 URL ならそのまま new URL で扱える。
+    var resolved;
+    try {
+      var base = CURRENT_UPSTREAM_URL || window.location.href;
+      resolved = new URL(input, base);
+    } catch (e) {
+      return input;
+    }
+
+    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') {
+      return input;
+    }
+
+    if (resolved.origin !== venueOrigin) {
+      return input; // 会場外 URL は透過
+    }
+
+    var pathAndQuery = resolved.pathname + resolved.search + resolved.hash;
+    return appendToken(PROXY_PREFIX + pathAndQuery);
   }
 
   var origAssign = window.Location && window.Location.prototype && window.Location.prototype.assign;

@@ -21,6 +21,7 @@ describe('venueReservationProxyAPI', () => {
       roomName: 'hamanasu',
       date: '2026-04-12',
       slotIndex: 2,
+      returnUrl: 'https://app.example.com/practice',
     };
     const response = {
       data: {

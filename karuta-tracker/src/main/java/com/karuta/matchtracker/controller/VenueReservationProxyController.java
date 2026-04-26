@@ -26,6 +26,17 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Phase 1 では KADERU のみ有効。Controller は認可・入力受け渡し・例外レスポンス整形に限定し、
  * 会場別 dispatch と HTML/ヘッダ書き換えは {@link VenueReservationProxyService} に委譲する。</p>
+ *
+ * <p><strong>認可モデル:</strong></p>
+ * <ul>
+ *   <li>{@code POST /session}: ヘッダー認証 ({@code X-User-Role}/{@code X-User-Id}) + {@code @RequireRole(ADMIN+)}。
+ *       ここでサーバ側で短命 (15分) なプロキシ token を発行する。</li>
+ *   <li>{@code GET /view} / {@code ANY /fetch/**}: token 自体を capability として検証する。
+ *       これらはブラウザの新規タブでの通常 GET 遷移として呼ばれるため、API クライアント
+ *       interceptor で付与される認可ヘッダーは届かない。token は UUID v4 (122 bit ランダム)
+ *       かつ {@code SessionStore} に登録されているもののみ有効で、Referer 経由の漏洩を防ぐため
+ *       Service 側で {@code Referrer-Policy: no-referrer} を付与する。</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/api/venue-reservation-proxy")
@@ -45,14 +56,20 @@ public class VenueReservationProxyController {
         return ResponseEntity.ok(venueReservationProxyService.createSession(request));
     }
 
+    /**
+     * プロキシ予約画面 (申込トレイ HTML を書き換えたもの) を返す。
+     * 認可は {@code token} (capability) のみ。{@code @RequireRole} は付けない。
+     */
     @GetMapping("/view")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<String> view(@RequestParam String token) {
         return venueReservationProxyService.view(token);
     }
 
+    /**
+     * 会場サイトへの中継エンドポイント。
+     * 認可は {@code token} (capability) のみ。{@code @RequireRole} は付けない。
+     */
     @RequestMapping("/fetch/**")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<byte[]> fetch(@RequestParam String token, HttpServletRequest request) {
         return venueReservationProxyService.fetch(token, request);
     }

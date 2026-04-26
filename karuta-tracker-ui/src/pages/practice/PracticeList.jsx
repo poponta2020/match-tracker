@@ -14,11 +14,21 @@ import LoadingScreen from '../../components/LoadingScreen';
 
 const RESERVATION_SLOT_INDEX = 2;
 const RESERVATION_PROXY_CHANNEL = 'venue-reservation-proxy';
+const RESERVATION_RETURN_PATH = '/practice';
 
 const resolveProxyViewUrl = (viewUrl) => {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
   const apiBase = new URL(apiBaseUrl, window.location.origin);
   return new URL(viewUrl, apiBase.origin).toString();
+};
+
+const resolveReturnUrl = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return new URL(RESERVATION_RETURN_PATH, window.location.origin).toString();
+  } catch {
+    return null;
+  }
 };
 
 const PracticeList = () => {
@@ -152,24 +162,23 @@ const PracticeList = () => {
   };
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.BroadcastChannel !== 'function') {
+    if (typeof window === 'undefined') {
       return undefined;
     }
 
-    const channel = new window.BroadcastChannel(RESERVATION_PROXY_CHANNEL);
-    channel.onmessage = async (event) => {
-      const message = event?.data;
+    // 完了通知は2系統を受け取る:
+    // 1) BroadcastChannel: 同一オリジン構成 (フロントとAPIが同じorigin) で動作
+    // 2) window.message: 別オリジン構成 (Render API + Vercelフロント) で
+    //    プロキシバナーが window.opener.postMessage(..., returnUrlのorigin) で発火
+    const handleCompletion = async (message) => {
       if (message?.type !== 'reservation-completed') {
         return;
       }
-
       const sessionId = Number(message.practiceSessionId);
       if (!Number.isInteger(sessionId) || sessionId <= 0) {
         return;
       }
-
       setReservationReady(prev => ({ ...prev, [sessionId]: true }));
-
       try {
         const response = await practiceAPI.getById(sessionId);
         setSessions(prev => prev.map(session =>
@@ -183,8 +192,22 @@ const PracticeList = () => {
       }
     };
 
+    let channel;
+    if (typeof window.BroadcastChannel === 'function') {
+      channel = new window.BroadcastChannel(RESERVATION_PROXY_CHANNEL);
+      channel.onmessage = (event) => handleCompletion(event?.data);
+    }
+
+    const onMessage = (event) => {
+      // event.origin が自オリジン以外でも、payload.type で識別する設計のため許容する。
+      // 信頼の根拠は payload.token (createSession で発行された UUID) と practiceSessionId の整合性。
+      handleCompletion(event?.data);
+    };
+    window.addEventListener('message', onMessage);
+
     return () => {
-      channel.close();
+      if (channel) channel.close();
+      window.removeEventListener('message', onMessage);
     };
   }, []);
 
@@ -355,6 +378,7 @@ const PracticeList = () => {
         roomName: adjacentRoomName,
         date: sessionDate,
         slotIndex: RESERVATION_SLOT_INDEX,
+        returnUrl: resolveReturnUrl(),
       });
       const viewUrl = response.data?.viewUrl;
       if (!viewUrl) {

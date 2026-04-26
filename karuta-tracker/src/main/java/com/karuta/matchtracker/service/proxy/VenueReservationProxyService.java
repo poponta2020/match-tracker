@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.entity.ByteArrayEntity;
@@ -47,6 +48,13 @@ public class VenueReservationProxyService {
     private static final String VIEW_PATH = "/api/venue-reservation-proxy/view";
     private static final String FETCH_PREFIX = VenueReservationHtmlRewriter.PROXY_PREFIX;
     private static final String COMPLETED_HEADER = "X-VRP-Completed";
+    private static final String REFERRER_POLICY_HEADER = "Referrer-Policy";
+    /**
+     * view/fetch のレスポンスに付与する Referrer-Policy。
+     * token を URL 上に持つため、ユーザーが会場サイト内のリンクをクリックした際に
+     * Referer 経由で外部に漏れるのを防ぐ。
+     */
+    private static final String REFERRER_POLICY_NO_REFERRER = "no-referrer";
     private static final MediaType TEXT_HTML_UTF8 = new MediaType("text", "html", StandardCharsets.UTF_8);
 
     private static final Set<String> REQUEST_HEADERS_SKIP = Set.of(
@@ -108,7 +116,8 @@ public class VenueReservationProxyService {
                 request.getPracticeSessionId(),
                 request.getRoomName(),
                 request.getDate(),
-                request.getSlotIndex());
+                request.getSlotIndex(),
+                request.getReturnUrl());
 
         try {
             clientFor(venue).prepareReservationTray(session);
@@ -143,15 +152,28 @@ public class VenueReservationProxyService {
                     "Proxy session has no cached tray HTML");
         }
 
+        VenueConfig venueConfig = configFor(session.getVenue());
+        // 申込トレイ HTML はエントリーポイント URL から取得した想定。HTML 内の相対 URL は
+        // この URL を基準に解決する (ドメイン直下と取り違えないため)。
+        String currentUpstreamUrl = entryUpstreamUrl(venueConfig);
         String rewritten = htmlRewriter.rewrite(
                 html,
+                currentUpstreamUrl,
                 session,
-                configFor(session.getVenue()),
+                venueConfig,
                 rewriteStrategyFor(session.getVenue()));
 
         return ResponseEntity.ok()
                 .contentType(TEXT_HTML_UTF8)
+                .header(REFERRER_POLICY_HEADER, REFERRER_POLICY_NO_REFERRER)
                 .body(rewritten);
+    }
+
+    private static String entryUpstreamUrl(VenueConfig venueConfig) {
+        String entry = venueConfig.entryPath();
+        if (entry == null || entry.isBlank()) entry = "/";
+        if (entry.charAt(0) != '/') entry = "/" + entry;
+        return venueConfig.baseUrl() + entry;
     }
 
     public ResponseEntity<byte[]> fetch(String token, HttpServletRequest request) {
@@ -163,9 +185,9 @@ public class VenueReservationProxyService {
         VenueRewriteStrategy rewriteStrategy = rewriteStrategyFor(venue);
 
         HttpUriRequest upstreamRequest = buildUpstreamRequest(request, venueConfig);
-        HttpResponse upstreamResponse = clientFor(venue).fetch(session, upstreamRequest);
 
-        try {
+        try (CloseableHttpResponse upstreamResponse =
+                     clientFor(venue).fetch(session, upstreamRequest)) {
             return toResponseEntity(session, venueConfig, rewriteStrategy, upstreamRequest, upstreamResponse);
         } catch (IOException e) {
             throw new VenueReservationProxyException(
@@ -186,12 +208,13 @@ public class VenueReservationProxyService {
         String contentType = firstHeaderValue(upstreamResponse, HttpHeaders.CONTENT_TYPE);
         byte[] body = entity == null ? new byte[0] : EntityUtils.toByteArray(entity);
 
+        String currentUpstreamUrl = upstreamRequest.getURI().toString();
         boolean html = isHtml(contentType);
         String responseBodyForDetection = html ? new String(body, charset) : null;
         String responseLocation = firstHeaderValue(upstreamResponse, HttpHeaders.LOCATION);
         boolean completed = completionDetector.detectAndMarkComplete(
                 session,
-                upstreamRequest.getURI().toString(),
+                currentUpstreamUrl,
                 responseLocation,
                 responseBodyForDetection);
 
@@ -200,6 +223,7 @@ public class VenueReservationProxyService {
         if (html) {
             String rewritten = htmlRewriter.rewrite(
                     responseBodyForDetection,
+                    currentUpstreamUrl,
                     session,
                     venueConfig,
                     rewriteStrategy);
@@ -209,13 +233,15 @@ public class VenueReservationProxyService {
             responseBody = body;
         }
 
-        HttpHeaders headers = rewriteResponseHeaders(upstreamResponse, venueConfig, session.getToken());
+        HttpHeaders headers = rewriteResponseHeaders(
+                upstreamResponse, venueConfig, currentUpstreamUrl, session.getToken());
         if (completed) {
             headers.set(COMPLETED_HEADER, "true");
         }
         if (responseContentType != null) {
             headers.setContentType(responseContentType);
         }
+        headers.set(REFERRER_POLICY_HEADER, REFERRER_POLICY_NO_REFERRER);
         headers.setContentLength(responseBody.length);
 
         int status = upstreamResponse.getStatusLine() == null
@@ -278,7 +304,8 @@ public class VenueReservationProxyService {
         }
     }
 
-    private HttpHeaders rewriteResponseHeaders(HttpResponse upstreamResponse, VenueConfig venueConfig, String token) {
+    private HttpHeaders rewriteResponseHeaders(HttpResponse upstreamResponse, VenueConfig venueConfig,
+                                               String currentUpstreamUrl, String token) {
         HttpHeaders headers = new HttpHeaders();
         for (Header header : upstreamResponse.getAllHeaders()) {
             String name = header.getName();
@@ -287,8 +314,10 @@ public class VenueReservationProxyService {
                 continue;
             }
             if (HttpHeaders.LOCATION.equalsIgnoreCase(name)) {
+                // Location ヘッダの相対 URL も会場ページ基準で絶対化してからプロキシ URL に変換する。
                 headers.add(HttpHeaders.LOCATION,
-                        htmlRewriter.rewriteUrl(header.getValue(), venueConfig.baseUrl(), token));
+                        htmlRewriter.rewriteUrl(header.getValue(), venueConfig.baseUrl(),
+                                currentUpstreamUrl, token));
             } else {
                 headers.add(name, header.getValue());
             }

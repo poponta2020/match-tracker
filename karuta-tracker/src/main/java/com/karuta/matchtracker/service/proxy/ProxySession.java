@@ -59,4 +59,11 @@ public class ProxySession {
 
     /** 申込トレイ画面の事前取得HTML (view エンドポイントが返す元データ) */
     private String cachedTrayHtml;
+
+    /**
+     * フロントエンドの絶対 URL (オリジン + パス)。
+     * 「アプリに戻る」リンクと別オリジン構成での postMessage targetOrigin に使用する。
+     * 省略時は null。
+     */
+    private String returnUrl;
 }

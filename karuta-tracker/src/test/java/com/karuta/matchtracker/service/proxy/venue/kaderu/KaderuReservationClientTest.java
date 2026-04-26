@@ -6,7 +6,7 @@ import com.karuta.matchtracker.config.VenueReservationProxyConfig;
 import com.karuta.matchtracker.service.proxy.ProxySession;
 import com.karuta.matchtracker.service.proxy.VenueId;
 import com.karuta.matchtracker.service.proxy.VenueReservationProxyException;
-import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.cookie.BasicClientCookie;
@@ -399,11 +399,11 @@ class KaderuReservationClientTest {
         ProxySession session = newSession();
         HttpGet request = new HttpGet(venueConfig.baseUrl() + "/some/path");
 
-        HttpResponse response = client.fetch(session, request);
-
-        assertThat(response.getStatusLine().getStatusCode()).isEqualTo(200);
-        String body = EntityUtils.toString(response.getEntity());
-        assertThat(body).isEqualTo("hello");
+        try (CloseableHttpResponse response = client.fetch(session, request)) {
+            assertThat(response.getStatusLine().getStatusCode()).isEqualTo(200);
+            String body = EntityUtils.toString(response.getEntity());
+            assertThat(body).isEqualTo("hello");
+        }
     }
 
     @Test
@@ -419,7 +419,11 @@ class KaderuReservationClientTest {
         session.getCookies().addCookie(cookie);
 
         HttpGet request = new HttpGet(venueConfig.baseUrl() + "/cookie-check");
-        client.fetch(session, request);
+        try (CloseableHttpResponse response = client.fetch(session, request)) {
+            assertThat(response.getStatusLine().getStatusCode()).isEqualTo(200);
+        } catch (java.io.IOException e) {
+            throw new AssertionError(e);
+        }
 
         wireMock.verify(WireMock.getRequestedFor(urlPathEqualTo("/cookie-check"))
                 .withHeader("Cookie", matching(".*PHPSESSID=client-set-value.*")));
@@ -472,5 +476,11 @@ class KaderuReservationClientTest {
     void venueConfig_defaultBaseUrl() {
         proxyConfig.getVenues().clear();
         assertThat(venueConfig.baseUrl()).isEqualTo("https://k2.p-kashikan.jp");
+    }
+
+    @Test
+    @DisplayName("KaderuVenueConfig: entryPath は /kaderu27/index.php を返す (相対URL解決の基準)")
+    void venueConfig_entryPathIsKaderu27IndexPhp() {
+        assertThat(venueConfig.entryPath()).isEqualTo("/kaderu27/index.php");
     }
 }

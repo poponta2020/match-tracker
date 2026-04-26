@@ -162,10 +162,15 @@ Phase 1 完了時点で:
     "practiceSessionId": 123,
     "roomName": "はまなす",
     "date": "2026-04-12",
-    "slotIndex": 2
+    "slotIndex": 2,
+    "returnUrl": "https://app.example.com/practice"
   }
   ```
 - **`venue` フィールド**: enum `{ KADERU, HIGASHI }` (Phase 1 では `KADERU` のみ受理、`HIGASHI` は HTTP 400 + `VENUE_NOT_SUPPORTED`)
+- **`returnUrl` フィールド**: フロントエンドの絶対URL (省略可)。
+  - 「アプリに戻る」ボタンの遷移先と、別オリジン構成 (Render API + Vercel フロント) における
+    完了通知 (`window.opener.postMessage`) の `targetOrigin` として使用する。
+  - 同一オリジン構成では省略可。バナーは `/practice` (相対 URL) と `BroadcastChannel` のみで動作する。
 - **レスポンス (成功)**:
   ```json
   {
@@ -182,13 +187,20 @@ Phase 1 完了時点で:
 #### 4.1.2 `GET /api/venue-reservation-proxy/view?token=...`
 事前準備済みの申込トレイ画面HTMLを返却 (ヘッダーバナー注入済み)。
 
-- **認可**: `@RequireRole({SUPER_ADMIN, ADMIN})` + proxyToken有効性検証
-- **レスポンス**: 書き換え済みHTML (Content-Type: text/html)
+- **認可**: proxyToken (capability) のみ。`@RequireRole` は付与しない。
+  - 理由: ブラウザの新規タブ通常 GET 遷移として呼ばれるため、axios interceptor 経由で
+    付与される `X-User-Role` / `X-User-Id` ヘッダーは届かない。`POST /session` (`@RequireRole(ADMIN+)`)
+    で発行された UUID v4 (122 bit ランダム) かつ `SessionStore` 登録済みのもののみ有効。
+  - 漏洩防止: レスポンスに `Referrer-Policy: no-referrer` を付与し、ユーザーが画面内で
+    外部リンクをクリックした際に Referer 経由で token が漏れるのを防ぐ。
+- **レスポンス**: 書き換え済みHTML (Content-Type: text/html, Referrer-Policy: no-referrer)
 
 #### 4.1.3 `ANY /api/venue-reservation-proxy/fetch/**?token=...`
 ユーザーブラウザが画面内の操作で発生させるリクエストを会場サイトに中継。
 
-- **認可**: `@RequireRole({SUPER_ADMIN, ADMIN})` + proxyToken有効性検証
+- **認可**: proxyToken (capability) のみ。`@RequireRole` は付与しない (理由は 4.1.2 と同じ)。
+  - 会場 HTML 内の `<link href>` / `<script src>` / `<img src>` はブラウザ自動 GET になり
+    認可ヘッダーが付かないため、token-only 認証が必須。
 - **メソッド**: GET / POST / PUT / DELETE 等すべて
 - **パス**: `/api/venue-reservation-proxy/fetch/` 以降を会場サイトのパスにマッピング (会場別 origin は `VenueConfig.baseUrl`)
 - **処理**:

@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -76,6 +78,26 @@ public class VenueReservationHtmlRewriter {
      * @return 書き換え済み HTML 文字列
      */
     public String rewrite(String html, ProxySession session, VenueConfig venueConfig, VenueRewriteStrategy strategy) {
+        return rewrite(html, defaultEntryUrl(venueConfig), session, venueConfig, strategy);
+    }
+
+    /**
+     * 上流 URL を明示して HTML を書き換える。
+     *
+     * <p>{@code currentUpstreamUrl} は会場サイト上の現在のページの絶対 URL
+     * (例: {@code https://k2.p-kashikan.jp/kaderu27/index.php?p=apply})。
+     * HTML 内の相対 URL ({@code "index.php"} や {@code "script/default.js"}) を
+     * この URL を基準に解決し、ドメイン直下に誤ってマッピングされる事故を防ぐ。</p>
+     *
+     * @param html              会場サイトから受信した生の HTML
+     * @param currentUpstreamUrl HTML が取得された会場サイト上の絶対 URL
+     * @param session           対象プロキシセッション
+     * @param venueConfig       会場メタ情報
+     * @param strategy          会場固有 strategy
+     * @return 書き換え済み HTML 文字列
+     */
+    public String rewrite(String html, String currentUpstreamUrl, ProxySession session,
+                          VenueConfig venueConfig, VenueRewriteStrategy strategy) {
         if (html == null || html.isEmpty()) {
             return html == null ? "" : html;
         }
@@ -86,31 +108,42 @@ public class VenueReservationHtmlRewriter {
         Document doc = Jsoup.parse(pre);
         String baseUrl = venueConfig.baseUrl();
         String token = session.getToken();
+        String upstreamUrl = currentUpstreamUrl != null && !currentUpstreamUrl.isBlank()
+                ? currentUpstreamUrl
+                : defaultEntryUrl(venueConfig);
 
-        rewriteAttribute(doc, "a[href]", "href", baseUrl, token);
-        rewriteAttribute(doc, "form[action]", "action", baseUrl, token);
-        rewriteAttribute(doc, "img[src]", "src", baseUrl, token);
-        rewriteAttribute(doc, "link[href]", "href", baseUrl, token);
-        rewriteAttribute(doc, "script[src]", "src", baseUrl, token);
-        rewriteAttribute(doc, "iframe[src]", "src", baseUrl, token);
+        rewriteAttribute(doc, "a[href]", "href", baseUrl, upstreamUrl, token);
+        rewriteAttribute(doc, "form[action]", "action", baseUrl, upstreamUrl, token);
+        rewriteAttribute(doc, "img[src]", "src", baseUrl, upstreamUrl, token);
+        rewriteAttribute(doc, "link[href]", "href", baseUrl, upstreamUrl, token);
+        rewriteAttribute(doc, "script[src]", "src", baseUrl, upstreamUrl, token);
+        rewriteAttribute(doc, "iframe[src]", "src", baseUrl, upstreamUrl, token);
 
         for (Element base : doc.select("base")) {
             base.remove();
         }
 
-        rewriteInlineScriptsAndStyles(doc, baseUrl, token);
+        rewriteInlineScriptsAndStyles(doc, baseUrl, upstreamUrl, token);
 
-        injectScriptIntoHead(doc, session, venueConfig, strategy);
+        injectScriptIntoHead(doc, session, venueConfig, strategy, upstreamUrl);
         injectBannerIntoBody(doc, session, venueConfig);
 
         return doc.outerHtml();
     }
 
-    private void rewriteAttribute(Document doc, String selector, String attr, String baseUrl, String token) {
+    private static String defaultEntryUrl(VenueConfig venueConfig) {
+        String entry = venueConfig.entryPath();
+        if (entry == null || entry.isBlank()) entry = "/";
+        if (entry.charAt(0) != '/') entry = "/" + entry;
+        return venueConfig.baseUrl() + entry;
+    }
+
+    private void rewriteAttribute(Document doc, String selector, String attr,
+                                  String baseUrl, String upstreamUrl, String token) {
         for (Element el : doc.select(selector)) {
             String original = el.attr(attr);
             if (original == null || original.isEmpty()) continue;
-            String rewritten = rewriteUrl(original, baseUrl, token);
+            String rewritten = rewriteUrl(original, baseUrl, upstreamUrl, token);
             if (rewritten != null && !rewritten.equals(original)) {
                 el.attr(attr, rewritten);
             }
@@ -118,11 +151,25 @@ public class VenueReservationHtmlRewriter {
     }
 
     /**
-     * 会場サイト URL → プロキシ URL に変換する。会場サイト外 URL や javascript: などは不変。
+     * 後方互換用 (テスト等)。{@code venueConfig.baseUrl()} 直下を upstream とみなす。
+     */
+    String rewriteUrl(String url, String baseUrl, String token) {
+        return rewriteUrl(url, baseUrl, baseUrl + "/", token);
+    }
+
+    /**
+     * 会場サイト URL → プロキシ URL に変換する。
+     *
+     * <p>相対 URL は {@code currentUpstreamUrl} (会場サイト上の現在ページ URL) を基準に
+     * {@link URI#resolve} で解決してから絶対化する。これにより
+     * {@code action="index.php"} のような相対 URL が、誤ってドメイン直下ではなく
+     * {@code /kaderu27/index.php} に解決される。</p>
+     *
+     * <p>会場サイト外 URL や {@code javascript:}/{@code mailto:} 等は不変。</p>
      *
      * @return 変換後 URL。変換不要なら入力をそのまま返す。null は null。
      */
-    String rewriteUrl(String url, String baseUrl, String token) {
+    String rewriteUrl(String url, String baseUrl, String currentUpstreamUrl, String token) {
         if (url == null) return null;
         String trimmed = url.trim();
         if (trimmed.isEmpty()) return url;
@@ -137,31 +184,68 @@ public class VenueReservationHtmlRewriter {
                 || trimmed.startsWith(PROXY_PREFIX)) {
             return url;
         }
-
-        String path;
-        if (trimmed.startsWith(baseUrl)) {
-            path = trimmed.substring(baseUrl.length());
-            if (path.isEmpty() || path.charAt(0) != '/') {
-                path = "/" + path;
-            }
-        } else if (trimmed.charAt(0) == '/') {
-            path = trimmed;
-        } else if (lower.startsWith("http://") || lower.startsWith("https://")) {
-            // 会場外 URL は透過
-            return url;
-        } else {
-            // プロトコル相対 / 相対 URL は会場サイト相対とみなす
-            if (trimmed.startsWith("//")) {
-                return url; // protocol-relative external — 透過
-            }
-            path = "/" + trimmed;
+        if (trimmed.startsWith("//")) {
+            return url; // protocol-relative external — 透過
         }
 
-        return PROXY_PREFIX + path + appendTokenSeparator(path) + "token=" + urlEncode(token);
+        // 会場サイト上での絶対 URL を URI.resolve で解決する。
+        URI absolute = resolveAgainstUpstream(trimmed, currentUpstreamUrl);
+        if (absolute == null) {
+            return url;
+        }
+
+        // 絶対 URL のスキーム+ホストが baseUrl と一致しなければ「会場外 URL」として透過。
+        URI baseUri;
+        try {
+            baseUri = new URI(baseUrl);
+        } catch (URISyntaxException e) {
+            return url;
+        }
+        if (absolute.getHost() == null || baseUri.getHost() == null
+                || !absolute.getHost().equalsIgnoreCase(baseUri.getHost())
+                || (absolute.getScheme() != null && baseUri.getScheme() != null
+                    && !absolute.getScheme().equalsIgnoreCase(baseUri.getScheme()))) {
+            return url;
+        }
+
+        String path = absolute.getRawPath();
+        if (path == null || path.isEmpty()) {
+            path = "/";
+        }
+        String query = absolute.getRawQuery();
+        String fragment = absolute.getRawFragment();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(PROXY_PREFIX).append(path);
+        if (query != null) {
+            sb.append('?').append(query);
+            sb.append('&');
+        } else {
+            sb.append('?');
+        }
+        sb.append("token=").append(urlEncode(token));
+        if (fragment != null) {
+            sb.append('#').append(fragment);
+        }
+        return sb.toString();
     }
 
-    private static String appendTokenSeparator(String path) {
-        return path.indexOf('?') >= 0 ? "&" : "?";
+    private static URI resolveAgainstUpstream(String url, String currentUpstreamUrl) {
+        try {
+            URI base = currentUpstreamUrl != null && !currentUpstreamUrl.isBlank()
+                    ? new URI(currentUpstreamUrl)
+                    : null;
+            URI input = new URI(url);
+            if (input.isAbsolute()) {
+                return input;
+            }
+            if (base == null) {
+                return null;
+            }
+            return base.resolve(input);
+        } catch (URISyntaxException e) {
+            return null;
+        }
     }
 
     private static String urlEncode(String s) {
@@ -169,12 +253,12 @@ public class VenueReservationHtmlRewriter {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
 
-    private void rewriteInlineScriptsAndStyles(Document doc, String baseUrl, String token) {
+    private void rewriteInlineScriptsAndStyles(Document doc, String baseUrl, String upstreamUrl, String token) {
         // インライン script: 引用符で囲まれた会場サイト絶対URLのみを保守的に書き換える
         for (Element script : doc.select("script:not([src])")) {
             String body = script.data();
             if (body == null || body.isEmpty()) continue;
-            String rewritten = rewriteQuotedVenueUrls(body, baseUrl, token);
+            String rewritten = rewriteQuotedVenueUrls(body, baseUrl, upstreamUrl, token);
             if (!rewritten.equals(body)) {
                 script.text("");
                 script.appendChild(new org.jsoup.nodes.DataNode(rewritten));
@@ -184,8 +268,8 @@ public class VenueReservationHtmlRewriter {
         for (Element style : doc.select("style")) {
             String body = style.data();
             if (body == null || body.isEmpty()) continue;
-            String afterCssUrl = rewriteCssUrls(body, baseUrl, token);
-            String afterQuoted = rewriteQuotedVenueUrls(afterCssUrl, baseUrl, token);
+            String afterCssUrl = rewriteCssUrls(body, baseUrl, upstreamUrl, token);
+            String afterQuoted = rewriteQuotedVenueUrls(afterCssUrl, baseUrl, upstreamUrl, token);
             if (!afterQuoted.equals(body)) {
                 style.text("");
                 style.appendChild(new org.jsoup.nodes.DataNode(afterQuoted));
@@ -193,7 +277,7 @@ public class VenueReservationHtmlRewriter {
         }
     }
 
-    private String rewriteQuotedVenueUrls(String body, String baseUrl, String token) {
+    private String rewriteQuotedVenueUrls(String body, String baseUrl, String upstreamUrl, String token) {
         Matcher m = QUOTED_VENUE_URL.matcher(body);
         StringBuilder sb = new StringBuilder(body.length());
         int last = 0;
@@ -203,7 +287,7 @@ public class VenueReservationHtmlRewriter {
             String url = m.group(2);
             String closeQuote = m.group(3);
             if (url.startsWith(baseUrl)) {
-                String rewritten = rewriteUrl(url, baseUrl, token);
+                String rewritten = rewriteUrl(url, baseUrl, upstreamUrl, token);
                 sb.append(quote).append(rewritten).append(closeQuote);
             } else {
                 sb.append(m.group(0));
@@ -214,7 +298,7 @@ public class VenueReservationHtmlRewriter {
         return sb.toString();
     }
 
-    private String rewriteCssUrls(String body, String baseUrl, String token) {
+    private String rewriteCssUrls(String body, String baseUrl, String upstreamUrl, String token) {
         Matcher m = CSS_URL.matcher(body);
         StringBuilder sb = new StringBuilder(body.length());
         int last = 0;
@@ -225,7 +309,7 @@ public class VenueReservationHtmlRewriter {
             String closeQuote = m.group(3);
             if (url.startsWith(baseUrl)
                     || url.startsWith("/") && !url.startsWith("//")) {
-                String rewritten = rewriteUrl(url, baseUrl, token);
+                String rewritten = rewriteUrl(url, baseUrl, upstreamUrl, token);
                 sb.append("url(").append(openQuote).append(rewritten).append(closeQuote).append(")");
             } else {
                 sb.append(m.group(0));
@@ -236,12 +320,17 @@ public class VenueReservationHtmlRewriter {
         return sb.toString();
     }
 
-    private void injectScriptIntoHead(Document doc, ProxySession session, VenueConfig venueConfig, VenueRewriteStrategy strategy) {
+    private void injectScriptIntoHead(Document doc, ProxySession session, VenueConfig venueConfig,
+                                      VenueRewriteStrategy strategy, String currentUpstreamUrl) {
         String venueInject = strategy != null && strategy.injectScript() != null ? strategy.injectScript() : "";
+        String upstream = currentUpstreamUrl != null && !currentUpstreamUrl.isBlank()
+                ? currentUpstreamUrl
+                : defaultEntryUrl(venueConfig);
         String script = injectorTemplate
                 .replace("{{token}}", jsEscape(session.getToken()))
                 .replace("{{baseUrl}}", jsEscape(venueConfig.baseUrl()))
                 .replace("{{proxyPrefix}}", jsEscape(PROXY_PREFIX))
+                .replace("{{currentUpstreamUrl}}", jsEscape(upstream))
                 .replace("/* {{venueInjectScript}} */", venueInject);
 
         Element head = doc.head();
@@ -262,11 +351,13 @@ public class VenueReservationHtmlRewriter {
             body = doc.appendElement("body");
         }
         Long psid = session.getPracticeSessionId();
+        String returnUrl = session.getReturnUrl() == null ? "" : session.getReturnUrl();
         String banner = bannerTemplate
                 .replace("{{displayName}}", htmlEscape(venueConfig.displayName()))
                 .replace("{{token}}", jsEscape(session.getToken()))
                 .replace("{{practiceSessionId}}", psid == null ? "" : String.valueOf(psid))
-                .replace("{{venue}}", session.getVenue() == null ? "" : session.getVenue().name());
+                .replace("{{venue}}", session.getVenue() == null ? "" : session.getVenue().name())
+                .replace("{{returnUrl}}", jsEscape(returnUrl));
 
         // <body> 先頭に挿入
         body.prepend(banner);

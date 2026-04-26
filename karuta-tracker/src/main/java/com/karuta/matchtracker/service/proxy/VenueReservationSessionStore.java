@@ -34,12 +34,16 @@ public class VenueReservationSessionStore {
 
     /**
      * 新しいプロキシセッションを生成し、UUID トークンで登録する。
+     *
+     * @param returnUrl フロントエンドの絶対 URL (省略可、null/blank なら未設定)。
+     *                  バナーの「アプリに戻る」遷移先と、postMessage の targetOrigin に使用する。
      */
     public ProxySession createSession(VenueId venue,
                                       Long practiceSessionId,
                                       String roomName,
                                       LocalDate date,
-                                      int slotIndex) {
+                                      int slotIndex,
+                                      String returnUrl) {
         Instant now = Instant.now();
         ProxySession session = ProxySession.builder()
                 .token(UUID.randomUUID().toString())
@@ -53,6 +57,7 @@ public class VenueReservationSessionStore {
                 .createdAt(now)
                 .lastAccessedAt(now)
                 .completed(false)
+                .returnUrl(returnUrl == null || returnUrl.isBlank() ? null : returnUrl)
                 .build();
         sessions.put(session.getToken(), session);
         log.debug("Created proxy session token={} venue={} practiceSessionId={}",

@@ -5,8 +5,9 @@ import com.karuta.matchtracker.dto.CreateVenueProxySessionRequest;
 import com.karuta.matchtracker.service.proxy.venue.VenueConfig;
 import com.karuta.matchtracker.service.proxy.venue.VenueRewriteStrategy;
 import org.apache.http.HttpEntityEnclosingRequest;
-import org.apache.http.HttpResponse;
 import org.apache.http.HttpVersion;
+import org.apache.http.StatusLine;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
@@ -88,7 +89,8 @@ class VenueReservationProxyServiceTest {
                     eq(123L),
                     eq("はまなす"),
                     eq(LocalDate.of(2026, 4, 12)),
-                    eq(2))).thenReturn(session);
+                    eq(2),
+                    any())).thenReturn(session);
             doAnswer(invocation -> {
                 session.setCachedTrayHtml("<html>tray</html>");
                 return null;
@@ -113,7 +115,7 @@ class VenueReservationProxyServiceTest {
                         assertThat(ex.getErrorCode()).isEqualTo(VenueReservationProxyException.VENUE_NOT_SUPPORTED);
                         assertThat(ex.getVenue()).isEqualTo(VenueId.HIGASHI);
                     });
-            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt());
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
         }
 
         @Test
@@ -121,7 +123,7 @@ class VenueReservationProxyServiceTest {
         void prepareFailureRemovesSession() {
             VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
             ProxySession session = session();
-            when(sessionStore.createSession(any(), any(), any(), any(), anyInt())).thenReturn(session);
+            when(sessionStore.createSession(any(), any(), any(), any(), anyInt(), any())).thenReturn(session);
             VenueReservationProxyException failure = new VenueReservationProxyException(
                     VenueReservationProxyException.LOGIN_FAILED,
                     VenueId.KADERU,
@@ -147,13 +149,19 @@ class VenueReservationProxyServiceTest {
             session.setCachedTrayHtml("<html>tray</html>");
             when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
             doReturn("<html>rewritten</html>")
-                    .when(rewriter).rewrite(eq("<html>tray</html>"), eq(session), eq(venueConfig), eq(rewriteStrategy));
+                    .when(rewriter).rewrite(
+                            eq("<html>tray</html>"),
+                            any(String.class),
+                            eq(session),
+                            eq(venueConfig),
+                            eq(rewriteStrategy));
 
             ResponseEntity<String> response = service.view(TOKEN);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getHeaders().getContentType())
                     .isEqualTo(new MediaType("text", "html", StandardCharsets.UTF_8));
+            assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("no-referrer");
             assertThat(response.getBody()).isEqualTo("<html>rewritten</html>");
             verify(sessionStore).touch(TOKEN);
         }
@@ -171,9 +179,14 @@ class VenueReservationProxyServiceTest {
             ProxySession session = session();
             when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
             doReturn("<html>rewritten</html>")
-                    .when(rewriter).rewrite(eq("<html>done</html>"), eq(session), eq(venueConfig), eq(rewriteStrategy));
+                    .when(rewriter).rewrite(
+                            eq("<html>done</html>"),
+                            any(String.class),
+                            eq(session),
+                            eq(venueConfig),
+                            eq(rewriteStrategy));
 
-            HttpResponse upstreamResponse = htmlResponse("<html>done</html>");
+            CloseableHttpResponse upstreamResponse = htmlResponse("<html>done</html>");
             upstreamResponse.addHeader(HttpHeaders.SET_COOKIE, "PHPSESSID=secret");
             upstreamResponse.addHeader("X-Frame-Options", "SAMEORIGIN");
             upstreamResponse.addHeader(HttpHeaders.LOCATION, BASE_URL + "/complete");
@@ -215,6 +228,7 @@ class VenueReservationProxyServiceTest {
             assertThat(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).isNull();
             assertThat(response.getHeaders().getFirst("X-Frame-Options")).isNull();
             assertThat(response.getHeaders().getFirst("X-VRP-Completed")).isEqualTo("true");
+            assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("no-referrer");
             assertThat(response.getHeaders().getFirst(HttpHeaders.LOCATION))
                     .isEqualTo("/api/venue-reservation-proxy/fetch/complete?token=" + TOKEN);
             verify(sessionStore).touch(TOKEN);
@@ -239,7 +253,8 @@ class VenueReservationProxyServiceTest {
 
             assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.IMAGE_PNG);
             assertThat(response.getBody()).isEqualTo("img".getBytes(StandardCharsets.UTF_8));
-            verify(rewriter, never()).rewrite(any(), any(), any(), any());
+            verify(rewriter, never()).rewrite(any(), any(String.class), any(), any(), any());
+            verify(rewriter, never()).rewrite(any(), any(ProxySession.class), any(), any());
         }
     }
 
@@ -295,8 +310,8 @@ class VenueReservationProxyServiceTest {
         return config;
     }
 
-    private static HttpResponse htmlResponse(String body) {
-        BasicHttpResponse response = new BasicHttpResponse(
+    private static CloseableHttpResponse htmlResponse(String body) {
+        BasicCloseableHttpResponse response = new BasicCloseableHttpResponse(
                 new BasicStatusLine(HttpVersion.HTTP_1_1, 200, "OK"));
         response.setEntity(new StringEntity(
                 body,
@@ -305,13 +320,19 @@ class VenueReservationProxyServiceTest {
         return response;
     }
 
-    private static HttpResponse binaryResponse(byte[] body) {
-        BasicHttpResponse response = new BasicHttpResponse(
+    private static CloseableHttpResponse binaryResponse(byte[] body) {
+        BasicCloseableHttpResponse response = new BasicCloseableHttpResponse(
                 new BasicStatusLine(HttpVersion.HTTP_1_1, 200, "OK"));
         response.setEntity(new org.apache.http.entity.ByteArrayEntity(
                 body,
                 ContentType.create("image/png")));
         response.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE);
         return response;
+    }
+
+    /** テスト用 {@link CloseableHttpResponse}。close() は no-op で leak チェックには十分。 */
+    private static final class BasicCloseableHttpResponse extends BasicHttpResponse implements CloseableHttpResponse {
+        BasicCloseableHttpResponse(StatusLine statusline) { super(statusline); }
+        @Override public void close() { /* no-op */ }
     }
 }

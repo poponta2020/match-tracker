@@ -30,7 +30,8 @@ class VenueReservationSessionStoreTest {
     @DisplayName("createSession: UUID 形式のトークンが発行され、フィールドが正しくセットされる")
     void createSession_issuesUuidToken_andSetsFields() {
         ProxySession session = store.createSession(
-                VenueId.KADERU, 123L, "はまなす", LocalDate.of(2026, 4, 12), 2);
+                VenueId.KADERU, 123L, "はまなす", LocalDate.of(2026, 4, 12), 2,
+                "https://app.example.com/practice");
 
         assertThat(session.getToken()).isNotBlank();
         UUID.fromString(session.getToken()); // 形式検証 (例外が出れば失敗)
@@ -39,6 +40,7 @@ class VenueReservationSessionStoreTest {
         assertThat(session.getRoomName()).isEqualTo("はまなす");
         assertThat(session.getDate()).isEqualTo(LocalDate.of(2026, 4, 12));
         assertThat(session.getSlotIndex()).isEqualTo(2);
+        assertThat(session.getReturnUrl()).isEqualTo("https://app.example.com/practice");
         assertThat(session.getCookies()).isNotNull();
         assertThat(session.getHiddenFields()).isNotNull().isEmpty();
         assertThat(session.getCreatedAt()).isNotNull();
@@ -47,10 +49,22 @@ class VenueReservationSessionStoreTest {
     }
 
     @Test
+    @DisplayName("createSession: returnUrl が null/blank なら null として保存される")
+    void createSession_returnUrl_blankIsNull() {
+        ProxySession nullCase = store.createSession(
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
+        ProxySession blankCase = store.createSession(
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, "   ");
+
+        assertThat(nullCase.getReturnUrl()).isNull();
+        assertThat(blankCase.getReturnUrl()).isNull();
+    }
+
+    @Test
     @DisplayName("get: 登録済みトークンで ProxySession を取得できる")
     void get_returnsSession_whenTokenExists() {
         ProxySession created = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 1);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 1, null);
 
         Optional<ProxySession> fetched = store.get(created.getToken());
 
@@ -69,7 +83,7 @@ class VenueReservationSessionStoreTest {
     @DisplayName("touch: lastAccessedAt が現在時刻で更新される")
     void touch_updatesLastAccessedAt() throws InterruptedException {
         ProxySession session = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
         Instant initial = session.getLastAccessedAt();
         Thread.sleep(10);
 
@@ -88,7 +102,7 @@ class VenueReservationSessionStoreTest {
     @DisplayName("remove: 指定トークンのセッションが削除される")
     void remove_deletesSession() {
         ProxySession session = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
 
         store.remove(session.getToken());
 
@@ -99,9 +113,9 @@ class VenueReservationSessionStoreTest {
     @DisplayName("KADERU と HIGASHI のセッションは独立して扱われる")
     void differentVenues_areIsolated() {
         ProxySession kaderu = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
         ProxySession higashi = store.createSession(
-                VenueId.HIGASHI, 2L, "中ホール", LocalDate.now(), 1);
+                VenueId.HIGASHI, 2L, "中ホール", LocalDate.now(), 1, null);
 
         assertThat(kaderu.getToken()).isNotEqualTo(higashi.getToken());
         assertThat(store.get(kaderu.getToken()).orElseThrow().getVenue()).isEqualTo(VenueId.KADERU);
@@ -117,9 +131,9 @@ class VenueReservationSessionStoreTest {
     @DisplayName("cleanup: タイムアウトを超過したセッションが削除され、期限内のものは残る")
     void cleanup_removesExpiredSessions() {
         ProxySession expired = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
         ProxySession fresh = store.createSession(
-                VenueId.KADERU, 2L, "すずらん", LocalDate.now(), 0);
+                VenueId.KADERU, 2L, "すずらん", LocalDate.now(), 0, null);
         // expired のみ lastAccessedAt を 16分前にずらす (sessionTimeoutMinutes=15)
         expired.setLastAccessedAt(Instant.now().minusSeconds(16 * 60));
 
@@ -133,7 +147,7 @@ class VenueReservationSessionStoreTest {
     @DisplayName("cleanup: completed=true のセッションは経過時間に関係なく即座に削除される")
     void cleanup_removesCompletedSessionsImmediately() {
         ProxySession completed = store.createSession(
-                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
+                VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
         completed.setCompleted(true);
 
         store.cleanupExpiredSessions(Instant.now());
@@ -144,8 +158,8 @@ class VenueReservationSessionStoreTest {
     @Test
     @DisplayName("cleanup: 削除対象がない場合はサイレントに完了する")
     void cleanup_isNoOp_whenAllSessionsAreFresh() {
-        store.createSession(VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0);
-        store.createSession(VenueId.HIGASHI, 2L, "中ホール", LocalDate.now(), 1);
+        store.createSession(VenueId.KADERU, 1L, "はまなす", LocalDate.now(), 0, null);
+        store.createSession(VenueId.HIGASHI, 2L, "中ホール", LocalDate.now(), 1, null);
 
         store.cleanupExpiredSessions(Instant.now());
 

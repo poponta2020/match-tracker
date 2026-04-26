@@ -6,7 +6,6 @@ import com.karuta.matchtracker.service.proxy.VenueId;
 import com.karuta.matchtracker.service.proxy.VenueReservationClient;
 import com.karuta.matchtracker.service.proxy.VenueReservationProxyException;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -179,7 +178,7 @@ public class KaderuReservationClient implements VenueReservationClient {
     }
 
     @Override
-    public HttpResponse fetch(ProxySession session, HttpUriRequest request)
+    public CloseableHttpResponse fetch(ProxySession session, HttpUriRequest request)
             throws VenueReservationProxyException {
         try {
             return httpClient.execute(request, buildContext(session));

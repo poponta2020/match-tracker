@@ -29,4 +29,14 @@ public class CreateVenueProxySessionRequest {
      * primitive int のため null は受け付けない設計。Bean Validation の @NotNull は対象外。
      */
     private int slotIndex;
+
+    /**
+     * フロントエンドの絶対 URL (オリジン + パス、例: {@code https://app.example.com/practice})。
+     * プロキシ画面の「アプリに戻る」リンクと、別オリジン構成での完了通知 (postMessage) の
+     * targetOrigin として使用する。
+     *
+     * <p>API オリジンとフロントエンドオリジンが同一なら省略可。省略時はバナーは
+     * {@code /practice} (相対 URL) と {@code BroadcastChannel} のみを利用する。</p>
+     */
+    private String returnUrl;
 }

@@ -58,13 +58,25 @@
   var TOKEN = "{{token}}";
   var PRACTICE_SESSION_ID = "{{practiceSessionId}}";
   var VENUE = "{{venue}}";
-  var APP_HOME = "/practice";
+  // フロントエンドの絶対 URL (createSession 時にクライアントが渡したもの)。
+  // 別オリジン構成 (Render API + Vercel フロント) では必須。同一オリジンなら空文字。
+  var RETURN_URL = "{{returnUrl}}";
+  var APP_HOME_FALLBACK = "/practice"; // 同一オリジン構成での後方互換
   var CHANNEL_NAME = "venue-reservation-proxy";
-  var COMPLETION_HEADER = "X-VRP-Completed";
+
+  function resolveReturnTargetOrigin() {
+    if (!RETURN_URL) return null;
+    try {
+      return new URL(RETURN_URL).origin;
+    } catch (e) {
+      return null;
+    }
+  }
 
   function backToApp() {
+    var dest = RETURN_URL || APP_HOME_FALLBACK;
     try {
-      window.location.href = APP_HOME;
+      window.location.href = dest;
     } catch (e) {
       // ignore
     }
@@ -75,6 +87,9 @@
     backBtn.addEventListener("click", backToApp);
   }
 
+  // BroadcastChannel は同一オリジン間でのみ動作するため、別オリジン構成では補助的に
+  // window.opener.postMessage(..., targetOrigin) を発火する。両方に重複送信されても
+  // 受信側でメッセージタイプが一致するため害はない。
   var channel = null;
   try {
     if (typeof BroadcastChannel === "function") {
@@ -86,19 +101,34 @@
 
   var notified = false;
 
+  function buildPayload() {
+    return {
+      type: "reservation-completed",
+      practiceSessionId: PRACTICE_SESSION_ID ? Number(PRACTICE_SESSION_ID) : null,
+      venue: VENUE,
+      token: TOKEN
+    };
+  }
+
   function notifyCompletion() {
     if (notified) return;
     notified = true;
     var status = document.getElementById("vrp-status");
     if (status) status.textContent = "予約完了を検知しました";
+    var payload = buildPayload();
+    // 同一オリジン経路: BroadcastChannel
     if (channel) {
       try {
-        channel.postMessage({
-          type: "reservation-completed",
-          practiceSessionId: PRACTICE_SESSION_ID ? Number(PRACTICE_SESSION_ID) : null,
-          venue: VENUE,
-          token: TOKEN
-        });
+        channel.postMessage(payload);
+      } catch (e) {
+        // ignore
+      }
+    }
+    // 別オリジン経路: window.opener.postMessage(targetOrigin)
+    var targetOrigin = resolveReturnTargetOrigin();
+    if (targetOrigin && window.opener) {
+      try {
+        window.opener.postMessage(payload, targetOrigin);
       } catch (e) {
         // ignore
       }
