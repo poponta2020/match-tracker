@@ -552,6 +552,38 @@ class VenueReservationProxyServiceTest {
             // CSP は HTML レスポンスのみに付与する。
             assertThat(response.getHeaders().getFirst("Content-Security-Policy")).isNull();
         }
+
+        @Test
+        @DisplayName("CSSレスポンスは @import / url(...) を書き換え、完了検知とCSPは適用しない")
+        void rewritesCssResponse() {
+            VenueReservationHtmlRewriter rewriter = spy(new VenueReservationHtmlRewriter());
+            VenueReservationProxyService service = newService(enabledConfig(), rewriter);
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+            String css = "@import url(color_local.css?25004) screen;";
+            when(client.fetch(eq(session), any())).thenReturn(cssResponse(css));
+
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "GET",
+                    "/api/venue-reservation-proxy/fetch/kaderu27/css/style.css");
+            request.setQueryString("25007&token=" + TOKEN);
+
+            ResponseEntity<byte[]> response = service.fetch(TOKEN, request);
+
+            String body = new String(response.getBody(), StandardCharsets.UTF_8);
+            assertThat(response.getHeaders().getContentType())
+                    .isEqualTo(new MediaType("text", "css", StandardCharsets.UTF_8));
+            assertThat(body)
+                    .contains("/api/venue-reservation-proxy/fetch/kaderu27/css/color_local.css?25004&token=" + TOKEN);
+            verify(rewriter).rewriteCss(
+                    eq(css),
+                    eq(BASE_URL + "/kaderu27/css/style.css?25007"),
+                    eq(session),
+                    eq(venueConfig));
+            verify(rewriter, never()).rewrite(any(), any(String.class), any(), any(), any());
+            verify(completionDetector, never()).detectAndMarkComplete(any(), any(), any(), any());
+            assertThat(response.getHeaders().getFirst("Content-Security-Policy")).isNull();
+        }
     }
 
     private VenueReservationProxyService newService(VenueReservationProxyConfig config,
@@ -625,6 +657,16 @@ class VenueReservationProxyServiceTest {
                 body,
                 ContentType.create("image/png")));
         response.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE);
+        return response;
+    }
+
+    private static CloseableHttpResponse cssResponse(String body) {
+        BasicCloseableHttpResponse response = new BasicCloseableHttpResponse(
+                new BasicStatusLine(HttpVersion.HTTP_1_1, 200, "OK"));
+        response.setEntity(new StringEntity(
+                body,
+                ContentType.create("text/css", StandardCharsets.UTF_8)));
+        response.addHeader(HttpHeaders.CONTENT_TYPE, "text/css; charset=UTF-8");
         return response;
     }
 

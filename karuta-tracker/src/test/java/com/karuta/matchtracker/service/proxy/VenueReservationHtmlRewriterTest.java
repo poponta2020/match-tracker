@@ -210,6 +210,42 @@ class VenueReservationHtmlRewriterTest {
         }
 
         @Test
+        @DisplayName("外部CSS内の @import url(相対URL) をCSSファイル基準で書き換え")
+        void externalCssImportUrlRelative() {
+            String upstream = BASE_URL + "/kaderu27/css/style.css?25007";
+            String css = "@import url(color_local.css?25004) screen;\n"
+                    + "@import url(\"../shared/form.css\") screen;";
+
+            String out = rewriter.rewriteCss(css, upstream, session, venueConfig);
+
+            assertThat(out)
+                    .contains("url(" + PROXY_PREFIX
+                            + "/kaderu27/css/color_local.css?25004&token=" + token + ")")
+                    .contains("url(\"" + PROXY_PREFIX
+                            + "/kaderu27/shared/form.css?token=" + token + "\")");
+        }
+
+        @Test
+        @DisplayName("外部CSS内の @import \"相対URL\" と通常 url(...) を書き換え")
+        void externalCssQuotedImportAndUrl() {
+            String upstream = BASE_URL + "/kaderu27/css/style.css";
+            String css = "@import \"font.css?25001\" screen;\n"
+                    + ".logo { background-image: url('../images/logo.png'); }\n"
+                    + ".icon { background-image: url(data:image/png;base64,xxx); }\n"
+                    + ".external { background-image: url(https://example.com/ext.png); }";
+
+            String out = rewriter.rewriteCss(css, upstream, session, venueConfig);
+
+            assertThat(out)
+                    .contains("@import \"" + PROXY_PREFIX
+                            + "/kaderu27/css/font.css?25001&token=" + token + "\"")
+                    .contains("url('" + PROXY_PREFIX
+                            + "/kaderu27/images/logo.png?token=" + token + "')")
+                    .contains("url(data:image/png;base64,xxx)")
+                    .contains("url(https://example.com/ext.png)");
+        }
+
+        @Test
         @DisplayName("<script> 内の引用符付き 会場サイト絶対URL を書き換え")
         void scriptQuotedVenueUrl() {
             String html = wrap("<script>const URL = 'https://k2.p-kashikan.jp/api'; foo();</script>");

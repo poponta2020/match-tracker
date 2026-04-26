@@ -2552,13 +2552,13 @@ Entity Layer (JPA Entity)
 | `VenueReservationProxyService` | Controller から呼ばれるファサード。`createSession` / `view` / `fetch` を統括し、会場別 client / config / rewrite strategy を `EnumMap<VenueId, ...>` で dispatch |
 | `VenueReservationSessionStore` | `ProxySession` を JVM メモリで管理。token、会場、CookieStore、hiddenFields、申込トレイHTML、完了状態を保持 |
 | `VenueReservationClient` | 会場別 HTTP クライアント契約。Phase 1 は `KaderuReservationClient` |
-| `VenueReservationHtmlRewriter` | HTMLのURLを `/api/venue-reservation-proxy/fetch/**?token=...` に書き換え、バナーと注入スクリプトを挿入 |
+| `VenueReservationHtmlRewriter` | HTMLのURLを `/api/venue-reservation-proxy/fetch/**?token=...` に書き換え、バナーと注入スクリプトを挿入。CSSレスポンスでは `@import` / `url(...)` をCSS自身の上流URL基準でプロキシURLへ書き換える |
 | `VenueReservationCompletionDetector` | 会場別 `VenueCompletionStrategy` で申込完了を検知し、`reservation_confirmed_at` を初回検知時刻で固定 |
 | `venueReservationProxyAPI` | React 側の API クライアント。`createSession` で `POST /api/venue-reservation-proxy/session` を呼び、`PracticeList.jsx` から利用する |
 | `venueResolver` | `PracticeSessionDto` の `venueId` を `KADERU` / `HIGASHI` / `null` に変換する。Phase 1 は Kaderu 会場 ID `[3, 4, 8, 11]` のみを `KADERU` に解決する |
 | `PracticeList.jsx` | 「隣室を予約」クリック直後に空タブを確保し、venue 判別、プロキシセッション作成、`viewUrl` 遷移を行う。`BroadcastChannel('venue-reservation-proxy')` の完了通知で該当セッションを再取得して UI を予約済みに更新 |
 
-`fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、完了検知時は `X-VRP-Completed: true` を付与する。
+`fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、HTMLレスポンスは画面内URLを書き換える。CSSレスポンスは `@import` / `url(...)` を現在の上流CSS URL基準で書き換え、Kaderu の `css/style.css` から読み込まれる分割CSSにも proxy token が付くようにする。完了検知時は `X-VRP-Completed: true` を付与する。
 
 公開 API は `POST /api/venue-reservation-proxy/session`、`GET /api/venue-reservation-proxy/view?token=...`、`ANY /api/venue-reservation-proxy/fetch/**?token=...`。いずれも ADMIN+ のみ利用可能。
 
