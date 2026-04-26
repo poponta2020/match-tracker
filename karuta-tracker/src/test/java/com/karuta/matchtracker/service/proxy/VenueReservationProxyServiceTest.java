@@ -216,6 +216,71 @@ class VenueReservationProxyServiceTest {
             verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
         }
 
+        @Test
+        @DisplayName("slotIndex が 2 (夜間) 以外なら INVALID_REQUEST")
+        void slotIndexOtherThanNightRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setSlotIndex(0); // 午前
+
+            assertThatThrownBy(() -> service.createSession(req, "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("returnUrl の host が allowed-origins 外なら INVALID_REQUEST")
+        void returnUrlHostNotAllowedRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setReturnUrl("https://evil.example.org/practice");
+
+            assertThatThrownBy(() -> service.createSession(req, "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("returnUrl の scheme が javascript: なら INVALID_REQUEST")
+        void returnUrlJavascriptSchemeRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setReturnUrl("javascript:alert(1)");
+
+            assertThatThrownBy(() -> service.createSession(req, "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("returnUrl の host が allowed-origins に含まれていれば通過する")
+        void returnUrlAllowedHostAccepted() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            ProxySession session = session();
+            when(sessionStore.createSession(any(), any(), any(), any(), anyInt(), any())).thenReturn(session);
+            doAnswer(invocation -> {
+                session.setCachedTrayHtml("<html>tray</html>");
+                return null;
+            }).when(client).prepareReservationTray(session);
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setReturnUrl("https://app.example.com/practice");
+
+            var response = service.createSession(req, "SUPER_ADMIN", null);
+
+            assertThat(response.getProxyToken()).isEqualTo(TOKEN);
+            verify(client).prepareReservationTray(session);
+        }
+
         private void stubPracticeSessionLookup(PracticeSession entity) {
             when(practiceSessionRepository.findById(PRACTICE_SESSION_ID)).thenReturn(Optional.of(entity));
         }
@@ -256,6 +321,10 @@ class VenueReservationProxyServiceTest {
             assertThat(response.getHeaders().getContentType())
                     .isEqualTo(new MediaType("text", "html", StandardCharsets.UTF_8));
             assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("no-referrer");
+            assertThat(response.getHeaders().getFirst("Content-Security-Policy"))
+                    .as("会場サイト由来のインライン JS を縮退させる CSP")
+                    .contains("default-src 'self' " + BASE_URL)
+                    .contains("frame-ancestors 'self'");
             assertThat(response.getBody()).isEqualTo("<html>rewritten</html>");
             verify(sessionStore).touch(TOKEN);
         }
@@ -323,20 +392,42 @@ class VenueReservationProxyServiceTest {
             assertThat(response.getHeaders().getFirst("X-Frame-Options")).isNull();
             assertThat(response.getHeaders().getFirst("X-VRP-Completed")).isEqualTo("true");
             assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("no-referrer");
+            assertThat(response.getHeaders().getFirst("Content-Security-Policy"))
+                    .as("HTML レスポンスには CSP を付与する")
+                    .contains("default-src 'self' " + BASE_URL)
+                    .contains("frame-ancestors 'self'");
             assertThat(response.getHeaders().getFirst(HttpHeaders.LOCATION))
                     .isEqualTo("/api/venue-reservation-proxy/fetch/complete?token=" + TOKEN);
             verify(sessionStore).touch(TOKEN);
         }
 
         @Test
-        @DisplayName("非HTMLレスポンスは body を透過し、HTML rewriter を呼ばない")
+        @DisplayName(".. を含むパスは INVALID_REQUEST で拒否し、上流に送らない")
+        void pathTraversalRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "GET",
+                    "/api/venue-reservation-proxy/fetch/../etc/passwd");
+            request.setQueryString("token=" + TOKEN);
+
+            assertThatThrownBy(() -> service.fetch(TOKEN, request))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(client, never()).fetch(any(), any());
+        }
+
+        @Test
+        @DisplayName("非HTMLレスポンスは body を透過し、HTML rewriter / 完了検知 / CSP のいずれも呼ばない")
         void nonHtmlPassThrough() {
             VenueReservationHtmlRewriter rewriter = spy(new VenueReservationHtmlRewriter());
             VenueReservationProxyService service = newService(enabledConfig(), rewriter);
             ProxySession session = session();
             when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
             when(client.fetch(eq(session), any())).thenReturn(binaryResponse("img".getBytes(StandardCharsets.UTF_8)));
-            when(completionDetector.detectAndMarkComplete(any(), any(), any(), any())).thenReturn(false);
 
             MockHttpServletRequest request = new MockHttpServletRequest(
                     "GET",
@@ -349,6 +440,10 @@ class VenueReservationProxyServiceTest {
             assertThat(response.getBody()).isEqualTo("img".getBytes(StandardCharsets.UTF_8));
             verify(rewriter, never()).rewrite(any(), any(String.class), any(), any(), any());
             verify(rewriter, never()).rewrite(any(), any(ProxySession.class), any(), any());
+            // サブリソース (CSS/JS/画像) で完了検知が走ると誤陽性の余地があるため、HTML 以外では呼ばない。
+            verify(completionDetector, never()).detectAndMarkComplete(any(), any(), any(), any());
+            // CSP は HTML レスポンスのみに付与する。
+            assertThat(response.getHeaders().getFirst("Content-Security-Policy")).isNull();
         }
     }
 
@@ -363,7 +458,8 @@ class VenueReservationProxyServiceTest {
                 practiceSessionRepository,
                 List.of(client),
                 List.of(venueConfig),
-                List.of(rewriteStrategy));
+                List.of(rewriteStrategy),
+                "https://app.example.com,http://localhost:5173");
     }
 
     private static CreateVenueProxySessionRequest request(VenueId venue) {

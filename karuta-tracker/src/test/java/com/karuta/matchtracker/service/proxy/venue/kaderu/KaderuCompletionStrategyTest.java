@@ -80,12 +80,19 @@ class KaderuCompletionStrategyTest {
         }
 
         @Test
-        @DisplayName("rsv_comp の単語に近い ?p=rsv_completion みたいな別パターンも陽性 (substring 一致のため)")
-        void substringMatch() {
-            // p=rsv_comp は p=rsv_completion でも substring match する。
-            // Phase 1 の暫定ルールでは許容 (実機検証で確定する旨を strategy にコメント済み)。
+        @DisplayName("?p=rsv_completion (rsv_comp の prefix 拡張) は word-boundary により陰性")
+        void rsvCompletionPrefixExtensionIsNotCompletion() {
+            // word-boundary の (\?|&)p=rsv_comp(&|$) により、p=rsv_completion はマッチしない。
             String url = "https://k2.p-kashikan.jp/kaderu27/index.php?p=rsv_completion";
-            assertThat(strategy.isCompletion(url, null, null)).isTrue();
+            assertThat(strategy.isCompletion(url, null, null)).isFalse();
+        }
+
+        @Test
+        @DisplayName("/incomplete-page のような substring は word-boundary により陰性")
+        void incompletePathIsNotCompletion() {
+            // (?<![A-Za-z0-9])complete(?![A-Za-z0-9]) により、incomplete はマッチしない。
+            String url = "https://k2.p-kashikan.jp/kaderu27/incomplete-page";
+            assertThat(strategy.isCompletion(url, null, null)).isFalse();
         }
     }
 
@@ -101,10 +108,18 @@ class KaderuCompletionStrategyTest {
         }
 
         @Test
-        @DisplayName("body に「申込番号」を含むと true")
+        @DisplayName("body に「申込番号: 12345」を含むと true (番号値が直後に続くパターン)")
         void bodyApplicationNumber() {
             String body = "<html><body>申込番号: 12345</body></html>";
             assertThat(strategy.isCompletion(null, null, body)).isTrue();
+        }
+
+        @Test
+        @DisplayName("body に「申込番号」ラベル単独 (番号値が後続しない) は陰性")
+        void bodyApplicationNumberLabelOnlyIsNotCompletion() {
+            // 申込トレイ画面に「申込番号」ラベルだけが含まれていても、番号値が直後に続いていなければ陰性。
+            String body = "<html><body><label>申込番号</label><input name=\"number\"></body></html>";
+            assertThat(strategy.isCompletion(null, null, body)).isFalse();
         }
 
         @Test

@@ -5,6 +5,7 @@ import com.karuta.matchtracker.service.proxy.venue.VenueCompletionStrategy;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * かでる2・7 用の {@link VenueCompletionStrategy} 実装。
@@ -16,7 +17,10 @@ import java.util.List;
  * </ul>
  *
  * <p>誤陽性を避けるため、申込フォーム画面 (例: {@code ?p=apply}) と区別できるパターンのみを採用する。
- * 文言判定では「完了」単体のような一般語は使わない。</p>
+ * 文言判定では「完了」単体のような一般語は使わない。
+ * URL/本文ともに word-boundary を考慮した正規表現で照合し、
+ * {@code p=rsv_completion} のような関連性のないパターンや、本文中の単独の「申込番号」ラベルだけでは
+ * 陽性にしない。</p>
  *
  * <p><strong>本パターンは暫定値。</strong> Phase 1 の実機検証 (E2E ステップで実申込を1回完走させる) で
  * 確定値に絞り込み / 拡張すること。venues/kaderu.md §5 を参照。</p>
@@ -25,28 +29,37 @@ import java.util.List;
 public class KaderuCompletionStrategy implements VenueCompletionStrategy {
 
     /**
-     * URL / Location ヘッダで完了画面と判定する部分文字列パターン。
-     * いずれか1つでも含まれていれば陽性。
+     * URL / Location ヘッダで完了画面と判定する正規表現パターン。
+     * いずれか1つでもマッチすれば陽性。
+     *
+     * <p>クエリは {@code (\?|&)p=...(&|$)} で word-boundary を強制し、
+     * {@code p=rsv_completion} のようなプレフィックス一致を排除する。
+     * パスは前後を非英数字で区切る形で {@code complete} を照合し、
+     * {@code /incomplete-page} のような substring 一致を排除する。</p>
      *
      * <p>暫定値: 実機検証で確定すること。</p>
      */
-    private static final List<String> URL_COMPLETION_TOKENS = List.of(
-            "p=rsv_comp",
-            "p=fix_comp",
-            "/complete"
+    private static final List<Pattern> URL_COMPLETION_PATTERNS = List.of(
+            Pattern.compile("(\\?|&)p=rsv_comp(&|$)"),
+            Pattern.compile("(\\?|&)p=fix_comp(&|$)"),
+            Pattern.compile("(?<![A-Za-z0-9])complete(?![A-Za-z0-9])")
     );
 
     /**
-     * HTML 本文で完了画面と判定する部分文字列パターン。
-     * いずれか1つでも含まれていれば陽性。
+     * HTML 本文で完了画面と判定する正規表現パターン。
+     * いずれか1つでもマッチすれば陽性。
      *
-     * <p>暫定値: 実機検証で確定すること。一般語 (単に「完了」等) は誤陽性を招くため使用しない。</p>
+     * <p>「申込番号」は単独ラベルとしてフォーム/トレイ画面にも現れる可能性があるため、
+     * {@code 申込番号[:：\s]*[0-9０-９]+} のように「番号値が直後に続く」前提を加えて誤陽性を避ける。
+     * 一般語 (単に「完了」等) は使用しない。</p>
+     *
+     * <p>暫定値: 実機検証で確定すること。</p>
      */
-    private static final List<String> BODY_COMPLETION_TOKENS = List.of(
-            "申込みを受け付けました",
-            "申込番号",
-            "予約を受付ました",
-            "予約完了"
+    private static final List<Pattern> BODY_COMPLETION_PATTERNS = List.of(
+            Pattern.compile("申込みを受け付けました"),
+            Pattern.compile("申込番号[:：\\s]*[0-9０-９]+"),
+            Pattern.compile("予約を受付ました"),
+            Pattern.compile("予約完了")
     );
 
     @Override
@@ -56,26 +69,26 @@ public class KaderuCompletionStrategy implements VenueCompletionStrategy {
 
     @Override
     public boolean isCompletion(String requestUrl, String responseLocation, String responseBody) {
-        if (matchesUrlToken(requestUrl) || matchesUrlToken(responseLocation)) {
+        if (matchesUrlPattern(requestUrl) || matchesUrlPattern(responseLocation)) {
             return true;
         }
-        return matchesBodyToken(responseBody);
+        return matchesBodyPattern(responseBody);
     }
 
-    private static boolean matchesUrlToken(String url) {
+    private static boolean matchesUrlPattern(String url) {
         if (url == null || url.isEmpty()) return false;
-        for (String token : URL_COMPLETION_TOKENS) {
-            if (url.contains(token)) {
+        for (Pattern pattern : URL_COMPLETION_PATTERNS) {
+            if (pattern.matcher(url).find()) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean matchesBodyToken(String body) {
+    private static boolean matchesBodyPattern(String body) {
         if (body == null || body.isEmpty()) return false;
-        for (String token : BODY_COMPLETION_TOKENS) {
-            if (body.contains(token)) {
+        for (Pattern pattern : BODY_COMPLETION_PATTERNS) {
+            if (pattern.matcher(body).find()) {
                 return true;
             }
         }

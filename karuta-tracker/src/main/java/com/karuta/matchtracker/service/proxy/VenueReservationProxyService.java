@@ -21,6 +21,7 @@ import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.util.EntityUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,11 +30,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,7 +64,14 @@ public class VenueReservationProxyService {
      * Referer 経由で外部に漏れるのを防ぐ。
      */
     private static final String REFERRER_POLICY_NO_REFERRER = "no-referrer";
+    private static final String CSP_HEADER = "Content-Security-Policy";
     private static final MediaType TEXT_HTML_UTF8 = new MediaType("text", "html", StandardCharsets.UTF_8);
+
+    /**
+     * Phase 1 で許可する slotIndex。要件定義書では「夜間のみ自動予約対象」と決定済み。
+     * 朝/昼スロットを ADMIN+ 権限で確保できないようにサーバ側で固定する。
+     */
+    private static final int EXPECTED_NIGHT_SLOT = 2;
 
     private static final Set<String> REQUEST_HEADERS_SKIP = Set.of(
             "host",
@@ -96,6 +107,12 @@ public class VenueReservationProxyService {
     private final Map<VenueId, VenueReservationClient> clients;
     private final Map<VenueId, VenueConfig> venueConfigs;
     private final Map<VenueId, VenueRewriteStrategy> rewriteStrategies;
+    /**
+     * {@code returnUrl} の host に許可するセット。{@code app.cors.allowed-origins} から
+     * 起動時に算出する。空セットの場合は returnUrl の URL 形式 (http/https) のみ検証する
+     * フェイルクローズに倒すため、createSession で必ず非空チェックを行う。
+     */
+    private final Set<String> allowedReturnUrlHosts;
 
     public VenueReservationProxyService(VenueReservationProxyConfig proxyConfig,
                                         VenueReservationSessionStore sessionStore,
@@ -104,7 +121,8 @@ public class VenueReservationProxyService {
                                         PracticeSessionRepository practiceSessionRepository,
                                         List<VenueReservationClient> clients,
                                         List<VenueConfig> venueConfigs,
-                                        List<VenueRewriteStrategy> rewriteStrategies) {
+                                        List<VenueRewriteStrategy> rewriteStrategies,
+                                        @Value("${app.cors.allowed-origins:}") String allowedOriginsRaw) {
         this.proxyConfig = proxyConfig;
         this.sessionStore = sessionStore;
         this.htmlRewriter = htmlRewriter;
@@ -113,6 +131,7 @@ public class VenueReservationProxyService {
         this.clients = toVenueMap(clients, VenueReservationClient::venue, "VenueReservationClient");
         this.venueConfigs = toVenueMap(venueConfigs, VenueConfig::venue, "VenueConfig");
         this.rewriteStrategies = toVenueMap(rewriteStrategies, VenueRewriteStrategy::venue, "VenueRewriteStrategy");
+        this.allowedReturnUrlHosts = parseAllowedHosts(allowedOriginsRaw);
     }
 
     /**
@@ -144,6 +163,7 @@ public class VenueReservationProxyService {
                 "他団体の練習日は予約できません");
 
         validateRequestMatchesPracticeSession(request, practiceSession);
+        validateReturnUrl(request);
 
         ProxySession session = sessionStore.createSession(
                 venue,
@@ -200,7 +220,23 @@ public class VenueReservationProxyService {
         return ResponseEntity.ok()
                 .contentType(TEXT_HTML_UTF8)
                 .header(REFERRER_POLICY_HEADER, REFERRER_POLICY_NO_REFERRER)
+                .header(CSP_HEADER, buildCspHeader(venueConfig.baseUrl()))
                 .body(rewritten);
+    }
+
+    /**
+     * view/fetch の HTML レスポンスに付与する CSP。会場サイト由来のインライン JS が
+     * API オリジン上でフルパワー実行されるのを縮退させる。注入バナー/インジェクタは
+     * {@code 'self'} で動作するため、会場側の {@code 'unsafe-inline'} は維持する。
+     */
+    private static String buildCspHeader(String baseUrl) {
+        String src = "'self' " + baseUrl;
+        return "default-src " + src + "; "
+                + "img-src " + src + " data:; "
+                + "script-src " + src + " 'unsafe-inline'; "
+                + "style-src " + src + " 'unsafe-inline'; "
+                + "connect-src " + src + "; "
+                + "frame-ancestors 'self'";
     }
 
     private static String entryUpstreamUrl(VenueConfig venueConfig) {
@@ -244,13 +280,20 @@ public class VenueReservationProxyService {
 
         String currentUpstreamUrl = upstreamRequest.getURI().toString();
         boolean html = isHtml(contentType);
-        String responseBodyForDetection = html ? new String(body, charset) : null;
         String responseLocation = firstHeaderValue(upstreamResponse, HttpHeaders.LOCATION);
-        boolean completed = completionDetector.detectAndMarkComplete(
-                session,
-                currentUpstreamUrl,
-                responseLocation,
-                responseBodyForDetection);
+        // 完了検知は HTML レスポンスのみに限定する。CSS/JS/画像等のサブリソースで URL に
+        // /complete 等のサブストリングが含まれる場合の誤陽性を防ぐ (KaderuCompletionStrategy
+        // は word-boundary 化済みだが、main document 以外で陽性化する余地は残しておかない)。
+        boolean completed = false;
+        String responseBodyForDetection = null;
+        if (html) {
+            responseBodyForDetection = new String(body, charset);
+            completed = completionDetector.detectAndMarkComplete(
+                    session,
+                    currentUpstreamUrl,
+                    responseLocation,
+                    responseBodyForDetection);
+        }
 
         byte[] responseBody;
         MediaType responseContentType = parseMediaType(contentType);
@@ -276,6 +319,10 @@ public class VenueReservationProxyService {
             headers.setContentType(responseContentType);
         }
         headers.set(REFERRER_POLICY_HEADER, REFERRER_POLICY_NO_REFERRER);
+        if (html) {
+            // CSP は HTML レスポンスのみに付与する (CSS/JS/画像には不要)。
+            headers.set(CSP_HEADER, buildCspHeader(venueConfig.baseUrl()));
+        }
         headers.setContentLength(responseBody.length);
 
         int status = upstreamResponse.getStatusLine() == null
@@ -320,8 +367,27 @@ public class VenueReservationProxyService {
             path = "/" + path;
         }
 
+        // path traversal / 二重スラッシュ経由の host swap を上流に渡さないためのサニタイズ。
+        // {@link HttpServletRequest#getRequestURI()} は decode されない素のパスなので、
+        // ここでは encoded 形式 (例 %2e%2e) も含めてブロックする。
+        if (containsTraversal(path)) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venueConfig.venue(),
+                    "Proxy fetch path contains forbidden traversal sequence: " + path);
+        }
+
         String query = stripTokenFromQuery(request.getQueryString());
         return venueConfig.baseUrl() + path + (query.isEmpty() ? "" : "?" + query);
+    }
+
+    private static boolean containsTraversal(String path) {
+        if (path == null) return false;
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.contains("..")
+                || lower.contains("//")
+                || lower.contains("%2e%2e")
+                || lower.contains("%2f%2f");
     }
 
     private void copyRequestHeaders(HttpServletRequest request, RequestBuilder builder) {
@@ -410,6 +476,66 @@ public class VenueReservationProxyService {
                     "リクエスト部屋名と隣室名が一致しません: request=" + request.getRoomName()
                             + " expected=" + expectedAdjacentRoom);
         }
+
+        // Phase 1 では夜間スロット (2) のみ自動予約対象。朝/昼スロットを ADMIN+ 権限で確保
+        // できないようにサーバ側で明示的にブロックする (要件定義書 §2 / venues/kaderu.md §4)。
+        if (request.getSlotIndex() != EXPECTED_NIGHT_SLOT) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venue,
+                    "slotIndex は " + EXPECTED_NIGHT_SLOT + " (夜間) のみ許可されます: request="
+                            + request.getSlotIndex());
+        }
+    }
+
+    /**
+     * createSession の {@code returnUrl} を検証する。
+     *
+     * <p>{@code returnUrl} は banner の {@code window.location.href} と
+     * {@code window.opener.postMessage(targetOrigin)} に渡されるため、
+     * {@code javascript:} / {@code data:} 等のスキームが入ると DOM 形 self-XSS に繋がる。
+     * 以下を全て満たす必要がある:</p>
+     * <ul>
+     *   <li>未指定 (null/blank) は OK (banner は同一オリジン構成にフォールバック)</li>
+     *   <li>scheme は {@code http} または {@code https}</li>
+     *   <li>host は {@code app.cors.allowed-origins} に列挙された origin のいずれかと一致</li>
+     * </ul>
+     */
+    private void validateReturnUrl(CreateVenueProxySessionRequest request) {
+        String returnUrl = request.getReturnUrl();
+        if (returnUrl == null || returnUrl.isBlank()) {
+            return;
+        }
+        URI uri;
+        try {
+            uri = new URI(returnUrl);
+        } catch (URISyntaxException e) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    request.getVenue(),
+                    "returnUrl の形式が不正です: " + returnUrl);
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null
+                || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    request.getVenue(),
+                    "returnUrl の scheme は http または https のみ許可されます: " + returnUrl);
+        }
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    request.getVenue(),
+                    "returnUrl に host がありません: " + returnUrl);
+        }
+        if (!allowedReturnUrlHosts.contains(host.toLowerCase(Locale.ROOT))) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    request.getVenue(),
+                    "returnUrl の host が allowed-origins に含まれていません: " + host);
+        }
     }
 
     private void ensureVenueReady(VenueId venue) {
@@ -462,6 +588,35 @@ public class VenueReservationProxyService {
                 VenueReservationProxyException.VENUE_NOT_SUPPORTED,
                 venue,
                 message);
+    }
+
+    /**
+     * {@code app.cors.allowed-origins} (例: {@code http://localhost:5173,https://app.example.com})
+     * を解析し、host のセットに変換する。空 / 不正値はスキップしつつ警告ログを残す。
+     */
+    private static Set<String> parseAllowedHosts(String allowedOriginsRaw) {
+        Set<String> hosts = new HashSet<>();
+        if (allowedOriginsRaw == null || allowedOriginsRaw.isBlank()) {
+            return hosts;
+        }
+        for (String origin : allowedOriginsRaw.split(",")) {
+            String trimmed = origin.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                URI uri = new URI(trimmed);
+                String host = uri.getHost();
+                if (host != null && !host.isBlank()) {
+                    hosts.add(host.toLowerCase(Locale.ROOT));
+                } else {
+                    log.warn("CORS allowed-origins entry has no host: {}", trimmed);
+                }
+            } catch (URISyntaxException e) {
+                log.warn("CORS allowed-origins entry is not a valid URI: {}", trimmed);
+            }
+        }
+        return hosts;
     }
 
     private static <T> Map<VenueId, T> toVenueMap(List<T> beans,

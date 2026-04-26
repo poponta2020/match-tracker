@@ -64,8 +64,18 @@
   var APP_HOME_FALLBACK = "/practice"; // 同一オリジン構成での後方互換
   var CHANNEL_NAME = "venue-reservation-proxy";
 
+  function isSafeNavigationUrl(u) {
+    // サーバ側で returnUrl を allowed-origins と突合済みだが、保険として
+    // banner 側でも http(s) 絶対 URL もしくは / で始まる相対 URL のみを許可し、
+    // javascript:/data:/about: 等を弾く (//evil.com の protocol-relative も拒否)。
+    if (!u) return false;
+    if (/^https?:\/\//i.test(u)) return true;
+    if (u.charAt(0) === '/' && u.charAt(1) !== '/') return true;
+    return false;
+  }
+
   function resolveReturnTargetOrigin() {
-    if (!RETURN_URL) return null;
+    if (!RETURN_URL || !isSafeNavigationUrl(RETURN_URL)) return null;
     try {
       return new URL(RETURN_URL).origin;
     } catch (e) {
@@ -74,7 +84,7 @@
   }
 
   function backToApp() {
-    var dest = RETURN_URL || APP_HOME_FALLBACK;
+    var dest = RETURN_URL && isSafeNavigationUrl(RETURN_URL) ? RETURN_URL : APP_HOME_FALLBACK;
     try {
       window.location.href = dest;
     } catch (e) {
