@@ -1412,8 +1412,8 @@ Entity Layer (JPA Entity)
 { "confirmed": true }
 ```
 
-#### GET /api/lottery/notify-status?year={year}&month={month}
-**説明**: 抽選結果通知の送信済みチェック
+#### GET /api/lottery/notify-status?year={year}&month={month}&organizationId={organizationId}
+**説明**: 抽選結果通知の送信済みチェック（ADMINは自団体に強制）。対象月・団体の練習セッションIDを引き当て、`LOTTERY_WAITLISTED` / `LOTTERY_ALL_WON` / `LOTTERY_REMAINING_WON` 通知のうち `referenceId` が該当セッションに紐づくレコード数を返す
 **権限**: SUPER_ADMIN, ADMIN
 **レスポンス**:
 ```json
@@ -1421,11 +1421,11 @@ Entity Layer (JPA Entity)
 ```
 
 #### POST /api/lottery/notify-results
-**説明**: 抽選結果通知の統合送信（アプリ内通知 + LINE通知を一括送信）
+**説明**: 抽選結果通知の統合送信（アプリ内通知 + LINE通知を一括送信）。ADMINは自団体に強制
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**:
 ```json
-{ "year": 2026, "month": 4 }
+{ "year": 2026, "month": 4, "organizationId": 1 }
 ```
 **レスポンス**:
 ```json
@@ -1486,7 +1486,7 @@ Entity Layer (JPA Entity)
 **レスポンス**: `List<MonthlyApplicantDto>` (`playerId`, `name`)
 
 #### POST /api/lottery/notify-waitlisted
-**説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信
+**説明**: キャンセル待ち（WAITLISTED）の参加者のみにアプリ内通知 + LINE通知を送信。ADMINは自団体に強制
 **権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
 **リクエスト**: `{ year, month, organizationId }`
 **レスポンス**: `{ inAppCount, lineSent, lineFailed, lineSkipped }`
