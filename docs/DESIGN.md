@@ -52,6 +52,7 @@
 - Google Calendar API v3（カレンダー同期）
 - Web Push（nl.martijndwars:web-push:5.1.1 + Bouncy Castle）
 - Testcontainers（テスト用PostgreSQL）
+- Apache HttpClient 4.5（会場予約プロキシの会場サイト中継）
 
 **フロントエンド**:
 - React 19
@@ -2486,12 +2487,12 @@ Entity Layer (JPA Entity)
 2. 「隣室を予約」ボタンクリック
    ↓
 [フロントエンド: PracticeList.jsx]
-3. Kaderu 和室(venueId ∈ {3,4,8,11}) → kaderuAPI.openReserve() で予約画面を自動起動
-   東区民センター 東🌸(venueId=6) → 初期状態から「予約完了を報告」ボタンを表示
-   （KADERU_VENUE_IDS 判定で分岐）
+3. Kaderu 和室(venueId ∈ {3,4,8,11}) → venueReservationProxyAPI.createSession() でプロキシ予約画面を新規タブに表示
+   東区民センター 東🌸(venueId=6) → Phase 1 ではプロキシ未対応のため初期状態から「予約完了を報告」ボタンを表示
+   （venueResolver / KADERU_VENUE_IDS 判定で分岐）
    ↓
-4a. Kaderu 自動起動成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
-4b. DISABLED時 → 同じく「予約完了を報告」ボタンを表示（手動予約を案内）
+4a. プロキシ画面表示成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
+4b. プロキシが申込完了を自動検知した場合 → BroadcastChannel 経由で元タブへ通知し、該当セッションを再取得して「会場を拡張」ボタンを表示
    ↓
 [ユーザー操作]
 5. かでる2・7サイトで予約を完了
@@ -2540,6 +2541,28 @@ Entity Layer (JPA Entity)
 | `AdjacentRoomNotificationScheduler` | セッションフィルタを `isAdjacentCheckTarget` に切替、通知の時間帯表記を動的化（かでる: 17-21 / 東🌸: 18-21） |
 | `scripts/room-checker/sync-higashi-availability-to-db.js` | 東区民センター かっこう の月表示ページから夜間(18-21)空き状況を `room_availability_cache` に UPSERT |
 | `.github/workflows/scrape-higashi-availability.yml` | 30分間隔で上記スクレイパを実行（`concurrency.group=higashi-availability-check`） |
+
+**会場予約プロキシ（Phase 1）**:
+
+`PracticeList.jsx` の隣室予約導線は `/api/venue-reservation-proxy/*` に接続済み。旧 `/api/kaderu/*` Controller / Service、旧 React API クライアント、Playwright 版 `open-reserve.js` は削除済み。
+
+| コンポーネント | 役割 |
+|---------------|------|
+| `VenueReservationProxyController` | `/api/venue-reservation-proxy/session`、`/view`、`/fetch/**` を公開。ADMIN+ の `@RequireRole` と venue proxy 固有例外の `{errorCode, message, venue}` レスポンスを担当 |
+| `VenueReservationProxyService` | Controller から呼ばれるファサード。`createSession` / `view` / `fetch` を統括し、会場別 client / config / rewrite strategy を `EnumMap<VenueId, ...>` で dispatch |
+| `VenueReservationSessionStore` | `ProxySession` を JVM メモリで管理。token、会場、CookieStore、hiddenFields、申込トレイHTML、完了状態を保持 |
+| `VenueReservationClient` | 会場別 HTTP クライアント契約。Phase 1 は `KaderuReservationClient` |
+| `VenueReservationHtmlRewriter` | HTMLのURLを `/api/venue-reservation-proxy/fetch/**?token=...` に書き換え、バナーと注入スクリプトを挿入 |
+| `VenueReservationCompletionDetector` | 会場別 `VenueCompletionStrategy` で申込完了を検知し、`reservation_confirmed_at` を初回検知時刻で固定 |
+| `venueReservationProxyAPI` | React 側の API クライアント。`createSession` で `POST /api/venue-reservation-proxy/session` を呼び、`PracticeList.jsx` から利用する |
+| `venueResolver` | `PracticeSessionDto` の `venueId` を `KADERU` / `HIGASHI` / `null` に変換する。Phase 1 は Kaderu 会場 ID `[3, 4, 8, 11]` のみを `KADERU` に解決する |
+| `PracticeList.jsx` | 「隣室を予約」クリック直後に空タブを確保し、venue 判別、プロキシセッション作成、`viewUrl` 遷移を行う。`BroadcastChannel('venue-reservation-proxy')` の完了通知で該当セッションを再取得して UI を予約済みに更新 |
+
+`fetch` は会場サイトの `Set-Cookie` / `X-Frame-Options` / `Strict-Transport-Security` / `Content-Security-Policy` をユーザーへ返さず、完了検知時は `X-VRP-Completed: true` を付与する。
+
+公開 API は `POST /api/venue-reservation-proxy/session`、`GET /api/venue-reservation-proxy/view?token=...`、`ANY /api/venue-reservation-proxy/fetch/**?token=...`。いずれも ADMIN+ のみ利用可能。
+
+Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、`p=my_page` ログイン、`p=srch_sst` 空き状況、`p=date_select` 日付/スロット選択、`p=rsv_search` 申込トレイ遷移を行う。申込完了検知は URL / Location の `p=rsv_comp`、`p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 

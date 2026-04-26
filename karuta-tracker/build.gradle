@@ -37,6 +37,8 @@ implementation 'org.springframework.boot:spring-boot-starter-web'
 	annotationProcessor 'org.projectlombok:lombok'
 	// Jsoup for HTML scraping (Densuke integration)
 	implementation 'org.jsoup:jsoup:1.17.2'
+	// Apache HttpClient (venue-reservation-proxy で会場サイト中継に使用)
+	implementation 'org.apache.httpcomponents:httpclient:4.5.14'
 	// Web Push notifications (VAPID署名付き)
 	implementation 'nl.martijndwars:web-push:5.1.1'
 	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
@@ -55,6 +57,9 @@ implementation 'org.springframework.boot:spring-boot-starter-web'
 	testImplementation 'org.testcontainers:testcontainers:1.19.3'
 	testImplementation 'org.testcontainers:postgresql:1.19.3'
 	testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
+
+	// WireMock (venue-reservation-proxy 単体テストで会場サーバをモック)
+	testImplementation 'org.wiremock:wiremock-standalone:3.3.1'
 }
 
 tasks.named('test') {

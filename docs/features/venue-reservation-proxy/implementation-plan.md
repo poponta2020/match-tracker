@@ -40,16 +40,17 @@ status: completed
 - **完了条件:** 削除対象ファイル/設定/依存がすべて「削除しても他機能に影響しない」ことを確認した旨のレポート
 
 #### タスク2: Jsoup 依存の追加
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #525 (旧名: Jsoup 依存の追加)
 - **概要:** バックエンドで HTML パース/書き換えに使用する Jsoup を Gradle 依存に追加する。
+- **対応結果:** **既に追加済み**。`karuta-tracker/build.gradle:39` に Densuke 統合機能で追加された `implementation 'org.jsoup:jsoup:1.17.2'` が存在するため、追加変更不要。本タスクはノーオペで完了。
 - **変更対象ファイル:**
-  - `karuta-tracker/build.gradle` — `implementation 'org.jsoup:jsoup:1.17.2'` 等を追加
+  - `karuta-tracker/build.gradle` — 変更なし
 - **依存タスク:** なし
-- **完了条件:** `./gradlew build` が成功する
+- **完了条件:** `./gradlew build` が成功する (既存ビルドが既に成功している前提のためスキップ)
 
 #### タスク3: 共通骨組み (Config / SessionStore / DTO / VenueId) 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 62b2ebc の実装を確認して進捗反映）
 - **対応Issue:** #526 (旧名: DTO・Config・SessionStore 骨組み実装)
 - **概要:** プロキシセッション管理の会場非依存な骨組み (ProxySession・ConcurrentHashMap ストア・設定クラス・DTO・VenueId enum) を作成する。タイムアウトクリーンアップの @Scheduled ジョブもここで実装。
 - **変更対象ファイル (新規):**
@@ -66,9 +67,9 @@ status: completed
 - **完了条件:** 単体テストで SessionStore の CRUD・タイムアウト削除・複数 venue のセッション分離が動作する
 
 #### タスク4: VenueReservationClient interface + KaderuReservationClient 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 76fb66f の実装を確認して進捗反映）
 - **対応Issue:** #527 (旧名: KaderuProxyClient 実装)
-- **概要:** 会場別 HTTP クライアントの契約を `VenueReservationClient` interface として定義し、Phase 1 で必要な `KaderuReservationClient` 実装をかでる用に作成する。Apache HttpClient ベースで、ログイン→マイページ→空き状況→月合わせ→日付クリック→スロット選択→申込トレイまでを順次実行する。既存 [open-reserve.js](scripts/room-checker/open-reserve.js) のロジックを Java に移植。空き状況verificationはスキップ。
+- **概要:** 会場別 HTTP クライアントの契約を `VenueReservationClient` interface として定義し、Phase 1 で必要な `KaderuReservationClient` 実装をかでる用に作成する。Apache HttpClient ベースで、ログイン→マイページ→空き状況→月合わせ→日付クリック→スロット選択→申込トレイまでを順次実行する。旧 `scripts/room-checker/open-reserve.js` のロジックを Java に移植。空き状況verificationはスキップ。
 - **変更対象ファイル (新規):**
   - `service/proxy/VenueReservationClient.java` (interface) — `venue()`, `prepareReservationTray(ProxySession)`, `fetch(ProxySession, HttpRequest)`
   - `service/proxy/VenueReservationProxyException.java` — `errorCode` + `message` + `venue`
@@ -77,9 +78,9 @@ status: completed
   - `service/proxy/venue/kaderu/KaderuReservationClient.java` — VenueReservationClient impl
     - CookieStore を ProxySession ごとに分離
     - エラーコード体系 (LOGIN_FAILED / ROOM_NOT_FOUND / NOT_AVAILABLE / TRAY_NAVIGATION_FAILED / TIMEOUT 等)
-- **参考実装:**
-  - [scripts/room-checker/open-reserve.js](scripts/room-checker/open-reserve.js) — ナビゲーションのステップ構造
-  - [KaderuReservationService.java](karuta-tracker/src/main/java/com/karuta/matchtracker/service/KaderuReservationService.java) — エラーコード体系
+- **参考実装（Task 12 で削除済みの旧実装）:**
+  - `scripts/room-checker/open-reserve.js` — ナビゲーションのステップ構造
+  - `KaderuReservationService.java` — エラーコード体系
   - [venues/kaderu.md](venues/kaderu.md) — Kaderu 固有の URL / DOM / ナビゲーション (ドキュメント整備時に充実化)
 - **依存タスク:** タスク3 (#526)
 - **完了条件:**
@@ -88,7 +89,7 @@ status: completed
 - **Phase 2 への布石:** `VenueReservationClient` interface を切ったことで、higashi 実装時は `HigashiReservationClient` を追加するだけで Spring DI が拾う
 
 #### タスク5: VenueReservationHtmlRewriter + VenueRewriteStrategy + KaderuRewriteStrategy 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 22644a0 の実装を確認して進捗反映）
 - **対応Issue:** #528 (旧名: KaderuHtmlRewriter 実装)
 - **概要:** 会場サイトからの応答 HTML を書き換える会場非依存コアと、会場別 strategy を実装する。URL書き換え、ヘッダーバナー注入、Location/fetch/XHR フック用スクリプト注入、BroadcastChannel 発信ロジック、申込完了ダイアログロジックを含む。
 - **変更対象ファイル (新規):**
@@ -110,7 +111,7 @@ status: completed
 - **Phase 2 への布石:** higashi では `HigashiRewriteStrategy` で `__doPostBack` のフックを `injectScript()` に追加するだけで対応できる
 
 #### タスク6: VenueReservationCompletionDetector + VenueCompletionStrategy + KaderuCompletionStrategy 実装
-- [ ] 完了
+- [x] 完了（2026-04-25、既存コミット 3ec956b の実装を確認して進捗反映）
 - **対応Issue:** #529 (旧名: KaderuReservationCompletionDetector 実装)
 - **概要:** プロキシ経由の各レスポンスを監視し、申込完了画面到達を検知する。会場非依存コアが strategy に判定を委譲する設計。検知時は `practice_sessions.reservation_confirmed_at` を更新し、`ProxySession.completed = true` にセット。
 - **変更対象ファイル (新規):**
@@ -125,7 +126,7 @@ status: completed
 - **完了条件:** 単体テスト: 完了画面サンプル / 非完了画面サンプルで判定が期待通り動作する。複数 venue を登録した状態で正しい strategy が呼ばれる
 
 #### タスク7: VenueReservationProxyService 実装 (統括ロジック)
-- [ ] 完了
+- [x] 完了（2026-04-25）
 - **対応Issue:** #530 (旧名: KaderuProxyService 実装)
 - **概要:** Controller から呼ばれるファサード的サービス。`createSession` / `view` / `fetch` の3つのユースケースを統括する。会場別 client / strategy を `Map<VenueId, ...>` で DI し、リクエストの venue で dispatch する。
 - **変更対象ファイル (新規):**
@@ -137,7 +138,7 @@ status: completed
 - **完了条件:** 単体テストでビジネスロジック分岐 (venue dispatch, enabled=false 拒否, completion 検知時の cleanup 等) がカバーされる
 
 #### タスク8: VenueReservationProxyController 実装
-- [ ] 完了
+- [x] 完了（2026-04-25）
 - **対応Issue:** #531 (旧名: KaderuProxyController 実装)
 - **概要:** `/api/venue-reservation-proxy/*` の3エンドポイントを公開する。
 - **変更対象ファイル (新規):**
@@ -154,7 +155,7 @@ status: completed
   - `venue: "HIGASHI"` で呼ぶと HTTP 400 + `VENUE_NOT_SUPPORTED` が返る (Phase 1 では `enabled=false`)
 
 #### タスク9: フロントエンド API クライアント + venueResolver 新規作成
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #532 (旧名: フロントエンド API クライアント新規作成)
 - **概要:** React フロント側のプロキシ API クライアントと venue 判別ユーティリティを新規作成する。
 - **変更対象ファイル (新規):**
@@ -165,9 +166,10 @@ status: completed
     - `KADERU_VENUE_IDS` / `HIGASHI_VENUE_IDS` 定数を export
 - **依存タスク:** タスク8 (#531)
 - **完了条件:** API 呼び出し試験 (バックエンドのモック/実機に対して) と venueResolver の単体テスト
+- **実装メモ:** `venueReservationProxyAPI.createSession` を追加し、`src/api/index.js` からも export。`resolveVenue` は `venueId` / `venue_id` を受け取り、Phase 1 では既存の Kaderu 会場 ID `[3, 4, 8, 11]` のみ `KADERU` にマッピングする。`HIGASHI_VENUE_IDS` は Phase 2 で埋める前提の空 Set。
 
 #### タスク10: PracticeList.jsx の改修
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #533 (旧名: PracticeList.jsx の改修)
 - **概要:** 既存の `handleReserveAdjacentRoom` を新プロキシフローに置き換え、venue 判別ロジックと BroadcastChannel 受信ロジックを追加する。
 - **変更対象ファイル:**
@@ -180,9 +182,10 @@ status: completed
     - component unmount 時に channel.close()
 - **依存タスク:** タスク9 (#532)
 - **完了条件:** 手動テストで本番と同一フローの予約操作が完了する
+- **実装メモ:** `PracticeList.jsx` の「隣室を予約」を `venueReservationProxyAPI.createSession` に差し替え。クリック直後に空タブを確保し、`resolveVenue` で `KADERU` を判別してプロキシ `viewUrl` へ遷移する。成功時は自動検知漏れに備えて既存の手動報告ボタンを表示し、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信で該当セッションを再取得して UI を予約済みに更新する。既存 `AdjacentRoomFlow.test.jsx` の更新はタスク11に残す。
 
 #### タスク11: フロントエンドテスト更新
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #534 (旧名: フロントエンドテスト更新)
 - **概要:** 既存の `AdjacentRoomFlow.test.jsx` を新プロキシフロー用に書き直す。
 - **変更対象ファイル:**
@@ -191,13 +194,14 @@ status: completed
     - `kaderuAPI.openReserve` テストケースを `venueReservationProxyAPI.createSession` 用に書き直し
     - 新フローの成功/失敗ケースを網羅 (KADERU 成功 / `VENUE_NOT_SUPPORTED` / `LOGIN_FAILED` 等)
     - BroadcastChannel 経由の即時反映テストを追加
-  - `karuta-tracker-ui/src/utils/venueResolver.test.js` (新規)
+  - `karuta-tracker-ui/src/utils/venueResolver.test.js` (タスク9で新規作成済み。必要に応じて追加)
     - venue_id → VenueId のマッピングを網羅
 - **依存タスク:** タスク10 (#533)
 - **完了条件:** `npm test` 全テスト通過
+- **実装メモ:** `AdjacentRoomFlow.test.jsx` を新プロキシフローに全面更新。`venueReservationProxyAPI.createSession`、事前 `window.open`、`VENUE_NOT_SUPPORTED` / `LOGIN_FAILED`、`BroadcastChannel('venue-reservation-proxy')` の `reservation-completed` 受信、既存 `reservationConfirmedAt` 復元を検証する。`npm test` は 8 files / 111 tests 通過。
 
 #### タスク12: 既存Kaderu関連コードの削除
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #535 (旧名: 既存Kaderu関連コードの削除)
 - **概要:** タスク1の調査で「削除可能」と判定された既存コードを実際に削除する。
 - **変更対象ファイル (削除):**
@@ -213,9 +217,10 @@ status: completed
   - Render 環境変数 (手動) — `KADERU_ENABLED`, `KADERU_SCRIPT_PATH`, `KADERU_NODE_COMMAND` を削除
 - **依存タスク:** タスク10 (#533), 11 (#534)
 - **完了条件:** `./gradlew build` と `npm run build` が成功する
+- **実装メモ:** 旧 `/api/kaderu/*` Controller / Service / ServiceTest、React `api/kaderu.js`、Playwright 版 `scripts/room-checker/open-reserve.js`、旧 `kaderu.*` 設定を削除。Playwright 依存本体は higashi 系スクリプトで使用中のため維持。`KADERU_USER_ID` / `KADERU_PASSWORD` は `venue-reservation-proxy.venues.kaderu.*` で引き続き利用する。
 
 #### タスク13: ドキュメント更新
-- [ ] 完了
+- [x] 完了 (2026-04-25)
 - **対応Issue:** #536 (旧名: ドキュメント更新)
 - **概要:** [CLAUDE.md](../../../CLAUDE.md) のルール「実装が完了したら、以下のドキュメントを必ず最新の状態に更新すること」に従い、関連ドキュメントを更新する。
 - **変更対象ファイル:**
@@ -225,9 +230,10 @@ status: completed
   - [docs/features/venue-reservation-proxy/venues/kaderu.md](venues/kaderu.md) — 実装で確定した URL / DOM / 完了パターンを反映
 - **依存タスク:** タスク12 (#535)
 - **完了条件:** 4ドキュメントすべてに本機能の内容が反映されている
+- **実装メモ:** `SPECIFICATION.md` / `SCREEN_LIST.md` / `DESIGN.md` の venue-reservation-proxy 記述を Phase 1 実装済みの内容へ更新し、旧 `/api/kaderu/*` 導線削除後の状態に合わせた。`venues/kaderu.md` は `KaderuReservationClient` / `KaderuCompletionStrategy` の実装に合わせ、`/kaderu27/index.php` への form 等価 POST、部屋コード、時間帯、エラー判定、完了検知 URL / 本文トークン、`reservation_confirmed_at` の冪等更新を反映した。
 
 #### タスク14: E2E手動検証 + PR作成
-- [ ] 完了
+- [x] 完了 (2026-04-25、PR #556 作成)
 - **対応Issue:** #537 (旧名: E2E手動検証 + PR作成)
 - **概要:** 本番 (Render) の環境変数設定を確認し、実機で E2E 検証を実施。問題なければ PR 作成。
 - **作業手順:**
@@ -238,6 +244,7 @@ status: completed
   - PR作成・レビュー依頼
 - **依存タスク:** タスク13 (#536)
 - **完了条件:** PR がマージ可能な状態になる
+- **実装メモ:** PR #556 (`feat: venue reservation proxy`) を作成し、GitHub 上の `mergeable` は `MERGEABLE`。機械検証は `./gradlew build`、`./gradlew test --rerun-tasks`、`npm run test -- --reporter=verbose`、`npm run build`、変更対象系の限定 ESLint、`git diff --check` が成功。`npm run lint` は既存の unrelated 44 errors / 14 warnings で失敗。Render 環境変数確認と Kaderu 実機E2Eは、この環境に Render CLI / Kaderu 認証情報 / DB 接続情報がなく、実申込の副作用もあるため未実施として PR の Test plan に明記。
 
 ### 実装順序
 

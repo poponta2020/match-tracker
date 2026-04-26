@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// --- Mocks ---
-
 const mockNavigate = vi.fn();
+const mockSetSearchParams = vi.fn();
+
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
+  useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
 }));
 
 vi.mock('../../api', () => ({
@@ -20,17 +21,14 @@ vi.mock('../../api', () => ({
     getPlayerParticipationStatus: vi.fn().mockResolvedValue({ data: { participations: {} } }),
   },
   lotteryAPI: {},
+  venueReservationProxyAPI: {
+    createSession: vi.fn(),
+  },
 }));
 
 vi.mock('../../api/organizations', () => ({
   organizationAPI: {
     getAll: vi.fn().mockResolvedValue({ data: [] }),
-  },
-}));
-
-vi.mock('../../api/kaderu', () => ({
-  default: {
-    openReserve: vi.fn(),
   },
 }));
 
@@ -41,7 +39,7 @@ vi.mock('../../utils/auth', () => ({
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
-    currentPlayer: { id: 1, name: 'テスト管理者', role: 'SUPER_ADMIN' },
+    currentPlayer: { id: 1, name: 'Admin', role: 'SUPER_ADMIN' },
   }),
 }));
 
@@ -58,101 +56,138 @@ vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-import { practiceAPI } from '../../api';
-import kaderuAPI from '../../api/kaderu';
+import { practiceAPI, venueReservationProxyAPI } from '../../api';
 import PracticeList from './PracticeList';
 
-// セッション詳細データ（隣室空きあり）
 const sessionWithAdjacentRoom = {
   id: 1,
   sessionDate: '2026-04-12',
   totalMatches: 3,
   venueId: 3,
-  venueName: 'すずらん',
+  venueName: 'suzuran',
   capacity: 14,
   organizationId: 1,
   participantCount: 10,
   adjacentRoomStatus: {
-    adjacentRoomName: 'はまなす',
-    status: '○',
+    adjacentRoomName: 'hamanasu',
+    status: 'open',
     available: true,
     expandedVenueId: 7,
-    expandedVenueName: 'すずらん・はまなす',
+    expandedVenueName: 'suzuran-hamanasu',
     expandedCapacity: 24,
   },
   reservationConfirmedAt: null,
   matchParticipants: {},
 };
 
-// サマリーデータ
 const sessionSummary = {
   id: 1,
   sessionDate: '2026-04-12',
   totalMatches: 3,
-  venueName: 'すずらん',
+  venueName: 'suzuran',
   participantCount: 10,
   organizationId: 1,
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  // カレンダーに表示されるセッション
-  practiceAPI.getSessionSummaries.mockResolvedValue({ data: [sessionSummary] });
-  practiceAPI.getByYearMonth.mockResolvedValue({ data: [sessionSummary] });
-  // モーダル用の詳細データ
-  practiceAPI.getById.mockResolvedValue({ data: sessionWithAdjacentRoom });
-  // happy-domでは window.alert/confirm が未定義のため直接設定
-  window.alert = vi.fn();
-  window.confirm = vi.fn().mockReturnValue(true);
-});
+let openedTab;
+let broadcastChannels;
+let originalBroadcastChannel;
 
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-});
+class MockBroadcastChannel {
+  constructor(name) {
+    this.name = name;
+    this.onmessage = null;
+    this.close = vi.fn();
+    broadcastChannels.push(this);
+  }
 
-/**
- * カレンダーの日付をクリックしてモーダルを開くヘルパー
- */
-const openSessionModal = async (user) => {
-  // カレンダーの12日をクリック
+  emit(data) {
+    return this.onmessage?.({ data });
+  }
+}
+
+const renderListAndOpenSession = async (user) => {
+  render(<PracticeList />);
   const dayCell = await screen.findByText('12');
   await user.click(dayCell);
-  // モーダルが開くのを待つ
+
   await waitFor(() => {
     expect(screen.getByText('隣室を予約')).toBeInTheDocument();
   });
 };
 
-describe('隣室予約→会場拡張フロー', () => {
-  it('openReserve成功時: 隣室を予約→予約完了を報告ボタン表示→クリック→会場を拡張ボタン表示', async () => {
-    kaderuAPI.openReserve.mockResolvedValue({ data: { success: true } });
-    practiceAPI.confirmReservation.mockResolvedValue({
-      data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
-    });
+beforeEach(() => {
+  vi.clearAllMocks();
 
+  practiceAPI.getSessionSummaries.mockResolvedValue({ data: [sessionSummary] });
+  practiceAPI.getByYearMonth.mockResolvedValue({ data: [sessionSummary] });
+  practiceAPI.getById.mockResolvedValue({ data: sessionWithAdjacentRoom });
+  practiceAPI.confirmReservation.mockResolvedValue({
+    data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
+  });
+  practiceAPI.expandVenue.mockResolvedValue({
+    data: {
+      ...sessionWithAdjacentRoom,
+      venueId: 7,
+      venueName: 'suzuran-hamanasu',
+      reservationConfirmedAt: '2026-04-12T10:00:00',
+    },
+  });
+  venueReservationProxyAPI.createSession.mockResolvedValue({
+    data: {
+      proxyToken: 'token-123',
+      viewUrl: '/api/venue-reservation-proxy/view?token=token-123',
+      venue: 'KADERU',
+    },
+  });
+
+  openedTab = {
+    location: { href: 'about:blank' },
+    close: vi.fn(),
+  };
+  window.open = vi.fn(() => openedTab);
+  window.alert = vi.fn();
+  window.confirm = vi.fn().mockReturnValue(true);
+
+  broadcastChannels = [];
+  originalBroadcastChannel = window.BroadcastChannel;
+  window.BroadcastChannel = MockBroadcastChannel;
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  if (originalBroadcastChannel === undefined) {
+    delete window.BroadcastChannel;
+  } else {
+    window.BroadcastChannel = originalBroadcastChannel;
+  }
+});
+
+describe('adjacent room reservation proxy flow', () => {
+  it('creates a proxy session, opens the proxy view, then keeps manual confirmation available', async () => {
     const user = userEvent.setup();
-    render(<PracticeList />);
-    await openSessionModal(user);
+    await renderListAndOpenSession(user);
 
-    // 「隣室を予約」ボタンをクリック
     await user.click(screen.getByText('隣室を予約'));
 
-    // alertが表示され、「予約完了を報告」ボタンが表示される
     await waitFor(() => {
-      expect(kaderuAPI.openReserve).toHaveBeenCalledWith('はまなす', '2026-04-12');
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining('予約画面を開きました')
-      );
+      expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalledWith(expect.objectContaining({
+        venue: 'KADERU',
+        practiceSessionId: 1,
+        roomName: 'hamanasu',
+        date: '2026-04-12',
+        slotIndex: 2,
+        returnUrl: expect.stringMatching(/\/practice$/),
+      }));
+      expect(openedTab.location.href).toBe('http://localhost:8080/api/venue-reservation-proxy/view?token=token-123');
       expect(screen.getByText('予約完了を報告')).toBeInTheDocument();
     });
-    // この時点ではconfirmReservationはまだ呼ばれない
     expect(practiceAPI.confirmReservation).not.toHaveBeenCalled();
 
-    // 「予約完了を報告」ボタンをクリック
     await user.click(screen.getByText('予約完了を報告'));
 
-    // confirmReservation が呼ばれ、「会場を拡張」ボタンに変わる
     await waitFor(() => {
       expect(practiceAPI.confirmReservation).toHaveBeenCalledWith(1);
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
@@ -160,68 +195,127 @@ describe('隣室予約→会場拡張フロー', () => {
     expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
   });
 
-  it('DISABLED時: 隣室を予約→予約完了を報告ボタン表示→クリック→会場を拡張ボタン表示', async () => {
-    kaderuAPI.openReserve.mockRejectedValue({
-      response: { data: { errorCode: 'DISABLED' } },
-    });
-    practiceAPI.confirmReservation.mockResolvedValue({
-      data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
+  it('keeps the reservation button when the backend rejects the venue as unsupported', async () => {
+    venueReservationProxyAPI.createSession.mockRejectedValue({
+      response: { data: { errorCode: 'VENUE_NOT_SUPPORTED', message: 'unsupported venue' } },
     });
 
     const user = userEvent.setup();
-    render(<PracticeList />);
-    await openSessionModal(user);
+    await renderListAndOpenSession(user);
 
-    // 「隣室を予約」ボタンをクリック
     await user.click(screen.getByText('隣室を予約'));
 
-    // alertが表示され、「予約完了を報告」ボタンが表示される
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining('自動予約機能は現在利用できません')
-      );
-      expect(screen.getByText('予約完了を報告')).toBeInTheDocument();
+      expect(openedTab.close).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('プロキシ予約に対応していません'));
+      expect(screen.getByText('隣室を予約')).toBeInTheDocument();
     });
-    // この時点ではconfirmReservationはまだ呼ばれない
-    expect(practiceAPI.confirmReservation).not.toHaveBeenCalled();
+    expect(screen.queryByText('予約完了を報告')).not.toBeInTheDocument();
+  });
 
-    // 「予約完了を報告」ボタンをクリック
-    await user.click(screen.getByText('予約完了を報告'));
+  it('closes the proxy tab and shows the backend message on login failure', async () => {
+    venueReservationProxyAPI.createSession.mockRejectedValue({
+      response: { data: { errorCode: 'LOGIN_FAILED', message: 'ログインに失敗しました' } },
+    });
 
-    // confirmReservation が呼ばれ、「会場を拡張」ボタンに変わる
+    const user = userEvent.setup();
+    await renderListAndOpenSession(user);
+
+    await user.click(screen.getByText('隣室を予約'));
+
     await waitFor(() => {
-      expect(practiceAPI.confirmReservation).toHaveBeenCalledWith(1);
+      expect(openedTab.close).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('ログインに失敗しました'));
+      expect(screen.getByText('隣室を予約')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('予約完了を報告')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the selected session when BroadcastChannel receives reservation-completed', async () => {
+    const completedSession = {
+      ...sessionWithAdjacentRoom,
+      reservationConfirmedAt: '2026-04-12T10:00:00',
+    };
+    practiceAPI.getById
+      .mockResolvedValueOnce({ data: sessionWithAdjacentRoom })
+      .mockResolvedValueOnce({ data: completedSession });
+
+    const user = userEvent.setup();
+    await renderListAndOpenSession(user);
+
+    // Register a proxy token first so the completion handler accepts the notification
+    await user.click(screen.getByText('隣室を予約'));
+    await waitFor(() => {
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      await broadcastChannels[0].emit({
+        type: 'reservation-completed',
+        practiceSessionId: 1,
+        venue: 'KADERU',
+        token: 'token-123',
+      });
+    });
+
+    await waitFor(() => {
+      expect(practiceAPI.getById).toHaveBeenLastCalledWith(1);
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
   });
 
-  it('その他エラー時: エラーメッセージが表示され、隣室を予約ボタンのまま', async () => {
-    kaderuAPI.openReserve.mockRejectedValue({
-      response: { data: { message: 'サーバーエラー' } },
-    });
-
+  it('ignores reservation-completed messages whose token does not match the registered proxy session', async () => {
     const user = userEvent.setup();
-    render(<PracticeList />);
-    await openSessionModal(user);
+    await renderListAndOpenSession(user);
 
-    // 「隣室を予約」ボタンをクリック
     await user.click(screen.getByText('隣室を予約'));
-
-    // エラーalertが表示される
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining('サーバーエラー')
-      );
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
     });
 
-    // ボタンは「隣室を予約」のまま
-    expect(screen.getByText('隣室を予約')).toBeInTheDocument();
+    practiceAPI.getById.mockClear();
+
+    await act(async () => {
+      await broadcastChannels[0].emit({
+        type: 'reservation-completed',
+        practiceSessionId: 1,
+        venue: 'KADERU',
+        token: 'attacker-token',
+      });
+    });
+
+    expect(practiceAPI.getById).not.toHaveBeenCalled();
     expect(screen.queryByText('会場を拡張')).not.toBeInTheDocument();
-    expect(screen.queryByText('予約完了を報告')).not.toBeInTheDocument();
   });
 
-  it('ページリロード時: reservationConfirmedAtがある場合は会場を拡張ボタンが表示される', async () => {
-    // getByIdが予約確認済みデータを返す
+  it('ignores window.message events from origins other than the API origin', async () => {
+    const user = userEvent.setup();
+    await renderListAndOpenSession(user);
+
+    await user.click(screen.getByText('隣室を予約'));
+    await waitFor(() => {
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
+    });
+
+    practiceAPI.getById.mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'reservation-completed',
+          practiceSessionId: 1,
+          venue: 'KADERU',
+          token: 'token-123',
+        },
+        origin: 'https://attacker.example.com',
+      }));
+    });
+
+    expect(practiceAPI.getById).not.toHaveBeenCalled();
+    expect(screen.queryByText('会場を拡張')).not.toBeInTheDocument();
+  });
+
+  it('shows the expand button immediately when reservationConfirmedAt is already set', async () => {
     practiceAPI.getById.mockResolvedValue({
       data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
     });
@@ -229,11 +323,9 @@ describe('隣室予約→会場拡張フロー', () => {
     const user = userEvent.setup();
     render(<PracticeList />);
 
-    // カレンダーの12日をクリック
     const dayCell = await screen.findByText('12');
     await user.click(dayCell);
 
-    // 初期表示から「会場を拡張」ボタンが表示されている（予約確認済みのため）
     await waitFor(() => {
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
