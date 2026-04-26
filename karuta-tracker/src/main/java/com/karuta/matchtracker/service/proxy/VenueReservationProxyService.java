@@ -98,6 +98,13 @@ public class VenueReservationProxyService {
      * プロキシは server-to-server で通信するので、これらは除去する方が会場側の通常リクエストに近い。
      * Referer をどうしても付けたい場合は、ブラウザ値ではなくサーバ側で
      * {@code currentUpstreamUrl} を改めて設定するのが安全。</p>
+     *
+     * <p>{@code user-agent} はサーバ側ログインから申込トレイ準備、ユーザのフォーム送信まで
+     * 一貫した値を会場サイトに見せるために除去する。Kaderu はセッションを UA に紐付けて
+     * 検証するため、サーバ側 (Chrome デスクトップ UA) で確立したセッションに
+     * Mobile Safari など別 UA で POST すると Kaderu がセッションを無効化してログイン画面に
+     * 飛ばす (Issue #577)。除去すると HttpClient が {@code setUserAgent} で設定済みの
+     * Chrome デスクトップ UA をデフォルトとして使うため、UA がブレなくなる。</p>
      */
     private static final Set<String> REQUEST_HEADERS_SKIP = Set.of(
             "host",
@@ -111,7 +118,8 @@ public class VenueReservationProxyService {
             "sec-fetch-site",
             "sec-fetch-mode",
             "sec-fetch-dest",
-            "sec-fetch-user"
+            "sec-fetch-user",
+            "user-agent"
     );
 
     private static final Set<String> RESPONSE_HEADERS_SKIP = Set.of(
