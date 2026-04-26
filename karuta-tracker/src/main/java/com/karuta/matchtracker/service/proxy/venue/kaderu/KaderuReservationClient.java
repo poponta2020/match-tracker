@@ -32,9 +32,13 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * かでる2・7 会場のリバースプロキシ用 HTTP クライアント実装。
@@ -206,10 +210,17 @@ public class KaderuReservationClient implements VenueReservationClient {
     // ===== private steps =====
 
     private void login(ProxySession session, String userId, String password) {
+        // ===== 診断ログ (Issue #562, 切り分け後に撤去) =====
+        log.info("[#562] Kaderu login start: userIdLen={} passwordLen={}",
+                userId.length(), password.length());
+
         // ログインフォームへ初期 GET (PHPSESSID 取得 + 隠しフィールド取得を兼ねる)
         HttpGet initial = new HttpGet(venueConfig.baseUrl() + ENTRY_PATH);
-        executeForHtml(session, initial, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
+        String entryHtml = executeForHtml(session, initial,
+                VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to fetch kaderu entry page");
+        log.info("[#562] Entry GET: htmlLen={} hiddenFields={} cookies={}",
+                entryHtml.length(), extractHiddenFieldNames(entryHtml), cookieNames(session));
 
         // ログインフォーム POST。kaderu の gotoPage('my_page') 経由で到達するログイン画面の
         // <button name="loginBtn"> 押下と等価。
@@ -223,12 +234,62 @@ public class KaderuReservationClient implements VenueReservationClient {
         String body = executeForHtml(session, post, VenueReservationProxyException.LOGIN_FAILED,
                 "Kaderu login HTTP error");
 
+        boolean hasMyPage = body.contains("マイページ");
+        boolean hasLogout = body.contains("ログアウト");
+        log.info("[#562] Login POST response: htmlLen={} hasMyPage={} hasLogout={} cookies={}",
+                body.length(), hasMyPage, hasLogout, cookieNames(session));
+
         // ログイン成功検知 (open-reserve.js:107-110 と同等。"マイページ" or "ログアウト" が含まれる)
-        if (!body.contains("マイページ") && !body.contains("ログアウト")) {
+        if (!hasMyPage && !hasLogout) {
+            log.warn("[#562] Login failed body head (1000 chars): {}",
+                    truncateForLog(body, 1000));
             throw new VenueReservationProxyException(
                     VenueReservationProxyException.LOGIN_FAILED, VenueId.KADERU,
                     "Kaderu login failed (response did not show マイページ/ログアウト)");
         }
+    }
+
+    // ===== 診断ヘルパー (Issue #562, 切り分け後に撤去) =====
+
+    /** name属性が type の前/後どちらでも拾えるよう2パターンの正規表現で hidden field 名を抽出。 */
+    private static final Pattern HIDDEN_PATTERN_TYPE_FIRST = Pattern.compile(
+            "<input[^>]*type=[\"']hidden[\"'][^>]*name=[\"']([^\"']+)[\"']",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern HIDDEN_PATTERN_NAME_FIRST = Pattern.compile(
+            "<input[^>]*name=[\"']([^\"']+)[\"'][^>]*type=[\"']hidden[\"']",
+            Pattern.CASE_INSENSITIVE);
+
+    private static List<String> extractHiddenFieldNames(String html) {
+        if (html == null || html.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        Matcher m1 = HIDDEN_PATTERN_TYPE_FIRST.matcher(html);
+        while (m1.find()) {
+            names.add(m1.group(1));
+        }
+        Matcher m2 = HIDDEN_PATTERN_NAME_FIRST.matcher(html);
+        while (m2.find()) {
+            names.add(m2.group(1));
+        }
+        return new ArrayList<>(names);
+    }
+
+    private static List<String> cookieNames(ProxySession session) {
+        if (session == null || session.getCookies() == null) {
+            return List.of();
+        }
+        return session.getCookies().getCookies().stream()
+                .map(c -> c.getName())
+                .collect(Collectors.toList());
+    }
+
+    private static String truncateForLog(String s, int max) {
+        if (s == null) {
+            return "";
+        }
+        String collapsed = s.replaceAll("\\s+", " ");
+        return collapsed.length() > max ? collapsed.substring(0, max) : collapsed;
     }
 
     private void navigateMyPage(ProxySession session) {
