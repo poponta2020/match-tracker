@@ -386,8 +386,14 @@ class VenueReservationProxyServiceTest {
             assertThat(proxiedBody).isEqualTo("name=value");
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-            assertThat(new String(response.getBody(), StandardCharsets.UTF_8))
-                    .isEqualTo("<html>rewritten</html>");
+            String responseBody = new String(response.getBody(), StandardCharsets.UTF_8);
+            assertThat(responseBody)
+                    .as("リライト後 HTML をレスポンスに含む")
+                    .contains("<html>rewritten</html>");
+            assertThat(responseBody)
+                    .as("完了検知時は X-VRP-Completed ヘッダを読めないトップレベル遷移経路でも"
+                            + "vrp-reservation-completed を発火する dispatch スクリプトを末尾に挿入する")
+                    .contains("vrp-reservation-completed");
             assertThat(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).isNull();
             assertThat(response.getHeaders().getFirst("X-Frame-Options")).isNull();
             assertThat(response.getHeaders().getFirst("X-VRP-Completed")).isEqualTo("true");
@@ -399,6 +405,89 @@ class VenueReservationProxyServiceTest {
             assertThat(response.getHeaders().getFirst(HttpHeaders.LOCATION))
                     .isEqualTo("/api/venue-reservation-proxy/fetch/complete?token=" + TOKEN);
             verify(sessionStore).touch(TOKEN);
+        }
+
+        @Test
+        @DisplayName("トップレベルのフォーム POST 完了レスポンスでも、レスポンス HTML 末尾に "
+                + "vrp-reservation-completed dispatch スクリプトを </body> 直前に挿入する "
+                + "(X-VRP-Completed ヘッダはトップレベル遷移では読めないため)")
+        void injectsCompletionDispatchScriptBeforeBodyClose() throws Exception {
+            // 実物の HtmlRewriter を使うことで、バナー注入 + </body> 直前への dispatch script
+            // 挿入が正しく組み合わさることを確認する。
+            VenueReservationHtmlRewriter rewriter = new VenueReservationHtmlRewriter();
+            VenueReservationProxyService service = newService(enabledConfig(), rewriter);
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+
+            String upstreamHtml = "<html><head><title>完了</title></head>"
+                    + "<body><h1>予約完了しました</h1></body></html>";
+            CloseableHttpResponse upstreamResponse = htmlResponse(upstreamHtml);
+            when(client.fetch(eq(session), any())).thenReturn(upstreamResponse);
+            when(completionDetector.detectAndMarkComplete(any(), any(), any(), any()))
+                    .thenReturn(true);
+
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "POST",
+                    "/api/venue-reservation-proxy/fetch/kaderu27/index.php");
+            request.setQueryString("p=apply&token=" + TOKEN);
+            request.setContentType(MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+            request.setContent("name=value".getBytes(StandardCharsets.UTF_8));
+
+            ResponseEntity<byte[]> response = service.fetch(TOKEN, request);
+
+            String body = new String(response.getBody(), StandardCharsets.UTF_8);
+
+            // injector.js も fetch / XHR フック経由で同じ CustomEvent を dispatch するため、
+            // 単に "vrp-reservation-completed" の有無だけ見ると常に true となり判別できない。
+            // サーバ側で追加挿入した dispatch スクリプトは <script>try{window.dispatchEvent
+            // という独自の prologue で識別する。
+            String dispatchScriptPrologue = "<script>try{window.dispatchEvent";
+            int dispatchIdx = body.indexOf(dispatchScriptPrologue);
+            assertThat(dispatchIdx)
+                    .as("完了検知時はサーバ側で dispatch スクリプトを挿入する")
+                    .isGreaterThanOrEqualTo(0);
+            int closingBodyIdx = body.lastIndexOf("</body>");
+            assertThat(closingBodyIdx)
+                    .as("リライト後 HTML には </body> が必ずある (Jsoup 正規化)")
+                    .isGreaterThan(0);
+            assertThat(dispatchIdx)
+                    .as("dispatch スクリプトは </body> 直前に挿入され、"
+                            + "<body> 先頭のバナーが addEventListener を済ませた後に評価される")
+                    .isLessThan(closingBodyIdx);
+            // X-VRP-Completed ヘッダはバックアップとして残す (fetch / XHR 経由の検知に使う)。
+            assertThat(response.getHeaders().getFirst("X-VRP-Completed")).isEqualTo("true");
+        }
+
+        @Test
+        @DisplayName("完了未検知の HTML レスポンスには dispatch スクリプトを挿入しない")
+        void doesNotInjectDispatchScriptWhenNotCompleted() throws Exception {
+            VenueReservationHtmlRewriter rewriter = new VenueReservationHtmlRewriter();
+            VenueReservationProxyService service = newService(enabledConfig(), rewriter);
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+
+            CloseableHttpResponse upstreamResponse = htmlResponse(
+                    "<html><body><h1>申込画面</h1></body></html>");
+            when(client.fetch(eq(session), any())).thenReturn(upstreamResponse);
+            when(completionDetector.detectAndMarkComplete(any(), any(), any(), any()))
+                    .thenReturn(false);
+
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "GET",
+                    "/api/venue-reservation-proxy/fetch/kaderu27/index.php");
+            request.setQueryString("p=apply&token=" + TOKEN);
+
+            ResponseEntity<byte[]> response = service.fetch(TOKEN, request);
+
+            String body = new String(response.getBody(), StandardCharsets.UTF_8);
+            // 完了未検知時にサーバ側 dispatch スクリプトを挿入してはいけない
+            // (フォールバック誤発火でユーザーが申込操作の途中で「予約完了」アラートに飲み込まれる事故を防ぐ)。
+            // injector.js が fetch/XHR フック内で発火するパスは引き続き含まれるが、
+            // サーバ側で追加挿入される独自 prologue ("<script>try{window.dispatchEvent") は無いことを確認する。
+            assertThat(body)
+                    .as("サーバ側で追加挿入される dispatch スクリプトは含まれない")
+                    .doesNotContain("<script>try{window.dispatchEvent");
+            assertThat(response.getHeaders().getFirst("X-VRP-Completed")).isNull();
         }
 
         @Test

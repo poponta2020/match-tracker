@@ -151,21 +151,13 @@
     backToApp();
   }
 
-  // 完了検知トリガー: injector.js の fetch/XHR フックが X-VRP-Completed: true を見たら
-  // window へ vrp-reservation-completed カスタムイベントを発火する。
+  // 完了検知トリガー:
+  //   - fetch / XMLHttpRequest 経由の応答: injector.js のフックが X-VRP-Completed: true を読み、
+  //     vrp-reservation-completed カスタムイベントを発火する。
+  //   - トップレベルのフォーム送信による画面遷移: サーバ側 (VenueReservationProxyService) が
+  //     完了検知時に同名イベントを dispatch する小さなスクリプトを HTML 末尾に注入する。
+  // 二重発火されても notified フラグで一度しか走らない。
   window.addEventListener("vrp-reservation-completed", notifyCompletion);
-
-  // フォールバック: HTML 本文に <!-- VRP-COMPLETED --> マーカーがあった場合
-  try {
-    if (document && document.documentElement
-        && document.documentElement.outerHTML
-        && document.documentElement.outerHTML.indexOf("VRP-COMPLETED") >= 0) {
-      // DOM に既にマーカーが乗ってきた場合は次のティックで発火
-      setTimeout(notifyCompletion, 0);
-    }
-  } catch (e) {
-    // ignore
-  }
 
   window.addEventListener("beforeunload", function () {
     if (channel) {

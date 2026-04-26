@@ -57,6 +57,18 @@ public class VenueReservationProxyService {
     private static final String VIEW_PATH = "/api/venue-reservation-proxy/view";
     private static final String FETCH_PREFIX = VenueReservationHtmlRewriter.PROXY_PREFIX;
     private static final String COMPLETED_HEADER = "X-VRP-Completed";
+    /**
+     * 完了検知時に注入するインラインスクリプト。
+     *
+     * <p>{@code X-VRP-Completed} ヘッダは fetch / XMLHttpRequest フックでしか読めず、Kaderu の
+     * 「予約確定」ボタンのようにトップレベルのフォーム送信で完了画面に遷移するケースでは
+     * バナースクリプトに完了を伝えられない。サーバ側で {@code vrp-reservation-completed}
+     * を発火する小さなスクリプトを HTML 末尾に挿入することで、トップレベル遷移経路でも
+     * バナーの {@code notifyCompletion()} が走り、{@code BroadcastChannel} / {@code postMessage}
+     * 経由で元タブの {@code PracticeList} が拡張ボタンに切り替わる。</p>
+     */
+    private static final String COMPLETION_DISPATCH_SCRIPT =
+            "<script>try{window.dispatchEvent(new CustomEvent(\"vrp-reservation-completed\"));}catch(e){}</script>";
     private static final String REFERRER_POLICY_HEADER = "Referrer-Policy";
     /**
      * view/fetch のレスポンスに付与する Referrer-Policy。
@@ -305,6 +317,9 @@ public class VenueReservationProxyService {
                     session,
                     venueConfig,
                     rewriteStrategy);
+            if (completed) {
+                rewritten = injectCompletionDispatchScript(rewritten);
+            }
             responseBody = rewritten.getBytes(StandardCharsets.UTF_8);
             responseContentType = TEXT_HTML_UTF8;
         } else {
@@ -333,6 +348,23 @@ public class VenueReservationProxyService {
         return ResponseEntity.status(status)
                 .headers(headers)
                 .body(responseBody);
+    }
+
+    /**
+     * 完了検知時に dispatch スクリプトを HTML 末尾 ({@code </body>} 直前) に挿入する。
+     * バナーは {@code <body>} 先頭に注入されているため、ここで挿入したスクリプトは
+     * 必ずバナーの {@code addEventListener} より後に評価され、リスナーが取りこぼされない。
+     */
+    private static String injectCompletionDispatchScript(String html) {
+        if (html == null || html.isEmpty()) {
+            return COMPLETION_DISPATCH_SCRIPT;
+        }
+        String lower = html.toLowerCase(Locale.ROOT);
+        int idx = lower.lastIndexOf("</body>");
+        if (idx < 0) {
+            return html + COMPLETION_DISPATCH_SCRIPT;
+        }
+        return html.substring(0, idx) + COMPLETION_DISPATCH_SCRIPT + html.substring(idx);
     }
 
     private HttpUriRequest buildUpstreamRequest(HttpServletRequest request, VenueConfig venueConfig) {
