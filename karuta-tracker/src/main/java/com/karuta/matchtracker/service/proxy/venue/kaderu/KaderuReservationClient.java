@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
  * scripts/room-checker/open-reserve.js の Playwright 版 6 ステップを HTTP リクエストへ移植する。
  * 詳細は docs/features/venue-reservation-proxy/venues/kaderu.md §2 を参照。</p>
  *
- * <p>kaderu サイトはページ遷移を JavaScript の gotoPage(p) / showCalendar(y, m) /
+ * <p>kaderu サイトはページ遷移を JavaScript の gotoPage(op) / showCalendar(y, m) /
  * clickDay(d) / setAppStatus(...) で行うが、内部的には PHP の index.php に対する form POST に
  * 等価。本実装はこの form 等価 POST を直接組み立てて送信する。
  * 細部のフィールド名や順序は実機 E2E (Task 4 完了条件の手動検証) で確定する。</p>
@@ -59,7 +59,7 @@ public class KaderuReservationClient implements VenueReservationClient {
     /** kaderu サイトのエントリポイント パス (baseUrl 直下からの相対) */
     static final String ENTRY_PATH = "/kaderu27/index.php";
 
-    /** ページ識別子 (kaderu の gotoPage(p) と等価) */
+    /** ページ識別子 (kaderu の gotoPage(op) と等価) */
     static final String PAGE_LOGIN = "login";
     static final String PAGE_MY_PAGE = "my_page";
     static final String PAGE_AVAILABILITY = "srch_sst";
@@ -221,7 +221,7 @@ public class KaderuReservationClient implements VenueReservationClient {
         // フォームの hidden field (op など) はブラウザ submit と同様にすべて転送する。
         // これを送らないとサーバはログインを拒否してフォーム画面を返す (Issue #562)。
         List<NameValuePair> form = new ArrayList<>(extractHiddenFields(entryHtml));
-        upsertField(form, "p", PAGE_MY_PAGE);
+        upsertField(form, "op", PAGE_MY_PAGE);
         upsertField(form, "loginID", userId);
         upsertField(form, "loginPwd", password);
         upsertField(form, "loginBtn", "ログイン");
@@ -298,7 +298,7 @@ public class KaderuReservationClient implements VenueReservationClient {
     }
 
     private void navigateMyPage(ProxySession session) {
-        List<NameValuePair> form = List.of(new BasicNameValuePair("p", PAGE_MY_PAGE));
+        List<NameValuePair> form = List.of(new BasicNameValuePair("op", PAGE_MY_PAGE));
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
         executeForHtml(session, post, VenueReservationProxyException.TRAY_NAVIGATION_FAILED,
                 "Failed to navigate to kaderu my page");
@@ -308,7 +308,7 @@ public class KaderuReservationClient implements VenueReservationClient {
         // gotoPage('srch_sst') 等価。月パラメータは UseYM=YYYYMM。
         String useYm = String.format(Locale.ROOT, "%04d%02d", date.getYear(), date.getMonthValue());
         List<NameValuePair> form = List.of(
-                new BasicNameValuePair("p", PAGE_AVAILABILITY),
+                new BasicNameValuePair("op", PAGE_AVAILABILITY),
                 new BasicNameValuePair("UseYM", useYm)
         );
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
@@ -325,7 +325,7 @@ public class KaderuReservationClient implements VenueReservationClient {
         // showCalendar(y, m) 等価。既に同じ月であれば現状の HTML には対象月が表示されている前提で
         // POST 自体を省略してもよいが、ステートレスに毎回送って同月を再確認する方が安全。
         List<NameValuePair> form = List.of(
-                new BasicNameValuePair("p", PAGE_AVAILABILITY),
+                new BasicNameValuePair("op", PAGE_AVAILABILITY),
                 new BasicNameValuePair("UseYear", String.valueOf(date.getYear())),
                 new BasicNameValuePair("UseMonth", String.format(Locale.ROOT, "%02d", date.getMonthValue()))
         );
@@ -335,11 +335,11 @@ public class KaderuReservationClient implements VenueReservationClient {
     }
 
     private void clickDay(ProxySession session, LocalDate date) {
-        // clickDay(d) 等価。POST p=date_select + UseDate=YYYYMMDD
+        // clickDay(d) 等価。POST op=date_select + UseDate=YYYYMMDD
         String useDate = String.format(Locale.ROOT, "%04d%02d%02d",
                 date.getYear(), date.getMonthValue(), date.getDayOfMonth());
         List<NameValuePair> form = List.of(
-                new BasicNameValuePair("p", PAGE_DATE_SELECT),
+                new BasicNameValuePair("op", PAGE_DATE_SELECT),
                 new BasicNameValuePair("UseDate", useDate)
         );
         HttpPost post = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, form);
@@ -359,7 +359,7 @@ public class KaderuReservationClient implements VenueReservationClient {
 
         // setAppStatus 等価。スロット選択フォーム送信。
         List<NameValuePair> selectForm = new ArrayList<>();
-        selectForm.add(new BasicNameValuePair("p", PAGE_DATE_SELECT));
+        selectForm.add(new BasicNameValuePair("op", PAGE_DATE_SELECT));
         selectForm.add(new BasicNameValuePair("setAppStatus", "1"));
         selectForm.add(new BasicNameValuePair("facilityCode", facilityCode));
         selectForm.add(new BasicNameValuePair("useDate", dateFormatted));
@@ -378,7 +378,7 @@ public class KaderuReservationClient implements VenueReservationClient {
 
         // requestBtn 押下等価。申込トレイ画面への遷移。
         List<NameValuePair> trayForm = List.of(
-                new BasicNameValuePair("p", PAGE_REQUEST_TRAY),
+                new BasicNameValuePair("op", PAGE_REQUEST_TRAY),
                 new BasicNameValuePair("requestBtn", "申込トレイに入れる")
         );
         HttpPost trayPost = newFormPost(venueConfig.baseUrl() + ENTRY_PATH, trayForm);

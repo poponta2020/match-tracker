@@ -23,12 +23,12 @@
 
 | # | ステップ | 概要 |
 |---|---------|-----|
-| 1 | ログイン | `GET /kaderu27/index.php` で `PHPSESSID` を取得し、`p=my_page`, `loginID`, `loginPwd`, `loginBtn=ログイン` を `POST /kaderu27/index.php` に送信。本文に「マイページ」または「ログアウト」があれば成功 |
-| 2 | マイページ遷移 | `p=my_page` を `POST /kaderu27/index.php` に送信 |
-| 3 | 空き状況ページ遷移 | `p=srch_sst`, `UseYM=YYYYMM` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
-| 4 | 月合わせ | `p=srch_sst`, `UseYear=YYYY`, `UseMonth=MM` を `POST /kaderu27/index.php` に送信 |
-| 5 | 日付クリック | `p=date_select`, `UseDate=YYYYMMDD` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
-| 6 | スロット選択 + 申込トレイへ | `p=date_select`, `setAppStatus=1`, `facilityCode`, `useDate=YYYY/MM/DD`, `slotIndex`, `timeRange` を送信後、`p=rsv_search`, `requestBtn=申込トレイに入れる` を送信。本文に「申込トレイ」があれば成功 |
+| 1 | ログイン | `GET /kaderu27/index.php` で `PHPSESSID` を取得し、実サイトの `gotoPage('my_page')` と同じく hidden field の `op` を `my_page` に上書きして、`loginID`, `loginPwd`, `loginBtn=ログイン` とともに `POST /kaderu27/index.php` に送信。本文に「マイページ」または「ログアウト」があれば成功 |
+| 2 | マイページ遷移 | `op=my_page` を `POST /kaderu27/index.php` に送信 |
+| 3 | 空き状況ページ遷移 | `op=srch_sst`, `UseYM=YYYYMM` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
+| 4 | 月合わせ | `op=srch_sst`, `UseYear=YYYY`, `UseMonth=MM` を `POST /kaderu27/index.php` に送信 |
+| 5 | 日付クリック | `op=date_select`, `UseDate=YYYYMMDD` を `POST /kaderu27/index.php` に送信。本文に対象部屋名が含まれることを確認 |
+| 6 | スロット選択 + 申込トレイへ | `op=date_select`, `setAppStatus=1`, `facilityCode`, `useDate=YYYY/MM/DD`, `slotIndex`, `timeRange` を送信後、`op=rsv_search`, `requestBtn=申込トレイに入れる` を送信。本文に「申込トレイ」があれば成功 |
 
 **省略するステップ**: 旧 Playwright 実装にあった「スロット状態確認」の DOM verification は行わない。会場側がスロット選択時に返すエラー文言で `NOT_AVAILABLE` を判定する。
 
@@ -76,8 +76,8 @@ Kaderu の form は hidden field が少ない (0-2個程度。CSRF token 等)。
 ## 5. 申込完了検知 (KaderuCompletionStrategy)
 
 ### 5.1 URL 条件
-- リクエスト URL または `Location` ヘッダに `p=rsv_comp` を含む
-- リクエスト URL または `Location` ヘッダに `p=fix_comp` を含む
+- リクエスト URL または `Location` ヘッダに `op=rsv_comp` または `p=rsv_comp` を含む
+- リクエスト URL または `Location` ヘッダに `op=fix_comp` または `p=fix_comp` を含む
 - リクエスト URL または `Location` ヘッダに `/complete` を含む
 
 ### 5.2 HTML 文言条件

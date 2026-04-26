@@ -16,10 +16,10 @@ import java.util.regex.Pattern;
  *   <li>レスポンス HTML 本文に完了画面固有の文言を含む</li>
  * </ul>
  *
- * <p>誤陽性を避けるため、申込フォーム画面 (例: {@code ?p=apply}) と区別できるパターンのみを採用する。
+ * <p>誤陽性を避けるため、申込フォーム画面 (例: {@code ?op=apply}) と区別できるパターンのみを採用する。
  * 文言判定では「完了」単体のような一般語は使わない。
  * URL/本文ともに word-boundary を考慮した正規表現で照合し、
- * {@code p=rsv_completion} のような関連性のないパターンや、本文中の単独の「申込番号」ラベルだけでは
+ * {@code op=rsv_completion} のような関連性のないパターンや、本文中の単独の「申込番号」ラベルだけでは
  * 陽性にしない。</p>
  *
  * <p><strong>本パターンは暫定値。</strong> Phase 1 の実機検証 (E2E ステップで実申込を1回完走させる) で
@@ -32,16 +32,16 @@ public class KaderuCompletionStrategy implements VenueCompletionStrategy {
      * URL / Location ヘッダで完了画面と判定する正規表現パターン。
      * いずれか1つでもマッチすれば陽性。
      *
-     * <p>クエリは {@code (\?|&)p=...(&|$)} で word-boundary を強制し、
-     * {@code p=rsv_completion} のようなプレフィックス一致を排除する。
+     * <p>クエリは {@code (\?|&)(op|p)=...(&|$)} で word-boundary を強制し、
+     * {@code op=rsv_completion} のようなプレフィックス一致を排除する。
      * パスは前後を非英数字で区切る形で {@code complete} を照合し、
      * {@code /incomplete-page} のような substring 一致を排除する。</p>
      *
      * <p>暫定値: 実機検証で確定すること。</p>
      */
     private static final List<Pattern> URL_COMPLETION_PATTERNS = List.of(
-            Pattern.compile("(\\?|&)p=rsv_comp(&|$)"),
-            Pattern.compile("(\\?|&)p=fix_comp(&|$)"),
+            Pattern.compile("(\\?|&)(?:op|p)=rsv_comp(&|$)"),
+            Pattern.compile("(\\?|&)(?:op|p)=fix_comp(&|$)"),
             Pattern.compile("(?<![A-Za-z0-9])complete(?![A-Za-z0-9])")
     );
 

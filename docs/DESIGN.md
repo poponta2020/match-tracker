@@ -2562,7 +2562,7 @@ Entity Layer (JPA Entity)
 
 公開 API は `POST /api/venue-reservation-proxy/session`、`GET /api/venue-reservation-proxy/view?token=...`、`ANY /api/venue-reservation-proxy/fetch/**?token=...`。いずれも ADMIN+ のみ利用可能。
 
-Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、`p=my_page` ログイン、`p=srch_sst` 空き状況、`p=date_select` 日付/スロット選択、`p=rsv_search` 申込トレイ遷移を行う。申込完了検知は URL / Location の `p=rsv_comp`、`p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
+Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、実サイトの `gotoPage(op)` と同じく `op=my_page` ログイン、`op=srch_sst` 空き状況、`op=date_select` 日付/スロット選択、`op=rsv_search` 申込トレイ遷移を行う。申込完了検知は URL / Location の `op=rsv_comp` / `p=rsv_comp`、`op=fix_comp` / `p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
 
 ### 7.8 かでる予約 → 練習日自動登録フロー
 

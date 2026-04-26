@@ -28,6 +28,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
+import static com.github.tomakehurst.wiremock.client.WireMock.notMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -143,9 +144,9 @@ class KaderuReservationClientTest {
                         .withStatus(200)
                         .withBody(AVAILABILITY_HTML)));
 
-        // ステップ 5: clickDay 等価 (p=date_select 単独)
+        // ステップ 5: clickDay 等価 (op=date_select 単独)
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching("p=date_select(?!.*setAppStatus).*"))
+                .withRequestBody(matching("op=date_select(?!.*setAppStatus).*"))
                 .atPriority(2)
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -167,7 +168,7 @@ class KaderuReservationClientTest {
                         .withStatus(200)
                         .withBody(AVAILABILITY_HTML)));
 
-        // ステップ 2: マイページ遷移 (p=my_page 単独。ログイン POST 後の汎用フォールバック)
+        // ステップ 2: マイページ遷移 (op=my_page 単独。ログイン POST 後の汎用フォールバック)
         wireMock.stubFor(post(urlPathEqualTo(ENTRY_PATH))
                 .atPriority(10)
                 .willReturn(aResponse()
@@ -531,13 +532,13 @@ class KaderuReservationClientTest {
     // ===== Issue #562 関連: hidden field 抽出とログイン POST への転送 =====
 
     @Test
-    @DisplayName("回帰テスト (Issue #562): ログインフォームの hidden field (op など) がログイン POST に含まれる")
-    void prepareReservationTray_includesHiddenFieldsInLoginPost() {
-        // 初期 GET 応答に hidden field op を含むログインフォームHTMLを返す
+    @DisplayName("回帰テスト (Issue #562): ログインフォームの hidden field op を my_page に上書きする")
+    void prepareReservationTray_overwritesHiddenOpWithMyPageInLoginPost() {
+        // 実サイトの初期 GET は hidden field op="" を返す。ブラウザは submit 前に op=my_page へ上書きする。
         String loginFormHtml =
                 "<html><body>"
                 + "<form name=\"form1\" method=\"post\" action=\"\">"
-                + "  <input type=\"hidden\" name=\"op\" value=\"login\">"
+                + "  <input type=\"hidden\" name=\"op\" value=\"\">"
                 + "  <input type=\"text\" name=\"loginID\">"
                 + "  <input type=\"password\" name=\"loginPwd\">"
                 + "  <button name=\"loginBtn\">ログイン</button>"
@@ -565,10 +566,11 @@ class KaderuReservationClientTest {
         ProxySession session = newSession();
         client.prepareReservationTray(session);
 
-        // ログイン POST に op=login と loginID=testuser の両方が含まれている
+        // ログイン POST は op=my_page を送り、旧実装の p=my_page は送らない。
         wireMock.verify(WireMock.postRequestedFor(urlPathEqualTo(ENTRY_PATH))
-                .withRequestBody(matching("(?s).*op=login.*"))
-                .withRequestBody(matching("(?s).*loginID=testuser.*")));
+                .withRequestBody(matching("(?s).*op=my_page.*"))
+                .withRequestBody(matching("(?s).*loginID=testuser.*"))
+                .withRequestBody(notMatching("(?s)(?:.*&)?p=my_page(?:&.*)?")));
     }
 
     @Test
