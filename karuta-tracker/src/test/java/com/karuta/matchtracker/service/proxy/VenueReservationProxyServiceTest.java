@@ -2,6 +2,10 @@ package com.karuta.matchtracker.service.proxy;
 
 import com.karuta.matchtracker.config.VenueReservationProxyConfig;
 import com.karuta.matchtracker.dto.CreateVenueProxySessionRequest;
+import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.proxy.venue.VenueConfig;
 import com.karuta.matchtracker.service.proxy.venue.VenueRewriteStrategy;
 import org.apache.http.HttpEntityEnclosingRequest;
@@ -53,6 +57,11 @@ class VenueReservationProxyServiceTest {
 
     private static final String BASE_URL = "https://k2.p-kashikan.jp";
     private static final String TOKEN = "tok-123";
+    private static final Long PRACTICE_SESSION_ID = 123L;
+    private static final Long ORGANIZATION_ID = 99L;
+    /** AdjacentRoomConfig 上で「すずらん」(隣室=「はまなす」) に対応する練習会場ID */
+    private static final Long KADERU_VENUE_ID = 3L;
+    private static final LocalDate SESSION_DATE = LocalDate.of(2026, 4, 12);
 
     @Mock
     private VenueReservationSessionStore sessionStore;
@@ -60,6 +69,8 @@ class VenueReservationProxyServiceTest {
     private VenueReservationCompletionDetector completionDetector;
     @Mock
     private VenueReservationClient client;
+    @Mock
+    private PracticeSessionRepository practiceSessionRepository;
 
     private final VenueConfig venueConfig = new VenueConfig() {
         @Override public VenueId venue() { return VenueId.KADERU; }
@@ -83,12 +94,13 @@ class VenueReservationProxyServiceTest {
         void createsSessionAndReturnsToken() {
             VenueReservationHtmlRewriter rewriter = new VenueReservationHtmlRewriter();
             VenueReservationProxyService service = newService(enabledConfig(), rewriter);
+            stubPracticeSessionLookup(practiceSessionFixture());
             ProxySession session = session();
             when(sessionStore.createSession(
                     eq(VenueId.KADERU),
-                    eq(123L),
+                    eq(PRACTICE_SESSION_ID),
                     eq("はまなす"),
-                    eq(LocalDate.of(2026, 4, 12)),
+                    eq(SESSION_DATE),
                     eq(2),
                     any())).thenReturn(session);
             doAnswer(invocation -> {
@@ -96,7 +108,7 @@ class VenueReservationProxyServiceTest {
                 return null;
             }).when(client).prepareReservationTray(session);
 
-            var response = service.createSession(request(VenueId.KADERU));
+            var response = service.createSession(request(VenueId.KADERU), "SUPER_ADMIN", null);
 
             assertThat(response.getProxyToken()).isEqualTo(TOKEN);
             assertThat(response.getViewUrl())
@@ -110,7 +122,7 @@ class VenueReservationProxyServiceTest {
         void disabledVenueRejected() {
             VenueReservationProxyService service = newService(disabledHigashiConfig(), new VenueReservationHtmlRewriter());
 
-            assertThatThrownBy(() -> service.createSession(request(VenueId.HIGASHI)))
+            assertThatThrownBy(() -> service.createSession(request(VenueId.HIGASHI), "SUPER_ADMIN", null))
                     .isInstanceOfSatisfying(VenueReservationProxyException.class, ex -> {
                         assertThat(ex.getErrorCode()).isEqualTo(VenueReservationProxyException.VENUE_NOT_SUPPORTED);
                         assertThat(ex.getVenue()).isEqualTo(VenueId.HIGASHI);
@@ -122,6 +134,7 @@ class VenueReservationProxyServiceTest {
         @DisplayName("prepareReservationTray が失敗したら作成済みセッションを破棄して例外を返す")
         void prepareFailureRemovesSession() {
             VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
             ProxySession session = session();
             when(sessionStore.createSession(any(), any(), any(), any(), anyInt(), any())).thenReturn(session);
             VenueReservationProxyException failure = new VenueReservationProxyException(
@@ -130,9 +143,90 @@ class VenueReservationProxyServiceTest {
                     "login failed");
             doThrow(failure).when(client).prepareReservationTray(session);
 
-            assertThatThrownBy(() -> service.createSession(request(VenueId.KADERU)))
+            assertThatThrownBy(() -> service.createSession(request(VenueId.KADERU), "SUPER_ADMIN", null))
                     .isSameAs(failure);
             verify(sessionStore).remove(TOKEN);
+        }
+
+        @Test
+        @DisplayName("practice_sessions が見つからない場合は ResourceNotFoundException")
+        void practiceSessionMissing() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            when(practiceSessionRepository.findById(PRACTICE_SESSION_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.createSession(request(VenueId.KADERU), "SUPER_ADMIN", null))
+                    .isInstanceOf(ResourceNotFoundException.class);
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("ADMIN が他団体の practice_sessions を指定した場合は ForbiddenException")
+        void adminOtherOrgRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+
+            assertThatThrownBy(() -> service.createSession(
+                    request(VenueId.KADERU), "ADMIN", ORGANIZATION_ID + 1L))
+                    .isInstanceOf(ForbiddenException.class);
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("リクエスト日付が practice_sessions の日付と異なる場合は INVALID_REQUEST")
+        void dateMismatchRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setDate(SESSION_DATE.plusDays(1));
+
+            assertThatThrownBy(() -> service.createSession(req, "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("リクエスト部屋名が隣室名と異なる場合は INVALID_REQUEST")
+        void roomNameMismatchRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            stubPracticeSessionLookup(practiceSessionFixture());
+            CreateVenueProxySessionRequest req = request(VenueId.KADERU);
+            req.setRoomName("えぞまつ");
+
+            assertThatThrownBy(() -> service.createSession(req, "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("KADERU 対象外の venueId が紐づく practice_sessions は INVALID_REQUEST")
+        void venueIdNotKaderuRejected() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            PracticeSession nonKaderu = practiceSessionFixture();
+            nonKaderu.setVenueId(6L); // 東区民センター(さくら) — KADERU 対象外
+            stubPracticeSessionLookup(nonKaderu);
+
+            assertThatThrownBy(() -> service.createSession(request(VenueId.KADERU), "SUPER_ADMIN", null))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.INVALID_REQUEST));
+            verify(sessionStore, never()).createSession(any(), any(), any(), any(), anyInt(), any());
+        }
+
+        private void stubPracticeSessionLookup(PracticeSession entity) {
+            when(practiceSessionRepository.findById(PRACTICE_SESSION_ID)).thenReturn(Optional.of(entity));
+        }
+
+        private PracticeSession practiceSessionFixture() {
+            return PracticeSession.builder()
+                    .id(PRACTICE_SESSION_ID)
+                    .organizationId(ORGANIZATION_ID)
+                    .venueId(KADERU_VENUE_ID)
+                    .sessionDate(SESSION_DATE)
+                    .build();
         }
     }
 
@@ -266,6 +360,7 @@ class VenueReservationProxyServiceTest {
                 sessionStore,
                 rewriter,
                 completionDetector,
+                practiceSessionRepository,
                 List.of(client),
                 List.of(venueConfig),
                 List.of(rewriteStrategy));
@@ -274,9 +369,9 @@ class VenueReservationProxyServiceTest {
     private static CreateVenueProxySessionRequest request(VenueId venue) {
         CreateVenueProxySessionRequest request = new CreateVenueProxySessionRequest();
         request.setVenue(venue);
-        request.setPracticeSessionId(123L);
+        request.setPracticeSessionId(PRACTICE_SESSION_ID);
         request.setRoomName("はまなす");
-        request.setDate(LocalDate.of(2026, 4, 12));
+        request.setDate(SESSION_DATE);
         request.setSlotIndex(2);
         return request;
     }
@@ -285,9 +380,9 @@ class VenueReservationProxyServiceTest {
         return ProxySession.builder()
                 .token(TOKEN)
                 .venue(VenueId.KADERU)
-                .practiceSessionId(123L)
+                .practiceSessionId(PRACTICE_SESSION_ID)
                 .roomName("はまなす")
-                .date(LocalDate.of(2026, 4, 12))
+                .date(SESSION_DATE)
                 .slotIndex(2)
                 .build();
     }

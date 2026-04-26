@@ -60,7 +60,7 @@ class VenueReservationProxyControllerTest {
                 .viewUrl("/api/venue-reservation-proxy/view?token=" + TOKEN)
                 .venue(VenueId.KADERU)
                 .build();
-        when(venueReservationProxyService.createSession(any())).thenReturn(response);
+        when(venueReservationProxyService.createSession(any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/venue-reservation-proxy/session")
                         .header("X-User-Role", "ADMIN")
@@ -73,11 +73,13 @@ class VenueReservationProxyControllerTest {
                 .andExpect(jsonPath("$.venue").value("KADERU"));
 
         verify(venueReservationProxyService).createSession(argThat(req ->
-                req.getVenue() == VenueId.KADERU
-                        && req.getPracticeSessionId().equals(123L)
-                        && "はまなす".equals(req.getRoomName())
-                        && req.getDate().equals(LocalDate.of(2026, 4, 12))
-                        && req.getSlotIndex() == 2));
+                        req.getVenue() == VenueId.KADERU
+                                && req.getPracticeSessionId().equals(123L)
+                                && "はまなす".equals(req.getRoomName())
+                                && req.getDate().equals(LocalDate.of(2026, 4, 12))
+                                && req.getSlotIndex() == 2),
+                eq("ADMIN"),
+                any());
     }
 
     @Test
@@ -90,7 +92,7 @@ class VenueReservationProxyControllerTest {
                         .content(objectMapper.writeValueAsString(request(VenueId.KADERU))))
                 .andExpect(status().isForbidden());
 
-        verify(venueReservationProxyService, never()).createSession(any());
+        verify(venueReservationProxyService, never()).createSession(any(), any(), any());
     }
 
     @Test
@@ -105,7 +107,7 @@ class VenueReservationProxyControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
 
-        verify(venueReservationProxyService, never()).createSession(any());
+        verify(venueReservationProxyService, never()).createSession(any(), any(), any());
     }
 
     @Test
@@ -175,7 +177,7 @@ class VenueReservationProxyControllerTest {
     @Test
     @DisplayName("VenueReservationProxyException(VENUE_NOT_SUPPORTED): 400 + errorCode/message/venue")
     void venueProxyException_badRequest() throws Exception {
-        when(venueReservationProxyService.createSession(any()))
+        when(venueReservationProxyService.createSession(any(), any(), any()))
                 .thenThrow(new VenueReservationProxyException(
                         VenueReservationProxyException.VENUE_NOT_SUPPORTED,
                         VenueId.HIGASHI,

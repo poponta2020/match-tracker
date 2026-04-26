@@ -1,10 +1,15 @@
 package com.karuta.matchtracker.service.proxy;
 
+import com.karuta.matchtracker.config.AdjacentRoomConfig;
 import com.karuta.matchtracker.config.VenueReservationProxyConfig;
 import com.karuta.matchtracker.dto.CreateVenueProxySessionRequest;
 import com.karuta.matchtracker.dto.CreateVenueProxySessionResponse;
+import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.proxy.venue.VenueConfig;
 import com.karuta.matchtracker.service.proxy.venue.VenueRewriteStrategy;
+import com.karuta.matchtracker.util.AdminScopeValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.Header;
@@ -87,6 +92,7 @@ public class VenueReservationProxyService {
     private final VenueReservationSessionStore sessionStore;
     private final VenueReservationHtmlRewriter htmlRewriter;
     private final VenueReservationCompletionDetector completionDetector;
+    private final PracticeSessionRepository practiceSessionRepository;
     private final Map<VenueId, VenueReservationClient> clients;
     private final Map<VenueId, VenueConfig> venueConfigs;
     private final Map<VenueId, VenueRewriteStrategy> rewriteStrategies;
@@ -95,6 +101,7 @@ public class VenueReservationProxyService {
                                         VenueReservationSessionStore sessionStore,
                                         VenueReservationHtmlRewriter htmlRewriter,
                                         VenueReservationCompletionDetector completionDetector,
+                                        PracticeSessionRepository practiceSessionRepository,
                                         List<VenueReservationClient> clients,
                                         List<VenueConfig> venueConfigs,
                                         List<VenueRewriteStrategy> rewriteStrategies) {
@@ -102,14 +109,41 @@ public class VenueReservationProxyService {
         this.sessionStore = sessionStore;
         this.htmlRewriter = htmlRewriter;
         this.completionDetector = completionDetector;
+        this.practiceSessionRepository = practiceSessionRepository;
         this.clients = toVenueMap(clients, VenueReservationClient::venue, "VenueReservationClient");
         this.venueConfigs = toVenueMap(venueConfigs, VenueConfig::venue, "VenueConfig");
         this.rewriteStrategies = toVenueMap(rewriteStrategies, VenueRewriteStrategy::venue, "VenueRewriteStrategy");
     }
 
-    public CreateVenueProxySessionResponse createSession(CreateVenueProxySessionRequest request) {
+    /**
+     * プロキシセッションを発行する。
+     *
+     * <p>capability token (UUID) を発行する前に、{@code request.practiceSessionId} の所有権と
+     * リクエスト内容の整合性をサーバ側で検証する:</p>
+     * <ul>
+     *   <li>ADMIN は自団体の練習日のみ操作可能 (SUPER_ADMIN は無条件で許可)</li>
+     *   <li>{@code request.date} は対象 practice_session の {@code session_date} と一致する</li>
+     *   <li>{@code request.venue} は practice_session の {@code venue_id} が属するプロキシ会場と一致する</li>
+     *   <li>{@code request.roomName} は隣室名 ({@link AdjacentRoomConfig#getAdjacentRoomName(Long)}) と一致する</li>
+     * </ul>
+     */
+    public CreateVenueProxySessionResponse createSession(CreateVenueProxySessionRequest request,
+                                                         String currentUserRole,
+                                                         Long adminOrganizationId) {
         VenueId venue = request == null ? null : request.getVenue();
         ensureVenueReady(venue);
+
+        PracticeSession practiceSession = practiceSessionRepository.findById(request.getPracticeSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "PracticeSession", request.getPracticeSessionId()));
+
+        AdminScopeValidator.validateScope(
+                currentUserRole,
+                adminOrganizationId,
+                practiceSession.getOrganizationId(),
+                "他団体の練習日は予約できません");
+
+        validateRequestMatchesPracticeSession(request, practiceSession);
 
         ProxySession session = sessionStore.createSession(
                 venue,
@@ -331,6 +365,51 @@ public class VenueReservationProxyService {
                         VenueReservationProxyException.TIMEOUT,
                         null,
                         "Proxy session not found or expired"));
+    }
+
+    /**
+     * createSession のリクエストパラメータが対象 practice_session と整合するかを検証する。
+     * 不整合な場合は {@link VenueReservationProxyException#INVALID_REQUEST} を投げる。
+     *
+     * <p>これにより、ADMIN が自団体内の sessionId を指定しつつ別日・別会場の予約を完了させて
+     * 任意の練習日を「予約済み」状態にする攻撃を防ぐ。</p>
+     */
+    private void validateRequestMatchesPracticeSession(CreateVenueProxySessionRequest request,
+                                                       PracticeSession practiceSession) {
+        VenueId venue = request.getVenue();
+        Long sessionVenueId = practiceSession.getVenueId();
+        if (sessionVenueId == null) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venue,
+                    "練習日に会場が登録されていません: practiceSessionId=" + practiceSession.getId());
+        }
+
+        // Phase 1 では KADERU のみ。HIGASHI 用の会場ID対応は Phase 2 で追加する。
+        if (venue == VenueId.KADERU && !AdjacentRoomConfig.isKaderuRoom(sessionVenueId)) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venue,
+                    "練習日の会場が KADERU 対象ではありません: practiceSessionId="
+                            + practiceSession.getId() + " venueId=" + sessionVenueId);
+        }
+
+        if (request.getDate() == null || !request.getDate().equals(practiceSession.getSessionDate())) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venue,
+                    "リクエスト日付と練習日の日付が一致しません: request=" + request.getDate()
+                            + " session=" + practiceSession.getSessionDate());
+        }
+
+        String expectedAdjacentRoom = AdjacentRoomConfig.getAdjacentRoomName(sessionVenueId);
+        if (expectedAdjacentRoom == null || !expectedAdjacentRoom.equals(request.getRoomName())) {
+            throw new VenueReservationProxyException(
+                    VenueReservationProxyException.INVALID_REQUEST,
+                    venue,
+                    "リクエスト部屋名と隣室名が一致しません: request=" + request.getRoomName()
+                            + " expected=" + expectedAdjacentRoom);
+        }
     }
 
     private void ensureVenueReady(VenueId venue) {

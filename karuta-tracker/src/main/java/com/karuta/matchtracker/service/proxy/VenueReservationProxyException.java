@@ -13,6 +13,8 @@ public class VenueReservationProxyException extends RuntimeException {
 
     /** 共通: 未対応の会場が指定された */
     public static final String VENUE_NOT_SUPPORTED = "VENUE_NOT_SUPPORTED";
+    /** 共通: リクエストの会場/日付/部屋名が紐づく practice_sessions と一致しない */
+    public static final String INVALID_REQUEST = "INVALID_REQUEST";
     /** 共通: 会場サイトへのログインに失敗した */
     public static final String LOGIN_FAILED = "LOGIN_FAILED";
     /** 共通: スロットが既に埋まっている等で確保できない */

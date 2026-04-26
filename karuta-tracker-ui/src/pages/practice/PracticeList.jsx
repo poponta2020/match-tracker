@@ -16,10 +16,13 @@ const RESERVATION_SLOT_INDEX = 2;
 const RESERVATION_PROXY_CHANNEL = 'venue-reservation-proxy';
 const RESERVATION_RETURN_PATH = '/practice';
 
-const resolveProxyViewUrl = (viewUrl) => {
+const resolveApiOrigin = () => {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
-  const apiBase = new URL(apiBaseUrl, window.location.origin);
-  return new URL(viewUrl, apiBase.origin).toString();
+  return new URL(apiBaseUrl, window.location.origin).origin;
+};
+
+const resolveProxyViewUrl = (viewUrl) => {
+  return new URL(viewUrl, resolveApiOrigin()).toString();
 };
 
 const resolveReturnUrl = () => {
@@ -59,6 +62,10 @@ const PracticeList = () => {
   // openTodayパラメータの処理済みフラグ
   const openTodayProcessedRef = useRef(false);
   const selectedSessionRef = useRef(null);
+  // 発行済みプロキシトークンと、postMessage の origin 検証に使う API オリジン。
+  // 形: { [practiceSessionId]: { token, expectedOrigin } }
+  // 完了通知 1 件で消費 (delete) し、再利用や偽装通知を弾く。
+  const pendingProxyTokensRef = useRef({});
 
   // データ取得を並列化して高速化
   useEffect(() => {
@@ -170,7 +177,11 @@ const PracticeList = () => {
     // 1) BroadcastChannel: 同一オリジン構成 (フロントとAPIが同じorigin) で動作
     // 2) window.message: 別オリジン構成 (Render API + Vercelフロント) で
     //    プロキシバナーが window.opener.postMessage(..., returnUrlのorigin) で発火
-    const handleCompletion = async (message) => {
+    //
+    // どちらの経路も createSession 時に保存した token + expectedOrigin と
+    // 突合してから受け入れる (任意の opener 子ウィンドウからの偽装通知を弾く)。
+    // eventOrigin = null の場合は origin 検証をスキップ (BroadcastChannel は同一 origin 強制)。
+    const handleCompletion = async (message, eventOrigin) => {
       if (message?.type !== 'reservation-completed') {
         return;
       }
@@ -178,6 +189,19 @@ const PracticeList = () => {
       if (!Number.isInteger(sessionId) || sessionId <= 0) {
         return;
       }
+      const pending = pendingProxyTokensRef.current[sessionId];
+      if (!pending) {
+        return;
+      }
+      if (typeof message.token !== 'string' || message.token !== pending.token) {
+        return;
+      }
+      if (eventOrigin !== null && eventOrigin !== pending.expectedOrigin) {
+        return;
+      }
+      // 1 完了通知につき 1 セッションだけ消費
+      delete pendingProxyTokensRef.current[sessionId];
+
       setReservationReady(prev => ({ ...prev, [sessionId]: true }));
       try {
         const response = await practiceAPI.getById(sessionId);
@@ -195,13 +219,11 @@ const PracticeList = () => {
     let channel;
     if (typeof window.BroadcastChannel === 'function') {
       channel = new window.BroadcastChannel(RESERVATION_PROXY_CHANNEL);
-      channel.onmessage = (event) => handleCompletion(event?.data);
+      channel.onmessage = (event) => handleCompletion(event?.data, null);
     }
 
     const onMessage = (event) => {
-      // event.origin が自オリジン以外でも、payload.type で識別する設計のため許容する。
-      // 信頼の根拠は payload.token (createSession で発行された UUID) と practiceSessionId の整合性。
-      handleCompletion(event?.data);
+      handleCompletion(event?.data, event?.origin);
     };
     window.addEventListener('message', onMessage);
 
@@ -381,9 +403,17 @@ const PracticeList = () => {
         returnUrl: resolveReturnUrl(),
       });
       const viewUrl = response.data?.viewUrl;
-      if (!viewUrl) {
-        throw new Error('予約画面URLが返されませんでした');
+      const proxyToken = response.data?.proxyToken;
+      if (!viewUrl || !proxyToken) {
+        throw new Error('予約画面URLまたはトークンが返されませんでした');
       }
+
+      // 完了通知を受け取る前に、検証に使うトークンと API オリジンを保存しておく。
+      // バナーは API オリジンから配信される HTML 内で動くため、postMessage の event.origin は API オリジンになる。
+      pendingProxyTokensRef.current[sessionId] = {
+        token: proxyToken,
+        expectedOrigin: resolveApiOrigin(),
+      };
 
       placeholderTab.location.href = resolveProxyViewUrl(viewUrl);
       // Opening the reservation page is not confirmation; keep manual fallback visible.

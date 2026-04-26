@@ -243,6 +243,12 @@ describe('adjacent room reservation proxy flow', () => {
     const user = userEvent.setup();
     await renderListAndOpenSession(user);
 
+    // Register a proxy token first so the completion handler accepts the notification
+    await user.click(screen.getByText('隣室を予約'));
+    await waitFor(() => {
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
+    });
+
     await act(async () => {
       await broadcastChannels[0].emit({
         type: 'reservation-completed',
@@ -256,6 +262,57 @@ describe('adjacent room reservation proxy flow', () => {
       expect(practiceAPI.getById).toHaveBeenLastCalledWith(1);
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
+  });
+
+  it('ignores reservation-completed messages whose token does not match the registered proxy session', async () => {
+    const user = userEvent.setup();
+    await renderListAndOpenSession(user);
+
+    await user.click(screen.getByText('隣室を予約'));
+    await waitFor(() => {
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
+    });
+
+    practiceAPI.getById.mockClear();
+
+    await act(async () => {
+      await broadcastChannels[0].emit({
+        type: 'reservation-completed',
+        practiceSessionId: 1,
+        venue: 'KADERU',
+        token: 'attacker-token',
+      });
+    });
+
+    expect(practiceAPI.getById).not.toHaveBeenCalled();
+    expect(screen.queryByText('会場を拡張')).not.toBeInTheDocument();
+  });
+
+  it('ignores window.message events from origins other than the API origin', async () => {
+    const user = userEvent.setup();
+    await renderListAndOpenSession(user);
+
+    await user.click(screen.getByText('隣室を予約'));
+    await waitFor(() => {
+      expect(venueReservationProxyAPI.createSession).toHaveBeenCalled();
+    });
+
+    practiceAPI.getById.mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'reservation-completed',
+          practiceSessionId: 1,
+          venue: 'KADERU',
+          token: 'token-123',
+        },
+        origin: 'https://attacker.example.com',
+      }));
+    });
+
+    expect(practiceAPI.getById).not.toHaveBeenCalled();
+    expect(screen.queryByText('会場を拡張')).not.toBeInTheDocument();
   });
 
   it('shows the expand button immediately when reservationConfirmedAt is already set', async () => {

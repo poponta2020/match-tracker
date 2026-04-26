@@ -49,11 +49,15 @@ public class VenueReservationProxyController {
     @PostMapping("/session")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<CreateVenueProxySessionResponse> createSession(
-            @Valid @RequestBody CreateVenueProxySessionRequest request) {
+            @Valid @RequestBody CreateVenueProxySessionRequest request,
+            HttpServletRequest httpRequest) {
         log.info("POST /api/venue-reservation-proxy/session: venue={} practiceSessionId={} room={} date={} slot={}",
                 request.getVenue(), request.getPracticeSessionId(), request.getRoomName(),
                 request.getDate(), request.getSlotIndex());
-        return ResponseEntity.ok(venueReservationProxyService.createSession(request));
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        return ResponseEntity.ok(
+                venueReservationProxyService.createSession(request, role, adminOrgId));
     }
 
     /**
