@@ -10,6 +10,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # dorny/test-reporter は GitHub Checks API で check run を作成するため checks: write が必須。
+    # リポジトリ設定の workflow permissions がデフォルトの "Read repository contents and packages permissions"
+    # の場合、permissions ブロック未指定だと GITHUB_TOKEN に checks: write が付与されず、
+    # "Generate test report" ステップが silent に失敗する。
+    permissions:
+      contents: read
+      checks: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
