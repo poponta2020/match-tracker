@@ -277,6 +277,39 @@ class DensukeImportServiceTest {
         assertThat(savedPlayer.getRequirePasswordChange()).isTrue();
         assertThat(savedPlayer.getRole()).isEqualTo(Player.Role.PLAYER);
         verify(organizationService).ensurePlayerBelongsToOrganization(savedPlayer.getId(), 1L);
+        // Issue #601: 新規プレイヤー作成後は importFromDensuke() 内の findAllPlayersRaw() が
+        // 古いキャッシュを返さないよう、明示的に players キャッシュを破棄する必要がある。
+        verify(playerService).evictPlayersCache();
+    }
+
+    @Test
+    @DisplayName("registerAndSyncで全員が既存の場合はキャッシュ破棄を行わない")
+    void testRegisterAndSync_allExisting_noCacheEviction() throws IOException {
+        DensukeData data = createSampleData();
+
+        Player existing = Player.builder().id(99L).name("新人")
+                .role(Player.Role.PLAYER).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerRepository.findByNameAndActive("新人")).thenReturn(Optional.of(existing));
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.empty());
+        when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
+            PracticeSession s = inv.getArgument(0);
+            s.setId(1L);
+            return s;
+        });
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.registerAndSync(List.of("新人"), "http://example.com", null, 10L, 1L);
+
+        // 既存プレイヤーのみ → playerRepository.save() も evictPlayersCache() も呼ばれない
+        verify(playerRepository, never()).save(any());
+        verify(playerService, never()).evictPlayersCache();
     }
 
     @Test

@@ -870,6 +870,12 @@ public class DensukeImportService {
             log.info("Auto-registered player: {} (org: {})", name, organizationId);
         }
         log.info("Registered {} new players, now re-syncing from densuke", created);
+        // playerRepository.save() を直接使っているため PlayerService の @CacheEvict が効かない。
+        // 直後の importFromDensuke() で findAllPlayersRaw() がキャッシュ済みの古いリストを返し
+        // 新規プレイヤーが playerNameMap にヒットしない不具合を防ぐため、明示的にキャッシュを破棄する。
+        if (created > 0) {
+            playerService.evictPlayersCache();
+        }
         return importFromDensuke(url, targetDate, createdBy, organizationId);
     }
 

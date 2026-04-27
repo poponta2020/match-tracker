@@ -110,6 +110,19 @@ public class PlayerService {
     }
 
     /**
+     * playersキャッシュを明示的にクリアする。
+     *
+     * PlayerService.createPlayer/updatePlayer/... を経由せず、
+     * playerRepository.save() で直接プレイヤーを保存・更新したパスから呼び出すこと。
+     * 例: DensukeImportService.registerAndSync() が伝助同期由来で新規プレイヤーを作成した直後、
+     * 同一トランザクション内で findAllPlayersRaw() を呼ぶ前にキャッシュを破棄する必要がある。
+     */
+    @CacheEvict(value = "players", allEntries = true)
+    public void evictPlayersCache() {
+        // AOP の @CacheEvict によるキャッシュ破棄のみが目的。本体は no-op。
+    }
+
+    /**
      * アクティブな選手数を取得
      */
     public long countActivePlayers() {
