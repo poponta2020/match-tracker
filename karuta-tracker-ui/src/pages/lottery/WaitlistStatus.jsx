@@ -52,7 +52,7 @@ export default function WaitlistStatus() {
 
       {loading ? (
         <LoadingScreen />
-      ) : entries.length === 0 ? (
+      ) : error ? null : entries.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           キャンセル待ちはありません
         </div>
