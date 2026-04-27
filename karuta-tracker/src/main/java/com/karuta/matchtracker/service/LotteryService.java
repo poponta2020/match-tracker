@@ -971,8 +971,15 @@ public class LotteryService {
      * 管理者による参加者手動編集
      *
      * - 参加者追加
-     * - ステータス変更（WON→CANCELLEDの場合は繰り上げフローを発動）
+     * - ステータス変更（WON→CANCELLEDの場合は通常キャンセル経路と同じ三分岐に委譲）
      * - キャンセル待ち順番変更
+     *
+     * <p>WON→CANCELLED時は {@code cancelParticipationSuppressed} に委譲することで、
+     * 通常キャンセル経路（{@code /api/lottery/cancel}）と完全に同じロジックで分岐する：
+     * <ul>
+     *   <li>当日12:00前 / 当日でない → 通常繰り上げ + 管理者バッチ通知 + プレイヤー向けオファー統合通知</li>
+     *   <li>当日12:00以降 → {@code SameDayCancelContext} 経由で当日補充フローが afterCommit 登録される</li>
+     * </ul>
      */
     @Transactional
     public void editParticipants(AdminEditParticipantsRequest request) {
@@ -996,35 +1003,35 @@ public class LotteryService {
                 PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
                         .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
                 ParticipantStatus oldStatus = p.getStatus();
+
+                // WON → CANCELLED は通常キャンセル経路に委譲し、当日12:00分岐・通常繰り上げを統一する。
+                // 委譲側で setStatus(CANCELLED) / setDirty / save と昇格判定を行うため、ここでは何もしない。
+                if (oldStatus == ParticipantStatus.WON && change.getNewStatus() == ParticipantStatus.CANCELLED) {
+                    AdminWaitlistNotificationData notifData = waitlistPromotionService
+                            .cancelParticipationSuppressed(change.getParticipantId(), null, null);
+                    if (notifData != null) {
+                        promotionDataList.add(notifData);
+                    }
+                    continue;
+                }
+
                 p.setStatus(change.getNewStatus());
                 p.setDirty(true);
                 if (change.getWaitlistNumber() != null) {
                     p.setWaitlistNumber(change.getWaitlistNumber());
                 }
                 practiceParticipantRepository.save(p);
-
-                // WON → CANCELLED の場合、繰り上げフローを発動（当日は除く）
-                if (oldStatus == ParticipantStatus.WON && change.getNewStatus() == ParticipantStatus.CANCELLED) {
-                    PracticeSession session = practiceSessionRepository.findById(p.getSessionId())
-                            .orElse(null);
-                    if (session != null && !lotteryDeadlineHelper.isToday(session.getSessionDate())) {
-                        Optional<PracticeParticipant> promoted = waitlistPromotionService.promoteNextWaitlisted(
-                                p.getSessionId(), p.getMatchNumber(), session.getSessionDate());
-                        promotionDataList.add(AdminWaitlistNotificationData.builder()
-                                .triggerAction("キャンセル")
-                                .triggerPlayerId(p.getPlayerId())
-                                .sessionId(p.getSessionId())
-                                .matchNumber(p.getMatchNumber())
-                                .promotedParticipant(promoted.orElse(null))
-                                .build());
-                    }
-                }
             }
         }
 
+        // 当日キャンセル分は dispatchSameDayCancelNotifications 内で afterCommit 登録され、
+        // 戻り値には通常繰り上げ分（同期送信対象）のみが残る。
+        List<AdminWaitlistNotificationData> normalNotifications =
+                waitlistPromotionService.dispatchSameDayCancelNotifications(promotionDataList);
+
         // 管理者通知＋プレイヤー向けオファー統合通知をバッチ送信
-        if (!promotionDataList.isEmpty()) {
-            promotionDataList.stream()
+        if (!normalNotifications.isEmpty()) {
+            normalNotifications.stream()
                     .collect(Collectors.groupingBy(AdminWaitlistNotificationData::getSessionId))
                     .forEach((sid, dataList) -> {
                         PracticeSession session = practiceSessionRepository.findById(sid).orElse(null);

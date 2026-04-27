@@ -91,6 +91,19 @@ public class WaitlistPromotionService {
      * WON → WAITLISTED（最後尾）に降格する（通知抑制版）。
      * 呼び出し元で複数件分をまとめて sendBatchedAdminWaitlistNotifications に渡す用途。
      *
+     * <p><b>トランザクション境界の契約:</b><br>
+     * このメソッドは {@code @Transactional}（伝播 {@code REQUIRED}）で宣言されているが、
+     * <em>個別コミットは保証しない</em>。呼び出し元に既存トランザクションがあれば
+     * それに参加し、無ければ新しいTXを開始する。
+     * <ul>
+     *   <li>{@code DensukeImportService} などインポートTX配下から呼ぶ場合は、
+     *       インポート全体と整合性を保ちたいので参加する設計（このまま使う）。</li>
+     *   <li>ループ内で1件ずつコミットしたい呼び出し元（{@code LotteryController#cancelParticipation} など）は
+     *       <strong>呼び出し元側に {@code @Transactional} を付けてはならない</strong>。
+     *       上流TXが存在すると本メソッドはそれに参加し、ループ全件が単一TXに化けて
+     *       途中の例外で全件ロールバックされる。</li>
+     * </ul>
+     *
      * @param participantId 参加者レコードID
      * @return 通知データ
      */
@@ -183,14 +196,26 @@ public class WaitlistPromotionService {
     }
 
     /**
-     * 当選者が参加をキャンセルする（通知抑制オプション付き）。
-     * suppressNotification=true の場合、管理者通知を送信せず通知データを返す。
+     * 当選者が参加をキャンセルする（通知抑制版）。
+     * 管理者通知は送信せず、通知データを返す。
      * 呼び出し元で複数件分をまとめて sendBatchedAdminWaitlistNotifications に渡す用途。
+     *
+     * <p><b>トランザクション境界の契約:</b><br>
+     * このメソッドは {@code @Transactional}（伝播 {@code REQUIRED}）で宣言されているが、
+     * <em>個別コミットは保証しない</em>。呼び出し元に既存トランザクションがあれば
+     * それに参加し、無ければ新しいTXを開始する。
+     * <ul>
+     *   <li>{@code DensukeImportService} などインポートTX配下から呼ぶ場合は、
+     *       インポート全体と整合性を保ちたいので参加する設計（このまま使う）。</li>
+     *   <li>ループ内で1件ずつコミットしたい呼び出し元（{@code LotteryController#cancelParticipation} など）は
+     *       <strong>呼び出し元側に {@code @Transactional} を付けてはならない</strong>。
+     *       上流TXが存在すると本メソッドはそれに参加し、ループ全件が単一TXに化けて
+     *       途中の例外で全件ロールバックされる。</li>
+     * </ul>
      *
      * @param participantId      参加者レコードID
      * @param cancelReason       キャンセル理由コード
      * @param cancelReasonDetail キャンセル理由詳細
-     * @param suppressNotification true=通知を送信しない
      * @return 通知データ（通知不要の場合はnull）
      */
     @Transactional
@@ -793,6 +818,19 @@ public class WaitlistPromotionService {
      * LINE通知（繰り上げ先・管理者）を送信せず、通知データを返す。
      * DensukeImportServiceでバッチ処理する用途。
      *
+     * <p><b>トランザクション境界の契約:</b><br>
+     * このメソッドは {@code @Transactional}（伝播 {@code REQUIRED}）で宣言されているが、
+     * <em>個別コミットは保証しない</em>。呼び出し元に既存トランザクションがあれば
+     * それに参加し、無ければ新しいTXを開始する。
+     * <ul>
+     *   <li>{@code DensukeImportService} などインポートTX配下から呼ぶ場合は、
+     *       インポート全体と整合性を保ちたいので参加する設計（このまま使う）。</li>
+     *   <li>ループ内で1件ずつコミットしたい呼び出し元は
+     *       <strong>呼び出し元側に {@code @Transactional} を付けてはならない</strong>。
+     *       上流TXが存在すると本メソッドはそれに参加し、ループ全件が単一TXに化けて
+     *       途中の例外で全件ロールバックされる。</li>
+     * </ul>
+     *
      * @param participantId 参加者レコードID
      * @return 通知データ（繰り上げ結果 + 管理者通知データ）
      */
@@ -1116,6 +1154,17 @@ public class WaitlistPromotionService {
      * LINE通知（繰り上げ先・管理者）を送信せず、通知データを返す。
      * OfferExpirySchedulerでバッチ処理する用途。
      *
+     * <p><b>トランザクション境界の契約:</b><br>
+     * このメソッドは {@code @Transactional}（伝播 {@code REQUIRED}）で宣言されているが、
+     * <em>個別コミットは保証しない</em>。呼び出し元に既存トランザクションがあれば
+     * それに参加し、無ければ新しいTXを開始する。
+     * <ul>
+     *   <li>{@code OfferExpiryScheduler} など個別ループから呼ぶ場合、上流TXが無い前提で
+     *       1件1TXとなるよう、<strong>呼び出し元側に {@code @Transactional} を付けてはならない</strong>。
+     *       上流TXが存在すると本メソッドはそれに参加し、ループ全件が単一TXに化けて
+     *       途中の例外で全件ロールバックされる。</li>
+     * </ul>
+     *
      * @param participant 期限切れのOFFERED参加者
      * @return 通知データ（繰り上げ結果 + 管理者通知データ）。OFFERED以外の場合はnull
      */
@@ -1392,13 +1441,17 @@ public class WaitlistPromotionService {
                 .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                         sessionId, matchNumber,
                         List.of(ParticipantStatus.WAITLISTED, ParticipantStatus.OFFERED));
+        List<PracticeParticipant> dirty = new ArrayList<>();
         for (int i = 0; i < remaining.size(); i++) {
             PracticeParticipant p = remaining.get(i);
             int newNumber = i + 1;
             if (!Integer.valueOf(newNumber).equals(p.getWaitlistNumber())) {
                 p.setWaitlistNumber(newNumber);
-                practiceParticipantRepository.save(p);
+                dirty.add(p);
             }
+        }
+        if (!dirty.isEmpty()) {
+            practiceParticipantRepository.saveAll(dirty);
         }
     }
 }
