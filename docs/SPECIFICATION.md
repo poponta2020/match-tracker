@@ -524,7 +524,10 @@ SUPER_ADMIN のみ操作可能。
 - **応答期限**: min(通知から24時間, 練習日前日23:59) の早い方。期限超過後の応答はバックエンドで拒否される
 - **短期限オファー注意喚起**: 応答期限まで12時間未満の場合、LINE・アプリ内通知に「※ 応答期限まで残りわずかです。お早めにご回答ください。」を付加
 - **タイムゾーン**: 全ての日時判定（期限チェック、当日判定、タイムスタンプ記録）はJST（Asia/Tokyo）で統一。`JstDateTimeUtil` ユーティリティクラスにより、サーバーのデフォルトタイムゾーンに依存しない
-- **管理者手動編集時の繰り上げ**: `editParticipants` で WON→CANCELLED にステータス変更した場合、当日でなければ自動的に繰り上げフローが発動
+- **管理者手動編集時のキャンセル動作**: `editParticipants` で WON→CANCELLED にステータス変更した場合、通常キャンセル経路（`/api/lottery/cancel`）と同じ三分岐ロジックに揃える：
+  - 当日でない / 当日12:00前 → 通常繰り上げ + 管理者バッチ通知 + プレイヤー向けオファー統合通知
+  - 当日12:00以降 → `SameDayCancelContext` 経由で当日補充フロー（キャンセル発生通知 + 空き募集通知 + 管理者通知）が `afterCommit` 登録される
+- **キャンセル待ち辞退/復帰の団体スコープ**: `POST /api/lottery/decline-waitlist` `POST /api/lottery/rejoin-waitlist` は ADMIN ロールに対し対象セッションの `organizationId` 一致を強制（`AdminScopeValidator`）。SUPER_ADMIN は全団体可、PLAYER は自己のみ可
 
 #### 3.7.3 抽選関連エンティティ
 

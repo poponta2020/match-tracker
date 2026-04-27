@@ -1438,7 +1438,7 @@ Entity Layer (JPA Entity)
 
 #### POST /api/lottery/decline-waitlist
 **説明**: キャンセル待ち辞退（セッション単位）。辞退後、後続のキャンセル待ち番号を自動繰り上げ。
-**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ。ADMINは自団体セッションのみ — `AdminScopeValidator` で検証、不一致は 403）
 **リクエスト**:
 ```json
 { "sessionId": 100, "playerId": 10 }
@@ -1450,7 +1450,7 @@ Entity Layer (JPA Entity)
 
 #### POST /api/lottery/rejoin-waitlist
 **説明**: キャンセル待ち復帰（セッション単位）。復帰時のキャンセル待ち番号は最後尾。
-**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（PLAYERは自分のみ。ADMINは自団体セッションのみ — `AdminScopeValidator` で検証、不一致は 403）
 **リクエスト**:
 ```json
 { "sessionId": 100, "playerId": 10 }
@@ -1461,7 +1461,7 @@ Entity Layer (JPA Entity)
 ```
 
 #### PUT /api/lottery/admin/edit-participants
-**説明**: 管理者による参加者手動編集。WON→CANCELLEDへのステータス変更時は繰り上げフローが自動発動（当日は除く）。
+**説明**: 管理者による参加者手動編集。WON→CANCELLED へのステータス変更時は通常キャンセル経路（`/api/lottery/cancel`）の `cancelParticipationSuppressed` に委譲し、当日12:00を境界に通常繰り上げ／当日補充フローへ自動分岐する。
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `AdminEditParticipantsRequest`
 
@@ -2329,14 +2329,15 @@ Entity Layer (JPA Entity)
    - 通知トグル: sameDayConfirmation
 
 [当日キャンセル→補充フェーズ — WaitlistPromotionService.cancelParticipation() / dispatchSameDayCancelNotifications()]
-1. 12:00以降にWON参加者がキャンセル
+1. 12:00以降にWON参加者がキャンセル（管理者手動編集 `editParticipants` 経由を含む）
    ↓
 2. LotteryDeadlineHelper.isAfterSameDayNoon() で12:00以降判定
    ↓
 3. cancelParticipationInternal が SameDayCancelContext 付き AdminWaitlistNotificationData を返却
    ↓
-4. 呼び出し元（LotteryController / DensukeImportService / cancelParticipation 単体版）で
+4. 呼び出し元（LotteryController / DensukeImportService / LotteryService.editParticipants）で
    (sessionId, playerId) 単位に集約し、afterCommit で handleSameDayCancelAndRecruitBatch を実行
+   - editParticipants は `cancelParticipationSuppressed` に委譲し、通常キャンセル経路と同じ三分岐ロジックに揃える（WON→CANCELLED 直書き経路は廃止）
    ↓
 5. キャンセル発生通知（統合版）: 「〇〇さんが今日の1、3試合目をキャンセルしました」
    - 同一セッション×同一プレイヤーの複数試合は1通にまとまる（通知トグル: sameDayCancel）
@@ -2348,6 +2349,17 @@ Entity Layer (JPA Entity)
    ↓
 7. 管理者通知: sendBatchedAdminWaitlistNotifications
    - セッション単位で1通にまとまる
+
+【トランザクション境界の契約】
+WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipationSuppressed` /
+`respondToOfferDeclineSuppressed` / `expireOfferSuppressed` / `demoteToWaitlistSuppressed`）は
+`@Transactional`（伝播 `REQUIRED`）で宣言されているが、個別コミットは保証しない：
+- `DensukeImportService` / `LotteryService.editParticipants` などインポート/編集TX配下から
+  呼ぶ場合、上流TXに参加して整合性を保つ（失敗時はキャンセル含めロールバック）
+- ループ内で1件ずつコミットしたい呼び出し元（`LotteryController#cancelParticipation` など）は
+  呼び出し元側に `@Transactional` を付けてはならない。付与するとループ全件が単一TXに化け、
+  途中の例外で全件ロールバックされる
+- `LotteryControllerCancelTest` にメソッド単位 `@Transactional` 不在のセンチネルテストあり
 
 [先着参加フェーズ — LINEボタン or アプリ]
 1. LINEボタンpostback → LineWebhookController（same_day_joinアクション）

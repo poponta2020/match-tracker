@@ -5,6 +5,8 @@ import com.karuta.matchtracker.dto.CancelRequest;
 import com.karuta.matchtracker.dto.SameDayCancelContext;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.entity.PracticeSession;
+import org.springframework.transaction.annotation.Transactional;
+import java.lang.reflect.Method;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.NotificationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -147,5 +149,64 @@ class LotteryControllerCancelTest {
                 ArgumentCaptor.forClass(List.class);
         verify(waitlistPromotionService).dispatchSameDayCancelNotifications(captor.capture());
         assertThat(captor.getValue()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("3件中2件目で例外でも、1件目と3件目相当の通知集約は finally で実行される")
+    void cancelParticipation_threeItemsMiddleFailure_dispatchesSuccessful() {
+        when(request.getAttribute("currentUserId")).thenReturn(1L);
+        when(request.getAttribute("currentUserRole")).thenReturn(Role.SUPER_ADMIN.name());
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 15)).capacity(6).build();
+        SameDayCancelContext ctx1 = SameDayCancelContext.builder()
+                .session(session).playerId(10L).playerName("選手A").matchNumber(1).build();
+        AdminWaitlistNotificationData d1 = AdminWaitlistNotificationData.builder()
+                .triggerAction("キャンセル（当日補充）").triggerPlayerId(10L)
+                .sessionId(100L).matchNumber(1).sameDayCancelContext(ctx1).build();
+
+        // 1件目成功 → 2件目で例外 → 3件目はそもそも呼ばれない（ループが中断するため）
+        // 個別TX契約が守られていれば 1件目の DB 更新は確定する。
+        // 通知集約処理は finally で必ず実行され、成功分のみが渡る。
+        when(waitlistPromotionService.cancelParticipationSuppressed(101L, "HEALTH", null))
+                .thenReturn(d1);
+        when(waitlistPromotionService.cancelParticipationSuppressed(102L, "HEALTH", null))
+                .thenThrow(new RuntimeException("DB error"));
+        when(waitlistPromotionService.dispatchSameDayCancelNotifications(anyList()))
+                .thenReturn(List.of());
+
+        CancelRequest req = CancelRequest.builder()
+                .participantIds(List.of(101L, 102L, 103L))
+                .cancelReason("HEALTH")
+                .build();
+
+        assertThatThrownBy(() -> controller.cancelParticipation(req, request))
+                .isInstanceOf(RuntimeException.class);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<AdminWaitlistNotificationData>> captor =
+                ArgumentCaptor.forClass(List.class);
+        verify(waitlistPromotionService).dispatchSameDayCancelNotifications(captor.capture());
+        assertThat(captor.getValue()).hasSize(1);
+        assertThat(captor.getValue().get(0).getMatchNumber()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("cancelParticipation には @Transactional を付けてはならない（個別TX契約のセンチネル）")
+    void cancelParticipation_mustNotHaveTransactionalAnnotation() throws NoSuchMethodException {
+        // 個別TXコミットの契約は、本メソッドに @Transactional が付与されていないことに依存する。
+        // 上流TXが存在すると cancelParticipationSuppressed が REQUIRED で参加し、ループ全件が
+        // 単一TXに化けて途中の例外で全件ロールバックされる（成功分のキャンセルが消える）。
+        // この sentinel テストにより、誤って @Transactional を付けた変更が CI で即検出される。
+        Method method = LotteryController.class.getMethod(
+                "cancelParticipation", CancelRequest.class,
+                jakarta.servlet.http.HttpServletRequest.class);
+        assertThat(method.isAnnotationPresent(Transactional.class))
+                .as("LotteryController#cancelParticipation must NOT be @Transactional " +
+                        "(see WaitlistPromotionService#cancelParticipationSuppressed Javadoc)")
+                .isFalse();
+        assertThat(LotteryController.class.isAnnotationPresent(Transactional.class))
+                .as("LotteryController class must NOT be @Transactional")
+                .isFalse();
     }
 }

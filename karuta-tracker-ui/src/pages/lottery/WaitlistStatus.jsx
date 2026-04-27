@@ -10,6 +10,7 @@ export default function WaitlistStatus() {
   const { currentPlayer } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (currentPlayer?.id) fetchStatus();
@@ -17,11 +18,14 @@ export default function WaitlistStatus() {
 
   const fetchStatus = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await lotteryAPI.getWaitlistStatus();
       setEntries(res.data.entries || []);
     } catch (err) {
       console.error('Failed to fetch waitlist status:', err);
+      setError('キャンセル待ち情報の取得に失敗しました。時間をおいて再度お試しください。');
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -39,6 +43,12 @@ export default function WaitlistStatus() {
   return (
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-xl font-bold mb-4">キャンセル待ち状況</h1>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-3">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <LoadingScreen />

@@ -289,8 +289,13 @@ public class LotteryController {
         List<String> results = new ArrayList<>();
         List<AdminWaitlistNotificationData> rawList = new ArrayList<>();
 
-        // cancelParticipationSuppressed は個別 TX でコミットされるため、
-        // ループ途中で例外が起きても先に成功した分の DB 更新は既にコミット済みになる。
+        // cancelParticipationSuppressed は @Transactional(REQUIRED) のため、
+        // 上流TXが無い場合のみ 1件1TX で動作する（個別コミット）。
+        // このメソッド自体に @Transactional を付けてはならない:
+        // 付与するとループ全件が単一TXに化け、途中の例外で全件ロールバックされ、
+        // 成功した分のキャンセルが消える（cancelParticipationSuppressed の Javadoc 参照）。
+        // 個別コミット契約は LotteryControllerCancelTest で CI 検出される。
+        // ループ途中で例外が起きても先に成功した分の DB 更新は既にコミット済みになるため、
         // 成功分の当日キャンセル通知・繰り上げ通知が取りこぼされないよう、
         // 通知集約処理は finally 節で必ず実行する。
         try {
@@ -504,10 +509,15 @@ public class LotteryController {
                         || p.getStatus() == ParticipantStatus.OFFERED)
                 .collect(Collectors.toList());
 
-        List<WaitlistStatusDto.WaitlistEntry> entries = new ArrayList<>();
+        Set<Long> sessionIds = waitlisted.stream()
+                .map(PracticeParticipant::getSessionId)
+                .collect(Collectors.toSet());
+        Map<Long, PracticeSession> sessionMap = practiceSessionRepository.findAllById(sessionIds).stream()
+                .collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
+        List<WaitlistStatusDto.WaitlistEntry> entries = new ArrayList<>();
         for (PracticeParticipant p : waitlisted) {
-            PracticeSession session = practiceSessionRepository.findById(p.getSessionId()).orElse(null);
+            PracticeSession session = sessionMap.get(p.getSessionId());
             if (session == null) continue;
 
             entries.add(WaitlistStatusDto.WaitlistEntry.builder()
