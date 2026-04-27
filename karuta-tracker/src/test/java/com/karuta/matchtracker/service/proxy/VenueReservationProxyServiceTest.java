@@ -539,6 +539,68 @@ class VenueReservationProxyServiceTest {
         }
 
         @Test
+        @DisplayName("Content-Length が proxy 上限 (5MB) 超過なら body を読まずに REQUEST_TOO_LARGE")
+        void rejectsOversizedContentLength() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+
+            // 5MB + 1 byte の Content-Length を申告するリクエスト。実 body は付けず、
+            // 宣言値の時点で REQUEST_TOO_LARGE になることを確認する (上流に到達しないこと込み)。
+            // MockHttpServletRequest は setContent() の長さから getContentLengthLong() を導出する
+            // ため、宣言値だけ大きい状態を再現するにはオーバーライドする必要がある。
+            long over = VenueReservationProxyService.MAX_PROXY_REQUEST_BODY_BYTES + 1;
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "POST",
+                    "/api/venue-reservation-proxy/fetch/kaderu27/index.php") {
+                @Override
+                public int getContentLength() { return (int) Math.min(over, Integer.MAX_VALUE); }
+                @Override
+                public long getContentLengthLong() { return over; }
+            };
+            request.setQueryString("token=" + TOKEN);
+            request.setContentType(MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+            request.setContent(new byte[0]);
+
+            assertThatThrownBy(() -> service.fetch(TOKEN, request))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.REQUEST_TOO_LARGE));
+            verify(client, never()).fetch(any(), any());
+        }
+
+        @Test
+        @DisplayName("Content-Length 未設定でも body 読み取り中に上限超過を検出して REQUEST_TOO_LARGE")
+        void rejectsOversizedStreamWithoutContentLength() {
+            VenueReservationProxyService service = newService(enabledConfig(), new VenueReservationHtmlRewriter());
+            ProxySession session = session();
+            when(sessionStore.get(TOKEN)).thenReturn(Optional.of(session));
+
+            // Content-Length を意図的に -1 (未申告) として返す request を組み立てる。
+            // chunked transfer / Content-Length 偽装ケースで、宣言値ではなく実際の読み取りバイト数で
+            // 上限超過を検出することを確認する。MockHttpServletRequest は setContent() の長さから
+            // getContentLengthLong() を導出するため、明示的にオーバーライドする。
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    "POST",
+                    "/api/venue-reservation-proxy/fetch/kaderu27/index.php") {
+                @Override
+                public int getContentLength() { return -1; }
+                @Override
+                public long getContentLengthLong() { return -1L; }
+            };
+            request.setQueryString("token=" + TOKEN);
+            request.setContentType(MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+            byte[] huge = new byte[(int) (VenueReservationProxyService.MAX_PROXY_REQUEST_BODY_BYTES + 1024L)];
+            request.setContent(huge);
+
+            assertThatThrownBy(() -> service.fetch(TOKEN, request))
+                    .isInstanceOfSatisfying(VenueReservationProxyException.class, ex ->
+                            assertThat(ex.getErrorCode())
+                                    .isEqualTo(VenueReservationProxyException.REQUEST_TOO_LARGE));
+            verify(client, never()).fetch(any(), any());
+        }
+
+        @Test
         @DisplayName("非HTMLレスポンスは body を透過し、HTML rewriter / 完了検知 / CSP のいずれも呼ばない")
         void nonHtmlPassThrough() {
             VenueReservationHtmlRewriter rewriter = spy(new VenueReservationHtmlRewriter());

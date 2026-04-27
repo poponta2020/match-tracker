@@ -134,6 +134,9 @@ public class VenueReservationProxyController {
         if (VenueReservationProxyException.SCRIPT_ERROR.equals(ex.getErrorCode())) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
+        if (VenueReservationProxyException.REQUEST_TOO_LARGE.equals(ex.getErrorCode())) {
+            return HttpStatus.PAYLOAD_TOO_LARGE;
+        }
         return HttpStatus.BAD_REQUEST;
     }
 

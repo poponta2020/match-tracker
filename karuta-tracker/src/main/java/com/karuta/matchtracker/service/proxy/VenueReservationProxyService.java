@@ -27,7 +27,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StreamUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -79,6 +78,16 @@ public class VenueReservationProxyService {
     private static final String CSP_HEADER = "Content-Security-Policy";
     private static final MediaType TEXT_HTML_UTF8 = new MediaType("text", "html", StandardCharsets.UTF_8);
     private static final MediaType TEXT_CSS_UTF8 = new MediaType("text", "css", StandardCharsets.UTF_8);
+
+    /**
+     * プロキシ経路で受け付けるリクエストボディの上限 (バイト)。
+     *
+     * <p>{@code spring.servlet.multipart.resolve-lazily=true} に切り替えたことで multipart parser
+     * が走らなくなり、Spring 標準の {@code spring.servlet.multipart.max-request-size=5MB} は
+     * proxy 経路では検証されない。{@link #readRequestBody} が無条件にメモリへ展開すると
+     * 巨大 POST でメモリを圧迫できるため、proxy 側で同等の上限 (5MB) を独自に強制する。</p>
+     */
+    static final long MAX_PROXY_REQUEST_BODY_BYTES = 5L * 1024L * 1024L;
 
     /**
      * Phase 1 で許可する slotIndex。要件定義書では「夜間のみ自動予約対象」と決定済み。
@@ -820,9 +829,33 @@ public class VenueReservationProxyService {
         return !m.equals("GET") && !m.equals("HEAD") && !m.equals("OPTIONS") && !m.equals("TRACE");
     }
 
+    /**
+     * リクエストボディを {@link #MAX_PROXY_REQUEST_BODY_BYTES} の上限付きで読み出す。
+     *
+     * <p>{@code Content-Length} が上限超過なら読み込み前に拒否する。{@code Content-Length} が
+     * 未設定 (chunked) や偽装値で実体が大きい場合に備えて、読み取り中も累積バイト数を監視し
+     * 上限超過を検出した時点で {@link VenueReservationProxyException#REQUEST_TOO_LARGE} を投げる。
+     * Controller 側でこのエラーは HTTP 413 にマップされる。</p>
+     */
     private static byte[] readRequestBody(HttpServletRequest request) {
-        try {
-            return StreamUtils.copyToByteArray(request.getInputStream());
+        long contentLength = request.getContentLengthLong();
+        if (contentLength > MAX_PROXY_REQUEST_BODY_BYTES) {
+            throw payloadTooLargeException();
+        }
+        try (java.io.InputStream in = request.getInputStream()) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(
+                    contentLength > 0 ? (int) contentLength : 0);
+            byte[] buf = new byte[8192];
+            long total = 0;
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > MAX_PROXY_REQUEST_BODY_BYTES) {
+                    throw payloadTooLargeException();
+                }
+                out.write(buf, 0, n);
+            }
+            return out.toByteArray();
         } catch (IOException e) {
             throw new VenueReservationProxyException(
                     VenueReservationProxyException.SCRIPT_ERROR,
@@ -830,6 +863,14 @@ public class VenueReservationProxyService {
                     "Failed to read proxy request body",
                     e);
         }
+    }
+
+    private static VenueReservationProxyException payloadTooLargeException() {
+        return new VenueReservationProxyException(
+                VenueReservationProxyException.REQUEST_TOO_LARGE,
+                null,
+                "Proxy request body exceeds upper limit of "
+                        + MAX_PROXY_REQUEST_BODY_BYTES + " bytes");
     }
 
     private static ByteArrayEntity newRequestEntity(byte[] body, String contentType) {
