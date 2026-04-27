@@ -232,13 +232,46 @@ public class LotteryController {
 
     /**
      * セッション別抽選結果取得
+     *
+     * セッションの所属団体に対して {@link #resolveOrganizationScope} と同等の認可を行う。
+     * - SUPER_ADMIN: 常に許可
+     * - ADMIN: adminOrganizationId と一致しない場合 403
+     * - PLAYER: 所属団体に含まれない場合 403
      */
     @GetMapping("/results/{sessionId}")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
-    public ResponseEntity<LotteryResultDto> getSessionLotteryResult(@PathVariable Long sessionId) {
+    public ResponseEntity<LotteryResultDto> getSessionLotteryResult(
+            @PathVariable Long sessionId, HttpServletRequest httpRequest) {
         PracticeSession session = practiceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+        authorizeSessionOrganizationAccess(session.getOrganizationId(), httpRequest);
         return ResponseEntity.ok(lotteryService.buildLotteryResult(session));
+    }
+
+    /**
+     * 単一セッションの組織アクセス権をチェックする。
+     * {@link #resolveOrganizationScope} と同じ判定ロジックを単一団体に適用する。
+     */
+    private void authorizeSessionOrganizationAccess(Long sessionOrgId, HttpServletRequest httpRequest) {
+        Role role = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (role == Role.SUPER_ADMIN) {
+            return;
+        }
+        if (role == Role.ADMIN) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            if (sessionOrgId == null || !sessionOrgId.equals(adminOrgId)) {
+                throw new ForbiddenException("他団体の抽選情報は閲覧できません");
+            }
+            return;
+        }
+        // PLAYER
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        List<Long> playerOrgIds = playerOrganizationRepository.findByPlayerId(currentUserId).stream()
+                .map(po -> po.getOrganizationId())
+                .collect(Collectors.toList());
+        if (sessionOrgId == null || !playerOrgIds.contains(sessionOrgId)) {
+            throw new ForbiddenException("所属していない団体の抽選情報は閲覧できません");
+        }
     }
 
     /**
