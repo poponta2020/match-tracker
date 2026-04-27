@@ -177,10 +177,16 @@ export default function LotteryManagement() {
     setProcessing('confirm');
     setError(null);
     try {
-      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds);
+      const res = await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds);
       if (sessionStorageKey) sessionStorage.removeItem(sessionStorageKey);
       setPhase('confirmed');
       setConfirmedLotteryExists(true);
+
+      // 伝助書き戻しの失敗をユーザーに知らせる（確定 DB は維持される）
+      if (res?.data && res.data.densukeWriteSucceeded === false) {
+        const detail = res.data.densukeWriteError ? `\n詳細: ${res.data.densukeWriteError}` : '';
+        alert('抽選結果は確定されましたが、伝助への書き戻しに失敗しました。手動で伝助の状態を確認してください。' + detail);
+      }
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || '確定処理に失敗しました';
       setError(typeof msg === 'string' ? msg : '確定処理に失敗しました');

@@ -224,7 +224,7 @@ class LotteryServiceTest {
             return ex;
         });
         when(practiceParticipantRepository.findBySessionId(sessionId)).thenReturn(List.of());
-        when(practiceParticipantRepository.findMonthlyLoserPlayerIds(2026, 4, sessionId)).thenReturn(List.of());
+        when(practiceParticipantRepository.findMonthlyLoserPlayerIds(2026, 4, sessionId, ORG_ID)).thenReturn(List.of());
         when(practiceParticipantRepository.saveAll(any())).thenReturn(List.of());
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 

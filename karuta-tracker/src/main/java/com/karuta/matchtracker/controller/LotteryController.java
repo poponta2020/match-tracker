@@ -13,6 +13,7 @@ import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.NotificationRepository;
+import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueRepository;
@@ -54,6 +55,7 @@ public class LotteryController {
     private final LotteryExecutionRepository lotteryExecutionRepository;
     private final NotificationRepository notificationRepository;
     private final VenueRepository venueRepository;
+    private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
@@ -204,13 +206,21 @@ public class LotteryController {
 
     /**
      * 月別抽選結果取得
+     *
+     * organizationId 未指定の場合のスコープ:
+     * - SUPER_ADMIN: 全団体
+     * - ADMIN: 自団体に強制スコープ
+     * - PLAYER: 所属団体すべてに絞り込み
      */
     @GetMapping("/results")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryResultDto>> getLotteryResults(
-            @RequestParam int year, @RequestParam int month) {
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
 
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> orgScope = resolveOrganizationScope(organizationId, httpRequest);
+        List<PracticeSession> sessions = findSessionsByScope(year, month, orgScope);
         List<LotteryResultDto> results = new ArrayList<>();
 
         for (PracticeSession session : sessions) {
@@ -233,15 +243,19 @@ public class LotteryController {
 
     /**
      * 自分の抽選結果取得
+     *
+     * organizationId 未指定の場合のスコープ解決は {@link #getLotteryResults} と同じ。
      */
     @GetMapping("/my-results")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryResultDto>> getMyLotteryResults(
             @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
             HttpServletRequest httpRequest) {
 
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> orgScope = resolveOrganizationScope(organizationId, httpRequest);
+        List<PracticeSession> sessions = findSessionsByScope(year, month, orgScope);
         List<LotteryResultDto> results = new ArrayList<>();
 
         for (PracticeSession session : sessions) {
@@ -740,12 +754,15 @@ public class LotteryController {
     }
 
     /**
-     * 抽選結果確定（抽選実行 + DB保存 + 伝助書き戻し）
+     * 抽選結果確定（抽選実行 + DB保存 + 伝助書き戻し）。
+     *
+     * 伝助書き戻しが失敗してもレスポンスは 200 OK を返し、
+     * {@code densukeWriteSucceeded = false} で呼び出し元（フロント）に乖離を伝える。
      */
     @PostMapping("/confirm")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
-    public ResponseEntity<LotteryExecution> confirmLottery(@Valid @RequestBody LotteryExecutionRequest request,
-                                                            HttpServletRequest httpRequest) {
+    public ResponseEntity<ConfirmLotteryResponse> confirmLottery(@Valid @RequestBody LotteryExecutionRequest request,
+                                                                  HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
 
         // ADMINは自団体に強制
@@ -782,19 +799,85 @@ public class LotteryController {
         List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
         lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
 
-        LotteryExecution result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
+        ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
         return ResponseEntity.ok(result);
     }
 
     /**
      * 抽選実行履歴取得
+     *
+     * organizationId 未指定の場合のスコープ解決は {@link #getLotteryResults} と同じ。
      */
     @GetMapping("/executions")
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<LotteryExecution>> getLotteryExecutions(
-            @RequestParam int year, @RequestParam int month) {
+            @RequestParam int year, @RequestParam int month,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        List<Long> orgScope = resolveOrganizationScope(organizationId, httpRequest);
+        if (orgScope == null) {
+            return ResponseEntity.ok(
+                    lotteryExecutionRepository.findByTargetYearAndTargetMonth(year, month));
+        }
+        if (orgScope.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
         return ResponseEntity.ok(
-                lotteryExecutionRepository.findByTargetYearAndTargetMonth(year, month));
+                lotteryExecutionRepository.findByTargetYearAndTargetMonthAndOrganizationIdIn(
+                        year, month, orgScope));
+    }
+
+    /**
+     * 抽選結果系 API での組織スコープを解決する。
+     *
+     * @return null 全団体（SUPER_ADMIN かつ organizationId 未指定）/
+     *         空リスト 結果なし（PLAYER で所属団体なし）/
+     *         単要素リスト 単一団体に絞り込み（指定あり or ADMIN）/
+     *         複数要素リスト PLAYER が複数団体所属（指定なし時）
+     */
+    private List<Long> resolveOrganizationScope(Long requestedOrganizationId, HttpServletRequest httpRequest) {
+        Role role = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+
+        if (role == Role.SUPER_ADMIN) {
+            return requestedOrganizationId != null ? List.of(requestedOrganizationId) : null;
+        }
+
+        if (role == Role.ADMIN) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            if (requestedOrganizationId != null && !requestedOrganizationId.equals(adminOrgId)) {
+                throw new ForbiddenException("他団体の抽選情報は閲覧できません");
+            }
+            return adminOrgId != null ? List.of(adminOrgId) : List.of();
+        }
+
+        // PLAYER
+        List<Long> playerOrgIds = playerOrganizationRepository.findByPlayerId(currentUserId).stream()
+                .map(po -> po.getOrganizationId())
+                .collect(Collectors.toList());
+        if (playerOrgIds.isEmpty()) {
+            return List.of();
+        }
+        if (requestedOrganizationId != null) {
+            if (!playerOrgIds.contains(requestedOrganizationId)) {
+                throw new ForbiddenException("所属していない団体の抽選情報は閲覧できません");
+            }
+            return List.of(requestedOrganizationId);
+        }
+        return playerOrgIds;
+    }
+
+    /**
+     * 組織スコープに基づき指定年月のセッション一覧を取得する。
+     */
+    private List<PracticeSession> findSessionsByScope(int year, int month, List<Long> orgScope) {
+        if (orgScope == null) {
+            return practiceSessionRepository.findByYearAndMonth(year, month);
+        }
+        if (orgScope.isEmpty()) {
+            return List.of();
+        }
+        return practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(orgScope, year, month);
     }
 
     /**

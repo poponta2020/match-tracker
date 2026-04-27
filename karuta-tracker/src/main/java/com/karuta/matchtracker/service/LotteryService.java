@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.AdminEditParticipantsRequest;
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
+import com.karuta.matchtracker.dto.ConfirmLotteryResponse;
 import com.karuta.matchtracker.dto.LotteryResultDto;
 import com.karuta.matchtracker.dto.MonthlyApplicantDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
@@ -145,15 +146,22 @@ public class LotteryService {
     }
 
     /**
-     * 抽選を実行し、即座に確定する（プレビュー後の確定用）
+     * 抽選を実行し、即座に確定する（プレビュー後の確定用）。
      * executeLottery + confirmLottery を1回の抽選実行で行う。
+     *
+     * 抽選自体が失敗した場合は {@code densukeWriteSucceeded = true}（書き戻し未実施）で返す。
+     * 抽選成功・伝助書き戻し失敗時は確定 DB は維持し、{@code densukeWriteSucceeded = false}
+     * とエラーメッセージをレスポンスに含めて呼び出し元に伝搬する。
      */
     @Transactional
-    public LotteryExecution executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
+    public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
         LotteryExecution execution = executeLottery(year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
 
         if (execution.getStatus() != ExecutionStatus.SUCCESS) {
-            return execution;
+            return ConfirmLotteryResponse.builder()
+                    .execution(execution)
+                    .densukeWriteSucceeded(true)
+                    .build();
         }
 
         execution.setPriorityPlayerIds(priorityPlayerIds);
@@ -164,15 +172,23 @@ public class LotteryService {
         log.info("Lottery executed and confirmed for {}-{} by user {}", year, month, executedBy);
 
         // 伝助への一括書き戻し
+        boolean densukeWriteSucceeded = true;
+        String densukeWriteError = null;
         if (organizationId != null) {
             try {
                 densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
+                densukeWriteSucceeded = false;
+                densukeWriteError = e.getMessage();
             }
         }
 
-        return execution;
+        return ConfirmLotteryResponse.builder()
+                .execution(execution)
+                .densukeWriteSucceeded(densukeWriteSucceeded)
+                .densukeWriteError(densukeWriteError)
+                .build();
     }
 
     /**
@@ -824,9 +840,9 @@ public class LotteryService {
             }
             practiceParticipantRepository.saveAll(reLotteryTargets);
 
-            // 月内の他セッションでの落選者を取得（優先当選判定用）
+            // 月内の他セッションでの落選者を取得（優先当選判定用、団体スコープ内）
             Set<Long> monthlyLosers = new HashSet<>(
-                    practiceParticipantRepository.findMonthlyLoserPlayerIds(year, month, sessionId));
+                    practiceParticipantRepository.findMonthlyLoserPlayerIds(year, month, sessionId, orgId));
 
             // セッション内落選者を追跡
             Set<Long> sessionLosers = new HashSet<>();
