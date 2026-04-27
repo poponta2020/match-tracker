@@ -12,6 +12,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
@@ -283,11 +284,14 @@ public class DensukeWriteService {
      * CANCELLED/DECLINED/WAITLIST_DECLINED/未登録は伝助の既存値を維持（join-{id} を省略）。
      * 書き戻したレコードのみ dirty=false に更新する。
      *
-     * <p>外側の {@code @Transactional}（{@link LotteryService#executeAndConfirmLottery}）が
-     * 書き戻し失敗でロールバックオンリーになると確定 DB 更新ごと巻き戻ってしまうため、
-     * 例外ではなく {@link DensukeWriteResult} で部分失敗を呼び出し元に伝える。
+     * <p>外側の {@code @Transactional}（{@link LotteryService#executeAndConfirmLottery}）から
+     * 完全に独立したトランザクションで実行する（{@link Propagation#REQUIRES_NEW}）。
+     * 書き戻し中に未捕捉の RuntimeException が発生した場合でも、Spring プロキシが外側
+     * トランザクションを rollback-only にマークしないようにし、抽選確定の DB 更新
+     * （{@code confirmed_at} 等）が巻き戻らないようにする。部分失敗は引き続き
+     * {@link DensukeWriteResult} で呼び出し元に返す。
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public DensukeWriteResult writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
         log.info("Starting bulk write-back for lottery confirmation: orgId={}, {}-{}", organizationId, year, month);
         lastAttemptAtByOrg.put(organizationId, JstDateTimeUtil.now());

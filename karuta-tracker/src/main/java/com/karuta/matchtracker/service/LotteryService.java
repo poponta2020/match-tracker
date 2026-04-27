@@ -175,8 +175,10 @@ public class LotteryService {
         // 伝助への一括書き戻し
         // 書き戻し失敗（HTTP 4xx/5xx、メンバーID取得失敗、リストページ取得失敗 等）は
         // DensukeWriteResult として返ってくるので、densukeWriteSucceeded に反映する。
-        // 例外で伝えると外側 @Transactional がロールバックオンリーとなり、確定 DB 更新が
-        // 巻き戻ってしまうため、内部失敗は必ず戻り値経由で受け取る。
+        // writeAllForLotteryConfirmation は REQUIRES_NEW で別トランザクションとして実行するため、
+        // 書き戻し中に未捕捉の RuntimeException が出ても、本メソッドの確定 DB 更新が
+        // ロールバックオンリーとされることはない（その場合も catch して 200 で
+        // densukeWriteSucceeded=false を返す）。
         boolean densukeWriteSucceeded = true;
         String densukeWriteError = null;
         if (organizationId != null) {

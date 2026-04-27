@@ -1294,7 +1294,7 @@ Entity Layer (JPA Entity)
 **レスポンス**: `LotteryExecution`
 
 #### POST /api/lottery/re-execute/{sessionId}
-**説明**: セッション再抽選。リクエストボディ省略時は直近実行時の `priorityPlayerIds` を引き継ぐ。`priorityPlayerIds: []` で明示クリア可能
+**説明**: セッション再抽選。リクエストボディ省略時は直近実行時の `priorityPlayerIds` を引き継ぐ。`priorityPlayerIds: []` で明示クリア可能。組織スコープを検証し、ADMIN/PLAYER は所属団体のセッション以外を再抽選できない（404 を返す）
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト** (任意):
 ```json
@@ -1303,16 +1303,16 @@ Entity Layer (JPA Entity)
 **レスポンス**: `LotteryExecution`
 
 #### GET /api/lottery/results?year={year}&month={month}
-**説明**: 月別抽選結果取得
-**権限**: なし
+**説明**: 月別抽選結果取得。ADMIN/PLAYER は自分の所属団体のセッションのみが対象（SUPER_ADMIN は全団体）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 **レスポンス**: `List<LotteryResultDto>`
 
 #### GET /api/lottery/results/{sessionId}
-**説明**: セッション別抽選結果取得
-**権限**: なし
+**説明**: セッション別抽選結果取得。ADMIN/PLAYER は所属団体のセッション以外にアクセスすると 404 を返す（SUPER_ADMIN は全団体）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### GET /api/lottery/my-results?year={year}&month={month}
-**説明**: 自分の抽選結果取得（ログインユーザーの結果のみ）
+**説明**: 自分の抽選結果取得（ログインユーザーの結果のみ）。ADMIN/PLAYER は所属団体のセッションに紐づく結果のみ返す
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### POST /api/lottery/cancel
@@ -1466,13 +1466,22 @@ Entity Layer (JPA Entity)
 **リクエスト**: `AdminEditParticipantsRequest`
 
 #### POST /api/lottery/confirm
-**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by`/`priority_player_ids`/`seed` を記録。団体単位で確定状態を管理
+**説明**: 抽選結果を確定し、伝助への一括書き戻しをトリガー。`confirmed_at`/`confirmed_by`/`priority_player_ids`/`seed` を記録。団体単位で確定状態を管理。伝助書き戻しは別トランザクション（REQUIRES_NEW）で実行され、書き戻しが失敗しても抽選確定の DB 更新は維持される
 **権限**: SUPER_ADMIN, ADMIN（ADMINは自団体のみ）
 **リクエスト**: `LotteryExecutionRequest`
 ```json
 { "year": 2026, "month": 5, "organizationId": 1, "seed": 12345, "priorityPlayerIds": [10, 20] }
 ```
-**レスポンス**: `LotteryExecution`
+**レスポンス**: `ConfirmLotteryResponse`
+```json
+{
+  "execution": { "...": "LotteryExecution の全フィールド" },
+  "densukeWriteSucceeded": true,
+  "densukeWriteError": null
+}
+```
+- `densukeWriteSucceeded`: 伝助書き戻しが全件成功した場合 true。部分失敗・例外発生時は false
+- `densukeWriteError`: 失敗内容の概要（成功時は null）。フロント側ではこの値を確認して伝助同期の再実行を促す
 
 #### POST /api/lottery/preview
 **説明**: 抽選プレビュー。抽選アルゴリズムを実行するがDBには保存しない。締め切り前チェック・確定済みチェック・AdminScopeValidation・priorityPlayerIdsバリデーションあり
@@ -1496,8 +1505,8 @@ Entity Layer (JPA Entity)
 **レスポンス**: `{ inAppCount, lineSent, lineFailed, lineSkipped }`
 
 #### GET /api/lottery/executions?year={year}&month={month}
-**説明**: 抽選実行履歴取得。`confirmedAt` フィールドで確定状態を確認可能
-**権限**: なし
+**説明**: 抽選実行履歴取得。`confirmedAt` フィールドで確定状態を確認可能。ADMIN/PLAYER は自分の所属団体の履歴のみ返す（SUPER_ADMIN は全団体）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### POST /api/lottery/same-day-join
 **説明**: 当日先着参加。12:00以降にキャンセルで空いた枠に先着1名がWONとして参加登録される。枠が既に埋まっている場合は409 Conflict。LINEのpostback `action=same_day_join` またはアプリから呼び出し可能。
@@ -2076,13 +2085,15 @@ Entity Layer (JPA Entity)
 #### 5.3.5 抽選結果
 **パス**: `/lottery/results`
 
-**表示内容**:
-- 年月選択
+**表示内容**（閲覧専用）:
+- 月ナビゲーション
 - セッション別の抽選結果
   - 当選者リスト（WON）
   - キャンセル待ちリスト（WAITLISTED、番号順）
-  - 各参加者のステータス表示
-- 管理者向け: 手動抽選実行ボタン、再抽選ボタン、参加者編集
+  - 各参加者のステータス表示（WAITLIST_DECLINED バッジを含む）
+- 自分のキャンセル待ちセッションに対する辞退/復帰ボタン
+
+**備考**: 抽選確定・再抽選・参加者編集等の管理操作は `/admin/lottery` 側に集約しており、本画面では行わない。
 
 ---
 
