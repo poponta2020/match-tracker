@@ -11,6 +11,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.web.servlet.MultipartProperties;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -18,7 +21,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.InputStream;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -174,6 +181,53 @@ class VenueReservationProxyControllerTest {
     }
 
     @Test
+    @DisplayName("ANY /api/venue-reservation-proxy/fetch/**: multipart/form-data POST でも request body が消費されず service に渡る")
+    void fetch_postMultipartBodyPreserved() throws Exception {
+        // Issue #579 回帰テスト: spring.servlet.multipart.resolve-lazily=false (デフォルト) では
+        // DispatcherServlet が multipart リクエストを eager parse して getInputStream() を空にしてしまい、
+        // 上流に空 body が転送されて Kaderu がトップに飛ばしていた。resolve-lazily=true に切り替えた状態で
+        // service に届く body が空でないことを確認する。
+        byte[] proxiedHtml = "<html>kaderu</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        java.util.concurrent.atomic.AtomicReference<byte[]> capturedBody =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> capturedContentType =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        when(venueReservationProxyService.fetch(eq(TOKEN), any(HttpServletRequest.class)))
+                .thenAnswer(invocation -> {
+                    HttpServletRequest req = invocation.getArgument(1);
+                    capturedContentType.set(req.getContentType());
+                    capturedBody.set(req.getInputStream().readAllBytes());
+                    return ResponseEntity.ok()
+                            .contentType(MediaType.TEXT_HTML)
+                            .body(proxiedHtml);
+                });
+
+        String boundary = "----WebKitFormBoundaryABCDEF";
+        String multipartBody = ""
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"op\"\r\n\r\n"
+                + "apply_chk\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"yobiboshu\"\r\n\r\n"
+                + "練習\r\n"
+                + "--" + boundary + "--\r\n";
+        byte[] multipartBytes = multipartBody.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php?token=" + TOKEN)
+                        .contentType("multipart/form-data; boundary=" + boundary)
+                        .content(multipartBytes))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(proxiedHtml));
+
+        org.assertj.core.api.Assertions.assertThat(capturedContentType.get())
+                .as("multipart の Content-Type は service に届いていること")
+                .startsWith("multipart/form-data");
+        org.assertj.core.api.Assertions.assertThat(capturedBody.get())
+                .as("multipart の request body は eager parse されず service に届いていること")
+                .isEqualTo(multipartBytes);
+    }
+
+    @Test
     @DisplayName("extractTokenFromQuery: token 値抽出のエッジケース")
     void extractTokenFromQuery_edgeCases() {
         org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery(null))
@@ -214,6 +268,51 @@ class VenueReservationProxyControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("VENUE_NOT_SUPPORTED"))
                 .andExpect(jsonPath("$.message").value("Venue reservation proxy is not supported for venue: HIGASHI"))
                 .andExpect(jsonPath("$.venue").value("HIGASHI"));
+    }
+
+    @Test
+    @DisplayName("VenueReservationProxyException(REQUEST_TOO_LARGE): 413 + errorCode/message/venue")
+    void venueProxyException_payloadTooLarge() throws Exception {
+        when(venueReservationProxyService.fetch(eq(TOKEN), any(HttpServletRequest.class)))
+                .thenThrow(new VenueReservationProxyException(
+                        VenueReservationProxyException.REQUEST_TOO_LARGE,
+                        VenueId.KADERU,
+                        "Proxy request body exceeds upper limit of 5242880 bytes"));
+
+        mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php?token=" + TOKEN)
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .content("payload=oversize"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.errorCode").value("REQUEST_TOO_LARGE"))
+                .andExpect(jsonPath("$.message").value("Proxy request body exceeds upper limit of 5242880 bytes"))
+                .andExpect(jsonPath("$.venue").value("KADERU"));
+    }
+
+    @Test
+    @DisplayName("application.properties: spring.servlet.multipart.resolve-lazily=true (Issue #579 回帰防止)")
+    void multipartResolveLazilyConfiguredInApplicationProperties() throws Exception {
+        // Issue #579 で resolve-lazily=true に切り替えた設定が誤って false に戻された場合に
+        // 確実に検知するため、application.properties を Spring の Binder で読み込み
+        // MultipartProperties.isResolveLazily() を直接検証する。MockMvc 経由の multipart POST
+        // テストは内部でモック request を使うため、実コンテナの multipart parser 挙動を再現できず
+        // resolve-lazily=false への退行を検出できないため、このテストが回帰ガードを担う。
+        Properties raw = new Properties();
+        try (InputStream in = getClass().getResourceAsStream("/application.properties")) {
+            org.assertj.core.api.Assertions.assertThat(in)
+                    .as("application.properties is on the test classpath")
+                    .isNotNull();
+            raw.load(in);
+        }
+        Map<String, Object> source = new HashMap<>();
+        raw.forEach((k, v) -> source.put((String) k, v));
+        MultipartProperties bound = new Binder(new MapConfigurationPropertySource(source))
+                .bind("spring.servlet.multipart", MultipartProperties.class)
+                .orElseThrow(() -> new AssertionError(
+                        "spring.servlet.multipart.* must be present in application.properties"));
+        org.assertj.core.api.Assertions.assertThat(bound.isResolveLazily())
+                .as("resolve-lazily=true is required so /api/venue-reservation-proxy/fetch/** "
+                        + "can read raw multipart body via getInputStream() (Issue #579)")
+                .isTrue();
     }
 
     @Test

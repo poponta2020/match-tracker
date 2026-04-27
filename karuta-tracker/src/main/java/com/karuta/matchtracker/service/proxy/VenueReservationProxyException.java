@@ -25,6 +25,8 @@ public class VenueReservationProxyException extends RuntimeException {
     public static final String TIMEOUT = "TIMEOUT";
     /** 共通: 想定外のスクリプト/ロジックエラー */
     public static final String SCRIPT_ERROR = "SCRIPT_ERROR";
+    /** 共通: リクエストボディがプロキシの上限を超えた (HTTP 413 にマップ) */
+    public static final String REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE";
     /** Kaderu: 申込トレイへの遷移ステップで予期しない応答 */
     public static final String TRAY_NAVIGATION_FAILED = "TRAY_NAVIGATION_FAILED";
 
