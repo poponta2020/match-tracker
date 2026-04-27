@@ -174,6 +174,53 @@ class VenueReservationProxyControllerTest {
     }
 
     @Test
+    @DisplayName("ANY /api/venue-reservation-proxy/fetch/**: multipart/form-data POST でも request body が消費されず service に渡る")
+    void fetch_postMultipartBodyPreserved() throws Exception {
+        // Issue #579 回帰テスト: spring.servlet.multipart.resolve-lazily=false (デフォルト) では
+        // DispatcherServlet が multipart リクエストを eager parse して getInputStream() を空にしてしまい、
+        // 上流に空 body が転送されて Kaderu がトップに飛ばしていた。resolve-lazily=true に切り替えた状態で
+        // service に届く body が空でないことを確認する。
+        byte[] proxiedHtml = "<html>kaderu</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        java.util.concurrent.atomic.AtomicReference<byte[]> capturedBody =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> capturedContentType =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        when(venueReservationProxyService.fetch(eq(TOKEN), any(HttpServletRequest.class)))
+                .thenAnswer(invocation -> {
+                    HttpServletRequest req = invocation.getArgument(1);
+                    capturedContentType.set(req.getContentType());
+                    capturedBody.set(req.getInputStream().readAllBytes());
+                    return ResponseEntity.ok()
+                            .contentType(MediaType.TEXT_HTML)
+                            .body(proxiedHtml);
+                });
+
+        String boundary = "----WebKitFormBoundaryABCDEF";
+        String multipartBody = ""
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"op\"\r\n\r\n"
+                + "apply_chk\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"yobiboshu\"\r\n\r\n"
+                + "練習\r\n"
+                + "--" + boundary + "--\r\n";
+        byte[] multipartBytes = multipartBody.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        mockMvc.perform(post("/api/venue-reservation-proxy/fetch/kaderu27/index.php?token=" + TOKEN)
+                        .contentType("multipart/form-data; boundary=" + boundary)
+                        .content(multipartBytes))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(proxiedHtml));
+
+        org.assertj.core.api.Assertions.assertThat(capturedContentType.get())
+                .as("multipart の Content-Type は service に届いていること")
+                .startsWith("multipart/form-data");
+        org.assertj.core.api.Assertions.assertThat(capturedBody.get())
+                .as("multipart の request body は eager parse されず service に届いていること")
+                .isEqualTo(multipartBytes);
+    }
+
+    @Test
     @DisplayName("extractTokenFromQuery: token 値抽出のエッジケース")
     void extractTokenFromQuery_edgeCases() {
         org.assertj.core.api.Assertions.assertThat(VenueReservationProxyController.extractTokenFromQuery(null))
