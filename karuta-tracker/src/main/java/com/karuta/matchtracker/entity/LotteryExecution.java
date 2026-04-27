@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -21,6 +22,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Slf4j
 public class LotteryExecution {
 
     @Id
@@ -87,6 +89,8 @@ public class LotteryExecution {
         try {
             return PRIORITY_IDS_MAPPER.readValue(priorityPlayerIdsJson, new TypeReference<List<Long>>() {});
         } catch (Exception e) {
+            log.warn("Failed to parse priorityPlayerIdsJson for LotteryExecution id={} json={}: {}",
+                    this.id, priorityPlayerIdsJson, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -100,6 +104,8 @@ public class LotteryExecution {
         try {
             this.priorityPlayerIdsJson = PRIORITY_IDS_MAPPER.writeValueAsString(ids);
         } catch (Exception e) {
+            log.warn("Failed to serialize priorityPlayerIds for LotteryExecution id={}: {}",
+                    this.id, e.getMessage());
             this.priorityPlayerIdsJson = null;
         }
     }

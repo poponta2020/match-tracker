@@ -15,12 +15,9 @@ export default function LotteryResults() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [lotteryExecuted, setLotteryExecuted] = useState(false);
 
   useEffect(() => {
     fetchResults();
-    fetchConfirmStatus();
   }, [currentDate]);
 
   const fetchResults = async () => {
@@ -32,35 +29,6 @@ export default function LotteryResults() {
       console.error('Failed to fetch lottery results:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchConfirmStatus = async () => {
-    try {
-      const res = await lotteryAPI.getExecutions(currentDate.year, currentDate.month);
-      const executions = res.data || [];
-      const successExecution = executions.find(e => e.status === 'SUCCESS' && !e.sessionId);
-      setLotteryExecuted(!!successExecution);
-      setConfirmed(!!successExecution?.confirmedAt);
-    } catch (err) {
-      console.error('Failed to fetch execution status:', err);
-    }
-  };
-
-  const handleConfirmLottery = async () => {
-    if (!confirm('抽選結果を確定しますか？\n確定すると伝助に結果が一括書き戻しされます。')) return;
-
-    setProcessing('confirm');
-    try {
-      const organizationId = results.length > 0 ? results[0].organizationId : null;
-      await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId);
-      setConfirmed(true);
-      alert('抽選結果を確定しました。伝助への書き戻しが実行されます。');
-    } catch (err) {
-      console.error('Failed to confirm lottery:', err);
-      alert(err.response?.data?.message || '確定処理に失敗しました');
-    } finally {
-      setProcessing(null);
     }
   };
 
@@ -120,7 +88,6 @@ export default function LotteryResults() {
   };
 
   const isMyResult = (playerId) => currentPlayer && currentPlayer.id === playerId;
-  const isSuperAdmin = currentPlayer?.role === 'SUPER_ADMIN';
 
   // セッション内で自分がWAITLISTED/WAITLIST_DECLINEDかチェック
   const getMyWaitlistStatus = (session) => {
@@ -150,29 +117,6 @@ export default function LotteryResults() {
         <span className="text-lg font-semibold">{currentDate.year}年{currentDate.month}月</span>
         <button onClick={() => changeMonth(1)} className="p-2 rounded hover:bg-gray-100">&gt;</button>
       </div>
-
-      {/* 抽選確定ステータス + ボタン */}
-      {lotteryExecuted && (
-        <div className="mb-4 flex items-center justify-between bg-white rounded-lg shadow p-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-700">抽選ステータス:</span>
-            {confirmed ? (
-              <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-bold">確定済み</span>
-            ) : (
-              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-bold">未確定</span>
-            )}
-          </div>
-          {isSuperAdmin && !confirmed && (
-            <button
-              onClick={handleConfirmLottery}
-              disabled={processing === 'confirm'}
-              className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold disabled:opacity-50"
-            >
-              {processing === 'confirm' ? '処理中...' : '結果を確定する'}
-            </button>
-          )}
-        </div>
-      )}
 
       {loading ? (
         <LoadingScreen />

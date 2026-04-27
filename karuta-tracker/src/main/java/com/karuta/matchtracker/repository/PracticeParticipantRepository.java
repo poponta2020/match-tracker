@@ -315,14 +315,16 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                             @Param("matchNumber") Integer matchNumber);
 
     /**
-     * 指定月のセッションで落選した選手IDリストを取得（月内優先当選判定用）
+     * 指定月・指定団体のセッションで落選した選手IDリストを取得（月内優先当選判定用）
      */
     @Query("SELECT DISTINCT pp.playerId FROM PracticeParticipant pp " +
            "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
            "WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month " +
+           "AND ps.organizationId = :organizationId " +
            "AND pp.status IN ('WAITLISTED', 'DECLINED') " +
            "AND ps.sessionDate < (SELECT ps2.sessionDate FROM PracticeSession ps2 WHERE ps2.id = :currentSessionId)")
     List<Long> findMonthlyLoserPlayerIds(@Param("year") int year,
                                          @Param("month") int month,
-                                         @Param("currentSessionId") Long currentSessionId);
+                                         @Param("currentSessionId") Long currentSessionId,
+                                         @Param("organizationId") Long organizationId);
 }
