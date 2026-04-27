@@ -99,12 +99,19 @@ public class VenueReservationProxyService {
      * Referer をどうしても付けたい場合は、ブラウザ値ではなくサーバ側で
      * {@code currentUpstreamUrl} を改めて設定するのが安全。</p>
      *
-     * <p>{@code user-agent} はサーバ側ログインから申込トレイ準備、ユーザのフォーム送信まで
-     * 一貫した値を会場サイトに見せるために除去する。Kaderu はセッションを UA に紐付けて
-     * 検証するため、サーバ側 (Chrome デスクトップ UA) で確立したセッションに
-     * Mobile Safari など別 UA で POST すると Kaderu がセッションを無効化してログイン画面に
-     * 飛ばす (Issue #577)。除去すると HttpClient が {@code setUserAgent} で設定済みの
-     * Chrome デスクトップ UA をデフォルトとして使うため、UA がブレなくなる。</p>
+     * <p>{@code user-agent} / {@code sec-ch-ua-*} はサーバ側ログインから申込トレイ準備、
+     * ユーザのフォーム送信まで一貫したクライアント情報を会場サイトに見せるために除去する。
+     * Kaderu はセッションを UA に紐付けて検証するため、サーバ側 (Chrome デスクトップ UA) で
+     * 確立したセッションに Mobile Safari など別 UA で POST すると Kaderu がセッションを
+     * 無効化してログイン画面に飛ばす (Issue #577)。除去すると HttpClient が
+     * {@code setUserAgent} で設定済みの Chrome デスクトップ UA をデフォルトとして使うため、
+     * UA がブレなくなる。Chromium 系ブラウザは {@code Sec-CH-UA-*} (Client Hints) で
+     * モバイル/プラットフォームを別経路で開示するため、これらも合わせて除去する (Issue #579)。</p>
+     *
+     * <p>{@code cache-control} / {@code pragma} / {@code if-modified-since} / {@code if-none-match}
+     * は条件付きリクエスト系ヘッダで、ブラウザ側の状態 (戻る/進むナビゲーションキャッシュ等)
+     * に依存して値が変動する。会場サイトに送ると 304 Not Modified が返ってきたり、
+     * セッション状態と矛盾するキャッシュ判定が行われる可能性があるため除去する。</p>
      */
     private static final Set<String> REQUEST_HEADERS_SKIP = Set.of(
             "host",
@@ -119,7 +126,23 @@ public class VenueReservationProxyService {
             "sec-fetch-mode",
             "sec-fetch-dest",
             "sec-fetch-user",
-            "user-agent"
+            "user-agent",
+            "sec-ch-ua",
+            "sec-ch-ua-mobile",
+            "sec-ch-ua-platform",
+            "sec-ch-ua-platform-version",
+            "sec-ch-ua-arch",
+            "sec-ch-ua-bitness",
+            "sec-ch-ua-full-version",
+            "sec-ch-ua-full-version-list",
+            "sec-ch-ua-model",
+            "sec-ch-ua-wow64",
+            "cache-control",
+            "pragma",
+            "if-modified-since",
+            "if-none-match",
+            "save-data",
+            "dnt"
     );
 
     private static final Set<String> RESPONSE_HEADERS_SKIP = Set.of(
@@ -297,9 +320,18 @@ public class VenueReservationProxyService {
 
         HttpUriRequest upstreamRequest = buildUpstreamRequest(request, venueConfig);
 
+        // 申込トレイの確定 POST が Kaderu トップページに redirect されるバグ (Issue #579)
+        // の原因切り分けのため、fetch のリクエスト/レスポンス概要を INFO で記録する。
+        // 申込フローの所要時間中だけ流れるログ量なので運用負荷は許容範囲。
+        // 根本原因が判明したら DEBUG に戻すことを検討する。
+        long startNanos = System.nanoTime();
+        logUpstreamRequest(session, request, upstreamRequest);
         try (CloseableHttpResponse upstreamResponse =
                      clientFor(venue).fetch(session, upstreamRequest)) {
-            return toResponseEntity(session, venueConfig, rewriteStrategy, upstreamRequest, upstreamResponse);
+            ResponseEntity<byte[]> response = toResponseEntity(
+                    session, venueConfig, rewriteStrategy, upstreamRequest, upstreamResponse);
+            logUpstreamResponse(session, upstreamRequest, upstreamResponse, response, startNanos);
+            return response;
         } catch (IOException e) {
             throw new VenueReservationProxyException(
                     VenueReservationProxyException.SCRIPT_ERROR,
@@ -307,6 +339,64 @@ public class VenueReservationProxyService {
                     "Failed to read venue response",
                     e);
         }
+    }
+
+    private static void logUpstreamRequest(ProxySession session, HttpServletRequest request,
+                                           HttpUriRequest upstreamRequest) {
+        String contentType = request.getContentType();
+        long contentLength = request.getContentLengthLong();
+        log.info("VRP fetch upstream request: token={} venue={} method={} url={} contentType={} contentLength={}",
+                tokenPrefix(session.getToken()),
+                session.getVenue(),
+                upstreamRequest.getMethod(),
+                upstreamRequest.getURI(),
+                contentType,
+                contentLength);
+    }
+
+    private static void logUpstreamResponse(ProxySession session,
+                                            HttpUriRequest upstreamRequest,
+                                            HttpResponse upstreamResponse,
+                                            ResponseEntity<byte[]> response,
+                                            long startNanos) {
+        int status = upstreamResponse.getStatusLine() == null
+                ? -1 : upstreamResponse.getStatusLine().getStatusCode();
+        String location = firstHeaderValue(upstreamResponse, HttpHeaders.LOCATION);
+        String contentType = firstHeaderValue(upstreamResponse, HttpHeaders.CONTENT_TYPE);
+        boolean completed = "true".equalsIgnoreCase(response.getHeaders().getFirst(COMPLETED_HEADER));
+        long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
+        int bodySize = response.getBody() == null ? 0 : response.getBody().length;
+        // 完了検知なしで 3xx が返ったらトップ戻り疑いのため WARN レベルで強調する。
+        boolean redirectSuspect = !completed && status >= 300 && status < 400;
+        if (redirectSuspect) {
+            log.warn("VRP fetch upstream redirect (likely top-page bounce): token={} venue={} method={} url={} status={} location={} contentType={} bodyBytes={} elapsedMs={}",
+                    tokenPrefix(session.getToken()),
+                    session.getVenue(),
+                    upstreamRequest.getMethod(),
+                    upstreamRequest.getURI(),
+                    status,
+                    location,
+                    contentType,
+                    bodySize,
+                    elapsedMs);
+        } else {
+            log.info("VRP fetch upstream response: token={} venue={} method={} url={} status={} location={} contentType={} bodyBytes={} completed={} elapsedMs={}",
+                    tokenPrefix(session.getToken()),
+                    session.getVenue(),
+                    upstreamRequest.getMethod(),
+                    upstreamRequest.getURI(),
+                    status,
+                    location,
+                    contentType,
+                    bodySize,
+                    completed,
+                    elapsedMs);
+        }
+    }
+
+    private static String tokenPrefix(String token) {
+        if (token == null) return "null";
+        return token.length() > 8 ? token.substring(0, 8) : token;
     }
 
     private ResponseEntity<byte[]> toResponseEntity(ProxySession session,
