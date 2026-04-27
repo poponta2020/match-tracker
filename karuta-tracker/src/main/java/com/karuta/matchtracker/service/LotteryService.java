@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.AdminEditParticipantsRequest;
 import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.ConfirmLotteryResponse;
+import com.karuta.matchtracker.dto.DensukeWriteResult;
 import com.karuta.matchtracker.dto.LotteryResultDto;
 import com.karuta.matchtracker.dto.MonthlyApplicantDto;
 import com.karuta.matchtracker.entity.LotteryExecution;
@@ -172,11 +173,20 @@ public class LotteryService {
         log.info("Lottery executed and confirmed for {}-{} by user {}", year, month, executedBy);
 
         // 伝助への一括書き戻し
+        // 書き戻し失敗（HTTP 4xx/5xx、メンバーID取得失敗、リストページ取得失敗 等）は
+        // DensukeWriteResult として返ってくるので、densukeWriteSucceeded に反映する。
+        // 例外で伝えると外側 @Transactional がロールバックオンリーとなり、確定 DB 更新が
+        // 巻き戻ってしまうため、内部失敗は必ず戻り値経由で受け取る。
         boolean densukeWriteSucceeded = true;
         String densukeWriteError = null;
         if (organizationId != null) {
             try {
-                densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+                DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+                if (!result.isSuccess()) {
+                    log.warn("Densuke write-back returned failures after lottery confirmation: {}", result.getErrors());
+                    densukeWriteSucceeded = false;
+                    densukeWriteError = String.join("; ", result.getErrors());
+                }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
                 densukeWriteSucceeded = false;
@@ -1107,10 +1117,13 @@ public class LotteryService {
 
         log.info("Lottery confirmed for {}-{} by user {}", year, month, confirmedBy);
 
-        // 伝助への一括書き戻し
+        // 伝助への一括書き戻し（失敗はログのみ・呼び出し元には伝搬しない）
         if (organizationId != null) {
             try {
-                densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+                DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
+                if (!result.isSuccess()) {
+                    log.warn("Densuke write-back returned failures after lottery confirmation (confirmLottery path): {}", result.getErrors());
+                }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
             }

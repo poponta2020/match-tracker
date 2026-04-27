@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.DensukeWriteResult;
 import com.karuta.matchtracker.dto.DensukeWriteStatusDto;
 import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.repository.*;
@@ -281,9 +282,13 @@ public class DensukeWriteService {
      * 伝助マッピングがある全プレイヤーについて、WON/WAITLISTED/OFFERED/PENDING のみ書き戻す。
      * CANCELLED/DECLINED/WAITLIST_DECLINED/未登録は伝助の既存値を維持（join-{id} を省略）。
      * 書き戻したレコードのみ dirty=false に更新する。
+     *
+     * <p>外側の {@code @Transactional}（{@link LotteryService#executeAndConfirmLottery}）が
+     * 書き戻し失敗でロールバックオンリーになると確定 DB 更新ごと巻き戻ってしまうため、
+     * 例外ではなく {@link DensukeWriteResult} で部分失敗を呼び出し元に伝える。
      */
     @Transactional
-    public void writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
+    public DensukeWriteResult writeAllForLotteryConfirmation(Long organizationId, int year, int month) {
         log.info("Starting bulk write-back for lottery confirmation: orgId={}, {}-{}", organizationId, year, month);
         lastAttemptAtByOrg.put(organizationId, JstDateTimeUtil.now());
 
@@ -294,7 +299,8 @@ public class DensukeWriteService {
         if (urls.isEmpty()) {
             log.info("No densuke URLs found for orgId={}, {}-{}", organizationId, year, month);
             lastErrorsByOrg.put(organizationId, List.of());
-            return;
+            lastSuccessAtByOrg.put(organizationId, JstDateTimeUtil.now());
+            return DensukeWriteResult.success();
         }
 
         List<String> errors = new ArrayList<>();
@@ -306,6 +312,7 @@ public class DensukeWriteService {
             String base = extractBase(urlStr);
             if (cd == null || base == null) {
                 log.warn("URL parse error for bulk write-back: {}", urlStr);
+                errors.add("伝助URL解析エラー: " + urlStr);
                 continue;
             }
 
@@ -337,10 +344,14 @@ public class DensukeWriteService {
                 memberNameToMi = extractAllMemberMappings(listDoc);
             } catch (IOException e) {
                 log.warn("Failed to fetch densuke list page for bulk write-back: {}", e.getMessage());
+                errors.add("伝助リストページ取得失敗(cd=" + cd + "): " + e.getMessage());
                 continue;
             }
 
-            if (pageId == null) continue;
+            if (pageId == null) {
+                errors.add("伝助ページID取得失敗: cd=" + cd);
+                continue;
+            }
 
             // プレイヤー名マップ
             Set<Long> playerIds = mappings.stream()
@@ -370,11 +381,13 @@ public class DensukeWriteService {
         if (!errors.isEmpty()) {
             log.warn("Bulk write-back completed with {} errors", errors.size());
             lastErrorsByOrg.put(organizationId, new ArrayList<>(errors));
-        } else {
-            log.info("Bulk write-back completed successfully for orgId={}, {}-{}", organizationId, year, month);
-            lastErrorsByOrg.put(organizationId, List.of());
-            lastSuccessAtByOrg.put(organizationId, JstDateTimeUtil.now());
+            return DensukeWriteResult.failure(errors);
         }
+
+        log.info("Bulk write-back completed successfully for orgId={}, {}-{}", organizationId, year, month);
+        lastErrorsByOrg.put(organizationId, List.of());
+        lastSuccessAtByOrg.put(organizationId, JstDateTimeUtil.now());
+        return DensukeWriteResult.success();
     }
 
     private void writePlayerToDensuke(
