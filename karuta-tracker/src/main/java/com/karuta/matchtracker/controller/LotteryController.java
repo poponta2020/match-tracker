@@ -535,6 +535,7 @@ public class LotteryController {
             @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long sessionId = body.get("sessionId");
         Long playerId = body.get("playerId");
 
@@ -542,6 +543,9 @@ public class LotteryController {
         if (currentUserRole == Role.PLAYER && !playerId.equals(currentUserId)) {
             throw new ForbiddenException("他の参加者のキャンセル待ちは辞退できません");
         }
+
+        // ADMINは自団体のセッションのみ操作可能
+        validateWaitlistAdminScope(sessionId, currentUserRole, adminOrgId);
 
         int count = waitlistPromotionService.declineWaitlistBySession(sessionId, playerId);
         return ResponseEntity.ok(Map.of(
@@ -558,6 +562,7 @@ public class LotteryController {
             @RequestBody Map<String, Long> body, HttpServletRequest httpRequest) {
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long sessionId = body.get("sessionId");
         Long playerId = body.get("playerId");
 
@@ -566,10 +571,21 @@ public class LotteryController {
             throw new ForbiddenException("他の参加者のキャンセル待ちは復帰できません");
         }
 
+        // ADMINは自団体のセッションのみ操作可能
+        validateWaitlistAdminScope(sessionId, currentUserRole, adminOrgId);
+
         int count = waitlistPromotionService.rejoinWaitlistBySession(sessionId, playerId);
         return ResponseEntity.ok(Map.of(
                 "rejoinedCount", count,
                 "message", "キャンセル待ちに復帰しました（" + count + "件）"));
+    }
+
+    private void validateWaitlistAdminScope(Long sessionId, Role role, Long adminOrgId) {
+        if (role != Role.ADMIN) return;
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+        AdminScopeValidator.validateScope(role.name(), adminOrgId, session.getOrganizationId(),
+                "他団体のキャンセル待ちは操作できません");
     }
 
     /**
