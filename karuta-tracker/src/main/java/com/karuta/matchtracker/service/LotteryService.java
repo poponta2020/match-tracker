@@ -29,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -66,6 +67,7 @@ public class LotteryService {
     private final ObjectMapper objectMapper;
     private final LotteryQueryService lotteryQueryService;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final TransactionTemplate transactionTemplate;
 
     // details JSON 用の内部レコード
     record LotteryDetails(List<SessionDetail> sessions) {}
@@ -153,32 +155,43 @@ public class LotteryService {
      * 抽選自体が失敗した場合は {@code densukeWriteSucceeded = true}（書き戻し未実施）で返す。
      * 抽選成功・伝助書き戻し失敗時は確定 DB は維持し、{@code densukeWriteSucceeded = false}
      * とエラーメッセージをレスポンスに含めて呼び出し元に伝搬する。
+     *
+     * 本メソッドは意図的に {@code @Transactional} を付けない。抽選結果の DB 反映と確定情報の保存は
+     * {@link TransactionTemplate} で囲んだブロック内で確実にコミットさせ、コミット後に
+     * {@link DensukeWriteService#writeAllForLotteryConfirmation} を呼び出す。
+     * これにより {@code REQUIRES_NEW} で開始される伝助書き戻し側の別トランザクションが、
+     * 確定済みの {@code WON} / {@code WAITLISTED} レコードを参照できることを保証する。
      */
-    @Transactional
     public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
-        LotteryExecution execution = executeLottery(year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
+        // 抽選実行 + 確定情報保存を1つのトランザクション内でコミットさせる。
+        // 同一クラス内の self-invocation では @Transactional が効かないため、
+        // TransactionTemplate を用いて明示的に外側トランザクションを構築する。
+        LotteryExecution execution = transactionTemplate.execute(status -> {
+            LotteryExecution exec = executeLottery(
+                    year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
+            if (exec.getStatus() != ExecutionStatus.SUCCESS) {
+                return exec;
+            }
+            exec.setPriorityPlayerIds(priorityPlayerIds);
+            exec.setConfirmedAt(JstDateTimeUtil.now());
+            exec.setConfirmedBy(executedBy);
+            return lotteryExecutionRepository.save(exec);
+        });
 
-        if (execution.getStatus() != ExecutionStatus.SUCCESS) {
+        if (execution == null || execution.getStatus() != ExecutionStatus.SUCCESS) {
             return ConfirmLotteryResponse.builder()
                     .execution(execution)
                     .densukeWriteSucceeded(true)
                     .build();
         }
 
-        execution.setPriorityPlayerIds(priorityPlayerIds);
-        execution.setConfirmedAt(JstDateTimeUtil.now());
-        execution.setConfirmedBy(executedBy);
-        lotteryExecutionRepository.save(execution);
-
         log.info("Lottery executed and confirmed for {}-{} by user {}", year, month, executedBy);
 
         // 伝助への一括書き戻し
         // 書き戻し失敗（HTTP 4xx/5xx、メンバーID取得失敗、リストページ取得失敗 等）は
         // DensukeWriteResult として返ってくるので、densukeWriteSucceeded に反映する。
-        // writeAllForLotteryConfirmation は REQUIRES_NEW で別トランザクションとして実行するため、
-        // 書き戻し中に未捕捉の RuntimeException が出ても、本メソッドの確定 DB 更新が
-        // ロールバックオンリーとされることはない（その場合も catch して 200 で
-        // densukeWriteSucceeded=false を返す）。
+        // この時点では外側 TransactionTemplate のトランザクションは既にコミット済みのため、
+        // writeAllForLotteryConfirmation 側 (REQUIRES_NEW) は最新の WON/WAITLISTED を読み取れる。
         boolean densukeWriteSucceeded = true;
         String densukeWriteError = null;
         if (organizationId != null) {

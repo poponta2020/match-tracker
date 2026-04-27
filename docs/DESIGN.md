@@ -1308,7 +1308,7 @@ Entity Layer (JPA Entity)
 **レスポンス**: `List<LotteryResultDto>`
 
 #### GET /api/lottery/results/{sessionId}
-**説明**: セッション別抽選結果取得。ADMIN/PLAYER は所属団体のセッション以外にアクセスすると 404 を返す（SUPER_ADMIN は全団体）
+**説明**: セッション別抽選結果取得。ADMIN/PLAYER は所属団体のセッション以外にアクセスすると 403 を返す（SUPER_ADMIN は全団体）
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 
 #### GET /api/lottery/my-results?year={year}&month={month}
