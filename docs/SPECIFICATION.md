@@ -1326,7 +1326,7 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 | `/practice/new` | 練習日作成 | ADMIN+ | 新しい練習日の作成（ADMINは自団体のみ） |
 | `/practice/:id` | 練習日詳細 | ALL | 練習日の詳細・参加者 |
 | `/practice/:id/edit` | 練習日編集 | ADMIN+ | 練習日の編集（ADMINは自団体のみ） |
-| `/practice/participation` | 出欠登録 | ALL | 月別カレンダーで参加登録 |
+| `/practice/participation` | 出欠登録 | ALL | 月別カレンダーで参加登録。試合番号チェック欄はチェックボックス周囲もタップ可能 |
 | `/practice/cancel` | 参加キャンセル | ALL | 理由付きキャンセル専用ページ |
 | `/pairings` | 組み合わせ作成 | ADMIN+ | 手動/自動マッチング（ADMINは自団体のみ） |
 | `/pairings/summary` | 組み合わせサマリー | ADMIN+ | 札のルール表示 |
