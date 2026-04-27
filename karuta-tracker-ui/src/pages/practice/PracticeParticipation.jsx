@@ -322,7 +322,7 @@ const PracticeParticipation = () => {
         ) : (
           <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden mx-4">
             <div className="overflow-x-auto">
-              <table className="w-full table-fixed">
+              <table className="w-full min-w-[404px] table-fixed">
                 <thead className="bg-[#e2d9d0] border-b border-[#d0c5b8]">
                   <tr>
                     <th className="w-[72px] px-2 py-2 text-left text-xs font-semibold text-[#5f3a2d]">
@@ -384,7 +384,7 @@ const PracticeParticipation = () => {
                             const matchStatus = statusList.find(s => s.matchNumber === matchNumber);
 
                             return (
-                              <td key={matchNumber} className="px-0 py-3 text-center">
+                              <td key={matchNumber} className="px-0 py-2 text-center align-middle">
                                 {isAvailable ? (
                                   isLotteryDone && matchStatus ? (
                                     // 抽選済み: ステータス表示
@@ -401,13 +401,19 @@ const PracticeParticipation = () => {
                                     <span className="text-gray-300">−</span>
                                   ) : (
                                     // 抽選前: チェックボックス
-                                    <div className="flex flex-col items-center gap-0.5">
+                                    <label
+                                      className={`mx-auto flex min-h-11 w-10 flex-col items-center justify-center gap-0.5 rounded-md py-1 transition-colors ${
+                                        isLockedRegistration(session.id, matchNumber)
+                                          ? 'cursor-not-allowed opacity-70'
+                                          : 'cursor-pointer hover:bg-[#e2d9d0]'
+                                      }`}
+                                    >
                                       <input
                                         type="checkbox"
                                         checked={isChecked}
                                         onChange={() => toggleMatch(session.id, matchNumber)}
                                         disabled={isLockedRegistration(session.id, matchNumber)}
-                                        className={`w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a] ${isLockedRegistration(session.id, matchNumber) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        className={`w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a] ${isLockedRegistration(session.id, matchNumber) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                                         style={{ accentColor: '#4a6b5a' }}
                                       />
                                       <span
@@ -418,7 +424,7 @@ const PracticeParticipation = () => {
                                       >
                                         {participantCount}
                                       </span>
-                                    </div>
+                                    </label>
                                   )
                                 ) : (
                                   <span className="text-gray-300">-</span>
