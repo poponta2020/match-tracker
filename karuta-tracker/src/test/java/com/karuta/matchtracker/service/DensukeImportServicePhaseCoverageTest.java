@@ -517,7 +517,7 @@ class DensukeImportServicePhaseCoverageTest {
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, ORG_ID))
                 .thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
-        when(lotteryDeadlineHelper.isBeforeDeadline(date.getYear(), date.getMonthValue(), ORG_ID)).thenReturn(true);
+        when(lotteryService.isLotteryConfirmed(date.getYear(), date.getMonthValue(), ORG_ID)).thenReturn(false);
     }
 
     private void mockPhase3Monthly(DensukeData data, PracticeSession session, LocalDate date) throws IOException {
@@ -527,7 +527,6 @@ class DensukeImportServicePhaseCoverageTest {
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, ORG_ID))
                 .thenReturn(Optional.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
-        when(lotteryDeadlineHelper.isBeforeDeadline(date.getYear(), date.getMonthValue(), ORG_ID)).thenReturn(false);
         when(lotteryService.isLotteryConfirmed(date.getYear(), date.getMonthValue(), ORG_ID)).thenReturn(true);
     }
 
