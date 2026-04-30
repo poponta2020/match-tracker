@@ -2,12 +2,17 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
 import LoadingScreen from '../../components/LoadingScreen';
+import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
 
 /**
  * 抽選結果確認画面
  */
 export default function LotteryResults() {
   const { currentPlayer } = useAuth();
+  const role = currentPlayer?.role;
+  const isAdminOrSuper = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const adminOrgId = currentPlayer?.adminOrganizationId || currentPlayer?.organizationId || null;
+
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -15,21 +20,53 @@ export default function LotteryResults() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [copyText, setCopyText] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
 
   useEffect(() => {
     fetchResults();
   }, [currentDate]);
+
+  // ADMIN/SUPER_ADMIN: 当該月・団体で抽選が確定済みかを問い合わせ、コピー領域の表示可否を決める
+  useEffect(() => {
+    setIsConfirmed(false);
+    if (!isAdminOrSuper) return;
+    let cancelled = false;
+    lotteryAPI.isConfirmed(currentDate.year, currentDate.month, adminOrgId)
+      .then((res) => {
+        if (cancelled) return;
+        setIsConfirmed(res.data?.confirmed === true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsConfirmed(false);
+      });
+    return () => { cancelled = true; };
+  }, [currentDate.year, currentDate.month, isAdminOrSuper, adminOrgId]);
 
   const fetchResults = async () => {
     setLoading(true);
     try {
       const res = await lotteryAPI.getResults(currentDate.year, currentDate.month);
       setResults(res.data);
+      setCopyText(buildCopyText(currentDate.year, currentDate.month, res.data));
     } catch (err) {
       console.error('Failed to fetch lottery results:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopyFeedback('コピーしました');
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      setCopyFeedback('コピーに失敗しました');
+    }
+    setTimeout(() => setCopyFeedback(''), 2000);
   };
 
   const changeMonth = (delta) => {
@@ -202,6 +239,33 @@ export default function LotteryResults() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 管理者向け: LINE告知用コピー領域。抽選確定済の月にのみ表示する */}
+      {isAdminOrSuper && isConfirmed && (
+        <div className="mt-8 pt-4 border-t">
+          <div className="text-sm font-semibold text-gray-700 mb-2">
+            管理者向け: LINE告知用テキスト（抽選落ちのみ）
+          </div>
+          <textarea
+            value={copyText}
+            onChange={(e) => setCopyText(e.target.value)}
+            rows={12}
+            className="w-full font-mono text-xs border border-gray-300 rounded p-2 whitespace-pre"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!hasAnyWaitlisted(results)}
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              コピー
+            </button>
+            {copyFeedback && (
+              <span className="text-sm text-gray-600">{copyFeedback}</span>
+            )}
+          </div>
         </div>
       )}
     </div>

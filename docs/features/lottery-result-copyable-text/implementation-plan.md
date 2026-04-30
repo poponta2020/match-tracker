@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #606
 
 ### タスク2: 抽選確定済フラグ取得とコピー領域UIの追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `LotteryResults.jsx` に管理者向けコピー領域（textarea + コピーボタン）を追加する。表示条件は「ADMIN または SUPER_ADMIN」かつ「当該月が抽選確定済」。textarea の初期値はタスク1の `buildCopyText` で生成し、月切替・再フェッチ時に上書きする。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/lottery/LotteryResults.jsx`
@@ -43,7 +43,7 @@ status: completed
 - **対応Issue:** #607
 
 ### タスク3: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** `docs/SCREEN_LIST.md` の `/lottery/results` 画面説明に管理者向けコピーテキスト機能の存在を追記する。`docs/SPECIFICATION.md` も該当機能セクションに簡潔に追記する。`docs/DESIGN.md` は API 追加・変更がないため原則不要だが、既存記載があれば併せて確認。
 - **変更対象ファイル:**
   - `docs/SCREEN_LIST.md` — 抽選結果画面の機能一覧に「管理者向けコピーテキスト出力（LINE告知用）」を追記
