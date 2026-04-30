@@ -642,7 +642,7 @@ SUPER_ADMIN のみ操作可能。
 
 #### 3.7.9 抽選結果の確定
 
-抽選実行後、管理者が結果を確認し「確定」操作を行うまではフェーズ1が維持される。確定時に伝助への一括書き戻し（WON→○、WAITLISTED→△、それ以外→×）がトリガーされる。
+抽選実行後、管理者が結果を確認し「確定」操作を行うまでは LOCKED が維持され、伝助インポートは停止される。確定時に伝助への一括書き戻し（WON→○、WAITLISTED→△、それ以外→×）がトリガーされ、フェーズ3に移行する。
 
 - **API**: `POST /api/lottery/confirm`（SUPER_ADMIN / ADMIN権限。ADMINは自団体のみ）
 - **DB**: `lottery_executions.confirmed_at`（確定日時）, `confirmed_by`（確定者ID）, `organization_id`（団体ID）
