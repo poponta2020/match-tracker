@@ -34,7 +34,8 @@ status: completed
 - **対応Issue:** #611
 
 ### タスク3: PracticeParticipation.jsx のクエリパラメータ対応（既存バグ修正）
-- [ ] 完了
+- [x] 完了
+- **実装メモ:** 共通ヘルパー `getInitialDateFromQuery` を `karuta-tracker-ui/src/pages/practice/utils/dateFromQuery.js` に新規作成し、`useSearchParams` を渡して初期化に使用する形に変更。タスク4でも同ヘルパーを再利用予定。
 - **概要:** 参加登録ページが URL クエリパラメータ `year` / `month` を読み取り、初期表示月に反映するよう修正。不正値時は現在月にフォールバック。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx`
