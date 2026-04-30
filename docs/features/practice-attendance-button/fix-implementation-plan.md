@@ -59,7 +59,8 @@ status: completed
 - **対応Issue:** #613
 
 ### タスク5: 既存テスト・ドキュメント更新
-- [ ] 完了
+- [x] 完了
+- **実装メモ:** AdjacentRoomFlow.test.jsx は「参加登録」「参加キャンセル」「出欠登録」のラベルアサーションを一切持たず、テスト修正は不要だった。SPECIFICATION.md には新セクション 3.2.3.1（出欠登録モーダル仕様）を追加し、3.2.3 と 3.2.4 にクエリパラメータ対応を追記、ルーティング表 1329-1330 行も更新。SCREEN_LIST.md は #13 の主要子コンポーネントに `AttendanceRegisterModal` を追加し、出欠登録モーダル経由のフローを説明、#17/#18 にクエリパラメータ対応を追記。DESIGN.md は 5.2 練習関連の導線フロー、5.3.1 カレンダー画面、5.3.2 練習参加登録、7.1 練習参加登録フローをモーダル経由に書き換え。
 - **概要:** ボタンラベル変更に伴うテスト修正と、`docs/SPECIFICATION.md` / `docs/SCREEN_LIST.md` / `docs/DESIGN.md` への反映。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/AdjacentRoomFlow.test.jsx` — 「参加登録」ボタンを直接アサートしている箇所があれば、新ラベル「出欠登録」とモーダル経由のフローに合わせて修正
