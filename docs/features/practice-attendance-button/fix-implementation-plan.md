@@ -19,7 +19,8 @@ status: completed
 - **対応Issue:** #610
 
 ### タスク2: PracticeList.jsx のボタン統合
-- [ ] 完了
+- [x] 完了
+- **実装メモ:** `XCircle` import と `goToParticipation` 関数を削除し、`openAttendanceModal` に置き換え。`isAttendanceModalOpen` state 追加、`hasCancellable` IIFE と左下フローティングボタンを削除。インライン/フローティング双方のラベルを「出欠登録」に統一し、JSX 末尾に `<AttendanceRegisterModal>` をマウント。
 - **概要:** カレンダー画面の 3 つのボタン（右下フローティング「参加登録」/ 左下フローティング「参加キャンセル」/ 選択セッション詳細インライン「参加登録」）を「出欠登録」ボタン 1 種類に統合し、押下時に AttendanceRegisterModal を開く。左下フローティング「参加キャンセル」ボタンと `hasCancellable` 判定ブロックは削除する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeList.jsx`

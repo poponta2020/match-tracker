@@ -3,9 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { practiceAPI, lotteryAPI, venueReservationProxyAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
-import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, XCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
+import AttendanceRegisterModal from '../../components/AttendanceRegisterModal';
 import PlayerChip from '../../components/PlayerChip';
 import YearMonthPicker from '../../components/YearMonthPicker';
 import { sortPlayersByRank } from '../../utils/playerSort';
@@ -56,6 +57,7 @@ const PracticeList = () => {
   const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
   const [reservationReady, setReservationReady] = useState({}); // 隣室予約済みフラグ {sessionId: true}
   const [reservationLoading, setReservationLoading] = useState(false); // 予約処理中フラグ
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false); // 出欠登録モーダル
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
@@ -558,11 +560,7 @@ const PracticeList = () => {
   const calendar = generateCalendar();
   const monthStr = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
 
-  const goToParticipation = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth() + 1;
-    navigate(`/practice/participation?year=${year}&month=${month}`);
-  };
+  const openAttendanceModal = () => setIsAttendanceModalOpen(true);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -949,10 +947,10 @@ const PracticeList = () => {
                 </button>
               ) : (
                 <button
-                  onClick={goToParticipation}
+                  onClick={openAttendanceModal}
                   className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
-                  参加登録
+                  出欠登録
                 </button>
               )}
               {isAdmin() && !isPastDate(selectedSession.sessionDate) && (
@@ -987,37 +985,22 @@ const PracticeList = () => {
         />
       )}
       {/* フローティングアクションボタン (FAB) */}
-      {(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const hasCancellable = sessions.some(session => {
-          const sessionDate = new Date(session.sessionDate + 'T00:00:00');
-          if (sessionDate < today) return false;
-          const statuses = myParticipationStatuses[session.id];
-          if (!statuses || statuses.length === 0) return false;
-          return statuses.some(s => s.status === 'WON');
-        });
-        return hasCancellable ? (
-          <div className="fixed left-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
-            <button
-              onClick={() => navigate('/practice/cancel')}
-              className="bg-white text-red-600 border border-red-300 pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-red-50 transition-all hover:shadow-xl flex items-center gap-2"
-            >
-              <XCircle className="w-5 h-5" />
-              <span className="text-sm font-medium">参加キャンセル</span>
-            </button>
-          </div>
-        ) : null;
-      })()}
       <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
         <button
-          onClick={goToParticipation}
+          onClick={openAttendanceModal}
           className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
         >
           <CalendarCheck className="w-5 h-5" />
-          <span className="text-sm font-medium">参加登録</span>
+          <span className="text-sm font-medium">出欠登録</span>
         </button>
       </div>
+
+      <AttendanceRegisterModal
+        isOpen={isAttendanceModalOpen}
+        onClose={() => setIsAttendanceModalOpen(false)}
+        year={currentDate.getFullYear()}
+        month={currentDate.getMonth() + 1}
+      />
 
     </div>
     </div>
