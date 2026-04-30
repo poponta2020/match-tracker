@@ -28,10 +28,12 @@ export default function LotteryResults() {
     fetchResults();
   }, [currentDate]);
 
-  // ADMIN/SUPER_ADMIN: 当該月・団体で抽選が確定済みかを問い合わせ、コピー領域の表示可否を決める
+  // ADMIN/SUPER_ADMIN かつ adminOrgId が判明しているときだけ確定状態を問い合わせる。
+  // adminOrgId が無い SUPER_ADMIN は団体スコープが定まらず is-confirmed と
+  // getResults の取得範囲が食い違うため、コピー領域は非表示のままにする。
   useEffect(() => {
     setIsConfirmed(false);
-    if (!isAdminOrSuper) return;
+    if (!isAdminOrSuper || !adminOrgId) return;
     let cancelled = false;
     lotteryAPI.isConfirmed(currentDate.year, currentDate.month, adminOrgId)
       .then((res) => {
@@ -48,7 +50,11 @@ export default function LotteryResults() {
   const fetchResults = async () => {
     setLoading(true);
     try {
-      const res = await lotteryAPI.getResults(currentDate.year, currentDate.month);
+      // is-confirmed と取得対象が食い違わないよう、adminOrgId が判明している
+      // ADMIN/SUPER_ADMIN は同じ団体でセッション一覧を絞り込む。
+      // ADMIN はバックエンド側で adminOrganizationId に強制されるため副作用はない。
+      const orgIdParam = isAdminOrSuper && adminOrgId ? adminOrgId : undefined;
+      const res = await lotteryAPI.getResults(currentDate.year, currentDate.month, orgIdParam);
       setResults(res.data);
       setCopyText(buildCopyText(currentDate.year, currentDate.month, res.data));
     } catch (err) {

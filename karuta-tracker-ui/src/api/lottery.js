@@ -11,8 +11,12 @@ export const lotteryAPI = {
       priorityPlayerIds !== null ? { priorityPlayerIds } : undefined),
 
   // 月別抽選結果取得
-  getResults: (year, month) =>
-    apiClient.get('/lottery/results', { params: { year, month } }),
+  // organizationId 省略時のスコープ:
+  //   - ADMIN: バックエンド側で adminOrganizationId に強制
+  //   - SUPER_ADMIN: 全団体
+  //   - PLAYER: 所属団体すべて
+  getResults: (year, month, organizationId) =>
+    apiClient.get('/lottery/results', { params: { year, month, organizationId } }),
 
   // セッション別抽選結果取得
   getSessionResult: (sessionId) =>
