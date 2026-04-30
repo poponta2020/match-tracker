@@ -66,7 +66,7 @@ public class DensukeImportService {
      */
     static final long DRIFT_WARN_THRESHOLD_MINUTES = 10;
 
-    private enum ImportPhase { PHASE1, PHASE3 }
+    private enum ImportPhase { PHASE1, LOCKED, PHASE3 }
 
     @Transactional
     public ImportResult importFromDensuke(String url, LocalDate targetDate, Long createdBy, Long organizationId) throws IOException {
@@ -126,6 +126,15 @@ public class DensukeImportService {
             switch (phase) {
                 case PHASE1 -> processPhase1(entry, session, deadlineType, playerNameMap, playerIdMap,
                         unmatchedNameSet, result, memberLastChangeTimes, detectedAt);
+                case LOCKED -> {
+                    // 抽選実行済み・未確定（admin の確認待ち）窓。
+                    // この間に伝助→アプリのインポートを許すと、新規○が PENDING で登録され、
+                    // 確定時の一括書き戻しで PENDING を ○ として伝助に書き出してしまうため、
+                    // 抽選を経ていないプレイヤーが当選者として混入するデータ破損が発生する。
+                    result.getDetails().add(String.format("%s 第%d試合: 抽選確定待ちのためスキップ",
+                            entry.getDate(), entry.getMatchNumber()));
+                    result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
+                }
                 case PHASE3 -> processPhase3(entry, session, scraped.getMemberNames(),
                         playerNameMap, playerIdMap, unmatchedNameSet, result, pendingNotifications,
                         vacancyChangedSessions, memberLastChangeTimes, detectedAt);
@@ -158,7 +167,11 @@ public class DensukeImportService {
      * フェーズ判定
      *
      * SAME_DAY: 当日12:00を境に Phase1 / Phase3
-     * MONTHLY : 抽選確定の有無のみで Phase1 / Phase3 を切り分ける（締切日時は判定に使わない）
+     * MONTHLY :
+     *   - 抽選確定後 → Phase3
+     *   - 抽選実行済み・未確定 → LOCKED（admin の確認待ち窓。インポート停止）
+     *   - それ以外 → Phase1
+     *   締切日時はフェーズ判定に使わない（締切なしモードでも同じ分岐になる）。
      */
     private ImportPhase determinePhase(DeadlineType deadlineType, int year, int month,
                                        LocalDate sessionDate, Long organizationId) {
@@ -168,8 +181,13 @@ public class DensukeImportService {
         }
 
         // MONTHLY
-        return lotteryService.isLotteryConfirmed(year, month, organizationId)
-                ? ImportPhase.PHASE3 : ImportPhase.PHASE1;
+        if (lotteryService.isLotteryConfirmed(year, month, organizationId)) {
+            return ImportPhase.PHASE3;
+        }
+        if (lotteryService.hasUnconfirmedExecution(year, month, organizationId)) {
+            return ImportPhase.LOCKED;
+        }
+        return ImportPhase.PHASE1;
     }
 
     // ========================================================================

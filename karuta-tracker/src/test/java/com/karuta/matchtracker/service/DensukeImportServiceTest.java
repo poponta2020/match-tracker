@@ -154,6 +154,69 @@ class DensukeImportServiceTest {
     }
 
     @Test
+    @DisplayName("抽選実行済み・未確定のときはインポートをスキップする（LOCKED窓）")
+    void testImportSkipsWhenLotteryExecutedButNotConfirmed() throws IOException {
+        DensukeData data = createSampleData();
+        PracticeSession session = PracticeSession.builder().id(1L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        // 抽選成功保存済み・未確定 → 確定書き戻しが PENDING を ○ で書き出してしまうため
+        // インポートはスキップ。
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(false);
+        when(lotteryService.hasUnconfirmedExecution(2026, 4, 1L)).thenReturn(true);
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        assertThat(result.getSkippedCount()).isEqualTo(2);
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).save(any());
+        verify(practiceParticipantRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("Phase1: dirty=false のキャンセル履歴(CANCELLED/DECLINED/WAITLIST_DECLINED)は伝助で×でも物理削除されない（Issue #616 回帰防止）")
+    void testPhase1PreservesTerminalStatusRecords() throws IOException {
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(LocalDate.of(2026, 4, 1));
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // 鈴木は伝助に出ていない（=×）
+        data.getEntries().add(entry);
+
+        PracticeSession session = PracticeSession.builder().id(1L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L))).thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(false);
+
+        for (ParticipantStatus terminal : List.of(
+                ParticipantStatus.CANCELLED,
+                ParticipantStatus.DECLINED,
+                ParticipantStatus.WAITLIST_DECLINED)) {
+            // 鈴木: terminal status, dirty=false（伝助同期成功で×を書き戻し済み）
+            PracticeParticipant cancelled = PracticeParticipant.builder()
+                    .id(50L).sessionId(1L).playerId(2L).matchNumber(1)
+                    .status(terminal).dirty(false).build();
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumber(1L, 1))
+                    .thenReturn(new java.util.ArrayList<>(List.of(cancelled)));
+
+            ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+            assertThat(result.getRemovedCount()).as("status=%s", terminal).isEqualTo(0);
+            verify(practiceParticipantRepository, never()).delete(cancelled);
+        }
+    }
+
+    @Test
     @DisplayName("未登録者がunmatchedNamesに記録される")
     void testImportTracksUnmatchedNames() throws IOException {
         DensukeData data = createSampleData();
