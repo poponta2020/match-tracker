@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, systemSettingsAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { getInitialDateFromQuery } from './utils/dateFromQuery';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
   const { currentPlayer } = useAuth();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchParams] = useSearchParams();
+  const [currentDate, setCurrentDate] = useState(() => getInitialDateFromQuery(searchParams));
   const [sessions, setSessions] = useState([]);
   const [participations, setParticipations] = useState({});
   const [initialParticipations, setInitialParticipations] = useState({});
