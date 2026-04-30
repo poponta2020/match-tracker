@@ -46,7 +46,8 @@ status: completed
 - **対応Issue:** #612
 
 ### タスク4: PracticeCancelPage.jsx のクエリパラメータ対応
-- [ ] 完了
+- [x] 完了
+- **実装メモ:** タスク3で作成した `getInitialDateFromQuery` ヘルパーを再利用。`useSearchParams` を導入し、`currentDate` 初期値をクエリパラメータ由来に変更。
 - **概要:** キャンセル登録ページが URL クエリパラメータ `year` / `month` を読み取り、初期表示月に反映するよう修正。タスク3と同じ方針。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeCancelPage.jsx`

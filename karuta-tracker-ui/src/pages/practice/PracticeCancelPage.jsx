@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { ChevronLeft, ChevronRight, ArrowLeft, XCircle, Check, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import YearMonthPicker from '../../components/YearMonthPicker';
+import { getInitialDateFromQuery } from './utils/dateFromQuery';
 
 const CANCEL_REASONS = [
   { value: 'HEALTH', label: '体調不良' },
@@ -17,7 +18,8 @@ const CANCEL_REASONS = [
 const PracticeCancelPage = () => {
   const navigate = useNavigate();
   const { currentPlayer } = useAuth();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchParams] = useSearchParams();
+  const [currentDate, setCurrentDate] = useState(() => getInitialDateFromQuery(searchParams));
   const [sessions, setSessions] = useState([]);
   const [myStatuses, setMyStatuses] = useState({});
   const [loading, setLoading] = useState(true);
