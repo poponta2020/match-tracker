@@ -17,7 +17,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'わすらログ', options)
+    self.registration.showNotification(data.title || '柄長', options)
   );
 });
 

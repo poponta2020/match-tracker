@@ -31,7 +31,7 @@ const PrivacyPolicy = () => {
             <dl className="space-y-2 text-gray-700">
               <div>
                 <dt className="font-medium">アプリ名</dt>
-                <dd className="ml-4">わすらログ</dd>
+                <dd className="ml-4">柄長</dd>
               </div>
               <div>
                 <dt className="font-medium">運営者</dt>
