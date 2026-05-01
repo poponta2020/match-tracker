@@ -5,8 +5,10 @@ import com.karuta.matchtracker.dto.AdminWaitlistNotificationData;
 import com.karuta.matchtracker.dto.SameDayCancelContext;
 import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.ParticipantStatus;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,7 +26,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -373,5 +378,128 @@ class LotteryServiceTest {
         verify(practiceParticipantRepository).save(p);
         // 委譲メソッドは呼ばれない
         verify(waitlistPromotionService, never()).cancelParticipationSuppressed(any(), any(), any());
+    }
+
+    // -------- validatePriorityPlayerIds: 団体所属チェック ([Issue #620]) --------
+
+    private PlayerOrganization playerOrgRecord(long playerId, long organizationId) {
+        return PlayerOrganization.builder()
+                .playerId(playerId)
+                .organizationId(organizationId)
+                .build();
+    }
+
+    private PracticeSession sessionForApplicants(long sessionId, long orgId, LocalDate date) {
+        PracticeSession s = new PracticeSession();
+        s.setId(sessionId);
+        s.setOrganizationId(orgId);
+        s.setSessionDate(date);
+        return s;
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: 単一団体所属の選手は対象団体ならOK")
+    void validatePriorityPlayerIds_singleOrgPlayer_inTargetOrg_passes() {
+        // 選手 10 は org 1 のみに所属
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(10L)))
+                .thenReturn(List.of(playerOrgRecord(10L, 1L)));
+        // 参加希望チェックは通過させる
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 5, 1L))
+                .thenReturn(List.of(sessionForApplicants(100L, 1L, LocalDate.of(2026, 5, 1))));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                .thenReturn(List.of(participant(1L, 10L)));
+
+        assertThatCode(() -> lotteryService.validatePriorityPlayerIds(List.of(10L), 2026, 5, 1L))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: 複数団体所属の選手も対象団体に含まれていればOK（Fix #620）")
+    void validatePriorityPlayerIds_multiOrgPlayer_targetIncluded_passes() {
+        // 選手 41 は org 1 と org 2 の両方に所属（北大とわすらもち会の両方）
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(41L)))
+                .thenReturn(List.of(
+                        playerOrgRecord(41L, 1L),
+                        playerOrgRecord(41L, 2L)));
+        // 北大 (org 2) のセッションに 41 が PENDING で参加希望
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 5, 2L))
+                .thenReturn(List.of(sessionForApplicants(200L, 2L, LocalDate.of(2026, 5, 1))));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(200L)))
+                .thenReturn(List.of(PracticeParticipant.builder()
+                        .id(1L).playerId(41L).sessionId(200L).matchNumber(MATCH)
+                        .status(ParticipantStatus.PENDING).build()));
+
+        // 北大 (org 2) の抽選で優先選手として 41 を指定 → 弾かれない
+        assertThatCode(() -> lotteryService.validatePriorityPlayerIds(List.of(41L), 2026, 5, 2L))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: 対象団体に所属していない選手は403")
+    void validatePriorityPlayerIds_foreignOrgPlayer_throwsForbidden() {
+        // 選手 50 は org 1 のみに所属
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(50L)))
+                .thenReturn(List.of(playerOrgRecord(50L, 1L)));
+
+        // org 2 の抽選で優先選手として 50 を指定 → 403
+        assertThatThrownBy(() -> lotteryService.validatePriorityPlayerIds(List.of(50L), 2026, 5, 2L))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("playerIds=[50]");
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: PlayerOrganization レコードが全くない選手も403")
+    void validatePriorityPlayerIds_noOrgRecord_throwsForbidden() {
+        // 選手 99 は player_organizations に1件もない（孤児データ）
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(99L)))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> lotteryService.validatePriorityPlayerIds(List.of(99L), 2026, 5, 1L))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("playerIds=[99]");
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: 複数選手のうち他団体所属のものだけが foreignIds に列挙される")
+    void validatePriorityPlayerIds_mixedIds_onlyForeignReported() {
+        // 10: org 1 のみ / 41: org 1+2 の複数所属 / 50: org 1 のみ
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(10L, 41L, 50L)))
+                .thenReturn(List.of(
+                        playerOrgRecord(10L, 1L),
+                        playerOrgRecord(41L, 1L),
+                        playerOrgRecord(41L, 2L),
+                        playerOrgRecord(50L, 1L)));
+
+        // org 2 の抽選 → 41 だけ通って良いはずだが、10 と 50 は他団体扱い
+        assertThatThrownBy(() -> lotteryService.validatePriorityPlayerIds(
+                List.of(10L, 41L, 50L), 2026, 5, 2L))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("playerIds=[10, 50]");
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: organizationId が null の場合は団体所属チェックをスキップ（SUPER_ADMIN 全団体モード）")
+    void validatePriorityPlayerIds_nullOrgId_skipsOrgCheck() {
+        // 全団体モード: 参加希望チェックのみ通過させる
+        when(practiceSessionRepository.findByYearAndMonth(2026, 5))
+                .thenReturn(List.of(sessionForApplicants(100L, 1L, LocalDate.of(2026, 5, 1))));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                .thenReturn(List.of(participant(1L, 10L)));
+
+        assertThatCode(() -> lotteryService.validatePriorityPlayerIds(List.of(10L), 2026, 5, null))
+                .doesNotThrowAnyException();
+
+        // findByPlayerIdIn が呼ばれていないことを確認
+        verify(playerOrganizationRepository, never()).findByPlayerIdIn(anyList());
+    }
+
+    @Test
+    @DisplayName("validatePriorityPlayerIds: 空リストはバリデーション全体をスキップ（DBアクセス無し）")
+    void validatePriorityPlayerIds_emptyIds_noOp() {
+        assertThatCode(() -> lotteryService.validatePriorityPlayerIds(List.of(), 2026, 5, 1L))
+                .doesNotThrowAnyException();
+
+        verify(playerOrganizationRepository, never()).findByPlayerIdIn(anyList());
+        verify(practiceSessionRepository, never()).findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), any());
     }
 }
