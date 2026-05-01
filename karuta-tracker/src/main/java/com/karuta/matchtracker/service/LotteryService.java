@@ -1161,6 +1161,13 @@ public class LotteryService {
         return lotteryQueryService.isLotteryConfirmed(year, month, organizationId);
     }
 
+    /**
+     * 抽選成功・未確定（admin の確認待ち窓）かどうかを返す
+     */
+    public boolean hasUnconfirmedExecution(int year, int month, Long organizationId) {
+        return lotteryQueryService.hasUnconfirmedExecution(year, month, organizationId);
+    }
+
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);

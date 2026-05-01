@@ -1,6 +1,5 @@
 package com.karuta.matchtracker.service;
 
-import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
@@ -22,8 +21,6 @@ public class DensukeSyncService {
     private final DensukeWriteService densukeWriteService;
     private final DensukeImportService densukeImportService;
     private final DensukeUrlRepository densukeUrlRepository;
-    private final LotteryDeadlineHelper lotteryDeadlineHelper;
-    private final LotteryService lotteryService;
 
     /**
      * 特定団体の伝助同期（書き込み + 読み取り）
@@ -65,17 +62,6 @@ public class DensukeSyncService {
         List<DensukeUrl> densukeUrls = densukeUrlRepository.findByYearAndMonth(year, month);
         for (DensukeUrl densukeUrl : densukeUrls) {
             Long orgId = densukeUrl.getOrganizationId();
-
-            // MONTHLY型でフェーズ2（締切後・抽選確定前）の場合、インポートをスキップ
-            // （書き戻しは writeToDensuke() で既に実行済み）
-            DeadlineType deadlineType = lotteryDeadlineHelper.getDeadlineType(orgId);
-            if (deadlineType != DeadlineType.SAME_DAY
-                    && lotteryDeadlineHelper.isAfterDeadline(year, month, orgId)
-                    && !lotteryService.isLotteryConfirmed(year, month, orgId)) {
-                log.debug("Skipping import for {}/{} (orgId={}): Phase 2 (after deadline, before lottery confirmation)",
-                        year, month, orgId);
-                continue;
-            }
 
             try {
                 LocalDate targetMonth = LocalDate.of(year, month, 1);

@@ -66,7 +66,7 @@ public class DensukeImportService {
      */
     static final long DRIFT_WARN_THRESHOLD_MINUTES = 10;
 
-    private enum ImportPhase { PHASE1, PHASE2, PHASE3 }
+    private enum ImportPhase { PHASE1, LOCKED, PHASE3 }
 
     @Transactional
     public ImportResult importFromDensuke(String url, LocalDate targetDate, Long createdBy, Long organizationId) throws IOException {
@@ -126,8 +126,12 @@ public class DensukeImportService {
             switch (phase) {
                 case PHASE1 -> processPhase1(entry, session, deadlineType, playerNameMap, playerIdMap,
                         unmatchedNameSet, result, memberLastChangeTimes, detectedAt);
-                case PHASE2 -> {
-                    result.getDetails().add(String.format("%s 第%d試合: 締切後・抽選確定前のためスキップ",
+                case LOCKED -> {
+                    // 抽選実行済み・未確定（admin の確認待ち）窓。
+                    // この間に伝助→アプリのインポートを許すと、新規○が PENDING で登録され、
+                    // 確定時の一括書き戻しで PENDING を ○ として伝助に書き出してしまうため、
+                    // 抽選を経ていないプレイヤーが当選者として混入するデータ破損が発生する。
+                    result.getDetails().add(String.format("%s 第%d試合: 抽選確定待ちのためスキップ",
                             entry.getDate(), entry.getMatchNumber()));
                     result.setSkippedCount(result.getSkippedCount() + entry.getParticipants().size());
                 }
@@ -161,23 +165,29 @@ public class DensukeImportService {
 
     /**
      * フェーズ判定
+     *
+     * SAME_DAY: 当日12:00を境に Phase1 / Phase3
+     * MONTHLY :
+     *   - 抽選確定後 → Phase3
+     *   - 抽選実行済み・未確定 → LOCKED（admin の確認待ち窓。インポート停止）
+     *   - それ以外 → Phase1
+     *   締切日時はフェーズ判定に使わない（締切なしモードでも同じ分岐になる）。
      */
     private ImportPhase determinePhase(DeadlineType deadlineType, int year, int month,
                                        LocalDate sessionDate, Long organizationId) {
         if (deadlineType == DeadlineType.SAME_DAY) {
-            // SAME_DAY: 締切前→Phase1、締切後→Phase3（Phase2なし）
             return lotteryDeadlineHelper.isBeforeSameDayDeadline(sessionDate)
                     ? ImportPhase.PHASE1 : ImportPhase.PHASE3;
         }
 
         // MONTHLY
-        if (lotteryDeadlineHelper.isBeforeDeadline(year, month, organizationId)) {
-            return ImportPhase.PHASE1;
-        }
         if (lotteryService.isLotteryConfirmed(year, month, organizationId)) {
             return ImportPhase.PHASE3;
         }
-        return ImportPhase.PHASE2;
+        if (lotteryService.hasUnconfirmedExecution(year, month, organizationId)) {
+            return ImportPhase.LOCKED;
+        }
+        return ImportPhase.PHASE1;
     }
 
     // ========================================================================
@@ -205,8 +215,12 @@ public class DensukeImportService {
         }
 
         // not-○: 既存レコード(dirty=false)を削除（1-E）
+        // ただしキャンセル履歴(CANCELLED/DECLINED/WAITLIST_DECLINED)は保持する。
+        // 伝助同期成功で dirty=false になった CANCELLED が物理削除されると履歴が失われるため。
         for (PracticeParticipant p : existing) {
-            if (!markedPlayerIds.contains(p.getPlayerId()) && !p.isDirty()) {
+            if (!markedPlayerIds.contains(p.getPlayerId())
+                    && !p.isDirty()
+                    && !isTerminalStatus(p.getStatus())) {
                 practiceParticipantRepository.delete(p);
                 result.setRemovedCount(result.getRemovedCount() + 1);
                 log.info("Phase1: removed non-○ participant {} from session {} match {} ({})",

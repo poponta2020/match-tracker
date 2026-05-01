@@ -43,4 +43,35 @@ public class LotteryQueryService {
                 .map(e -> e.getConfirmedAt() != null)
                 .orElse(false);
     }
+
+    /**
+     * 抽選成功（保存済み）だが管理者が未確定の状態かどうかを返す。
+     *
+     * 伝助インポートはこの窓ではスキップする必要がある。Phase1 として動かすと、
+     * 伝助で新たに○が付いた未抽選プレイヤーが PENDING で登録され、
+     * 確定時の一括書き戻し ({@code DensukeWriteService.writeAllForLotteryConfirmation})
+     * で PENDING → ○ として伝助に書き出されてしまうため、抽選を経ていないプレイヤーが
+     * 当選者として扱われるデータ破損が発生する。
+     */
+    public boolean hasUnconfirmedExecution(int year, int month, Long organizationId) {
+        if (organizationId != null) {
+            boolean orgSpecific = lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndOrganizationIdAndStatusOrderByExecutedAtDesc(
+                            year, month, organizationId, ExecutionStatus.SUCCESS)
+                    .map(e -> e.getConfirmedAt() == null)
+                    .orElse(false);
+            if (orgSpecific) return true;
+
+            return lotteryExecutionRepository
+                    .findTopByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatusOrderByExecutedAtDesc(
+                            year, month, ExecutionStatus.SUCCESS)
+                    .map(e -> e.getConfirmedAt() == null)
+                    .orElse(false);
+        }
+        return lotteryExecutionRepository
+                .findTopByTargetYearAndTargetMonthAndStatusOrderByExecutedAtDesc(
+                        year, month, ExecutionStatus.SUCCESS)
+                .map(e -> e.getConfirmedAt() == null)
+                .orElse(false);
+    }
 }

@@ -1,6 +1,5 @@
 package com.karuta.matchtracker.service;
 
-import com.karuta.matchtracker.entity.DeadlineType;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,8 +29,6 @@ class DensukeSyncServiceTest {
     @Mock private DensukeWriteService densukeWriteService;
     @Mock private DensukeImportService densukeImportService;
     @Mock private DensukeUrlRepository densukeUrlRepository;
-    @Mock private LotteryDeadlineHelper lotteryDeadlineHelper;
-    @Mock private LotteryService lotteryService;
 
     @InjectMocks
     private DensukeSyncService densukeSyncService;
@@ -79,31 +75,8 @@ class DensukeSyncServiceTest {
     }
 
     @Test
-    @DisplayName("syncAll skips import in MONTHLY phase2")
-    void syncAll_skipsImportInMonthlyPhase2() throws Exception {
-        DensukeUrl densukeUrl = DensukeUrl.builder()
-                .id(10L)
-                .year(2026)
-                .month(4)
-                .organizationId(1L)
-                .url("https://densuke.biz/list?cd=test")
-                .build();
-
-        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
-                .thenReturn(List.of(densukeUrl));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(lotteryDeadlineHelper.isAfterDeadline(anyInt(), anyInt(), eq(1L))).thenReturn(true);
-        when(lotteryService.isLotteryConfirmed(anyInt(), anyInt(), eq(1L))).thenReturn(false);
-
-        densukeSyncService.syncAll();
-
-        verify(densukeWriteService).writeToDensuke();
-        verify(densukeImportService, never()).importFromDensuke(any(), any(), any(), any());
-    }
-
-    @Test
-    @DisplayName("syncAll does not skip import for SAME_DAY organizations")
-    void syncAll_sameDayDoesNotSkipImport() throws Exception {
+    @DisplayName("syncAll runs import for every URL (phase decision is per-entry inside import)")
+    void syncAll_runsImportForEveryUrl() throws Exception {
         DensukeUrl densukeUrl = DensukeUrl.builder()
                 .id(10L)
                 .year(2026)
@@ -115,44 +88,12 @@ class DensukeSyncServiceTest {
 
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
                 .thenReturn(List.of(densukeUrl));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.SAME_DAY);
         when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
                 .thenReturn(result);
 
         densukeSyncService.syncAll();
 
         verify(densukeWriteService).writeToDensuke();
-        verify(densukeImportService, times(2)).importFromDensuke(
-                eq("https://densuke.biz/list?cd=test"),
-                any(LocalDate.class),
-                eq(DensukeImportService.SYSTEM_USER_ID),
-                eq(1L));
-        verify(lotteryDeadlineHelper, never()).isAfterDeadline(anyInt(), anyInt(), eq(1L));
-        verify(lotteryService, never()).isLotteryConfirmed(anyInt(), anyInt(), eq(1L));
-    }
-
-    @Test
-    @DisplayName("syncAll imports when MONTHLY lottery is already confirmed")
-    void syncAll_importsWhenMonthlyLotteryConfirmed() throws Exception {
-        DensukeUrl densukeUrl = DensukeUrl.builder()
-                .id(10L)
-                .year(2026)
-                .month(4)
-                .organizationId(1L)
-                .url("https://densuke.biz/list?cd=test")
-                .build();
-        DensukeImportService.ImportResult result = new DensukeImportService.ImportResult();
-
-        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
-                .thenReturn(List.of(densukeUrl));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(lotteryDeadlineHelper.isAfterDeadline(anyInt(), anyInt(), eq(1L))).thenReturn(true);
-        when(lotteryService.isLotteryConfirmed(anyInt(), anyInt(), eq(1L))).thenReturn(true);
-        when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
-                .thenReturn(result);
-
-        densukeSyncService.syncAll();
-
         verify(densukeImportService, times(2)).importFromDensuke(
                 eq("https://densuke.biz/list?cd=test"),
                 any(LocalDate.class),

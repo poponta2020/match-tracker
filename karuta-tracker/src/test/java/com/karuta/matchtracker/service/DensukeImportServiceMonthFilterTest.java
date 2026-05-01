@@ -100,7 +100,6 @@ class DensukeImportServiceMonthFilterTest {
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(eq(LocalDate.of(2026, 4, 8)), eq(1L)))
                 .thenReturn(Optional.of(session2));
         when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(lotteryDeadlineHelper.isBeforeDeadline(2026, 4, 1L)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(11L, 1))
                 .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(12L, 1))
