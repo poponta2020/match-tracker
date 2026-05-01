@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
 import { organizationAPI } from '../../api/organizations';
@@ -28,6 +28,9 @@ export default function LotteryResults() {
   const [copyFeedback, setCopyFeedback] = useState('');
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  // 古いリクエストの結果が後から到着しても捨てるためのリクエストID（SUPER_ADMIN の
+  // 初回ロードで全団体スコープと選択団体スコープのレスポンスが競合するのを防ぐ）
+  const requestIdRef = useRef(0);
 
   // SUPER_ADMIN は団体一覧を取得し、デフォルトとして先頭団体を選択する。
   // LotteryManagement と同じ方針で、選択された団体IDを is-confirmed と getResults の
@@ -72,6 +75,13 @@ export default function LotteryResults() {
   }, [currentDate.year, currentDate.month, isAdminOrSuper, adminScopeOrgId]);
 
   const fetchResults = async () => {
+    // SUPER_ADMIN は selectedOrgId が確定するまでは fetch を発行しない。
+    // null のまま発行すると全団体スコープのレスポンスが返り、後続の単一団体スコープ
+    // のレスポンスより遅れて到着すると results / copyText を上書きする恐れがある。
+    if (isSuperAdmin() && !selectedOrgId) {
+      return;
+    }
+    const myRequestId = ++requestIdRef.current;
     setLoading(true);
     try {
       // is-confirmed と取得対象が食い違わないよう、adminScopeOrgId が判明している
@@ -79,12 +89,15 @@ export default function LotteryResults() {
       // ADMIN はバックエンド側で adminOrganizationId に強制されるため副作用はない。
       const orgIdParam = isAdminOrSuper && adminScopeOrgId ? adminScopeOrgId : undefined;
       const res = await lotteryAPI.getResults(currentDate.year, currentDate.month, orgIdParam);
+      // 自分の発行後に新しい fetch が走っていたら stale なので捨てる
+      if (requestIdRef.current !== myRequestId) return;
       setResults(res.data);
       setCopyText(buildCopyText(currentDate.year, currentDate.month, res.data));
     } catch (err) {
+      if (requestIdRef.current !== myRequestId) return;
       console.error('Failed to fetch lottery results:', err);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === myRequestId) setLoading(false);
     }
   };
 
