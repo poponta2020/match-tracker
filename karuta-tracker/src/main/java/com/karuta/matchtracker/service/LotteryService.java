@@ -13,6 +13,7 @@ import com.karuta.matchtracker.entity.LotteryExecution.ExecutionStatus;
 import com.karuta.matchtracker.entity.LotteryExecution.ExecutionType;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
@@ -639,11 +640,15 @@ public class LotteryService {
             return;
         }
 
-        // 1) 団体所属チェック（他団体所属の選手は403）
+        // 1) 団体所属チェック（対象団体に所属していない選手は403）
+        // 複数団体に所属している選手の場合、いずれか1つに対象団体が含まれていれば許可する。
         if (organizationId != null) {
+            Set<Long> playersBelongingToOrg = playerOrganizationRepository.findByPlayerIdIn(ids).stream()
+                    .filter(po -> organizationId.equals(po.getOrganizationId()))
+                    .map(PlayerOrganization::getPlayerId)
+                    .collect(Collectors.toSet());
             List<Long> foreignIds = ids.stream()
-                    .filter(id -> !playerOrganizationRepository
-                            .existsByPlayerIdAndOrganizationId(id, organizationId))
+                    .filter(id -> !playersBelongingToOrg.contains(id))
                     .collect(Collectors.toList());
             if (!foreignIds.isEmpty()) {
                 throw new ForbiddenException(
