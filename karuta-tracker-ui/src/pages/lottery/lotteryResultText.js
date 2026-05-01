@@ -4,8 +4,18 @@ export function getJapaneseWeekday(date) {
   return JAPANESE_WEEKDAYS[date.getDay()];
 }
 
+// `YYYY-MM-DD` を Date コンストラクタへそのまま渡すと UTC 解釈になり、
+// 西側タイムゾーンのブラウザで前日扱いになるため、ローカル日付として組み立てる。
+function parseLocalDate(sessionDate) {
+  if (typeof sessionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    const [year, month, day] = sessionDate.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(sessionDate);
+}
+
 export function formatSessionHeader(sessionDate, venueName) {
-  const date = new Date(sessionDate);
+  const date = parseLocalDate(sessionDate);
   const m = date.getMonth() + 1;
   const d = date.getDate();
   const weekday = getJapaneseWeekday(date);

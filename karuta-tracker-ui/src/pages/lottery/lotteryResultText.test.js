@@ -38,6 +38,19 @@ describe('formatSessionHeader', () => {
   it('substitutes 会場未設定 when venueName is empty string', () => {
     expect(formatSessionHeader('2026-04-05', '')).toBe('4/5（日）会場未設定');
   });
+  // `new Date('YYYY-MM-DD')` は UTC 解釈になり、UTC- の TZ (例: America/Los_Angeles)
+  // では前日に shift する。実装はローカル日付として扱う必要がある。
+  // 以下のテストは新実装（split + new Date(y, m-1, d)）と、その正解を返す
+  // ローカル Date コンストラクタを直接比較することで、UTC- TZ で実行された場合に
+  // 旧実装の回帰（4/5（日） が 4/4（土） になる等）を検出する。
+  it('parses YYYY-MM-DD as local date and matches new Date(year, month-1, day)', () => {
+    const cases = ['2026-01-01', '2026-04-05', '2026-07-15', '2026-12-31'];
+    for (const dateStr of cases) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const expectedWeekday = ['日', '月', '火', '水', '木', '金', '土'][new Date(y, m - 1, d).getDay()];
+      expect(formatSessionHeader(dateStr, 'V')).toBe(`${m}/${d}（${expectedWeekday}）V`);
+    }
+  });
 });
 
 describe('hasAnyWaitlisted', () => {

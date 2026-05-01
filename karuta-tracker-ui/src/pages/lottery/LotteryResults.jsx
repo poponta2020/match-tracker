@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import { organizationAPI } from '../../api/organizations';
+import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
 import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
 
@@ -11,7 +13,8 @@ export default function LotteryResults() {
   const { currentPlayer } = useAuth();
   const role = currentPlayer?.role;
   const isAdminOrSuper = role === 'ADMIN' || role === 'SUPER_ADMIN';
-  const adminOrgId = currentPlayer?.adminOrganizationId || currentPlayer?.organizationId || null;
+  // ADMIN は LoginResponse の adminOrganizationId を使う（organizationId は LoginResponse に存在しない）
+  const adminOrgId = currentPlayer?.adminOrganizationId || null;
 
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -23,19 +26,40 @@ export default function LotteryResults() {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [copyText, setCopyText] = useState('');
   const [copyFeedback, setCopyFeedback] = useState('');
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+
+  // SUPER_ADMIN は団体一覧を取得し、デフォルトとして先頭団体を選択する。
+  // LotteryManagement と同じ方針で、選択された団体IDを is-confirmed と getResults の
+  // 両方に渡し、コピー領域の表示スコープを揃える。
+  useEffect(() => {
+    if (!isSuperAdmin()) return;
+    organizationAPI.getAll().then(res => {
+      setOrganizations(res.data);
+      setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
+    }).catch(() => {
+      setOrganizations([]);
+    });
+  }, []);
+
+  // 管理者向けの団体スコープ。ADMIN は adminOrgId 固定、SUPER_ADMIN は選択中の団体。
+  const adminScopeOrgId = isAdminOrSuper
+    ? (isSuperAdmin() ? selectedOrgId : adminOrgId)
+    : null;
 
   useEffect(() => {
     fetchResults();
-  }, [currentDate]);
+    // adminScopeOrgId 変更時にも再取得する（SUPER_ADMIN の団体切替対応）
+  }, [currentDate, adminScopeOrgId]);
 
-  // ADMIN/SUPER_ADMIN かつ adminOrgId が判明しているときだけ確定状態を問い合わせる。
-  // adminOrgId が無い SUPER_ADMIN は団体スコープが定まらず is-confirmed と
-  // getResults の取得範囲が食い違うため、コピー領域は非表示のままにする。
+  // ADMIN/SUPER_ADMIN かつ adminScopeOrgId が判明しているときだけ確定状態を問い合わせる。
+  // adminScopeOrgId が無い間は団体スコープが定まらず is-confirmed と getResults の
+  // 取得範囲が食い違うため、コピー領域は非表示のままにする。
   useEffect(() => {
     setIsConfirmed(false);
-    if (!isAdminOrSuper || !adminOrgId) return;
+    if (!isAdminOrSuper || !adminScopeOrgId) return;
     let cancelled = false;
-    lotteryAPI.isConfirmed(currentDate.year, currentDate.month, adminOrgId)
+    lotteryAPI.isConfirmed(currentDate.year, currentDate.month, adminScopeOrgId)
       .then((res) => {
         if (cancelled) return;
         setIsConfirmed(res.data?.confirmed === true);
@@ -45,15 +69,15 @@ export default function LotteryResults() {
         setIsConfirmed(false);
       });
     return () => { cancelled = true; };
-  }, [currentDate.year, currentDate.month, isAdminOrSuper, adminOrgId]);
+  }, [currentDate.year, currentDate.month, isAdminOrSuper, adminScopeOrgId]);
 
   const fetchResults = async () => {
     setLoading(true);
     try {
-      // is-confirmed と取得対象が食い違わないよう、adminOrgId が判明している
+      // is-confirmed と取得対象が食い違わないよう、adminScopeOrgId が判明している
       // ADMIN/SUPER_ADMIN は同じ団体でセッション一覧を絞り込む。
       // ADMIN はバックエンド側で adminOrganizationId に強制されるため副作用はない。
-      const orgIdParam = isAdminOrSuper && adminOrgId ? adminOrgId : undefined;
+      const orgIdParam = isAdminOrSuper && adminScopeOrgId ? adminScopeOrgId : undefined;
       const res = await lotteryAPI.getResults(currentDate.year, currentDate.month, orgIdParam);
       setResults(res.data);
       setCopyText(buildCopyText(currentDate.year, currentDate.month, res.data));
@@ -160,6 +184,21 @@ export default function LotteryResults() {
         <span className="text-lg font-semibold">{currentDate.year}年{currentDate.month}月</span>
         <button onClick={() => changeMonth(1)} className="p-2 rounded hover:bg-gray-100">&gt;</button>
       </div>
+
+      {/* 団体セレクタ（SUPER_ADMIN用）。LotteryManagement と同じ条件で複数団体時のみ表示。 */}
+      {isSuperAdmin() && organizations.length > 1 && (
+        <div className="flex justify-center mb-6">
+          <select
+            value={selectedOrgId || ''}
+            onChange={(e) => setSelectedOrgId(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-[#374151]"
+          >
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <LoadingScreen />
