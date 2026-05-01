@@ -1,6 +1,6 @@
 {
-  "name": "わすらログ",
-  "short_name": "わすらログ",
+  "name": "柄長",
+  "short_name": "柄長",
   "description": "かるた試合記録アプリ",
   "start_url": "/",
   "display": "standalone",

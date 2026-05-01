@@ -7,7 +7,7 @@ const Landing = () => {
       {/* ヘッダー */}
       <header className="bg-[#4a6b5a] text-white">
         <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-          <h1 className="text-4xl font-bold mb-3">わすらログ</h1>
+          <h1 className="text-4xl font-bold mb-3">柄長</h1>
           <p className="text-[#c8ddd0] text-lg">
             競技かるたの練習・試合記録管理アプリ
           </p>
@@ -20,7 +20,7 @@ const Landing = () => {
         <section className="bg-white rounded-xl shadow-sm p-6 mb-8">
           <h2 className="text-xl font-bold text-[#374151] mb-4">アプリについて</h2>
           <p className="text-[#4b5563] leading-relaxed">
-            わすらログは、競技かるたの練習記録や試合結果を管理するためのアプリです。
+            柄長は、競技かるたの練習記録や試合結果を管理するためのアプリです。
             サークルのメンバー間で練習日程の共有、対戦組み合わせの作成、試合結果の記録・閲覧を行うことができます。
           </p>
         </section>
@@ -101,7 +101,7 @@ const Landing = () => {
             </Link>
           </div>
           <p className="text-xs text-[#9ca3af]">
-            &copy; 2026 わすらログ
+            &copy; 2026 柄長
           </p>
         </footer>
       </main>

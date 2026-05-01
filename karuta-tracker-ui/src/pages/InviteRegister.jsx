@@ -116,7 +116,7 @@ const InviteRegister = () => {
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-[#4a6b5a] mb-2">
-              わすらログ（仮）
+              柄長
             </h1>
           </div>
           <div className="bg-[#f9f6f2] rounded-lg shadow-md p-8 text-center">
@@ -145,7 +145,7 @@ const InviteRegister = () => {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-[#4a6b5a] mb-2">
-            わすらログ（仮）
+            柄長
           </h1>
         </div>
 
