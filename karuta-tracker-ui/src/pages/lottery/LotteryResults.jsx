@@ -28,6 +28,9 @@ export default function LotteryResults() {
   const [copyFeedback, setCopyFeedback] = useState('');
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  // SUPER_ADMIN の団体一覧取得が完了したかどうか。失敗・0件のときも true になり、
+  // fetchResults を組織ID未指定（全団体スコープ）で進めるフォールバックの起点になる。
+  const [orgsFetched, setOrgsFetched] = useState(false);
   // 古いリクエストの結果が後から到着しても捨てるためのリクエストID（SUPER_ADMIN の
   // 初回ロードで全団体スコープと選択団体スコープのレスポンスが競合するのを防ぐ）
   const requestIdRef = useRef(0);
@@ -42,6 +45,8 @@ export default function LotteryResults() {
       setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
     }).catch(() => {
       setOrganizations([]);
+    }).finally(() => {
+      setOrgsFetched(true);
     });
   }, []);
 
@@ -52,8 +57,10 @@ export default function LotteryResults() {
 
   useEffect(() => {
     fetchResults();
-    // adminScopeOrgId 変更時にも再取得する（SUPER_ADMIN の団体切替対応）
-  }, [currentDate, adminScopeOrgId]);
+    // adminScopeOrgId 変更時にも再取得する（SUPER_ADMIN の団体切替対応）。
+    // orgsFetched は団体一覧取得失敗 / 0件時の全団体スコープフォールバックを発火させる
+    // ためにも依存に含める（このとき adminScopeOrgId は null のまま変化しない）。
+  }, [currentDate, adminScopeOrgId, orgsFetched]);
 
   // ADMIN/SUPER_ADMIN かつ adminScopeOrgId が判明しているときだけ確定状態を問い合わせる。
   // adminScopeOrgId が無い間は団体スコープが定まらず is-confirmed と getResults の
@@ -75,10 +82,13 @@ export default function LotteryResults() {
   }, [currentDate.year, currentDate.month, isAdminOrSuper, adminScopeOrgId]);
 
   const fetchResults = async () => {
-    // SUPER_ADMIN は selectedOrgId が確定するまでは fetch を発行しない。
-    // null のまま発行すると全団体スコープのレスポンスが返り、後続の単一団体スコープ
-    // のレスポンスより遅れて到着すると results / copyText を上書きする恐れがある。
-    if (isSuperAdmin() && !selectedOrgId) {
+    // SUPER_ADMIN は団体一覧取得が完了するまでは fetch を発行しない。
+    // 取得前に null で発行すると全団体スコープのレスポンスが返り、後続の単一団体
+    // スコープのレスポンスより遅れて到着した場合に results / copyText を上書きする
+    // 恐れがある（requestIdRef でも防げるが、不要な HTTP を避ける最適化）。
+    // 取得後に selectedOrgId が無いケース（団体一覧取得失敗 / 0件）は従来どおり
+    // 組織ID未指定で全団体スコープを取得し、ローディングを必ず解除する。
+    if (isSuperAdmin() && !selectedOrgId && !orgsFetched) {
       return;
     }
     const myRequestId = ++requestIdRef.current;
