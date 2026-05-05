@@ -1,13 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
+import { organizationAPI } from '../../api/organizations';
+import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
+import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
 
 /**
  * 抽選結果確認画面
  */
 export default function LotteryResults() {
   const { currentPlayer } = useAuth();
+  const role = currentPlayer?.role;
+  const isAdminOrSuper = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  // ADMIN は LoginResponse の adminOrganizationId を使う（organizationId は LoginResponse に存在しない）
+  const adminOrgId = currentPlayer?.adminOrganizationId || null;
+
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -15,21 +23,103 @@ export default function LotteryResults() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [copyText, setCopyText] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  // SUPER_ADMIN の団体一覧取得が完了したかどうか。失敗・0件のときも true になり、
+  // fetchResults を組織ID未指定（全団体スコープ）で進めるフォールバックの起点になる。
+  const [orgsFetched, setOrgsFetched] = useState(false);
+  // 古いリクエストの結果が後から到着しても捨てるためのリクエストID（SUPER_ADMIN の
+  // 初回ロードで全団体スコープと選択団体スコープのレスポンスが競合するのを防ぐ）
+  const requestIdRef = useRef(0);
+
+  // SUPER_ADMIN は団体一覧を取得し、デフォルトとして先頭団体を選択する。
+  // LotteryManagement と同じ方針で、選択された団体IDを is-confirmed と getResults の
+  // 両方に渡し、コピー領域の表示スコープを揃える。
+  useEffect(() => {
+    if (!isSuperAdmin()) return;
+    organizationAPI.getAll().then(res => {
+      setOrganizations(res.data);
+      setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
+    }).catch(() => {
+      setOrganizations([]);
+    }).finally(() => {
+      setOrgsFetched(true);
+    });
+  }, []);
+
+  // 管理者向けの団体スコープ。ADMIN は adminOrgId 固定、SUPER_ADMIN は選択中の団体。
+  const adminScopeOrgId = isAdminOrSuper
+    ? (isSuperAdmin() ? selectedOrgId : adminOrgId)
+    : null;
 
   useEffect(() => {
     fetchResults();
-  }, [currentDate]);
+    // adminScopeOrgId 変更時にも再取得する（SUPER_ADMIN の団体切替対応）。
+    // orgsFetched は団体一覧取得失敗 / 0件時の全団体スコープフォールバックを発火させる
+    // ためにも依存に含める（このとき adminScopeOrgId は null のまま変化しない）。
+  }, [currentDate, adminScopeOrgId, orgsFetched]);
+
+  // ADMIN/SUPER_ADMIN かつ adminScopeOrgId が判明しているときだけ確定状態を問い合わせる。
+  // adminScopeOrgId が無い間は団体スコープが定まらず is-confirmed と getResults の
+  // 取得範囲が食い違うため、コピー領域は非表示のままにする。
+  useEffect(() => {
+    setIsConfirmed(false);
+    if (!isAdminOrSuper || !adminScopeOrgId) return;
+    let cancelled = false;
+    lotteryAPI.isConfirmed(currentDate.year, currentDate.month, adminScopeOrgId)
+      .then((res) => {
+        if (cancelled) return;
+        setIsConfirmed(res.data?.confirmed === true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsConfirmed(false);
+      });
+    return () => { cancelled = true; };
+  }, [currentDate.year, currentDate.month, isAdminOrSuper, adminScopeOrgId]);
 
   const fetchResults = async () => {
+    // SUPER_ADMIN は団体一覧取得が完了するまでは fetch を発行しない。
+    // 取得前に null で発行すると全団体スコープのレスポンスが返り、後続の単一団体
+    // スコープのレスポンスより遅れて到着した場合に results / copyText を上書きする
+    // 恐れがある（requestIdRef でも防げるが、不要な HTTP を避ける最適化）。
+    // 取得後に selectedOrgId が無いケース（団体一覧取得失敗 / 0件）は従来どおり
+    // 組織ID未指定で全団体スコープを取得し、ローディングを必ず解除する。
+    if (isSuperAdmin() && !selectedOrgId && !orgsFetched) {
+      return;
+    }
+    const myRequestId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const res = await lotteryAPI.getResults(currentDate.year, currentDate.month);
+      // is-confirmed と取得対象が食い違わないよう、adminScopeOrgId が判明している
+      // ADMIN/SUPER_ADMIN は同じ団体でセッション一覧を絞り込む。
+      // ADMIN はバックエンド側で adminOrganizationId に強制されるため副作用はない。
+      const orgIdParam = isAdminOrSuper && adminScopeOrgId ? adminScopeOrgId : undefined;
+      const res = await lotteryAPI.getResults(currentDate.year, currentDate.month, orgIdParam);
+      // 自分の発行後に新しい fetch が走っていたら stale なので捨てる
+      if (requestIdRef.current !== myRequestId) return;
       setResults(res.data);
+      setCopyText(buildCopyText(currentDate.year, currentDate.month, res.data));
     } catch (err) {
+      if (requestIdRef.current !== myRequestId) return;
       console.error('Failed to fetch lottery results:', err);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === myRequestId) setLoading(false);
     }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopyFeedback('コピーしました');
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      setCopyFeedback('コピーに失敗しました');
+    }
+    setTimeout(() => setCopyFeedback(''), 2000);
   };
 
   const changeMonth = (delta) => {
@@ -118,6 +208,21 @@ export default function LotteryResults() {
         <button onClick={() => changeMonth(1)} className="p-2 rounded hover:bg-gray-100">&gt;</button>
       </div>
 
+      {/* 団体セレクタ（SUPER_ADMIN用）。LotteryManagement と同じ条件で複数団体時のみ表示。 */}
+      {isSuperAdmin() && organizations.length > 1 && (
+        <div className="flex justify-center mb-6">
+          <select
+            value={selectedOrgId || ''}
+            onChange={(e) => setSelectedOrgId(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-[#374151]"
+          >
+            {organizations.map(org => (
+              <option key={org.id} value={org.id}>{org.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <LoadingScreen />
       ) : results.length === 0 ? (
@@ -202,6 +307,33 @@ export default function LotteryResults() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 管理者向け: LINE告知用コピー領域。抽選確定済の月にのみ表示する */}
+      {isAdminOrSuper && isConfirmed && (
+        <div className="mt-8 pt-4 border-t">
+          <div className="text-sm font-semibold text-gray-700 mb-2">
+            管理者向け: LINE告知用テキスト（抽選落ちのみ）
+          </div>
+          <textarea
+            value={copyText}
+            onChange={(e) => setCopyText(e.target.value)}
+            rows={12}
+            className="w-full font-mono text-xs border border-gray-300 rounded p-2 whitespace-pre"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!hasAnyWaitlisted(results)}
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              コピー
+            </button>
+            {copyFeedback && (
+              <span className="text-sm text-gray-600">{copyFeedback}</span>
+            )}
+          </div>
         </div>
       )}
     </div>

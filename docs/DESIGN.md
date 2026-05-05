@@ -2091,7 +2091,7 @@ Entity Layer (JPA Entity)
 #### 5.3.5 抽選結果
 **パス**: `/lottery/results`
 
-**表示内容**（閲覧専用）:
+**全ユーザー共通の表示内容**:
 - 月ナビゲーション
 - セッション別の抽選結果
   - 当選者リスト（WON）
@@ -2099,7 +2099,16 @@ Entity Layer (JPA Entity)
   - 各参加者のステータス表示（WAITLIST_DECLINED バッジを含む）
 - 自分のキャンセル待ちセッションに対する辞退/復帰ボタン
 
-**備考**: 抽選確定・再抽選・参加者編集等の管理操作は `/admin/lottery` 側に集約しており、本画面では行わない。
+**ADMIN / SUPER_ADMIN 向けの追加表示**:
+- 抽選確定済の月にのみ表示する LINE告知用テキスト領域
+  - 抽選落ち（キャンセル待ち）のみを整形した文面を初期値として持つ編集可能 textarea
+  - コピーボタンで `navigator.clipboard.writeText` を実行（キャンセル待ち0件の月はボタンを無効化）
+  - 整形ロジックは `lotteryResultText.js` に切り出し（`buildCopyText` / `hasAnyWaitlisted`）
+- SUPER_ADMIN かつ複数団体所属時は団体スコープ切替セレクタを表示
+  - 選択された団体IDを `/api/lottery/results` および `/api/lottery/is-confirmed` の両方に渡し、コピー領域と確定状態判定を同じ団体スコープで揃える
+  - 団体一覧取得前および切替直後の stale レスポンスを捨てるためのリクエストIDガードを `fetchResults` に持たせる
+
+**備考**: 抽選確定・再抽選・参加者の手動編集等の主要な管理操作は `/admin/lottery` 側に集約している。本画面で管理者向けに提供するのは、確定済み月の抽選落ちを LINE 告知用に整形・コピーする機能のみで、確定や再抽選は行わない。
 
 ---
 
