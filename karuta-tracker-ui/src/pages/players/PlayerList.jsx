@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
 import { inviteAPI } from '../../api/invite';
+import { organizationAPI } from '../../api/organizations';
 import { useAuth } from '../../context/AuthContext';
+import { isSuperAdmin } from '../../utils/auth';
 import { Search, UserPlus, ChevronRight, Link2, UserCheck, Copy, Check, X } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -17,9 +19,20 @@ const PlayerList = () => {
   const [error, setError] = useState('');
   const [inviteMessage, setInviteMessage] = useState(null);
   const [inviteGenerating, setInviteGenerating] = useState(null);
+  const adminOrgId = currentPlayer?.adminOrganizationId || currentPlayer?.organizationId || null;
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(adminOrgId);
 
   useEffect(() => {
     fetchPlayers();
+    if (isSuperAdmin()) {
+      organizationAPI.getAll()
+        .then(res => {
+          setOrganizations(res.data);
+          setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
+        })
+        .catch(err => console.error('Failed to fetch organizations:', err));
+    }
   }, []);
 
   useEffect(() => {
@@ -70,11 +83,18 @@ const PlayerList = () => {
     return `${Math.floor(diffMonths / 12)}年前`;
   };
 
+  const targetOrgId = isSuperAdmin() ? selectedOrgId : adminOrgId;
+
   const generateInviteLink = async (type) => {
+    if (!targetOrgId) {
+      setInviteMessage({ text: '招待先の団体を選択してください', success: false });
+      setTimeout(() => setInviteMessage(null), 3000);
+      return;
+    }
     setInviteGenerating(type);
     setInviteMessage(null);
     try {
-      const response = await inviteAPI.createToken(type, currentPlayer.id);
+      const response = await inviteAPI.createToken(type, currentPlayer.id, targetOrgId);
       const url = `${window.location.origin}/register/${response.data.token}`;
       const label = type === 'MULTI_USE' ? 'グループ招待リンク' : '個人招待リンク';
       try {
@@ -134,10 +154,24 @@ const PlayerList = () => {
         {/* 招待リンク */}
         <div className="mb-3 bg-white rounded-xl shadow-sm p-3">
           <p className="text-xs text-[#6b7280] mb-2">招待リンクを発行してLINE等で共有</p>
+          {isSuperAdmin() && organizations.length > 0 && (
+            <div className="mb-2">
+              <label className="block text-[10px] text-[#6b7280] mb-1">招待先の団体</label>
+              <select
+                value={selectedOrgId || ''}
+                onChange={(e) => setSelectedOrgId(Number(e.target.value))}
+                className="w-full px-2 py-1.5 bg-white border border-[#d4ddd7] rounded text-xs text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]"
+              >
+                {organizations.map(org => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={() => generateInviteLink('MULTI_USE')}
-              disabled={inviteGenerating}
+              disabled={inviteGenerating || !targetOrgId}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] transition-colors text-xs font-medium disabled:opacity-50"
             >
               <Link2 className="w-3.5 h-3.5" />
@@ -145,7 +179,7 @@ const PlayerList = () => {
             </button>
             <button
               onClick={() => generateInviteLink('SINGLE_USE')}
-              disabled={inviteGenerating}
+              disabled={inviteGenerating || !targetOrgId}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] transition-colors text-xs font-medium disabled:opacity-50"
             >
               <UserCheck className="w-3.5 h-3.5" />
