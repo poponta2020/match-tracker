@@ -10,6 +10,7 @@ import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.InviteTokenRepository;
+import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class InviteTokenService {
     private final InviteTokenRepository inviteTokenRepository;
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final OrganizationRepository organizationRepository;
 
     /** グループ用トークンの有効期限（時間） */
     private static final int MULTI_USE_EXPIRY_HOURS = 72;
@@ -51,6 +53,10 @@ public class InviteTokenService {
     @Transactional
     public InviteTokenResponse createToken(TokenType type, Long createdBy, Long organizationId) {
         log.info("Creating invite token: type={}, createdBy={}, organizationId={}", type, createdBy, organizationId);
+
+        if (organizationId == null || !organizationRepository.existsById(organizationId)) {
+            throw new ResourceNotFoundException("Organization", organizationId);
+        }
 
         int expiryHours = type == TokenType.MULTI_USE ? MULTI_USE_EXPIRY_HOURS : SINGLE_USE_EXPIRY_HOURS;
 

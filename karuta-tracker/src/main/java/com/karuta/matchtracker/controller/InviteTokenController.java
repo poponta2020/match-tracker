@@ -31,6 +31,7 @@ public class InviteTokenController {
      *
      * @param type トークン種別（MULTI_USE / SINGLE_USE）
      * @param createdBy 発行者の選手ID
+     * @param organizationId 紐付ける団体ID（SUPER_ADMINは必須、ADMINはサーバ側で自団体を採用）
      * @return トークン情報
      */
     @PostMapping
@@ -45,6 +46,13 @@ public class InviteTokenController {
 
         // ADMINは自動で自団体、SUPER_ADMINはパラメータ指定
         Long targetOrgId = "ADMIN".equals(role) ? adminOrgId : organizationId;
+
+        if (targetOrgId == null) {
+            if ("ADMIN".equals(role)) {
+                throw new IllegalArgumentException("発行者の所属団体が設定されていないため、招待トークンを発行できません");
+            }
+            throw new IllegalArgumentException("organizationId は必須です");
+        }
 
         log.info("POST /api/invite-tokens - Creating token: type={}, createdBy={}, orgId={}", type, createdBy, targetOrgId);
         InviteTokenResponse response = inviteTokenService.createToken(type, createdBy, targetOrgId);
