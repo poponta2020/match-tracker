@@ -919,7 +919,9 @@ Entity Layer (JPA Entity)
 - `organizationId`（紐付ける団体ID）
   - SUPER_ADMIN: 必須。クエリで指定された団体IDが採用される
   - ADMIN: 不要。サーバ側で発行者の所属団体（`adminOrganizationId`）が自動採用され、クエリ指定値は無視される
-**バリデーション**: `organizationId` 解決後に NULL を検証し、空の場合は 400 Bad Request を返す（ADMIN で `adminOrganizationId` 未設定の場合も同様）
+**バリデーション**:
+- `organizationId` 解決後に NULL を検証し、空の場合は 400 Bad Request を返す（ADMIN で `adminOrganizationId` 未設定の場合も同様）
+- 解決された `organizationId` が `organizations` テーブルに存在しない場合は 404 Not Found を返す（`ResourceNotFoundException`）
 **レスポンス**: `InviteTokenResponse`
 ```json
 {
