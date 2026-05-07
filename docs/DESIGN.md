@@ -756,6 +756,7 @@ Entity Layer (JPA Entity)
 | id | BIGINT | PK, AUTO_INCREMENT | ID |
 | token | VARCHAR(36) | NOT NULL, UNIQUE | トークン文字列（UUID） |
 | type | ENUM | NOT NULL | MULTI_USE（グループ用）/ SINGLE_USE（個人用） |
+| organization_id | BIGINT | NOT NULL, FK → organizations(id) | 紐付ける団体ID（登録された選手はこの団体に所属） |
 | expires_at | DATETIME | NOT NULL | 有効期限 |
 | used_at | DATETIME | | 使用日時（SINGLE_USEのみ） |
 | used_by | BIGINT | | 使用した選手ID（SINGLE_USEのみ） |
@@ -909,15 +910,22 @@ Entity Layer (JPA Entity)
 
 ### 4.2.1 招待トークンAPI (`/api/invite-tokens`)
 
-#### POST /api/invite-tokens?type={type}&createdBy={id}
+#### POST /api/invite-tokens?type={type}&createdBy={id}&organizationId={orgId}
 **説明**: 招待トークン生成
 **権限**: ADMIN+
-**パラメータ**: `type`（MULTI_USE / SINGLE_USE）, `createdBy`（発行者ID）
+**パラメータ**:
+- `type`（MULTI_USE / SINGLE_USE）
+- `createdBy`（発行者ID）
+- `organizationId`（紐付ける団体ID）
+  - SUPER_ADMIN: 必須。クエリで指定された団体IDが採用される
+  - ADMIN: 不要。サーバ側で発行者の所属団体（`adminOrganizationId`）が自動採用され、クエリ指定値は無視される
+**バリデーション**: `organizationId` 解決後に NULL を検証し、空の場合は 400 Bad Request を返す（ADMIN で `adminOrganizationId` 未設定の場合も同様）
 **レスポンス**: `InviteTokenResponse`
 ```json
 {
   "token": "550e8400-e29b-41d4-a716-446655440000",
   "type": "MULTI_USE",
+  "organizationId": 1,
   "expiresAt": "2026-03-28T12:00:00",
   "createdAt": "2026-03-25T12:00:00"
 }

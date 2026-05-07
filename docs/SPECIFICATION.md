@@ -1888,7 +1888,7 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| POST | `/?type=&createdBy=` | ADMIN+ | 招待トークン生成（MULTI_USE / SINGLE_USE） |
+| POST | `/?type=&createdBy=&organizationId=` | ADMIN+ | 招待トークン生成（MULTI_USE / SINGLE_USE）。`organizationId` は SUPER_ADMIN は必須、ADMIN はサーバ側で自団体に固定される |
 | GET | `/validate/{token}` | Public | トークン有効性検証 |
 | POST | `/register` | Public | トークン付き公開登録 |
 

@@ -77,7 +77,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用） | SUPER_ADMIN | 選手一覧 |
+| 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用、SUPER_ADMINは招待先団体セレクタで指定／ADMINは自団体固定） | SUPER_ADMIN | 選手一覧 |
 | 22 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
 | 23 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
 | 24 | `/players/:id/edit` | `PlayerEdit.jsx` | ロールがADMINの場合に管理団体ドロップダウン表示（SUPER_ADMIN専用） | SUPER_ADMIN | 選手編集 |
