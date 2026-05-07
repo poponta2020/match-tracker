@@ -459,41 +459,6 @@ export default function LotteryManagement() {
             </div>
           )}
 
-          {/* 管理者向け: LINE告知用コピー領域。プレビュー段階では警告色で誤配信を防ぐ */}
-          <div className="mt-4 pt-4 border-t">
-            <div className="text-sm font-semibold text-gray-700 mb-2">
-              管理者向け: LINE告知用テキスト（抽選落ちのみ）
-              {phase === 'preview' && (
-                <span className="ml-2 text-xs text-orange-700 font-bold">
-                  ※ プレビュー（未確定）
-                </span>
-              )}
-            </div>
-            <textarea
-              value={copyText}
-              onChange={(e) => setCopyText(e.target.value)}
-              rows={12}
-              className="w-full font-mono text-xs border border-gray-300 rounded p-2 whitespace-pre"
-            />
-            <div className="mt-2 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleCopy}
-                disabled={!hasAnyWaitlisted(previewResults)}
-                className={`px-4 py-1.5 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed ${
-                  phase === 'preview'
-                    ? 'bg-orange-500 hover:bg-orange-600'
-                    : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                コピー
-              </button>
-              {copyFeedback && (
-                <span className="text-sm text-gray-600">{copyFeedback}</span>
-              )}
-            </div>
-          </div>
-
         </div>
       )}
 
@@ -542,6 +507,43 @@ export default function LotteryManagement() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 管理者向け: LINE告知用コピー領域。確定後の主導線（通知送信）を妨げないよう最後に配置 */}
+      {(phase === 'preview' || phase === 'confirmed') && previewResults.length > 0 && (
+        <div className="mb-6 bg-white rounded-lg shadow p-4">
+          <div className="text-sm font-semibold text-gray-700 mb-2">
+            管理者向け: LINE告知用テキスト（抽選落ちのみ）
+            {phase === 'preview' && (
+              <span className="ml-2 text-xs text-orange-700 font-bold">
+                ※ プレビュー（未確定）
+              </span>
+            )}
+          </div>
+          <textarea
+            value={copyText}
+            onChange={(e) => setCopyText(e.target.value)}
+            rows={12}
+            className="w-full font-mono text-xs border border-gray-300 rounded p-2 whitespace-pre"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!hasAnyWaitlisted(previewResults)}
+              className={`px-4 py-1.5 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed ${
+                phase === 'preview'
+                  ? 'bg-orange-500 hover:bg-orange-600'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              コピー
+            </button>
+            {copyFeedback && (
+              <span className="text-sm text-gray-600">{copyFeedback}</span>
+            )}
+          </div>
         </div>
       )}
     </div>
