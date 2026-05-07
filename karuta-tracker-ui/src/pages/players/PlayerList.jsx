@@ -4,7 +4,6 @@ import { playerAPI } from '../../api/players';
 import { inviteAPI } from '../../api/invite';
 import { organizationAPI } from '../../api/organizations';
 import { useAuth } from '../../context/AuthContext';
-import { isSuperAdmin } from '../../utils/auth';
 import { Search, UserPlus, ChevronRight, Link2, UserCheck, Copy, Check, X } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -19,20 +18,17 @@ const PlayerList = () => {
   const [error, setError] = useState('');
   const [inviteMessage, setInviteMessage] = useState(null);
   const [inviteGenerating, setInviteGenerating] = useState(null);
-  const adminOrgId = currentPlayer?.adminOrganizationId || currentPlayer?.organizationId || null;
   const [organizations, setOrganizations] = useState([]);
-  const [selectedOrgId, setSelectedOrgId] = useState(adminOrgId);
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
 
   useEffect(() => {
     fetchPlayers();
-    if (isSuperAdmin()) {
-      organizationAPI.getAll()
-        .then(res => {
-          setOrganizations(res.data);
-          setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
-        })
-        .catch(err => console.error('Failed to fetch organizations:', err));
-    }
+    organizationAPI.getAll()
+      .then(res => {
+        setOrganizations(res.data);
+        setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
+      })
+      .catch(err => console.error('Failed to fetch organizations:', err));
   }, []);
 
   useEffect(() => {
@@ -83,7 +79,7 @@ const PlayerList = () => {
     return `${Math.floor(diffMonths / 12)}年前`;
   };
 
-  const targetOrgId = isSuperAdmin() ? selectedOrgId : adminOrgId;
+  const targetOrgId = selectedOrgId;
 
   const generateInviteLink = async (type) => {
     if (!targetOrgId) {
@@ -154,7 +150,7 @@ const PlayerList = () => {
         {/* 招待リンク */}
         <div className="mb-3 bg-white rounded-xl shadow-sm p-3">
           <p className="text-xs text-[#6b7280] mb-2">招待リンクを発行してLINE等で共有</p>
-          {isSuperAdmin() && organizations.length > 0 && (
+          {organizations.length > 0 && (
             <div className="mb-2">
               <label className="block text-[10px] text-[#6b7280] mb-1">招待先の団体</label>
               <select

@@ -756,7 +756,7 @@ Entity Layer (JPA Entity)
 | id | BIGINT | PK, AUTO_INCREMENT | ID |
 | token | VARCHAR(36) | NOT NULL, UNIQUE | トークン文字列（UUID） |
 | type | ENUM | NOT NULL | MULTI_USE（グループ用）/ SINGLE_USE（個人用） |
-| organization_id | BIGINT | NOT NULL, FK → organizations(id) | 紐付ける団体ID（登録された選手はこの団体に所属） |
+| organization_id | BIGINT | NOT NULL | 紐付ける団体ID（登録された選手はこの団体に所属。DB FK は付与せず、`InviteTokenService` で `organizations.id` の存在検証を行う） |
 | expires_at | DATETIME | NOT NULL | 有効期限 |
 | used_at | DATETIME | | 使用日時（SINGLE_USEのみ） |
 | used_by | BIGINT | | 使用した選手ID（SINGLE_USEのみ） |
