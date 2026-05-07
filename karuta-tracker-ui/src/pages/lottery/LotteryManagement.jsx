@@ -5,6 +5,7 @@ import { lotteryAPI } from '../../api/lottery';
 import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin } from '../../utils/auth';
 import { ArrowLeft, Settings, Play, Check, Bell, BellRing } from 'lucide-react';
+import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
 
 /**
  * 抽選管理画面（ADMIN/SUPER_ADMIN用）
@@ -53,6 +54,8 @@ export default function LotteryManagement() {
   const [applicants, setApplicants] = useState([]);
   const [priorityPlayerIds, setPriorityPlayerIds] = useState([]);
   const [confirmedLotteryExists, setConfirmedLotteryExists] = useState(false);
+  const [copyText, setCopyText] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
 
   useEffect(() => {
     if (isSuperAdmin()) {
@@ -116,6 +119,15 @@ export default function LotteryManagement() {
       });
     return () => { cancelled = true; };
   }, [currentDate.year, currentDate.month, organizationId]);
+
+  // プレビュー結果が更新されたら LINE 告知用テキストを再生成する
+  useEffect(() => {
+    if (previewResults.length > 0) {
+      setCopyText(buildCopyText(currentDate.year, currentDate.month, previewResults));
+    } else {
+      setCopyText('');
+    }
+  }, [previewResults, currentDate.year, currentDate.month]);
 
   const togglePriorityPlayer = (playerId) => {
     setPriorityPlayerIds(prev =>
@@ -223,6 +235,18 @@ export default function LotteryManagement() {
     } finally {
       setProcessing(null);
     }
+  };
+
+  // LINE 告知用テキストをクリップボードにコピー
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setCopyFeedback('コピーしました');
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      setCopyFeedback('コピーに失敗しました');
+    }
+    setTimeout(() => setCopyFeedback(''), 2000);
   };
 
   // キャンセル待ちのみに通知送信
@@ -434,6 +458,41 @@ export default function LotteryManagement() {
               </button>
             </div>
           )}
+
+          {/* 管理者向け: LINE告知用コピー領域。プレビュー段階では警告色で誤配信を防ぐ */}
+          <div className="mt-4 pt-4 border-t">
+            <div className="text-sm font-semibold text-gray-700 mb-2">
+              管理者向け: LINE告知用テキスト（抽選落ちのみ）
+              {phase === 'preview' && (
+                <span className="ml-2 text-xs text-orange-700 font-bold">
+                  ※ プレビュー（未確定）
+                </span>
+              )}
+            </div>
+            <textarea
+              value={copyText}
+              onChange={(e) => setCopyText(e.target.value)}
+              rows={12}
+              className="w-full font-mono text-xs border border-gray-300 rounded p-2 whitespace-pre"
+            />
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={!hasAnyWaitlisted(previewResults)}
+                className={`px-4 py-1.5 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed ${
+                  phase === 'preview'
+                    ? 'bg-orange-500 hover:bg-orange-600'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                コピー
+              </button>
+              {copyFeedback && (
+                <span className="text-sm text-gray-600">{copyFeedback}</span>
+              )}
+            </div>
+          </div>
 
         </div>
       )}
