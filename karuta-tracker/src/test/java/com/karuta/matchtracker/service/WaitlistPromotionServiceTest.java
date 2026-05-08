@@ -182,6 +182,73 @@ class WaitlistPromotionServiceTest {
     }
 
     @Nested
+    @DisplayName("PENDING（抽選フェーズ1）キャンセル")
+    class PendingCancelTests {
+
+        @Test
+        @DisplayName("PENDING のキャンセルは成功し CANCELLED + dirty=true になる")
+        void cancelPending_success() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.PENDING).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 5, 15)).capacity(6).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            ParticipantStatus result = service.cancelParticipation(1L, "HEALTH", null);
+
+            assertThat(result).isEqualTo(ParticipantStatus.CANCELLED);
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+            assertThat(participant.isDirty()).isTrue();
+            assertThat(participant.getCancelReason()).isEqualTo("HEALTH");
+            verify(practiceParticipantRepository).save(participant);
+        }
+
+        @Test
+        @DisplayName("PENDING のキャンセルでは繰り上げ・当日補充フローを発動しない")
+        void cancelPending_doesNotTriggerPromotionOrSameDayFlow() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.PENDING).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 5, 15)).capacity(6).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            service.cancelParticipation(1L, "HEALTH", null);
+
+            // PENDING はフェーズ1で WAITLISTED が存在し得ないため、繰り上げ検索は行わない
+            verify(practiceParticipantRepository, never())
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                            anyLong(), anyInt(), eq(ParticipantStatus.WAITLISTED));
+            // 当日12時補充フローも抽選確定後の概念のため起動しない
+            verify(lotteryDeadlineHelper, never()).isAfterSameDayNoon(any());
+            verify(lineNotificationService, never())
+                    .sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never())
+                    .sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+        }
+
+        @Test
+        @DisplayName("WAITLISTED など WON / PENDING 以外はキャンセル拒否")
+        void cancelWaitlisted_rejected() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+
+            assertThatThrownBy(() -> service.cancelParticipation(1L, "HEALTH", null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("WAITLISTED");
+        }
+    }
+
+    @Nested
     @DisplayName("繰り上げ時のキャンセル待ち番号更新")
     class PromoteRenumberTests {
 

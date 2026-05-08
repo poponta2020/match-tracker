@@ -236,8 +236,9 @@ public class WaitlistPromotionService {
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
 
-        if (participant.getStatus() != ParticipantStatus.WON) {
-            throw new IllegalStateException("当選者のみキャンセルできます（現在のステータス: " + participant.getStatus() + "）");
+        ParticipantStatus originalStatus = participant.getStatus();
+        if (originalStatus != ParticipantStatus.WON && originalStatus != ParticipantStatus.PENDING) {
+            throw new IllegalStateException("当選者または抽選未実行の申込のみキャンセルできます（現在のステータス: " + originalStatus + "）");
         }
 
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
@@ -251,8 +252,14 @@ public class WaitlistPromotionService {
         participant.setCancelledAt(JstDateTimeUtil.now());
         practiceParticipantRepository.save(participant);
 
-        log.info("Player {} cancelled participation in session {} match {} (reason: {})",
-                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), cancelReason);
+        log.info("Player {} cancelled participation in session {} match {} (originalStatus: {}, reason: {})",
+                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), originalStatus, cancelReason);
+
+        // PENDING（抽選未実行・フェーズ1）のキャンセルは、繰り上げ対象の WAITLISTED が存在せず、
+        // 当日12時補充フローも抽選確定後の概念のため対象外。dirty=true による伝助×書き戻しのみで完結する。
+        if (originalStatus == ParticipantStatus.PENDING) {
+            return null;
+        }
 
         // 当日12:00以降のキャンセル → 新フロー（全体募集＋先着ボタン方式）
         if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
