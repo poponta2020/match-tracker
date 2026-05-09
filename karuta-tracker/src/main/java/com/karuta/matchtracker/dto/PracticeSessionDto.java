@@ -55,6 +55,10 @@ public class PracticeSessionDto {
     private Boolean lotteryExecuted;  // 抽選実行済みか
     private java.util.Map<Integer, MatchLotteryInfo> matchLotteryInfo;  // 試合番号ごとの抽選情報
 
+    // 組み合わせ対象ステータス: 抽選なし運用では PENDING も組み合わせ対象（true）、
+    // 抽選あり運用では WON のみ（false）。フロント側の参加者フィルタで使用する。
+    private Boolean pairingIncludesPending;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

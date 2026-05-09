@@ -56,6 +56,9 @@ class MatchPairingServiceTest {
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
 
+    @Mock
+    private LotteryDeadlineHelper lotteryDeadlineHelper;
+
     @InjectMocks
     private MatchPairingService matchPairingService;
 
@@ -408,7 +411,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -449,7 +452,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -489,7 +492,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(List.of(createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON)));
             when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1));
@@ -525,7 +528,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Collections.emptyList());
 
             // When
@@ -573,7 +576,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
@@ -595,6 +598,87 @@ class MatchPairingServiceTest {
             // Then
             assertThat(result.getPairings()).hasSize(1);
             assertThat(result.getWaitingPlayers()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("抽選あり運用 (isLotteryDisabled=false): WON のみを組み合わせ対象とし PENDING は除外する")
+        void shouldExcludePendingWhenLotteryEnabled() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(lotteryDeadlineHelper.isLotteryDisabled(organizationId)).thenReturn(false);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
+                    ));
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: WON 2人だけがマッチング対象、PENDING を含む List.of(WON,PENDING) では呼ばれない
+            assertThat(result.getPairings()).hasSize(1);
+            verify(practiceParticipantRepository).findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON));
+            verify(practiceParticipantRepository, never())
+                    .findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON));
+        }
+
+        @Test
+        @DisplayName("抽選なし運用 (isLotteryDisabled=true): PENDING も組み合わせ対象に含める")
+        void shouldIncludePendingWhenLotteryDisabled() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long organizationId = 8L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(lotteryDeadlineHelper.isLotteryDisabled(organizationId)).thenReturn(true);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.PENDING),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.PENDING)
+                    ));
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: PENDING 2人もマッチング対象になる
+            assertThat(result.getPairings()).hasSize(1);
+            verify(practiceParticipantRepository)
+                    .findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON));
         }
     }
 
@@ -701,7 +785,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
@@ -747,7 +831,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -893,7 +977,7 @@ class MatchPairingServiceTest {
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
             // 4人参加
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -1376,7 +1460,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, currentMatchNumber, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, currentMatchNumber, 2L, ParticipantStatus.WON)
@@ -1426,7 +1510,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, currentMatchNumber, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, currentMatchNumber, 2L, ParticipantStatus.WON),

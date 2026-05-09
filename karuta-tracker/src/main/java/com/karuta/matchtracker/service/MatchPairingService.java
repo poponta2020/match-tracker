@@ -37,6 +37,7 @@ public class MatchPairingService {
     private final PlayerRepository playerRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
      * 指定日の対戦組み合わせを取得
@@ -417,7 +418,7 @@ public class MatchPairingService {
     public AutoMatchingResult autoMatch(AutoMatchingRequest request, Long organizationId) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
-        List<Long> participantIds = loadActiveParticipantIdsForMatch(sessionDate, matchNumber);
+        List<Long> participantIds = loadActiveParticipantIdsForMatch(sessionDate, matchNumber, organizationId);
 
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
@@ -661,18 +662,27 @@ public class MatchPairingService {
     }
 
     /**
-     * 指定日・試合番号のアクティブ参加者IDを取得（PENDING + WON）
+     * 指定日・試合番号のアクティブ参加者IDを取得。
      *
-     * 抽選を運用している場合は WON のみが組み合わせ対象だが、抽選を運用しないケースでは
-     * 参加登録時の PENDING のままになるため、両方をアクティブ参加者として扱う。
-     * WAITLISTED / OFFERED / DECLINED / CANCELLED / WAITLIST_DECLINED は除外。
+     * 団体の運用設定により対象ステータスを切り替える:
+     *  - 抽選あり運用 (MONTHLY + 締め切りあり): WON のみ
+     *  - 抽選なし運用 (SAME_DAY もしくは MONTHLY + 締め切りなしモード): PENDING + WON
+     *
+     * 抽選あり運用で PENDING を含めると抽選前の参加希望者まで自動マッチング対象になり、
+     * 抽選結果をバイパスしてしまうため、組織設定に応じた判定が必須。
+     * WAITLISTED / OFFERED / DECLINED / CANCELLED / WAITLIST_DECLINED は常に除外する。
      */
-    private List<Long> loadActiveParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber) {
+    private List<Long> loadActiveParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber,
+                                                         Long organizationId) {
         if (sessionDate == null || matchNumber == null) {
             log.warn("アクティブ参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
                     sessionDate, matchNumber);
             return Collections.emptyList();
         }
+
+        List<ParticipantStatus> targetStatuses = lotteryDeadlineHelper.isLotteryDisabled(organizationId)
+                ? List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)
+                : List.of(ParticipantStatus.WON);
 
         return practiceSessionRepository.findBySessionDate(sessionDate)
                 .map(session -> {
@@ -680,14 +690,14 @@ public class MatchPairingService {
                             .findBySessionIdAndMatchNumberAndStatusIn(
                                     session.getId(),
                                     matchNumber,
-                                    List.of(ParticipantStatus.PENDING, ParticipantStatus.WON))
+                                    targetStatuses)
                             .stream()
                             .map(PracticeParticipant::getPlayerId)
                             .distinct()
                             .toList();
                     if (activeParticipantIds.isEmpty()) {
-                        log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}",
-                                session.getId(), sessionDate, matchNumber);
+                        log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}, statuses={}",
+                                session.getId(), sessionDate, matchNumber, targetStatuses);
                     }
                     return activeParticipantIds;
                 })

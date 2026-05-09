@@ -133,13 +133,21 @@ const PairingGenerator = () => {
     setIsViewMode(true);
   }, []);
 
-  // 組み合わせ対象となるアクティブ参加者名を取得（PENDING + WON）
-  // 抽選あり運用では当選者(WON)、抽選なし運用では参加登録のまま(PENDING)を含める
+  // 組み合わせ対象となるアクティブ参加者名を取得
+  // - 抽選あり運用 (MONTHLY + 締め切りあり): WON のみ
+  // - 抽選なし運用 (SAME_DAY もしくは MONTHLY + 締め切りなし): WON + PENDING
+  // バックエンドが返す `pairingIncludesPending` フラグで判定する。
   const getActiveParticipantNamesForMatch = useCallback((session, targetMatchNumber) => {
     if (!session) return [];
+    const includesPending = session.pairingIncludesPending === true;
     const entries = session.matchParticipants?.[String(targetMatchNumber)] || [];
     return entries
-      .filter(p => (typeof p === 'string') || p.status === 'WON' || p.status === 'PENDING')
+      .filter(p => {
+        if (typeof p === 'string') return true;
+        if (p.status === 'WON') return true;
+        if (p.status === 'PENDING') return includesPending;
+        return false;
+      })
       .map(p => typeof p === 'string' ? p : p.name);
   }, []);
 

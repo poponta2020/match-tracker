@@ -59,6 +59,7 @@ public class PracticeSessionService {
     private final DensukeSyncService densukeSyncService;
     private final AdjacentRoomService adjacentRoomService;
     private final WaitlistPromotionService waitlistPromotionService;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
      * IDで練習日を取得
@@ -77,7 +78,9 @@ public class PracticeSessionService {
         log.debug("Finding practice session by date: {}", date);
         PracticeSession session = practiceSessionRepository.findBySessionDate(date)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
-        return PracticeSessionDto.fromEntity(session);
+        PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
+        dto.setPairingIncludesPending(lotteryDeadlineHelper.isLotteryDisabled(session.getOrganizationId()));
+        return dto;
     }
 
     /**
@@ -592,6 +595,9 @@ public class PracticeSessionService {
         // 試合ごとの参加人数・参加者情報を集計
         enrichDtoWithMatchDetails(dto, session, allParticipants, playerMap);
 
+        // 組み合わせ対象に PENDING を含めるか（抽選なし運用判定）
+        dto.setPairingIncludesPending(lotteryDeadlineHelper.isLotteryDisabled(session.getOrganizationId()));
+
         return dto;
     }
 
@@ -680,6 +686,9 @@ public class PracticeSessionService {
 
                     // 試合ごとの参加人数・参加者情報を集計
                     enrichDtoWithMatchDetails(dto, session, sessionParticipants, playerMap);
+
+                    // 組み合わせ対象に PENDING を含めるか（抽選なし運用判定）
+                    dto.setPairingIncludesPending(lotteryDeadlineHelper.isLotteryDisabled(session.getOrganizationId()));
 
                     // 会場情報を取得
                     if (session.getVenueId() != null) {
