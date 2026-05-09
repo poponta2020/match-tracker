@@ -86,6 +86,9 @@ class PracticeSessionServiceTest {
     @Mock
     private WaitlistPromotionService waitlistPromotionService;
 
+    @Mock
+    private LotteryDeadlineHelper lotteryDeadlineHelper;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 
@@ -104,6 +107,10 @@ class PracticeSessionServiceTest {
                 .sessionDate(today)
                 .totalMatches(10)
                 .build();
+        // enrichSessionWithParticipants を経由するテストでのみ参照される。
+        // 参照しないテスト（NotFound 系・ findNextSessionForPlayer など）で
+        // UnnecessaryStubbingException を起こさないよう lenient で登録する。
+        lenient().when(lotteryDeadlineHelper.isLotteryDisabled(any())).thenReturn(false);
     }
 
     @Test
@@ -122,6 +129,31 @@ class PracticeSessionServiceTest {
         assertThat(result.getSessionDate()).isEqualTo(today);
         assertThat(result.getTotalMatches()).isEqualTo(10);
         verify(practiceSessionRepository).findById(1L);
+    }
+
+    @Test
+    @DisplayName("findById: 抽選なし運用団体ではpairingIncludesPending=true、抽選あり運用ではfalseを返す")
+    void testFindById_pairingIncludesPendingReflectsLotteryDisabled() {
+        // Given: organizationId を持つセッション
+        PracticeSession sessionWithOrg = PracticeSession.builder()
+                .id(2L)
+                .sessionDate(today)
+                .totalMatches(10)
+                .organizationId(99L)
+                .build();
+        when(practiceSessionRepository.findById(2L)).thenReturn(Optional.of(sessionWithOrg));
+        when(practiceParticipantRepository.findBySessionId(2L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // 抽選なし運用 → pairingIncludesPending=true
+        when(lotteryDeadlineHelper.isLotteryDisabled(99L)).thenReturn(true);
+        PracticeSessionDto resultDisabled = practiceSessionService.findById(2L);
+        assertThat(resultDisabled.getPairingIncludesPending()).isTrue();
+
+        // 抽選あり運用 → pairingIncludesPending=false
+        when(lotteryDeadlineHelper.isLotteryDisabled(99L)).thenReturn(false);
+        PracticeSessionDto resultEnabled = practiceSessionService.findById(2L);
+        assertThat(resultEnabled.getPairingIncludesPending()).isFalse();
     }
 
     @Test

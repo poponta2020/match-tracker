@@ -684,7 +684,15 @@ public class MatchPairingService {
                 ? List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)
                 : List.of(ParticipantStatus.WON);
 
-        return practiceSessionRepository.findBySessionDate(sessionDate)
+        // organizationId が指定されている場合は組織スコープでセッションを取得する。
+        // 同日に複数団体の練習セッションがある場合、findBySessionDate(date) のみだと
+        // 別団体のセッションを拾う / 単一結果前提のクエリで例外になる可能性があるため。
+        // organizationId == null は SUPER_ADMIN 経路で組織非限定の取得を許可する。
+        Optional<com.karuta.matchtracker.entity.PracticeSession> sessionOpt = organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                : practiceSessionRepository.findBySessionDate(sessionDate);
+
+        return sessionOpt
                 .map(session -> {
                     List<Long> activeParticipantIds = practiceParticipantRepository
                             .findBySessionIdAndMatchNumberAndStatusIn(
@@ -702,8 +710,8 @@ public class MatchPairingService {
                     return activeParticipantIds;
                 })
                 .orElseGet(() -> {
-                    log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}",
-                            sessionDate, matchNumber);
+                    log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}, organizationId={}",
+                            sessionDate, matchNumber, organizationId);
                     return Collections.emptyList();
                 });
     }
