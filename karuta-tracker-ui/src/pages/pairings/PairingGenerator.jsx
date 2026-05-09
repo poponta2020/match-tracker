@@ -133,11 +133,13 @@ const PairingGenerator = () => {
     setIsViewMode(true);
   }, []);
 
-  const getWonParticipantNamesForMatch = useCallback((session, targetMatchNumber) => {
+  // 組み合わせ対象となるアクティブ参加者名を取得（PENDING + WON）
+  // 抽選あり運用では当選者(WON)、抽選なし運用では参加登録のまま(PENDING)を含める
+  const getActiveParticipantNamesForMatch = useCallback((session, targetMatchNumber) => {
     if (!session) return [];
     const entries = session.matchParticipants?.[String(targetMatchNumber)] || [];
     return entries
-      .filter(p => (typeof p === 'string') || p.status === 'WON')
+      .filter(p => (typeof p === 'string') || p.status === 'WON' || p.status === 'PENDING')
       .map(p => typeof p === 'string' ? p : p.name);
   }, []);
 
@@ -147,12 +149,12 @@ const PairingGenerator = () => {
       setParticipants([]);
       return;
     }
-    const matchParticipantNames = getWonParticipantNamesForMatch(session, matchNum);
+    const matchParticipantNames = getActiveParticipantNamesForMatch(session, matchNum);
     const sessionParticipants = session.participants || [];
     // 試合番号ごとの登録参加者のみを表示（0人なら0人）
     const filtered = sessionParticipants.filter(p => matchParticipantNames.includes(p.name));
     setParticipants(filtered);
-  }, [getWonParticipantNamesForMatch]);
+  }, [getActiveParticipantNamesForMatch]);
 
   // 日付変更時: セッション・参加者・全試合の組み合わせを一括取得
   useEffect(() => {
@@ -243,7 +245,7 @@ const PairingGenerator = () => {
     // この試合番号の参加者を算出（loadExistingPairingsToStateに渡す用）
     const getMatchParticipants = () => {
       if (!currentSession) return [];
-      const names = getWonParticipantNamesForMatch(currentSession, matchNumber);
+      const names = getActiveParticipantNamesForMatch(currentSession, matchNumber);
       const allParticipants = currentSession.participants || [];
       // 試合番号ごとの登録参加者のみを返す（0人なら空配列）
       return allParticipants.filter(p => names.includes(p.name));
@@ -277,7 +279,7 @@ const PairingGenerator = () => {
       setIsEditingExisting(false);
       setIsViewMode(false);
     }
-  }, [matchNumber, cacheVersion, currentSession, getWonParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
+  }, [matchNumber, cacheVersion, currentSession, getActiveParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
 
   // 選手一覧を遅延取得（選手追加モーダル表示時に初めて取得）
   const playersLoadedRef = useRef(false);
@@ -1091,7 +1093,7 @@ const PairingGenerator = () => {
                       // 既存の組み合わせがあった場合は閲覧モードに戻す
                       const getMatchParticipants = () => {
                         if (!currentSession) return [];
-                        const names = getWonParticipantNamesForMatch(currentSession, matchNumber);
+                        const names = getActiveParticipantNamesForMatch(currentSession, matchNumber);
                         const allP = currentSession.participants || [];
                         return allP.filter(p => names.includes(p.name));
                       };

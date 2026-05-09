@@ -325,8 +325,15 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
   - 同じ選手同士のペアは不可
   - 結果入力済み（ロック済み）ペア・閲覧モード・他試合に未保存変更がある時（`isReadOnly`）は入替操作を受け付けない
 
+**組み合わせ対象となる参加者の範囲:**
+- `status === 'WON'`（抽選当選者）または `status === 'PENDING'`（抽選未実行・抽選なし運用での参加登録者）の両方を組み合わせ対象とする
+- 抽選あり運用（北海道大学かるた会など）では WON が対象、抽選なし運用では PENDING のままで対象になる
+- `WAITLISTED` / `OFFERED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` は組み合わせ対象から除外する
+- 対象画面: `PairingGenerator`（参加者表示・自動マッチング）、`BulkResultInput`（抜け番算出）、`MatchResultsView`（抜け番表示）すべて同一ルール
+- バックエンドは `MatchPairingService.loadActiveParticipantIdsForMatch()` でアクティブ参加者IDを取得する
+
 **自動マッチング:**
-- 参加者IDリストを入力として最適なペアリングを生成
+- 上記のアクティブ参加者IDリストを入力として最適なペアリングを生成
 - アルゴリズム:
   1. 過去30日のペアリング履歴（`match_pairings` テーブル）と対戦履歴（`matches` テーブル）を統合取得
   2. 同日の前の試合で既に組まれたペアを除外
@@ -437,10 +444,10 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 奇数参加者の練習で対戦相手がいない選手（抜け番）の活動を試合番号ごとに記録する機能。
 
 **抜け番の判定ルール:**
-- 抜け番 = 「その試合番号の WON 参加者」のうち、組み合わせ（MatchPairing）に含まれない選手
-- `PracticeSessionDto.matchParticipants` には `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/`OFFERED`/`CANCELLED`）が含まれるため、**抜け番候補を算出する際は必ず `status === 'WON'` でフィルタすること**
+- 抜け番 = 「その試合番号のアクティブ参加者（`WON` または `PENDING`）」のうち、組み合わせ（MatchPairing）に含まれない選手
+- `PracticeSessionDto.matchParticipants` には `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/`OFFERED`/`CANCELLED`）が含まれるため、**抜け番候補を算出する際は `status === 'WON' || status === 'PENDING'` でフィルタすること**（抽選なし運用では PENDING のままで組み合わせ対象になるため）
 - キャンセル済み（`CANCELLED`）・キャンセル待ち（`WAITLISTED`/`OFFERED`）の選手は抜け番として扱わない
-- 対象画面: `PairingGenerator` / `BulkResultInput` / `MatchResultsView` いずれも同じルールで算出する
+- 対象画面: `PairingGenerator` / `BulkResultInput` / `MatchResultsView` いずれも同じルールで算出する（フロントロジックは `byePlayersLogic.js`）
 
 **活動種別:**
 

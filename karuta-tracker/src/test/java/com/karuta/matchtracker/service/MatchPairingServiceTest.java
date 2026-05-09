@@ -408,7 +408,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -449,7 +449,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -489,7 +489,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(List.of(createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON)));
             when(playerRepository.findAllById(anyCollection()))
                     .thenReturn(Arrays.asList(player1));
@@ -525,7 +525,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Collections.emptyList());
 
             // When
@@ -556,7 +556,7 @@ class MatchPairingServiceTest {
             assertThat(result.getPairings()).isEmpty();
             assertThat(result.getWaitingPlayers()).isEmpty();
             verify(practiceParticipantRepository, never())
-                    .findBySessionIdAndMatchNumberAndStatus(anyLong(), anyInt(), any());
+                    .findBySessionIdAndMatchNumberAndStatusIn(anyLong(), anyInt(), any());
             verify(playerRepository, never()).findAllById(anyList());
         }
 
@@ -573,7 +573,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
@@ -701,7 +701,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON)
@@ -747,7 +747,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -893,7 +893,7 @@ class MatchPairingServiceTest {
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
             // 4人参加
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
@@ -1376,7 +1376,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, currentMatchNumber, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, currentMatchNumber, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, currentMatchNumber, 2L, ParticipantStatus.WON)
@@ -1426,7 +1426,7 @@ class MatchPairingServiceTest {
 
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
-            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, currentMatchNumber, ParticipantStatus.WON))
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, currentMatchNumber, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
                     .thenReturn(Arrays.asList(
                             createPracticeParticipant(100L, currentMatchNumber, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, currentMatchNumber, 2L, ParticipantStatus.WON),

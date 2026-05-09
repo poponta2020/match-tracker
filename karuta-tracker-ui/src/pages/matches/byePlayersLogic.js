@@ -4,7 +4,9 @@
  * バックエンドの `PracticeSessionService.enrichDtoWithMatchDetails` は
  * `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/
  * `OFFERED`/`CANCELLED`）を `matchParticipants` に含めて返すため、抜け番算出では
- * 必ず `status === 'WON'` でフィルタしてからペア済み選手を除外する。
+ * 組み合わせ対象となるアクティブ参加者（`WON` または `PENDING`）でフィルタしてから
+ * ペア済み選手を除外する。抽選あり運用では WON、抽選なし運用では PENDING のままで
+ * 組み合わせ対象になるため両方を含める。
  *
  * 旧データとの後方互換のため、エントリが文字列（name単体）の場合は WON とみなす。
  */
@@ -27,7 +29,7 @@ export function computeByePlayersByMatch(sessionData, allPairings, allParticipan
     matchPairings.forEach(p => { pairedIds.add(p.player1Id); pairedIds.add(p.player2Id); });
     const matchPartEntries = sessionData.matchParticipants?.[String(num)] || [];
     const matchPartNames = matchPartEntries
-      .filter(p => typeof p === 'string' || p.status === 'WON')
+      .filter(p => typeof p === 'string' || p.status === 'WON' || p.status === 'PENDING')
       .map(p => typeof p === 'string' ? p : p.name);
     const bye = allParticipants
       .filter(p => matchPartNames.includes(p.name) && !pairedIds.has(p.id));
@@ -53,7 +55,7 @@ export function getByePlayerNamesForMatch(matchParticipantEntries, matchPairings
     pairedNames.add(p.player2Name);
   });
   return matchParticipantEntries
-    .filter(p => typeof p === 'string' || p.status === 'WON')
+    .filter(p => typeof p === 'string' || p.status === 'WON' || p.status === 'PENDING')
     .map(p => typeof p === 'string' ? p : p.name)
     .filter(name => !pairedNames.has(name));
 }

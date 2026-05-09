@@ -53,7 +53,7 @@ describe('computeByePlayersByMatch (BulkResultInput)', () => {
     expect(result[1].find(p => p.name === 'D')).toBeUndefined();
   });
 
-  it('excludes WAITLISTED / OFFERED / PENDING from bye (only WON is bye)', () => {
+  it('excludes WAITLISTED / OFFERED from bye but includes PENDING (抽選なし運用対応)', () => {
     const sessionData = {
       totalMatches: 1,
       matchParticipants: {
@@ -74,7 +74,7 @@ describe('computeByePlayersByMatch (BulkResultInput)', () => {
     ];
 
     const result = computeByePlayersByMatch(sessionData, allPairings, allParticipants);
-    expect(result[1]).toEqual([{ id: 1, name: 'A' }]);
+    expect(result[1]).toEqual([{ id: 1, name: 'A' }, { id: 4, name: 'D' }]);
   });
 
   it('treats string entries as WON (backward compatibility)', () => {
@@ -145,13 +145,14 @@ describe('getByePlayerNamesForMatch (MatchResultsView)', () => {
     expect(result).not.toContain('D');
   });
 
-  it('excludes WAITLISTED / OFFERED from bye names', () => {
+  it('excludes WAITLISTED / OFFERED from bye names but includes PENDING (抽選なし運用対応)', () => {
     const entries = [
       { name: 'A', status: 'WON' },
       { name: 'B', status: 'WAITLISTED' },
       { name: 'C', status: 'OFFERED' },
+      { name: 'D', status: 'PENDING' },
     ];
-    expect(getByePlayerNamesForMatch(entries, [])).toEqual(['A']);
+    expect(getByePlayerNamesForMatch(entries, [])).toEqual(['A', 'D']);
   });
 
   it('treats string entries as WON (backward compatibility)', () => {

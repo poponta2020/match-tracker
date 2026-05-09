@@ -417,7 +417,7 @@ public class MatchPairingService {
     public AutoMatchingResult autoMatch(AutoMatchingRequest request, Long organizationId) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
-        List<Long> participantIds = loadWonParticipantIdsForMatch(sessionDate, matchNumber);
+        List<Long> participantIds = loadActiveParticipantIdsForMatch(sessionDate, matchNumber);
 
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
@@ -661,34 +661,38 @@ public class MatchPairingService {
     }
 
     /**
-     * 指定日・試合番号のWON参加者IDを取得
+     * 指定日・試合番号のアクティブ参加者IDを取得（PENDING + WON）
+     *
+     * 抽選を運用している場合は WON のみが組み合わせ対象だが、抽選を運用しないケースでは
+     * 参加登録時の PENDING のままになるため、両方をアクティブ参加者として扱う。
+     * WAITLISTED / OFFERED / DECLINED / CANCELLED / WAITLIST_DECLINED は除外。
      */
-    private List<Long> loadWonParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber) {
+    private List<Long> loadActiveParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber) {
         if (sessionDate == null || matchNumber == null) {
-            log.warn("WON参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
+            log.warn("アクティブ参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
                     sessionDate, matchNumber);
             return Collections.emptyList();
         }
 
         return practiceSessionRepository.findBySessionDate(sessionDate)
                 .map(session -> {
-                    List<Long> wonParticipantIds = practiceParticipantRepository
-                            .findBySessionIdAndMatchNumberAndStatus(
+                    List<Long> activeParticipantIds = practiceParticipantRepository
+                            .findBySessionIdAndMatchNumberAndStatusIn(
                                     session.getId(),
                                     matchNumber,
-                                    ParticipantStatus.WON)
+                                    List.of(ParticipantStatus.PENDING, ParticipantStatus.WON))
                             .stream()
                             .map(PracticeParticipant::getPlayerId)
                             .distinct()
                             .toList();
-                    if (wonParticipantIds.isEmpty()) {
-                        log.info("WON参加者なし: sessionId={}, sessionDate={}, matchNumber={}",
+                    if (activeParticipantIds.isEmpty()) {
+                        log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}",
                                 session.getId(), sessionDate, matchNumber);
                     }
-                    return wonParticipantIds;
+                    return activeParticipantIds;
                 })
                 .orElseGet(() -> {
-                    log.info("セッション未登録のためWON参加者なし: sessionDate={}, matchNumber={}",
+                    log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}",
                             sessionDate, matchNumber);
                     return Collections.emptyList();
                 });
