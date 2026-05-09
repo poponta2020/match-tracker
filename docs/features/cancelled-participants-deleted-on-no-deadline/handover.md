@@ -184,11 +184,7 @@ git worktree add /tmp/fix-cancelled-display-on-no-deadline -b fix/cancelled-disp
 
 ### DB 接続
 
-`CLAUDE.local.md` 記載の本番 Render PostgreSQL。
-
-```
-postgresql://karuta:9wvobIcnZknsLP5owc9bQDKOWHmiekNE@dpg-d7fpnf8sfn5c73d7hkgg-a.oregon-postgres.render.com/karuta_tracker_o7gz
-```
+本番 Render PostgreSQL を使用。接続情報（ホスト・ユーザー・パスワード・DB 名）は `CLAUDE.local.md`（gitignore 対象）を参照すること。
 
 ### Issue
 
