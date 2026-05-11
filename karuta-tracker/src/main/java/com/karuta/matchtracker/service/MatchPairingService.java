@@ -44,7 +44,7 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDate(LocalDate sessionDate) {
-        return getByDate(sessionDate, false);
+        return getByDate(sessionDate, false, null);
     }
 
     /**
@@ -52,7 +52,24 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDate(LocalDate sessionDate, boolean light) {
+        return getByDate(sessionDate, light, null);
+    }
+
+    /**
+     * 指定日の対戦組み合わせを取得（軽量オプション・組織スコープ対応）
+     *
+     * organizationId が指定されている場合は当該団体のセッション参加者に紐づく
+     * ペアリングのみを返す。同日に複数団体のセッションがあっても他団体の
+     * 組み合わせが混入しないようにする（createBatch / autoMatch と同じスコープ）。
+     * organizationId == null は SUPER_ADMIN / PLAYER 経路で組織非限定の取得を許可する。
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getByDate(LocalDate sessionDate, boolean light, Long organizationId) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+            pairings = filterPairingsBySession(pairings, sessionPlayerIds, true);
+        }
         // 全選手IDを一括取得してN+1問題を回避
         Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
@@ -70,7 +87,19 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
+        return getByDateAndMatchNumber(sessionDate, matchNumber, null);
+    }
+
+    /**
+     * 指定日・試合番号の対戦組み合わせを取得（組織スコープ対応）
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber, Long organizationId) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+            pairings = filterPairingsBySession(pairings, sessionPlayerIds, true);
+        }
         Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
                 .map(p -> convertToDtoWithCache(p, playerNames))

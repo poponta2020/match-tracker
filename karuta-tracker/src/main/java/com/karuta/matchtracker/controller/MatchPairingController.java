@@ -31,8 +31,16 @@ public class MatchPairingController {
 
     /**
      * 指定日の対戦組み合わせを取得
+     *
+     * ADMIN の場合は自団体スコープでペアリングを返す。同日に複数団体のセッションが
+     * ある場合でも、autoMatch / createBatch / getSessionByDate と同じ組織のペアリング
+     * のみを返し、別団体の組み合わせが PairingGenerator 等に混入しないようにする。
+     *
+     * @RequireRole は ADMIN への adminOrganizationId 設定を有効化するために必須
+     * （RoleCheckInterceptor は @RequireRole 未付与だとこの属性をセットしない）。
      */
     @GetMapping("/date")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<List<MatchPairingDto>> getByDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false, defaultValue = "false") boolean light,
@@ -42,14 +50,18 @@ public class MatchPairingController {
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light);
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light, adminOrgId);
         return ResponseEntity.ok(pairings);
     }
 
     /**
      * 指定日・試合番号の対戦組み合わせを取得
+     *
+     * ADMIN は自団体スコープで取得する（同日複数団体時の混入防止）。
      */
     @GetMapping("/date-and-match")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<List<MatchPairingDto>> getByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
@@ -59,7 +71,8 @@ public class MatchPairingController {
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber);
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber, adminOrgId);
         return ResponseEntity.ok(pairings);
     }
 

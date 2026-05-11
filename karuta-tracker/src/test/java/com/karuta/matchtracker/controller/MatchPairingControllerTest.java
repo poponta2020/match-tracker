@@ -58,7 +58,7 @@ class MatchPairingControllerTest {
     class GetByDateTests {
 
         @Test
-        @DisplayName("指定日付の対戦ペアリングを取得できる")
+        @DisplayName("SUPER_ADMIN は organizationId=null で全ペアリングを取得できる")
         void shouldGetPairingsByDate() throws Exception {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
@@ -67,10 +67,11 @@ class MatchPairingControllerTest {
                     MatchPairingDto.builder().id(2L).sessionDate(date).matchNumber(2).player1Id(30L).player1Name("選手C").player2Id(40L).player2Name("選手D").createdBy(1L).build()
             );
 
-            when(matchPairingService.getByDate(date, false)).thenReturn(pairings);
+            when(matchPairingService.getByDate(date, false, null)).thenReturn(pairings);
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(2)))
@@ -82,7 +83,29 @@ class MatchPairingControllerTest {
                     .andExpect(jsonPath("$[0].player2Name").value("選手B"))
                     .andExpect(jsonPath("$[1].matchNumber").value(2));
 
-            verify(matchPairingService).getByDate(date, false);
+            verify(matchPairingService).getByDate(date, false, null);
+        }
+
+        @Test
+        @DisplayName("ADMIN は RoleCheckInterceptor 経由で adminOrganizationId が伝播し、組織スコープで取得する")
+        void shouldGetPairingsByDateScopedByAdminOrganizationId() throws Exception {
+            // Given: ADMIN ユーザーで Player.adminOrganizationId=7L を持つ
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long adminUserId = 1L;
+            Long adminOrgId = 7L;
+            mockAdminScopeForDate(date, adminUserId, adminOrgId);
+            when(matchPairingService.getByDate(date, false, adminOrgId))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .param("date", "2024-01-15"))
+                    .andExpect(status().isOk());
+
+            // 組織スコープ付きで呼ばれる（null では呼ばれない）
+            verify(matchPairingService).getByDate(date, false, adminOrgId);
+            verify(matchPairingService, never()).getByDate(date, false, (Long) null);
         }
 
         @Test
@@ -90,13 +113,24 @@ class MatchPairingControllerTest {
         void shouldReturnEmptyArrayWhenNoPairings() throws Exception {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
-            when(matchPairingService.getByDate(date, false)).thenReturn(Collections.emptyList());
+            when(matchPairingService.getByDate(date, false, null)).thenReturn(Collections.emptyList());
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(0)));
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしは 403")
+        void shouldReturn403WithoutAuthHeader() throws Exception {
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .param("date", "2024-01-15"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
         }
 
         @Test
@@ -104,20 +138,22 @@ class MatchPairingControllerTest {
         void shouldReturnErrorForInvalidDateFormat() throws Exception {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "invalid-date"))
                     .andExpect(status().isInternalServerError());
 
-            verify(matchPairingService, never()).getByDate(any(), anyBoolean());
+            verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
         }
 
         @Test
         @DisplayName("日付パラメータが欠落している場合はエラーが返る")
         void shouldReturnErrorForMissingDateParameter() throws Exception {
             // When & Then
-            mockMvc.perform(get("/api/match-pairings/date"))
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                     .andExpect(status().isInternalServerError());
 
-            verify(matchPairingService, never()).getByDate(any(), anyBoolean());
+            verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
         }
     }
 
@@ -126,7 +162,7 @@ class MatchPairingControllerTest {
     class GetByDateAndMatchNumberTests {
 
         @Test
-        @DisplayName("指定日付と試合番号の対戦ペアリングを取得できる")
+        @DisplayName("SUPER_ADMIN は organizationId=null で指定日付・試合番号のペアリングを取得できる")
         void shouldGetPairingByDateAndMatchNumber() throws Exception {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
@@ -138,11 +174,12 @@ class MatchPairingControllerTest {
                     .createdBy(1L)
                     .build();
 
-            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber))
+            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber, null))
                     .thenReturn(Arrays.asList(pairing));
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isOk())
@@ -152,7 +189,31 @@ class MatchPairingControllerTest {
                     .andExpect(jsonPath("$[0].player1Id").value(10))
                     .andExpect(jsonPath("$[0].player2Id").value(20));
 
-            verify(matchPairingService).getByDateAndMatchNumber(date, matchNumber);
+            verify(matchPairingService).getByDateAndMatchNumber(date, matchNumber, null);
+        }
+
+        @Test
+        @DisplayName("ADMIN は adminOrganizationId で組織スコープ取得する")
+        void shouldGetPairingByDateAndMatchNumberScopedByAdminOrganizationId() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 3;
+            Long adminUserId = 1L;
+            Long adminOrgId = 7L;
+            mockAdminScopeForDate(date, adminUserId, adminOrgId);
+            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber, adminOrgId))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date-and-match")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("matchNumber", "3"))
+                    .andExpect(status().isOk());
+
+            verify(matchPairingService).getByDateAndMatchNumber(date, matchNumber, adminOrgId);
+            verify(matchPairingService, never())
+                    .getByDateAndMatchNumber(date, matchNumber, (Long) null);
         }
 
         @Test
@@ -162,14 +223,27 @@ class MatchPairingControllerTest {
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 99;
 
-            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber))
+            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber, null))
                     .thenThrow(new ResourceNotFoundException("Match pairing not found"));
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "99"))
                     .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしは 403")
+        void shouldReturn403WithoutAuthHeader() throws Exception {
+            mockMvc.perform(get("/api/match-pairings/date-and-match")
+                            .param("date", "2024-01-15")
+                            .param("matchNumber", "3"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never())
+                    .getByDateAndMatchNumber(any(), anyInt(), any());
         }
 
         @Test
@@ -177,10 +251,12 @@ class MatchPairingControllerTest {
         void shouldReturnErrorForMissingMatchNumber() throws Exception {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .param("date", "2024-01-15"))
                     .andExpect(status().isInternalServerError());
 
-            verify(matchPairingService, never()).getByDateAndMatchNumber(any(), anyInt());
+            verify(matchPairingService, never())
+                    .getByDateAndMatchNumber(any(), anyInt(), any());
         }
     }
 

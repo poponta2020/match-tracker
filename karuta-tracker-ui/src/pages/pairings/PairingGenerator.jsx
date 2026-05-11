@@ -337,7 +337,7 @@ const PairingGenerator = () => {
         lockedCount + (newPairings.length || 0) * 2 + (response.data.waitingPlayers?.length || 0);
       if (usedParticipantCount !== participants.length) {
         setNotice(
-          `表示中の参加者数(${participants.length}名)と最新WON参加者数(${usedParticipantCount}名)が異なるため、最新WONで生成しました。`
+          `表示中の参加者数(${participants.length}名)と最新の組み合わせ対象参加者数(${usedParticipantCount}名)が異なるため、最新の組み合わせ対象で生成しました。`
         );
       }
       if (locked.length > 0) {
