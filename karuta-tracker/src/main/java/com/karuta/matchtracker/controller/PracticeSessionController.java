@@ -59,10 +59,15 @@ public class PracticeSessionController {
      * pairingIncludesPending が組み合わせ生成対象とずれないようにする。
      * SUPER_ADMIN / PLAYER は adminOrganizationId が null なので日付のみで取得する。
      *
+     * @RequireRole は ADMIN への adminOrganizationId 設定を有効化するために必須。
+     * RoleCheckInterceptor は @RequireRole 未付与のメソッドではこの属性をセットせず
+     * 早期 return するため、付けないと ADMIN 経路の組織スコープが効かない。
+     *
      * @param date 日付
      * @return 練習日情報
      */
     @GetMapping("/date")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<PracticeSessionDto> getSessionByDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             HttpServletRequest httpRequest) {
