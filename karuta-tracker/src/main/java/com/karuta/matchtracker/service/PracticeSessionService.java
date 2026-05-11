@@ -87,8 +87,23 @@ public class PracticeSessionService {
      * 日付で練習日を取得（参加者情報付き）
      */
     public PracticeSessionDto findByDateWithParticipants(LocalDate date) {
-        log.debug("Finding practice session with participants by date: {}", date);
-        PracticeSession session = practiceSessionRepository.findBySessionDate(date)
+        return findByDateWithParticipants(date, null);
+    }
+
+    /**
+     * 日付で練習日を取得（参加者情報付き・組織スコープ対応）
+     *
+     * organizationId が指定されている場合は同日に複数団体のセッションがあっても
+     * 当該団体のセッションのみを返す。autoMatch / createBatch と同じ組織スコープで
+     * セッションを取得し、フロントの pairingIncludesPending / 参加者一覧と
+     * バックエンドの組み合わせ生成対象がずれないようにする。
+     * organizationId == null の場合は SUPER_ADMIN / PLAYER 経路として日付のみで取得する。
+     */
+    public PracticeSessionDto findByDateWithParticipants(LocalDate date, Long organizationId) {
+        log.debug("Finding practice session with participants by date: {}, organizationId: {}", date, organizationId);
+        PracticeSession session = (organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(date, organizationId)
+                : practiceSessionRepository.findBySessionDate(date))
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
         return enrichSessionWithParticipants(session);
     }

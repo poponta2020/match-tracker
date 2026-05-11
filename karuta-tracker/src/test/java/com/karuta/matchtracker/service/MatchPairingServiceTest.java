@@ -755,6 +755,63 @@ class MatchPairingServiceTest {
             verify(practiceParticipantRepository, never())
                     .findBySessionIdAndMatchNumberAndStatusIn(eq(200L), anyInt(), anyList());
         }
+
+        @Test
+        @DisplayName("SUPER_ADMIN 経路 (organizationId=null): セッションの組織IDで isLotteryDisabled を判定し、抽選なし運用なら PENDING を含める")
+        void shouldUseSessionOrgIdForSuperAdminPath() {
+            // Given: SUPER_ADMIN が autoMatch を呼び、organizationId=null を渡す。
+            // セッション側に組織ID (8L: 抽選なし運用) があるので、そちらで判定されるべき。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long sessionOrgId = 8L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(matchNumber)
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            session.setOrganizationId(sessionOrgId);
+
+            // 抽選なし運用団体: isLotteryDisabled(8L) = true
+            when(lotteryDeadlineHelper.isLotteryDisabled(sessionOrgId)).thenReturn(true);
+            // SUPER_ADMIN 経路では organizationId=null で findBySessionDate が呼ばれる
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(
+                    100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.PENDING),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.PENDING)
+                    ));
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.PENDING),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.PENDING)
+                    ));
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // Then: セッションの組織ID(8L)で isLotteryDisabled が判定され、PENDING を含む targetStatuses が使われる
+            assertThat(result.getPairings()).hasSize(1);
+            verify(practiceParticipantRepository)
+                    .findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.PENDING, ParticipantStatus.WON));
+            verify(practiceParticipantRepository, never())
+                    .findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON));
+            // セッションの組織ID(8L)で判定されたことを確認 (null では呼ばれない)
+            verify(lotteryDeadlineHelper).isLotteryDisabled(sessionOrgId);
+            verify(lotteryDeadlineHelper, never()).isLotteryDisabled(null);
+        }
     }
 
     @Nested

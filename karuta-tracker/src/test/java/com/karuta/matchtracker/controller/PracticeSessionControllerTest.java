@@ -122,10 +122,10 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions/date - 日付で練習日を取得できる")
+    @DisplayName("GET /api/practice-sessions/date - 日付で練習日を取得できる（adminOrganizationId 未設定時は組織非スコープ）")
     void testGetSessionByDate() throws Exception {
-        // Given
-        when(practiceSessionService.findByDateWithParticipants(today)).thenReturn(testSessionDto);
+        // Given: MockMvc では adminOrganizationId 属性が未設定なので null として渡される
+        when(practiceSessionService.findByDateWithParticipants(today, null)).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
@@ -134,7 +134,26 @@ class PracticeSessionControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(practiceSessionService).findByDateWithParticipants(today);
+        verify(practiceSessionService).findByDateWithParticipants(today, null);
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - ADMIN は adminOrganizationId で組織スコープ取得する")
+    void testGetSessionByDateScopedByAdminOrganizationId() throws Exception {
+        // Given: インターセプタで adminOrganizationId が設定された前提
+        Long adminOrgId = 7L;
+        when(practiceSessionService.findByDateWithParticipants(today, adminOrgId)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .requestAttr("adminOrganizationId", adminOrgId))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(practiceSessionService).findByDateWithParticipants(today, adminOrgId);
+        verify(practiceSessionService, org.mockito.Mockito.never()).findByDateWithParticipants(today);
     }
 
     @Test

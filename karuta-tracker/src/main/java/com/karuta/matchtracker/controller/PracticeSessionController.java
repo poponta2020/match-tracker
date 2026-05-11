@@ -54,14 +54,21 @@ public class PracticeSessionController {
     /**
      * 日付で練習日を取得
      *
+     * ADMIN の場合は自団体スコープで取得する。同日に複数団体のセッションがある場合でも
+     * autoMatch / createBatch と同じ組織のセッションを返し、フロント側の参加者一覧・
+     * pairingIncludesPending が組み合わせ生成対象とずれないようにする。
+     * SUPER_ADMIN / PLAYER は adminOrganizationId が null なので日付のみで取得する。
+     *
      * @param date 日付
      * @return 練習日情報
      */
     @GetMapping("/date")
     public ResponseEntity<PracticeSessionDto> getSessionByDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest httpRequest) {
         log.debug("GET /api/practice-sessions/date?date={} - Getting practice session by date", date);
-        PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date);
+        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date, adminOrgId);
         return ResponseEntity.ok(session);
     }
 

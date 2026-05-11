@@ -186,6 +186,49 @@ class PracticeSessionServiceTest {
     }
 
     @Test
+    @DisplayName("findByDateWithParticipants(date, organizationId): 組織スコープでセッションを取得する")
+    void testFindByDateWithParticipants_orgScoped() {
+        // Given: 同日に複数団体のセッションがある場面を想定
+        Long adminOrgId = 7L;
+        PracticeSession orgSession = PracticeSession.builder()
+                .id(100L)
+                .sessionDate(today)
+                .totalMatches(10)
+                .organizationId(adminOrgId)
+                .build();
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, adminOrgId))
+                .thenReturn(Optional.of(orgSession));
+        when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDateWithParticipants(today, adminOrgId);
+
+        // Then: 組織スコープ取得のみが使われ、日付のみ取得は呼ばれない
+        assertThat(result.getId()).isEqualTo(100L);
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, adminOrgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(today);
+    }
+
+    @Test
+    @DisplayName("findByDateWithParticipants(date, null): organizationId=null は日付のみで取得する（SUPER_ADMIN/PLAYER 経路）")
+    void testFindByDateWithParticipants_nullOrgIdUsesDateOnly() {
+        // Given
+        when(practiceSessionRepository.findBySessionDate(today))
+                .thenReturn(Optional.of(testSession));
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDateWithParticipants(today, null);
+
+        // Then: 日付のみで取得され、組織スコープ取得は呼ばれない
+        assertThat(result.getSessionDate()).isEqualTo(today);
+        verify(practiceSessionRepository).findBySessionDate(today);
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+    }
+
+    @Test
     @DisplayName("特定の年月の練習日を取得できる")
     void testFindSessionsByYearMonth() {
         // Given

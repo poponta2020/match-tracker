@@ -680,10 +680,7 @@ public class MatchPairingService {
             return Collections.emptyList();
         }
 
-        List<ParticipantStatus> targetStatuses = lotteryDeadlineHelper.isLotteryDisabled(organizationId)
-                ? List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)
-                : List.of(ParticipantStatus.WON);
-
+        // 先に対象セッションを取得する。
         // organizationId が指定されている場合は組織スコープでセッションを取得する。
         // 同日に複数団体の練習セッションがある場合、findBySessionDate(date) のみだと
         // 別団体のセッションを拾う / 単一結果前提のクエリで例外になる可能性があるため。
@@ -692,28 +689,35 @@ public class MatchPairingService {
                 ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
                 : practiceSessionRepository.findBySessionDate(sessionDate);
 
-        return sessionOpt
-                .map(session -> {
-                    List<Long> activeParticipantIds = practiceParticipantRepository
-                            .findBySessionIdAndMatchNumberAndStatusIn(
-                                    session.getId(),
-                                    matchNumber,
-                                    targetStatuses)
-                            .stream()
-                            .map(PracticeParticipant::getPlayerId)
-                            .distinct()
-                            .toList();
-                    if (activeParticipantIds.isEmpty()) {
-                        log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}, statuses={}",
-                                session.getId(), sessionDate, matchNumber, targetStatuses);
-                    }
-                    return activeParticipantIds;
-                })
-                .orElseGet(() -> {
-                    log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}, organizationId={}",
-                            sessionDate, matchNumber, organizationId);
-                    return Collections.emptyList();
-                });
+        if (sessionOpt.isEmpty()) {
+            log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}, organizationId={}",
+                    sessionDate, matchNumber, organizationId);
+            return Collections.emptyList();
+        }
+
+        com.karuta.matchtracker.entity.PracticeSession session = sessionOpt.get();
+        // 抽選なし運用判定は対象セッションの団体に対して行う。
+        // SUPER_ADMIN 経路では呼び出し側の organizationId が null になるため、
+        // セッションの組織IDで判定しないと SAME_DAY / 締め切りなし団体でも PENDING が誤って除外される。
+        Long effectiveOrganizationId = organizationId != null ? organizationId : session.getOrganizationId();
+        List<ParticipantStatus> targetStatuses = lotteryDeadlineHelper.isLotteryDisabled(effectiveOrganizationId)
+                ? List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)
+                : List.of(ParticipantStatus.WON);
+
+        List<Long> activeParticipantIds = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusIn(
+                        session.getId(),
+                        matchNumber,
+                        targetStatuses)
+                .stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .toList();
+        if (activeParticipantIds.isEmpty()) {
+            log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}, statuses={}",
+                    session.getId(), sessionDate, matchNumber, targetStatuses);
+        }
+        return activeParticipantIds;
     }
 
     private Map<String, List<LocalDate>> getMatchHistory(List<Long> participantIds,
