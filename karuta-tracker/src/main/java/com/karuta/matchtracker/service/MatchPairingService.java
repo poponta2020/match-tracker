@@ -37,13 +37,14 @@ public class MatchPairingService {
     private final PlayerRepository playerRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final LotteryDeadlineHelper lotteryDeadlineHelper;
 
     /**
      * 指定日の対戦組み合わせを取得
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDate(LocalDate sessionDate) {
-        return getByDate(sessionDate, false);
+        return getByDate(sessionDate, false, null);
     }
 
     /**
@@ -51,7 +52,24 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDate(LocalDate sessionDate, boolean light) {
+        return getByDate(sessionDate, light, null);
+    }
+
+    /**
+     * 指定日の対戦組み合わせを取得（軽量オプション・組織スコープ対応）
+     *
+     * organizationId が指定されている場合は当該団体のセッション参加者に紐づく
+     * ペアリングのみを返す。同日に複数団体のセッションがあっても他団体の
+     * 組み合わせが混入しないようにする（createBatch / autoMatch と同じスコープ）。
+     * organizationId == null は SUPER_ADMIN / PLAYER 経路で組織非限定の取得を許可する。
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getByDate(LocalDate sessionDate, boolean light, Long organizationId) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+            pairings = filterPairingsBySession(pairings, sessionPlayerIds, true);
+        }
         // 全選手IDを一括取得してN+1問題を回避
         Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
@@ -69,7 +87,19 @@ public class MatchPairingService {
      */
     @Transactional(readOnly = true)
     public List<MatchPairingDto> getByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber) {
+        return getByDateAndMatchNumber(sessionDate, matchNumber, null);
+    }
+
+    /**
+     * 指定日・試合番号の対戦組み合わせを取得（組織スコープ対応）
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getByDateAndMatchNumber(LocalDate sessionDate, Integer matchNumber, Long organizationId) {
         List<MatchPairing> pairings = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber);
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+            pairings = filterPairingsBySession(pairings, sessionPlayerIds, true);
+        }
         Map<Long, String> playerNames = collectPlayerNames(pairings);
         List<MatchPairingDto> dtos = pairings.stream()
                 .map(p -> convertToDtoWithCache(p, playerNames))
@@ -417,7 +447,7 @@ public class MatchPairingService {
     public AutoMatchingResult autoMatch(AutoMatchingRequest request, Long organizationId) {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
-        List<Long> participantIds = loadWonParticipantIdsForMatch(sessionDate, matchNumber);
+        List<Long> participantIds = loadActiveParticipantIdsForMatch(sessionDate, matchNumber, organizationId);
 
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
@@ -529,7 +559,13 @@ public class MatchPairingService {
             displayHistoryMap.put(entry.getKey(), new ArrayList<>(entry.getValue()));
         }
         if (matchNumber != null) {
+            // 同日他試合のペアも組織スコープでフィルタする。
+            // 同日に複数団体のセッションがあると、別団体の同日ペアが displayHistoryMap に
+            // 入り、当該団体の組み合わせ画面に他団体ペアの履歴が表示されてしまう。
             List<MatchPairing> sameDayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+            if (orgScoped) {
+                sameDayPairings = filterPairingsBySession(sameDayPairings, sessionPlayerIds, true);
+            }
             for (MatchPairing mp : sameDayPairings) {
                 if (!mp.getMatchNumber().equals(matchNumber)) {
                     String pairKey = getPairKey(mp.getPlayer1Id(), mp.getPlayer2Id());
@@ -543,7 +579,8 @@ public class MatchPairingService {
         }
 
         // 同日の既存組み合わせを取得（除外用）— MatchPairingテーブルから
-        Set<String> todayMatches = getTodayPairings(sessionDate, matchNumber);
+        // 組織スコープを引き継ぎ、別団体の前試合ペアが当該団体の候補から除外されないようにする
+        Set<String> todayMatches = getTodayPairings(sessionDate, matchNumber, sessionPlayerIds, orgScoped);
 
         // スコアを計算して最適なペアリングを生成
         List<AutoMatchingResult.PairingSuggestion> pairings = new ArrayList<>();
@@ -640,12 +677,26 @@ public class MatchPairingService {
 
     /**
      * ペアリング/マッチをセッション参加者でフィルタ（組織スコープ）
+     *
+     * orgScoped=true (ADMIN 等の組織スコープ実行) では「両方の選手が当該団体の
+     * セッション参加者である」場合のみ通過させる。同じ選手が複数団体に所属
+     * していたり、別団体のペアリングに対象団体の選手が片方だけ含まれていた
+     * 場合に、別団体のペアリングが ADMIN 画面に混入することを防ぐ。
+     *
+     * orgScoped=false (SUPER_ADMIN 経路で組織非限定) は従来通り片方一致でも
+     * 通過させ、後方互換の挙動を維持する。
      */
     private List<MatchPairing> filterPairingsBySession(List<MatchPairing> pairings, Set<Long> sessionPlayerIds,
                                                         boolean orgScoped) {
         // 組織スコープ時に参加者0人なら空リストを返す（無フィルタにフォールバックしない）
         if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
         if (sessionPlayerIds.isEmpty()) return pairings;
+        if (orgScoped) {
+            return pairings.stream()
+                    .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id())
+                            && sessionPlayerIds.contains(p.getPlayer2Id()))
+                    .collect(Collectors.toList());
+        }
         return pairings.stream()
                 .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id()) || sessionPlayerIds.contains(p.getPlayer2Id()))
                 .collect(Collectors.toList());
@@ -655,43 +706,74 @@ public class MatchPairingService {
                                                 boolean orgScoped) {
         if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
         if (sessionPlayerIds.isEmpty()) return matches;
+        if (orgScoped) {
+            return matches.stream()
+                    .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id())
+                            && sessionPlayerIds.contains(m.getPlayer2Id()))
+                    .collect(Collectors.toList());
+        }
         return matches.stream()
                 .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id()) || sessionPlayerIds.contains(m.getPlayer2Id()))
                 .collect(Collectors.toList());
     }
 
     /**
-     * 指定日・試合番号のWON参加者IDを取得
+     * 指定日・試合番号のアクティブ参加者IDを取得。
+     *
+     * 団体の運用設定により対象ステータスを切り替える:
+     *  - 抽選あり運用 (MONTHLY + 締め切りあり): WON のみ
+     *  - 抽選なし運用 (SAME_DAY もしくは MONTHLY + 締め切りなしモード): PENDING + WON
+     *
+     * 抽選あり運用で PENDING を含めると抽選前の参加希望者まで自動マッチング対象になり、
+     * 抽選結果をバイパスしてしまうため、組織設定に応じた判定が必須。
+     * WAITLISTED / OFFERED / DECLINED / CANCELLED / WAITLIST_DECLINED は常に除外する。
      */
-    private List<Long> loadWonParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber) {
+    private List<Long> loadActiveParticipantIdsForMatch(LocalDate sessionDate, Integer matchNumber,
+                                                         Long organizationId) {
         if (sessionDate == null || matchNumber == null) {
-            log.warn("WON参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
+            log.warn("アクティブ参加者取得をスキップ: sessionDateまたはmatchNumberがnull (sessionDate={}, matchNumber={})",
                     sessionDate, matchNumber);
             return Collections.emptyList();
         }
 
-        return practiceSessionRepository.findBySessionDate(sessionDate)
-                .map(session -> {
-                    List<Long> wonParticipantIds = practiceParticipantRepository
-                            .findBySessionIdAndMatchNumberAndStatus(
-                                    session.getId(),
-                                    matchNumber,
-                                    ParticipantStatus.WON)
-                            .stream()
-                            .map(PracticeParticipant::getPlayerId)
-                            .distinct()
-                            .toList();
-                    if (wonParticipantIds.isEmpty()) {
-                        log.info("WON参加者なし: sessionId={}, sessionDate={}, matchNumber={}",
-                                session.getId(), sessionDate, matchNumber);
-                    }
-                    return wonParticipantIds;
-                })
-                .orElseGet(() -> {
-                    log.info("セッション未登録のためWON参加者なし: sessionDate={}, matchNumber={}",
-                            sessionDate, matchNumber);
-                    return Collections.emptyList();
-                });
+        // 先に対象セッションを取得する。
+        // organizationId が指定されている場合は組織スコープでセッションを取得する。
+        // 同日に複数団体の練習セッションがある場合、findBySessionDate(date) のみだと
+        // 別団体のセッションを拾う / 単一結果前提のクエリで例外になる可能性があるため。
+        // organizationId == null は SUPER_ADMIN 経路で組織非限定の取得を許可する。
+        Optional<com.karuta.matchtracker.entity.PracticeSession> sessionOpt = organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                : practiceSessionRepository.findBySessionDate(sessionDate);
+
+        if (sessionOpt.isEmpty()) {
+            log.info("セッション未登録のためアクティブ参加者なし: sessionDate={}, matchNumber={}, organizationId={}",
+                    sessionDate, matchNumber, organizationId);
+            return Collections.emptyList();
+        }
+
+        com.karuta.matchtracker.entity.PracticeSession session = sessionOpt.get();
+        // 抽選なし運用判定は対象セッションの団体に対して行う。
+        // SUPER_ADMIN 経路では呼び出し側の organizationId が null になるため、
+        // セッションの組織IDで判定しないと SAME_DAY / 締め切りなし団体でも PENDING が誤って除外される。
+        Long effectiveOrganizationId = organizationId != null ? organizationId : session.getOrganizationId();
+        List<ParticipantStatus> targetStatuses = lotteryDeadlineHelper.isLotteryDisabled(effectiveOrganizationId)
+                ? List.of(ParticipantStatus.PENDING, ParticipantStatus.WON)
+                : List.of(ParticipantStatus.WON);
+
+        List<Long> activeParticipantIds = practiceParticipantRepository
+                .findBySessionIdAndMatchNumberAndStatusIn(
+                        session.getId(),
+                        matchNumber,
+                        targetStatuses)
+                .stream()
+                .map(PracticeParticipant::getPlayerId)
+                .distinct()
+                .toList();
+        if (activeParticipantIds.isEmpty()) {
+            log.info("アクティブ参加者なし: sessionId={}, sessionDate={}, matchNumber={}, statuses={}",
+                    session.getId(), sessionDate, matchNumber, targetStatuses);
+        }
+        return activeParticipantIds;
     }
 
     private Map<String, List<LocalDate>> getMatchHistory(List<Long> participantIds,
@@ -714,11 +796,22 @@ public class MatchPairingService {
 
     /**
      * 同日の既存対戦を取得（Matchテーブルから）
+     *
+     * orgScoped=true の場合は両方の選手が当該団体セッション参加者である対戦のみ
+     * 返す。同日に複数団体のセッションがあり共有選手がいる場合、別団体の前試合
+     * 対戦が含まれて自動マッチング候補から誤って除外されることを防ぐ。
      */
-    private Set<String> getTodayMatches(LocalDate sessionDate, Integer currentMatchNumber) {
+    private Set<String> getTodayMatches(LocalDate sessionDate, Integer currentMatchNumber,
+                                         Set<Long> sessionPlayerIds, boolean orgScoped) {
         List<Object[]> results = matchRepository.findTodayMatches(sessionDate, currentMatchNumber);
 
         return results.stream()
+                .filter(row -> {
+                    if (!orgScoped) return true;
+                    Long playerA = (Long) row[0];
+                    Long playerB = (Long) row[1];
+                    return sessionPlayerIds.contains(playerA) && sessionPlayerIds.contains(playerB);
+                })
                 .map(row -> {
                     Long playerA = (Long) row[0];
                     Long playerB = (Long) row[1];
@@ -729,18 +822,26 @@ public class MatchPairingService {
 
     /**
      * 同日の既存組み合わせを取得（MatchPairingテーブルから、同日の他の試合番号）
+     *
+     * orgScoped=true の場合は両方の選手が当該団体セッション参加者であるペアのみ
+     * 対象とする。これにより自動マッチング側で別団体のペアが除外候補に混入する
+     * ことを防ぐ（filterPairingsBySession と同じ AND 条件）。
      */
-    private Set<String> getTodayPairings(LocalDate sessionDate, Integer currentMatchNumber) {
+    private Set<String> getTodayPairings(LocalDate sessionDate, Integer currentMatchNumber,
+                                          Set<Long> sessionPlayerIds, boolean orgScoped) {
         // MatchPairingテーブルから同日の他の試合番号の組み合わせを取得
         List<MatchPairing> todayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+        if (orgScoped) {
+            todayPairings = filterPairingsBySession(todayPairings, sessionPlayerIds, true);
+        }
 
         Set<String> pairKeys = todayPairings.stream()
                 .filter(p -> p.getMatchNumber() < currentMatchNumber)
                 .map(p -> getPairKey(p.getPlayer1Id(), p.getPlayer2Id()))
                 .collect(Collectors.toSet());
 
-        // Matchテーブルからも同日の対戦を取得してマージ
-        pairKeys.addAll(getTodayMatches(sessionDate, currentMatchNumber));
+        // Matchテーブルからも同日の対戦を取得してマージ（組織スコープも引き継ぐ）
+        pairKeys.addAll(getTodayMatches(sessionDate, currentMatchNumber, sessionPlayerIds, orgScoped));
 
         return pairKeys;
     }

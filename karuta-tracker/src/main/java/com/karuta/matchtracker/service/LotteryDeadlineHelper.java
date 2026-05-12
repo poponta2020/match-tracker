@@ -143,4 +143,21 @@ public class LotteryDeadlineHelper {
                 .map(Organization::getDeadlineType)
                 .orElse(DeadlineType.MONTHLY);
     }
+
+    /**
+     * 当該団体が「抽選を運用しない」モードかどうか。
+     *
+     * 以下のいずれかに該当する場合 true:
+     *  - DeadlineType.SAME_DAY (例: わすらもち会、先着順で抽選なし)
+     *  - DeadlineType.MONTHLY かつ isNoDeadline=true (締め切りなしモード、抽選を実行しない)
+     *
+     * 抽選なし運用では参加者は PENDING のまま組み合わせ対象になる。
+     * 抽選あり運用では WON のみ組み合わせ対象とし、PENDING (抽選前の参加希望者) は除外する。
+     */
+    public boolean isLotteryDisabled(Long organizationId) {
+        if (getDeadlineType(organizationId) == DeadlineType.SAME_DAY) {
+            return true;
+        }
+        return isNoDeadline(organizationId);
+    }
 }

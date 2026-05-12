@@ -7,6 +7,7 @@ import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.PracticeParticipantService;
 import com.karuta.matchtracker.service.PracticeSessionService;
 import com.karuta.matchtracker.util.AdminScopeValidator;
+import com.karuta.matchtracker.util.OrganizationScopeResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class PracticeSessionController {
     private final com.karuta.matchtracker.service.DensukeSyncService densukeSyncService;
     private final com.karuta.matchtracker.service.DensukePageCreateService densukePageCreateService;
     private final com.karuta.matchtracker.service.AdjacentRoomService adjacentRoomService;
+    private final OrganizationScopeResolver organizationScopeResolver;
 
     /**
      * IDで練習日を取得
@@ -54,14 +56,35 @@ public class PracticeSessionController {
     /**
      * 日付で練習日を取得
      *
+     * 組織スコープのルール（OrganizationScopeResolver と一致）:
+     *  - ADMIN: 自団体スコープを強制（adminOrganizationId）。クエリで他団体IDが
+     *    指定された場合は 403。
+     *  - PLAYER: organizationId 任意指定可。指定時は本人の所属団体に含まれる
+     *    必要があり、不一致なら 403。未指定なら日付のみで取得。
+     *  - SUPER_ADMIN: organizationId 任意指定可。指定なしなら日付のみで取得。
+     *
+     * 同日に複数団体のセッションがある場合、画面側 (PairingGenerator 等) は
+     * organizationId を明示的に渡すことで autoMatch / createBatch と同じ組織の
+     * セッション・pairingIncludesPending を取得できる。
+     *
+     * @RequireRole は ADMIN への adminOrganizationId 設定を有効化するために必須。
+     * RoleCheckInterceptor は @RequireRole 未付与のメソッドではこの属性をセットせず
+     * 早期 return するため、付けないと ADMIN 経路の組織スコープが効かない。
+     *
      * @param date 日付
+     * @param organizationId 組織スコープ（任意。PLAYER / SUPER_ADMIN が同日複数団体時の曖昧性を解消するために指定可能）
      * @return 練習日情報
      */
     @GetMapping("/date")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<PracticeSessionDto> getSessionByDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        log.debug("GET /api/practice-sessions/date?date={} - Getting practice session by date", date);
-        PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        log.debug("GET /api/practice-sessions/date?date={}, organizationId={} - Getting practice session by date",
+                date, organizationId);
+        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date, effectiveOrgId);
         return ResponseEntity.ok(session);
     }
 

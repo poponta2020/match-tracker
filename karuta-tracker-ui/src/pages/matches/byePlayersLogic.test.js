@@ -53,9 +53,10 @@ describe('computeByePlayersByMatch (BulkResultInput)', () => {
     expect(result[1].find(p => p.name === 'D')).toBeUndefined();
   });
 
-  it('excludes WAITLISTED / OFFERED / PENDING from bye (only WON is bye)', () => {
+  it('抽選なし運用 (pairingIncludesPending=true): PENDING を組み合わせ対象に含める', () => {
     const sessionData = {
       totalMatches: 1,
+      pairingIncludesPending: true,
       matchParticipants: {
         '1': [
           { name: 'A', status: 'WON' },
@@ -74,6 +75,50 @@ describe('computeByePlayersByMatch (BulkResultInput)', () => {
     ];
 
     const result = computeByePlayersByMatch(sessionData, allPairings, allParticipants);
+    expect(result[1]).toEqual([{ id: 1, name: 'A' }, { id: 4, name: 'D' }]);
+  });
+
+  it('抽選あり運用 (pairingIncludesPending=false): PENDING は組み合わせ対象から除外する', () => {
+    const sessionData = {
+      totalMatches: 1,
+      pairingIncludesPending: false,
+      matchParticipants: {
+        '1': [
+          { name: 'A', status: 'WON' },
+          { name: 'B', status: 'WAITLISTED' },
+          { name: 'C', status: 'OFFERED' },
+          { name: 'D', status: 'PENDING' },
+        ],
+      },
+    };
+    const allPairings = [];
+    const allParticipants = [
+      { id: 1, name: 'A' },
+      { id: 2, name: 'B' },
+      { id: 3, name: 'C' },
+      { id: 4, name: 'D' },
+    ];
+
+    const result = computeByePlayersByMatch(sessionData, allPairings, allParticipants);
+    expect(result[1]).toEqual([{ id: 1, name: 'A' }]);
+  });
+
+  it('pairingIncludesPending 未指定時は安全側 (PENDING を除外) で動作する', () => {
+    const sessionData = {
+      totalMatches: 1,
+      matchParticipants: {
+        '1': [
+          { name: 'A', status: 'WON' },
+          { name: 'D', status: 'PENDING' },
+        ],
+      },
+    };
+    const allParticipants = [
+      { id: 1, name: 'A' },
+      { id: 4, name: 'D' },
+    ];
+
+    const result = computeByePlayersByMatch(sessionData, [], allParticipants);
     expect(result[1]).toEqual([{ id: 1, name: 'A' }]);
   });
 
@@ -145,11 +190,30 @@ describe('getByePlayerNamesForMatch (MatchResultsView)', () => {
     expect(result).not.toContain('D');
   });
 
-  it('excludes WAITLISTED / OFFERED from bye names', () => {
+  it('抽選なし運用 (pairingIncludesPending=true): PENDING を組み合わせ対象に含める', () => {
     const entries = [
       { name: 'A', status: 'WON' },
       { name: 'B', status: 'WAITLISTED' },
       { name: 'C', status: 'OFFERED' },
+      { name: 'D', status: 'PENDING' },
+    ];
+    expect(getByePlayerNamesForMatch(entries, [], true)).toEqual(['A', 'D']);
+  });
+
+  it('抽選あり運用 (pairingIncludesPending=false): PENDING は除外する', () => {
+    const entries = [
+      { name: 'A', status: 'WON' },
+      { name: 'B', status: 'WAITLISTED' },
+      { name: 'C', status: 'OFFERED' },
+      { name: 'D', status: 'PENDING' },
+    ];
+    expect(getByePlayerNamesForMatch(entries, [], false)).toEqual(['A']);
+  });
+
+  it('pairingIncludesPending 未指定時は安全側 (PENDING を除外) で動作する', () => {
+    const entries = [
+      { name: 'A', status: 'WON' },
+      { name: 'D', status: 'PENDING' },
     ];
     expect(getByePlayerNamesForMatch(entries, [])).toEqual(['A']);
   });

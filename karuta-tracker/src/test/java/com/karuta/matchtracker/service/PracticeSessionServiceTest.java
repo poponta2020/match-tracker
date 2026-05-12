@@ -86,6 +86,9 @@ class PracticeSessionServiceTest {
     @Mock
     private WaitlistPromotionService waitlistPromotionService;
 
+    @Mock
+    private LotteryDeadlineHelper lotteryDeadlineHelper;
+
     @InjectMocks
     private PracticeSessionService practiceSessionService;
 
@@ -104,6 +107,10 @@ class PracticeSessionServiceTest {
                 .sessionDate(today)
                 .totalMatches(10)
                 .build();
+        // enrichSessionWithParticipants を経由するテストでのみ参照される。
+        // 参照しないテスト（NotFound 系・ findNextSessionForPlayer など）で
+        // UnnecessaryStubbingException を起こさないよう lenient で登録する。
+        lenient().when(lotteryDeadlineHelper.isLotteryDisabled(any())).thenReturn(false);
     }
 
     @Test
@@ -122,6 +129,31 @@ class PracticeSessionServiceTest {
         assertThat(result.getSessionDate()).isEqualTo(today);
         assertThat(result.getTotalMatches()).isEqualTo(10);
         verify(practiceSessionRepository).findById(1L);
+    }
+
+    @Test
+    @DisplayName("findById: 抽選なし運用団体ではpairingIncludesPending=true、抽選あり運用ではfalseを返す")
+    void testFindById_pairingIncludesPendingReflectsLotteryDisabled() {
+        // Given: organizationId を持つセッション
+        PracticeSession sessionWithOrg = PracticeSession.builder()
+                .id(2L)
+                .sessionDate(today)
+                .totalMatches(10)
+                .organizationId(99L)
+                .build();
+        when(practiceSessionRepository.findById(2L)).thenReturn(Optional.of(sessionWithOrg));
+        when(practiceParticipantRepository.findBySessionId(2L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // 抽選なし運用 → pairingIncludesPending=true
+        when(lotteryDeadlineHelper.isLotteryDisabled(99L)).thenReturn(true);
+        PracticeSessionDto resultDisabled = practiceSessionService.findById(2L);
+        assertThat(resultDisabled.getPairingIncludesPending()).isTrue();
+
+        // 抽選あり運用 → pairingIncludesPending=false
+        when(lotteryDeadlineHelper.isLotteryDisabled(99L)).thenReturn(false);
+        PracticeSessionDto resultEnabled = practiceSessionService.findById(2L);
+        assertThat(resultEnabled.getPairingIncludesPending()).isFalse();
     }
 
     @Test
@@ -151,6 +183,49 @@ class PracticeSessionServiceTest {
         // Then
         assertThat(result.getSessionDate()).isEqualTo(today);
         verify(practiceSessionRepository).findBySessionDate(today);
+    }
+
+    @Test
+    @DisplayName("findByDateWithParticipants(date, organizationId): 組織スコープでセッションを取得する")
+    void testFindByDateWithParticipants_orgScoped() {
+        // Given: 同日に複数団体のセッションがある場面を想定
+        Long adminOrgId = 7L;
+        PracticeSession orgSession = PracticeSession.builder()
+                .id(100L)
+                .sessionDate(today)
+                .totalMatches(10)
+                .organizationId(adminOrgId)
+                .build();
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, adminOrgId))
+                .thenReturn(Optional.of(orgSession));
+        when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDateWithParticipants(today, adminOrgId);
+
+        // Then: 組織スコープ取得のみが使われ、日付のみ取得は呼ばれない
+        assertThat(result.getId()).isEqualTo(100L);
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, adminOrgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(today);
+    }
+
+    @Test
+    @DisplayName("findByDateWithParticipants(date, null): organizationId=null は日付のみで取得する（SUPER_ADMIN/PLAYER 経路）")
+    void testFindByDateWithParticipants_nullOrgIdUsesDateOnly() {
+        // Given
+        when(practiceSessionRepository.findBySessionDate(today))
+                .thenReturn(Optional.of(testSession));
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDateWithParticipants(today, null);
+
+        // Then: 日付のみで取得され、組織スコープ取得は呼ばれない
+        assertThat(result.getSessionDate()).isEqualTo(today);
+        verify(practiceSessionRepository).findBySessionDate(today);
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
     }
 
     @Test

@@ -194,6 +194,12 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Integer matchNumber, Collection<ParticipantStatus> statuses);
 
     /**
+     * 特定セッション・試合・複数ステータスの参加者を取得
+     */
+    List<PracticeParticipant> findBySessionIdAndMatchNumberAndStatusIn(
+            Long sessionId, Integer matchNumber, Collection<ParticipantStatus> statuses);
+
+    /**
      * 特定セッション・試合・ステータスの参加者数を取得
      */
     long countBySessionIdAndMatchNumberAndStatus(

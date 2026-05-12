@@ -342,9 +342,14 @@ const MatchResultsView = () => {
 
   // 対戦組み合わせに含まれていない参加者（抜けの選手）を算出
   // （byePlayersLogic.js の純粋関数に委譲）
+  // pairingIncludesPending: 抽選なし運用 (SAME_DAY/締め切りなし) のとき true
   const getByePlayersForMatch = (matchNumber) => {
     const matchParticipants = session?.matchParticipants?.[matchNumber] || [];
-    return getByePlayerNamesForMatch(matchParticipants, getPairingsForMatch(matchNumber));
+    return getByePlayerNamesForMatch(
+      matchParticipants,
+      getPairingsForMatch(matchNumber),
+      session?.pairingIncludesPending === true
+    );
   };
 
   const currentByePlayers = getByePlayersForMatch(currentMatchNumber);

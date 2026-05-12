@@ -56,6 +56,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 3. 日付で練習日を取得
         mockMvc.perform(get("/api/practice-sessions/date")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", sessionDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sessionId));
@@ -267,6 +268,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(get("/api/practice-sessions/date")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", LocalDate.now().plusYears(10).toString()))
                 .andExpect(status().isNotFound());
     }

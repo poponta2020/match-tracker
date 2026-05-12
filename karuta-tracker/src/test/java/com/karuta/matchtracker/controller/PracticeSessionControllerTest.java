@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * PracticeSessionControllerのテスト
  */
 @WebMvcTest(PracticeSessionController.class)
+@Import(com.karuta.matchtracker.util.OrganizationScopeResolver.class)
 @DisplayName("PracticeSessionController 単体テスト")
 class PracticeSessionControllerTest {
 
@@ -122,19 +124,166 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions/date - 日付で練習日を取得できる")
+    @DisplayName("GET /api/practice-sessions/date - PLAYER は organizationId=null で取得する（日付のみ検索）")
     void testGetSessionByDate() throws Exception {
-        // Given
-        when(practiceSessionService.findByDateWithParticipants(today)).thenReturn(testSessionDto);
+        // Given: PLAYER は adminOrganizationId を持たないので、サービスには null が渡る
+        when(practiceSessionService.findByDateWithParticipants(today, null)).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
-                        .param("date", today.toString()))
+                        .param("date", today.toString())
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(practiceSessionService).findByDateWithParticipants(today);
+        verify(practiceSessionService).findByDateWithParticipants(today, null);
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - ADMIN は RoleCheckInterceptor 経由で adminOrganizationId が設定されサービスに伝播する")
+    void testGetSessionByDateScopedByAdminOrganizationId() throws Exception {
+        // Given: ADMIN ロールのプレイヤーで、Player.adminOrganizationId=7L を持つ。
+        // RoleCheckInterceptor が X-User-Role=ADMIN を見て playerRepository.findById から
+        // adminOrganizationId を取り出し、リクエスト属性にセットする経路を検証する。
+        Long adminOrgId = 7L;
+        Long adminUserId = 99L;
+        com.karuta.matchtracker.entity.Player adminPlayer = new com.karuta.matchtracker.entity.Player();
+        adminPlayer.setId(adminUserId);
+        adminPlayer.setName("管理者");
+        adminPlayer.setPassword("dummy");
+        adminPlayer.setGender(com.karuta.matchtracker.entity.Player.Gender.その他);
+        adminPlayer.setDominantHand(com.karuta.matchtracker.entity.Player.DominantHand.右);
+        adminPlayer.setRole(com.karuta.matchtracker.entity.Player.Role.ADMIN);
+        adminPlayer.setAdminOrganizationId(adminOrgId);
+        when(playerRepository.findById(adminUserId)).thenReturn(java.util.Optional.of(adminPlayer));
+        when(practiceSessionService.findByDateWithParticipants(today, adminOrgId)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(1));
+
+        // サービスは adminOrganizationId=7L で呼ばれる（null で呼ばれてはいけない）
+        verify(practiceSessionService).findByDateWithParticipants(today, adminOrgId);
+        verify(practiceSessionService, org.mockito.Mockito.never())
+                .findByDateWithParticipants(today, (Long) null);
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - SUPER_ADMIN は organizationId=null で取得する")
+    void testGetSessionByDateForSuperAdmin() throws Exception {
+        // Given: SUPER_ADMIN は adminOrganizationId を持たないため null が渡る
+        when(practiceSessionService.findByDateWithParticipants(today, null)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(practiceSessionService).findByDateWithParticipants(today, null);
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - X-User-Role ヘッダーなしは 403")
+    void testGetSessionByDateWithoutAuthIsForbidden() throws Exception {
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString()))
+                .andExpect(status().isForbidden());
+
+        verify(practiceSessionService, org.mockito.Mockito.never())
+                .findByDateWithParticipants(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - ADMIN が他団体IDを指定すると 403")
+    void testGetSessionByDateAdminMismatchOrgIsForbidden() throws Exception {
+        // Given: ADMIN (adminOrganizationId=7L) が他団体 99L を指定
+        Long adminOrgId = 7L;
+        Long adminUserId = 99L;
+        com.karuta.matchtracker.entity.Player adminPlayer = new com.karuta.matchtracker.entity.Player();
+        adminPlayer.setId(adminUserId);
+        adminPlayer.setName("管理者");
+        adminPlayer.setPassword("dummy");
+        adminPlayer.setGender(com.karuta.matchtracker.entity.Player.Gender.その他);
+        adminPlayer.setDominantHand(com.karuta.matchtracker.entity.Player.DominantHand.右);
+        adminPlayer.setRole(com.karuta.matchtracker.entity.Player.Role.ADMIN);
+        adminPlayer.setAdminOrganizationId(adminOrgId);
+        when(playerRepository.findById(adminUserId)).thenReturn(java.util.Optional.of(adminPlayer));
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .param("organizationId", "99")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString()))
+                .andExpect(status().isForbidden());
+
+        verify(practiceSessionService, org.mockito.Mockito.never())
+                .findByDateWithParticipants(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - PLAYER が所属団体IDを指定すると組織スコープで取得する")
+    void testGetSessionByDatePlayerWithBelongingOrgIsScoped() throws Exception {
+        // Given
+        Long playerUserId = 10L;
+        Long orgId = 7L;
+        when(organizationService.getPlayerOrganizationIds(playerUserId))
+                .thenReturn(List.of(orgId, 8L));
+        when(practiceSessionService.findByDateWithParticipants(today, orgId)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .param("organizationId", orgId.toString())
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(practiceSessionService).findByDateWithParticipants(today, orgId);
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - PLAYER が所属外の団体IDを指定すると 403")
+    void testGetSessionByDatePlayerWithNonBelongingOrgIsForbidden() throws Exception {
+        // Given
+        Long playerUserId = 10L;
+        when(organizationService.getPlayerOrganizationIds(playerUserId))
+                .thenReturn(List.of(7L));
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .param("organizationId", "99")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                .andExpect(status().isForbidden());
+
+        verify(practiceSessionService, org.mockito.Mockito.never())
+                .findByDateWithParticipants(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/practice-sessions/date - SUPER_ADMIN が organizationId を指定すると組織スコープで取得する")
+    void testGetSessionByDateSuperAdminWithExplicitOrgIsScoped() throws Exception {
+        // Given
+        Long orgId = 7L;
+        when(practiceSessionService.findByDateWithParticipants(today, orgId)).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(get("/api/practice-sessions/date")
+                        .param("date", today.toString())
+                        .param("organizationId", orgId.toString())
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(practiceSessionService).findByDateWithParticipants(today, orgId);
     }
 
     @Test

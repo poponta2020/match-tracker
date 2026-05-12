@@ -325,8 +325,18 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
   - 同じ選手同士のペアは不可
   - 結果入力済み（ロック済み）ペア・閲覧モード・他試合に未保存変更がある時（`isReadOnly`）は入替操作を受け付けない
 
+**組み合わせ対象となる参加者の範囲:**
+- 団体の運用設定により対象ステータスが切り替わる:
+  - **抽選あり運用** (`DeadlineType.MONTHLY` で締め切りなしモードでない、北海道大学かるた会など): `status === 'WON'` のみ。抽選前の `PENDING` 参加希望者は対象外。
+  - **抽選なし運用** (`DeadlineType.SAME_DAY` または `MONTHLY` + `isNoDeadline=true`、わすらもち会など): `status === 'WON'` または `status === 'PENDING'`。抽選を運用しないため参加登録時の `PENDING` のまま組み合わせ対象になる。
+- `WAITLISTED` / `OFFERED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` は常に組み合わせ対象から除外する。
+- 対象画面: `PairingGenerator`（参加者表示・自動マッチング）、`BulkResultInput`（抜け番算出）、`MatchResultsView`（抜け番表示）すべて同一ルール。
+- 判定ヘルパー: `LotteryDeadlineHelper.isLotteryDisabled(organizationId)` が `true` の場合に抽選なし運用扱い。
+- バックエンドは `MatchPairingService.loadActiveParticipantIdsForMatch()` で上記ルールに従ってアクティブ参加者IDを取得する。
+- フロント側は `PracticeSessionDto.pairingIncludesPending`（バックエンドが `isLotteryDisabled` を反映して返すフラグ）を見て判定する。これによりバックエンドとフロントを単一ルールに揃え、抽選前 `PENDING` の自動マッチング流入を防ぐ。
+
 **自動マッチング:**
-- 参加者IDリストを入力として最適なペアリングを生成
+- 上記のアクティブ参加者IDリストを入力として最適なペアリングを生成
 - アルゴリズム:
   1. 過去30日のペアリング履歴（`match_pairings` テーブル）と対戦履歴（`matches` テーブル）を統合取得
   2. 同日の前の試合で既に組まれたペアを除外
@@ -437,10 +447,13 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 奇数参加者の練習で対戦相手がいない選手（抜け番）の活動を試合番号ごとに記録する機能。
 
 **抜け番の判定ルール:**
-- 抜け番 = 「その試合番号の WON 参加者」のうち、組み合わせ（MatchPairing）に含まれない選手
-- `PracticeSessionDto.matchParticipants` には `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/`OFFERED`/`CANCELLED`）が含まれるため、**抜け番候補を算出する際は必ず `status === 'WON'` でフィルタすること**
+- 抜け番 = 「その試合番号のアクティブ参加者」のうち、組み合わせ（MatchPairing）に含まれない選手
+- アクティブ参加者の対象ステータスは「3.3.1 組み合わせ対象となる参加者の範囲」と完全に同一ルール:
+  - **抽選あり運用**（`pairingIncludesPending === false`）: `status === 'WON'` のみ。抽選前の `PENDING` は抜け番候補にも含めない
+  - **抽選なし運用**（`pairingIncludesPending === true`）: `status === 'WON' || status === 'PENDING'`。抽選を運用しないため `PENDING` のまま組み合わせ対象 = 抜け番候補
+- `PracticeSessionDto.matchParticipants` には `DECLINED` / `WAITLIST_DECLINED` 以外の全ステータス（`WON`/`PENDING`/`WAITLISTED`/`OFFERED`/`CANCELLED`）が含まれるため、**抜け番候補を算出する際は `PracticeSessionDto.pairingIncludesPending` を見て上記の通りフィルタすること**（true なら `WON||PENDING`、false なら `WON` のみ）
 - キャンセル済み（`CANCELLED`）・キャンセル待ち（`WAITLISTED`/`OFFERED`）の選手は抜け番として扱わない
-- 対象画面: `PairingGenerator` / `BulkResultInput` / `MatchResultsView` いずれも同じルールで算出する
+- 対象画面: `PairingGenerator` / `BulkResultInput` / `MatchResultsView` いずれも同じルールで算出する（フロントロジックは `byePlayersLogic.js`）
 
 **活動種別:**
 
