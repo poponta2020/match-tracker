@@ -1,14 +1,34 @@
 # Render PostgreSQL データベース移行手順書
 
-Renderの無料プランPostgreSQLデータベースは90日間の制限があります。この手順書では、既存のデータを新しいデータベースに移行する方法を説明します。
+Renderの無料プラン PostgreSQL は約30日で削除されるため、定期的に新しいDBを作成してデータを移行する必要がある。
 
-## 前提条件
+> **2026-05 以降は GitHub Actions による自動マイグレーションが動作している。**
+> 通常運用では本書の手動手順は不要。自動化の初期セットアップ手順は
+> [`render-db-migration-setup.md`](render-db-migration-setup.md) を参照。
+>
+> 本書は以下のケースで使用する：
+> - 自動ワークフローが失敗し、フォールバックで手動移行が必要なとき
+> - 自動ワークフローを止めて緊急で手動運用に戻すとき
+> - 動作原理を理解するための参照資料として
+
+## 自動運用の挙動（参考）
+
+- `.github/workflows/migrate-render-db.yml` が毎日 0:00 JST に起動
+- スクリプト内で「現DBが作成から25日未満ならスキップ」のガードあり
+- 25日以上経過したら自動で：dump → 新DB作成 → restore → env vars 差し替え → 再デプロイ → ヘルスチェック → Secrets 書き戻し
+- 失敗時は env vars を旧DBにロールバック
+- 旧DB は 14日後に `.github/workflows/cleanup-old-render-db.yml` が自動削除
+- 実行結果は LINE Messaging API で通知される
+
+---
+
+## 手動移行手順（自動ワークフロー停止時のフォールバック）
+
+**前提条件:**
 
 - PostgreSQL 18のクライアントツールがインストールされていること
 - 既存のデータベースへのアクセス権限があること
 - 新しいデータベースを作成済みであること
-
-## 手順
 
 ### 1. PostgreSQL 18クライアントツールのインストール
 
@@ -281,8 +301,9 @@ ERROR: permission denied to change default privileges
 
 ## まとめ
 
-- Renderの無料DBは90日制限があるため、定期的な移行が必要
-- pg_dumpとpsqlを使ってデータを完全に移行可能
+- Renderの無料DBは約30日制限があるため、定期的な移行が必要
+- 通常は GitHub Actions による自動マイグレーションが処理する（`migrate-render-db.yml`）
+- 手動フォールバック時は pg_dumpとpsqlを使ってデータを完全に移行可能
 - External URLとInternal URLの使い分けが重要
 - JDBC URLにはクエリパラメータを付けない
 - **Internal接続では必ずポート番号 `:5432` を明示する**
@@ -317,4 +338,4 @@ The connection attempt failed.
 
 ---
 
-**最終更新:** 2026-03-18
+**最終更新:** 2026-05-12（自動マイグレーション導入に伴い手動手順をフォールバック扱いに変更）
