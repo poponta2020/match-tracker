@@ -15,6 +15,10 @@
 #
 set -euo pipefail
 
+# Render PostgreSQL は SSL 必須。libpq のデフォルト sslmode=prefer だとフォールバックして
+# 接続が切られる場合があるので、全 psql/pg_dump に明示的に require を強制。
+export PGSSLMODE=require
+
 DRY_RUN="${DRY_RUN:-false}"
 FORCE="${FORCE:-false}"
 MIN_AGE_DAYS="${MIN_AGE_DAYS:-25}"
@@ -204,8 +208,8 @@ while :; do
   STATUS=$(echo "$STATUS_JSON" | jq -r '.status // .postgres.status // empty')
   log "  status=$STATUS"
   if [[ "$STATUS" == "available" ]]; then
-    log "新DBが available。接続安定化のため 30 秒待機"
-    sleep 30
+    log "新DBが available。接続安定化のため 60 秒待機"
+    sleep 60
     break
   fi
   if [[ "$STATUS" == "suspended" || "$STATUS" == "deleting" || "$STATUS" == "unknown" ]]; then
@@ -252,6 +256,28 @@ NEW_PG_INT_HOST=$(echo "$NEW_PG_INT_URL" | sed -E 's|^postgresql://[^@]+@([^:/]+
 log "新DB: host=$NEW_PG_HOST  internalHost=$NEW_PG_INT_HOST  db=$NEW_PG_DATABASE"
 
 #=== 6. リストア =============================================================
+# Available になった直後でも SSL ハンドシェイクが安定しないことがあるので、
+# リストア前に簡単な接続テストでリトライ。
+log "新DBへの SSL 接続テスト（最大 5 回 × 30 秒）"
+CONN_OK=false
+for i in 1 2 3 4 5; do
+  if PGPASSWORD="$NEW_PG_PASSWORD" psql \
+    -h "$NEW_PG_HOST" -U "$NEW_DB_USER" -d "$NEW_PG_DATABASE" \
+    -c "SELECT 1;" > /tmp/conn-test.log 2>&1; then
+    log "  接続テスト成功 (attempt $i)"
+    CONN_OK=true
+    break
+  fi
+  log "  接続テスト失敗 (attempt $i): $(tail -1 /tmp/conn-test.log)"
+  sleep 30
+done
+
+if [[ "$CONN_OK" != "true" ]]; then
+  err "新DBへの接続テストが5回失敗"
+  notify failure "Render DB 自動マイグレーション失敗" "新DBへの接続が安定しません（SSL ハンドシェイク不安定）。"
+  exit 1
+fi
+
 log "新DBへリストア実行"
 PGPASSWORD="$NEW_PG_PASSWORD" psql \
   -h "$NEW_PG_HOST" -U "$NEW_DB_USER" -d "$NEW_PG_DATABASE" \
