@@ -1,8 +1,8 @@
 ---
 name: review
-description: クロスレビュー用プロンプトを生成するスキル。PRの差分からレビュー依頼プロンプトを作成し、外部レビューアー（Codex等）に渡せる形にする。レビューを依頼したいとき、/reviewで使用する。
+description: クロスレビュー自動ループの起点となるスキル。PR差分から Codex CLI で評価 → 結果ファイル（CRITICAL/WARNING/INFO形式）を得る → 指摘ありなら /fix を、指摘なしなら /ship を自動連鎖呼び出しする。レビューを依頼したいとき、/reviewで使用する。
 user-invocable: true
-allowed-tools: Bash, Read, Write, Glob, Grep
+allowed-tools: Bash, Read, Write, Glob, Grep, Skill
 argument-hint: [PR番号（任意。省略時は現在のブランチのPRを検出）]
 ---
 
@@ -62,10 +62,69 @@ git checkout main
 6. 生成結果を `scripts/review/output/review-prompt-pr{番号}-{レビュー回数}.md` に保存する
 
 7. レビュー結果の受け皿ファイルを空で作成する
-   - `scripts/review/output/review-result-pr{番号}-{レビュー回数}.md` を空ファイルとして作成する（レビュー担当がここに結果を貼り付ける）
+   - `scripts/review/output/review-result-pr{番号}-{レビュー回数}.md` を空ファイルとして作成する（Codex がここに結果を書き込む）
 
-8. ユーザーに以下を案内する:
-   - 生成されたプロンプトファイルのパス
-   - 「このファイルの内容をレビュー担当AI（Codex or Claude Code）に貼り付けてください」
-   - 「Codexがレビュー結果を `scripts/review/output/review-result-pr{番号}-{レビュー回数}.md` に直接書き込みます」
-   - 「書き込み完了後、`/fix` でこのAIに修正依頼できます」
+8. Codex CLI を起動してレビューを自動実行する
+
+   **前提**: `codex` コマンドが PATH にあり、ChatGPT または OpenAI API キーで認証済みであること。
+   - 未インストール: `npm install -g @openai/codex`
+   - 未認証: `codex login`
+
+   実行コマンド:
+
+   ```bash
+   cat scripts/review/output/review-prompt-pr{番号}-{レビュー回数}.md \
+     | codex exec --sandbox workspace-write -
+   ```
+
+   - `codex exec` は非対話モードで実行される
+   - `--sandbox workspace-write` でリポジトリ配下へのファイル書き込みを許可（プロンプト末尾の指示通り `{{RESULT_FILE}}` に書き込む）
+   - **Bash 呼び出し時の timeout は 600000ms（10分）を指定すること**。大規模 PR では数分かかる
+   - stderr に進捗ログ、stdout に最終メッセージが流れる
+
+9. レビュー結果を検証する
+
+   ```bash
+   test -s scripts/review/output/review-result-pr{番号}-{レビュー回数}.md
+   ```
+
+   - **非空で存在する場合** → 次へ進む
+   - **空 or 存在しない場合** → Codex が指示通り書き込めなかった可能性。stderr のログを確認してユーザーに状況を報告し、中断する（自動で再実行はしない）
+
+10. レビュー結果の簡易サマリーを表示する
+    - 結果ファイルから CRITICAL / WARNING / INFO の件数をカウントして表示
+    - 「総合評価」（APPROVE / REQUEST_CHANGES / COMMENT）を抽出して表示
+    - レビュー結果ファイルのパスも併せて表示
+
+11. 自動連鎖呼び出し（auto-loop）
+
+    レビュー結果と現在のレビュー回数（step 2 で算出した値）に基づき、次のスキルを自動実行する。
+
+    **判定ロジック**:
+
+    | 条件 | 次のアクション |
+    |---|---|
+    | CRITICAL=0 かつ WARNING=0 | `/ship {PR番号}` を Skill tool で呼び出す |
+    | CRITICAL≥1 または WARNING≥1（かつレビュー回数 ≤ 5） | `/fix {PR番号}` を Skill tool で呼び出す |
+    | CRITICAL≥1 または WARNING≥1（かつレビュー回数 > 5） | **自動継続せず停止**してユーザーに報告 |
+
+    **報告メッセージ**:
+
+    - **/ship に進む場合**:
+      ```
+      指摘なし（CRITICAL: 0, WARNING: 0, INFO: Z）。`/ship {PR番号}` を自動実行します。
+      結果ファイル: scripts/review/output/review-result-pr{番号}-{回数}.md
+      ```
+    - **/fix に進む場合**:
+      ```
+      指摘 N 件 (CRITICAL: X, WARNING: Y, INFO: Z)。`/fix {PR番号}` を自動実行します。
+      結果ファイル: scripts/review/output/review-result-pr{番号}-{回数}.md
+      ```
+    - **最大反復到達時（停止）**:
+      ```
+      Review round が 5 を超えました。Codex の指摘が収束していないため、自動ループを停止します。
+      最後のレビュー結果: scripts/review/output/review-result-pr{番号}-{回数}.md
+      指摘内容を確認のうえ、手動で対応してください。
+      ```
+
+    **件数のパースに失敗した場合**: 「レビュー結果のフォーマット解析に失敗しました」とユーザーに報告し、自動継続せず停止する（誤った自動実行を避けるため）。
