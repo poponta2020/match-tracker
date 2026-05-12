@@ -35,6 +35,22 @@ log()  { echo "[$(date -u +%H:%M:%S)] $*"; }
 warn() { echo "[$(date -u +%H:%M:%S)] WARN: $*" >&2; }
 err()  { echo "[$(date -u +%H:%M:%S)] ERROR: $*" >&2; }
 
+# bash の `trap ERR` は明示的な `exit 1` では発火しないため、EXIT trap でカバーする。
+# 失敗時に cleanup（or resume_old_pg のみ）を確実に呼ぶ。
+on_exit() {
+  local code=$?
+  set +e
+  if [[ $code -ne 0 ]]; then
+    warn "exit code=$code, running cleanup if available"
+    if declare -f cleanup > /dev/null 2>&1; then
+      cleanup
+    elif declare -f resume_old_pg > /dev/null 2>&1; then
+      resume_old_pg
+    fi
+  fi
+}
+trap on_exit EXIT
+
 notify() {
   local status="$1"; local title="$2"; local body="$3"
   "$SCRIPT_DIR/notify-line.sh" "$status" "$title" "$body" || warn "LINE通知失敗（処理は継続）"
@@ -219,18 +235,19 @@ if [[ -z "$NEW_PG_PASSWORD" || -z "$NEW_PG_EXT_URL" ]]; then
 fi
 
 # external URL から host と database 名を抽出
-# 形式: postgresql://user:pass@host/database
-NEW_PG_HOST=$(echo "$NEW_PG_EXT_URL" | sed -E 's|^postgresql://[^@]+@([^/]+)/.*$|\1|')
+# 形式: postgresql://user:pass@host[:port]/database  ← port が含まれる場合もあるので除外
+NEW_PG_HOST=$(echo "$NEW_PG_EXT_URL" | sed -E 's|^postgresql://[^@]+@([^:/]+).*$|\1|')
 NEW_PG_DATABASE=$(echo "$NEW_PG_EXT_URL" | sed -E 's|^postgresql://[^@]+@[^/]+/([^?]+).*$|\1|')
 
 if [[ -z "$NEW_PG_HOST" || -z "$NEW_PG_DATABASE" ]]; then
   err "新DB external URL のパース失敗: $NEW_PG_EXT_URL"
   notify failure "Render DB 自動マイグレーション失敗" "新DBの接続URLパースに失敗しました。"
+  cleanup
   exit 1
 fi
 
 # internal URL のホスト部（Renderサービス間アクセス用、ドメインなし）
-NEW_PG_INT_HOST=$(echo "$NEW_PG_INT_URL" | sed -E 's|^postgresql://[^@]+@([^/]+)/.*$|\1|')
+NEW_PG_INT_HOST=$(echo "$NEW_PG_INT_URL" | sed -E 's|^postgresql://[^@]+@([^:/]+).*$|\1|')
 
 log "新DB: host=$NEW_PG_HOST  internalHost=$NEW_PG_INT_HOST  db=$NEW_PG_DATABASE"
 
