@@ -174,7 +174,16 @@ CREATE_PAYLOAD=$(jq -n \
   --arg region "$NEW_DB_REGION" \
   --arg version "$NEW_DB_VERSION" \
   --arg plan "$NEW_DB_PLAN" \
-  '{name:$name, ownerId:$ownerId, databaseName:$databaseName, databaseUser:$databaseUser, region:$region, version:$version, plan:$plan}')
+  '{
+    name: $name,
+    ownerId: $ownerId,
+    databaseName: $databaseName,
+    databaseUser: $databaseUser,
+    region: $region,
+    version: $version,
+    plan: $plan,
+    ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "everywhere" }]
+  }')
 
 NEW_PG_JSON=$(render_api POST "/postgres" "$CREATE_PAYLOAD")
 NEW_PG_ID=$(echo "$NEW_PG_JSON" | jq -r '.id // .postgres.id // empty')
