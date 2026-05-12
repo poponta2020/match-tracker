@@ -118,6 +118,31 @@ for table in players matches practice_sessions practice_participants match_pairi
   log "  source.$table = ${SRC_COUNTS[$table]} 行"
 done
 
+#=== 2.5 旧DB を suspend（Free tier の "1 active DB" 制約を回避） ===========
+# 旧DBを suspend してから新DBを作成する。失敗時は cleanup で resume してサービス復旧。
+log "旧DB を suspend します（Free tier 制約のため）"
+SUSPEND_HTTP=$(curl -sS -o /tmp/suspend.out -w "%{http_code}" \
+  -X POST -H "Authorization: Bearer $RENDER_API_KEY" \
+  "$RENDER_API/postgres/$RENDER_PG_ID/suspend")
+if [[ "$SUSPEND_HTTP" != "202" && "$SUSPEND_HTTP" != "200" ]]; then
+  err "旧DB suspend 失敗: HTTP $SUSPEND_HTTP, $(cat /tmp/suspend.out 2>/dev/null)"
+  notify failure "Render DB 自動マイグレーション失敗" "旧DB の suspend に失敗しました（マイグレーション中止）。"
+  exit 1
+fi
+SUSPENDED_OLD_PG=true
+
+resume_old_pg() {
+  if [[ "${SUSPENDED_OLD_PG:-false}" != "true" ]]; then return 0; fi
+  warn "旧DB を resume してサービス復旧します"
+  curl -sS -X POST -H "Authorization: Bearer $RENDER_API_KEY" \
+    "$RENDER_API/postgres/$RENDER_PG_ID/resume" >/dev/null || true
+}
+
+# suspend 反映待ち
+sleep 10
+SUSPEND_STATUS=$(render_api GET "/postgres/$RENDER_PG_ID" | jq -r '.status // .postgres.status // empty')
+log "旧DB status: $SUSPEND_STATUS"
+
 #=== 3. 新DB作成 ============================================================
 log "新DBを作成します: name=$NEW_DB_NAME"
 
@@ -136,18 +161,22 @@ NEW_PG_ID=$(echo "$NEW_PG_JSON" | jq -r '.id // .postgres.id // empty')
 
 if [[ -z "$NEW_PG_ID" ]]; then
   err "新DB作成失敗。レスポンス: $NEW_PG_JSON"
-  notify failure "Render DB 自動マイグレーション失敗" "新DB作成APIが ID を返しませんでした。Render側のクォータ等を確認してください。"
+  notify failure "Render DB 自動マイグレーション失敗" "新DB作成APIが ID を返しませんでした。旧DB を resume してロールバックします。"
+  resume_old_pg
   exit 1
 fi
 log "新DB作成リクエスト受理: id=$NEW_PG_ID"
 
-# rollback 用に「失敗したら作成済みの新DBは削除」をセット
+# rollback 用フラグ
 ROLLBACK_NEW_PG=true
 cleanup() {
+  set +e
   if [[ "${ROLLBACK_NEW_PG:-false}" == "true" && -n "${NEW_PG_ID:-}" ]]; then
     warn "失敗のため作成済み新DBを削除: $NEW_PG_ID"
     render_api DELETE "/postgres/$NEW_PG_ID" >/dev/null || true
+    sleep 30  # 削除反映待ち（次の resume が成功するように）
   fi
+  resume_old_pg
 }
 trap cleanup ERR
 
@@ -284,11 +313,14 @@ rollback_env() {
   render_api POST "/services/$RENDER_SERVICE_ID/deploys" '{"clearCache":"do_not_clear"}' >/dev/null || true
 }
 cleanup() {
+  set +e
   rollback_env
   if [[ "${ROLLBACK_NEW_PG:-false}" == "true" && -n "${NEW_PG_ID:-}" ]]; then
     warn "失敗のため作成済み新DBを削除: $NEW_PG_ID"
     render_api DELETE "/postgres/$NEW_PG_ID" >/dev/null || true
+    sleep 30  # 削除反映待ち
   fi
+  resume_old_pg
 }
 trap cleanup ERR
 
@@ -392,7 +424,7 @@ Render PostgreSQL 自動マイグレーション完了
   db:   $NEW_PG_DATABASE
   user: $NEW_DB_USER
 
-旧DB:
+旧DB（suspended のまま放置、14日後に cleanup ワークフローが削除）:
   id:   $RENDER_PG_ID
   作成: $CURRENT_CREATED_AT (経過 $AGE_DAYS 日)
   削除予定: $DELETE_AFTER
