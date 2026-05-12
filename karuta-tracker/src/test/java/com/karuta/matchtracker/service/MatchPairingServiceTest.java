@@ -936,6 +936,75 @@ class MatchPairingServiceTest {
             verify(lotteryDeadlineHelper).isLotteryDisabled(sessionOrgId);
             verify(lotteryDeadlineHelper, never()).isLotteryDisabled(null);
         }
+
+        @Test
+        @DisplayName("同日複数団体・共有選手がいる場合、別団体の前試合ペアは todayMatches に混入しない（autoMatch 候補から誤除外しない）")
+        void shouldExcludeCrossOrgPairsFromTodayMatches() {
+            // Given: 同日に2団体のセッションがある。自団体 org=7L のセッション参加者は
+            // 1L, 2L, 3L, 4L。共有選手 1L が別団体 org=8L の試合1にも参加し、別団体側
+            // で (1L, 99L) のペアが存在する。
+            // 自団体の試合2を autoMatch するとき、todayMatches に (1L, 99L) が混入
+            // すると、99L はそもそも自団体外なので問題ないが、より重要なのは別団体の
+            // ペアが「同日に組まれた」候補として算出され、ペア生成のスコア計算で
+            // SAME_DAY_PENALTY_SCORE になりうる点。AND フィルタで除外される。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer currentMatch = 2;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate)
+                    .matchNumber(currentMatch)
+                    .build();
+
+            PracticeSession orgSession = createSession(100L, sessionDate);
+            when(lotteryDeadlineHelper.isLotteryDisabled(organizationId)).thenReturn(false);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId))
+                    .thenReturn(Optional.of(orgSession));
+            // 自団体の試合2参加者: 1L, 2L
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(
+                    100L, currentMatch, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, currentMatch, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, currentMatch, 2L, ParticipantStatus.WON)
+                    ));
+            // 自団体セッションの全参加者: 1L, 2L, 3L, 4L
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, currentMatch, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, currentMatch, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            // 同日のペアリング: 試合1で別団体 (1L, 99L), 自団体内の (3L, 4L)
+            // findBySessionDateAndMatchNumber は autoMatch のロック判定にも使われる
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, currentMatch))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Arrays.asList(
+                            createMatchPairing(10L, sessionDate, 1, 1L, 99L),  // 別団体: 99L は自団体不参加
+                            createMatchPairing(11L, sessionDate, 1, 3L, 4L)    // 自団体
+                    ));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, currentMatch))
+                    .thenReturn(Collections.emptyList());
+            // findTodayMatches も別団体の対戦結果を返す: (1L, 99L)
+            List<Object[]> crossOrgTodayMatches = new ArrayList<>();
+            crossOrgTodayMatches.add(new Object[]{1L, 99L});
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(crossOrgTodayMatches);
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: 自団体の (1L, 2L) が候補から除外されてはいけない。
+            // 別団体ペア (1L, 99L) は AND フィルタにより todayMatches/todayPairings に
+            // 混入しないため、(1L, 2L) は通常通り組まれる。
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(result.getPairings().get(0).getPlayer1Id()).isIn(1L, 2L);
+            assertThat(result.getPairings().get(0).getPlayer2Id()).isIn(1L, 2L);
+        }
     }
 
     @Nested

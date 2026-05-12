@@ -559,7 +559,13 @@ public class MatchPairingService {
             displayHistoryMap.put(entry.getKey(), new ArrayList<>(entry.getValue()));
         }
         if (matchNumber != null) {
+            // 同日他試合のペアも組織スコープでフィルタする。
+            // 同日に複数団体のセッションがあると、別団体の同日ペアが displayHistoryMap に
+            // 入り、当該団体の組み合わせ画面に他団体ペアの履歴が表示されてしまう。
             List<MatchPairing> sameDayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+            if (orgScoped) {
+                sameDayPairings = filterPairingsBySession(sameDayPairings, sessionPlayerIds, true);
+            }
             for (MatchPairing mp : sameDayPairings) {
                 if (!mp.getMatchNumber().equals(matchNumber)) {
                     String pairKey = getPairKey(mp.getPlayer1Id(), mp.getPlayer2Id());
@@ -573,7 +579,8 @@ public class MatchPairingService {
         }
 
         // 同日の既存組み合わせを取得（除外用）— MatchPairingテーブルから
-        Set<String> todayMatches = getTodayPairings(sessionDate, matchNumber);
+        // 組織スコープを引き継ぎ、別団体の前試合ペアが当該団体の候補から除外されないようにする
+        Set<String> todayMatches = getTodayPairings(sessionDate, matchNumber, sessionPlayerIds, orgScoped);
 
         // スコアを計算して最適なペアリングを生成
         List<AutoMatchingResult.PairingSuggestion> pairings = new ArrayList<>();
@@ -789,11 +796,22 @@ public class MatchPairingService {
 
     /**
      * 同日の既存対戦を取得（Matchテーブルから）
+     *
+     * orgScoped=true の場合は両方の選手が当該団体セッション参加者である対戦のみ
+     * 返す。同日に複数団体のセッションがあり共有選手がいる場合、別団体の前試合
+     * 対戦が含まれて自動マッチング候補から誤って除外されることを防ぐ。
      */
-    private Set<String> getTodayMatches(LocalDate sessionDate, Integer currentMatchNumber) {
+    private Set<String> getTodayMatches(LocalDate sessionDate, Integer currentMatchNumber,
+                                         Set<Long> sessionPlayerIds, boolean orgScoped) {
         List<Object[]> results = matchRepository.findTodayMatches(sessionDate, currentMatchNumber);
 
         return results.stream()
+                .filter(row -> {
+                    if (!orgScoped) return true;
+                    Long playerA = (Long) row[0];
+                    Long playerB = (Long) row[1];
+                    return sessionPlayerIds.contains(playerA) && sessionPlayerIds.contains(playerB);
+                })
                 .map(row -> {
                     Long playerA = (Long) row[0];
                     Long playerB = (Long) row[1];
@@ -804,18 +822,26 @@ public class MatchPairingService {
 
     /**
      * 同日の既存組み合わせを取得（MatchPairingテーブルから、同日の他の試合番号）
+     *
+     * orgScoped=true の場合は両方の選手が当該団体セッション参加者であるペアのみ
+     * 対象とする。これにより自動マッチング側で別団体のペアが除外候補に混入する
+     * ことを防ぐ（filterPairingsBySession と同じ AND 条件）。
      */
-    private Set<String> getTodayPairings(LocalDate sessionDate, Integer currentMatchNumber) {
+    private Set<String> getTodayPairings(LocalDate sessionDate, Integer currentMatchNumber,
+                                          Set<Long> sessionPlayerIds, boolean orgScoped) {
         // MatchPairingテーブルから同日の他の試合番号の組み合わせを取得
         List<MatchPairing> todayPairings = matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
+        if (orgScoped) {
+            todayPairings = filterPairingsBySession(todayPairings, sessionPlayerIds, true);
+        }
 
         Set<String> pairKeys = todayPairings.stream()
                 .filter(p -> p.getMatchNumber() < currentMatchNumber)
                 .map(p -> getPairKey(p.getPlayer1Id(), p.getPlayer2Id()))
                 .collect(Collectors.toSet());
 
-        // Matchテーブルからも同日の対戦を取得してマージ
-        pairKeys.addAll(getTodayMatches(sessionDate, currentMatchNumber));
+        // Matchテーブルからも同日の対戦を取得してマージ（組織スコープも引き継ぐ）
+        pairKeys.addAll(getTodayMatches(sessionDate, currentMatchNumber, sessionPlayerIds, orgScoped));
 
         return pairKeys;
     }

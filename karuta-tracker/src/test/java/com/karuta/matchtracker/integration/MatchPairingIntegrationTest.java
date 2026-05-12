@@ -83,6 +83,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 日付で対戦ペアリングを取得
         mockMvc.perform(get("/api/match-pairings/date")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", "2024-02-10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -91,6 +92,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 日付と試合番号で対戦ペアリングを取得
         mockMvc.perform(get("/api/match-pairings/date-and-match")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", "2024-02-10")
                         .param("matchNumber", "1"))
                 .andExpect(status().isOk())
@@ -153,6 +155,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // Then: 一覧取得で2件取得でき、試合番号順になっている
         mockMvc.perform(get("/api/match-pairings/date")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("date", "2024-02-11"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
