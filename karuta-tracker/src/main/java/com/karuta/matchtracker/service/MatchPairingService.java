@@ -670,12 +670,26 @@ public class MatchPairingService {
 
     /**
      * ペアリング/マッチをセッション参加者でフィルタ（組織スコープ）
+     *
+     * orgScoped=true (ADMIN 等の組織スコープ実行) では「両方の選手が当該団体の
+     * セッション参加者である」場合のみ通過させる。同じ選手が複数団体に所属
+     * していたり、別団体のペアリングに対象団体の選手が片方だけ含まれていた
+     * 場合に、別団体のペアリングが ADMIN 画面に混入することを防ぐ。
+     *
+     * orgScoped=false (SUPER_ADMIN 経路で組織非限定) は従来通り片方一致でも
+     * 通過させ、後方互換の挙動を維持する。
      */
     private List<MatchPairing> filterPairingsBySession(List<MatchPairing> pairings, Set<Long> sessionPlayerIds,
                                                         boolean orgScoped) {
         // 組織スコープ時に参加者0人なら空リストを返す（無フィルタにフォールバックしない）
         if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
         if (sessionPlayerIds.isEmpty()) return pairings;
+        if (orgScoped) {
+            return pairings.stream()
+                    .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id())
+                            && sessionPlayerIds.contains(p.getPlayer2Id()))
+                    .collect(Collectors.toList());
+        }
         return pairings.stream()
                 .filter(p -> sessionPlayerIds.contains(p.getPlayer1Id()) || sessionPlayerIds.contains(p.getPlayer2Id()))
                 .collect(Collectors.toList());
@@ -685,6 +699,12 @@ public class MatchPairingService {
                                                 boolean orgScoped) {
         if (orgScoped && sessionPlayerIds.isEmpty()) return Collections.emptyList();
         if (sessionPlayerIds.isEmpty()) return matches;
+        if (orgScoped) {
+            return matches.stream()
+                    .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id())
+                            && sessionPlayerIds.contains(m.getPlayer2Id()))
+                    .collect(Collectors.toList());
+        }
         return matches.stream()
                 .filter(m -> sessionPlayerIds.contains(m.getPlayer1Id()) || sessionPlayerIds.contains(m.getPlayer2Id()))
                 .collect(Collectors.toList());

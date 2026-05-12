@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(MatchPairingController.class)
+@Import(com.karuta.matchtracker.util.OrganizationScopeResolver.class)
 @DisplayName("MatchPairingController 単体テスト")
 class MatchPairingControllerTest {
 
@@ -131,6 +133,87 @@ class MatchPairingControllerTest {
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
+        }
+
+        @Test
+        @DisplayName("ADMIN が他団体IDを organizationId に指定すると 403")
+        void shouldReturn403WhenAdminRequestsOtherOrg() throws Exception {
+            // Given: ADMIN (adminOrganizationId=7L) で他団体 99L を要求
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            mockAdminScopeForDate(date, 1L, 7L);
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .param("date", "2024-01-15")
+                            .param("organizationId", "99"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
+        }
+
+        @Test
+        @DisplayName("PLAYER が所属団体IDを organizationId に指定すると組織スコープで取得する")
+        void shouldGetPairingsByDatePlayerWithBelongingOrgIsScoped() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(orgId));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingService.getByDate(date, false, orgId))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("organizationId", orgId.toString()))
+                    .andExpect(status().isOk());
+
+            verify(matchPairingService).getByDate(date, false, orgId);
+        }
+
+        @Test
+        @DisplayName("PLAYER が所属外の団体IDを organizationId に指定すると 403")
+        void shouldReturn403WhenPlayerRequestsNonBelongingOrg() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("organizationId", "99"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
+        }
+
+        @Test
+        @DisplayName("SUPER_ADMIN が organizationId を指定すると組織スコープで取得する")
+        void shouldGetPairingsByDateSuperAdminWithExplicitOrgIsScoped() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long orgId = 7L;
+            when(matchPairingService.getByDate(date, false, orgId))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/date")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .param("date", "2024-01-15")
+                            .param("organizationId", orgId.toString()))
+                    .andExpect(status().isOk());
+
+            verify(matchPairingService).getByDate(date, false, orgId);
         }
 
         @Test

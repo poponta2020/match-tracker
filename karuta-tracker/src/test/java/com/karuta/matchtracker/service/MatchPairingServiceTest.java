@@ -185,6 +185,40 @@ class MatchPairingServiceTest {
             // Then: 別団体ペアリングが混入してはいけない
             assertThat(result).isEmpty();
         }
+
+        @Test
+        @DisplayName("organizationId 指定時は、片方の選手だけが自団体セッション参加者でも除外する（AND 条件）")
+        void shouldExcludePairingsWhenOnlyOnePlayerInOrgSession() {
+            // Given: 共有選手 1L のみが自団体セッション参加。
+            //   pairing1: (1L, 2L) - 1L のみ自団体 → AND だと除外
+            //   pairing2: (1L, 10L) - 1L のみ自団体 → AND だと除外
+            //   pairing3: (10L, 20L) - 両方とも別団体 → 除外
+            // 旧 OR 条件では pairing1 と pairing2 が通過していたが、
+            // AND 条件では3つとも除外され、共有選手を含む別団体ペアリング混入を防ぐ。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Long organizationId = 7L;
+            List<MatchPairing> pairings = Arrays.asList(
+                    createMatchPairing(1L, sessionDate, 1, 1L, 2L),
+                    createMatchPairing(2L, sessionDate, 2, 1L, 10L),
+                    createMatchPairing(3L, sessionDate, 3, 10L, 20L)
+            );
+            PracticeSession orgSession = createSession(100L, sessionDate);
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(pairings);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId))
+                    .thenReturn(Optional.of(orgSession));
+            // 自団体セッション参加者は 1L のみ（他は別団体）
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON)
+                    ));
+
+            // When
+            List<MatchPairingDto> result = matchPairingService.getByDate(sessionDate, false, organizationId);
+
+            // Then: AND 条件で全件除外
+            assertThat(result).isEmpty();
+        }
     }
 
     @Nested

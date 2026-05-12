@@ -6,6 +6,7 @@ import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.MatchPairingService;
 import com.karuta.matchtracker.util.AdminScopeValidator;
+import com.karuta.matchtracker.util.OrganizationScopeResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -28,51 +29,56 @@ public class MatchPairingController {
     private final MatchPairingService matchPairingService;
     private final com.karuta.matchtracker.service.OrganizationService organizationService;
     private final com.karuta.matchtracker.repository.PracticeSessionRepository practiceSessionRepository;
+    private final OrganizationScopeResolver organizationScopeResolver;
 
     /**
      * 指定日の対戦組み合わせを取得
      *
-     * ADMIN の場合は自団体スコープでペアリングを返す。同日に複数団体のセッションが
-     * ある場合でも、autoMatch / createBatch / getSessionByDate と同じ組織のペアリング
-     * のみを返し、別団体の組み合わせが PairingGenerator 等に混入しないようにする。
+     * 組織スコープのルール (OrganizationScopeResolver と共通):
+     *  - ADMIN: 自団体スコープ強制。クエリで他団体IDが指定された場合は 403。
+     *  - PLAYER: organizationId 任意。本人所属でなければ 403。未指定なら日付のみ。
+     *  - SUPER_ADMIN: organizationId 任意。未指定なら日付のみ。
      *
-     * @RequireRole は ADMIN への adminOrganizationId 設定を有効化するために必須
-     * （RoleCheckInterceptor は @RequireRole 未付与だとこの属性をセットしない）。
+     * これにより、PairingGenerator 等のフロント画面が autoMatch / createBatch /
+     * getSessionByDate と同じ組織のペアリングを取得でき、別団体の組み合わせが
+     * 混入しないようにする。
      */
     @GetMapping("/date")
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<List<MatchPairingDto>> getByDate(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false, defaultValue = "false") boolean light,
+            @RequestParam(required = false) Long organizationId,
             HttpServletRequest httpRequest) {
-        log.info("対戦組み合わせ取得: 日付={}, light={}", date, light);
+        log.info("対戦組み合わせ取得: 日付={}, light={}, organizationId={}", date, light, organizationId);
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light, adminOrgId);
+        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light, effectiveOrgId);
         return ResponseEntity.ok(pairings);
     }
 
     /**
      * 指定日・試合番号の対戦組み合わせを取得
      *
-     * ADMIN は自団体スコープで取得する（同日複数団体時の混入防止）。
+     * 組織スコープは getByDate と同じルール（OrganizationScopeResolver）。
      */
     @GetMapping("/date-and-match")
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<List<MatchPairingDto>> getByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
+            @RequestParam(required = false) Long organizationId,
             HttpServletRequest httpRequest) {
-        log.info("対戦組み合わせ取得: 日付={}, 試合番号={}", date, matchNumber);
+        log.info("対戦組み合わせ取得: 日付={}, 試合番号={}, organizationId={}", date, matchNumber, organizationId);
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber, adminOrgId);
+        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber, effectiveOrgId);
         return ResponseEntity.ok(pairings);
     }
 
