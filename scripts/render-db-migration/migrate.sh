@@ -449,7 +449,8 @@ trap - ERR
 log "GitHub Secrets を新DB情報で更新します"
 set_secret() {
   local name="$1"; local value="$2"
-  printf '%s' "$value" | GH_TOKEN="$RENDER_GH_PAT" gh secret set "$name" --repo "$GITHUB_REPOSITORY" --body-file -
+  # gh CLI のバージョンによって `--body-file -` が無いので、引数なしで stdin から読む。
+  printf '%s' "$value" | GH_TOKEN="$RENDER_GH_PAT" gh secret set "$name" --repo "$GITHUB_REPOSITORY"
   log "  $name updated"
 }
 
