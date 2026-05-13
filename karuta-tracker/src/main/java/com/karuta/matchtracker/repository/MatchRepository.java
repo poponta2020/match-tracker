@@ -27,12 +27,12 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     List<Match> findByMatchDateOrderByMatchNumber(@Param("matchDate") LocalDate matchDate);
 
     /**
-     * 選手の対戦結果を取得（日付の降順）
+     * 選手の対戦結果を取得（日付・試合番号の降順）
      *
      * @param playerId 選手ID
      * @return 対戦結果のリスト
      */
-    @Query("SELECT m FROM Match m WHERE m.player1Id = :playerId OR m.player2Id = :playerId ORDER BY m.matchDate DESC, m.matchNumber ASC")
+    @Query("SELECT m FROM Match m WHERE m.player1Id = :playerId OR m.player2Id = :playerId ORDER BY m.matchDate DESC, m.matchNumber DESC")
     List<Match> findByPlayerId(@Param("playerId") Long playerId);
 
     /**

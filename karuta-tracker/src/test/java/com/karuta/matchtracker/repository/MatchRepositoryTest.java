@@ -118,7 +118,7 @@ class MatchRepositoryTest {
     }
 
     @Test
-    @DisplayName("選手の対戦結果を全て取得できる")
+    @DisplayName("選手の対戦結果を全て取得できる（同日内は試合番号の降順）")
     void testFindByPlayerId() {
         // When
         List<Match> matches = matchRepository.findByPlayerId(player1.getId());
@@ -128,6 +128,23 @@ class MatchRepositoryTest {
         assertThat(matches)
                 .allMatch(m -> m.getPlayer1Id().equals(player1.getId()) ||
                               m.getPlayer2Id().equals(player1.getId()));
+        // 同日内は matchNumber の降順（新しい試合番号が先頭）
+        assertThat(matches.get(0).getMatchDate()).isEqualTo(today);
+        assertThat(matches.get(0).getMatchNumber()).isEqualTo(2);
+        assertThat(matches.get(1).getMatchDate()).isEqualTo(today);
+        assertThat(matches.get(1).getMatchNumber()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("選手の対戦結果は試合日の降順で取得される")
+    void testFindByPlayerIdOrdersByMatchDateDesc() {
+        // When: player2は today（matchNumber=1）と today-7（matchNumber=1）の試合に出場
+        List<Match> matches = matchRepository.findByPlayerId(player2.getId());
+
+        // Then: 試合日の降順（新しい日が先頭）
+        assertThat(matches).hasSize(2);
+        assertThat(matches.get(0).getMatchDate()).isEqualTo(today);
+        assertThat(matches.get(1).getMatchDate()).isEqualTo(today.minusDays(7));
     }
 
     @Test
