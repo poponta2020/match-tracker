@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -37,6 +38,11 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 public class PracticeParticipantService {
+
+    private static final Set<ParticipantStatus> INACTIVE_STATUSES = EnumSet.of(
+            ParticipantStatus.CANCELLED,
+            ParticipantStatus.DECLINED,
+            ParticipantStatus.WAITLIST_DECLINED);
 
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
@@ -397,6 +403,7 @@ public class PracticeParticipantService {
         if (sessionIds.isEmpty()) return Map.of();
         return practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds).stream()
                 .filter(p -> p.getMatchNumber() != null)
+                .filter(p -> !INACTIVE_STATUSES.contains(p.getStatus()))
                 .collect(Collectors.groupingBy(PracticeParticipant::getSessionId,
                         Collectors.mapping(PracticeParticipant::getMatchNumber, Collectors.toList())));
     }

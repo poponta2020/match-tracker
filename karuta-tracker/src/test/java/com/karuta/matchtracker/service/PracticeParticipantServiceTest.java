@@ -576,4 +576,36 @@ class PracticeParticipantServiceTest {
         p.setMatchNumber(matchNumber);
         return p;
     }
+
+    @Test
+    @DisplayName("getPlayerParticipationsByMonth はCANCELLED/DECLINED/WAITLIST_DECLINEDのレコードを除外する")
+    void getPlayerParticipationsByMonth_excludesInactiveStatuses() {
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(LocalDate.of(2026, 5, 19));
+        when(practiceSessionRepository.findByYearAndMonth(2026, 5)).thenReturn(List.of(session));
+
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L)))
+                .thenReturn(List.of(
+                        buildParticipant(100L, 10L, 1, ParticipantStatus.WON),
+                        buildParticipant(100L, 10L, 2, ParticipantStatus.CANCELLED),
+                        buildParticipant(100L, 10L, 3, ParticipantStatus.DECLINED),
+                        buildParticipant(100L, 10L, 4, ParticipantStatus.WAITLIST_DECLINED),
+                        buildParticipant(100L, 10L, 5, ParticipantStatus.WAITLISTED)
+                ));
+
+        java.util.Map<Long, List<Integer>> result = service.getPlayerParticipationsByMonth(10L, 2026, 5);
+
+        // 一度キャンセルした試合(matchNumber=2)が再登録できるよう、登録済み扱いに含まれてはいけない
+        assertThat(result).containsKey(100L);
+        assertThat(result.get(100L)).containsExactlyInAnyOrder(1, 5);
+    }
+
+    private PracticeParticipant buildParticipant(Long sessionId, Long playerId, int matchNumber, ParticipantStatus status) {
+        PracticeParticipant p = new PracticeParticipant();
+        p.setSessionId(sessionId);
+        p.setPlayerId(playerId);
+        p.setMatchNumber(matchNumber);
+        p.setStatus(status);
+        return p;
+    }
 }
