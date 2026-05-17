@@ -224,7 +224,14 @@ public class PracticeParticipantService {
                 .findByYearAndMonthAndOrganizationId(request.getYear(), request.getMonth(), organizationId).stream()
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
+        // softDelete前に既存WONの (sessionId, matchNumber) を控えておく。
+        // 「以前からWONのまま変わらない」再登録では「今日参加します」通知を発火させないため。
+        Set<String> previouslyWonKeys = new HashSet<>();
         if (!allMonthSessionIds.isEmpty()) {
+            practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, allMonthSessionIds).stream()
+                    .filter(p -> p.getStatus() == ParticipantStatus.WON && p.getMatchNumber() != null)
+                    .forEach(p -> previouslyWonKeys.add(participationKey(p.getSessionId(), p.getMatchNumber())));
+
             practiceParticipantRepository.softDeleteByPlayerIdAndSessionIds(
                     playerId, allMonthSessionIds, JstDateTimeUtil.now());
             practiceParticipantRepository.flush();
@@ -247,7 +254,9 @@ public class PracticeParticipantService {
 
             if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
-                notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
+                if (!previouslyWonKeys.contains(participationKey(sessionId, matchNumber))) {
+                    notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
+                }
                 registered++;
             } else {
                 int maxNumber = practiceParticipantRepository
