@@ -64,7 +64,7 @@ status: completed
 ---
 
 ### タスク5: IcalCalendarFeedController（公開エンドポイント）実装
-- [ ] 完了
+- [x] 完了
 - **概要:** 認証不要の公開エンドポイント `GET /ical/calendar/{token}.ics` を実装。インターセプターによる認証チェックを除外する必要あり。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/IcalCalendarFeedController.java` — 新規作成
@@ -77,7 +77,7 @@ status: completed
 ---
 
 ### タスク6: IcalCalendarSettingsController（認証必須）実装
-- [ ] 完了
+- [x] 完了
 - **概要:** 設定画面用の3エンドポイントを実装。`@RequireRole(PLAYER)` 等で認証を要求。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/IcalCalendarSettingsController.java` — 新規作成
