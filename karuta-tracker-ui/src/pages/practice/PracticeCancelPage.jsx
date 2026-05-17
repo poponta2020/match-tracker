@@ -445,7 +445,7 @@ const PracticeCancelPage = () => {
                     return (
                       <label
                         key={match.matchNumber}
-                        className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                        className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors touch-manipulation select-none ${
                           isSelected
                             ? 'border-red-400 bg-red-50'
                             : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -455,7 +455,7 @@ const PracticeCancelPage = () => {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleMatchSelection(match.matchNumber)}
-                          className="w-5 h-5 rounded border-gray-300"
+                          className="w-5 h-5 rounded border-gray-300 touch-manipulation"
                           style={{ accentColor: '#8b4513' }}
                         />
                         <span className="text-sm font-medium text-gray-800">
