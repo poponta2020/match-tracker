@@ -137,16 +137,22 @@ const PracticeParticipation = () => {
     return JSON.stringify(filterLottery(participations)) !== JSON.stringify(filterLottery(initialParticipations));
   };
 
-  // SAME_DAYタイプの当日12:00以降チェック
+  // SAME_DAYタイプの当日12:00以降に、当日セッションの参加状態が変更された場合のみ確認ダイアログを出す。
+  // 当日を変更していない（別日だけ変えた）保存では管理者連絡は不要なため。
   const needsSameDayConfirm = () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const isAfterNoon = now.getHours() >= 12;
+    if (!isAfterNoon) return false;
 
     return sessions.some(session => {
       const org = orgMap[session.organizationId];
       if (!org || org.deadlineType !== 'SAME_DAY') return false;
-      return session.sessionDate === todayStr && isAfterNoon;
+      if (session.sessionDate !== todayStr) return false;
+
+      const current = [...(participations[session.id] || [])].sort();
+      const initial = [...(initialParticipations[session.id] || [])].sort();
+      return JSON.stringify(current) !== JSON.stringify(initial);
     });
   };
 
