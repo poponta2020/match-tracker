@@ -608,4 +608,85 @@ class PracticeParticipantServiceTest {
         p.setStatus(status);
         return p;
     }
+
+    @Test
+    @DisplayName("SAME_DAY: 当日12:00以降に同月内の別日を新たに登録しても、既存WONには「今日参加します」通知が発火しない")
+    void sameDay_existingWonNotReNotified_whenSavingAnotherDayInSameMonth() {
+        // 5/17（当日）= 既存WON、5/19 = 新規参加。両方ともリクエストに含まれる。
+        LocalDate today = LocalDate.of(2026, 5, 17);
+        LocalDate later = LocalDate.of(2026, 5, 19);
+
+        PracticeSession todaySession = createSession(100L, null);
+        todaySession.setSessionDate(today);
+        PracticeSession laterSession = createSession(200L, null);
+        laterSession.setSessionDate(later);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(todaySession, laterSession));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 5, ORG_ID))
+                .thenReturn(List.of(todaySession, laterSession));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        // softDelete前のスナップショット取得: 5/17 はWON、5/19 は未登録
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L, 200L))))
+                .thenReturn(List.of(buildParticipant(100L, 10L, 1, ParticipantStatus.WON)));
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(anyLong(), eq(10L), anyInt()))
+                .thenReturn(List.of());
+        // 5/17 はpreviouslyWonKeysに含まれるため notifySameDayJoinIfApplicable は呼ばれない。
+        // 5/19 は呼ばれるが、当日でないので isAfterSameDayNoon=false で早期return。
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(later)).thenReturn(false);
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2026);
+        request.setMonth(5);
+        request.setParticipations(List.of(
+                createParticipation(100L, 1), // 既存WONの再保存
+                createParticipation(200L, 1)  // 新規（5/19）
+        ));
+
+        service.registerParticipations(request);
+
+        // 「今日参加します」通知は発火しないこと（既存WONの再保存も、当日でない別日も対象外）
+        verify(lineNotificationService, never())
+                .sendSameDayJoinNotification(any(PracticeSession.class), anyInt(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("SAME_DAY: 当日12:00以降にキャンセル済みから新規WONになる場合は「今日参加します」通知が発火する")
+    void sameDay_reactivateFromCancelled_firesJoinNotificationAfterNoon() {
+        LocalDate today = LocalDate.of(2026, 5, 17);
+        PracticeSession session = createSession(100L, null);
+        session.setSessionDate(today);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 5, ORG_ID))
+                .thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        // 既存はCANCELLEDなのでスナップショットのWONには含まれない
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L))))
+                .thenReturn(List.of(buildParticipant(100L, 10L, 1, ParticipantStatus.CANCELLED)));
+        PracticeParticipant cancelled = PracticeParticipant.builder()
+                .id(555L).sessionId(100L).playerId(10L).matchNumber(1)
+                .status(ParticipantStatus.CANCELLED).dirty(false).build();
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of(cancelled));
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(true);
+        com.karuta.matchtracker.entity.Player player = new com.karuta.matchtracker.entity.Player();
+        player.setId(10L);
+        player.setName("テスト太郎");
+        when(playerRepository.findById(10L)).thenReturn(Optional.of(player));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2026);
+        request.setMonth(5);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        // 通知発火を検証
+        verify(lineNotificationService)
+                .sendSameDayJoinNotification(eq(session), eq(1), eq("テスト太郎"), eq(10L));
+    }
 }
