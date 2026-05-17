@@ -1155,7 +1155,7 @@ Entity Layer (JPA Entity)
 ```
 
 #### GET /api/practice-sessions/participations/player/{playerId}?year={year}&month={month}
-**説明**: 月別参加状況取得
+**説明**: 月別参加状況取得（アクティブな参加レコードのみ。`CANCELLED`/`DECLINED`/`WAITLIST_DECLINED` は除外し、キャンセル後の再登録判定に使えるようにする）
 **権限**: なし
 **レスポンス**:
 ```json
