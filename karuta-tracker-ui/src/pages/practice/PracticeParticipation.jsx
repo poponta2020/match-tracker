@@ -6,6 +6,7 @@ import { organizationAPI } from '../../api/organizations';
 import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
+import { needsSameDayConfirm as needsSameDayConfirmFn } from './utils/sameDayConfirm';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -137,18 +138,14 @@ const PracticeParticipation = () => {
     return JSON.stringify(filterLottery(participations)) !== JSON.stringify(filterLottery(initialParticipations));
   };
 
-  // SAME_DAYタイプの当日12:00以降チェック
-  const needsSameDayConfirm = () => {
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const isAfterNoon = now.getHours() >= 12;
-
-    return sessions.some(session => {
-      const org = orgMap[session.organizationId];
-      if (!org || org.deadlineType !== 'SAME_DAY') return false;
-      return session.sessionDate === todayStr && isAfterNoon;
+  const needsSameDayConfirm = () =>
+    needsSameDayConfirmFn({
+      sessions,
+      orgMap,
+      participations,
+      initialParticipations,
+      now: new Date(),
     });
-  };
 
   // 保存処理
   const handleSave = async () => {

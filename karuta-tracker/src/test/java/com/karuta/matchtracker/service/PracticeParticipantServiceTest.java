@@ -502,8 +502,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("SAME_DAYタイプでクロス団体のセッションがsoft-deleteされないこと")
-    void sameDay_crossOrganization_doesNotSoftDeleteOtherOrg() {
+    @DisplayName("SAME_DAYタイプでクロス団体のセッションは差分処理の対象にならない")
+    void sameDay_crossOrganization_doesNotTouchOtherOrg() {
         Long orgId2 = 2L;
         PracticeSession session1 = createSession(100L, null); // ORG_ID=1
         PracticeSession session2 = new PracticeSession();
@@ -527,10 +527,11 @@ class PracticeParticipantServiceTest {
 
         service.registerParticipations(request);
 
-        // soft-deleteはORG_IDのセッション(100L)のみに対して呼ばれる
-        verify(practiceParticipantRepository).softDeleteByPlayerIdAndSessionIds(
-                eq(10L), eq(List.of(100L)), any());
-        // 団体2のセッション(200L)はsoft-deleteに含まれない
+        // 差分処理のスナップショット取得はORG_IDのセッション(100L)に限られる
+        verify(practiceParticipantRepository).findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L)));
+        // 団体2のセッション(200L)は触られない
+        verify(practiceParticipantRepository, never())
+                .findByPlayerIdAndSessionIds(eq(10L), argThat(ids -> ids.contains(200L)));
         verify(practiceParticipantRepository, never()).softDeleteByPlayerIdAndSessionIds(
                 eq(10L), argThat(ids -> ids.contains(200L)), any());
     }
@@ -631,8 +632,7 @@ class PracticeParticipantServiceTest {
                 .thenReturn(List.of(buildParticipant(100L, 10L, 1, ParticipantStatus.WON)));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(anyLong(), eq(10L), anyInt()))
                 .thenReturn(List.of());
-        // 5/17 はpreviouslyWonKeysに含まれるため notifySameDayJoinIfApplicable は呼ばれない。
-        // 5/19 は呼ばれるが、当日でないので isAfterSameDayNoon=false で早期return。
+        // 5/17 は既存アクティブなので差分処理でno-op。5/19 は新規だが当日でないので isAfterSameDayNoon=false で早期return。
         when(lotteryDeadlineHelper.isAfterSameDayNoon(later)).thenReturn(false);
 
         PracticeParticipationRequest request = new PracticeParticipationRequest();
@@ -640,15 +640,59 @@ class PracticeParticipantServiceTest {
         request.setYear(2026);
         request.setMonth(5);
         request.setParticipations(List.of(
-                createParticipation(100L, 1), // 既存WONの再保存
+                createParticipation(100L, 1), // 既存WONはno-op
                 createParticipation(200L, 1)  // 新規（5/19）
         ));
 
         service.registerParticipations(request);
 
-        // 「今日参加します」通知は発火しないこと（既存WONの再保存も、当日でない別日も対象外）
+        // 「今日参加します」通知は発火しないこと（既存WONはno-op、当日でない別日も対象外）
         verify(lineNotificationService, never())
                 .sendSameDayJoinNotification(any(PracticeSession.class), anyInt(), anyString(), anyLong());
+
+        // 既存WON（100:1）はsaveされない。新規（200:1）だけsaveされる。
+        verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+        // 月単位softDeleteは使われない（差分処理化により）
+        verify(practiceParticipantRepository, never())
+                .softDeleteByPlayerIdAndSessionIds(anyLong(), anyList(), any());
+    }
+
+    @Test
+    @DisplayName("SAME_DAY: リクエストにない既存アクティブは個別にCANCELLED化される")
+    void sameDay_existingNotInRequest_cancelledIndividually() {
+        PracticeSession session1 = createSession(100L, null);
+        PracticeSession session2 = createSession(200L, null);
+
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2025, 4, ORG_ID))
+                .thenReturn(List.of(session1, session2));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.SAME_DAY);
+        // 既存: 100:1 (WON), 200:1 (WON)。リクエストには 100:1 のみ → 200:1 はキャンセルされるはず
+        PracticeParticipant existingKeep = PracticeParticipant.builder()
+                .id(901L).sessionId(100L).playerId(10L).matchNumber(1).status(ParticipantStatus.WON).build();
+        PracticeParticipant existingDrop = PracticeParticipant.builder()
+                .id(902L).sessionId(200L).playerId(10L).matchNumber(1).status(ParticipantStatus.WON).build();
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L, 200L))))
+                .thenReturn(List.of(existingKeep, existingDrop));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        // 月単位softDeleteは呼ばれない
+        verify(practiceParticipantRepository, never())
+                .softDeleteByPlayerIdAndSessionIds(anyLong(), anyList(), any());
+        // 200:1 だけが個別にsaveされる（CANCELLED 化）。100:1 はno-op。
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        PracticeParticipant cancelledSaved = participantCaptor.getValue();
+        assertThat(cancelledSaved.getId()).isEqualTo(902L);
+        assertThat(cancelledSaved.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        assertThat(cancelledSaved.isDirty()).isTrue();
     }
 
     @Test
