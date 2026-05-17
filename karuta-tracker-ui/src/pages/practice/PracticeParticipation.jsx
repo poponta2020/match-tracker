@@ -401,7 +401,7 @@ const PracticeParticipation = () => {
                                   ) : (
                                     // 抽選前: チェックボックス
                                     <label
-                                      className={`mx-auto flex min-h-11 w-10 flex-col items-center justify-center gap-0.5 rounded-md py-1 transition-colors ${
+                                      className={`mx-auto flex min-h-11 w-10 flex-col items-center justify-center gap-0.5 rounded-md py-1 transition-colors touch-manipulation select-none ${
                                         isLockedRegistration(session.id, matchNumber)
                                           ? 'cursor-not-allowed opacity-70'
                                           : 'cursor-pointer hover:bg-[#e2d9d0]'
@@ -412,7 +412,7 @@ const PracticeParticipation = () => {
                                         checked={isChecked}
                                         onChange={() => toggleMatch(session.id, matchNumber)}
                                         disabled={isLockedRegistration(session.id, matchNumber)}
-                                        className={`w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a] ${isLockedRegistration(session.id, matchNumber) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                        className={`w-5 h-5 border-gray-300 rounded focus:ring-[#4a6b5a] touch-manipulation ${isLockedRegistration(session.id, matchNumber) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                                         style={{ accentColor: '#4a6b5a' }}
                                       />
                                       <span
