@@ -49,6 +49,9 @@ implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'com.google.auth:google-auth-library-credentials:1.20.0'
 	implementation 'com.google.auth:google-auth-library-oauth2-http:1.20.0'
 
+	// iCal feed generation (ical-calendar-feed)
+	implementation 'net.sf.biweekly:biweekly:0.6.7'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 

@@ -23,7 +23,7 @@ status: completed
 ---
 
 ### タスク2: build.gradle 依存ライブラリ追加（biweekly）
-- [ ] 完了
+- [x] 完了
 - **概要:** iCal形式生成用に `biweekly` ライブラリを追加。Google Calendar API系の削除はタスク10で実施。
 - **変更対象ファイル:**
   - `karuta-tracker/build.gradle` — `implementation 'net.sf.biweekly:biweekly:0.6.7'` を追加
