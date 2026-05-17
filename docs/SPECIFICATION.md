@@ -1968,7 +1968,7 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/dates?fromDate=` | ALL | 日付一覧（軽量・参加団体フィルタ） |
 | GET | `/exists?date=` | ALL | 日付存在確認 |
 | GET | `/{id}/participants` | ALL | 参加者一覧 |
-| GET | `/participations/player/{id}?year=&month=` | ALL | 月別参加状況 |
+| GET | `/participations/player/{id}?year=&month=` | ALL | 月別参加状況（アクティブな参加レコードのみ返す。`CANCELLED`/`DECLINED`/`WAITLIST_DECLINED` は除外し、キャンセル後の再登録判定に使える）。ステータス詳細やキャンセル済み状態を含めて確認したい場合は `/participations/player/{id}/status` を使う |
 | GET | `/participations/player/{id}/status?year=&month=` | ALL | 月別参加状況（抽選ステータス付き）。レスポンスに `beforeDeadline: boolean`（締切前かどうか）を含む。フロントエンドはこの値を使って締切後の既存登録チェックボックスを disabled 化する |
 | POST | `/` | SUPER_ADMIN | セッション作成 |
 | PUT | `/{id}` | SUPER_ADMIN | セッション更新 |
