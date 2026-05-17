@@ -47,7 +47,7 @@ status: completed
 ---
 
 ### タスク4: IcalCalendarFeedService 実装
-- [ ] 完了
+- [x] 完了
 - **概要:** フィード生成・token管理・表示名管理のビジネスロジックを実装。既存`GoogleCalendarSyncService`の時刻算出ロジックは流用する（参考にしてコピペでもよい）。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/IcalCalendarFeedService.java` — 新規作成
