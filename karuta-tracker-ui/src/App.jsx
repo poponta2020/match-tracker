@@ -42,6 +42,7 @@ import DensukeManagement from './pages/densuke/DensukeManagement';
 import SystemSettings from './pages/settings/SystemSettings';
 import OrganizationSettings from './pages/settings/OrganizationSettings';
 import SettingsPage from './pages/SettingsPage';
+import CalendarSubscriptionPage from './pages/CalendarSubscriptionPage';
 import MentorManagement from './pages/mentor/MentorManagement';
 import LotteryManagement from './pages/lottery/LotteryManagement';
 
@@ -140,6 +141,7 @@ function App() {
             <Route path="/settings/organizations" element={<ProtectedPage><OrganizationSettings /></ProtectedPage>} />
             <Route path="/settings/mentor" element={<ProtectedPage><MentorManagement /></ProtectedPage>} />
             <Route path="/settings/notifications" element={<ProtectedPage><NotificationSettings /></ProtectedPage>} />
+            <Route path="/settings/calendar" element={<ProtectedPage><CalendarSubscriptionPage /></ProtectedPage>} />
             <Route path="/admin/line/channels" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><LineChannelAdmin /></RoleProtectedPage>} />
             <Route path="/admin/line/schedule" element={<RoleProtectedPage requiredRole="ADMIN"><LineScheduleAdmin /></RoleProtectedPage>} />
 

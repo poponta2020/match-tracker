@@ -103,7 +103,7 @@ status: completed
 ---
 
 ### タスク8: フロントエンド API client 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `icalCalendar.js` に3つのAPI呼び出し関数を実装。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/icalCalendar.js` — 新規作成
@@ -117,7 +117,7 @@ status: completed
 ---
 
 ### タスク9: SettingsPage.jsx の新UI実装
-- [ ] 完了
+- [x] 完了
 - **概要:** 既存のGoogle Calendar OAuth同期UIを削除し、新しい「カレンダー購読」セクションを実装。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/SettingsPage.jsx` —
