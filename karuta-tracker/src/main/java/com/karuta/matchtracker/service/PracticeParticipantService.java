@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -219,22 +220,18 @@ public class PracticeParticipantService {
     private void registerSameDay(PracticeParticipationRequest request, Long organizationId) {
         Long playerId = request.getPlayerId();
 
-        // 対象団体の月内セッションIDを取得して既存登録を削除（月単位の一括更新）
+        // 対象団体の月内セッションIDを取得
         List<Long> allMonthSessionIds = practiceSessionRepository
                 .findByYearAndMonthAndOrganizationId(request.getYear(), request.getMonth(), organizationId).stream()
                 .map(PracticeSession::getId).collect(Collectors.toList());
 
-        // softDelete前に既存WONの (sessionId, matchNumber) を控えておく。
-        // 「以前からWONのまま変わらない」再登録では「今日参加します」通知を発火させないため。
-        Set<String> previouslyWonKeys = new HashSet<>();
+        // 月内の既存アクティブ参加（CANCELLED/DECLINED/WAITLIST_DECLINED を除く）を (sessionId, matchNumber) でマップ化。
+        // 差分処理用: 「リクエストにあり既存とも一致」は no-op（dirty化・waitlistNumber再採番・通知発火を避ける）。
+        Map<String, PracticeParticipant> existingActiveByKey = new HashMap<>();
         if (!allMonthSessionIds.isEmpty()) {
             practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, allMonthSessionIds).stream()
-                    .filter(p -> p.getStatus() == ParticipantStatus.WON && p.getMatchNumber() != null)
-                    .forEach(p -> previouslyWonKeys.add(participationKey(p.getSessionId(), p.getMatchNumber())));
-
-            practiceParticipantRepository.softDeleteByPlayerIdAndSessionIds(
-                    playerId, allMonthSessionIds, JstDateTimeUtil.now());
-            practiceParticipantRepository.flush();
+                    .filter(p -> p.getMatchNumber() != null && !INACTIVE_STATUSES.contains(p.getStatus()))
+                    .forEach(p -> existingActiveByKey.put(participationKey(p.getSessionId(), p.getMatchNumber()), p));
         }
 
         Map<Long, PracticeSession> sessionsMap = practiceSessionRepository.findAllById(
@@ -243,20 +240,28 @@ public class PracticeParticipantService {
                         .distinct().collect(Collectors.toList())
         ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
-        int registered = 0, waitlisted = 0;
+        int registered = 0, waitlisted = 0, unchanged = 0;
+        Set<String> requestKeys = new HashSet<>();
         Set<String> processedKeys = new HashSet<>();
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
             Integer matchNumber = participation.getMatchNumber();
-            if (!processedKeys.add(participationKey(sessionId, matchNumber))) {
+            String key = participationKey(sessionId, matchNumber);
+            if (!processedKeys.add(key)) {
+                continue;
+            }
+            requestKeys.add(key);
+
+            // 既存アクティブ参加と一致するキーは触らない（副作用を出さない）
+            if (existingActiveByKey.containsKey(key)) {
+                unchanged++;
                 continue;
             }
 
+            // 新規、または CANCELLED/DECLINED/WAITLIST_DECLINED からの復活
             if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
-                if (!previouslyWonKeys.contains(participationKey(sessionId, matchNumber))) {
-                    notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
-                }
+                notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
             } else {
                 int maxNumber = practiceParticipantRepository
@@ -265,7 +270,25 @@ public class PracticeParticipantService {
                 waitlisted++;
             }
         }
-        log.info("SAME_DAY: registered {} won, {} waitlisted for player {}", registered, waitlisted, playerId);
+
+        // リクエストに含まれない既存アクティブを個別にキャンセル
+        int cancelled = 0;
+        LocalDateTime now = JstDateTimeUtil.now();
+        for (Map.Entry<String, PracticeParticipant> entry : existingActiveByKey.entrySet()) {
+            if (requestKeys.contains(entry.getKey())) continue;
+            PracticeParticipant existing = entry.getValue();
+            existing.setStatus(ParticipantStatus.CANCELLED);
+            existing.setDirty(true);
+            existing.setCancelledAt(now);
+            practiceParticipantRepository.save(existing);
+            cancelled++;
+        }
+        if (cancelled > 0) {
+            practiceParticipantRepository.flush();
+        }
+
+        log.info("SAME_DAY: registered {} won, {} waitlisted, {} unchanged, {} cancelled for player {}",
+                registered, waitlisted, unchanged, cancelled, playerId);
     }
 
     private void registerBeforeDeadline(PracticeParticipationRequest request, Long organizationId) {
