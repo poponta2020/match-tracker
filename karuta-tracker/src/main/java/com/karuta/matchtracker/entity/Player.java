@@ -3,7 +3,9 @@ package com.karuta.matchtracker.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 
 /**
  * 選手マスタエンティティ
@@ -129,6 +131,16 @@ public class Player {
     private LocalDateTime updatedAt;
 
     /**
+     * iCalフィード用トークン
+     * 推測困難なランダム文字列。プレイヤーごとに一意で、URL中で本人特定に使う
+     */
+    @Column(name = "ical_feed_token", nullable = false, unique = true, length = 64)
+    private String icalFeedToken;
+
+    private static final SecureRandom ICAL_FEED_TOKEN_RANDOM = new SecureRandom();
+    private static final HexFormat ICAL_FEED_TOKEN_HEX = HexFormat.of();
+
+    /**
      * 性別の列挙型
      */
     public enum Gender {
@@ -180,6 +192,11 @@ public class Player {
     protected void onCreate() {
         createdAt = JstDateTimeUtil.now();
         updatedAt = JstDateTimeUtil.now();
+        if (icalFeedToken == null) {
+            byte[] bytes = new byte[24];
+            ICAL_FEED_TOKEN_RANDOM.nextBytes(bytes);
+            icalFeedToken = ICAL_FEED_TOKEN_HEX.formatHex(bytes);
+        }
     }
 
     /**

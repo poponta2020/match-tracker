@@ -34,7 +34,7 @@ status: completed
 ---
 
 ### タスク3: Player / PlayerOrganization エンティティ拡張
-- [ ] 完了
+- [x] 完了
 - **概要:** エンティティに新列をマッピングし、Repository にフィードtoken検索メソッドを追加。新規プレイヤー作成時のtoken自動生成も実装。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/Player.java` — `icalFeedToken` フィールド追加、`@PrePersist` メソッドで未設定時に自動生成
