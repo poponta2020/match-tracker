@@ -214,7 +214,7 @@
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
 | 伝助管理 | `/admin/densuke` | ADMIN+ |
 | システム設定 | `/admin/settings` | ADMIN+ |
-| Googleカレンダー連携 | （OAuth） | ALL |
+| カレンダー購読 | `/settings/calendar` | ALL |
 | ログアウト | — | ALL |
 
 ---

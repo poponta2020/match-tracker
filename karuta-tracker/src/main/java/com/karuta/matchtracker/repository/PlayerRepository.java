@@ -86,4 +86,14 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
      */
     @Query("SELECT p FROM Player p WHERE p.role = :role AND p.adminOrganizationId = :orgId AND p.deletedAt IS NULL")
     List<Player> findByRoleAndAdminOrganizationIdAndActive(@Param("role") Player.Role role, @Param("orgId") Long orgId);
+
+    /**
+     * iCalフィードトークンでアクティブな選手を検索
+     * 論理削除済みは取得しない（フィードURL経由のアクセスを拒否するため）
+     *
+     * @param token iCalフィードトークン
+     * @return 選手（任意）
+     */
+    @Query("SELECT p FROM Player p WHERE p.icalFeedToken = :token AND p.deletedAt IS NULL")
+    Optional<Player> findByIcalFeedTokenAndActive(@Param("token") String token);
 }

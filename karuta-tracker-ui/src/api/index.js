@@ -3,7 +3,7 @@ export { matchAPI } from './matches';
 export { practiceAPI } from './practices';
 export { pairingAPI } from './pairings';
 export { venueAPI } from './venues';
-export { calendarAPI } from './calendar';
+export { icalCalendarAPI } from './icalCalendar';
 export { homeAPI } from './home';
 export { lotteryAPI } from './lottery';
 export { notificationAPI } from './notifications';

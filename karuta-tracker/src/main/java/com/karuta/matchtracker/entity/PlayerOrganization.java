@@ -32,6 +32,13 @@ public class PlayerOrganization {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * カレンダー購読フィード上での団体表示名（ユーザー個別オーバーライド）
+     * NULLの場合は Organization.name をそのまま使う
+     */
+    @Column(name = "calendar_display_name", length = 50)
+    private String calendarDisplayName;
+
     @PrePersist
     protected void onCreate() {
         createdAt = JstDateTimeUtil.now();

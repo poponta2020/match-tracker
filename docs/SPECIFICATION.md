@@ -33,7 +33,7 @@
 - **Lombok** — コード生成（Getter/Setter/Builder等）
 - **Jsoup** — 伝助HTMLスクレイピング
 - **Apache HttpClient 4.5** — 会場予約プロキシの会場サイト中継
-- **Google Calendar API v3** — カレンダー同期
+- **biweekly** — iCalフィード生成（カレンダー購読）
 - **Axios** — HTTP通信
 - **React Router v7** — ルーティング
 - **Recharts** — グラフ描画
@@ -149,7 +149,7 @@
 
 | セクション | 内容 |
 |---|---|
-| ナビゲーションバー | 選手名表示、ハンバーガーメニュー（プロフィール、管理メニュー、Googleカレンダー同期、ログアウト） |
+| ナビゲーションバー | 選手名表示、ハンバーガーメニュー（プロフィール、管理メニュー、カレンダー購読、ログアウト） |
 | 繰り上げオファーバナー | 未応答の繰り上げ参加通知がある場合に表示。タップで通知一覧に遷移 |
 | 次の練習 | 次回参加予定の練習日・時間・会場・参加試合番号。当日の場合は `TODAY` バッジ表示 |
 | 組み合わせ作成リンク | ADMIN以上のみ。次の練習日の組み合わせ作成画面へのショートカット |
@@ -995,35 +995,35 @@ WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 pla
 - UI 表示（管理画面に drift 列を追加しない）
 - アラート通知（ログから外部監視で拾う運用）
 
-### 4.2 Google カレンダー同期
+### 4.2 カレンダー購読（iCalフィード）
 
 #### 4.2.1 概要
 
-本アプリの練習予定を各選手のGoogleカレンダーに一方向で同期する。
+選手ごとに固有のフィードURL（`/ical/calendar/{token}.ics`）を発行し、Googleカレンダー・Apple Calendar・Outlook などの外部カレンダーから購読する一方向の同期。購読側が定期取得（数時間〜半日間隔）するため、追加・キャンセルの反映には数時間のラグがあるが、サーバ側スケジューラ不要で実質自動同期される。
 
-#### 4.2.2 認証フロー
+#### 4.2.2 認証
 
-- **ブラウザ**: Google Identity Services (GIS) ライブラリのポップアップ方式
-- **モバイル（PWA/ホーム画面追加時）**: GISが動作しないため、OAuth2のリダイレクト方式にフォールバック
-  - `sessionStorage` にプレイヤーIDを保存してリダイレクト
-  - コールバックでURLハッシュからアクセストークンを取得
-- **スコープ**: `https://www.googleapis.com/auth/calendar.events`
+- 公開エンドポイント（認証なし）。`players.ical_feed_token`（推測困難なランダム48文字）が事実上の認証
+- 設定画面用の3エンドポイント（`/api/calendar/feed/...`）は通常の認証（X-User-Id ヘッダ）必須
+- 漏洩時はユーザー自身が設定画面で「URL再発行」ボタン → 旧トークン即時無効化
 
-#### 4.2.3 同期ロジック
+#### 4.2.3 フィード生成ロジック
 
-1. 選手が参加予定の今後の練習セッションを取得
-2. 各セッションについて:
-   - `google_calendar_events` テーブルに既存イベントがあれば更新
-   - なければ新規作成
-   - アプリから削除されたセッションに対応するGoogleイベントは削除
-3. イベントの時間は会場の `VenueMatchSchedule` から決定。スケジュールがなければ終日イベント
-4. Google側でイベントが削除されていた場合（404）は再作成
+1. リクエストの token から Player を検索（論理削除済みは404）
+2. `findUpcomingParticipations(playerId, today)` で参加練習を取得
+3. ステータス `CANCELLED` は除外
+4. 各参加について VEVENT を構築:
+   - **UID**: `session-{sessionId}-player-{playerId}@match-tracker`（決定的、再生成時に同UIDで上書きされる）
+   - **タイトル**: `{表示名}＠{会場名}` 表示名は `PlayerOrganization.calendar_display_name` を優先、未設定 or 未所属（ゲスト参加）なら `Organization.name`
+   - **時刻**: `PracticeSession.start_time`/`end_time` → `VenueMatchSchedule` → 全日 の順
+   - **タイムゾーン**: Asia/Tokyo
+5. biweekly ライブラリで VCALENDAR にまとめてテキスト返却
 
-#### 4.2.4 同期結果
+#### 4.2.4 表示名カスタマイズ
 
-レスポンスに含まれる情報:
-- 作成件数 / 更新件数 / 削除件数 / 変更なし件数 / エラー件数
-- 詳細ログ / エラーメッセージ
+- プレイヤー×団体ごとに表示名を設定可能（`PlayerOrganization.calendar_display_name`、0〜50文字）
+- 1人のユーザーが複数団体に所属する場合に「わすら＠すずらん」「北大＠クラ館」のように使い分けできる
+- 所属していない団体（ゲスト参加）の練習も購読カレンダーに含まれ、表示名は `Organization.name` 固定
 
 ---
 
@@ -1417,7 +1417,7 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 - LINEチャネル管理（SUPER_ADMIN のみ）
 - LINE通知スケジュール（ADMIN+ のみ）
 - 伝助管理（ADMIN+ のみ）
-- Googleカレンダー同期
+- カレンダー購読
 - ログアウト
 
 ---
@@ -1432,7 +1432,6 @@ players ──< practice_participants (playerId)
 players ──< player_profiles (playerId)
 players ──< match_pairings (player1Id, player2Id)
 players ──< bye_activities (playerId)
-players ──< google_calendar_events (playerId)
 players ──< notifications (playerId)
 players ──< push_subscriptions (playerId)
 players ──< push_notification_preferences (playerId, organizationId)
@@ -1448,7 +1447,6 @@ line_channels ──< line_linking_codes (lineChannelId)
 line_channels ──< line_message_log (lineChannelId)
 
 practice_sessions ──< practice_participants (sessionId)
-practice_sessions ──< google_calendar_events (sessionId)
 practice_sessions ──< lottery_executions (sessionId)
 
 practice_participants ──> lottery_executions (lotteryId)
@@ -1653,16 +1651,6 @@ venues ──< venue_match_schedules (venueId)
 | match_number | INT | NOT NULL | 試合番号 |
 | start_time | TIME | NOT NULL | 開始時刻 |
 | end_time | TIME | NOT NULL | 終了時刻 |
-
-#### google_calendar_events
-
-| カラム | 型 | 制約 | 説明 |
-|---|---|---|---|
-| id | BIGINT | PK, AUTO | — |
-| player_id | BIGINT | NOT NULL | 選手ID |
-| session_id | BIGINT | NOT NULL | 練習日ID |
-| google_event_id | VARCHAR | NOT NULL | GoogleイベントID |
-| synced_session_updated_at | TIMESTAMP | — | 同期時のセッション更新日時 |
 
 #### densuke_urls
 
@@ -2012,11 +2000,21 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/{id}` | ALL | 会場更新 |
 | DELETE | `/{id}` | ALL | 会場削除 |
 
-### 7.10 Googleカレンダー (`/api/google-calendar`)
+### 7.10 カレンダー購読 (iCalフィード)
+
+公開エンドポイント（認証なし。token が事実上の認証）:
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| POST | `/sync` | ALL | カレンダー同期実行 |
+| GET | `/ical/calendar/{token}.ics` | — | iCal形式のフィード本体（text/calendar） |
+
+設定画面用エンドポイント (`/api/calendar/feed`、認証必須):
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `/info` | ALL | 自分のフィードURL+所属団体・表示名一覧 |
+| POST | `/regenerate` | ALL | feed_tokenを再発行（旧URLは即時無効） |
+| PATCH | `/display-names` | ALL | 所属団体ごとの表示名（calendar_display_name）を一括更新 |
 
 ### 7.11 抽選 (`/api/lottery`)
 
