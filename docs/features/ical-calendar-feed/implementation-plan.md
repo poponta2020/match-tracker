@@ -155,7 +155,7 @@ status: completed
 ---
 
 ### タスク11: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.mdルールに基づき、機能追加・変更を3つの公式ドキュメントに反映。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — Google Calendar機能の記述を新方式（iCalフィード）に書き換え
