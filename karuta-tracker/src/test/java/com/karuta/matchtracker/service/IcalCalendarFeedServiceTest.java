@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TimeZone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -704,6 +705,50 @@ class IcalCalendarFeedServiceTest {
                 .hasMessageContaining("Player")
                 .hasMessageContaining("999");
         verify(playerOrganizationRepository, never()).saveAll(anyList());
+    }
+
+    // ============================================================
+    // 全日イベントの日付（タイムゾーン非依存）テスト
+    // ============================================================
+
+    @Test
+    @DisplayName("時刻なしセッションは VALUE=DATE 形式で日付がそのまま出る（UTC JVMでも前日にならない）")
+    void generateIcsForToken_allDayEventCorrectDateInUtcJvm() {
+        // Given - JVM TZ を UTC に切り替えて、Render等の本番環境を再現
+        TimeZone originalTz = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        try {
+            LocalDate sessionDate = LocalDate.of(2026, 5, 18);
+            // 開始/終了時刻なし、VenueMatchSchedule もなし → 全日イベントになる
+            PracticeSession session = createSession(SESSION_ID, sessionDate, VENUE_ID, ORG_ID,
+                    null, null);
+            PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                    ParticipantStatus.WON);
+
+            when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
+                    .thenReturn(Optional.of(player));
+            when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                    .thenReturn(List.of(participation));
+            when(practiceSessionRepository.findAllById(anyList()))
+                    .thenReturn(List.of(session));
+            when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+            when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                    .thenReturn(Collections.emptyList());
+            when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
+            when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            String ics = service.generateIcsForToken(VALID_TOKEN);
+
+            // Then - DTSTART/DTEND が VALUE=DATE 形式かつ前日にずれていない
+            assertThat(ics).contains("DTSTART;VALUE=DATE:20260518");
+            assertThat(ics).contains("DTEND;VALUE=DATE:20260519");
+            // 前日 (20260517) として出力されていないことを明示
+            assertThat(ics).doesNotContain("DTSTART;VALUE=DATE:20260517");
+        } finally {
+            TimeZone.setDefault(originalTz);
+        }
     }
 
     // ============================================================

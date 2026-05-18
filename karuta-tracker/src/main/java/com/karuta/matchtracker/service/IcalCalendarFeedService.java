@@ -4,6 +4,10 @@ import biweekly.Biweekly;
 import biweekly.ICalVersion;
 import biweekly.ICalendar;
 import biweekly.component.VEvent;
+import biweekly.property.DateEnd;
+import biweekly.property.DateStart;
+import biweekly.util.DateTimeComponents;
+import biweekly.util.ICalDate;
 import com.karuta.matchtracker.dto.CalendarOrganizationDto;
 import com.karuta.matchtracker.dto.FeedInfoDto;
 import com.karuta.matchtracker.entity.Organization;
@@ -347,11 +351,16 @@ public class IcalCalendarFeedService {
             event.setDateStart(startDate, true);
             event.setDateEnd(endDateTime, true);
         } else {
-            // 全日イベント: 日付のみ（hasTime=false）
-            Date dayStart = Date.from(date.atStartOfDay(JstDateTimeUtil.JST).toInstant());
-            Date dayEnd = Date.from(date.plusDays(1).atStartOfDay(JstDateTimeUtil.JST).toInstant());
-            event.setDateStart(dayStart, false);
-            event.setDateEnd(dayEnd, false);
+            // 全日イベント (VALUE=DATE)。
+            // setDateStart(Date, false) は JVM デフォルトTZ で日付を解釈するため、Render などの UTC 環境では
+            // 前日として出力されてしまう。biweekly の DateTimeComponents で日付成分を直接保持し、TZ非依存にする。
+            LocalDate nextDay = date.plusDays(1);
+            DateTimeComponents startComp = new DateTimeComponents(
+                    date.getYear(), date.getMonthValue(), date.getDayOfMonth());
+            DateTimeComponents endComp = new DateTimeComponents(
+                    nextDay.getYear(), nextDay.getMonthValue(), nextDay.getDayOfMonth());
+            event.setDateStart(new DateStart(new ICalDate(startComp, false)));
+            event.setDateEnd(new DateEnd(new ICalDate(endComp, false)));
         }
 
         return event;
