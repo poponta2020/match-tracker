@@ -23,6 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -168,27 +170,26 @@ class IcalCalendarFeedServiceTest {
                 .hasMessageContaining("icalFeedToken");
     }
 
-    @Test
-    @DisplayName("CANCELLEDステータスの参加はVEVENTから除外される")
-    void generateIcsForToken_cancelledParticipationsExcluded() {
-        // Given
-        Long cancelledSessionId = 401L;
+    @ParameterizedTest
+    @EnumSource(value = ParticipantStatus.class,
+            names = {"CANCELLED", "DECLINED", "WAITLISTED", "OFFERED", "WAITLIST_DECLINED"})
+    @DisplayName("非アクティブステータス（CANCELLED/DECLINED/WAITLISTED/OFFERED/WAITLIST_DECLINED）はVEVENTから除外される")
+    void generateIcsForToken_nonActiveStatusExcluded(ParticipantStatus inactiveStatus) {
+        // Given - WON のセッションと非アクティブステータスのセッション各1件
+        Long inactiveSessionId = 401L;
         PracticeSession activeSession = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
-                LocalTime.of(9, 0), LocalTime.of(12, 0));
-        PracticeSession cancelledSession = createSession(cancelledSessionId,
-                futureDate.plusDays(1), VENUE_ID, ORG_ID,
                 LocalTime.of(9, 0), LocalTime.of(12, 0));
 
         PracticeParticipant activeParticipation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
-        PracticeParticipant cancelledParticipation = createParticipation(cancelledSessionId,
-                PLAYER_ID, 1, ParticipantStatus.CANCELLED);
+        PracticeParticipant inactiveParticipation = createParticipation(inactiveSessionId,
+                PLAYER_ID, 1, inactiveStatus);
 
         when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
                 .thenReturn(Optional.of(player));
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
-                .thenReturn(List.of(activeParticipation, cancelledParticipation));
-        // CANCELLED は filter 後に除外されるので、ロード対象になるのは activeSession のみ
+                .thenReturn(List.of(activeParticipation, inactiveParticipation));
+        // 非アクティブは filter 後に除外されるので、ロード対象になるのは activeSession のみ
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(activeSession));
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
@@ -201,13 +202,40 @@ class IcalCalendarFeedServiceTest {
         // When
         String ics = service.generateIcsForToken(VALID_TOKEN);
 
-        // Then
-        // VEVENT は1つだけ含まれる（CANCELLED の方は除外）
+        // Then - WON のみ VEVENT 化される
         long veventCount = countOccurrences(ics, "BEGIN:VEVENT");
         assertThat(veventCount).isEqualTo(1L);
-        // CANCELLED 側の sessionId に対応する UID が含まれないことを確認
-        assertThat(ics).doesNotContain("session-" + cancelledSessionId + "-player-");
-        // 残る方の UID は含まれる
+        assertThat(ics).doesNotContain("session-" + inactiveSessionId + "-player-");
+        assertThat(ics).contains("session-" + SESSION_ID + "-player-" + PLAYER_ID);
+    }
+
+    @Test
+    @DisplayName("PENDINGステータスもisActive()扱いでVEVENTに含まれる")
+    void generateIcsForToken_pendingStatusIncluded() {
+        // Given
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(9, 0), LocalTime.of(12, 0));
+        PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                ParticipantStatus.PENDING);
+
+        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
+                .thenReturn(Optional.of(player));
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(participation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(Collections.emptyList());
+        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        String ics = service.generateIcsForToken(VALID_TOKEN);
+
+        // Then
+        assertThat(countOccurrences(ics, "BEGIN:VEVENT")).isEqualTo(1L);
         assertThat(ics).contains("session-" + SESSION_ID + "-player-" + PLAYER_ID);
     }
 

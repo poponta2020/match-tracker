@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,6 +30,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class IcalCalendarSettingsController {
+
+    /** PlayerOrganization.calendar_display_name の DB 上の VARCHAR(50) と一致させる */
+    private static final int DISPLAY_NAME_MAX_LENGTH = 50;
 
     private final IcalCalendarFeedService icalCalendarFeedService;
 
@@ -53,17 +55,26 @@ public class IcalCalendarSettingsController {
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
     public ResponseEntity<FeedInfoDto> updateDisplayNames(
             HttpServletRequest request,
-            @RequestBody UpdateDisplayNamesRequest body) {
+            @RequestBody(required = false) UpdateDisplayNamesRequest body) {
         Long userId = (Long) request.getAttribute("currentUserId");
-        Map<String, String> raw = body.getDisplayNames() != null ? body.getDisplayNames() : Collections.emptyMap();
+        if (body == null || body.getDisplayNames() == null || body.getDisplayNames().isEmpty()) {
+            // 空ボディは表示名の変更なしとして扱い、現状を返す
+            return ResponseEntity.ok(icalCalendarFeedService.getFeedInfo(userId));
+        }
         Map<Long, String> displayNames = new HashMap<>();
-        raw.forEach((k, v) -> {
+        for (Map.Entry<String, String> entry : body.getDisplayNames().entrySet()) {
+            long orgId;
             try {
-                displayNames.put(Long.parseLong(k), v);
+                orgId = Long.parseLong(entry.getKey());
             } catch (NumberFormatException e) {
-                log.warn("Invalid organizationId in display-names request: {}", k);
+                throw new IllegalArgumentException("organizationId は数値で指定してください: " + entry.getKey());
             }
-        });
+            String value = entry.getValue();
+            if (value != null && value.length() > DISPLAY_NAME_MAX_LENGTH) {
+                throw new IllegalArgumentException("表示名は" + DISPLAY_NAME_MAX_LENGTH + "文字以下にしてください");
+            }
+            displayNames.put(orgId, value);
+        }
         return ResponseEntity.ok(icalCalendarFeedService.updateDisplayNames(userId, displayNames));
     }
 }

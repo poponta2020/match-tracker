@@ -7,7 +7,6 @@ import biweekly.component.VEvent;
 import com.karuta.matchtracker.dto.CalendarOrganizationDto;
 import com.karuta.matchtracker.dto.FeedInfoDto;
 import com.karuta.matchtracker.entity.Organization;
-import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.entity.PracticeParticipant;
@@ -88,9 +87,11 @@ public class IcalCalendarFeedService {
         Long playerId = player.getId();
         LocalDate today = JstDateTimeUtil.today();
 
+        // 参加確定（WON / PENDING）のみカレンダーに出す。
+        // CANCELLED / DECLINED / WAITLISTED / OFFERED / WAITLIST_DECLINED は対象外。
         List<PracticeParticipant> participations = practiceParticipantRepository
                 .findUpcomingParticipations(playerId, today).stream()
-                .filter(p -> p.getStatus() != ParticipantStatus.CANCELLED)
+                .filter(p -> p.getStatus() != null && p.getStatus().isActive())
                 .collect(Collectors.toList());
 
         ICalendar ical = new ICalendar();
