@@ -91,7 +91,7 @@ status: completed
 ---
 
 ### タスク7: バックエンド ユニットテスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 主要ロジック（feed生成・CANCELLED除外・表示名カスタマイズ・token再発行・時刻算出・UID一意性）のテストを追加。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/IcalCalendarFeedServiceTest.java` — 新規作成
