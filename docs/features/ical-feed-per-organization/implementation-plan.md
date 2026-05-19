@@ -78,7 +78,7 @@ status: completed
 ---
 
 ### タスク5: フロントエンド UI 改修（CalendarSubscriptionPage.jsx）
-- [ ] 完了
+- [x] 完了
 - **概要:** 設定画面を「所属団体ごとのカード」+「ゲスト参加カード」構造に改修。各カードにカレンダー名・URL・コピーボタン。表示名カスタマイズ入力欄は既存維持（所属団体ごと）。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/CalendarSubscriptionPage.jsx` —
@@ -96,7 +96,7 @@ status: completed
 ---
 
 ### タスク6: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.mdルールに基づき、機能変更を3つの公式ドキュメントに反映。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` —

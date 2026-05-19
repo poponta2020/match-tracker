@@ -999,31 +999,49 @@ WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 pla
 
 #### 4.2.1 概要
 
-選手ごとに固有のフィードURL（`/ical/calendar/{token}.ics`）を発行し、Googleカレンダー・Apple Calendar・Outlook などの外部カレンダーから購読する一方向の同期。購読側が定期取得（数時間〜半日間隔）するため、追加・キャンセルの反映には数時間のラグがあるが、サーバ側スケジューラ不要で実質自動同期される。
+選手ごとに「所属団体ごと + ゲスト参加」でフィードURLを発行し、Googleカレンダー・Apple Calendar・Outlook などの外部カレンダーから購読する一方向の同期。**カレンダー単位を団体別に分けることで、購読側で団体ごとに色分けできる**。購読側が定期取得（数時間〜半日間隔）するため、追加・キャンセルの反映には数時間のラグがあるが、サーバ側スケジューラ不要で実質自動同期される。
 
-#### 4.2.2 認証
+#### 4.2.2 URL構造
+
+- 所属団体ごと: `GET /ical/calendar/{token}/org/{orgId}.ics`
+- ゲスト参加（所属していない団体の練習）: `GET /ical/calendar/{token}/guest.ics`
+- 親トークンは `players.ical_feed_token`（プレイヤー1人に1つ）。複数URLを同じ親トークンで発行する
+
+#### 4.2.3 認証
 
 - 公開エンドポイント（認証なし）。`players.ical_feed_token`（推測困難なランダム48文字）が事実上の認証
 - 設定画面用の3エンドポイント（`/api/calendar/feed/...`）は通常の認証（X-User-Id ヘッダ）必須
-- 漏洩時はユーザー自身が設定画面で「URL再発行」ボタン → 旧トークン即時無効化
+- 漏洩時はユーザー自身が設定画面で「URL再発行」ボタン → 旧トークン即時無効化（**所属団体URL・ゲストURLすべてが一斉に切り替わる**）
 
-#### 4.2.3 フィード生成ロジック
+#### 4.2.4 フィード生成ロジック
 
+共通:
 1. リクエストの token から Player を検索（論理削除済みは404）
 2. `findUpcomingParticipations(playerId, today)` で参加練習を取得
-3. ステータス `CANCELLED` は除外
-4. 各参加について VEVENT を構築:
-   - **UID**: `session-{sessionId}-player-{playerId}@match-tracker`（決定的、再生成時に同UIDで上書きされる）
-   - **タイトル**: `{表示名}＠{会場名}` 表示名は `PlayerOrganization.calendar_display_name` を優先、未設定 or 未所属（ゲスト参加）なら `Organization.name`
-   - **時刻**: `PracticeSession.start_time`/`end_time` → `VenueMatchSchedule` → 全日 の順
-   - **タイムゾーン**: Asia/Tokyo
-5. biweekly ライブラリで VCALENDAR にまとめてテキスト返却
+3. `ParticipantStatus.isActive()`（WON / PENDING のみ）でフィルタ
 
-#### 4.2.4 表示名カスタマイズ
+所属団体フィード (`/org/{orgId}.ics`):
+4. プレイヤーが orgId に所属していなければ 404
+5. `session.organizationId == orgId` でさらにフィルタ
+6. **VCALENDAR の X-WR-CALNAME** に該当団体の表示名（`PlayerOrganization.calendar_display_name` ?? `Organization.name`）
+
+ゲストフィード (`/guest.ics`):
+4. プレイヤーが所属する組織ID集合に**含まれない**練習のみ抽出
+5. **VCALENDAR の X-WR-CALNAME** に `"ゲスト参加"` 固定
+
+各 VEVENT は両フィード共通:
+- **UID**: `session-{sessionId}-player-{playerId}@match-tracker`（決定的、再生成時に同UIDで上書きされる）
+- **タイトル**: `{表示名}＠{会場名}` 表示名は `PlayerOrganization.calendar_display_name` を優先、未設定 or 未所属（ゲスト参加）なら `Organization.name`
+- **時刻**: `PracticeSession.start_time`/`end_time` → `VenueMatchSchedule` → 全日 の順
+- **タイムゾーン**: Asia/Tokyo（全日イベントは TZ非依存の DateTimeComponents で構築）
+
+biweekly ライブラリで VCALENDAR にまとめてテキスト返却。
+
+#### 4.2.5 表示名カスタマイズ
 
 - プレイヤー×団体ごとに表示名を設定可能（`PlayerOrganization.calendar_display_name`、0〜50文字）
 - 1人のユーザーが複数団体に所属する場合に「わすら＠すずらん」「北大＠クラ館」のように使い分けできる
-- 所属していない団体（ゲスト参加）の練習も購読カレンダーに含まれ、表示名は `Organization.name` 固定
+- ゲスト参加フィード内のイベントタイトルは `Organization.name` 固定（カスタマイズ対象外。`PlayerOrganization` が存在しないため）
 
 ---
 
@@ -2006,14 +2024,15 @@ UNIQUE制約: (player_id, organization_id)
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/ical/calendar/{token}.ics` | — | iCal形式のフィード本体（text/calendar） |
+| GET | `/ical/calendar/{token}/org/{orgId}.ics` | — | 所属団体ごとのiCalフィード（プレイヤーがorgIdに所属していなければ404） |
+| GET | `/ical/calendar/{token}/guest.ics` | — | ゲスト参加（所属外団体の練習）のiCalフィード |
 
 設定画面用エンドポイント (`/api/calendar/feed`、認証必須):
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/info` | ALL | 自分のフィードURL+所属団体・表示名一覧 |
-| POST | `/regenerate` | ALL | feed_tokenを再発行（旧URLは即時無効） |
+| GET | `/info` | ALL | 所属団体ごとのフィードURL一覧 + ゲスト参加URL |
+| POST | `/regenerate` | ALL | feed_tokenを再発行（**全URLが一斉に無効**） |
 | PATCH | `/display-names` | ALL | 所属団体ごとの表示名（calendar_display_name）を一括更新 |
 
 ### 7.11 抽選 (`/api/lottery`)
