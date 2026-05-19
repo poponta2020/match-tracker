@@ -27,15 +27,28 @@ public class IcalCalendarFeedController {
 
     private final IcalCalendarFeedService icalCalendarFeedService;
 
-    @GetMapping(value = "/{token}.ics", produces = "text/calendar;charset=UTF-8")
-    public ResponseEntity<String> getFeed(@PathVariable String token) {
+    @GetMapping(value = "/{token}/org/{orgId}.ics", produces = "text/calendar;charset=UTF-8")
+    public ResponseEntity<String> getOrgFeed(@PathVariable String token, @PathVariable Long orgId) {
         try {
-            String ics = icalCalendarFeedService.generateIcsForToken(token);
+            String ics = icalCalendarFeedService.generateIcsForOrgFeed(token, orgId);
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("text/calendar;charset=UTF-8"))
                     .body(ics);
         } catch (ResourceNotFoundException ex) {
-            log.debug("iCal feed token not found");
+            log.debug("iCal org feed not found for token/orgId");
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping(value = "/{token}/guest.ics", produces = "text/calendar;charset=UTF-8")
+    public ResponseEntity<String> getGuestFeed(@PathVariable String token) {
+        try {
+            String ics = icalCalendarFeedService.generateIcsForGuestFeed(token);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("text/calendar;charset=UTF-8"))
+                    .body(ics);
+        } catch (ResourceNotFoundException ex) {
+            log.debug("iCal guest feed token not found");
             return ResponseEntity.notFound().build();
         }
     }

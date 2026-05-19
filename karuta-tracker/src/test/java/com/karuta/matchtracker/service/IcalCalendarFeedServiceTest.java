@@ -1,7 +1,7 @@
 package com.karuta.matchtracker.service;
 
-import com.karuta.matchtracker.dto.CalendarOrganizationDto;
 import com.karuta.matchtracker.dto.FeedInfoDto;
+import com.karuta.matchtracker.dto.OrganizationFeedDto;
 import com.karuta.matchtracker.entity.Organization;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
@@ -120,20 +120,23 @@ class IcalCalendarFeedServiceTest {
     }
 
     // ============================================================
-    // generateIcsForToken テスト
+    // generateIcsForOrgFeed テスト
     // ============================================================
 
     @Test
-    @DisplayName("有効なトークンで未来の参加練習がVEVENTとして含まれる")
-    void generateIcsForToken_validToken_returnsIcsWithVEvents() {
+    @DisplayName("有効なトークンと所属orgIdで未来の参加練習がVEVENTとして含まれる")
+    void generateIcsForOrgFeed_validToken_returnsIcsWithVEvents() {
         // Given
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
                 LocalTime.of(9, 0), LocalTime.of(12, 0));
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -141,12 +144,9 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then
         assertThat(ics).contains("BEGIN:VCALENDAR");
@@ -159,23 +159,74 @@ class IcalCalendarFeedServiceTest {
 
     @Test
     @DisplayName("無効なトークンの場合 ResourceNotFoundException")
-    void generateIcsForToken_invalidToken_throwsResourceNotFoundException() {
+    void generateIcsForOrgFeed_invalidToken_throwsResourceNotFoundException() {
         // Given
         when(playerRepository.findByIcalFeedTokenAndActive("invalid"))
                 .thenReturn(Optional.empty());
 
         // When & Then
-        assertThatThrownBy(() -> service.generateIcsForToken("invalid"))
+        assertThatThrownBy(() -> service.generateIcsForOrgFeed("invalid", ORG_ID))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Player")
                 .hasMessageContaining("icalFeedToken");
+    }
+
+    @Test
+    @DisplayName("プレイヤーがorgIdに所属していない場合は ResourceNotFoundException")
+    void generateIcsForOrgFeed_unaffiliatedOrgId_throwsResourceNotFoundException() {
+        // Given
+        stubPlayerByToken();
+        stubMembership(ORG_ID, false);
+
+        // When & Then
+        assertThatThrownBy(() -> service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("PlayerOrganization");
+    }
+
+    @Test
+    @DisplayName("指定 orgId 以外の所属団体の練習はVEVENTに含まれない")
+    void generateIcsForOrgFeed_otherOrgPracticeExcluded() {
+        // Given: orgId=200 を指定するが、別の orgId=201 の練習もある
+        Long otherOrgId = 201L;
+        Long otherSessionId = 401L;
+        PracticeSession ownSession = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(9, 0), LocalTime.of(12, 0));
+        PracticeSession otherOrgSession = createSession(otherSessionId, futureDate, VENUE_ID, otherOrgId,
+                LocalTime.of(13, 0), LocalTime.of(15, 0));
+        PracticeParticipant ownParticipation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+        PracticeParticipant otherParticipation = createParticipation(otherSessionId, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(ownParticipation, otherParticipation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(ownSession, otherOrgSession));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: 指定 orgId のセッションのみ VEVENT 化される
+        long veventCount = countOccurrences(ics, "BEGIN:VEVENT");
+        assertThat(veventCount).isEqualTo(1L);
+        assertThat(ics).contains("session-" + SESSION_ID + "-player-" + PLAYER_ID);
+        assertThat(ics).doesNotContain("session-" + otherSessionId + "-player-");
     }
 
     @ParameterizedTest
     @EnumSource(value = ParticipantStatus.class,
             names = {"CANCELLED", "DECLINED", "WAITLISTED", "OFFERED", "WAITLIST_DECLINED"})
     @DisplayName("非アクティブステータス（CANCELLED/DECLINED/WAITLISTED/OFFERED/WAITLIST_DECLINED）はVEVENTから除外される")
-    void generateIcsForToken_nonActiveStatusExcluded(ParticipantStatus inactiveStatus) {
+    void generateIcsForOrgFeed_nonActiveStatusExcluded(ParticipantStatus inactiveStatus) {
         // Given - WON のセッションと非アクティブステータスのセッション各1件
         Long inactiveSessionId = 401L;
         PracticeSession activeSession = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
@@ -186,8 +237,11 @@ class IcalCalendarFeedServiceTest {
         PracticeParticipant inactiveParticipation = createParticipation(inactiveSessionId,
                 PLAYER_ID, 1, inactiveStatus);
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(activeParticipation, inactiveParticipation));
         // 非アクティブは filter 後に除外されるので、ロード対象になるのは activeSession のみ
@@ -196,12 +250,9 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then - WON のみ VEVENT 化される
         long veventCount = countOccurrences(ics, "BEGIN:VEVENT");
@@ -212,15 +263,18 @@ class IcalCalendarFeedServiceTest {
 
     @Test
     @DisplayName("PENDINGステータスもisActive()扱いでVEVENTに含まれる")
-    void generateIcsForToken_pendingStatusIncluded() {
+    void generateIcsForOrgFeed_pendingStatusIncluded() {
         // Given
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
                 LocalTime.of(9, 0), LocalTime.of(12, 0));
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.PENDING);
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -228,12 +282,9 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then
         assertThat(countOccurrences(ics, "BEGIN:VEVENT")).isEqualTo(1L);
@@ -241,8 +292,8 @@ class IcalCalendarFeedServiceTest {
     }
 
     @Test
-    @DisplayName("PlayerOrganization.calendarDisplayName が設定されていればタイトルに使われる")
-    void generateIcsForToken_displayNameCustomized() {
+    @DisplayName("orgFeed: PlayerOrganization.calendarDisplayName が設定されていればタイトルとX-WR-CALNAMEに使われる")
+    void generateIcsForOrgFeed_calendarNameUsesDisplayName() {
         // Given
         String customDisplayName = "マイ団体";
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
@@ -256,8 +307,11 @@ class IcalCalendarFeedServiceTest {
                 .calendarDisplayName(customDisplayName)
                 .build();
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -265,30 +319,31 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(List.of(playerOrg));
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
-        // Then
+        // Then: X-WR-CALNAME と SUMMARY 両方で表示名が使われる
+        assertThat(ics).contains("X-WR-CALNAME:" + customDisplayName);
         assertThat(ics).contains(customDisplayName);
         // Organization.name (元の団体名) は使われない
         assertThat(ics).doesNotContain("テスト団体");
     }
 
     @Test
-    @DisplayName("ゲスト参加（未所属団体）は Organization.name がタイトルに使われる")
-    void generateIcsForToken_guestParticipationUsesOrganizationName() {
-        // Given: プレイヤーは ORG_ID に所属していないが、その団体の練習にゲスト参加している
+    @DisplayName("orgFeed: displayName 未設定なら X-WR-CALNAME は Organization.name")
+    void generateIcsForOrgFeed_calendarNameFallsBackToOrganizationName() {
+        // Given: displayName は未設定
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
                 LocalTime.of(9, 0), LocalTime.of(12, 0));
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -296,29 +351,28 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        // 所属がない（ゲスト）
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
-        // Then: Organization.name がそのまま使われる
-        assertThat(ics).contains("テスト団体");
+        // Then
+        assertThat(ics).contains("X-WR-CALNAME:" + organization.getName());
     }
 
     @Test
     @DisplayName("VEVENT.UID は session-{sid}-player-{pid}@match-tracker 形式")
-    void generateIcsForToken_uidFormat() {
+    void generateIcsForOrgFeed_uidFormat() {
         // Given
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
                 LocalTime.of(9, 0), LocalTime.of(12, 0));
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -326,12 +380,9 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(Collections.emptyList());
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then
         String expectedUid = "session-" + SESSION_ID + "-player-" + PLAYER_ID + "@match-tracker";
@@ -339,16 +390,19 @@ class IcalCalendarFeedServiceTest {
     }
 
     @Test
-    @DisplayName("未来の参加が0件でも空のVCALENDARが返る")
-    void generateIcsForToken_zeroParticipations_returnsEmptyCalendar() {
+    @DisplayName("orgFeed: 未来の参加が0件でも空のVCALENDARが返る")
+    void generateIcsForOrgFeed_zeroParticipations_returnsEmptyCalendar() {
         // Given
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then
         assertThat(ics).contains("BEGIN:VCALENDAR");
@@ -357,8 +411,8 @@ class IcalCalendarFeedServiceTest {
     }
 
     @Test
-    @DisplayName("session.start_time / end_time があればそれが使われる")
-    void generateIcsForToken_usesPracticeSessionStartEndTime() {
+    @DisplayName("orgFeed: session.start_time / end_time があればそれが使われる")
+    void generateIcsForOrgFeed_usesPracticeSessionStartEndTime() {
         // Given
         LocalTime sessionStart = LocalTime.of(13, 30);
         LocalTime sessionEnd = LocalTime.of(17, 0);
@@ -367,7 +421,6 @@ class IcalCalendarFeedServiceTest {
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
 
-        // VenueMatchSchedule は別の時刻を返すが、session.start/end 優先のはず
         VenueMatchSchedule unusedSchedule = VenueMatchSchedule.builder()
                 .id(1L)
                 .venueId(VENUE_ID)
@@ -376,8 +429,11 @@ class IcalCalendarFeedServiceTest {
                 .endTime(LocalTime.of(10, 30))
                 .build();
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -385,26 +441,19 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(List.of(unusedSchedule));
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then: 13:30 (JST) → UTC 04:30 として現れる想定
-        // UTC タイムスタンプを正規表現で確認するのは脆いので、session 時刻が使われていることを
-        // VenueMatchSchedule の時刻が混ざっていないことで確認する
-        // (DTSTART/DTEND の時刻部分が 1330/1700 形式で含まれる)
         assertThat(ics).contains("133000");
         assertThat(ics).contains("170000");
-        // VenueMatchSchedule の 0900/1030 は使われない
         assertThat(ics).doesNotContain("T090000");
     }
 
     @Test
-    @DisplayName("session.start_time / end_time がなければ VenueMatchSchedule から取得")
-    void generateIcsForToken_fallsBackToVenueMatchSchedule() {
+    @DisplayName("orgFeed: session.start_time / end_time がなければ VenueMatchSchedule から取得")
+    void generateIcsForOrgFeed_fallsBackToVenueMatchSchedule() {
         // Given: session の時刻は NULL
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID, null, null);
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
@@ -418,8 +467,11 @@ class IcalCalendarFeedServiceTest {
                 .endTime(LocalTime.of(10, 30))
                 .build();
 
-        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                .thenReturn(Optional.of(player));
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
         when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
@@ -427,16 +479,173 @@ class IcalCalendarFeedServiceTest {
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                 .thenReturn(List.of(schedule));
-        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                .thenReturn(Collections.emptyList());
 
         // When
-        String ics = service.generateIcsForToken(VALID_TOKEN);
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
         // Then: VenueMatchSchedule の 09:00 / 10:30 (JST) が使われる
         assertThat(ics).contains("090000");
         assertThat(ics).contains("103000");
+    }
+
+    // ============================================================
+    // generateIcsForGuestFeed テスト
+    // ============================================================
+
+    @Test
+    @DisplayName("guestFeed: 所属外組織の練習だけVEVENTに含まれる")
+    void generateIcsForGuestFeed_onlyGuestPracticesIncluded() {
+        // Given: プレイヤーは ORG_ID に所属。ゲスト参加 = guestOrgId
+        Long guestOrgId = 999L;
+        Long guestSessionId = 401L;
+        Organization guestOrg = Organization.builder()
+                .id(guestOrgId)
+                .code("guest-org")
+                .name("ゲスト団体")
+                .color("#000000")
+                .build();
+
+        PracticeSession ownSession = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(9, 0), LocalTime.of(12, 0));
+        PracticeSession guestSession = createSession(guestSessionId, futureDate, VENUE_ID, guestOrgId,
+                LocalTime.of(13, 0), LocalTime.of(15, 0));
+        PracticeParticipant ownParticipation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+        PracticeParticipant guestParticipation = createParticipation(guestSessionId, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+
+        PlayerOrganization playerOrg = PlayerOrganization.builder()
+                .id(1L)
+                .playerId(PLAYER_ID)
+                .organizationId(ORG_ID)
+                .build();
+
+        stubPlayerByToken();
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(ownParticipation, guestParticipation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(ownSession, guestSession));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(Collections.emptyList());
+        when(organizationRepository.findAllById(any())).thenReturn(List.of(guestOrg));
+
+        // When
+        String ics = service.generateIcsForGuestFeed(VALID_TOKEN);
+
+        // Then: ゲスト参加分のみ含まれる
+        long veventCount = countOccurrences(ics, "BEGIN:VEVENT");
+        assertThat(veventCount).isEqualTo(1L);
+        assertThat(ics).contains("session-" + guestSessionId + "-player-");
+        assertThat(ics).doesNotContain("session-" + SESSION_ID + "-player-");
+    }
+
+    @Test
+    @DisplayName("guestFeed: 該当0件でも空のVCALENDARが返る")
+    void generateIcsForGuestFeed_noGuestParticipations_returnsEmptyCalendar() {
+        // Given: プレイヤーは ORG_ID 所属で、その団体の練習にのみ参加
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(9, 0), LocalTime.of(12, 0));
+        PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+
+        PlayerOrganization playerOrg = PlayerOrganization.builder()
+                .id(1L)
+                .playerId(PLAYER_ID)
+                .organizationId(ORG_ID)
+                .build();
+
+        stubPlayerByToken();
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(participation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+
+        // When
+        String ics = service.generateIcsForGuestFeed(VALID_TOKEN);
+
+        // Then: VCALENDAR は返るが VEVENT は無い
+        assertThat(ics).contains("BEGIN:VCALENDAR");
+        assertThat(ics).contains("END:VCALENDAR");
+        assertThat(ics).doesNotContain("BEGIN:VEVENT");
+    }
+
+    @Test
+    @DisplayName("guestFeed: タイトルは Organization.name 固定（カスタマイズ対象外）")
+    void generateIcsForGuestFeed_titleUsesOrganizationName() {
+        // Given: プレイヤーは ORG_ID 所属で displayName をカスタマイズ済み。
+        //        ゲスト参加 = guestOrg。本人の displayName 設定は影響してはいけない。
+        Long guestOrgId = 999L;
+        Long guestSessionId = 401L;
+        Organization guestOrg = Organization.builder()
+                .id(guestOrgId)
+                .code("guest-org")
+                .name("ゲスト団体")
+                .color("#000000")
+                .build();
+        PracticeSession guestSession = createSession(guestSessionId, futureDate, VENUE_ID, guestOrgId,
+                LocalTime.of(13, 0), LocalTime.of(15, 0));
+        PracticeParticipant guestParticipation = createParticipation(guestSessionId, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+
+        PlayerOrganization playerOrg = PlayerOrganization.builder()
+                .id(1L)
+                .playerId(PLAYER_ID)
+                .organizationId(ORG_ID)
+                .calendarDisplayName("マイ団体")
+                .build();
+
+        stubPlayerByToken();
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(guestParticipation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(guestSession));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(Collections.emptyList());
+        when(organizationRepository.findAllById(any())).thenReturn(List.of(guestOrg));
+
+        // When
+        String ics = service.generateIcsForGuestFeed(VALID_TOKEN);
+
+        // Then: ゲスト団体の Organization.name が使われ、所属団体の displayName は出ない
+        assertThat(ics).contains("ゲスト団体");
+        assertThat(ics).doesNotContain("マイ団体");
+    }
+
+    @Test
+    @DisplayName("guestFeed: X-WR-CALNAME は \"ゲスト参加\"")
+    void generateIcsForGuestFeed_calendarNameIsGuestSanka() {
+        // Given: 参加0件でも X-WR-CALNAME は出る
+        stubPlayerByToken();
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        String ics = service.generateIcsForGuestFeed(VALID_TOKEN);
+
+        // Then
+        assertThat(ics).contains("X-WR-CALNAME:ゲスト参加");
+    }
+
+    @Test
+    @DisplayName("guestFeed: 無効トークンは ResourceNotFoundException")
+    void generateIcsForGuestFeed_invalidToken_throwsResourceNotFoundException() {
+        when(playerRepository.findByIcalFeedTokenAndActive("invalid"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.generateIcsForGuestFeed("invalid"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Player")
+                .hasMessageContaining("icalFeedToken");
     }
 
     // ============================================================
@@ -483,8 +692,8 @@ class IcalCalendarFeedServiceTest {
     // ============================================================
 
     @Test
-    @DisplayName("フィードURLと所属団体が返る")
-    void getFeedInfo_returnsUrlAndOrganizations() {
+    @DisplayName("getFeedInfo: organizationFeeds と guestFeed が新DTO形式で返る")
+    void getFeedInfo_returnsOrgFeedsAndGuestFeed() {
         // Given
         PlayerOrganization playerOrg = PlayerOrganization.builder()
                 .id(1L)
@@ -503,30 +712,60 @@ class IcalCalendarFeedServiceTest {
 
         // Then
         assertThat(info).isNotNull();
-        assertThat(info.getUrl()).isEqualTo(BASE_URL + "/ical/calendar/" + VALID_TOKEN + ".ics");
-        assertThat(info.getOrganizations()).hasSize(1);
-        CalendarOrganizationDto orgDto = info.getOrganizations().get(0);
+        assertThat(info.getOrganizationFeeds()).hasSize(1);
+        OrganizationFeedDto orgDto = info.getOrganizationFeeds().get(0);
         assertThat(orgDto.getOrganizationId()).isEqualTo(ORG_ID);
         assertThat(orgDto.getOrganizationName()).isEqualTo("テスト団体");
         assertThat(orgDto.getDisplayName()).isEqualTo("カスタム名");
+        assertThat(orgDto.getUrl()).isEqualTo(
+                BASE_URL + "/ical/calendar/" + VALID_TOKEN + "/org/" + ORG_ID + ".ics");
+
+        assertThat(info.getGuestFeed()).isNotNull();
+        assertThat(info.getGuestFeed().getUrl()).isEqualTo(
+                BASE_URL + "/ical/calendar/" + VALID_TOKEN + "/guest.ics");
     }
 
     @Test
-    @DisplayName("フィードURLは末尾スラッシュなしで連結される")
-    void getFeedInfo_baseUrlWithTrailingSlash_normalized() {
-        // Given: 末尾スラッシュ付きの BASE_URL
-        ReflectionTestUtils.setField(service, "appBaseUrl", BASE_URL + "/");
-
+    @DisplayName("getFeedInfo: 所属0件でも guestFeed は必ず返る")
+    void getFeedInfo_noOrganizations_stillReturnsGuestFeed() {
         when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(player));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
         when(organizationRepository.findAllById(any())).thenReturn(Collections.emptyList());
 
+        FeedInfoDto info = service.getFeedInfo(PLAYER_ID);
+
+        assertThat(info.getOrganizationFeeds()).isEmpty();
+        assertThat(info.getGuestFeed()).isNotNull();
+        assertThat(info.getGuestFeed().getUrl()).isEqualTo(
+                BASE_URL + "/ical/calendar/" + VALID_TOKEN + "/guest.ics");
+    }
+
+    @Test
+    @DisplayName("getFeedInfo: フィードURLは末尾スラッシュなしで連結される")
+    void getFeedInfo_baseUrlWithTrailingSlash_normalized() {
+        // Given: 末尾スラッシュ付きの BASE_URL
+        ReflectionTestUtils.setField(service, "appBaseUrl", BASE_URL + "/");
+
+        PlayerOrganization playerOrg = PlayerOrganization.builder()
+                .id(1L)
+                .playerId(PLAYER_ID)
+                .organizationId(ORG_ID)
+                .build();
+
+        when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(player));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
+        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
+
         // When
         FeedInfoDto info = service.getFeedInfo(PLAYER_ID);
 
         // Then: スラッシュ重複は発生しない
-        assertThat(info.getUrl()).isEqualTo(BASE_URL + "/ical/calendar/" + VALID_TOKEN + ".ics");
+        assertThat(info.getOrganizationFeeds().get(0).getUrl()).isEqualTo(
+                BASE_URL + "/ical/calendar/" + VALID_TOKEN + "/org/" + ORG_ID + ".ics");
+        assertThat(info.getGuestFeed().getUrl()).isEqualTo(
+                BASE_URL + "/ical/calendar/" + VALID_TOKEN + "/guest.ics");
     }
 
     @Test
@@ -576,6 +815,35 @@ class IcalCalendarFeedServiceTest {
         assertThat(savedList).hasSize(1);
         assertThat(savedList.get(0).getCalendarDisplayName()).isEqualTo("カスタム表示名");
         assertThat(savedList.get(0).getOrganizationId()).isEqualTo(ORG_ID);
+    }
+
+    @Test
+    @DisplayName("updateDisplayNames: 戻り値DTOは新形式 (organizationFeeds + guestFeed) ")
+    void updateDisplayNames_returnsNewDtoFormat() {
+        // Given
+        PlayerOrganization playerOrg = PlayerOrganization.builder()
+                .id(1L)
+                .playerId(PLAYER_ID)
+                .organizationId(ORG_ID)
+                .calendarDisplayName(null)
+                .build();
+
+        when(playerRepository.findById(PLAYER_ID)).thenReturn(Optional.of(player));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(List.of(playerOrg));
+        when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
+
+        Map<Long, String> displayNames = new HashMap<>();
+        displayNames.put(ORG_ID, "新しい表示名");
+
+        // When
+        FeedInfoDto info = service.updateDisplayNames(PLAYER_ID, displayNames);
+
+        // Then
+        assertThat(info.getOrganizationFeeds()).hasSize(1);
+        assertThat(info.getOrganizationFeeds().get(0).getOrganizationId()).isEqualTo(ORG_ID);
+        assertThat(info.getGuestFeed()).isNotNull();
+        assertThat(info.getGuestFeed().getUrl()).contains("/guest.ics");
     }
 
     @Test
@@ -713,7 +981,7 @@ class IcalCalendarFeedServiceTest {
 
     @Test
     @DisplayName("時刻なしセッションは VALUE=DATE 形式で日付がそのまま出る（UTC JVMでも前日にならない）")
-    void generateIcsForToken_allDayEventCorrectDateInUtcJvm() {
+    void generateIcsForOrgFeed_allDayEventCorrectDateInUtcJvm() {
         // Given - JVM TZ を UTC に切り替えて、Render等の本番環境を再現
         TimeZone originalTz = TimeZone.getDefault();
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
@@ -725,8 +993,11 @@ class IcalCalendarFeedServiceTest {
             PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                     ParticipantStatus.WON);
 
-            when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
-                    .thenReturn(Optional.of(player));
+            stubPlayerByToken();
+            stubMembership(ORG_ID, true);
+            when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+            when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                    .thenReturn(Collections.emptyList());
             when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
                     .thenReturn(List.of(participation));
             when(practiceSessionRepository.findAllById(anyList()))
@@ -734,12 +1005,9 @@ class IcalCalendarFeedServiceTest {
             when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
             when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
                     .thenReturn(Collections.emptyList());
-            when(organizationRepository.findAllById(any())).thenReturn(List.of(organization));
-            when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
-                    .thenReturn(Collections.emptyList());
 
             // When
-            String ics = service.generateIcsForToken(VALID_TOKEN);
+            String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
             // Then - DTSTART/DTEND が VALUE=DATE 形式かつ前日にずれていない
             assertThat(ics).contains("DTSTART;VALUE=DATE:20260518");
@@ -754,6 +1022,16 @@ class IcalCalendarFeedServiceTest {
     // ============================================================
     // ヘルパー
     // ============================================================
+
+    private void stubPlayerByToken() {
+        when(playerRepository.findByIcalFeedTokenAndActive(VALID_TOKEN))
+                .thenReturn(Optional.of(player));
+    }
+
+    private void stubMembership(Long orgId, boolean exists) {
+        when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(PLAYER_ID, orgId))
+                .thenReturn(exists);
+    }
 
     private PracticeSession createSession(Long id, LocalDate date, Long venueId, Long orgId,
                                           LocalTime startTime, LocalTime endTime) {

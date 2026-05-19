@@ -8,8 +8,9 @@ import biweekly.property.DateEnd;
 import biweekly.property.DateStart;
 import biweekly.util.DateTimeComponents;
 import biweekly.util.ICalDate;
-import com.karuta.matchtracker.dto.CalendarOrganizationDto;
 import com.karuta.matchtracker.dto.FeedInfoDto;
+import com.karuta.matchtracker.dto.GuestFeedDto;
+import com.karuta.matchtracker.dto.OrganizationFeedDto;
 import com.karuta.matchtracker.entity.Organization;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PlayerOrganization;
@@ -40,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +54,8 @@ import java.util.stream.Collectors;
  * iCalカレンダーフィード生成サービス
  *
  * プレイヤーごとに発行された固定トークンを用いて、未来の参加練習を
- * iCalendar (RFC 5545) 形式のテキストとして出力する。
+ * 所属団体カレンダー・ゲスト参加カレンダーに分割した iCalendar (RFC 5545)
+ * 形式のテキストとして出力する。
  */
 @Slf4j
 @Service
@@ -63,6 +66,7 @@ public class IcalCalendarFeedService {
     private static final HexFormat TOKEN_HEX = HexFormat.of();
     private static final int TOKEN_BYTE_LENGTH = 24;
     private static final String PRODUCT_ID = "-//karuta-match-tracker//iCal Feed//JP";
+    private static final String GUEST_CALENDAR_NAME = "ゲスト参加";
     private static final TimeZone JST_TIMEZONE = TimeZone.getTimeZone(JstDateTimeUtil.JST);
 
     private final PlayerRepository playerRepository;
@@ -77,70 +81,26 @@ public class IcalCalendarFeedService {
     private String appBaseUrl;
 
     /**
-     * トークンから iCal フィード（VCALENDAR テキスト）を生成する。
+     * 所属団体カレンダーの iCal フィードを生成する。
      *
      * @param token プレイヤーのフィードトークン
+     * @param orgId 所属団体ID
      * @return iCalendar 形式のテキスト
-     * @throws ResourceNotFoundException トークンに対応するアクティブなプレイヤーが存在しない場合
+     * @throws ResourceNotFoundException トークンに対応するプレイヤーが存在しない、または
+     *                                   プレイヤーが orgId に所属していない場合
      */
     @Transactional(readOnly = true)
-    public String generateIcsForToken(String token) {
-        Player player = playerRepository.findByIcalFeedTokenAndActive(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Player", "icalFeedToken", token));
-
+    public String generateIcsForOrgFeed(String token, Long orgId) {
+        Player player = loadPlayerByToken(token);
         Long playerId = player.getId();
-        LocalDate today = JstDateTimeUtil.today();
 
-        // 参加確定（WON / PENDING）のみカレンダーに出す。
-        // CANCELLED / DECLINED / WAITLISTED / OFFERED / WAITLIST_DECLINED は対象外。
-        List<PracticeParticipant> participations = practiceParticipantRepository
-                .findUpcomingParticipations(playerId, today).stream()
-                .filter(p -> p.getStatus() != null && p.getStatus().isActive())
-                .collect(Collectors.toList());
-
-        ICalendar ical = new ICalendar();
-        ical.setProductId(PRODUCT_ID);
-
-        if (participations.isEmpty()) {
-            return Biweekly.write(ical).version(ICalVersion.V2_0).tz(JST_TIMEZONE, true).go();
+        if (!playerOrganizationRepository.existsByPlayerIdAndOrganizationId(playerId, orgId)) {
+            throw new ResourceNotFoundException(
+                    String.format("PlayerOrganization not found with playerId: %d, organizationId: %d",
+                            playerId, orgId));
         }
 
-        // セッションIDをユニーク化（順序維持）
-        List<Long> participatingSessionIds = participations.stream()
-                .map(PracticeParticipant::getSessionId)
-                .distinct()
-                .collect(Collectors.toList());
-
-        // 関連エンティティを一括取得
-        Map<Long, PracticeSession> sessionMap = practiceSessionRepository
-                .findAllById(participatingSessionIds).stream()
-                .collect(Collectors.toMap(PracticeSession::getId, s -> s));
-
-        Set<Long> venueIds = sessionMap.values().stream()
-                .map(PracticeSession::getVenueId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, Venue> venueMap = venueRepository.findAllById(venueIds).stream()
-                .collect(Collectors.toMap(Venue::getId, v -> v));
-
-        Map<Long, Map<Integer, VenueMatchSchedule>> scheduleMap = new HashMap<>();
-        if (!venueIds.isEmpty()) {
-            List<VenueMatchSchedule> schedules =
-                    venueMatchScheduleRepository.findByVenueIdIn(new ArrayList<>(venueIds));
-            for (VenueMatchSchedule s : schedules) {
-                scheduleMap
-                        .computeIfAbsent(s.getVenueId(), k -> new HashMap<>())
-                        .put(s.getMatchNumber(), s);
-            }
-        }
-
-        Set<Long> organizationIds = sessionMap.values().stream()
-                .map(PracticeSession::getOrganizationId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, Organization> organizationMap = organizationRepository.findAllById(organizationIds).stream()
-                .collect(Collectors.toMap(Organization::getId, o -> o));
-
+        Organization organization = organizationRepository.findById(orgId).orElse(null);
         Map<Long, String> displayNameByOrgId = playerOrganizationRepository.findByPlayerId(playerId).stream()
                 .filter(po -> po.getCalendarDisplayName() != null && !po.getCalendarDisplayName().isBlank())
                 .collect(Collectors.toMap(
@@ -148,26 +108,46 @@ public class IcalCalendarFeedService {
                         PlayerOrganization::getCalendarDisplayName,
                         (a, b) -> a));
 
-        // セッション単位で試合番号をまとめる
-        Map<Long, List<Integer>> sessionMatchNumbers = new HashMap<>();
-        for (PracticeParticipant p : participations) {
-            if (p.getMatchNumber() != null) {
-                sessionMatchNumbers
-                        .computeIfAbsent(p.getSessionId(), k -> new ArrayList<>())
-                        .add(p.getMatchNumber());
-            }
-        }
+        String calendarName = resolveOrgCalendarName(orgId, organization, displayNameByOrgId);
 
-        for (Long sessionId : participatingSessionIds) {
-            PracticeSession session = sessionMap.get(sessionId);
-            if (session == null) continue;
+        List<PracticeParticipant> participations = loadActiveParticipations(playerId).stream()
+                .collect(Collectors.toList());
 
-            VEvent event = buildEvent(playerId, session, venueMap, scheduleMap,
-                    sessionMatchNumbers.get(sessionId), organizationMap, displayNameByOrgId);
-            ical.addEvent(event);
-        }
+        return buildIcsForParticipations(
+                playerId,
+                participations,
+                calendarName,
+                session -> Objects.equals(session.getOrganizationId(), orgId),
+                organization != null ? Map.of(orgId, organization) : Collections.emptyMap(),
+                displayNameByOrgId);
+    }
 
-        return Biweekly.write(ical).version(ICalVersion.V2_0).tz(JST_TIMEZONE, true).go();
+    /**
+     * ゲスト参加カレンダーの iCal フィードを生成する。
+     *
+     * @param token プレイヤーのフィードトークン
+     * @return iCalendar 形式のテキスト
+     * @throws ResourceNotFoundException トークンに対応するプレイヤーが存在しない場合
+     */
+    @Transactional(readOnly = true)
+    public String generateIcsForGuestFeed(String token) {
+        Player player = loadPlayerByToken(token);
+        Long playerId = player.getId();
+
+        Set<Long> memberOrgIds = playerOrganizationRepository.findByPlayerId(playerId).stream()
+                .map(PlayerOrganization::getOrganizationId)
+                .collect(Collectors.toSet());
+
+        List<PracticeParticipant> participations = loadActiveParticipations(playerId);
+
+        return buildIcsForParticipations(
+                playerId,
+                participations,
+                GUEST_CALENDAR_NAME,
+                session -> session.getOrganizationId() != null
+                        && !memberOrgIds.contains(session.getOrganizationId()),
+                Collections.emptyMap(),
+                Collections.emptyMap());
     }
 
     /**
@@ -251,9 +231,113 @@ public class IcalCalendarFeedService {
     // 内部ヘルパー
     // ============================================================
 
-    private FeedInfoDto buildFeedInfo(Player player) {
-        String url = buildFeedUrl(player.getIcalFeedToken());
+    private Player loadPlayerByToken(String token) {
+        return playerRepository.findByIcalFeedTokenAndActive(token)
+                .orElseThrow(() -> new ResourceNotFoundException("Player", "icalFeedToken", token));
+    }
 
+    private List<PracticeParticipant> loadActiveParticipations(Long playerId) {
+        LocalDate today = JstDateTimeUtil.today();
+        return practiceParticipantRepository.findUpcomingParticipations(playerId, today).stream()
+                .filter(p -> p.getStatus() != null && p.getStatus().isActive())
+                .collect(Collectors.toList());
+    }
+
+    private String buildIcsForParticipations(Long playerId,
+                                             List<PracticeParticipant> activeParticipations,
+                                             String calendarName,
+                                             java.util.function.Predicate<PracticeSession> sessionFilter,
+                                             Map<Long, Organization> presetOrganizationMap,
+                                             Map<Long, String> displayNameByOrgId) {
+        ICalendar ical = buildBaseCalendar(calendarName);
+
+        if (activeParticipations.isEmpty()) {
+            return Biweekly.write(ical).version(ICalVersion.V2_0).tz(JST_TIMEZONE, true).go();
+        }
+
+        List<Long> participatingSessionIds = activeParticipations.stream()
+                .map(PracticeParticipant::getSessionId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, PracticeSession> sessionMap = practiceSessionRepository
+                .findAllById(participatingSessionIds).stream()
+                .collect(Collectors.toMap(PracticeSession::getId, s -> s));
+
+        List<Long> filteredSessionIds = participatingSessionIds.stream()
+                .filter(sid -> {
+                    PracticeSession s = sessionMap.get(sid);
+                    return s != null && sessionFilter.test(s);
+                })
+                .collect(Collectors.toList());
+
+        if (filteredSessionIds.isEmpty()) {
+            return Biweekly.write(ical).version(ICalVersion.V2_0).tz(JST_TIMEZONE, true).go();
+        }
+
+        Set<Long> venueIds = filteredSessionIds.stream()
+                .map(sessionMap::get)
+                .map(PracticeSession::getVenueId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Venue> venueMap = venueRepository.findAllById(venueIds).stream()
+                .collect(Collectors.toMap(Venue::getId, v -> v));
+
+        Map<Long, Map<Integer, VenueMatchSchedule>> scheduleMap = new HashMap<>();
+        if (!venueIds.isEmpty()) {
+            List<VenueMatchSchedule> schedules =
+                    venueMatchScheduleRepository.findByVenueIdIn(new ArrayList<>(venueIds));
+            for (VenueMatchSchedule s : schedules) {
+                scheduleMap
+                        .computeIfAbsent(s.getVenueId(), k -> new HashMap<>())
+                        .put(s.getMatchNumber(), s);
+            }
+        }
+
+        Set<Long> organizationIds = filteredSessionIds.stream()
+                .map(sessionMap::get)
+                .map(PracticeSession::getOrganizationId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Organization> organizationMap = new HashMap<>(presetOrganizationMap);
+        Set<Long> missingOrgIds = new HashSet<>(organizationIds);
+        missingOrgIds.removeAll(organizationMap.keySet());
+        if (!missingOrgIds.isEmpty()) {
+            organizationRepository.findAllById(missingOrgIds).forEach(o -> organizationMap.put(o.getId(), o));
+        }
+
+        Map<Long, List<Integer>> sessionMatchNumbers = new HashMap<>();
+        for (PracticeParticipant p : activeParticipations) {
+            if (!filteredSessionIds.contains(p.getSessionId())) continue;
+            if (p.getMatchNumber() != null) {
+                sessionMatchNumbers
+                        .computeIfAbsent(p.getSessionId(), k -> new ArrayList<>())
+                        .add(p.getMatchNumber());
+            }
+        }
+
+        for (Long sessionId : filteredSessionIds) {
+            PracticeSession session = sessionMap.get(sessionId);
+            if (session == null) continue;
+
+            VEvent event = buildEvent(playerId, session, venueMap, scheduleMap,
+                    sessionMatchNumbers.get(sessionId), organizationMap, displayNameByOrgId);
+            ical.addEvent(event);
+        }
+
+        return Biweekly.write(ical).version(ICalVersion.V2_0).tz(JST_TIMEZONE, true).go();
+    }
+
+    private ICalendar buildBaseCalendar(String calendarName) {
+        ICalendar ical = new ICalendar();
+        ical.setProductId(PRODUCT_ID);
+        if (calendarName != null && !calendarName.isBlank()) {
+            ical.addExperimentalProperty("X-WR-CALNAME", calendarName);
+        }
+        return ical;
+    }
+
+    private FeedInfoDto buildFeedInfo(Player player) {
         List<PlayerOrganization> playerOrgs = playerOrganizationRepository.findByPlayerId(player.getId());
         List<Long> orgIds = playerOrgs.stream()
                 .map(PlayerOrganization::getOrganizationId)
@@ -261,29 +345,42 @@ public class IcalCalendarFeedService {
         Map<Long, Organization> orgMap = organizationRepository.findAllById(orgIds).stream()
                 .collect(Collectors.toMap(Organization::getId, o -> o));
 
-        List<CalendarOrganizationDto> orgDtos = playerOrgs.stream()
+        List<OrganizationFeedDto> orgFeeds = playerOrgs.stream()
                 .map(po -> {
                     Organization org = orgMap.get(po.getOrganizationId());
-                    return CalendarOrganizationDto.builder()
+                    return OrganizationFeedDto.builder()
                             .organizationId(po.getOrganizationId())
                             .organizationName(org != null ? org.getName() : null)
                             .displayName(po.getCalendarDisplayName())
+                            .url(buildOrgFeedUrl(player.getIcalFeedToken(), po.getOrganizationId()))
                             .build();
                 })
                 .collect(Collectors.toList());
 
+        GuestFeedDto guestFeed = GuestFeedDto.builder()
+                .url(buildGuestFeedUrl(player.getIcalFeedToken()))
+                .build();
+
         return FeedInfoDto.builder()
-                .url(url)
-                .organizations(orgDtos)
+                .organizationFeeds(orgFeeds)
+                .guestFeed(guestFeed)
                 .build();
     }
 
-    private String buildFeedUrl(String token) {
+    private String buildOrgFeedUrl(String token, Long orgId) {
+        return normalizedBaseUrl() + "/ical/calendar/" + token + "/org/" + orgId + ".ics";
+    }
+
+    private String buildGuestFeedUrl(String token) {
+        return normalizedBaseUrl() + "/ical/calendar/" + token + "/guest.ics";
+    }
+
+    private String normalizedBaseUrl() {
         String base = appBaseUrl == null ? "" : appBaseUrl;
         if (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
-        return base + "/ical/calendar/" + token + ".ics";
+        return base;
     }
 
     private String generateRandomToken() {
@@ -364,6 +461,16 @@ public class IcalCalendarFeedService {
         }
 
         return event;
+    }
+
+    private String resolveOrgCalendarName(Long orgId,
+                                          Organization organization,
+                                          Map<Long, String> displayNameByOrgId) {
+        String override = displayNameByOrgId.get(orgId);
+        if (override != null && !override.isBlank()) {
+            return override;
+        }
+        return organization != null ? organization.getName() : "練習";
     }
 
     private String resolveDisplayName(PracticeSession session,

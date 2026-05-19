@@ -5,18 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 /**
- * iCalフィード設定画面用のレスポンスDTO
+ * 所属団体ごとのiCalフィード情報DTO
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FeedInfoDto {
+public class OrganizationFeedDto {
 
-    private List<OrganizationFeedDto> organizationFeeds;
+    private Long organizationId;
 
-    private GuestFeedDto guestFeed;
+    private String organizationName;
+
+    private String displayName;
+
+    private String url;
 }
