@@ -25,7 +25,7 @@ const OrganizationSettings = () => {
         organizationAPI.getAll(),
         organizationAPI.getPlayerOrganizations(currentPlayer.id),
       ]);
-      setOrganizations(orgsRes.data);
+      setOrganizations(orgsRes.data.filter(o => o.code !== 'hokudai'));
       setSelectedOrgIds(playerOrgsRes.data.map(o => o.id));
     } catch (e) {
       setError('データの取得に失敗しました');
