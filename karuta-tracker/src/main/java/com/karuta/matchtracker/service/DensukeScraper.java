@@ -221,25 +221,28 @@ public class DensukeScraper {
 
     /**
      * 名前の先頭に付いている絵文字（Symbol カテゴリの文字）を除去し、
-     * 不可視のUnicode制御文字（Variation Selector等）を全体から除去する。
-     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木", "︎井桁" → "井桁"
+     * 不可視のUnicode制御文字（FORMAT カテゴリ全般 + Variation Selector）を全体から除去する。
+     * 末尾の Unicode 空白（NBSP/全角空白を含む）も除去する。
+     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木", "︎井桁" → "井桁", "‪⭐森保滉大" → "森保滉大"
      */
     static String stripLeadingEmoji(String name) {
         if (name == null || name.isEmpty()) return name;
 
-        // 全体からVariation Selector (U+FE00–U+FE0F, U+E0100–U+E01EF) および
-        // その他の不可視FORMAT文字（ゼロ幅スペース等）を除去
+        // Step 1: 全体から不可視文字を除去
+        // - Cf (FORMAT) カテゴリ全般: BIDIコントロール(LRM/RLM/LRE/RLE/PDF/LRO/RLO/LRI/RLI/FSI/PDI)、
+        //   ゼロ幅スペース・接合子(ZWSP/ZWNJ/ZWJ)、BOM、Word Joiner、Soft Hyphen 等を一括除去。
+        //   伝助からペーストされた名前に U+202A 等が混入していた既往不具合 (#671) を救済する。
+        // - Variation Selectors (U+FE00-U+FE0F, U+E0100-U+E01EF) は Mn カテゴリのため別途明示除去。
         StringBuilder sb = new StringBuilder(name.length());
         name.codePoints().forEach(cp -> {
-            if (cp >= 0xFE00 && cp <= 0xFE0F) return;          // Variation Selectors
-            if (cp >= 0xE0100 && cp <= 0xE01EF) return;        // Variation Selectors Supplement
-            if (cp == 0x200B || cp == 0x200C || cp == 0x200D    // Zero-width chars
-                    || cp == 0xFEFF || cp == 0x2060) return;    // BOM, Word Joiner
+            if (Character.getType(cp) == Character.FORMAT) return;
+            if (cp >= 0xFE00 && cp <= 0xFE0F) return;
+            if (cp >= 0xE0100 && cp <= 0xE01EF) return;
             sb.appendCodePoint(cp);
         });
         String cleaned = sb.toString();
 
-        // 先頭の絵文字（Symbolカテゴリ）を除去
+        // Step 2: 先頭の絵文字（Symbolカテゴリ）を除去
         int i = 0;
         while (i < cleaned.length()) {
             int codePoint = cleaned.codePointAt(i);
@@ -252,6 +255,36 @@ public class DensukeScraper {
                 break;
             }
         }
-        return cleaned.substring(i).trim();
+
+        // Step 3: 末尾の Unicode 空白（U+00A0 NBSP / U+3000 全角空白 等）を含めて両端トリム。
+        // Java の String.trim() は U+0020 以下のみのため、isWhitespace + isSpaceChar の和集合で剥がす。
+        return stripUnicodeWhitespace(cleaned.substring(i));
+    }
+
+    /**
+     * 両端から Unicode の空白文字を除去する。
+     * String.strip() は Character.isWhitespace のみで NBSP (U+00A0) を残すため、
+     * Character.isSpaceChar(U+00A0/U+3000 等) との和集合で除去する。
+     */
+    private static String stripUnicodeWhitespace(String s) {
+        int start = 0;
+        int end = s.length();
+        while (start < end) {
+            int cp = s.codePointAt(start);
+            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
+                start += Character.charCount(cp);
+            } else {
+                break;
+            }
+        }
+        while (end > start) {
+            int cp = s.codePointBefore(end);
+            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
+                end -= Character.charCount(cp);
+            } else {
+                break;
+            }
+        }
+        return s.substring(start, end);
     }
 }

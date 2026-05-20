@@ -107,6 +107,42 @@ class DensukeScraperTest {
     }
 
     @Test
+    @DisplayName("stripLeadingEmoji: 双方向制御文字 (Cf カテゴリ) が除去される (#671)")
+    void testStripBidiControlChars() {
+        // U+202A LEFT-TO-RIGHT EMBEDDING が先頭に付いた本番事例 (#671: 森保滉大の重複登録)
+        assertThat(DensukeScraper.stripLeadingEmoji("‪森保滉大")).isEqualTo("森保滉大");
+        // U+202A LRE + ⭐絵文字 の組み合わせ (id=140 のケース)
+        // 先頭BIDIで絵文字剥がしループが止まる旧バグの回帰防止
+        assertThat(DensukeScraper.stripLeadingEmoji("‪⭐森保滉大")).isEqualTo("森保滉大");
+        // U+200E LEFT-TO-RIGHT MARK
+        assertThat(DensukeScraper.stripLeadingEmoji("‎田中")).isEqualTo("田中");
+        // U+200F RIGHT-TO-LEFT MARK
+        assertThat(DensukeScraper.stripLeadingEmoji("‏田中")).isEqualTo("田中");
+        // U+202C POP DIRECTIONAL FORMATTING (末尾)
+        assertThat(DensukeScraper.stripLeadingEmoji("田中‬")).isEqualTo("田中");
+        // U+2068 FIRST STRONG ISOLATE + U+2069 POP DIRECTIONAL ISOLATE
+        assertThat(DensukeScraper.stripLeadingEmoji("⁨田中⁩")).isEqualTo("田中");
+        // U+00AD SOFT HYPHEN (中間に混入)
+        assertThat(DensukeScraper.stripLeadingEmoji("田­中")).isEqualTo("田中");
+    }
+
+    @Test
+    @DisplayName("stripLeadingEmoji: 非ASCII空白 (NBSP/全角空白) も両端トリムされる")
+    void testStripUnicodeWhitespace() {
+        // U+3000 IDEOGRAPHIC SPACE (全角空白)
+        assertThat(DensukeScraper.stripLeadingEmoji("　田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.stripLeadingEmoji("田中　")).isEqualTo("田中");
+        assertThat(DensukeScraper.stripLeadingEmoji("　田中　")).isEqualTo("田中");
+        // U+00A0 NBSP
+        assertThat(DensukeScraper.stripLeadingEmoji(" 田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.stripLeadingEmoji("田中 ")).isEqualTo("田中");
+        // ASCII space は従来通り
+        assertThat(DensukeScraper.stripLeadingEmoji("  田中  ")).isEqualTo("田中");
+        // 絵文字 + 全角空白 の組み合わせ
+        assertThat(DensukeScraper.stripLeadingEmoji("🔰田中　")).isEqualTo("田中");
+    }
+
+    @Test
     @DisplayName("parse: 3択 (○/△/×) ページで全メンバー・出欠が正しく取得される")
     void testParseThreeChoicePage() throws IOException {
         String html = buildDensukeHtml(
