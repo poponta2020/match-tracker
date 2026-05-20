@@ -29,10 +29,17 @@
 -- 全般除去で対応済み。本SQL適用後、伝助同期は正規 id=39 にマッチする。
 -- ============================================================
 
+-- 安全柵: id 単独ではなく「期待する不可視文字付き名前」と AND 結合する。
+-- 別環境・リストア後DBで万一 id=140/141 が別人に再採番されていた場合に
+-- 誤って論理削除しないようにする。U& リテラルで U+202A LRE と U+2B50 ⭐ を
+-- 明示的にエスケープし、それ以外の漢字はソース上でも視認できる literal を使う。
 UPDATE players
 SET deleted_at = NOW()
-WHERE id IN (140, 141)
-  AND deleted_at IS NULL;
+WHERE deleted_at IS NULL
+  AND (
+        (id = 140 AND name = U&'\202A\2B50' || '森保滉大')
+    OR  (id = 141 AND name = U&'\202A'      || '森保滉大')
+  );
 
 -- 検証クエリ: 実行後に id=39 のみがアクティブで残ることを確認
 SELECT id, name, length(name) AS chars, deleted_at
