@@ -2,6 +2,7 @@ package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.FeedInfoDto;
+import com.karuta.matchtracker.dto.GuestFeedDto;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.IcalCalendarFeedService;
 import org.junit.jupiter.api.DisplayName;
@@ -52,7 +53,7 @@ class IcalCalendarSettingsControllerTest {
     @Test
     @DisplayName("PATCH /display-names: 空ボディは 200 + 現状の feedInfo を返し、updateDisplayNames は呼ばれない")
     void updateDisplayNames_emptyBody_returnsCurrentInfo() throws Exception {
-        FeedInfoDto info = new FeedInfoDto("http://localhost/ical/calendar/dummy.ics", List.of());
+        FeedInfoDto info = new FeedInfoDto(List.of(), new GuestFeedDto("http://localhost/ical/calendar/dummy/guest.ics"));
         when(icalCalendarFeedService.getFeedInfo(USER_ID)).thenReturn(info);
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
@@ -68,7 +69,7 @@ class IcalCalendarSettingsControllerTest {
     @Test
     @DisplayName("PATCH /display-names: displayNames が null の場合も 200 で feedInfo を返す")
     void updateDisplayNames_nullDisplayNames_returnsCurrentInfo() throws Exception {
-        FeedInfoDto info = new FeedInfoDto("http://localhost/ical/calendar/dummy.ics", List.of());
+        FeedInfoDto info = new FeedInfoDto(List.of(), new GuestFeedDto("http://localhost/ical/calendar/dummy/guest.ics"));
         when(icalCalendarFeedService.getFeedInfo(USER_ID)).thenReturn(info);
 
         // {"displayNames": null}
@@ -121,7 +122,7 @@ class IcalCalendarSettingsControllerTest {
     void updateDisplayNames_validDisplayName_returns200() throws Exception {
         String name = "あ".repeat(50);
         Map<String, Object> body = Map.of("displayNames", Map.of("1", name));
-        FeedInfoDto info = new FeedInfoDto("http://localhost/ical/calendar/dummy.ics", List.of());
+        FeedInfoDto info = new FeedInfoDto(List.of(), new GuestFeedDto("http://localhost/ical/calendar/dummy/guest.ics"));
         when(icalCalendarFeedService.updateDisplayNames(anyLong(), anyMap())).thenReturn(info);
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
