@@ -381,6 +381,47 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
+        @DisplayName("PENDING（抽選前申込）のキャンセルでもCANCELLEDに遷移し、繰り上げ・通知は発生しない")
+        void cancelPending_transitionsToCancelledWithoutPromotion() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.PENDING).build();
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(LocalDate.of(2026, 5, 25)).capacity(6).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+            when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+            ParticipantStatus result = service.cancelParticipation(1L, "HEALTH", null);
+
+            assertThat(result).isEqualTo(ParticipantStatus.CANCELLED);
+            assertThat(participant.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+            assertThat(participant.getCancelReason()).isEqualTo("HEALTH");
+            assertThat(participant.isDirty()).isTrue();
+
+            // PENDINGからのキャンセルでは繰り上げ・補充フローは発動しない
+            verify(practiceParticipantRepository, never())
+                    .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(anyLong(), anyInt(), any());
+            verify(lineNotificationService, never()).sendWaitlistOfferNotification(any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayCancelNotification(any(), any(), any(), any());
+            verify(lineNotificationService, never()).sendConsolidatedSameDayVacancyNotification(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("WAITLISTEDなど対象外ステータスのキャンセルはIllegalStateExceptionを投げる")
+        void cancelWaitlisted_throwsIllegalState() {
+            PracticeParticipant participant = PracticeParticipant.builder()
+                    .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+            when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
+
+            assertThatThrownBy(() -> service.cancelParticipation(1L, "HEALTH", null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("WAITLISTED");
+        }
+
+        @Test
         @DisplayName("トランザクション内ではafterCommitで通知が遅延実行される")
         void cancelAfterNoon_defersNotificationToAfterCommit() {
             PracticeParticipant participant = PracticeParticipant.builder()

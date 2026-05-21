@@ -1324,6 +1324,7 @@ Entity Layer (JPA Entity)
 
 #### POST /api/lottery/cancel
 **説明**: 参加キャンセル（理由付き・複数対応）。PLAYERは自分の参加のみキャンセル可能かつ過去日のキャンセル不可、ADMIN+は他人分・過去日も可。
+受け付けるステータスは `WON`（当選後キャンセル）と `PENDING`（抽選前申込のキャンセル）。`PENDING` の場合は繰り上げ・当日補充フローは発動しない（待機者が存在しないため）。
 **権限**: SUPER_ADMIN, ADMIN, PLAYER
 **リクエスト**: `CancelRequest`
 ```json
