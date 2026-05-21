@@ -8,7 +8,7 @@ import {
   Trophy,
   Plus,
   Search,
-  Filter,
+  ChevronDown,
   X,
   StickyNote,
 } from 'lucide-react';
@@ -281,6 +281,14 @@ const MatchList = () => {
     return <LoadingScreen />;
   }
 
+  const activeFilterCount = [
+    filterKyuRank,
+    filterGender,
+    filterDominantHand,
+    searchTerm,
+    filterResult !== '全て' ? filterResult : '',
+  ].filter(Boolean).length;
+
   return (
     <div className="space-y-6 pb-20">
       {/* ナビゲーションバー */}
@@ -293,13 +301,25 @@ const MatchList = () => {
                 <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
                 <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank || '初心者'}</span>
               </h1>
-              <p className="text-sm text-white/70 mt-0.5">
-                {selectedYear && selectedMonth
-                  ? `${selectedYear}年 ${selectedMonth}月`
-                  : selectedYear
-                  ? `${selectedYear}年`
-                  : '全期間'}
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(true)}
+                className="mt-0.5 -ml-2 inline-flex items-center gap-1.5 rounded px-2 py-2 text-sm text-white/70 transition-all hover:bg-white/10 active:scale-95 active:bg-white/10"
+              >
+                <span className="underline decoration-dotted underline-offset-4">
+                  {selectedYear && selectedMonth
+                    ? `${selectedYear}年 ${selectedMonth}月`
+                    : selectedYear
+                    ? `${selectedYear}年`
+                    : '全期間'}
+                </span>
+                <ChevronDown className="w-4 h-4" aria-hidden="true" />
+                {activeFilterCount > 0 && (
+                  <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs text-white">
+                    フィルタ {activeFilterCount}件
+                  </span>
+                )}
+              </button>
             </div>
             {/* 右: アクションボタン */}
             <div className="flex items-center gap-2 ml-3 flex-shrink-0">
@@ -368,7 +388,7 @@ const MatchList = () => {
       </div>
 
       {/* コンテンツ（上部パディング追加） */}
-      <div className={`${showPlayerSearch ? 'pt-32' : 'pt-20'} space-y-6 transition-all`}>
+      <div className={`${showPlayerSearch ? 'pt-36' : 'pt-24'} space-y-6 transition-all`}>
       {/* 統計 */}
       {rankStatistics && (
         <div className="space-y-3">
@@ -470,7 +490,8 @@ const MatchList = () => {
         </div>
       )}
 
-      {/* フローティングアクションボタン (FAB) */}
+      {/* FAB は上部年月ボタンへ移行済み（2026-05-21） */}
+      {/*
       <button
         onClick={() => setIsFilterOpen(true)}
         className="fixed right-4 z-20 bg-[#4a6b5a] text-white p-4 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl"
@@ -478,6 +499,7 @@ const MatchList = () => {
       >
         <Filter className="w-6 h-6" />
       </button>
+      */}
 
       {/* ボトムシート */}
       <FilterBottomSheet
