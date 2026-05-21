@@ -1039,8 +1039,31 @@ WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 pla
 各 VEVENT は両フィード共通:
 - **UID**: `session-{sessionId}-player-{playerId}@match-tracker`（決定的、再生成時に同UIDで上書きされる）
 - **タイトル**: `{表示名}＠{会場名}` 表示名は `PlayerOrganization.calendar_display_name` を優先、未設定 or 未所属（ゲスト参加）なら `Organization.name`
-- **時刻**: `PracticeSession.start_time`/`end_time` → `VenueMatchSchedule` → 全日 の順
+- **時刻**: プレイヤーが**実際に参加する試合の時間帯**に絞り込む（下記「時刻決定アルゴリズム」参照）
 - **タイムゾーン**: Asia/Tokyo（全日イベントは TZ非依存の DateTimeComponents で構築）
+
+##### 時刻決定アルゴリズム
+
+1 つの `PracticeSession` に対するプレイヤーの参加レコード集合（`isActive()` フィルタ後）から、以下の手順で `startTime`/`endTime` を決める。
+
+- **条件A**: 当該 session の全参加レコードに `match_number` が入っている（`null` が 1 件もない）
+- **条件B**: `session.venue_id` が設定されており、参加 `match_number` のうち少なくとも 1 件分の `VenueMatchSchedule` が登録されている
+
+| パターン | startTime / endTime |
+|---------|---------------------|
+| 条件A・B 両方成立 | 参加 `match_number` のうち `VenueMatchSchedule` が登録されている番号で `min(start_time)` 〜 `max(end_time)` |
+| 条件A or B が不成立 | `PracticeSession.start_time` / `end_time` にフォールバック（旧来挙動） |
+| 上記の startTime/endTime が両方 `null` | 全日イベント（`VALUE=DATE`） |
+| startTime のみ存在、endTime が `null`（フォールバック時のみ発生） | `endTime = startTime.plusHours(4)` |
+
+例: 練習が会場 A で 13:00〜17:00（試合1〜6）、プレイヤーが試合 3〜6 のみに参加登録 → イベント時刻は **14:00〜17:00**（試合3 開始〜試合6 終了）になる。全試合参加なら 13:00〜17:00。
+
+**補足:**
+- **混在ケース**（同じ session で `match_number` ありレコードと `null` レコードが混在）: `null` が 1 件でもあれば条件A 不成立 → session 全体時刻を採用（`match_number=null` は「全試合参加」の表現として使われる運用を壊さないため）
+- **部分スケジュール**（参加 `match_number` の一部しか `VenueMatchSchedule` が無い）: 登録済みの分だけで `min`/`max` を計算（範囲は狭くなる可能性あり）
+- **会場スケジュール未登録**（条件B 不成立）: session 全体時刻にフォールバック
+- **バッファ時間**: 前後の受付・撤収時間は加味しない（試合の開始〜終了時刻ぴったり）
+- **UID 不変**: イベント時刻が変わっても UID は同一なので、Google カレンダー等では同じイベントが「更新」される（重複登録にはならない）
 
 biweekly ライブラリで VCALENDAR にまとめてテキスト返却。
 

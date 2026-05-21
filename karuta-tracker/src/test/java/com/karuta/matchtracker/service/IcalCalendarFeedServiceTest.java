@@ -411,23 +411,15 @@ class IcalCalendarFeedServiceTest {
     }
 
     @Test
-    @DisplayName("orgFeed: session.start_time / end_time があればそれが使われる")
-    void generateIcsForOrgFeed_usesPracticeSessionStartEndTime() {
-        // Given
+    @DisplayName("orgFeed §4.4 ケース5: 会場 VenueMatchSchedule が未登録 → session 全体時刻が採用される")
+    void generateIcsForOrgFeed_noVenueSchedule_usesSessionTime() {
+        // Given: session 時刻あり、VenueMatchSchedule は未登録
         LocalTime sessionStart = LocalTime.of(13, 30);
         LocalTime sessionEnd = LocalTime.of(17, 0);
         PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
                 sessionStart, sessionEnd);
         PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
                 ParticipantStatus.WON);
-
-        VenueMatchSchedule unusedSchedule = VenueMatchSchedule.builder()
-                .id(1L)
-                .venueId(VENUE_ID)
-                .matchNumber(1)
-                .startTime(LocalTime.of(9, 0))
-                .endTime(LocalTime.of(10, 30))
-                .build();
 
         stubPlayerByToken();
         stubMembership(ORG_ID, true);
@@ -440,15 +432,14 @@ class IcalCalendarFeedServiceTest {
                 .thenReturn(List.of(session));
         when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
         when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
-                .thenReturn(List.of(unusedSchedule));
+                .thenReturn(Collections.emptyList());
 
         // When
         String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
 
-        // Then: 13:30 (JST) → UTC 04:30 として現れる想定
-        assertThat(ics).contains("133000");
-        assertThat(ics).contains("170000");
-        assertThat(ics).doesNotContain("T090000");
+        // Then: schedule 未登録のため、条件B 不成立で session 全体時刻にフォールバック
+        assertThat(ics).contains("T133000");
+        assertThat(ics).contains("T170000");
     }
 
     @Test
@@ -486,6 +477,266 @@ class IcalCalendarFeedServiceTest {
         // Then: VenueMatchSchedule の 09:00 / 10:30 (JST) が使われる
         assertThat(ics).contains("090000");
         assertThat(ics).contains("103000");
+    }
+
+    // ============================================================
+    // §4.4 参加試合に応じたイベント時刻 (新仕様) テスト
+    // ============================================================
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース1: 全参加レコードに match_number あり・会場スケジュール完備 → スケジュール時刻採用")
+    void generateIcsForOrgFeed_allMatchSchedulePresent_usesScheduleTime() {
+        // Given: session 12:00-18:00 (敢えて schedule とは異なる広めの時刻)、
+        //        会場は match1-6 schedule 完備、参加は match1-6 全件
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(12, 0), LocalTime.of(18, 0));
+
+        List<VenueMatchSchedule> schedules = List.of(
+                createSchedule(1, LocalTime.of(13, 0), LocalTime.of(13, 45)),
+                createSchedule(2, LocalTime.of(13, 50), LocalTime.of(14, 35)),
+                createSchedule(3, LocalTime.of(14, 40), LocalTime.of(15, 25)),
+                createSchedule(4, LocalTime.of(15, 30), LocalTime.of(16, 15)),
+                createSchedule(5, LocalTime.of(16, 20), LocalTime.of(16, 30)),
+                createSchedule(6, LocalTime.of(16, 35), LocalTime.of(17, 20))
+        );
+        List<PracticeParticipant> participations = List.of(
+                createParticipation(SESSION_ID, PLAYER_ID, 1, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 2, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 3, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 4, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 5, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 6, ParticipantStatus.WON)
+        );
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(participations);
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(schedules);
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: schedule の min(start)=13:00, max(end)=17:20 が採用される
+        assertThat(ics).contains("T130000");
+        assertThat(ics).contains("T172000");
+        // session 全体時刻 12:00 / 18:00 は出ない
+        assertThat(ics).doesNotContain("T120000");
+        assertThat(ics).doesNotContain("T180000");
+    }
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース2: 部分参加 (match3-6 / 会場は match1-6 完備) → match3.start〜match6.end")
+    void generateIcsForOrgFeed_partialParticipation_usesScheduleSubset() {
+        // Given: session 13:00-17:00, 会場は match1-6 完備, 参加は match3-6
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(13, 0), LocalTime.of(17, 0));
+
+        List<VenueMatchSchedule> schedules = List.of(
+                createSchedule(1, LocalTime.of(13, 0), LocalTime.of(13, 45)),
+                createSchedule(2, LocalTime.of(13, 50), LocalTime.of(14, 35)),
+                createSchedule(3, LocalTime.of(14, 0), LocalTime.of(14, 45)),
+                createSchedule(4, LocalTime.of(14, 50), LocalTime.of(15, 35)),
+                createSchedule(5, LocalTime.of(15, 40), LocalTime.of(16, 25)),
+                createSchedule(6, LocalTime.of(16, 15), LocalTime.of(17, 0))
+        );
+
+        List<PracticeParticipant> participations = List.of(
+                createParticipation(SESSION_ID, PLAYER_ID, 3, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 4, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 5, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 6, ParticipantStatus.WON)
+        );
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(participations);
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(schedules);
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: match3.start=14:00, match6.end=17:00 が採用される
+        assertThat(ics).contains("T140000");
+        assertThat(ics).contains("T170000");
+        // session 全体の 13:00 開始は出ない
+        assertThat(ics).doesNotContain("T130000");
+    }
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース3: 全試合参加 (match1-6 全件 / 会場 match1-6 完備) → schedule 全体 min/max")
+    void generateIcsForOrgFeed_allMatchesParticipation_usesFullScheduleRange() {
+        // Given: session 13:00-17:00, 会場 match1-6 完備で min=13:00, max=17:00 (session と一致)
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(13, 0), LocalTime.of(17, 0));
+
+        List<VenueMatchSchedule> schedules = List.of(
+                createSchedule(1, LocalTime.of(13, 0), LocalTime.of(13, 45)),
+                createSchedule(2, LocalTime.of(13, 50), LocalTime.of(14, 35)),
+                createSchedule(3, LocalTime.of(14, 40), LocalTime.of(15, 25)),
+                createSchedule(4, LocalTime.of(15, 30), LocalTime.of(16, 15)),
+                createSchedule(5, LocalTime.of(16, 20), LocalTime.of(16, 30)),
+                createSchedule(6, LocalTime.of(16, 35), LocalTime.of(17, 0))
+        );
+
+        List<PracticeParticipant> participations = List.of(
+                createParticipation(SESSION_ID, PLAYER_ID, 1, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 2, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 3, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 4, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 5, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 6, ParticipantStatus.WON)
+        );
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(participations);
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(schedules);
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: schedule の min=13:00, max=17:00 → session 全体時刻と一致する範囲
+        assertThat(ics).contains("T130000");
+        assertThat(ics).contains("T170000");
+    }
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース4: 同じ session に match_number あり/null 混在 → session 全体時刻")
+    void generateIcsForOrgFeed_mixedNullMatchNumber_usesSessionTime() {
+        // Given: session 13:00-17:00, schedule match3 のみ登録、
+        //        参加は match=3 と match=null の 2件 (混在)
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(13, 0), LocalTime.of(17, 0));
+
+        List<VenueMatchSchedule> schedules = List.of(
+                createSchedule(3, LocalTime.of(14, 0), LocalTime.of(14, 45))
+        );
+
+        List<PracticeParticipant> participations = List.of(
+                createParticipation(SESSION_ID, PLAYER_ID, 3, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, null, ParticipantStatus.WON)
+        );
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(participations);
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(schedules);
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: 条件A 不成立 (null 混在) → session 全体時刻が採用される
+        assertThat(ics).contains("T130000");
+        assertThat(ics).contains("T170000");
+        // schedule match3 の 14:00 / 14:45 は採用されない
+        assertThat(ics).doesNotContain("T140000");
+        assertThat(ics).doesNotContain("T144500");
+    }
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース6: 参加 match_number の一部だけスケジュール登録あり → 登録分の min/max")
+    void generateIcsForOrgFeed_partialSchedule_usesPresentSchedulesMinMax() {
+        // Given: session 13:00-17:00, schedule は match3, match5 のみ登録 (match4 未登録)、
+        //        参加は match3-5
+        PracticeSession session = createSession(SESSION_ID, futureDate, VENUE_ID, ORG_ID,
+                LocalTime.of(13, 0), LocalTime.of(17, 0));
+
+        List<VenueMatchSchedule> schedules = List.of(
+                createSchedule(3, LocalTime.of(14, 0), LocalTime.of(14, 45)),
+                createSchedule(5, LocalTime.of(15, 30), LocalTime.of(16, 15))
+        );
+
+        List<PracticeParticipant> participations = List.of(
+                createParticipation(SESSION_ID, PLAYER_ID, 3, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 4, ParticipantStatus.WON),
+                createParticipation(SESSION_ID, PLAYER_ID, 5, ParticipantStatus.WON)
+        );
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(participations);
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(schedules);
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: 登録のある match3.start=14:00, match5.end=16:15 が採用される
+        assertThat(ics).contains("T140000");
+        assertThat(ics).contains("T161500");
+        // session 全体の 13:00 / 17:00 は出ない
+        assertThat(ics).doesNotContain("T130000");
+        assertThat(ics).doesNotContain("T170000");
+    }
+
+    @Test
+    @DisplayName("orgFeed §4.4 ケース7: session.startTime/endTime も null かつスケジュール不在 → 全日イベント")
+    void generateIcsForOrgFeed_noTimeAndNoSchedule_returnsAllDayEvent() {
+        // Given: session 時刻 null, schedule 不在, 参加=match1 (matchNumber あり)
+        LocalDate sessionDate = LocalDate.of(2026, 6, 10);
+        PracticeSession session = createSession(SESSION_ID, sessionDate, VENUE_ID, ORG_ID,
+                null, null);
+        PracticeParticipant participation = createParticipation(SESSION_ID, PLAYER_ID, 1,
+                ParticipantStatus.WON);
+
+        stubPlayerByToken();
+        stubMembership(ORG_ID, true);
+        when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
+        when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+                .thenReturn(List.of(participation));
+        when(practiceSessionRepository.findAllById(anyList()))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdIn(anyList()))
+                .thenReturn(Collections.emptyList());
+
+        // When
+        String ics = service.generateIcsForOrgFeed(VALID_TOKEN, ORG_ID);
+
+        // Then: 条件B 不成立かつ session 時刻 null → VALUE=DATE 形式の全日イベント
+        assertThat(ics).contains("DTSTART;VALUE=DATE:20260610");
+        assertThat(ics).contains("DTEND;VALUE=DATE:20260611");
     }
 
     // ============================================================
@@ -1056,6 +1307,16 @@ class IcalCalendarFeedServiceTest {
                 .playerId(playerId)
                 .matchNumber(matchNumber)
                 .status(status)
+                .build();
+    }
+
+    private VenueMatchSchedule createSchedule(Integer matchNumber, LocalTime startTime, LocalTime endTime) {
+        return VenueMatchSchedule.builder()
+                .id((long) matchNumber)
+                .venueId(VENUE_ID)
+                .matchNumber(matchNumber)
+                .startTime(startTime)
+                .endTime(endTime)
                 .build();
     }
 
