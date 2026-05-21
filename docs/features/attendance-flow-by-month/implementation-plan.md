@@ -50,7 +50,7 @@ status: completed
 - **対応Issue:** #696
 
 ### タスク6: ドキュメント更新（SCREEN_LIST.md）
-- [ ] 完了
+- [x] 完了
 - **概要:** `docs/SCREEN_LIST.md` のPracticeList（項番13）、PracticeParticipation（項番17）、PracticeCancelPage（項番18）の説明を新仕様に合わせて更新する。
 - **変更対象ファイル:**
   - `docs/SCREEN_LIST.md` — 項番13・17・18の「説明」列に「カレンダー表示月の抽選確定状態に応じて当月扱い／来月扱いを判定し、参加登録画面のチェック外し挙動とAttendanceRegisterModalのボタン表示を切り替える」旨を追記。項番18には「月ナビ廃止、クエリパラメータ月固定」を追記
