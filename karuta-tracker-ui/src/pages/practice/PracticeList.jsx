@@ -93,10 +93,15 @@ const PracticeList = () => {
         const month = currentDate.getMonth() + 1;
 
         // 並列でデータ取得（軽量エンドポイント使用）
+        // 注意: getPlayerParticipationStatus は lotteryExecuted を返し、これは
+        // resolveAttendanceMode の月判定の必須入力。失敗時に空マップで握りつぶすと
+        // 未来月に抽選確定済みセッションがあっても誤って「来月扱い」と判定され、
+        // AttendanceRegisterModal からキャンセル登録導線が消える。
+        // → 個別 catch は外し、エラー時は全体エラーに流して FAB を非表示にする。
         const [sessionsRes, participationsRes, statusRes, orgsRes] = await Promise.all([
           practiceAPI.getSessionSummaries(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
-          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
+          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
           organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
 
@@ -993,8 +998,9 @@ const PracticeList = () => {
           onSave={handleSaveMatchParticipants}
         />
       )}
-      {/* フローティングアクションボタン (FAB)。過去月は非表示 */}
-      {!isPastMonth && (
+      {/* フローティングアクションボタン (FAB)。過去月とデータ取得失敗時は非表示
+          （lotteryExecutedMap が欠落した状態で誤った来月扱いで操作させないため） */}
+      {!error && !isPastMonth && (
         <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <button
             onClick={openAttendanceModal}

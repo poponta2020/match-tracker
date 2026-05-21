@@ -17,7 +17,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import com.karuta.matchtracker.dto.PlayerParticipationStatusDto;
 
@@ -599,6 +601,136 @@ class PracticeParticipantServiceTest {
         // 一度キャンセルした試合(matchNumber=2)が再登録できるよう、登録済み扱いに含まれてはいけない
         assertThat(result).containsKey(100L);
         assertThat(result.get(100L)).containsExactlyInAnyOrder(1, 5);
+    }
+
+    @Test
+    @DisplayName("当月扱い: 既存アクティブ参加がリクエストに含まれていない場合は IllegalArgumentException（API直叩きでの理由なしキャンセルを拒否）")
+    void currentMonth_missingActiveEntry_throwsIllegalArgument() {
+        LocalDate fixedToday = LocalDate.of(2026, 5, 15);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(fixedToday);
+
+            PracticeSession session = createSession(100L, 4);
+            session.setSessionDate(LocalDate.of(2026, 5, 25));
+
+            when(playerRepository.existsById(10L)).thenReturn(true);
+            when(practiceSessionRepository.findByYearAndMonth(2026, 5)).thenReturn(List.of(session));
+            // 既存: 第1, 第2試合がアクティブ（PENDING）
+            when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L))))
+                    .thenReturn(List.of(
+                            buildParticipant(100L, 10L, 1, ParticipantStatus.PENDING),
+                            buildParticipant(100L, 10L, 2, ParticipantStatus.PENDING)
+                    ));
+
+            PracticeParticipationRequest request = new PracticeParticipationRequest();
+            request.setPlayerId(10L);
+            request.setYear(2026);
+            request.setMonth(5);
+            // 第1のみ含む（第2は削除差分 → 拒否されるべき）
+            request.setParticipations(List.of(createParticipation(100L, 1)));
+
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> service.registerParticipations(request));
+            assertThat(ex.getMessage()).contains("matchNumber=2");
+            // softDelete は一度も呼ばれないこと（拒否で処理打ち切り）
+            verify(practiceParticipantRepository, never()).softDeleteByPlayerIdAndSessionIds(any(), any(), any());
+        }
+    }
+
+    @Test
+    @DisplayName("未来月+抽選確定済み: 既存アクティブ参加の削除差分があれば IllegalArgumentException（当月扱いに昇格）")
+    void futureMonth_lotteryExecuted_missingActiveEntry_throwsIllegalArgument() {
+        LocalDate fixedToday = LocalDate.of(2026, 5, 15);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(fixedToday);
+            // 翌月（2026年6月）に抽選確定済みあり → 当月扱いに昇格
+            when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                    2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+
+            PracticeSession session = createSession(200L, 4);
+            session.setSessionDate(LocalDate.of(2026, 6, 10));
+
+            when(playerRepository.existsById(10L)).thenReturn(true);
+            when(practiceSessionRepository.findByYearAndMonth(2026, 6)).thenReturn(List.of(session));
+            when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(200L))))
+                    .thenReturn(List.of(
+                            buildParticipant(200L, 10L, 1, ParticipantStatus.WON)
+                    ));
+
+            PracticeParticipationRequest request = new PracticeParticipationRequest();
+            request.setPlayerId(10L);
+            request.setYear(2026);
+            request.setMonth(6);
+            // 空リクエストで第1試合を削除しようとする
+            request.setParticipations(List.of());
+
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> service.registerParticipations(request));
+            assertThat(ex.getMessage()).contains("matchNumber=1");
+        }
+    }
+
+    @Test
+    @DisplayName("未来月+抽選確定なし: 削除差分があっても通常処理（来月扱いのため理由なしキャンセル可）")
+    void futureMonth_noLotteryExecuted_missingActiveEntry_allowed() {
+        LocalDate fixedToday = LocalDate.of(2026, 5, 15);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(fixedToday);
+            // 翌月（2026年6月）に抽選確定済みなし → 来月扱い
+            when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                    2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+
+            when(playerRepository.existsById(10L)).thenReturn(true);
+
+            PracticeParticipationRequest request = new PracticeParticipationRequest();
+            request.setPlayerId(10L);
+            request.setYear(2026);
+            request.setMonth(6);
+            // 空リクエストでの削除も来月扱いなら許可される（validate を通過）
+            request.setParticipations(List.of());
+
+            // 例外がスローされないことを検証（registerParticipations 本体は空リクエストで no-op）
+            service.registerParticipations(request);
+        }
+    }
+
+    @Test
+    @DisplayName("当月扱い: 削除差分がない（追加のみ）リクエストは通常通り処理される")
+    void currentMonth_noMissingEntry_processedNormally() {
+        LocalDate fixedToday = LocalDate.of(2026, 5, 15);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(fixedToday);
+            jstMock.when(JstDateTimeUtil::now).thenReturn(fixedToday.atTime(12, 0));
+
+            PracticeSession session = createSession(100L, 4);
+            session.setSessionDate(LocalDate.of(2026, 5, 25));
+
+            when(playerRepository.existsById(10L)).thenReturn(true);
+            when(practiceSessionRepository.findByYearAndMonth(2026, 5)).thenReturn(List.of(session));
+            // 既存: 第1試合がアクティブ
+            when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), eq(List.of(100L))))
+                    .thenReturn(List.of(
+                            buildParticipant(100L, 10L, 1, ParticipantStatus.PENDING)
+                    ));
+            when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 5, ORG_ID))
+                    .thenReturn(List.of(session));
+            when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+            when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(5), eq(ORG_ID))).thenReturn(true);
+
+            PracticeParticipationRequest request = new PracticeParticipationRequest();
+            request.setPlayerId(10L);
+            request.setYear(2026);
+            request.setMonth(5);
+            // 第1（既存）と第2（追加）の両方をリクエスト → 削除差分なし
+            request.setParticipations(List.of(
+                    createParticipation(100L, 1),
+                    createParticipation(100L, 2)
+            ));
+
+            // 例外がスローされないことを検証
+            service.registerParticipations(request);
+        }
     }
 
     private PracticeParticipant buildParticipant(Long sessionId, Long playerId, int matchNumber, ParticipantStatus status) {
