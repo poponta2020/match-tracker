@@ -39,6 +39,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -307,9 +308,12 @@ public class IcalCalendarFeedService {
         }
 
         Map<Long, List<Integer>> sessionMatchNumbers = new HashMap<>();
+        Set<Long> sessionsWithNullMatchNumber = new HashSet<>();
         for (PracticeParticipant p : activeParticipations) {
             if (!filteredSessionIds.contains(p.getSessionId())) continue;
-            if (p.getMatchNumber() != null) {
+            if (p.getMatchNumber() == null) {
+                sessionsWithNullMatchNumber.add(p.getSessionId());
+            } else {
                 sessionMatchNumbers
                         .computeIfAbsent(p.getSessionId(), k -> new ArrayList<>())
                         .add(p.getMatchNumber());
@@ -320,8 +324,10 @@ public class IcalCalendarFeedService {
             PracticeSession session = sessionMap.get(sessionId);
             if (session == null) continue;
 
+            boolean allHaveMatchNumber = !sessionsWithNullMatchNumber.contains(sessionId);
             VEvent event = buildEvent(playerId, session, venueMap, scheduleMap,
-                    sessionMatchNumbers.get(sessionId), organizationMap, displayNameByOrgId);
+                    sessionMatchNumbers.get(sessionId), allHaveMatchNumber,
+                    organizationMap, displayNameByOrgId);
             ical.addEvent(event);
         }
 
@@ -394,6 +400,7 @@ public class IcalCalendarFeedService {
                               Map<Long, Venue> venueMap,
                               Map<Long, Map<Integer, VenueMatchSchedule>> scheduleMap,
                               List<Integer> matchNumbers,
+                              boolean allHaveMatchNumber,
                               Map<Long, Organization> organizationMap,
                               Map<Long, String> displayNameByOrgId) {
         VEvent event = new VEvent();
@@ -419,22 +426,35 @@ public class IcalCalendarFeedService {
             event.setDescription(desc);
         }
 
-        LocalTime startTime = session.getStartTime();
-        LocalTime endTime = session.getEndTime();
+        LocalTime startTime = null;
+        LocalTime endTime = null;
+        boolean scheduleApplied = false;
 
-        if ((startTime == null || endTime == null) && session.getVenueId() != null
+        // 参加レコードの match_number が全件揃っており、会場スケジュールが
+        // 少なくとも1件分は登録されている場合のみ、参加試合範囲の時刻を採用する。
+        if (allHaveMatchNumber && session.getVenueId() != null
                 && matchNumbers != null && !matchNumbers.isEmpty()) {
             Map<Integer, VenueMatchSchedule> venueSchedule = scheduleMap.get(session.getVenueId());
             if (venueSchedule != null) {
-                VenueMatchSchedule firstSchedule = venueSchedule.get(minMatch);
-                VenueMatchSchedule lastSchedule = venueSchedule.get(maxMatch);
-                if (startTime == null && firstSchedule != null) {
-                    startTime = firstSchedule.getStartTime();
-                }
-                if (endTime == null && lastSchedule != null) {
-                    endTime = lastSchedule.getEndTime();
+                List<VenueMatchSchedule> presentSchedules = matchNumbers.stream()
+                        .map(venueSchedule::get)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                if (!presentSchedules.isEmpty()) {
+                    startTime = presentSchedules.stream()
+                            .map(VenueMatchSchedule::getStartTime)
+                            .min(Comparator.naturalOrder()).orElse(null);
+                    endTime = presentSchedules.stream()
+                            .map(VenueMatchSchedule::getEndTime)
+                            .max(Comparator.naturalOrder()).orElse(null);
+                    scheduleApplied = true;
                 }
             }
+        }
+
+        if (!scheduleApplied) {
+            startTime = session.getStartTime();
+            endTime = session.getEndTime();
         }
 
         LocalDate date = session.getSessionDate();
