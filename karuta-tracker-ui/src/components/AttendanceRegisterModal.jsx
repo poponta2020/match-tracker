@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { X, UserPlus, UserMinus } from 'lucide-react';
 
-const AttendanceRegisterModal = ({ isOpen, onClose, year, month }) => {
+const AttendanceRegisterModal = ({ isOpen, onClose, year, month, isCurrentMonth = true }) => {
   const navigate = useNavigate();
 
   if (!isOpen) {
@@ -47,13 +47,15 @@ const AttendanceRegisterModal = ({ isOpen, onClose, year, month }) => {
             <UserPlus size={16} />
             参加登録
           </button>
-          <button
-            onClick={handleCancel}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-[#82655a] bg-white border border-[#82655a] rounded-lg hover:bg-[#e2d9d0] transition-colors"
-          >
-            <UserMinus size={16} />
-            キャンセル登録
-          </button>
+          {isCurrentMonth && (
+            <button
+              onClick={handleCancel}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-[#82655a] bg-white border border-[#82655a] rounded-lg hover:bg-[#e2d9d0] transition-colors"
+            >
+              <UserMinus size={16} />
+              キャンセル登録
+            </button>
+          )}
         </div>
 
         {/* フッター */}

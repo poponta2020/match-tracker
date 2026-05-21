@@ -15,7 +15,7 @@ status: completed
 - **対応Issue:** #692
 
 ### タスク2: AttendanceRegisterModal の改修
-- [ ] 完了
+- [x] 完了
 - **概要:** モーダルに `isCurrentMonth` props を追加し、来月扱いのときは「キャンセル登録」ボタンを非表示にする。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/components/AttendanceRegisterModal.jsx` — props に `isCurrentMonth: boolean` を追加し、`isCurrentMonth === false` の場合に「キャンセル登録」ボタンを描画しない
