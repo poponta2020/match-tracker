@@ -229,6 +229,12 @@ public class WaitlistPromotionService {
 
     /**
      * キャンセル処理の内部実装。通知送信は行わず、通知データを返す。
+     *
+     * <p>受け付けるステータス:
+     * <ul>
+     *   <li>{@code WON}: 通常の参加キャンセル。繰り上げ・当日補充フローを発動する。</li>
+     *   <li>{@code PENDING}: 抽選前の申込取消。繰り上げ・通知は発生しない。</li>
+     * </ul>
      */
     private AdminWaitlistNotificationData cancelParticipationInternal(Long participantId,
                                                                        String cancelReason,
@@ -236,8 +242,9 @@ public class WaitlistPromotionService {
         PracticeParticipant participant = practiceParticipantRepository.findById(participantId)
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
 
-        if (participant.getStatus() != ParticipantStatus.WON) {
-            throw new IllegalStateException("当選者のみキャンセルできます（現在のステータス: " + participant.getStatus() + "）");
+        ParticipantStatus originalStatus = participant.getStatus();
+        if (originalStatus != ParticipantStatus.WON && originalStatus != ParticipantStatus.PENDING) {
+            throw new IllegalStateException("当選者または申込者のみキャンセルできます（現在のステータス: " + originalStatus + "）");
         }
 
         PracticeSession session = practiceSessionRepository.findById(participant.getSessionId())
@@ -251,8 +258,13 @@ public class WaitlistPromotionService {
         participant.setCancelledAt(JstDateTimeUtil.now());
         practiceParticipantRepository.save(participant);
 
-        log.info("Player {} cancelled participation in session {} match {} (reason: {})",
-                participant.getPlayerId(), participant.getSessionId(), participant.getMatchNumber(), cancelReason);
+        log.info("Player {} cancelled participation (from {}) in session {} match {} (reason: {})",
+                participant.getPlayerId(), originalStatus, participant.getSessionId(), participant.getMatchNumber(), cancelReason);
+
+        // PENDING（抽選前申込）のキャンセル: 繰り上げ対象が存在しないため通知不要
+        if (originalStatus == ParticipantStatus.PENDING) {
+            return null;
+        }
 
         // 当日12:00以降のキャンセル → 新フロー（全体募集＋先着ボタン方式）
         if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {

@@ -123,11 +123,11 @@ const PracticeCancelPage = () => {
     return sessions.find((s) => s.sessionDate === dateStr);
   };
 
-  // そのセッションでWONの試合があるかチェック
-  const getWonMatches = (session) => {
+  // そのセッションでキャンセル可能な試合（当選 or 抽選前申込）を取得
+  const getCancellableMatches = (session) => {
     if (!session) return [];
     const statuses = myStatuses[session.id] || [];
-    return statuses.filter((s) => s.status === 'WON');
+    return statuses.filter((s) => s.status === 'WON' || s.status === 'PENDING');
   };
 
   // 今日かどうか
@@ -168,8 +168,8 @@ const PracticeCancelPage = () => {
     const session = getSessionForDate(day);
     if (!session) return;
 
-    const wonMatches = getWonMatches(session);
-    if (wonMatches.length === 0) return;
+    const cancellableMatches = getCancellableMatches(session);
+    if (cancellableMatches.length === 0) return;
 
     setSelectedDate(day);
     setSelectedSession(session);
@@ -218,9 +218,9 @@ const PracticeCancelPage = () => {
     }
     setShowSameDayConfirm(false);
 
-    const wonMatches = getWonMatches(selectedSession);
+    const cancellableMatches = getCancellableMatches(selectedSession);
     const participantIds = selectedMatches
-      .map((matchNum) => wonMatches.find((m) => m.matchNumber === matchNum)?.participantId)
+      .map((matchNum) => cancellableMatches.find((m) => m.matchNumber === matchNum)?.participantId)
       .filter(Boolean);
 
     if (participantIds.length === 0) return;
@@ -261,7 +261,7 @@ const PracticeCancelPage = () => {
 
   const calendar = generateCalendar();
   const monthStr = `${year}年${month}月`;
-  const wonMatchesForSelected = selectedSession ? getWonMatches(selectedSession) : [];
+  const cancellableMatchesForSelected = selectedSession ? getCancellableMatches(selectedSession) : [];
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -341,8 +341,9 @@ const PracticeCancelPage = () => {
                       const session = getSessionForDate(day);
                       const today = isToday(day);
                       const past = isPastDate(day);
-                      const wonMatches = session ? getWonMatches(session) : [];
-                      const hasWon = wonMatches.length > 0;
+                      const cancellableMatches = session ? getCancellableMatches(session) : [];
+                      const hasCancellable = cancellableMatches.length > 0;
+                      const hasWon = cancellableMatches.some((m) => m.status === 'WON');
                       const hasSession = !!session;
 
                       let cellBg = 'bg-[#f9f6f2]';
@@ -350,11 +351,18 @@ const PracticeCancelPage = () => {
                       let cursor = 'cursor-default';
                       let venueColor = 'text-gray-400';
 
-                      if (hasWon && !past) {
-                        cellBg = 'bg-[#fce4e4] hover:bg-[#f8d0d0]';
-                        cellBorder = 'border-2 border-[#e8a0a0]';
+                      if (hasCancellable && !past) {
+                        // 当選を含む場合は赤系、申込のみの場合は青系
+                        if (hasWon) {
+                          cellBg = 'bg-[#fce4e4] hover:bg-[#f8d0d0]';
+                          cellBorder = 'border-2 border-[#e8a0a0]';
+                          venueColor = 'text-[#8b4513]';
+                        } else {
+                          cellBg = 'bg-[#e4ecfc] hover:bg-[#d0deff]';
+                          cellBorder = 'border-2 border-[#a0b8e8]';
+                          venueColor = 'text-[#1e4a8a]';
+                        }
                         cursor = 'cursor-pointer';
-                        venueColor = 'text-[#8b4513]';
                       } else if (hasSession && !past) {
                         cellBg = 'bg-[#f9f6f2]';
                       }
@@ -367,7 +375,7 @@ const PracticeCancelPage = () => {
                         <td
                           key={dayIdx}
                           className={`px-1 py-2 ${cellBorder} ${cellBg} ${cursor} align-top h-20 relative`}
-                          onClick={() => hasWon && !past && handleDateClick(day)}
+                          onClick={() => hasCancellable && !past && handleDateClick(day)}
                         >
                           {day && (
                             <div className="text-center flex flex-col items-center">
@@ -387,9 +395,9 @@ const PracticeCancelPage = () => {
                                   {abbreviateLocation(session.venueName)}
                                 </div>
                               )}
-                              {hasWon && !past && (
-                                <div className="mt-0.5 text-[9px] text-red-500 font-bold">
-                                  {wonMatches.length}試合
+                              {hasCancellable && !past && (
+                                <div className={`mt-0.5 text-[9px] font-bold ${hasWon ? 'text-red-500' : 'text-blue-600'}`}>
+                                  {cancellableMatches.length}試合
                                 </div>
                               )}
                             </div>
@@ -438,10 +446,11 @@ const PracticeCancelPage = () => {
                 何試合目の参加をキャンセルしますか？
               </p>
               <div className="space-y-2">
-                {wonMatchesForSelected
+                {cancellableMatchesForSelected
                   .sort((a, b) => a.matchNumber - b.matchNumber)
                   .map((match) => {
                     const isSelected = selectedMatches.includes(match.matchNumber);
+                    const isPending = match.status === 'PENDING';
                     return (
                       <label
                         key={match.matchNumber}
@@ -461,9 +470,15 @@ const PracticeCancelPage = () => {
                         <span className="text-sm font-medium text-gray-800">
                           第{match.matchNumber}試合
                         </span>
-                        <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded font-bold">
-                          当選
-                        </span>
+                        {isPending ? (
+                          <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-bold">
+                            申込（抽選前）
+                          </span>
+                        ) : (
+                          <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded font-bold">
+                            当選
+                          </span>
+                        )}
                       </label>
                     );
                   })}
