@@ -695,6 +695,56 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
+    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS（sessionId=null）時は月内全セッションで lotteryExecuted=true を返す")
+    void getPlayerParticipationStatusByMonth_monthlyLotteryExecuted_marksAllSessionsTrue() {
+        PracticeSession session1 = createSession(100L, 4);
+        session1.setSessionDate(LocalDate.of(2026, 6, 10));
+        PracticeSession session2 = createSession(200L, 4);
+        session2.setSessionDate(LocalDate.of(2026, 6, 15));
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 6))
+                .thenReturn(List.of(session1, session2));
+        // セッション単位の SUCCESS レコードは存在しない
+        when(lotteryExecutionRepository.findBySessionIdIn(List.of(100L, 200L)))
+                .thenReturn(List.of());
+        // しかし月次抽選 SUCCESS は存在する（LotteryService.executeLottery のケース）
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L, 200L)))
+                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(6), eq(ORG_ID)))
+                .thenReturn(false);
+
+        PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 6);
+
+        // 月次抽選 SUCCESS により、月内全セッションが true になる
+        assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
+        assertThat(dto.getLotteryExecuted()).containsEntry(200L, true);
+    }
+
+    @Test
+    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選レコードがない場合は全セッションで lotteryExecuted=false")
+    void getPlayerParticipationStatusByMonth_noLottery_marksAllSessionsFalse() {
+        PracticeSession session = createSession(300L, 4);
+        session.setSessionDate(LocalDate.of(2026, 7, 5));
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 7))
+                .thenReturn(List.of(session));
+        when(lotteryExecutionRepository.findBySessionIdIn(List.of(300L)))
+                .thenReturn(List.of());
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2026, 7, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(300L)))
+                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(7), eq(ORG_ID)))
+                .thenReturn(true);
+
+        PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 7);
+
+        assertThat(dto.getLotteryExecuted()).containsEntry(300L, false);
+    }
+
+    @Test
     @DisplayName("当月扱い: 削除差分がない（追加のみ）リクエストは通常通り処理される")
     void currentMonth_noMissingEntry_processedNormally() {
         LocalDate fixedToday = LocalDate.of(2026, 5, 15);

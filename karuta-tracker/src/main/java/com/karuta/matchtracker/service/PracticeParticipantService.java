@@ -528,9 +528,19 @@ public class PracticeParticipantService {
 
         Map<Long, Boolean> lotteryMap = new HashMap<>();
         sessionIds.forEach(sid -> lotteryMap.put(sid, false));
+        // セッション単位の抽選実行レコード（再抽選など）を反映
         lotteryExecutionRepository.findBySessionIdIn(sessionIds).forEach(exec -> {
             if (exec.getSessionId() != null) lotteryMap.put(exec.getSessionId(), true);
         });
+        // 月次抽選レコードは sessionId=null で保存されるため findBySessionIdIn では拾えない。
+        // 月全体が抽選確定（SUCCESS）済みなら、月内の全セッションを true にする。
+        // これにより、フロントの resolveAttendanceMode（lotteryExecutedMap）と
+        // サーバー側の validateAttendanceModeCancellation（月単位 SUCCESS 判定）の
+        // 判定軸が揃い、抽選確定済み未来月のキャンセル導線が破綻するのを防ぐ。
+        if (lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                year, month, LotteryExecution.ExecutionStatus.SUCCESS)) {
+            sessionIds.forEach(sid -> lotteryMap.put(sid, true));
+        }
 
         // セッションからorganizationIdを取得
         Long orgId = sessions.isEmpty() ? null : sessions.get(0).getOrganizationId();
