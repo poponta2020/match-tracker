@@ -248,15 +248,6 @@ const MatchList = () => {
     setFilteredMatches(filtered);
   }, [searchTerm, filterResult, matches, selectedYear, selectedMonth]);
 
-  const getResultBadge = (result) => {
-    const styles = {
-      勝ち: 'bg-green-100 text-green-700',
-      負け: 'bg-red-100 text-red-700',
-      引き分け: 'bg-gray-100 text-gray-700',
-    };
-    return styles[result] || styles['引き分け'];
-  };
-
   // 日付をM/D形式でフォーマット
   const formatDate = (dateString) => {
     const [, m, d] = dateString.split('-');

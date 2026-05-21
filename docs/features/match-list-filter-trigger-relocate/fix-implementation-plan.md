@@ -71,7 +71,7 @@ status: completed
 - **対応Issue:** #685
 
 ### タスク6: lint・ビルド・既存テストの実行
-- [ ] 完了
+- [x] 完了
 - **概要:**
   - `cd karuta-tracker-ui && npm run lint` で ESLint エラーがないことを確認
   - `npm run build` でプロダクションビルドが通ることを確認
@@ -81,7 +81,7 @@ status: completed
 - **対応Issue:** #686
 
 ### タスク7: ドキュメントの更新
-- [ ] 完了
+- [x] 完了
 - **概要:**
   - `docs/SPECIFICATION.md`, `docs/SCREEN_LIST.md`, `docs/DESIGN.md` を確認し、対戦結果一覧画面のフィルタリングUIに関する記述があれば最新の内容（年月クリックでフィルタを開く、件数バッジ表示、FABなし）に更新
   - 該当記述がなければ更新不要
