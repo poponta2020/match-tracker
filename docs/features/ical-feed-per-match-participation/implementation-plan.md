@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #675
 
 ### タスク2: IcalCalendarFeedServiceTest にユニットテスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 要件定義書 §4.4 の7ケースをカバーするテストを追加する。既存テストで新仕様に合致しなくなったケースは期待値を修正する。
 - **変更対象ファイル:**
   - [karuta-tracker/src/test/java/com/karuta/matchtracker/service/IcalCalendarFeedServiceTest.java](karuta-tracker/src/test/java/com/karuta/matchtracker/service/IcalCalendarFeedServiceTest.java) — 以下のケースを追加：
