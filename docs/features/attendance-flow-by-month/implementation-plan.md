@@ -41,7 +41,7 @@ status: completed
 - **対応Issue:** #695
 
 ### タスク5: PracticeCancelPage の月ナビ廃止
-- [ ] 完了
+- [x] 完了
 - **概要:** 月ナビゲーション・YearMonthPicker を削除し、クエリパラメータの年月で固定表示する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeCancelPage.jsx` — `ChevronLeft` / `ChevronRight` の月ナビボタン、`YearMonthPicker` の表示、`changeMonth` 関数、`showYearMonthPicker` ステート、月変更時リセットの `useEffect` を削除。タイトル下に「○年○月」の固定表示を追加

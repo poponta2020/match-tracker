@@ -3,10 +3,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockNavigate = vi.fn();
+let mockSearchParams = new URLSearchParams();
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: () => [mockSearchParams, vi.fn()],
 }));
 
 vi.mock('../../api', () => ({
@@ -29,10 +30,6 @@ vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-vi.mock('../../components/YearMonthPicker', () => ({
-  default: () => null,
-}));
-
 import { practiceAPI } from '../../api';
 import PracticeCancelPage from './PracticeCancelPage';
 
@@ -42,6 +39,7 @@ describe('PracticeCancelPage UI 統一', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(FIXED_NOW);
+    mockSearchParams = new URLSearchParams();
     practiceAPI.getSessionSummaries.mockResolvedValue({
       data: [
         {
@@ -94,5 +92,64 @@ describe('PracticeCancelPage UI 統一', () => {
     });
     expect(screen.queryByText('当選')).not.toBeInTheDocument();
     expect(screen.queryByText('申込（抽選前）')).not.toBeInTheDocument();
+  });
+});
+
+describe('PracticeCancelPage 月ナビ廃止と年月固定表示', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
+    mockSearchParams = new URLSearchParams();
+    practiceAPI.getSessionSummaries.mockResolvedValue({ data: [] });
+    practiceAPI.getPlayerParticipationStatus.mockResolvedValue({
+      data: { participations: {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('月送り（前月/翌月）のボタンを描画しない', async () => {
+    render(<PracticeCancelPage />);
+    // ローディング完了待ち
+    await screen.findByText('どの日の試合をキャンセルしますか？');
+
+    // ナビゲーション領域の戻るボタン以外、月送り目的のボタンは存在しない
+    const buttons = screen.getAllByRole('button');
+    // 戻るボタン（ナビバー左の ArrowLeft）はあるが、それ以外のIconOnlyな月送りボタンは廃止済み
+    const hoverGrayButtons = buttons.filter((b) =>
+      (b.className || '').includes('hover:bg-gray-100'),
+    );
+    expect(hoverGrayButtons.length).toBe(0);
+  });
+
+  it('クエリパラメータ未指定のとき現在年月（2026年5月）を表示する', async () => {
+    mockSearchParams = new URLSearchParams();
+    render(<PracticeCancelPage />);
+    expect(await screen.findByText('2026年5月')).toBeInTheDocument();
+  });
+
+  it('クエリパラメータ year=2026&month=8 のとき「2026年8月」を表示する', async () => {
+    mockSearchParams = new URLSearchParams('year=2026&month=8');
+    render(<PracticeCancelPage />);
+    expect(await screen.findByText('2026年8月')).toBeInTheDocument();
+  });
+
+  it('クエリパラメータ year=2027&month=1 のとき「2027年1月」を表示する（年またぎ）', async () => {
+    mockSearchParams = new URLSearchParams('year=2027&month=1');
+    render(<PracticeCancelPage />);
+    expect(await screen.findByText('2027年1月')).toBeInTheDocument();
+  });
+
+  it('クエリパラメータ year=2026&month=8 の月でセッション一覧APIが呼ばれる（月変更が起きない）', async () => {
+    mockSearchParams = new URLSearchParams('year=2026&month=8');
+    render(<PracticeCancelPage />);
+    await screen.findByText('2026年8月');
+
+    expect(practiceAPI.getSessionSummaries).toHaveBeenCalledWith(2026, 8);
+    expect(practiceAPI.getPlayerParticipationStatus).toHaveBeenCalledWith(10, 2026, 8);
   });
 });

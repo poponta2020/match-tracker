@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, lotteryAPI } from '../../api';
-import { ChevronLeft, ChevronRight, ArrowLeft, XCircle, Check, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ArrowLeft, XCircle, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
-import YearMonthPicker from '../../components/YearMonthPicker';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 
 const CANCEL_REASONS = [
@@ -19,7 +18,7 @@ const PracticeCancelPage = () => {
   const navigate = useNavigate();
   const { currentPlayer } = useAuth();
   const [searchParams] = useSearchParams();
-  const [currentDate, setCurrentDate] = useState(() => getInitialDateFromQuery(searchParams));
+  const [currentDate] = useState(() => getInitialDateFromQuery(searchParams));
   const [sessions, setSessions] = useState([]);
   const [myStatuses, setMyStatuses] = useState({});
   const [loading, setLoading] = useState(true);
@@ -30,7 +29,6 @@ const PracticeCancelPage = () => {
   const [cancelReasonDetail, setCancelReasonDetail] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
-  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   const [showSameDayConfirm, setShowSameDayConfirm] = useState(false);
 
   const fetchingRef = useRef(false);
@@ -77,15 +75,6 @@ const PracticeCancelPage = () => {
       fetchingRef.current = false;
     };
   }, [currentPlayer?.id, year, month]);
-
-  // 月変更時にリセット
-  useEffect(() => {
-    setSelectedDate(null);
-    setSelectedSession(null);
-    setSelectedMatches([]);
-    setCancelReason('');
-    setCancelReasonDetail('');
-  }, [year, month]);
 
   // カレンダー生成
   const generateCalendar = () => {
@@ -250,13 +239,6 @@ const PracticeCancelPage = () => {
     }
   };
 
-  // 月変更
-  const changeMonth = (offset) => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + offset);
-    setCurrentDate(newDate);
-  };
-
   if (loading) return <LoadingScreen />;
 
   const calendar = generateCalendar();
@@ -286,32 +268,9 @@ const PracticeCancelPage = () => {
           </div>
         )}
 
-        {/* 月ナビゲーション */}
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-100 rounded-full">
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
-              className="text-lg font-semibold text-gray-800"
-            >
-              {monthStr}
-            </button>
-            {showYearMonthPicker && (
-              <YearMonthPicker
-                currentYear={year}
-                currentMonth={month}
-                onSelect={(y, m) => {
-                  setCurrentDate(new Date(y, m - 1, 1));
-                }}
-                onClose={() => setShowYearMonthPicker(false)}
-              />
-            )}
-          </div>
-          <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-100 rounded-full">
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          </button>
+        {/* 月表示（クエリパラメータ年月で固定。月変更は遷移元から） */}
+        <div className="flex items-center justify-center mb-4">
+          <span className="text-lg font-semibold text-gray-800">{monthStr}</span>
         </div>
 
         {/* 説明文 */}
