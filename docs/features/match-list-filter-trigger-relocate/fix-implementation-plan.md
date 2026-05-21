@@ -54,7 +54,7 @@ status: completed
 - **対応Issue:** #684
 
 ### タスク5: 開発サーバーでの動作確認
-- [ ] 完了
+- [x] 完了
 - **概要:**
   - `cd karuta-tracker-ui && npm run dev` で開発サーバーを起動
   - `/matches` 画面を開いて以下を確認:
