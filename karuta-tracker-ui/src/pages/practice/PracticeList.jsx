@@ -12,6 +12,7 @@ import YearMonthPicker from '../../components/YearMonthPicker';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import { KADERU_VENUE_IDS, resolveVenue } from '../../utils/venueResolver';
 import LoadingScreen from '../../components/LoadingScreen';
+import { resolveAttendanceMode } from './utils/attendanceMode';
 
 const RESERVATION_SLOT_INDEX = 2;
 const RESERVATION_PROXY_CHANNEL = 'venue-reservation-proxy';
@@ -51,6 +52,7 @@ const PracticeList = () => {
   const [expandedMatches, setExpandedMatches] = useState({}); // アコーディオンの開閉状態
   const [myParticipations, setMyParticipations] = useState({}); // 自分の参加状況 {sessionId: [matchNumbers]}
   const [myParticipationStatuses, setMyParticipationStatuses] = useState({}); // ステータス付き {sessionId: [{matchNumber, status, ...}]}
+  const [lotteryExecutedMap, setLotteryExecutedMap] = useState({}); // {sessionId: boolean} 抽選確定済みフラグ
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
@@ -102,6 +104,7 @@ const PracticeList = () => {
           setSessions(sessionsRes.data);
           setMyParticipations(participationsRes.data || {});
           setMyParticipationStatuses(statusRes.data?.participations || {});
+          setLotteryExecutedMap(statusRes.data?.lotteryExecuted || {});
           const map = {};
           (orgsRes.data || []).forEach(o => { map[o.id] = o; });
           setOrgMap(map);
@@ -560,6 +563,12 @@ const PracticeList = () => {
   const calendar = generateCalendar();
   const monthStr = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
 
+  const { isCurrentMonth: isCurrentMonthMode, isPastMonth } = resolveAttendanceMode(
+    currentDate.getFullYear(),
+    currentDate.getMonth() + 1,
+    lotteryExecutedMap,
+  );
+
   const openAttendanceModal = () => setIsAttendanceModalOpen(true);
 
   return (
@@ -984,22 +993,25 @@ const PracticeList = () => {
           onSave={handleSaveMatchParticipants}
         />
       )}
-      {/* フローティングアクションボタン (FAB) */}
-      <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
-        <button
-          onClick={openAttendanceModal}
-          className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
-        >
-          <CalendarCheck className="w-5 h-5" />
-          <span className="text-sm font-medium">出欠登録</span>
-        </button>
-      </div>
+      {/* フローティングアクションボタン (FAB)。過去月は非表示 */}
+      {!isPastMonth && (
+        <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
+          <button
+            onClick={openAttendanceModal}
+            className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+          >
+            <CalendarCheck className="w-5 h-5" />
+            <span className="text-sm font-medium">出欠登録</span>
+          </button>
+        </div>
+      )}
 
       <AttendanceRegisterModal
         isOpen={isAttendanceModalOpen}
         onClose={() => setIsAttendanceModalOpen(false)}
         year={currentDate.getFullYear()}
         month={currentDate.getMonth() + 1}
+        isCurrentMonth={isCurrentMonthMode}
       />
 
     </div>

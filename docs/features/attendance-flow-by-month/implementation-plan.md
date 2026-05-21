@@ -24,7 +24,7 @@ status: completed
 - **対応Issue:** #693
 
 ### タスク3: PracticeList に当月扱い判定とFAB制御を実装
-- [ ] 完了
+- [x] 完了
 - **概要:** カレンダー表示月の `lotteryExecuted` 情報を取得し、`resolveAttendanceMode` で判定。FAB／インラインボタンの過去月非表示、`AttendanceRegisterModal` への `isCurrentMonth` 引き渡しを実装。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeList.jsx` — 月変更時に `practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month)` を呼んで `lotteryExecutedMap` をステート保持。`resolveAttendanceMode` で `isCurrentMonth` / `isPastMonth` を算出。FABとインラインボタンを `!isPastMonth` のときのみ表示。`AttendanceRegisterModal` に `isCurrentMonth` を渡す
