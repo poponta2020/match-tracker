@@ -343,7 +343,6 @@ const PracticeCancelPage = () => {
                       const past = isPastDate(day);
                       const cancellableMatches = session ? getCancellableMatches(session) : [];
                       const hasCancellable = cancellableMatches.length > 0;
-                      const hasWon = cancellableMatches.some((m) => m.status === 'WON');
                       const hasSession = !!session;
 
                       let cellBg = 'bg-[#f9f6f2]';
@@ -352,16 +351,9 @@ const PracticeCancelPage = () => {
                       let venueColor = 'text-gray-400';
 
                       if (hasCancellable && !past) {
-                        // 当選を含む場合は赤系、申込のみの場合は青系
-                        if (hasWon) {
-                          cellBg = 'bg-[#fce4e4] hover:bg-[#f8d0d0]';
-                          cellBorder = 'border-2 border-[#e8a0a0]';
-                          venueColor = 'text-[#8b4513]';
-                        } else {
-                          cellBg = 'bg-[#e4ecfc] hover:bg-[#d0deff]';
-                          cellBorder = 'border-2 border-[#a0b8e8]';
-                          venueColor = 'text-[#1e4a8a]';
-                        }
+                        cellBg = 'bg-[#fce4e4] hover:bg-[#f8d0d0]';
+                        cellBorder = 'border-2 border-[#e8a0a0]';
+                        venueColor = 'text-[#8b4513]';
                         cursor = 'cursor-pointer';
                       } else if (hasSession && !past) {
                         cellBg = 'bg-[#f9f6f2]';
@@ -396,7 +388,7 @@ const PracticeCancelPage = () => {
                                 </div>
                               )}
                               {hasCancellable && !past && (
-                                <div className={`mt-0.5 text-[9px] font-bold ${hasWon ? 'text-red-500' : 'text-blue-600'}`}>
+                                <div className="mt-0.5 text-[9px] font-bold text-red-500">
                                   {cancellableMatches.length}試合
                                 </div>
                               )}
@@ -450,7 +442,6 @@ const PracticeCancelPage = () => {
                   .sort((a, b) => a.matchNumber - b.matchNumber)
                   .map((match) => {
                     const isSelected = selectedMatches.includes(match.matchNumber);
-                    const isPending = match.status === 'PENDING';
                     return (
                       <label
                         key={match.matchNumber}
@@ -470,15 +461,6 @@ const PracticeCancelPage = () => {
                         <span className="text-sm font-medium text-gray-800">
                           第{match.matchNumber}試合
                         </span>
-                        {isPending ? (
-                          <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-bold">
-                            申込（抽選前）
-                          </span>
-                        ) : (
-                          <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded font-bold">
-                            当選
-                          </span>
-                        )}
                       </label>
                     );
                   })}
