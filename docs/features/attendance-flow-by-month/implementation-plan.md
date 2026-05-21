@@ -32,7 +32,7 @@ status: completed
 - **対応Issue:** #694
 
 ### タスク4: PracticeParticipation のチェック外し挙動を「当月扱い／来月扱い」で切り替え
-- [ ] 完了
+- [x] 完了
 - **概要:** 既存の `lotteryExecuted` ステートを使って `resolveAttendanceMode` で月単位判定を行い、当月扱い時は既存登録のチェック外しを禁止、来月扱い時は可能とする。抽選確定済みセッションのロックは現状ロジックを維持。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx` — `resolveAttendanceMode` をimport。表示月から `isCurrentMonth` を算出。`isLockedRegistration` のロジックを「当月扱い時は既存登録すべてロック、来月扱い時は現状の締切後ロックのみ」に変更（締切後ロックは来月扱いの月では事実上発生しない）。`toggleMatch` で当月扱い時のチェック外しを抑止

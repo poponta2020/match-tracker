@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lu
 import LoadingScreen from '../../components/LoadingScreen';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 import { needsSameDayConfirm as needsSameDayConfirmFn } from './utils/sameDayConfirm';
+import { resolveAttendanceMode } from './utils/attendanceMode';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -93,9 +94,19 @@ const PracticeParticipation = () => {
     );
   };
 
-  // 締切後かつサーバーに保存済みの登録かどうか
+  // 表示月の「当月扱い／来月扱い」判定（lotteryExecuted の値も加味）
+  const { isCurrentMonth: isCurrentMonthMode } = resolveAttendanceMode(
+    year,
+    month,
+    lotteryExecuted,
+  );
+
+  // 既存登録（保存済み）のチェック外しが不可かどうか。
+  // - 当月扱い：常にロック（理由付きキャンセルへ誘導）
+  // - 来月扱い：締切後のみロック（締切前は自由に外せる）
+  // - いずれも、initial に含まれない試合は対象外（追加チェックは可能）
   const isLockedRegistration = (sessionId, matchNumber) => {
-    if (beforeDeadline) return false;
+    if (!isCurrentMonthMode && beforeDeadline) return false;
     const initial = initialParticipations[sessionId] || [];
     return initial.includes(matchNumber);
   };
