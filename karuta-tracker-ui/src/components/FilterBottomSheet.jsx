@@ -70,7 +70,8 @@ const FilterBottomSheet = ({
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2]"
+                disabled={!selectedYear}
+                className="px-3 py-2 border border-[#d0c5b8] rounded-lg focus:ring-2 focus:ring-[#82655a] focus:border-transparent bg-[#f9f6f2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="">すべての月</option>
                 {availableMonths.map((month) => (

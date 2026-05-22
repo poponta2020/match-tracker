@@ -54,6 +54,14 @@ const MatchList = () => {
   // ボトムシート表示状態
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  // 年を変更したときに、未選択（すべての年）に切り替えたら月もリセット
+  const handleYearChange = (value) => {
+    setSelectedYear(value);
+    if (value === '') {
+      setSelectedMonth('');
+    }
+  };
+
   // 選手一覧を遅延取得（検索フォーカス時に初めて取得）
   const playersLoadedRef = useRef(false);
   const fetchPlayersIfNeeded = async () => {
@@ -177,7 +185,7 @@ const MatchList = () => {
             sortedMatches
               .filter(m => {
                 const [year] = m.matchDate.split('-').map(Number);
-                return year === selectedYear;
+                return year === Number(selectedYear);
               })
               .map(m => {
                 const [, month] = m.matchDate.split('-').map(Number);
@@ -191,6 +199,9 @@ const MatchList = () => {
           if (months.length > 0 && selectedMonth && !months.includes(Number(selectedMonth))) {
             setSelectedMonth(months[0]);
           }
+        } else {
+          // 「すべての年」選択時は月の選択肢を空にする（月は「すべての月」固定）
+          setAvailableMonths([]);
         }
       } catch (error) {
         if (!cancelled) {
@@ -497,7 +508,7 @@ const MatchList = () => {
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
         selectedYear={selectedYear}
-        setSelectedYear={setSelectedYear}
+        setSelectedYear={handleYearChange}
         selectedMonth={selectedMonth}
         setSelectedMonth={setSelectedMonth}
         availableYears={availableYears}
