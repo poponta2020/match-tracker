@@ -1,23 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { lineAPI, notificationAPI } from '../../api';
+import { lineAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
-import { Bell, MessageSquare, Copy, RefreshCw, ExternalLink, AlertCircle, Check, Info } from 'lucide-react';
+import { Bell, MessageSquare, Copy, RefreshCw, ExternalLink, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
-
-/**
- * Base64 URL-safe文字列をUint8Arrayに変換（VAPID鍵用）
- */
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
 
 const NotificationSettings = () => {
   const { currentPlayer } = useAuth();
@@ -31,13 +17,6 @@ const NotificationSettings = () => {
   // 団体
   const [organizations, setOrganizations] = useState([]);
   const [playerOrgIds, setPlayerOrgIds] = useState([]);
-
-  // Web Push（団体別: { [orgId]: preferences }）
-  const [pushPrefsMap, setPushPrefsMap] = useState({});
-  const [pushActionLoading, setPushActionLoading] = useState(false);
-  const [browserSupported, setBrowserSupported] = useState(true);
-  const [browserBlocked, setBrowserBlocked] = useState(false);
-  const [pushGlobalEnabled, setPushGlobalEnabled] = useState(false);
 
   // LINE（選手用）
   const [lineStatus, setLineStatus] = useState(null);
@@ -58,11 +37,6 @@ const NotificationSettings = () => {
 
   useEffect(() => {
     if (!playerId) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setBrowserSupported(false);
-    } else if (Notification.permission === 'denied') {
-      setBrowserBlocked(true);
-    }
     fetchData();
   }, [playerId]);
 
@@ -70,7 +44,6 @@ const NotificationSettings = () => {
     try {
       setLoading(true);
       const promises = [
-        notificationAPI.getPushPreferences(playerId),
         lineAPI.getStatus(playerId),
         lineAPI.getPreferences(playerId),
         organizationAPI.getAll().catch(() => ({ data: [] })),
@@ -80,21 +53,12 @@ const NotificationSettings = () => {
         promises.push(lineAPI.getStatus(playerId, 'ADMIN').catch(() => ({ data: null })));
       }
       const results = await Promise.all(promises);
-      const [pushRes, lineStatusRes, linePrefsRes, orgsRes, playerOrgsRes] = results;
+      const [lineStatusRes, linePrefsRes, orgsRes, playerOrgsRes] = results;
 
       // 団体情報
       setOrganizations(orgsRes.data || []);
       const pOrgIds = (playerOrgsRes.data || []).map(o => o.id);
       setPlayerOrgIds(pOrgIds);
-
-      // Web Push設定を団体別マップに変換
-      const pushMap = {};
-      const pushPrefs = Array.isArray(pushRes.data) ? pushRes.data : (pushRes.data ? [pushRes.data] : []);
-      for (const p of pushPrefs) {
-        pushMap[p.organizationId] = p;
-      }
-      setPushPrefsMap(pushMap);
-      setPushGlobalEnabled(pushPrefs.some(p => p.enabled));
 
       // LINE設定（選手用）
       setLineStatus(lineStatusRes.data);
@@ -110,10 +74,10 @@ const NotificationSettings = () => {
       }
 
       // LINE設定（管理者用）
-      if (isAdmin && results[5]?.data) {
-        setAdminLineStatus(results[5].data);
-        if (results[5].data.friendAddUrl) {
-          setAdminFriendAddUrl(results[5].data.friendAddUrl);
+      if (isAdmin && results[4]?.data) {
+        setAdminLineStatus(results[4].data);
+        if (results[4].data.friendAddUrl) {
+          setAdminFriendAddUrl(results[4].data.friendAddUrl);
         }
       }
     } catch (err) {
@@ -121,124 +85,6 @@ const NotificationSettings = () => {
       setError('通知設定の取得に失敗しました');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // === Web Push ハンドラー ===
-
-  const handleEnablePush = async () => {
-    setPushActionLoading(true);
-    setError(null);
-    try {
-      // Step 1: ブラウザの通知許可
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        setBrowserBlocked(true);
-        setError('ブラウザの設定から通知を許可してください');
-        return;
-      }
-
-      // Step 2: VAPID公開鍵を取得
-      let vapidPublicKey;
-      try {
-        const keyRes = await notificationAPI.getVapidPublicKey();
-        vapidPublicKey = keyRes.data.publicKey;
-      } catch (err) {
-        console.error('VAPID鍵取得エラー:', err);
-        setError('サーバーとの通信に失敗しました。時間をおいて再度お試しください。');
-        return;
-      }
-
-      // Step 3: Service Worker登録
-      let registration;
-      try {
-        registration = await navigator.serviceWorker.register('/sw.js');
-        await navigator.serviceWorker.ready;
-      } catch (err) {
-        console.error('Service Worker登録エラー:', err);
-        setError('Service Workerの登録に失敗しました。ページを再読み込みしてお試しください。');
-        return;
-      }
-
-      // Step 4: Push購読を作成
-      let subscription;
-      try {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        });
-      } catch (err) {
-        console.error('Push購読エラー:', err);
-        setError('Push通知の購読に失敗しました。ブラウザが対応しているか確認してください。');
-        return;
-      }
-
-      // Step 5: バックエンドに購読情報を送信
-      try {
-        const subJson = subscription.toJSON();
-        await notificationAPI.subscribePush({
-          playerId,
-          endpoint: subJson.endpoint,
-          p256dhKey: subJson.keys.p256dh,
-          authKey: subJson.keys.auth,
-          userAgent: navigator.userAgent,
-        });
-      } catch (err) {
-        console.error('購読情報送信エラー:', err);
-        setError('サーバーへの登録に失敗しました。時間をおいて再度お試しください。');
-        return;
-      }
-
-      // Step 6: 全団体の設定をONに
-      const newMap = { ...pushPrefsMap };
-      for (const orgId of playerOrgIds) {
-        const pref = newMap[orgId] || { playerId, organizationId: orgId };
-        const updated = { ...pref, playerId, organizationId: orgId, enabled: true };
-        await notificationAPI.updatePushPreferences(updated);
-        newMap[orgId] = updated;
-      }
-      setPushPrefsMap(newMap);
-      setPushGlobalEnabled(true);
-      setSuccessMessage('Web Push通知を有効にしました');
-    } catch (err) {
-      console.error('Web Push有効化に失敗:', err);
-      setError('Web Push通知の有効化に失敗しました。時間をおいて再度お試しください。');
-    } finally {
-      setPushActionLoading(false);
-    }
-  };
-
-  const handleDisablePush = async () => {
-    try {
-      setPushActionLoading(true);
-      setError(null);
-      const newMap = { ...pushPrefsMap };
-      for (const orgId of playerOrgIds) {
-        const pref = newMap[orgId] || { playerId, organizationId: orgId };
-        const updated = { ...pref, playerId, organizationId: orgId, enabled: false };
-        await notificationAPI.updatePushPreferences(updated);
-        newMap[orgId] = updated;
-      }
-      setPushPrefsMap(newMap);
-      setPushGlobalEnabled(false);
-      setSuccessMessage('Web Push通知を無効にしました');
-    } catch {
-      setError('Web Push通知の無効化に失敗しました');
-    } finally {
-      setPushActionLoading(false);
-    }
-  };
-
-  const handleTogglePushPreference = async (orgId, key) => {
-    const pref = pushPrefsMap[orgId];
-    if (!pref) return;
-    const updated = { ...pref, [key]: !pref[key] };
-    setPushPrefsMap(prev => ({ ...prev, [orgId]: updated }));
-    try {
-      await notificationAPI.updatePushPreferences({ ...updated, playerId, organizationId: orgId });
-    } catch {
-      setPushPrefsMap(prev => ({ ...prev, [orgId]: pref }));
-      setError('設定の更新に失敗しました');
     }
   };
 
@@ -395,28 +241,6 @@ const NotificationSettings = () => {
 
   const showOrgHeaders = playerOrgIds.length > 1;
 
-  // 団体のdeadlineTypeに応じてトグルをフィルタ
-  const getPushTypesForOrg = (org) => {
-    const types = [];
-    // SAME_DAYタイプ（わすらもち会）は抽選なしなので「抽選結果」を除外
-    if (org?.deadlineType !== 'SAME_DAY') {
-      types.push({ key: 'lotteryResult', label: '抽選結果' });
-    }
-    types.push(
-      { key: 'waitlistOffer', label: 'キャンセル待ち繰り上げ' },
-      { key: 'offerExpiring', label: '繰り上げ期限切れ警告' },
-      { key: 'offerExpired', label: '繰り上げ期限切れ' },
-    );
-    if (isAdmin) {
-      types.push(
-        { key: 'channelReclaimWarning', label: 'LINEチャネル回収警告' },
-        { key: 'densukeUnmatched', label: '伝助未登録者' },
-        { key: 'adjacentRoom', label: '隣室空き通知' },
-      );
-    }
-    return types;
-  };
-
   const getLineTypesForOrg = (org) => {
     const types = [];
     if (org?.deadlineType !== 'SAME_DAY') {
@@ -472,80 +296,6 @@ const NotificationSettings = () => {
           <p className="text-green-800 text-sm">{successMessage}</p>
         </div>
       )}
-
-      {/* ========== Web Push通知セクション ========== */}
-      <div className="bg-white rounded-lg border p-4 space-y-4">
-        <h2 className="font-semibold text-gray-700 flex items-center gap-2">
-          <Bell className="h-5 w-5" />
-          Web Push通知
-        </h2>
-
-        {!browserSupported ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
-            <Info className="h-5 w-5 text-yellow-600 flex-shrink-0" />
-            <p className="text-yellow-800 text-sm">お使いのブラウザはWeb Push通知に対応していません</p>
-          </div>
-        ) : browserBlocked && !pushGlobalEnabled ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
-            <Info className="h-5 w-5 text-yellow-600 flex-shrink-0" />
-            <p className="text-yellow-800 text-sm">ブラウザの設定から通知を許可してください</p>
-          </div>
-        ) : !pushGlobalEnabled ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600">
-              Web Push通知を有効にすると、アプリを開いていなくても通知を受け取れます。
-            </p>
-            <button
-              onClick={handleEnablePush}
-              disabled={pushActionLoading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {pushActionLoading ? '処理中...' : 'Web Push通知を有効にする'}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                <span className="text-sm font-medium text-blue-700">有効</span>
-              </div>
-              <button
-                onClick={handleDisablePush}
-                disabled={pushActionLoading}
-                className="bg-gray-100 text-gray-700 py-1.5 px-3 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
-              >
-                無効にする
-              </button>
-            </div>
-
-            {/* 団体別種別トグル */}
-            {playerOrgs.map(org => (
-              <div key={org.id} className="space-y-1">
-                {showOrgHeaders && (
-                  <h3 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: org.color }} />
-                    {org.name}
-                  </h3>
-                )}
-                {!showOrgHeaders && (
-                  <h3 className="text-sm font-medium text-gray-600 mb-2">通知種別</h3>
-                )}
-                {getPushTypesForOrg(org).map(({ key, label }) => (
-                  <div key={`${org.id}-${key}`} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <Toggle
-                      enabled={pushPrefsMap[org.id]?.[key] ?? true}
-                      onClick={() => handleTogglePushPreference(org.id, key)}
-                      color="bg-blue-600"
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* ========== LINE通知セクション（選手用） ========== */}
       <div className="bg-white rounded-lg border p-4 space-y-4">
