@@ -49,7 +49,7 @@ status: completed
 - **対応Issue:** #705
 
 ### タスク5: ドキュメント更新（SCREEN_LIST.md / SPECIFICATION.md）
-- [ ] 完了
+- [x] 完了
 - **概要:** PracticeParticipation・PracticeCancelPage の画面説明に「保存／キャンセル実行時はオーバーレイで進捗を表示し、完了後にボタン押下でカレンダーへ戻る」と追記する。
 - **変更対象ファイル:**
   - `docs/SCREEN_LIST.md` — 該当画面（参加登録画面・キャンセル画面）の項目に保存フローの新挙動を追記。
