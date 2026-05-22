@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lu
 import LoadingScreen from '../../components/LoadingScreen';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 import { needsSameDayConfirm as needsSameDayConfirmFn } from './utils/sameDayConfirm';
+import { resolveAttendanceMode } from './utils/attendanceMode';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -21,7 +22,8 @@ const PracticeParticipation = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
-  const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean
+  const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean（個別セッションのロック判定）
+  const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（月単位判定）
   const [beforeDeadline, setBeforeDeadline] = useState(true);
   const [deadlineInfo, setDeadlineInfo] = useState(null);
   const [orgMap, setOrgMap] = useState({});
@@ -61,6 +63,7 @@ const PracticeParticipation = () => {
         const statusData = statusRes.data || {};
         setParticipationStatuses(statusData.participations || {});
         setLotteryExecuted(statusData.lotteryExecuted || {});
+        setHasMonthlyLottery(Boolean(statusData.hasAnyExecutedLotteryInMonth));
         setBeforeDeadline(statusData.beforeDeadline !== false);
         setDeadlineInfo(deadlineRes.data);
 
@@ -93,9 +96,19 @@ const PracticeParticipation = () => {
     );
   };
 
-  // 締切後かつサーバーに保存済みの登録かどうか
+  // 表示月の「当月扱い／来月扱い」判定（hasMonthlyLottery を月単位フラグとして使用）
+  const { isCurrentMonth: isCurrentMonthMode } = resolveAttendanceMode(
+    year,
+    month,
+    hasMonthlyLottery,
+  );
+
+  // 既存登録（保存済み）のチェック外しが不可かどうか。
+  // - 当月扱い：常にロック（理由付きキャンセルへ誘導）
+  // - 来月扱い：締切後のみロック（締切前は自由に外せる）
+  // - いずれも、initial に含まれない試合は対象外（追加チェックは可能）
   const isLockedRegistration = (sessionId, matchNumber) => {
-    if (beforeDeadline) return false;
+    if (!isCurrentMonthMode && beforeDeadline) return false;
     const initial = initialParticipations[sessionId] || [];
     return initial.includes(matchNumber);
   };

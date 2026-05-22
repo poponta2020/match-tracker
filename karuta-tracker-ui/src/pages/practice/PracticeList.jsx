@@ -12,6 +12,7 @@ import YearMonthPicker from '../../components/YearMonthPicker';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import { KADERU_VENUE_IDS, resolveVenue } from '../../utils/venueResolver';
 import LoadingScreen from '../../components/LoadingScreen';
+import { resolveAttendanceMode } from './utils/attendanceMode';
 
 const RESERVATION_SLOT_INDEX = 2;
 const RESERVATION_PROXY_CHANNEL = 'venue-reservation-proxy';
@@ -51,6 +52,7 @@ const PracticeList = () => {
   const [expandedMatches, setExpandedMatches] = useState({}); // アコーディオンの開閉状態
   const [myParticipations, setMyParticipations] = useState({}); // 自分の参加状況 {sessionId: [matchNumbers]}
   const [myParticipationStatuses, setMyParticipationStatuses] = useState({}); // ステータス付き {sessionId: [{matchNumber, status, ...}]}
+  const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（resolveAttendanceMode 月単位判定用）
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
@@ -91,10 +93,15 @@ const PracticeList = () => {
         const month = currentDate.getMonth() + 1;
 
         // 並列でデータ取得（軽量エンドポイント使用）
+        // 注意: getPlayerParticipationStatus は lotteryExecuted を返し、これは
+        // resolveAttendanceMode の月判定の必須入力。失敗時に空マップで握りつぶすと
+        // 未来月に抽選確定済みセッションがあっても誤って「来月扱い」と判定され、
+        // AttendanceRegisterModal からキャンセル登録導線が消える。
+        // → 個別 catch は外し、エラー時は全体エラーに流して FAB を非表示にする。
         const [sessionsRes, participationsRes, statusRes, orgsRes] = await Promise.all([
           practiceAPI.getSessionSummaries(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month).catch(() => ({ data: {} })),
-          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month).catch(() => ({ data: { participations: {} } })),
+          practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
           organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
 
@@ -102,6 +109,7 @@ const PracticeList = () => {
           setSessions(sessionsRes.data);
           setMyParticipations(participationsRes.data || {});
           setMyParticipationStatuses(statusRes.data?.participations || {});
+          setHasMonthlyLottery(Boolean(statusRes.data?.hasAnyExecutedLotteryInMonth));
           const map = {};
           (orgsRes.data || []).forEach(o => { map[o.id] = o; });
           setOrgMap(map);
@@ -536,6 +544,20 @@ const PracticeList = () => {
       // セッション詳細を再取得
       const response = await practiceAPI.getById(sessionId);
       setSelectedSession(response.data);
+      // 再抽選で月の hasAnyExecutedLotteryInMonth / lotteryExecuted が変わるため
+      // 月のステータスも再取得（出欠登録モーダルのキャンセル登録ボタン表示が即時反映される）
+      if (currentPlayer?.id) {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1;
+        try {
+          const statusRes = await practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month);
+          setMyParticipationStatuses(statusRes.data?.participations || {});
+          setHasMonthlyLottery(Boolean(statusRes.data?.hasAnyExecutedLotteryInMonth));
+        } catch (statusErr) {
+          // 再取得失敗は致命的ではない（次回月切替/再読み込みで同期される）
+          console.error('Re-lottery: failed to refresh month status', statusErr);
+        }
+      }
     } catch (err) {
       console.error('Re-lottery error:', err);
       alert(err.response?.data?.message || '再抽選に失敗しました');
@@ -559,6 +581,12 @@ const PracticeList = () => {
 
   const calendar = generateCalendar();
   const monthStr = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
+
+  const { isCurrentMonth: isCurrentMonthMode, isPastMonth } = resolveAttendanceMode(
+    currentDate.getFullYear(),
+    currentDate.getMonth() + 1,
+    hasMonthlyLottery,
+  );
 
   const openAttendanceModal = () => setIsAttendanceModalOpen(true);
 
@@ -984,22 +1012,26 @@ const PracticeList = () => {
           onSave={handleSaveMatchParticipants}
         />
       )}
-      {/* フローティングアクションボタン (FAB) */}
-      <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
-        <button
-          onClick={openAttendanceModal}
-          className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
-        >
-          <CalendarCheck className="w-5 h-5" />
-          <span className="text-sm font-medium">出欠登録</span>
-        </button>
-      </div>
+      {/* フローティングアクションボタン (FAB)。過去月とデータ取得失敗時は非表示
+          （lotteryExecutedMap が欠落した状態で誤った来月扱いで操作させないため） */}
+      {!error && !isPastMonth && (
+        <div className="fixed right-4 z-20" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>
+          <button
+            onClick={openAttendanceModal}
+            className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
+          >
+            <CalendarCheck className="w-5 h-5" />
+            <span className="text-sm font-medium">出欠登録</span>
+          </button>
+        </div>
+      )}
 
       <AttendanceRegisterModal
         isOpen={isAttendanceModalOpen}
         onClose={() => setIsAttendanceModalOpen(false)}
         year={currentDate.getFullYear()}
         month={currentDate.getMonth() + 1}
+        isCurrentMonth={isCurrentMonthMode}
       />
 
     </div>
