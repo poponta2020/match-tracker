@@ -2,12 +2,15 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
+import com.karuta.matchtracker.entity.MentorRelationship;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,9 @@ class MatchServiceTest {
 
     @Mock
     private MatchPersonalNoteRepository matchPersonalNoteRepository;
+
+    @Mock
+    private MentorRelationshipRepository mentorRelationshipRepository;
 
     @InjectMocks
     private MatchService matchService;
@@ -1397,6 +1403,115 @@ class MatchServiceTest {
 
             assertThatThrownBy(() -> matchService.findById(1L, 10L, 99L))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("viewedPlayerIdが自分自身の場合はメンター検証なしで取得できる")
+        void selfViewIsAllowedWithoutMentorCheck() {
+            Match match = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(1L)
+                    .scoreDifference(5)
+                    .build();
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(anyLong(), anyList()))
+                    .thenReturn(List.of());
+
+            MatchDto result = matchService.findById(1L, 1L, 1L);
+
+            assertThat(result).isNotNull();
+            verify(mentorRelationshipRepository, never())
+                    .findByMentorIdAndStatus(any(), any());
+        }
+
+        @Test
+        @DisplayName("ACTIVEメンターは他選手の対戦詳細を閲覧できる")
+        void activeMentorCanViewMenteeMatch() {
+            Match match = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(2L)
+                    .player2Id(3L)
+                    .winnerId(2L)
+                    .scoreDifference(5)
+                    .build();
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            MentorRelationship rel = MentorRelationship.builder()
+                    .mentorId(10L)
+                    .menteeId(2L)
+                    .status(MentorRelationship.Status.ACTIVE)
+                    .build();
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, MentorRelationship.Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(anyLong(), anyList()))
+                    .thenReturn(List.of());
+
+            MatchDto result = matchService.findById(1L, 10L, 2L);
+
+            assertThat(result).isNotNull();
+        }
+
+        @Test
+        @DisplayName("メンターがメンティー詳細を見ると、メンティー視点（player2が負け）で勝敗が算出される")
+        void mentorSeesMatchFromMenteePerspective() {
+            // メンティー(id=2) が player2 として登場し、player1(id=3) が勝った試合
+            Player mentee = Player.builder().id(2L).name("メンティー").build();
+            Player opponentForMentee = Player.builder().id(3L).name("ライバル").build();
+            Match match = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(3L)
+                    .player2Id(2L)
+                    .winnerId(3L)
+                    .scoreDifference(5)
+                    .build();
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(mentee, opponentForMentee));
+            MentorRelationship rel = MentorRelationship.builder()
+                    .mentorId(10L)
+                    .menteeId(2L)
+                    .status(MentorRelationship.Status.ACTIVE)
+                    .build();
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, MentorRelationship.Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(anyLong(), anyList()))
+                    .thenReturn(List.of());
+
+            MatchDto result = matchService.findById(1L, 10L, 2L);
+
+            assertThat(result).isNotNull();
+            // メンティー視点で見ると「負け」、相手は player1（ライバル）
+            assertThat(result.getResult()).isEqualTo("負け");
+            assertThat(result.getOpponentName()).isEqualTo("ライバル");
+        }
+
+        @Test
+        @DisplayName("非メンターが他選手の対戦詳細を閲覧しようとするとForbiddenException")
+        void nonMentorCannotViewOtherPlayerMatch() {
+            Match match = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(2L)
+                    .player2Id(3L)
+                    .winnerId(2L)
+                    .scoreDifference(5)
+                    .build();
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, MentorRelationship.Status.ACTIVE))
+                    .thenReturn(List.of());
+
+            assertThatThrownBy(() -> matchService.findById(1L, 10L, 2L))
+                    .isInstanceOf(ForbiddenException.class)
+                    .hasMessageContaining("メンター関係");
         }
     }
 

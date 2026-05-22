@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI } from '../../api';
+import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import LoadingScreen from '../../components/LoadingScreen';
 import {
@@ -43,6 +44,12 @@ const MatchList = () => {
 
   // 級別統計データ
   const [rankStatistics, setRankStatistics] = useState(null);
+
+  // メンター関係チェック（他選手の対戦一覧を見ている時、その選手が自分の ACTIVE メンティーか）
+  // mentorCheckedTargetPlayerId が targetPlayerId と一致した時のみ判定結果（isMentorOfTarget）を信頼する
+  const [isMentorOfTarget, setIsMentorOfTarget] = useState(false);
+  const [mentorCheckedTargetPlayerId, setMentorCheckedTargetPlayerId] = useState(null);
+  const mentorCheckCompleted = mentorCheckedTargetPlayerId === targetPlayerId;
 
   // 期間フィルタ関連の状態
   const today = new Date();
@@ -94,6 +101,53 @@ const MatchList = () => {
       setTargetPlayerKyuRank(currentPlayer?.kyuRank || '');
     }
   }, [targetPlayerId, isOtherPlayer, currentPlayer]);
+
+  // targetPlayerId 変更時は前選手のデータを即座にクリアしてローディング状態に戻す
+  // （遅い回線で前選手の対戦行が新画面に残るのを防ぐ）
+  useEffect(() => {
+    setMatches([]);
+    setFilteredMatches([]);
+    setLoading(true);
+  }, [targetPlayerId]);
+
+  // メンター関係チェック（詳細導線の表示判定に使用）
+  useEffect(() => {
+    let cancelled = false;
+
+    // targetPlayerId 変更時は前回の判定結果を即座に無効化（誤った詳細ボタン表示を防ぐ）
+    setIsMentorOfTarget(false);
+    setMentorCheckedTargetPlayerId(null);
+
+    if (!isOtherPlayer) {
+      setMentorCheckedTargetPlayerId(targetPlayerId);
+      return;
+    }
+
+    const checkMentorRelation = async () => {
+      try {
+        const res = await mentorRelationshipAPI.getMyMentees();
+        if (cancelled) return;
+        const isActiveMentee = (res.data || []).some(
+          (r) => r.menteeId === targetPlayerId && r.status === 'ACTIVE'
+        );
+        setIsMentorOfTarget(isActiveMentee);
+      } catch (e) {
+        if (!cancelled) {
+          console.error('メンター関係の取得に失敗:', e);
+          setIsMentorOfTarget(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setMentorCheckedTargetPlayerId(targetPlayerId);
+        }
+      }
+    };
+    checkMentorRelation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetPlayerId, isOtherPlayer]);
 
   // 選手検索のフィルタリング
   useEffect(() => {
@@ -465,29 +519,59 @@ const MatchList = () => {
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="divide-y divide-[#e5e0da]">
-                {filteredMatches.map((match) => (
-                  <div
-                    key={match.id}
-                    className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
-                    onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
-                  >
-                    <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
-                    <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
-                      {match.opponentName}
-                    </span>
-                    {((!isOtherPlayer && match.myPersonalNotes) || (isOtherPlayer && match.menteePersonalNotes)) && (
-                      <StickyNote className="w-3.5 h-3.5 text-[#9ca3af] flex-shrink-0 ml-1" />
-                    )}
-                    {((!isOtherPlayer && match.myOtetsukiCount != null) || (isOtherPlayer && match.menteeOtetsukiCount != null)) && (
-                      <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
-                        手{isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount}
+                {filteredMatches.map((match) => {
+                  const opponentId = match.player1Id === targetPlayerId
+                    ? match.player2Id
+                    : match.player1Id;
+                  const opponentLinkable = opponentId && opponentId !== 0;
+                  const hasNote = isOtherPlayer
+                    ? !!match.menteePersonalNotes
+                    : !!match.myPersonalNotes;
+                  const otetsukiCount = isOtherPlayer
+                    ? match.menteeOtetsukiCount
+                    : match.myOtetsukiCount;
+                  const showDetailButton = !isOtherPlayer || isMentorOfTarget;
+
+                  return (
+                    <div
+                      key={match.id}
+                      className="flex items-center px-4 py-2"
+                    >
+                      <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
+                      {opponentLinkable ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/matches?playerId=${opponentId}`)}
+                          className="flex-1 min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate"
+                        >
+                          {match.opponentName}
+                        </button>
+                      ) : (
+                        <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
+                          {match.opponentName}
+                        </span>
+                      )}
+                      {showDetailButton && mentorCheckCompleted && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
+                          aria-label="対戦詳細を見る"
+                          className={`flex-shrink-0 ml-1 p-1 ${hasNote ? 'text-gray-600' : 'text-gray-300'}`}
+                        >
+                          <StickyNote className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {otetsukiCount != null && (
+                        <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
+                          手{otetsukiCount}
+                        </span>
+                      )}
+                      <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
+                        {getResultDisplay(match.result, match.scoreDifference)}
                       </span>
-                    )}
-                    <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
-                      {getResultDisplay(match.result, match.scoreDifference)}
-                    </span>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
           </div>
         </div>
       )}

@@ -71,11 +71,30 @@ public class MatchService {
             if (!viewedPlayerId.equals(match.getPlayer1Id()) && !viewedPlayerId.equals(match.getPlayer2Id())) {
                 throw new IllegalArgumentException("指定されたplayerIdはこの試合の参加者ではありません");
             }
+            // 他人のメンティーとしての試合を参照する場合、現在ユーザーがACTIVEメンターであることを検証
+            validateMentorAccess(currentPlayerId, viewedPlayerId);
         }
 
-        MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId, viewedPlayerId);
+        // viewedPlayerId が指定された場合はその視点で勝敗・対戦相手名を算出する（メンター閲覧時にメンティー視点で表示するため）
+        List<MatchDto> dtos = (viewedPlayerId != null)
+                ? enrichMatchesWithPlayerPerspective(List.of(match), viewedPlayerId)
+                : List.of(enrichMatchWithPlayerNames(match, currentPlayerId));
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(dtos, currentPlayerId, viewedPlayerId);
         return enriched.get(0);
+    }
+
+    /**
+     * currentPlayerId が viewedPlayerId の ACTIVE メンターであることを検証する。
+     * メンター関係がない場合は ForbiddenException をスローする。
+     */
+    private void validateMentorAccess(Long currentPlayerId, Long viewedPlayerId) {
+        boolean isMentor = mentorRelationshipRepository
+                .findByMentorIdAndStatus(currentPlayerId, MentorRelationship.Status.ACTIVE)
+                .stream()
+                .anyMatch(r -> r.getMenteeId().equals(viewedPlayerId));
+        if (!isMentor) {
+            throw new ForbiddenException("メンター関係がないため他選手の対戦詳細を閲覧できません");
+        }
     }
 
     /**
