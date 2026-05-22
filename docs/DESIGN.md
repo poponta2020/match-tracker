@@ -993,6 +993,16 @@ Entity Layer (JPA Entity)
 **権限**: なし
 **レスポンス**: `List<MatchDto>`（リクエストユーザーの個人メモ・お手付きを `myPersonalNotes` / `myOtetsukiCount` として含む）
 
+#### GET /api/matches/{id}?playerId={viewedPlayerId}
+**説明**: 対戦詳細を取得
+**権限**:
+- `playerId` 指定なし: 認証ユーザーであればアクセス可
+- `playerId` 指定あり かつ `playerId !== currentUserId`: `currentUserId` が `playerId` の ACTIVE メンターであること（非メンターは 403 Forbidden）
+
+**レスポンス**: `MatchDto`
+- `playerId` 指定あり時は、指定された選手視点で勝敗・対戦相手名が算出される（メンターがメンティーの試合を見るときに「メンティー視点で負けた」と正しく表示するため）
+- メンター閲覧時はメンティーの個人メモ（`menteePersonalNotes` / `menteeOtetsukiCount`）も含まれる
+
 #### GET /api/matches/player/{playerId}
 **説明**: 選手の試合履歴
 **権限**: なし

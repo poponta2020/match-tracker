@@ -75,8 +75,11 @@ public class MatchService {
             validateMentorAccess(currentPlayerId, viewedPlayerId);
         }
 
-        MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
-        List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId, viewedPlayerId);
+        // viewedPlayerId が指定された場合はその視点で勝敗・対戦相手名を算出する（メンター閲覧時にメンティー視点で表示するため）
+        List<MatchDto> dtos = (viewedPlayerId != null)
+                ? enrichMatchesWithPlayerPerspective(List.of(match), viewedPlayerId)
+                : List.of(enrichMatchWithPlayerNames(match, currentPlayerId));
+        List<MatchDto> enriched = enrichDtosWithPersonalNotes(dtos, currentPlayerId, viewedPlayerId);
         return enriched.get(0);
     }
 

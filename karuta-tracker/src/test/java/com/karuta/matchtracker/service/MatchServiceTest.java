@@ -1459,6 +1459,41 @@ class MatchServiceTest {
         }
 
         @Test
+        @DisplayName("メンターがメンティー詳細を見ると、メンティー視点（player2が負け）で勝敗が算出される")
+        void mentorSeesMatchFromMenteePerspective() {
+            // メンティー(id=2) が player2 として登場し、player1(id=3) が勝った試合
+            Player mentee = Player.builder().id(2L).name("メンティー").build();
+            Player opponentForMentee = Player.builder().id(3L).name("ライバル").build();
+            Match match = Match.builder()
+                    .id(1L)
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(3L)
+                    .player2Id(2L)
+                    .winnerId(3L)
+                    .scoreDifference(5)
+                    .build();
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(mentee, opponentForMentee));
+            MentorRelationship rel = MentorRelationship.builder()
+                    .mentorId(10L)
+                    .menteeId(2L)
+                    .status(MentorRelationship.Status.ACTIVE)
+                    .build();
+            when(mentorRelationshipRepository.findByMentorIdAndStatus(10L, MentorRelationship.Status.ACTIVE))
+                    .thenReturn(List.of(rel));
+            when(matchPersonalNoteRepository.findByPlayerIdAndMatchIdIn(anyLong(), anyList()))
+                    .thenReturn(List.of());
+
+            MatchDto result = matchService.findById(1L, 10L, 2L);
+
+            assertThat(result).isNotNull();
+            // メンティー視点で見ると「負け」、相手は player1（ライバル）
+            assertThat(result.getResult()).isEqualTo("負け");
+            assertThat(result.getOpponentName()).isEqualTo("ライバル");
+        }
+
+        @Test
         @DisplayName("非メンターが他選手の対戦詳細を閲覧しようとするとForbiddenException")
         void nonMentorCannotViewOtherPlayerMatch() {
             Match match = Match.builder()
