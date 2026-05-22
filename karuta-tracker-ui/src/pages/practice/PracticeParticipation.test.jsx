@@ -50,7 +50,13 @@ const setupAPI = ({
   lotteryExecuted = {},
   participationStatuses = {},
   beforeDeadline = true,
+  hasAnyExecutedLotteryInMonth,
 }) => {
+  // hasAnyExecutedLotteryInMonth 未指定時は lotteryExecuted の値から導出
+  // （サーバー側の挙動と整合：セッション単位 true があれば月単位も true）
+  const resolvedHasAny = hasAnyExecutedLotteryInMonth !== undefined
+    ? hasAnyExecutedLotteryInMonth
+    : Object.values(lotteryExecuted).some(Boolean);
   practiceAPI.getByYearMonth.mockResolvedValue({ data: sessions });
   practiceAPI.getPlayerParticipations.mockResolvedValue({ data: participations });
   practiceAPI.getPlayerParticipationStatus.mockResolvedValue({
@@ -58,6 +64,7 @@ const setupAPI = ({
       participations: participationStatuses,
       lotteryExecuted,
       beforeDeadline,
+      hasAnyExecutedLotteryInMonth: resolvedHasAny,
     },
   });
 };

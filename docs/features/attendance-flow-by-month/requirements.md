@@ -190,7 +190,20 @@ export function resolveAttendanceMode(year, month, lotteryExecutedMap, now = new
 
 ### 4.4 バックエンド設計
 
-**変更なし**。既存の `PlayerParticipationStatusDto.lotteryExecuted` が判定に必要な情報をすでに含んでいる。
+DBマイグレーション・新規API追加はなし。ただしクロスレビューでの指摘を踏まえ、以下のサーバー側変更を行う：
+
+1. **`PlayerParticipationStatusDto` に `hasAnyExecutedLotteryInMonth: Boolean` を追加**
+   - 月単位の「当月扱い／来月扱い」判定用フラグ。月次抽選レコード（`session_id=null` の SUCCESS）とセッション単位の再抽選 SUCCESS の両方を考慮
+   - 既存の `lotteryExecuted: Map<sessionId, Boolean>` は個別セッションのロック判定に使い続ける（責務を分離）
+2. **`PracticeParticipantService.getPlayerParticipationStatusByMonth` の `lotteryExecuted` 算出を SUCCESS 限定に修正**
+   - これまでは `findBySessionIdIn` の戻り値を status を見ずに true 化していたが、`status == SUCCESS` のレコードのみ反映するよう厳密化
+3. **`PracticeParticipantService.registerParticipations` にサーバー側検証を追加**
+   - フロントの `resolveAttendanceMode` と同じ判定（月単位 + セッション単位の SUCCESS 統合）で「当月扱い」を判別
+   - 当月扱いの月で月内既存アクティブ参加（CANCELLED/DECLINED/WAITLIST_DECLINED 以外）がリクエストから欠落している場合、`IllegalArgumentException`（HTTP 400）で拒否
+   - 理由付きキャンセルは `lotteryAPI.cancelMultiple` に集約するという仕様をAPI直叩きでも守らせるための防御
+
+互換性影響：
+- 既存クライアントが「当月扱いの月の参加登録 API リクエストで既存登録を意図的に欠落させる」と HTTP 400 になる。本プロジェクトのフロントエンドは新仕様で送信するため影響なし。
 
 ## 5. 影響範囲
 

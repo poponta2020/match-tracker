@@ -211,8 +211,25 @@ public class PracticeParticipantService {
 
         if (targetIndex < nowIndex) return false;
         if (targetIndex == nowIndex) return true;
-        return lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                year, month, LotteryExecution.ExecutionStatus.SUCCESS);
+        List<Long> sessionIds = practiceSessionRepository.findByYearAndMonth(year, month).stream()
+                .map(PracticeSession::getId).collect(Collectors.toList());
+        return hasAnyExecutedLotteryInMonth(year, month, sessionIds);
+    }
+
+    /**
+     * 指定月に抽選確定済み（SUCCESS）の {@link LotteryExecution} が1つでも存在するか。
+     * 月次抽選レコード（{@code sessionId=null}）とセッション単位の再抽選レコードの
+     * 両方を考慮する。月単位の「当月扱い／来月扱い」判定で使う。
+     */
+    private boolean hasAnyExecutedLotteryInMonth(int year, int month, List<Long> sessionIds) {
+        if (lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                year, month, LotteryExecution.ExecutionStatus.SUCCESS)) {
+            return true;
+        }
+        if (sessionIds == null || sessionIds.isEmpty()) return false;
+        return lotteryExecutionRepository.findBySessionIdIn(sessionIds).stream()
+                .anyMatch(exec -> exec.getSessionId() != null
+                        && exec.getStatus() == LotteryExecution.ExecutionStatus.SUCCESS);
     }
 
     /**
@@ -510,10 +527,16 @@ public class PracticeParticipantService {
         List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonth(year, month);
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         if (sessionIds.isEmpty()) {
+            // 月内にセッションがない場合でも、月次抽選レコード（sessionId=null）が
+            // 存在しうるため hasAnyExecutedLotteryInMonth は別途判定する。
+            boolean monthlyExecutedNoSessions = lotteryExecutionRepository
+                    .existsByTargetYearAndTargetMonthAndStatus(
+                            year, month, LotteryExecution.ExecutionStatus.SUCCESS);
             return PlayerParticipationStatusDto.builder()
                     .participations(Map.of())
                     .lotteryExecuted(Map.of())
                     .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month, null))
+                    .hasAnyExecutedLotteryInMonth(monthlyExecutedNoSessions)
                     .build();
         }
 
@@ -526,30 +549,30 @@ public class PracticeParticipantService {
                                 .status(p.getStatus() != null ? p.getStatus() : ParticipantStatus.WON)
                                 .waitlistNumber(p.getWaitlistNumber()).build(), Collectors.toList())));
 
+        // セッション単位のロック判定に使うため、SUCCESS かつ sessionId が紐づくレコードのみを反映する。
+        // 月単位の「当月扱い／来月扱い」判定には別途 hasAnyExecutedLotteryInMonth を返す。
         Map<Long, Boolean> lotteryMap = new HashMap<>();
         sessionIds.forEach(sid -> lotteryMap.put(sid, false));
-        // セッション単位の抽選実行レコード（再抽選など）を反映
         lotteryExecutionRepository.findBySessionIdIn(sessionIds).forEach(exec -> {
-            if (exec.getSessionId() != null) lotteryMap.put(exec.getSessionId(), true);
+            if (exec.getSessionId() != null
+                    && exec.getStatus() == LotteryExecution.ExecutionStatus.SUCCESS) {
+                lotteryMap.put(exec.getSessionId(), true);
+            }
         });
-        // 月次抽選レコードは sessionId=null で保存されるため findBySessionIdIn では拾えない。
-        // 月全体が抽選確定（SUCCESS）済みなら、月内の全セッションを true にする。
-        // これにより、フロントの resolveAttendanceMode（lotteryExecutedMap）と
-        // サーバー側の validateAttendanceModeCancellation（月単位 SUCCESS 判定）の
-        // 判定軸が揃い、抽選確定済み未来月のキャンセル導線が破綻するのを防ぐ。
-        if (lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                year, month, LotteryExecution.ExecutionStatus.SUCCESS)) {
-            sessionIds.forEach(sid -> lotteryMap.put(sid, true));
-        }
 
         // セッションからorganizationIdを取得
         Long orgId = sessions.isEmpty() ? null : sessions.get(0).getOrganizationId();
         boolean beforeDeadline = lotteryDeadlineHelper.isBeforeDeadline(year, month, orgId);
 
+        // 月単位の「当月扱い」判定用：月内に1つでも SUCCESS な LotteryExecution があるか
+        // （月次抽選 sessionId=null とセッション単位の再抽選 SUCCESS 両方を考慮）
+        boolean monthlyExecuted = hasAnyExecutedLotteryInMonth(year, month, sessionIds);
+
         return PlayerParticipationStatusDto.builder()
                 .participations(participationMap)
                 .lotteryExecuted(lotteryMap)
                 .beforeDeadline(beforeDeadline)
+                .hasAnyExecutedLotteryInMonth(monthlyExecuted)
                 .build();
     }
 

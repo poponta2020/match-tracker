@@ -85,5 +85,8 @@ status: completed
 ## 補足
 
 - 既存のテスト構成（Vitest 想定）に合わせ、テストファイル名は `<対象>.test.jsx` または `<対象>.test.js` とする。テスト基盤が未整備のコンポーネントについてはタスク内で最小限のテストを追加する。
-- バックエンド変更・DBマイグレーションは発生しないため、本番DB適用作業は不要。
 - 既存の `practiceAPI.getPlayerParticipationStatus` を PracticeList から呼ぶことで、月変更時のリクエスト数が1件増える。パフォーマンス影響は軽微と判断するが、必要なら futureSessions が0件の月でリクエストをスキップする最適化を検討。
+- **バックエンド変更について（クロスレビュー指摘を踏まえた更新）:**
+  - DBマイグレーションは発生しないため、本番DB適用作業は不要
+  - ただし `PracticeParticipantService.registerParticipations` にサーバー側ガード（当月扱いの既存登録欠落を 400 で拒否）を追加し、`getPlayerParticipationStatusByMonth` のレスポンスに月単位フラグ `hasAnyExecutedLotteryInMonth` を追加。`lotteryExecuted` は SUCCESS のみ反映するよう厳密化
+  - 詳細は requirements.md §4.4 を参照

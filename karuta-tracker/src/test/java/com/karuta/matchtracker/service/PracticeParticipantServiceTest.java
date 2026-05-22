@@ -695,8 +695,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS（sessionId=null）時は月内全セッションで lotteryExecuted=true を返す")
-    void getPlayerParticipationStatusByMonth_monthlyLotteryExecuted_marksAllSessionsTrue() {
+    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS（sessionId=null）時は lotteryExecuted はセッション単位のまま false、hasAnyExecutedLotteryInMonth=true")
+    void getPlayerParticipationStatusByMonth_monthlyLotteryExecuted_marksHasAnyOnly() {
         PracticeSession session1 = createSession(100L, 4);
         session1.setSessionDate(LocalDate.of(2026, 6, 10));
         PracticeSession session2 = createSession(200L, 4);
@@ -717,14 +717,49 @@ class PracticeParticipantServiceTest {
 
         PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 6);
 
-        // 月次抽選 SUCCESS により、月内全セッションが true になる
-        assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
-        assertThat(dto.getLotteryExecuted()).containsEntry(200L, true);
+        // セッション単位のロックは個別判定のため、全セッションで false（未抽選セッションが誤ってロックされない）
+        assertThat(dto.getLotteryExecuted()).containsEntry(100L, false);
+        assertThat(dto.getLotteryExecuted()).containsEntry(200L, false);
+        // 月単位の当月扱い昇格用フラグは true
+        assertThat(dto.getHasAnyExecutedLotteryInMonth()).isTrue();
     }
 
     @Test
-    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選レコードがない場合は全セッションで lotteryExecuted=false")
-    void getPlayerParticipationStatusByMonth_noLottery_marksAllSessionsFalse() {
+    @DisplayName("getPlayerParticipationStatusByMonth: セッション単位の再抽選 SUCCESS は当該セッションのみ lotteryExecuted=true、hasAnyExecutedLotteryInMonth=true")
+    void getPlayerParticipationStatusByMonth_sessionRelottery_marksOnlyThatSession() {
+        PracticeSession session1 = createSession(100L, 4);
+        session1.setSessionDate(LocalDate.of(2026, 6, 10));
+        PracticeSession session2 = createSession(200L, 4);
+        session2.setSessionDate(LocalDate.of(2026, 6, 15));
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 6))
+                .thenReturn(List.of(session1, session2));
+        // session1 のみ再抽選 SUCCESS
+        LotteryExecution exec = new LotteryExecution();
+        exec.setSessionId(100L);
+        exec.setStatus(LotteryExecution.ExecutionStatus.SUCCESS);
+        when(lotteryExecutionRepository.findBySessionIdIn(List.of(100L, 200L)))
+                .thenReturn(List.of(exec));
+        // 月次抽選レコードは存在しない
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L, 200L)))
+                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(6), eq(ORG_ID)))
+                .thenReturn(true);
+
+        PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 6);
+
+        // session1 のみ true（個別セッションロック）、session2 は未抽選で false
+        assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
+        assertThat(dto.getLotteryExecuted()).containsEntry(200L, false);
+        // 月単位の当月扱い昇格用フラグも true（セッション単位 SUCCESS あり）
+        assertThat(dto.getHasAnyExecutedLotteryInMonth()).isTrue();
+    }
+
+    @Test
+    @DisplayName("getPlayerParticipationStatusByMonth: 抽選 SUCCESS レコードがない場合は lotteryExecuted 全 false、hasAnyExecutedLotteryInMonth=false")
+    void getPlayerParticipationStatusByMonth_noLottery_marksAllFalse() {
         PracticeSession session = createSession(300L, 4);
         session.setSessionDate(LocalDate.of(2026, 7, 5));
 
@@ -742,6 +777,7 @@ class PracticeParticipantServiceTest {
         PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 7);
 
         assertThat(dto.getLotteryExecuted()).containsEntry(300L, false);
+        assertThat(dto.getHasAnyExecutedLotteryInMonth()).isFalse();
     }
 
     @Test

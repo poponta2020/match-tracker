@@ -52,7 +52,7 @@ const PracticeList = () => {
   const [expandedMatches, setExpandedMatches] = useState({}); // アコーディオンの開閉状態
   const [myParticipations, setMyParticipations] = useState({}); // 自分の参加状況 {sessionId: [matchNumbers]}
   const [myParticipationStatuses, setMyParticipationStatuses] = useState({}); // ステータス付き {sessionId: [{matchNumber, status, ...}]}
-  const [lotteryExecutedMap, setLotteryExecutedMap] = useState({}); // {sessionId: boolean} 抽選確定済みフラグ
+  const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（resolveAttendanceMode 月単位判定用）
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
@@ -109,7 +109,7 @@ const PracticeList = () => {
           setSessions(sessionsRes.data);
           setMyParticipations(participationsRes.data || {});
           setMyParticipationStatuses(statusRes.data?.participations || {});
-          setLotteryExecutedMap(statusRes.data?.lotteryExecuted || {});
+          setHasMonthlyLottery(Boolean(statusRes.data?.hasAnyExecutedLotteryInMonth));
           const map = {};
           (orgsRes.data || []).forEach(o => { map[o.id] = o; });
           setOrgMap(map);
@@ -571,7 +571,7 @@ const PracticeList = () => {
   const { isCurrentMonth: isCurrentMonthMode, isPastMonth } = resolveAttendanceMode(
     currentDate.getFullYear(),
     currentDate.getMonth() + 1,
-    lotteryExecutedMap,
+    hasMonthlyLottery,
   );
 
   const openAttendanceModal = () => setIsAttendanceModalOpen(true);
