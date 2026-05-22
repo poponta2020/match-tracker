@@ -39,7 +39,7 @@ status: completed
   - メンター関係 API のロード中はメモアイコンが表示されない
 
 ### タスク3: MatchList のテストを新規作成
-- [ ] 完了
+- [x] 完了
 - **概要:** Vitest + React Testing Library で `MatchList.jsx` のテストを新規作成。各閲覧ケースとエッジケースをカバーする。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchList.test.jsx`（新規作成）— 以下のテストケースを実装:
