@@ -1,9 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
 import { icalCalendarAPI } from '../api/icalCalendar';
-import { Rss, Copy, RefreshCw, AlertCircle, Check } from 'lucide-react';
+import { Rss, Copy, RefreshCw, AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import LoadingScreen from '../components/LoadingScreen';
 
 const DISPLAY_NAME_MAX_LENGTH = 50;
+
+const AccordionItem = ({ title, isOpen, onToggle, children }) => (
+  <div className="border border-gray-200 rounded-lg">
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full flex items-center justify-between px-3 py-2 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
+      aria-expanded={isOpen}
+    >
+      <span>{title}</span>
+      {isOpen ? (
+        <ChevronUp className="h-4 w-4 text-gray-500 flex-shrink-0" />
+      ) : (
+        <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
+      )}
+    </button>
+    {isOpen && (
+      <div className="px-3 pb-3 pt-2 text-sm text-gray-700 border-t border-gray-100">
+        {children}
+      </div>
+    )}
+  </div>
+);
 
 const CalendarSubscriptionPage = () => {
   const [feedInfo, setFeedInfo] = useState(null);
@@ -14,6 +37,7 @@ const CalendarSubscriptionPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [copyFeedbackId, setCopyFeedbackId] = useState(null);
+  const [openAccordionKey, setOpenAccordionKey] = useState(null);
 
   const applyFeedInfo = useCallback((info) => {
     setFeedInfo(info);
@@ -108,6 +132,10 @@ const CalendarSubscriptionPage = () => {
     }
   };
 
+  const toggleAccordion = (key) => {
+    setOpenAccordionKey(prev => (prev === key ? null : key));
+  };
+
   if (loading) return <LoadingScreen />;
 
   const organizationFeeds = feedInfo?.organizationFeeds ?? [];
@@ -147,8 +175,12 @@ const CalendarSubscriptionPage = () => {
               )}
             </button>
           </div>
-          {copied && (
+          {copied ? (
             <p className="text-xs text-green-600 mt-1">コピーしました</p>
+          ) : (
+            <p className="text-xs text-gray-500 mt-1">
+              このURLをコピーして、下の「登録手順を見る」のとおりカレンダーアプリに貼り付けてください
+            </p>
           )}
         </div>
       </div>
@@ -175,11 +207,25 @@ const CalendarSubscriptionPage = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border p-4">
-        <p className="text-sm text-gray-600">
-          <span className="font-semibold">所属団体ごと（＋ゲスト参加）にURLが分かれています。</span>
-          Googleカレンダー等で各URLを別カレンダーとして登録すると、団体ごとに色を分けられます。GoogleカレンダーやAppleカレンダー、Outlookで使えます。
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+        <h2 className="font-semibold text-gray-800">このページについて</h2>
+        <p className="text-sm text-gray-700">
+          あなたの参加予定の練習を、Google カレンダーや iPhone のカレンダーに自動表示するためのURLを発行する画面です。
         </p>
+        <div>
+          <p className="text-sm font-semibold text-gray-700 mb-1">使い方（3ステップ）</p>
+          <ol className="list-decimal list-outside ml-5 text-sm text-gray-700 space-y-1">
+            <li>下のフィードURLをコピー</li>
+            <li>お使いのカレンダーアプリで「URLで購読」を選んで貼り付け（具体的な手順は下の「登録手順を見る」を参照）</li>
+            <li>以降はカレンダーアプリが数時間ごとに自動更新します（毎回の操作は不要）</li>
+          </ol>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-700 mb-1">カレンダーに表示されるもの</p>
+          <p className="text-sm text-gray-700">
+            今日以降のあなたの参加予定の練習のみ（キャンセル済みは表示されません）。所属団体ごと＋ゲスト参加で別URLになっており、別カレンダーとして登録すると団体ごとに色分けできます。
+          </p>
+        </div>
       </div>
 
       {!hasOrganizations && (
@@ -200,12 +246,49 @@ const CalendarSubscriptionPage = () => {
 
       {guestFeed && renderFeedCard('guest', 'ゲスト参加', '所属していない団体の練習を表示します', guestFeed.url)}
 
+      <div className="bg-white rounded-lg border p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold text-gray-800">登録手順を見る</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            ご利用のカレンダーアプリを選んで、手順を確認してください。
+          </p>
+        </div>
+        <AccordionItem
+          title="Google カレンダー（PCブラウザ）"
+          isOpen={openAccordionKey === 'google'}
+          onToggle={() => toggleAccordion('google')}
+        >
+          <ol className="list-decimal list-outside ml-5 space-y-1.5">
+            <li>PCのブラウザで <span className="font-mono">calendar.google.com</span> を開きます</li>
+            <li>左サイドメニュー「他のカレンダー」の右にある「+」をクリック</li>
+            <li>「URLで追加」を選択</li>
+            <li>このページでコピーしたURLを貼り付け、「カレンダーを追加」をクリック</li>
+          </ol>
+          <p className="text-xs text-gray-500 mt-2">
+            ※ スマホアプリのGoogleカレンダーからは追加できません。PCブラウザで一度追加すれば、スマホのGoogleカレンダーアプリにも自動的に表示されます。
+          </p>
+        </AccordionItem>
+        <AccordionItem
+          title="Apple カレンダー（iPhone）"
+          isOpen={openAccordionKey === 'apple'}
+          onToggle={() => toggleAccordion('apple')}
+        >
+          <ol className="list-decimal list-outside ml-5 space-y-1.5">
+            <li>iPhoneの「設定」アプリを開きます</li>
+            <li>「カレンダー」→「アカウント」→「アカウントを追加」をタップ</li>
+            <li>「その他」→「照会するカレンダーを追加」をタップ</li>
+            <li>このページでコピーしたURLを貼り付け、「次へ」→「保存」</li>
+            <li>ホーム画面の「カレンダー」アプリで購読カレンダーが表示されます</li>
+          </ol>
+        </AccordionItem>
+      </div>
+
       {hasOrganizations && (
         <div className="bg-white rounded-lg border p-4 space-y-4">
           <div>
             <h2 className="font-semibold text-gray-700">所属団体ごとの表示名</h2>
             <p className="text-xs text-gray-500 mt-1">
-              設定するとカレンダー上の表示が変わります（例: 早稲田カルタ会 → わすら）。空欄なら団体名がそのまま表示されます。
+              カレンダー上のイベントタイトルは「<span className="font-mono">{'{表示名}＠{会場名}'}</span>」の形式で表示されます（例: 「わすら＠すずらん」）。表示名を設定すると、団体名の代わりにこの名前が使われます。空欄なら団体名がそのまま表示されます。
             </p>
           </div>
 
