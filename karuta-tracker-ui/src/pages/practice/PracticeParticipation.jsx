@@ -43,12 +43,12 @@ const PracticeParticipation = () => {
       setError('');
 
       try {
-        const [sessionsRes, participationsRes, statusRes, deadlineRes, orgsRes] = await Promise.all([
+        const [sessionsRes, participationsRes, statusRes, orgsRes, playerOrgsRes] = await Promise.all([
           practiceAPI.getByYearMonth(year, month),
           practiceAPI.getPlayerParticipations(currentPlayer.id, year, month),
           practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month),
-          systemSettingsAPI.getDeadline(year, month).catch(() => ({ data: null })),
           organizationAPI.getAll().catch(() => ({ data: [] })),
+          organizationAPI.getPlayerOrganizations(currentPlayer.id).catch(() => ({ data: [] })),
         ]);
 
         // セッションを日付昇順にソート
@@ -67,7 +67,17 @@ const PracticeParticipation = () => {
         setLotteryExecuted(statusData.lotteryExecuted || {});
         setHasMonthlyLottery(Boolean(statusData.hasAnyExecutedLotteryInMonth));
         setBeforeDeadline(statusData.beforeDeadline !== false);
-        setDeadlineInfo(deadlineRes.data);
+
+        // 北大に所属している場合のみ、北大の締め切り情報を取得
+        const hokudaiOrg = (playerOrgsRes.data || []).find(o => o.code === 'hokudai');
+        if (hokudaiOrg) {
+          const deadlineRes = await systemSettingsAPI
+            .getDeadline(year, month, hokudaiOrg.id)
+            .catch(() => ({ data: null }));
+          setDeadlineInfo(deadlineRes.data);
+        } else {
+          setDeadlineInfo(null);
+        }
 
         // 団体マップ
         const map = {};
@@ -314,7 +324,7 @@ const PracticeParticipation = () => {
           return (
             <div className="mx-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-800">
-                締め切り: {dl.getMonth() + 1}月{dl.getDate()}日（あと{diffDays}日）
+                締め切り: {dl.getMonth() + 1}月{dl.getDate()}日（あと{diffDays}日）（北大）
               </p>
             </div>
           );

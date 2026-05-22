@@ -9,6 +9,8 @@ export const systemSettingsAPI = {
   update: (key, value, organizationId) =>
     apiClient.put(`/system-settings/${key}`, { value, ...(organizationId && { organizationId: String(organizationId) }) }),
 
-  getDeadline: (year, month) =>
-    apiClient.get('/lottery/deadline', { params: { year, month } }),
+  getDeadline: (year, month, organizationId) =>
+    apiClient.get('/lottery/deadline', {
+      params: organizationId ? { year, month, organizationId } : { year, month },
+    }),
 };
