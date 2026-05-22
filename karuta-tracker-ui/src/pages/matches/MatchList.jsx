@@ -542,7 +542,7 @@ const MatchList = () => {
                         <button
                           type="button"
                           onClick={() => navigate(`/matches?playerId=${opponentId}`)}
-                          className="flex-1 min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate"
+                          className="flex-1 min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate underline underline-offset-2"
                         >
                           {match.opponentName}
                         </button>
