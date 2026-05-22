@@ -695,21 +695,22 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS（sessionId=null）時は lotteryExecuted はセッション単位のまま false、hasAnyExecutedLotteryInMonth=true")
-    void getPlayerParticipationStatusByMonth_monthlyLotteryExecuted_marksHasAnyOnly() {
+    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS (organizationId=null) は月内の全セッションで lotteryExecuted=true、hasAnyExecutedLotteryInMonth=true")
+    void getPlayerParticipationStatusByMonth_monthlyLotteryAllOrgs_marksAllSessions() {
         PracticeSession session1 = createSession(100L, 4);
         session1.setSessionDate(LocalDate.of(2026, 6, 10));
         PracticeSession session2 = createSession(200L, 4);
         session2.setSessionDate(LocalDate.of(2026, 6, 15));
 
+        LotteryExecution exec = new LotteryExecution();
+        exec.setSessionId(null);
+        exec.setOrganizationId(null);
+        exec.setStatus(LotteryExecution.ExecutionStatus.SUCCESS);
+
         when(practiceSessionRepository.findByYearAndMonth(2026, 6))
                 .thenReturn(List.of(session1, session2));
-        // セッション単位の SUCCESS レコードは存在しない
-        when(lotteryExecutionRepository.findBySessionIdIn(List.of(100L, 200L)))
-                .thenReturn(List.of());
-        // しかし月次抽選 SUCCESS は存在する（LotteryService.executeLottery のケース）
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.findByTargetYearAndTargetMonth(2026, 6))
+                .thenReturn(List.of(exec));
         when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L, 200L)))
                 .thenReturn(List.of());
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(6), eq(ORG_ID)))
@@ -717,10 +718,41 @@ class PracticeParticipantServiceTest {
 
         PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 6);
 
-        // セッション単位のロックは個別判定のため、全セッションで false（未抽選セッションが誤ってロックされない）
-        assertThat(dto.getLotteryExecuted()).containsEntry(100L, false);
+        // 月次抽選 SUCCESS で全 organization → 月内全セッションをロック
+        assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
+        assertThat(dto.getLotteryExecuted()).containsEntry(200L, true);
+        assertThat(dto.getHasAnyExecutedLotteryInMonth()).isTrue();
+    }
+
+    @Test
+    @DisplayName("getPlayerParticipationStatusByMonth: 月次抽選 SUCCESS (organizationId 指定) は同じ団体のセッションのみ lotteryExecuted=true")
+    void getPlayerParticipationStatusByMonth_monthlyLotteryPerOrg_marksOnlyThatOrg() {
+        // session1 は ORG_ID=1（抽選対象）、session2 は他団体（抽選なし）
+        PracticeSession session1 = createSession(100L, 4); // organizationId = ORG_ID
+        session1.setSessionDate(LocalDate.of(2026, 6, 10));
+        PracticeSession session2 = createSession(200L, 4);
+        session2.setOrganizationId(99L); // 別団体
+        session2.setSessionDate(LocalDate.of(2026, 6, 15));
+
+        LotteryExecution exec = new LotteryExecution();
+        exec.setSessionId(null);
+        exec.setOrganizationId(ORG_ID); // ORG_ID の月次抽選のみ
+        exec.setStatus(LotteryExecution.ExecutionStatus.SUCCESS);
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 6))
+                .thenReturn(List.of(session1, session2));
+        when(lotteryExecutionRepository.findByTargetYearAndTargetMonth(2026, 6))
+                .thenReturn(List.of(exec));
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L, 200L)))
+                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(6), eq(ORG_ID)))
+                .thenReturn(false);
+
+        PlayerParticipationStatusDto dto = service.getPlayerParticipationStatusByMonth(10L, 2026, 6);
+
+        // 同じ団体（ORG_ID）の session1 のみ true、別団体の session2 は false
+        assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
         assertThat(dto.getLotteryExecuted()).containsEntry(200L, false);
-        // 月単位の当月扱い昇格用フラグは true
         assertThat(dto.getHasAnyExecutedLotteryInMonth()).isTrue();
     }
 
@@ -732,17 +764,14 @@ class PracticeParticipantServiceTest {
         PracticeSession session2 = createSession(200L, 4);
         session2.setSessionDate(LocalDate.of(2026, 6, 15));
 
-        when(practiceSessionRepository.findByYearAndMonth(2026, 6))
-                .thenReturn(List.of(session1, session2));
-        // session1 のみ再抽選 SUCCESS
         LotteryExecution exec = new LotteryExecution();
         exec.setSessionId(100L);
         exec.setStatus(LotteryExecution.ExecutionStatus.SUCCESS);
-        when(lotteryExecutionRepository.findBySessionIdIn(List.of(100L, 200L)))
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 6))
+                .thenReturn(List.of(session1, session2));
+        when(lotteryExecutionRepository.findByTargetYearAndTargetMonth(2026, 6))
                 .thenReturn(List.of(exec));
-        // 月次抽選レコードは存在しない
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2026, 6, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
         when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(100L, 200L)))
                 .thenReturn(List.of());
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(6), eq(ORG_ID)))
@@ -753,7 +782,6 @@ class PracticeParticipantServiceTest {
         // session1 のみ true（個別セッションロック）、session2 は未抽選で false
         assertThat(dto.getLotteryExecuted()).containsEntry(100L, true);
         assertThat(dto.getLotteryExecuted()).containsEntry(200L, false);
-        // 月単位の当月扱い昇格用フラグも true（セッション単位 SUCCESS あり）
         assertThat(dto.getHasAnyExecutedLotteryInMonth()).isTrue();
     }
 
@@ -765,10 +793,8 @@ class PracticeParticipantServiceTest {
 
         when(practiceSessionRepository.findByYearAndMonth(2026, 7))
                 .thenReturn(List.of(session));
-        when(lotteryExecutionRepository.findBySessionIdIn(List.of(300L)))
+        when(lotteryExecutionRepository.findByTargetYearAndTargetMonth(2026, 7))
                 .thenReturn(List.of());
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2026, 7, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
         when(practiceParticipantRepository.findByPlayerIdAndSessionIds(10L, List.of(300L)))
                 .thenReturn(List.of());
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2026), eq(7), eq(ORG_ID)))
