@@ -36,7 +36,7 @@ status: completed
 - **対応Issue:** #704
 
 ### タスク4: PracticeCancelPage のキャンセルフローに SaveProgressOverlay を組み込む
-- [ ] 完了
+- [x] 完了
 - **概要:** PracticeCancelPage.jsx で、キャンセル実行時のオーバーレイ表示・成功時の手動遷移・失敗時のエラー表示を実装する。既存の `alert('キャンセル処理が完了しました')`、直後の `navigate('/practice')`、保存失敗時の `setError` を削除し、`overlayState` + `overlayErrorDetail` に置き換える。SAME_DAY 確認ダイアログと `window.confirm` による試合キャンセル確認は現状維持。初期取得失敗時の `error` 表示は維持。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeCancelPage.jsx` — 要件定義書 4.3.3 に従って変更。

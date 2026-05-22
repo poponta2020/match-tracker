@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, lotteryAPI } from '../../api';
 import { ChevronLeft, ArrowLeft, XCircle, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import SaveProgressOverlay from '../../components/SaveProgressOverlay';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 
 const CANCEL_REASONS = [
@@ -29,6 +30,8 @@ const PracticeCancelPage = () => {
   const [cancelReasonDetail, setCancelReasonDetail] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
+  const [overlayState, setOverlayState] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
+  const [overlayErrorDetail, setOverlayErrorDetail] = useState('');
   const [showSameDayConfirm, setShowSameDayConfirm] = useState(false);
 
   const fetchingRef = useRef(false);
@@ -223,17 +226,19 @@ const PracticeCancelPage = () => {
 
     setCancelling(true);
     setError('');
+    setOverlayErrorDetail('');
+    setOverlayState('saving');
     try {
       await lotteryAPI.cancelMultiple(
         participantIds,
         cancelReason,
         cancelReason === 'OTHER' ? cancelReasonDetail : null
       );
-      alert('キャンセル処理が完了しました');
-      navigate('/practice');
+      setOverlayState('success');
     } catch (err) {
       console.error('Cancel error:', err);
-      setError(err.response?.data?.message || 'キャンセルに失敗しました');
+      setOverlayErrorDetail(err.response?.data?.message || '');
+      setOverlayState('error');
     } finally {
       setCancelling(false);
     }
@@ -518,6 +523,16 @@ const PracticeCancelPage = () => {
           </div>
         </div>
       )}
+
+      <SaveProgressOverlay
+        state={overlayState}
+        savingMessage="キャンセル処理中..."
+        successMessage="キャンセル処理が完了しました"
+        errorMessage="キャンセルに失敗しました"
+        errorDetail={overlayErrorDetail}
+        onSuccessConfirm={() => navigate('/practice')}
+        onErrorClose={() => setOverlayState('idle')}
+      />
     </div>
   );
 };
