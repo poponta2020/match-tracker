@@ -507,29 +507,59 @@ const MatchList = () => {
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="divide-y divide-[#e5e0da]">
-                {filteredMatches.map((match) => (
-                  <div
-                    key={match.id}
-                    className="flex items-center px-4 py-2 hover:bg-[#eef2ef] cursor-pointer transition-colors"
-                    onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
-                  >
-                    <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
-                    <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
-                      {match.opponentName}
-                    </span>
-                    {((!isOtherPlayer && match.myPersonalNotes) || (isOtherPlayer && match.menteePersonalNotes)) && (
-                      <StickyNote className="w-3.5 h-3.5 text-[#9ca3af] flex-shrink-0 ml-1" />
-                    )}
-                    {((!isOtherPlayer && match.myOtetsukiCount != null) || (isOtherPlayer && match.menteeOtetsukiCount != null)) && (
-                      <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
-                        手{isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount}
+                {filteredMatches.map((match) => {
+                  const opponentId = match.player1Id === targetPlayerId
+                    ? match.player2Id
+                    : match.player1Id;
+                  const opponentLinkable = opponentId && opponentId !== 0;
+                  const hasNote = isOtherPlayer
+                    ? !!match.menteePersonalNotes
+                    : !!match.myPersonalNotes;
+                  const otetsukiCount = isOtherPlayer
+                    ? match.menteeOtetsukiCount
+                    : match.myOtetsukiCount;
+                  const showDetailButton = !isOtherPlayer || isMentorOfTarget;
+
+                  return (
+                    <div
+                      key={match.id}
+                      className="flex items-center px-4 py-2"
+                    >
+                      <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
+                      {opponentLinkable ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/matches?playerId=${opponentId}`)}
+                          className="flex-1 min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate"
+                        >
+                          {match.opponentName}
+                        </button>
+                      ) : (
+                        <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
+                          {match.opponentName}
+                        </span>
+                      )}
+                      {showDetailButton && !mentorCheckLoading && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
+                          aria-label="対戦詳細を見る"
+                          className={`flex-shrink-0 ml-1 p-1 ${hasNote ? 'text-gray-600' : 'text-gray-300'}`}
+                        >
+                          <StickyNote className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {otetsukiCount != null && (
+                        <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
+                          手{otetsukiCount}
+                        </span>
+                      )}
+                      <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
+                        {getResultDisplay(match.result, match.scoreDifference)}
                       </span>
-                    )}
-                    <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
-                      {getResultDisplay(match.result, match.scoreDifference)}
-                    </span>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
           </div>
         </div>
       )}

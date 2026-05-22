@@ -18,7 +18,7 @@ status: completed
   - API 失敗時は `isMentorOfTarget = false` に固定し、エラーログを出す
 
 ### タスク2: MatchList.jsx の対戦行レンダリング変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 各対戦行のレンダリングを変更する。①対戦相手名をボタン化して `/matches?playerId=<opponentId>` へ遷移、②メモアイコンを `<button>` でラップしてタップ可能にし、自分閲覧時かメンター閲覧時のみ表示、③行全体の `onClick` ハンドラを削除、④`opponentId` をフロント側で計算、⑤ゲスト選手の場合はリンク無効化。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchList.jsx` — `filteredMatches.map(...)` 内を実装。具体的には:
