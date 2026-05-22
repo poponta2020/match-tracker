@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #703
 
 ### タスク3: PracticeParticipation の保存フローに SaveProgressOverlay を組み込む
-- [ ] 完了
+- [x] 完了
 - **概要:** PracticeParticipation.jsx で、保存ボタン押下時のオーバーレイ表示・成功時の手動遷移・失敗時のエラー表示を実装する。既存の `success` ステート、setTimeout による自動遷移、保存失敗時の `setError` を削除し、`overlayState` + `overlayErrorDetail` に置き換える。初期データ取得失敗時の `error` 表示は維持する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx` — 要件定義書 4.3.2 に従って変更。
