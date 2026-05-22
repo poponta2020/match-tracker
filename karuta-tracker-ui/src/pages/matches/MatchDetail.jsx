@@ -168,7 +168,9 @@ const MatchDetail = () => {
             <div className="flex items-center justify-center gap-2">
               <User className="w-5 h-5 text-gray-400" />
               {(() => {
-                const opponentId = match.player1Id === currentPlayer?.id
+                // メンター閲覧時は queryPlayerId（メンティー）視点で対戦相手を計算する
+                const perspectivePlayerId = queryPlayerId ? Number(queryPlayerId) : currentPlayer?.id;
+                const opponentId = match.player1Id === perspectivePlayerId
                   ? match.player2Id
                   : match.player1Id;
                 return opponentId && opponentId !== 0 ? (
