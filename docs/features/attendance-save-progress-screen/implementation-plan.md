@@ -14,7 +14,7 @@ status: completed
 - **対応Issue:** #702
 
 ### タスク2: SaveProgressOverlay のユニットテスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `SaveProgressOverlay` の4状態それぞれの描画、ボタンクリックでハンドラが呼ばれること、errorDetail の有無での表示切替を検証するテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/components/SaveProgressOverlay.test.jsx` — 新規作成。Vitest + @testing-library/react を使い、各 state での描画とハンドラ呼び出しを検証。
