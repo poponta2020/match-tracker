@@ -1948,10 +1948,12 @@ Entity Layer (JPA Entity)
   │     ↓
   │   出欠登録モーダル（AttendanceRegisterModal）
   │     ├─ 「参加登録」 → /practice/participation?year=YYYY&month=M
-  │     │                   ↓ 保存後1秒待機
-  │     │                   └→ カレンダー画面に自動戻り（データ再取得）
+  │     │                   ↓ 保存 → SaveProgressOverlay（保存中／完了／エラー）
+  │     │                   └→ 「カレンダーに戻る」ボタン押下で /practice へ遷移（データ再取得）
   │     ├─ 「キャンセル登録」 → /practice/cancel?year=YYYY&month=M
   │     │   （当月扱いの月でのみ表示。来月扱いの月では非表示）
+  │     │                   ↓ キャンセル実行 → SaveProgressOverlay（キャンセル処理中／完了／エラー）
+  │     │                   └→ 「カレンダーに戻る」ボタン押下で /practice へ遷移
   │     └─ 「閉じる」 → モーダルを閉じる（遷移なし）
   │
   ├─ 日付クリック → 選択セッション詳細モーダル表示
@@ -2059,7 +2061,7 @@ Entity Layer (JPA Entity)
     - **抽選実行済みセッション**: 当月扱い／来月扱いに関わらず全チェックボックスが操作不可（ステータスバッジ表示）
     - **締切後**: 既存仕様どおり、`beforeDeadline=false` のとき既存登録は disabled（来月扱いの月でも維持）
 - **SAME_DAYタイプ確認ダイアログ**: SAME_DAYタイプの団体で当日12:00以降、かつ「当日のセッション」の参加状態に初期値からの実際の差分があるときのみ、管理者への連絡確認ダイアログを表示する。同月内の別日セッションだけを変更した保存では当日セッションは触られないためダイアログは出さない。判定ロジックは `karuta-tracker-ui/src/pages/practice/utils/sameDayConfirm.js` の `needsSameDayConfirm` に切り出され、単体テストでカバー
-- **保存ボタン**: 成功後、1秒待ってカレンダー画面に自動遷移
+- **保存ボタン**: 押下後、API 呼び出し直前から共通コンポーネント `SaveProgressOverlay` で全画面オーバーレイ（保存中／完了／エラー）を表示する。完了画面の「カレンダーに戻る」ボタンを押下したときのみ `/practice` に遷移する（旧仕様の1秒タイマー自動遷移は廃止）。エラー時は「閉じる」で編集中のチェック状態を維持したまま元画面に戻り再試行できる。Esc キー・背景クリックではオーバーレイは閉じない。同じオーバーレイは PracticeCancelPage のキャンセル実行フロー（旧 `alert` 通知の置き換え）にも使用される
 
 **データフロー**:
 1. ページ読み込み時に以下のAPIを並列取得:
@@ -2070,9 +2072,9 @@ Entity Layer (JPA Entity)
    - `GET /api/organizations` — 団体名・色・締切タイプ
 2. 取得データをもとにテーブルを描画（チェックボックス or ステータスバッジ）
 3. チェックボックス操作
-4. 保存ボタン → `POST /api/practice-sessions/participations`（PLAYERロールは自分のplayerIdのみ操作可能）
-5. 成功メッセージ表示（1秒間）
-6. `/practice`（カレンダー画面）へ自動ナビゲート
+4. 保存ボタン → API 呼び出し直前で `SaveProgressOverlay` を `saving` 状態に切替え → `POST /api/practice-sessions/participations`（PLAYERロールは自分のplayerIdのみ操作可能）
+5. 成功時: オーバーレイを `success` 状態に切替え（「参加登録を保存しました」と「カレンダーに戻る」ボタン）。失敗時: `error` 状態に切替え、サーバーからのエラーメッセージ（`err.response?.data?.message`）を表示
+6. ユーザーが「カレンダーに戻る」を押下 → `/practice`（カレンダー画面）へ遷移（エラー時は「閉じる」で編集中のチェック状態を保持したまま画面に戻り再試行可）
 7. カレンダー画面で自動的にデータ再取得
 
 ---
@@ -2272,7 +2274,7 @@ Entity Layer (JPA Entity)
 12. レスポンス: 201 Created
    ↓
 [フロントエンド]
-13. 成功メッセージ表示 → 1秒待機 → /practice へ自動ナビゲート
+13. SaveProgressOverlay を success 状態へ切替え（「参加登録を保存しました」「カレンダーに戻る」ボタン） → ユーザーが「カレンダーに戻る」を押下 → /practice へ遷移
 ```
 
 ---
