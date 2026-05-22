@@ -338,7 +338,7 @@ const PracticeParticipation = () => {
         ) : (
           <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden mx-4">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[404px] table-fixed">
+              <table className="w-full min-w-[432px] table-fixed">
                 <thead className="bg-[#e2d9d0] border-b border-[#d0c5b8]">
                   <tr>
                     <th className="w-[72px] px-2 py-2 text-left text-xs font-semibold text-[#5f3a2d]">
@@ -348,7 +348,7 @@ const PracticeParticipation = () => {
                       場所
                     </th>
                     {Array.from({ length: 7 }, (_, i) => i + 1).map((n) => (
-                      <th key={n} className="px-0 py-2 text-center text-xs font-semibold text-[#5f3a2d]">
+                      <th key={n} className="px-0.5 py-2 text-center text-xs font-semibold text-[#5f3a2d]">
                         {n}
                       </th>
                     ))}
@@ -400,7 +400,7 @@ const PracticeParticipation = () => {
                             const matchStatus = statusList.find(s => s.matchNumber === matchNumber);
 
                             return (
-                              <td key={matchNumber} className="px-0 py-2 text-center align-middle">
+                              <td key={matchNumber} className="px-0.5 py-2 text-center align-middle">
                                 {isAvailable ? (
                                   isLotteryDone && matchStatus ? (
                                     // 抽選済み: ステータス表示
