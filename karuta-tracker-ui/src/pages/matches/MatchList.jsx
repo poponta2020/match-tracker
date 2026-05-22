@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI } from '../../api';
+import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import LoadingScreen from '../../components/LoadingScreen';
 import {
@@ -43,6 +44,10 @@ const MatchList = () => {
 
   // 級別統計データ
   const [rankStatistics, setRankStatistics] = useState(null);
+
+  // メンター関係チェック（他選手の対戦一覧を見ている時、その選手が自分の ACTIVE メンティーか）
+  const [isMentorOfTarget, setIsMentorOfTarget] = useState(false);
+  const [mentorCheckLoading, setMentorCheckLoading] = useState(true);
 
   // 期間フィルタ関連の状態
   const today = new Date();
@@ -94,6 +99,43 @@ const MatchList = () => {
       setTargetPlayerKyuRank(currentPlayer?.kyuRank || '');
     }
   }, [targetPlayerId, isOtherPlayer, currentPlayer]);
+
+  // メンター関係チェック（詳細導線の表示判定に使用）
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isOtherPlayer) {
+      setIsMentorOfTarget(false);
+      setMentorCheckLoading(false);
+      return;
+    }
+
+    setMentorCheckLoading(true);
+    const checkMentorRelation = async () => {
+      try {
+        const res = await mentorRelationshipAPI.getMyMentees();
+        if (cancelled) return;
+        const isActiveMentee = (res.data || []).some(
+          (r) => r.menteeId === targetPlayerId && r.status === 'ACTIVE'
+        );
+        setIsMentorOfTarget(isActiveMentee);
+      } catch (e) {
+        if (!cancelled) {
+          console.error('メンター関係の取得に失敗:', e);
+          setIsMentorOfTarget(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setMentorCheckLoading(false);
+        }
+      }
+    };
+    checkMentorRelation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetPlayerId, isOtherPlayer]);
 
   // 選手検索のフィルタリング
   useEffect(() => {
