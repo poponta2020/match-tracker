@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const mockNavigate = vi.fn();
 let mockSearchParams = new URLSearchParams();
@@ -263,5 +264,85 @@ describe('PracticeParticipation 当月扱い／来月扱いのチェック外し
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes[0]).toBeDisabled(); // 第1試合は initial 含む → disabled
     expect(checkboxes[1]).not.toBeDisabled(); // 第2試合は未登録 → 追加可能
+  });
+});
+
+describe('PracticeParticipation 保存フロー（SaveProgressOverlay）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
+    mockSearchParams = new URLSearchParams('year=2026&month=5');
+    setupAPI({
+      sessions: [
+        {
+          id: 100,
+          sessionDate: '2026-05-25',
+          totalMatches: 3,
+          venueName: '東区民センター',
+          organizationId: 1,
+        },
+      ],
+      participations: { 100: [] },
+      lotteryExecuted: { 100: false },
+      beforeDeadline: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('保存成功: saving → success オーバーレイ表示。「カレンダーに戻る」押下まで navigate しない（自動遷移なし）', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    practiceAPI.registerParticipations.mockResolvedValue({ data: {} });
+
+    render(<PracticeParticipation />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).toBeNull());
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[0]);
+
+    const saveButton = await screen.findByRole('button', { name: /保存する/ });
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('参加登録を保存しました')).toBeInTheDocument();
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'カレンダーに戻る' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/practice');
+  });
+
+  it('保存失敗: error オーバーレイにサーバーメッセージ表示 →「閉じる」で idle、チェック状態を保持', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    practiceAPI.registerParticipations.mockRejectedValue({
+      response: { data: { message: 'サーバーエラー: 500' } },
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<PracticeParticipation />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).toBeNull());
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[0]);
+    expect(checkboxes[0]).toBeChecked();
+
+    const saveButton = await screen.findByRole('button', { name: /保存する/ });
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('保存に失敗しました')).toBeInTheDocument();
+    });
+    expect(screen.getByText('サーバーエラー: 500')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByText('保存に失敗しました')).toBeNull();
+    expect(checkboxes[0]).toBeChecked();
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });

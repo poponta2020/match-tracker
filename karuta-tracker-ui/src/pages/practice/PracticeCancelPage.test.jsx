@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockNavigate = vi.fn();
@@ -30,7 +30,7 @@ vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-import { practiceAPI } from '../../api';
+import { practiceAPI, lotteryAPI } from '../../api';
 import PracticeCancelPage from './PracticeCancelPage';
 
 const FIXED_NOW = new Date('2026-05-21T20:00:00+09:00');
@@ -151,5 +151,111 @@ describe('PracticeCancelPage 月ナビ廃止と年月固定表示', () => {
 
     expect(practiceAPI.getSessionSummaries).toHaveBeenCalledWith(2026, 8);
     expect(practiceAPI.getPlayerParticipationStatus).toHaveBeenCalledWith(10, 2026, 8);
+  });
+});
+
+describe('PracticeCancelPage キャンセルフロー（SaveProgressOverlay）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
+    mockSearchParams = new URLSearchParams();
+    practiceAPI.getSessionSummaries.mockResolvedValue({
+      data: [
+        {
+          id: 945,
+          sessionDate: '2026-05-25',
+          totalMatches: 3,
+          venueName: 'テスト会場',
+          capacity: 24,
+        },
+      ],
+    });
+    practiceAPI.getPlayerParticipationStatus.mockResolvedValue({
+      data: {
+        participations: {
+          945: [
+            { participantId: 21415, matchNumber: 3, status: 'PENDING' },
+          ],
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  const selectMatchAndReason = async (user) => {
+    const matchCountEl = await screen.findByText('1試合');
+    await user.click(matchCountEl.closest('td'));
+    await waitFor(() => {
+      expect(screen.getByText('第3試合')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('checkbox', { name: /第3試合/ }));
+    await user.click(screen.getByLabelText('体調不良'));
+  };
+
+  it('キャンセル成功: success オーバーレイ →「カレンダーに戻る」で navigate、alert は呼ばれない', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const confirmStub = vi.fn().mockReturnValue(true);
+    const alertStub = vi.fn();
+    vi.stubGlobal('confirm', confirmStub);
+    vi.stubGlobal('alert', alertStub);
+    lotteryAPI.cancelMultiple.mockResolvedValue({ data: {} });
+
+    render(<PracticeCancelPage />);
+    await selectMatchAndReason(user);
+
+    await user.click(
+      screen.getByRole('button', { name: /キャンセルする/ }),
+    );
+
+    expect(confirmStub).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getByText('キャンセル処理が完了しました')).toBeInTheDocument();
+    });
+    expect(alertStub).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    const overlay = screen.getByRole('dialog');
+    await user.click(within(overlay).getByRole('button', { name: 'カレンダーに戻る' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/practice');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('キャンセル失敗: error オーバーレイ →「閉じる」で idle、選択状態（試合・理由）を保持', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+    lotteryAPI.cancelMultiple.mockRejectedValue({
+      response: { data: { message: 'サーバーエラー: 500' } },
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<PracticeCancelPage />);
+    await selectMatchAndReason(user);
+
+    await user.click(
+      screen.getByRole('button', { name: /キャンセルする/ }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('キャンセルに失敗しました')).toBeInTheDocument();
+    });
+    expect(screen.getByText('サーバーエラー: 500')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByText('キャンセルに失敗しました')).toBeNull();
+
+    // 選択状態は維持されている（試合・理由ともに）
+    expect(screen.getByText('第3試合')).toBeInTheDocument();
+    expect(screen.getByLabelText('体調不良').checked).toBe(true);
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+    consoleErrorSpy.mockRestore();
   });
 });

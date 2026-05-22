@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { practiceAPI, systemSettingsAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
-import { ChevronLeft, ChevronRight, Check, Save, AlertCircle, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, AlertCircle, XCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import SaveProgressOverlay from '../../components/SaveProgressOverlay';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 import { needsSameDayConfirm as needsSameDayConfirmFn } from './utils/sameDayConfirm';
 import { resolveAttendanceMode } from './utils/attendanceMode';
@@ -20,7 +21,8 @@ const PracticeParticipation = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [overlayState, setOverlayState] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
+  const [overlayErrorDetail, setOverlayErrorDetail] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean（個別セッションのロック判定）
   const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（月単位判定）
@@ -173,7 +175,8 @@ const PracticeParticipation = () => {
 
     setSaving(true);
     setError('');
-    setSuccess('');
+    setOverlayErrorDetail('');
+    setOverlayState('saving');
 
     try {
       const participationsList = [];
@@ -193,13 +196,11 @@ const PracticeParticipation = () => {
         participations: participationsList,
       });
 
-      setSuccess('参加登録を保存しました');
-      setTimeout(() => {
-        navigate('/practice');
-      }, 1000);
+      setOverlayState('success');
     } catch (err) {
       console.error('保存エラー:', err);
-      setError('保存に失敗しました');
+      setOverlayErrorDetail(err.response?.data?.message || '');
+      setOverlayState('error');
     } finally {
       setSaving(false);
     }
@@ -296,18 +297,11 @@ const PracticeParticipation = () => {
 
       {/* コンテンツ */}
       <div className="pt-20 pb-24">
-        {/* エラー・成功メッセージ */}
+        {/* 初期取得エラー */}
         {error && (
           <div className="mx-4 mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="mx-4 mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-2">
-            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-green-700">{success}</p>
           </div>
         )}
 
@@ -499,6 +493,16 @@ const PracticeParticipation = () => {
           </div>
         </div>
       )}
+
+      <SaveProgressOverlay
+        state={overlayState}
+        savingMessage="保存中..."
+        successMessage="参加登録を保存しました"
+        errorMessage="保存に失敗しました"
+        errorDetail={overlayErrorDetail}
+        onSuccessConfirm={() => navigate('/practice')}
+        onErrorClose={() => setOverlayState('idle')}
+      />
     </div>
   );
 };
