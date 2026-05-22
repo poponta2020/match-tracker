@@ -544,6 +544,20 @@ const PracticeList = () => {
       // セッション詳細を再取得
       const response = await practiceAPI.getById(sessionId);
       setSelectedSession(response.data);
+      // 再抽選で月の hasAnyExecutedLotteryInMonth / lotteryExecuted が変わるため
+      // 月のステータスも再取得（出欠登録モーダルのキャンセル登録ボタン表示が即時反映される）
+      if (currentPlayer?.id) {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1;
+        try {
+          const statusRes = await practiceAPI.getPlayerParticipationStatus(currentPlayer.id, year, month);
+          setMyParticipationStatuses(statusRes.data?.participations || {});
+          setHasMonthlyLottery(Boolean(statusRes.data?.hasAnyExecutedLotteryInMonth));
+        } catch (statusErr) {
+          // 再取得失敗は致命的ではない（次回月切替/再読み込みで同期される）
+          console.error('Re-lottery: failed to refresh month status', statusErr);
+        }
+      }
     } catch (err) {
       console.error('Re-lottery error:', err);
       alert(err.response?.data?.message || '再抽選に失敗しました');

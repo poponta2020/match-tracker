@@ -127,9 +127,13 @@ status: completed
 
 ### 4.1 API設計
 
-**追加・変更なし**。既存APIをそのまま利用する。
-- `practiceAPI.getPlayerParticipationStatus(playerId, year, month)`：レスポンスの `lotteryExecuted: Map<Long, Boolean>` を利用
+エンドポイントの新規追加はなし。既存APIを再利用するが、`PlayerParticipationStatusDto` のレスポンスフィールドに **追加** あり（後方互換）。
+- `practiceAPI.getPlayerParticipationStatus(playerId, year, month)`：
+  - 既存 `lotteryExecuted: Map<Long, Boolean>` は個別セッションのロック判定（チェック不可表示）に使う
+  - **追加：`hasAnyExecutedLotteryInMonth: boolean`** — 月内に SUCCESS な `LotteryExecution` が1つでもあれば true。フロントの `resolveAttendanceMode` で月単位の「当月扱い／来月扱い」判定に使う
+  - 月次抽選 SUCCESS（`sessionId=null`）のセッションも `lotteryExecuted` に反映される（`organizationId=null` なら月内全セッション、`organizationId` 指定なら同一団体のみ）
 - `practiceAPI.registerParticipations(data)`：チェック追加／チェック外しの一括保存
+  - **挙動変更：当月扱いの月で既存アクティブ参加がリクエストから欠落している場合は HTTP 400** で拒否（理由付きキャンセル経由に誘導）
 - `lotteryAPI.cancelMultiple(participantIds, cancelReason, cancelReasonDetail)`：理由付きキャンセル
 
 ### 4.2 DB設計
@@ -212,18 +216,25 @@ DBマイグレーション・新規API追加はなし。ただしクロスレビ
 **フロントエンド（変更／新規）**
 - `karuta-tracker-ui/src/pages/practice/PracticeList.jsx`（変更）
 - `karuta-tracker-ui/src/components/AttendanceRegisterModal.jsx`（変更）
+- `karuta-tracker-ui/src/components/AttendanceRegisterModal.test.jsx`（新規）
 - `karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx`（変更）
+- `karuta-tracker-ui/src/pages/practice/PracticeParticipation.test.jsx`（新規）
 - `karuta-tracker-ui/src/pages/practice/PracticeCancelPage.jsx`（変更）
+- `karuta-tracker-ui/src/pages/practice/PracticeCancelPage.test.jsx`（変更）
+- `karuta-tracker-ui/src/pages/practice/PracticeList.attendanceMode.test.jsx`（新規）
 - `karuta-tracker-ui/src/pages/practice/utils/attendanceMode.js`（新規）
 - `karuta-tracker-ui/src/pages/practice/utils/attendanceMode.test.js`（新規）
-- 既存テストの調整（PracticeParticipation / PracticeCancelPage / AttendanceRegisterModal 関連）
 
-**バックエンド** — 変更なし。
+**バックエンド（変更）** ※ クロスレビューでの指摘を踏まえ追加対応
+- `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/PlayerParticipationStatusDto.java`（変更）— `hasAnyExecutedLotteryInMonth: Boolean` フィールド追加
+- `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeParticipantService.java`（変更）— サーバー側ガード `validateAttendanceModeCancellation`、`isCurrentMonthAttendanceMode`、`getPlayerParticipationStatusByMonth` の `lotteryExecuted` 算出を月次抽選 SUCCESS に対応
+- `karuta-tracker/src/test/java/com/karuta/matchtracker/service/PracticeParticipantServiceTest.java`（変更）— 上記挙動の回帰テスト追加
 
 **DB** — 変更なし。
 
 **ドキュメント**
 - `docs/SCREEN_LIST.md`：項番13（PracticeList）、項番17（PracticeParticipation）、項番18（PracticeCancelPage）の説明を更新
+- `docs/SPECIFICATION.md` / `docs/DESIGN.md`：当月扱い／来月扱いに伴う動線とAPIレスポンスの変更を反映
 
 ### 5.2 既存機能への影響
 
