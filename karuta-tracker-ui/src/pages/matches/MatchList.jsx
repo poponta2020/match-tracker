@@ -46,8 +46,10 @@ const MatchList = () => {
   const [rankStatistics, setRankStatistics] = useState(null);
 
   // メンター関係チェック（他選手の対戦一覧を見ている時、その選手が自分の ACTIVE メンティーか）
+  // mentorCheckedTargetPlayerId が targetPlayerId と一致した時のみ判定結果（isMentorOfTarget）を信頼する
   const [isMentorOfTarget, setIsMentorOfTarget] = useState(false);
-  const [mentorCheckLoading, setMentorCheckLoading] = useState(true);
+  const [mentorCheckedTargetPlayerId, setMentorCheckedTargetPlayerId] = useState(null);
+  const mentorCheckCompleted = mentorCheckedTargetPlayerId === targetPlayerId;
 
   // 期間フィルタ関連の状態
   const today = new Date();
@@ -100,17 +102,27 @@ const MatchList = () => {
     }
   }, [targetPlayerId, isOtherPlayer, currentPlayer]);
 
+  // targetPlayerId 変更時は前選手のデータを即座にクリアしてローディング状態に戻す
+  // （遅い回線で前選手の対戦行が新画面に残るのを防ぐ）
+  useEffect(() => {
+    setMatches([]);
+    setFilteredMatches([]);
+    setLoading(true);
+  }, [targetPlayerId]);
+
   // メンター関係チェック（詳細導線の表示判定に使用）
   useEffect(() => {
     let cancelled = false;
 
+    // targetPlayerId 変更時は前回の判定結果を即座に無効化（誤った詳細ボタン表示を防ぐ）
+    setIsMentorOfTarget(false);
+    setMentorCheckedTargetPlayerId(null);
+
     if (!isOtherPlayer) {
-      setIsMentorOfTarget(false);
-      setMentorCheckLoading(false);
+      setMentorCheckedTargetPlayerId(targetPlayerId);
       return;
     }
 
-    setMentorCheckLoading(true);
     const checkMentorRelation = async () => {
       try {
         const res = await mentorRelationshipAPI.getMyMentees();
@@ -126,7 +138,7 @@ const MatchList = () => {
         }
       } finally {
         if (!cancelled) {
-          setMentorCheckLoading(false);
+          setMentorCheckedTargetPlayerId(targetPlayerId);
         }
       }
     };
@@ -539,7 +551,7 @@ const MatchList = () => {
                           {match.opponentName}
                         </span>
                       )}
-                      {showDetailButton && !mentorCheckLoading && (
+                      {showDetailButton && mentorCheckCompleted && (
                         <button
                           type="button"
                           onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}

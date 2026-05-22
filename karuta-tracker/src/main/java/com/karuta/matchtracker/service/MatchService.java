@@ -71,11 +71,27 @@ public class MatchService {
             if (!viewedPlayerId.equals(match.getPlayer1Id()) && !viewedPlayerId.equals(match.getPlayer2Id())) {
                 throw new IllegalArgumentException("指定されたplayerIdはこの試合の参加者ではありません");
             }
+            // 他人のメンティーとしての試合を参照する場合、現在ユーザーがACTIVEメンターであることを検証
+            validateMentorAccess(currentPlayerId, viewedPlayerId);
         }
 
         MatchDto dto = enrichMatchWithPlayerNames(match, currentPlayerId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), currentPlayerId, viewedPlayerId);
         return enriched.get(0);
+    }
+
+    /**
+     * currentPlayerId が viewedPlayerId の ACTIVE メンターであることを検証する。
+     * メンター関係がない場合は ForbiddenException をスローする。
+     */
+    private void validateMentorAccess(Long currentPlayerId, Long viewedPlayerId) {
+        boolean isMentor = mentorRelationshipRepository
+                .findByMentorIdAndStatus(currentPlayerId, MentorRelationship.Status.ACTIVE)
+                .stream()
+                .anyMatch(r -> r.getMenteeId().equals(viewedPlayerId));
+        if (!isMentor) {
+            throw new ForbiddenException("メンター関係がないため他選手の対戦詳細を閲覧できません");
+        }
     }
 
     /**
