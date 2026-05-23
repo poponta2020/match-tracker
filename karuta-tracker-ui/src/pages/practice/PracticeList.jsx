@@ -704,6 +704,30 @@ const PracticeList = () => {
                               </div>
                             );
                           })())}
+                          {(() => {
+                            // 同日複数セッションは最も重い状態（FULL > NEARLY_FULL > AVAILABLE）を1つだけ表示
+                            const order = { FULL: 2, NEARLY_FULL: 1, AVAILABLE: 0 };
+                            const worst = daySessions.reduce((acc, s) => {
+                              const v = order[s.capacityStatus] ?? 0;
+                              return v > acc.value ? { value: v, status: s.capacityStatus } : acc;
+                            }, { value: 0, status: 'AVAILABLE' }).status;
+
+                            if (worst === 'NEARLY_FULL') {
+                              return (
+                                <div className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-medium inline-block">
+                                  残わずか
+                                </div>
+                              );
+                            }
+                            if (worst === 'FULL') {
+                              return (
+                                <div className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium inline-block">
+                                  満員
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       )}
                     </td>

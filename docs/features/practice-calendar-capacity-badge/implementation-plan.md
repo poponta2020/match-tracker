@@ -52,7 +52,7 @@ status: completed
   - 既存テストがリグレッションしていない
 
 ### タスク4: フロントエンド カレンダーセルにバッジ表示を追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `PracticeList.jsx` のカレンダー描画ロジックで `capacityStatus` バッジを会場名の下に表示する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeList.jsx` — `<tbody>` のセル描画ロジック（既存の `daySessions.map(...)` 直下）に集約ロジック（`FULL > NEARLY_FULL > AVAILABLE`）とバッジ JSX を追加。
