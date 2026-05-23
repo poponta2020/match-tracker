@@ -59,6 +59,18 @@ public class PracticeSessionDto {
     // 抽選あり運用では WON のみ（false）。フロント側の参加者フィルタで使用する。
     private Boolean pairingIncludesPending;
 
+    // セッションの定員到達状況（サマリーAPI のみで設定される）
+    private CapacityStatus capacityStatus;
+
+    /**
+     * セッションの定員到達状況
+     */
+    public enum CapacityStatus {
+        AVAILABLE,
+        NEARLY_FULL,
+        FULL
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
