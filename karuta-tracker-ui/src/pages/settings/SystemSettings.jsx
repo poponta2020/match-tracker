@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { systemSettingsAPI, organizationAPI } from '../../api';
-import { Settings, AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
+import PageHeader from '../../components/PageHeader';
 
 const SystemSettings = () => {
   const { currentPlayer } = useAuth();
@@ -184,12 +185,9 @@ const SystemSettings = () => {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-4">
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-        <Settings className="h-6 w-6" />
-        システム設定
-      </h1>
-
+    <>
+      <PageHeader title="システム設定" backTo="/settings" />
+      <div className="max-w-lg mx-auto p-4 space-y-4">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-red-600" />
@@ -312,7 +310,8 @@ const SystemSettings = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

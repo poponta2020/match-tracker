@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
 import { Edit, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../components/LoadingScreen';
+import PageHeader from '../components/PageHeader';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -65,44 +66,47 @@ const Profile = () => {
   ].filter(item => item.value);
 
   return (
-    <div className="space-y-6">
-      {/* ヘッダー：名前 + ロール + 編集ボタン */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#374151]">{player.name}</h1>
-          <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
-            {roleLabel.text}
-          </span>
-        </div>
-        <button
-          onClick={() => navigate('/profile/edit')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
-        >
-          <Edit className="w-3.5 h-3.5" />
-          編集
-        </button>
-      </div>
-
-      {/* 情報リスト（PlayerDetailと同じカードスタイル） */}
-      {items.length > 0 && (
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
-          <div className="divide-y divide-[#e2d9d0]">
-            {items.map((item) => (
-              <div key={item.label} className="flex justify-between py-3 first:pt-0 last:pb-0">
-                <span className="text-sm text-[#6b7280]">{item.label}</span>
-                <span className="text-sm font-medium text-[#374151]">{item.value}</span>
-              </div>
-            ))}
+    <>
+      <PageHeader title="プロフィール" backTo="/settings" />
+      <div className="space-y-6">
+        {/* ヘッダー：名前 + ロール + 編集ボタン */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[#374151]">{player.name}</h1>
+            <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
+              {roleLabel.text}
+            </span>
           </div>
+          <button
+            onClick={() => navigate('/profile/edit')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
+          >
+            <Edit className="w-3.5 h-3.5" />
+            編集
+          </button>
         </div>
-      )}
 
-      {items.length === 0 && (
-        <p className="text-sm text-[#6b7280] text-center py-8">
-          プロフィール情報が未設定です
-        </p>
-      )}
-    </div>
+        {/* 情報リスト（PlayerDetailと同じカードスタイル） */}
+        {items.length > 0 && (
+          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-4">
+            <div className="divide-y divide-[#e2d9d0]">
+              {items.map((item) => (
+                <div key={item.label} className="flex justify-between py-3 first:pt-0 last:pb-0">
+                  <span className="text-sm text-[#6b7280]">{item.label}</span>
+                  <span className="text-sm font-medium text-[#374151]">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {items.length === 0 && (
+          <p className="text-sm text-[#6b7280] text-center py-8">
+            プロフィール情報が未設定です
+          </p>
+        )}
+      </div>
+    </>
   );
 };
 

@@ -4,8 +4,9 @@ import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import { organizationAPI } from '../../api/organizations';
 import { playerAPI } from '../../api/players';
 import { getCurrentPlayer } from '../../utils/auth';
-import { Users, UserPlus, UserCheck, UserX, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { Users, UserPlus, UserCheck, UserX, ChevronRight, Clock } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 export default function MentorManagement() {
   const navigate = useNavigate();
@@ -115,15 +116,9 @@ export default function MentorManagement() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-[#4a6b5a] text-white p-4 flex items-center gap-3">
-        <button onClick={() => navigate('/settings')} className="p-1">
-          <ChevronLeft size={24} />
-        </button>
-        <Users size={24} />
-        <h1 className="text-lg font-bold">メンター管理</h1>
-      </div>
-
+    <>
+      <PageHeader title="メンター管理" backTo="/settings" />
+      <div className="min-h-screen bg-gray-50 pb-20">
       <div className="p-4 space-y-4">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
@@ -289,6 +284,7 @@ export default function MentorManagement() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

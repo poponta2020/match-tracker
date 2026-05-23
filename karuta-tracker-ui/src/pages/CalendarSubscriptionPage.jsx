@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { icalCalendarAPI } from '../api/icalCalendar';
-import { Rss, Copy, RefreshCw, AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, RefreshCw, AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import LoadingScreen from '../components/LoadingScreen';
+import PageHeader from '../components/PageHeader';
 
 const DISPLAY_NAME_MAX_LENGTH = 50;
 
@@ -188,12 +189,9 @@ const CalendarSubscriptionPage = () => {
   };
 
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-6">
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-        <Rss className="h-6 w-6" />
-        カレンダー購読
-      </h1>
-
+    <>
+      <PageHeader title="カレンダー購読" backTo="/settings" />
+      <div className="max-w-lg mx-auto p-4 space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
@@ -331,7 +329,8 @@ const CalendarSubscriptionPage = () => {
           {regenerating ? '再発行中...' : 'URLを再発行する'}
         </button>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 
