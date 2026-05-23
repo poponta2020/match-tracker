@@ -71,7 +71,7 @@ status: completed
   - capacityStatus が null や未知の値のときバッジが表示されない（防御的に AVAILABLE 扱い）
 
 ### タスク5: フロントエンド テストを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `PracticeList.jsx` 関連テスト（`PracticeList.attendanceMode.test.jsx` または新規テストファイル）に capacityStatus バッジ表示のテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/practice/PracticeList.attendanceMode.test.jsx` または新規 `PracticeList.capacityBadge.test.jsx` — 以下のケースを追加:
