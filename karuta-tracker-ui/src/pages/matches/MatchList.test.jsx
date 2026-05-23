@@ -277,6 +277,69 @@ describe('MatchList', () => {
     expect(screen.queryByText(/\(5\)/)).toBeNull();
   });
 
+  it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [メモ] [手N] の順で描画される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        venueName: '本郷',
+        matchNumber: 3,
+        result: '勝ち',
+        scoreDifference: 5,
+        myPersonalNotes: 'メモ本文',
+        myOtetsukiCount: 2,
+      })],
+    });
+
+    renderMatchList('/matches');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    const row = opponentBtn.parentElement;
+    const cells = Array.from(row.children);
+
+    expect(cells[0]).toHaveTextContent('5/23');
+    expect(cells[1]).toHaveTextContent('山田太郎');
+    expect(cells[2]).toHaveTextContent('〇5');
+    expect(cells[3]).toHaveTextContent('本郷 3試合目');
+    expect(cells[4]).toHaveAttribute('aria-label', '対戦詳細を見る');
+    expect(cells[5]).toHaveTextContent('手2');
+  });
+
+  it('行内表示: メモアイコン非表示・お手付き null の行でも 6 列構造が維持される（列幅確保）', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        player1Id: 2,
+        player2Id: 3,
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        venueName: '本郷',
+        matchNumber: 3,
+        result: '負け',
+        scoreDifference: 1,
+        menteePersonalNotes: '',
+        menteeOtetsukiCount: null,
+      })],
+      mentees: [],
+    });
+
+    renderMatchList('/matches?playerId=2');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(mentorRelationshipAPI.getMyMentees).toHaveBeenCalled();
+    });
+
+    const row = opponentBtn.parentElement;
+    const cells = Array.from(row.children);
+
+    // 6 列構造が維持されること
+    expect(cells).toHaveLength(6);
+    // メモ列（列5）は描画されているが invisible で空間を確保
+    expect(cells[4]).toHaveAttribute('aria-hidden', 'true');
+    // 手 N 列（列6）も同様に空間を確保
+    expect(cells[5]).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('メンター関係 API 失敗時: メモアイコンが描画されず、画面はクラッシュしない', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     setupDefaultMocks({

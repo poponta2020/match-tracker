@@ -535,47 +535,55 @@ const MatchList = () => {
                   return (
                     <div
                       key={match.id}
-                      className="flex items-center px-4 py-2"
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_auto] items-center gap-x-2 px-4 py-2"
                     >
-                      <span className="text-xs text-[#9ca3af] flex-shrink-0 mr-2">
+                      <span className="text-xs text-[#9ca3af]">
                         {formatDate(match.matchDate)}
                       </span>
                       {opponentLinkable ? (
                         <button
                           type="button"
                           onClick={() => navigate(`/matches?playerId=${opponentId}`)}
-                          className="flex-1 min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate underline underline-offset-2"
+                          className="min-w-0 text-sm font-medium text-[#4a6b5a] text-left truncate underline underline-offset-2"
                         >
                           {match.opponentName}
                         </button>
                       ) : (
-                        <span className="flex-1 min-w-0 text-sm font-medium text-[#374151] text-left truncate">
+                        <span className="min-w-0 text-sm font-medium text-[#374151] text-left truncate">
                           {match.opponentName}
                         </span>
                       )}
-                      <span className="text-xs text-[#9ca3af] min-w-0 truncate ml-2 max-w-[40%]">
+                      <span className={`text-sm font-bold ${getResultColor(match.result)}`}>
+                        {getResultDisplay(match.result, match.scoreDifference)}
+                      </span>
+                      <span className="text-xs text-[#9ca3af] min-w-0 truncate">
                         {match.venueName
                           ? `${match.venueName} ${match.matchNumber}試合目`
                           : `${match.matchNumber}試合目`}
                       </span>
-                      {showDetailButton && mentorCheckCompleted && (
+                      {showDetailButton && mentorCheckCompleted ? (
                         <button
                           type="button"
                           onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
                           aria-label="対戦詳細を見る"
-                          className={`flex-shrink-0 ml-1 p-1 ${hasNote ? 'text-gray-600' : 'text-gray-300'}`}
+                          className={`p-1 ${hasNote ? 'text-gray-600' : 'text-gray-300'}`}
                         >
                           <StickyNote className="w-3.5 h-3.5" />
                         </button>
-                      )}
-                      {otetsukiCount != null && (
-                        <span className="text-xs text-[#9ca3af] flex-shrink-0 ml-1">
-                          手{otetsukiCount}
+                      ) : (
+                        <span aria-hidden="true" className="p-1 invisible">
+                          <StickyNote className="w-3.5 h-3.5" />
                         </span>
                       )}
-                      <span className={`text-sm font-bold flex-shrink-0 ml-2 ${getResultColor(match.result)}`}>
-                        {getResultDisplay(match.result, match.scoreDifference)}
-                      </span>
+                      {otetsukiCount != null ? (
+                        <span className="text-xs text-[#9ca3af]">
+                          手{otetsukiCount}
+                        </span>
+                      ) : (
+                        <span aria-hidden="true" className="text-xs invisible">
+                          手0
+                        </span>
+                      )}
                     </div>
                   );
                 })}
