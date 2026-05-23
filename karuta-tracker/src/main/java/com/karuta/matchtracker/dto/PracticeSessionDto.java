@@ -59,11 +59,12 @@ public class PracticeSessionDto {
     // 抽選あり運用では WON のみ（false）。フロント側の参加者フィルタで使用する。
     private Boolean pairingIncludesPending;
 
-    // セッションの定員到達状況（サマリーAPI のみで設定される）
-    private CapacityStatus capacityStatus;
+    // 試合単位の定員到達状況（サマリーAPI のみで設定される）。
+    // matchCapacityStatuses[i] が第 (i+1) 試合のステータス。長さは min(totalMatches, 9)。
+    private List<CapacityStatus> matchCapacityStatuses;
 
     /**
-     * セッションの定員到達状況
+     * 試合ごとの定員到達状況
      */
     public enum CapacityStatus {
         AVAILABLE,

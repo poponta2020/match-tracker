@@ -223,45 +223,71 @@
   - 判定単位は「月単位」。個別セッションのロック判定は各画面で別途行う
 - **背景:** 旧仕様では右下「参加登録」と左下「参加キャンセル」の2フローティングボタンが分離していたが、本モーダルへの統合により単一エントリーポイント化された。左下のキャンセル専用フローティングは廃止
 
-#### 3.2.3.2 カレンダー画面のセル表示（定員状況バッジ）
+#### 3.2.3.2 カレンダー画面のセル表示（試合別ステータスグリッド）
 
-カレンダー画面（`/practice`）の各セルでは、日付・会場名に加えて**定員状況バッジ**を表示し、セルをタップしなくても空き状況を一目で把握できるようにする。
+カレンダー画面（`/practice`）の各セルでは、日付・会場名に加えて**試合別ステータスグリッド**を表示し、どの試合に空きがあるかをセルをタップしなくても一目で把握できるようにする。
 
 - **対象画面:** `PracticeList.jsx` のカレンダー本体
-- **配置:** セル内の会場名の下に中央揃えで配置（小さなテキストバッジ）
+- **配置:** セル内の会場名の下に、十分な余白を空けて中央寄せで配置（小さな記号グリッド）
+- **セル高さ:** 既存の `h-20`（80px）を維持
 - **表示対象日:** 過去日も含めて全日付で判定・表示する
 
-**バッジ仕様:**
+**グリッド仕様:**
 
-| 状態（`capacityStatus`） | バッジ文言 | 配色 |
-|--------------------------|-----------|------|
-| `AVAILABLE`（空きあり） | （バッジなし） | — |
-| `NEARLY_FULL`（一部試合が満員） | `残わずか` | 黄系（`bg-yellow-100 text-yellow-800`） |
-| `FULL`（全試合が満員） | `満員` | 赤系（`bg-red-100 text-red-700`） |
+| 状態（`CapacityStatus`） | 記号 | 配色 |
+|--------------------------|------|------|
+| `AVAILABLE`（空きあり） | `○` | 緑（`text-green-600`） |
+| `NEARLY_FULL`（残り席数 1〜2） | `△` | オレンジ（`text-orange-500`） |
+| `FULL`（満員） | `×` | 赤（`text-red-600`） |
+
+- 記号は小さい文字（`text-[9px]` 程度）・`font-bold`
+- グリッドは **3列固定**（`grid-cols-3`）、最大3行 = 最大9試合
+- 試合番号順に **左詰め・行優先（row-major）** で配置:
+  - 例: 3試合 → 行1: `○ ○ ×`
+  - 例: 4試合 → 行1: `○ ○ ○`、行2: `×`（左端、空きスロットは詰めない）
+  - 例: 7試合 → 行1: `○ ○ ○`、行2: `△ △ ×`、行3: `×`
+- グリッドはセル内で **水平方向は中央寄せ**（`w-fit mx-auto`、行内は左詰め）
 
 **判定ロジック（バックエンドの `findSessionSummariesByYearMonth` で算出）:**
 
-- 「実質枠取得人数」 = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
+各試合について以下を計算:
+- 実質枠取得人数 `effectiveCount` = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
   - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
   - `PENDING` を含めるのは抽選なし運用（`pairingIncludesPending = true`）でも「実質枠を取っている」とみなすため
   - `OFFERED`（繰り上げ通知応答待ち）は名目上枠を確保しているのでカウントに含める
-- セッションの `capacityStatus` 判定（優先順位順）:
-  1. `capacity == null || capacity <= 0` → `AVAILABLE`
-  2. `totalMatches == null || totalMatches <= 0` → `AVAILABLE`
-  3. 試合番号 1〜`totalMatches` の **全試合**で `effectiveCount >= capacity` → `FULL`
-  4. **いずれか1試合以上**で `effectiveCount >= capacity` → `NEARLY_FULL`
-  5. 上記以外 → `AVAILABLE`
+- 残り席数 `remaining` = `capacity - effectiveCount`
+- 各試合の状態判定（優先順位順）:
+  1. `effectiveCount >= capacity` （= `remaining <= 0`） → `FULL`
+  2. `0 < remaining <= 2` → `NEARLY_FULL`
+  3. それ以外（= `remaining > 2`） → `AVAILABLE`
+
+判定対象は試合番号 1 〜 `min(totalMatches, 9)`。参加者ゼロの試合は `effectiveCount = 0` で扱い、capacity が設定されていれば残り席数 = capacity となるため通常は `AVAILABLE`。
+
+**グリッドを描画しない条件:**
+
+以下のいずれかに該当する場合、グリッドそのものを描画しない（会場名のみのセルになる）:
+
+1. その日に練習セッションが **2件以上** ある（同日複数団体）
+2. セッションの `capacity` が `null` または `0` 以下
+3. セッションの `totalMatches` が `null` または `0` 以下
+4. `matchCapacityStatuses` が `null`（バックエンド側で算出不可だった場合）
+5. `totalMatches >= 10`（3×3 グリッドに収まらない）
+6. `matchCapacityStatuses` に既知 enum 値以外の不正値が混入
 
 **同日複数セッションの扱い:**
 
-- 同一日に複数団体のセッションがある場合は、**セル全体で1つだけ**バッジを表示する
-- 表示する状態は最も重いものを採用: `FULL` > `NEARLY_FULL` > `AVAILABLE`
-- 例: 同日に `FULL` と `NEARLY_FULL` のセッションが共存する場合 → 「満員」のみ表示
+- 同一日に複数団体のセッションがある場合はグリッドを描画しない（ごちゃつき回避）
+- 会場名は従来通り全セッション分を縦に並べて表示
+
+**参加状況背景色との関係:**
+
+- 既存の参加状況による背景色（`confirmed` = 薄い緑系 `bg-[#e8efea]` / `waitlisted` = 薄い黄系 `bg-[#fefcf5]`）は保持するが、グリッド記号が読みやすいよう既存より一段薄くしてある
+- 罫線（`border-2 border-[#a3c4ad]` 等）は維持
 
 **防御的挙動:**
 
-- フロントエンドは `capacityStatus` が未定義／不明値のとき、バッジを表示しない（`AVAILABLE` 扱い）
-- バックエンドの集計でエラーが起きた場合も `capacityStatus = null` にフォールバックし、カレンダー表示を阻害しない
+- フロントエンドは `matchCapacityStatuses` が `null` / 配列長0 / 不正値（既知 enum 値以外）混入のとき、グリッドを描画しない
+- バックエンドの集計でエラーが起きた場合も `matchCapacityStatuses = null` にフォールバックし、カレンダー表示を阻害しない
 
 **API対応:**
 

@@ -714,10 +714,10 @@ class PracticeSessionServiceTest {
         verify(densukeMemberMappingRepository, never()).deleteByDensukeUrlId(any());
     }
 
-    // === findSessionSummariesByYearMonth: capacityStatus 計算ロジックのテスト ===
+    // === findSessionSummariesByYearMonth: matchCapacityStatuses 計算ロジックのテスト ===
 
     /**
-     * capacityStatus テスト用の参加者を生成するヘルパー。
+     * matchCapacityStatuses テスト用の参加者を生成するヘルパー。
      */
     private PracticeParticipant capacityTestParticipant(
             Long sessionId, Long playerId, Integer matchNumber, ParticipantStatus status) {
@@ -730,12 +730,123 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    @DisplayName("findSessionSummariesByYearMonth: capacity が null のセッションは AVAILABLE")
-    void findSessionSummariesByYearMonth_capacityNull_returnsAvailable() {
+    @DisplayName("findSessionSummariesByYearMonth: capacity が null のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_capacityNull_returnsNull() {
         int year = today.getYear();
         int month = today.getMonthValue();
         PracticeSession session = PracticeSession.builder()
                 .id(1L).sessionDate(today).totalMatches(3).capacity(null).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON)
+                ));
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: capacity が 0 のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_capacityZero_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(0).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: capacity が負のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_capacityNegative_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(-1).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: totalMatches が null のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_totalMatchesNull_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(null).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: totalMatches が 0 のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_totalMatchesZero_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(0).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: totalMatches が 10 以上のセッションは matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_totalMatchesTenOrMore_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(10).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: 全試合で空き多数なら全 AVAILABLE（長さ = totalMatches）")
+    void findSessionSummariesByYearMonth_allMatchesAvailable() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // capacity=6, totalMatches=3, 各試合に1人ずつ → remaining=5 → AVAILABLE
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(6).build();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
                 .thenReturn(List.of(session));
         when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
@@ -748,56 +859,57 @@ class PracticeSessionServiceTest {
         List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.AVAILABLE);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE
+                );
     }
 
     @Test
-    @DisplayName("findSessionSummariesByYearMonth: capacity が 0 のセッションは AVAILABLE")
-    void findSessionSummariesByYearMonth_capacityZero_returnsAvailable() {
+    @DisplayName("findSessionSummariesByYearMonth: remaining ≤ 2 の試合のみ NEARLY_FULL")
+    void findSessionSummariesByYearMonth_partialNearlyFull() {
         int year = today.getYear();
         int month = today.getMonthValue();
+        // capacity=4, totalMatches=3
+        // 試合1: 1人 → remaining=3 → AVAILABLE
+        // 試合2: 2人 → remaining=2 → NEARLY_FULL
+        // 試合3: 3人 → remaining=1 → NEARLY_FULL
         PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(3).capacity(0).build();
+                .id(1L).sessionDate(today).totalMatches(3).capacity(4).build();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
                 .thenReturn(List.of(session));
         when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
                 .thenReturn(List.of(
-                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON)
+                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 20L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 21L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 30L, 3, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 31L, 3, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 32L, 3, ParticipantStatus.WON)
                 ));
 
         List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.AVAILABLE);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.NEARLY_FULL,
+                        PracticeSessionDto.CapacityStatus.NEARLY_FULL
+                );
     }
 
     @Test
-    @DisplayName("findSessionSummariesByYearMonth: totalMatches が null のセッションは AVAILABLE")
-    void findSessionSummariesByYearMonth_totalMatchesNull_returnsAvailable() {
+    @DisplayName("findSessionSummariesByYearMonth: remaining = 0 の試合のみ FULL")
+    void findSessionSummariesByYearMonth_partialFull() {
         int year = today.getYear();
         int month = today.getMonthValue();
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(null).capacity(2).build();
-        when(practiceSessionRepository.findByYearAndMonth(year, month))
-                .thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
-                .thenReturn(List.of());
-
-        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.AVAILABLE);
-    }
-
-    @Test
-    @DisplayName("findSessionSummariesByYearMonth: 全試合で空きがあれば AVAILABLE")
-    void findSessionSummariesByYearMonth_allMatchesAvailable_returnsAvailable() {
-        int year = today.getYear();
-        int month = today.getMonthValue();
-        // capacity=4, totalMatches=3, 各試合に3人ずつ → どの試合も capacity 未達
+        // capacity=4, totalMatches=3
+        // 試合1: 4人 → remaining=0 → FULL
+        // 試合2: 5人 → remaining=-1 → FULL（超過しても FULL）
+        // 試合3: 1人 → remaining=3 → AVAILABLE
         PracticeSession session = PracticeSession.builder()
                 .id(1L).sessionDate(today).totalMatches(3).capacity(4).build();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
@@ -807,68 +919,24 @@ class PracticeSessionServiceTest {
                         capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
                         capacityTestParticipant(1L, 11L, 1, ParticipantStatus.WON),
                         capacityTestParticipant(1L, 12L, 1, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 13L, 2, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 14L, 2, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 15L, 2, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 16L, 3, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 17L, 3, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 18L, 3, ParticipantStatus.WON)
+                        capacityTestParticipant(1L, 13L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 20L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 21L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 22L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 23L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 24L, 2, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 30L, 3, ParticipantStatus.WON)
                 ));
 
         List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.AVAILABLE);
-    }
-
-    @Test
-    @DisplayName("findSessionSummariesByYearMonth: いずれか1試合で effectiveCount >= capacity なら NEARLY_FULL")
-    void findSessionSummariesByYearMonth_oneMatchAtCapacity_returnsNearlyFull() {
-        int year = today.getYear();
-        int month = today.getMonthValue();
-        // capacity=2, totalMatches=3, 試合1のみ満員、他の試合は空き
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(3).capacity(2).build();
-        when(practiceSessionRepository.findByYearAndMonth(year, month))
-                .thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
-                .thenReturn(List.of(
-                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.PENDING),
-                        capacityTestParticipant(1L, 12L, 2, ParticipantStatus.WON)
-                ));
-
-        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.NEARLY_FULL);
-    }
-
-    @Test
-    @DisplayName("findSessionSummariesByYearMonth: 全試合で effectiveCount >= capacity なら FULL")
-    void findSessionSummariesByYearMonth_allMatchesAtCapacity_returnsFull() {
-        int year = today.getYear();
-        int month = today.getMonthValue();
-        // capacity=2, totalMatches=2, 全試合で2人達成
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(2).capacity(2).build();
-        when(practiceSessionRepository.findByYearAndMonth(year, month))
-                .thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
-                .thenReturn(List.of(
-                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 12L, 2, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 13L, 2, ParticipantStatus.WON)
-                ));
-
-        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.FULL);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.FULL,
+                        PracticeSessionDto.CapacityStatus.FULL,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE
+                );
     }
 
     @Test
@@ -876,11 +944,10 @@ class PracticeSessionServiceTest {
     void findSessionSummariesByYearMonth_inactiveStatusesExcludedFromEffectiveCount() {
         int year = today.getYear();
         int month = today.getMonthValue();
-        // capacity=2, totalMatches=1
-        // 実質枠（WON+PENDING+OFFERED） = 1人のみ → AVAILABLE
-        // 残りはカウント対象外
+        // capacity=4, totalMatches=1
+        // 実質枠（WON+PENDING+OFFERED） = 1人のみ → remaining=3 → AVAILABLE
         PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(1).capacity(2).build();
+                .id(1L).sessionDate(today).totalMatches(1).capacity(4).build();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
                 .thenReturn(List.of(session));
         when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
@@ -895,18 +962,85 @@ class PracticeSessionServiceTest {
         List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
 
         assertThat(result).hasSize(1);
-        // effectiveCount = 1, capacity = 2 → AVAILABLE
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.AVAILABLE);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(PracticeSessionDto.CapacityStatus.AVAILABLE);
     }
 
     @Test
-    @DisplayName("findSessionSummariesByYearMonth: 参加者集計の例外時もセッション一覧を返し capacityStatus は null にフォールバックする")
-    void findSessionSummariesByYearMonth_aggregationFailure_returnsSessionsWithoutCapacityStatus() {
+    @DisplayName("findSessionSummariesByYearMonth: PENDING / OFFERED は effectiveCount に含める")
+    void findSessionSummariesByYearMonth_pendingAndOfferedIncluded() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // capacity=4, totalMatches=1, WON + PENDING + OFFERED = 4 → remaining=0 → FULL
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(1).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 12L, 1, ParticipantStatus.PENDING),
+                        capacityTestParticipant(1L, 13L, 1, ParticipantStatus.OFFERED)
+                ));
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(PracticeSessionDto.CapacityStatus.FULL);
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: 参加者ゼロの試合は AVAILABLE")
+    void findSessionSummariesByYearMonth_emptyMatchesAreAvailable() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // capacity=4, totalMatches=3, 参加者ゼロ → 全試合 AVAILABLE
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE
+                );
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: matchCapacityStatuses の長さは totalMatches と一致する")
+    void findSessionSummariesByYearMonth_lengthMatchesTotalMatches() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // totalMatches=9（上限ぎりぎり）
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(9).capacity(4).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).hasSize(9);
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: 参加者集計の例外時もセッション一覧を返し matchCapacityStatuses は null にフォールバックする")
+    void findSessionSummariesByYearMonth_aggregationFailure_returnsSessionsWithoutMatchCapacityStatuses() {
         int year = today.getYear();
         int month = today.getMonthValue();
         PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(2).capacity(2).build();
+                .id(1L).sessionDate(today).totalMatches(2).capacity(4).build();
         when(practiceSessionRepository.findByYearAndMonth(year, month))
                 .thenReturn(List.of(session));
         // 参加者の一括取得で例外発生
@@ -915,33 +1049,9 @@ class PracticeSessionServiceTest {
 
         List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
 
-        // セッション本体は返り、capacityStatus は null（バッジ非表示扱い）
+        // セッション本体は返り、matchCapacityStatuses は null（グリッド非表示扱い）
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(1L);
-        assertThat(result.get(0).getCapacityStatus()).isNull();
-    }
-
-    @Test
-    @DisplayName("findSessionSummariesByYearMonth: OFFERED は effectiveCount に含める")
-    void findSessionSummariesByYearMonth_offeredIncludedInEffectiveCount() {
-        int year = today.getYear();
-        int month = today.getMonthValue();
-        // capacity=2, totalMatches=1, WON + OFFERED = 2 → 試合1で達成 → 1試合中1試合達成なので FULL
-        PracticeSession session = PracticeSession.builder()
-                .id(1L).sessionDate(today).totalMatches(1).capacity(2).build();
-        when(practiceSessionRepository.findByYearAndMonth(year, month))
-                .thenReturn(List.of(session));
-        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
-                .thenReturn(List.of(
-                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
-                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.OFFERED)
-                ));
-
-        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
-
-        assertThat(result).hasSize(1);
-        // totalMatches=1 で全試合（=1試合）が capacity 達成なので FULL
-        assertThat(result.get(0).getCapacityStatus())
-                .isEqualTo(PracticeSessionDto.CapacityStatus.FULL);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
     }
 }
