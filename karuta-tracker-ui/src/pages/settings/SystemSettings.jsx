@@ -185,7 +185,7 @@ const SystemSettings = () => {
   if (loading) {
     return (
       <>
-        <PageHeader title="システム設定" backTo="/settings" />
+        <PageHeader title="システム設定" backTo="/admin/lottery" />
         <LoadingScreen />
       </>
     );
@@ -193,7 +193,7 @@ const SystemSettings = () => {
 
   return (
     <>
-      <PageHeader title="システム設定" backTo="/settings" />
+      <PageHeader title="システム設定" backTo="/admin/lottery" />
       <div className="max-w-lg mx-auto p-4 space-y-4">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
