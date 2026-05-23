@@ -65,7 +65,12 @@ const PracticeDetail = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="練習詳細" backTo="/practice" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   if (error || !session) {

@@ -94,7 +94,14 @@ const LineChannelAdmin = () => {
     );
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="LINEチャネル管理" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
     <>

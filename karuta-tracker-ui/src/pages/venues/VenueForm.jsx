@@ -203,10 +203,6 @@ function VenueForm() {
     <>
       <PageHeader title={isEditMode ? '会場編集' : '新規会場登録'} backTo="/venues" />
       <div className="venue-form-container">
-        <div className="venue-form-header">
-          <h2>{isEditMode ? '会場編集' : '会場登録'}</h2>
-        </div>
-
       {error && <div className="error-message">{error}</div>}
 
       <form onSubmit={handleSubmit} className="venue-form">

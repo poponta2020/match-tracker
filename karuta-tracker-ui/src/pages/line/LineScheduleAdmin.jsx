@@ -58,7 +58,14 @@ const LineScheduleAdmin = () => {
     DEADLINE_REMINDER: '締め切りリマインダー',
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="LINE通知スケジュール" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
     <>
@@ -93,7 +100,8 @@ const LineScheduleAdmin = () => {
           スケジュール設定がまだ登録されていません
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

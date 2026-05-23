@@ -47,7 +47,12 @@ function VenueList() {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="会場管理" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (
@@ -55,7 +60,6 @@ function VenueList() {
       <PageHeader title="会場管理" backTo="/settings" />
       <div className="venue-list-container">
       <div className="venue-list-header">
-        <h2>会場管理</h2>
         <button
           className="btn-primary"
           onClick={() => navigate('/venues/new')}

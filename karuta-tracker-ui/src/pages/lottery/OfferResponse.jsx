@@ -136,87 +136,109 @@ export default function OfferResponse() {
 
   if (!participantId) {
     return (
-      <div className="max-w-md mx-auto p-4 text-center">
-        <p className="text-gray-500">無効なURLです</p>
-      </div>
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <div className="max-w-md mx-auto p-4 text-center">
+          <p className="text-gray-500">無効なURLです</p>
+        </div>
+      </>
     );
   }
 
-  if (fetching) return <LoadingScreen />;
+  if (fetching) {
+    return (
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   if (!offerDetail && !fetching) {
     return (
-      <div className="max-w-md mx-auto p-4 text-center">
-        <div className="p-6 rounded-lg bg-red-50">
-          <h2 className="text-xl font-bold mb-2 text-red-700">オファー情報を取得できませんでした</h2>
-          <p className="text-gray-600 mb-4">{error || 'オファーが見つかりません'}</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
-            ホームに戻る
-          </button>
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <div className="max-w-md mx-auto p-4 text-center">
+          <div className="p-6 rounded-lg bg-red-50">
+            <h2 className="text-xl font-bold mb-2 text-red-700">オファー情報を取得できませんでした</h2>
+            <p className="text-gray-600 mb-4">{error || 'オファーが見つかりません'}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+              ホームに戻る
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (responded) {
     return (
-      <div className="max-w-md mx-auto p-4 text-center">
-        <div className={`p-6 rounded-lg ${result === 'accepted' ? 'bg-green-50' : 'bg-gray-50'}`}>
-          <div className="text-4xl mb-4">{result === 'accepted' ? '✓' : '—'}</div>
-          <h2 className="text-xl font-bold mb-2">
-            {result === 'accepted' ? '参加が確定しました' : '辞退しました'}
-          </h2>
-          <p className="text-gray-600 mb-4">
-            {result === 'accepted'
-              ? '練習への参加が確定しました。'
-              : '次のキャンセル待ちの方に通知されます。'}
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
-            ホームに戻る
-          </button>
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <div className="max-w-md mx-auto p-4 text-center">
+          <div className={`p-6 rounded-lg ${result === 'accepted' ? 'bg-green-50' : 'bg-gray-50'}`}>
+            <div className="text-4xl mb-4">{result === 'accepted' ? '✓' : '—'}</div>
+            <h2 className="text-xl font-bold mb-2">
+              {result === 'accepted' ? '参加が確定しました' : '辞退しました'}
+            </h2>
+            <p className="text-gray-600 mb-4">
+              {result === 'accepted'
+                ? '練習への参加が確定しました。'
+                : '次のキャンセル待ちの方に通知されます。'}
+            </p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+              ホームに戻る
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // 処理済み表示（元のオファーが応答済み かつ 残りOFFEREDなし）
   if (isProcessed) {
     return (
-      <div className="max-w-md mx-auto p-4 text-center">
-        <div className="p-6 rounded-lg bg-gray-50">
-          <div className="text-4xl mb-4">—</div>
-          <h2 className="text-xl font-bold mb-2">このオファーは処理済みです</h2>
-          <p className="text-gray-600 mb-4">
-            現在のステータス: {offerDetail.status === 'WON' ? '当選' : offerDetail.status === 'DECLINED' ? '辞退' : offerDetail.status}
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
-            ホームに戻る
-          </button>
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <div className="max-w-md mx-auto p-4 text-center">
+          <div className="p-6 rounded-lg bg-gray-50">
+            <div className="text-4xl mb-4">—</div>
+            <h2 className="text-xl font-bold mb-2">このオファーは処理済みです</h2>
+            <p className="text-gray-600 mb-4">
+              現在のステータス: {offerDetail.status === 'WON' ? '当選' : offerDetail.status === 'DECLINED' ? '辞退' : offerDetail.status}
+            </p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+              ホームに戻る
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // 対象オファーなし（一括辞退後のリンク再訪等）
   if (offerDetail && allOffers.length === 0) {
     return (
-      <div className="max-w-md mx-auto p-4 text-center">
-        <div className="p-6 rounded-lg bg-gray-50">
-          <div className="text-4xl mb-4">—</div>
-          <h2 className="text-xl font-bold mb-2">応答可能なオファーはありません</h2>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
-            ホームに戻る
-          </button>
+      <>
+        <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+        <div className="max-w-md mx-auto p-4 text-center">
+          <div className="p-6 rounded-lg bg-gray-50">
+            <div className="text-4xl mb-4">—</div>
+            <h2 className="text-xl font-bold mb-2">応答可能なオファーはありません</h2>
+            <button
+              onClick={() => navigate('/')}
+              className="px-4 py-2 bg-[#4a6b5a] text-white rounded hover:opacity-90">
+              ホームに戻る
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 

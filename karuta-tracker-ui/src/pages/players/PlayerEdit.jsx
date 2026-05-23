@@ -238,7 +238,15 @@ const PlayerEdit = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader
+          title={id ? '選手情報編集' : '選手新規登録'}
+          backTo={id ? `/players/${id}` : '/players'}
+        />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (

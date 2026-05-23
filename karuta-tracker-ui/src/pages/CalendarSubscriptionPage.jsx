@@ -137,7 +137,14 @@ const CalendarSubscriptionPage = () => {
     setOpenAccordionKey(prev => (prev === key ? null : key));
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="カレンダー購読" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   const organizationFeeds = feedInfo?.organizationFeeds ?? [];
   const guestFeed = feedInfo?.guestFeed ?? null;

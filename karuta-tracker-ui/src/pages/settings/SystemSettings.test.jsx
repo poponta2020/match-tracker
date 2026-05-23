@@ -80,9 +80,8 @@ describe('SystemSettings', () => {
       expect(mocks.settingsGetAll).toHaveBeenCalledWith(2);
     });
 
-    await user.click(screen.getByRole('button'));
-    const buttons = screen.getAllByRole('button');
-    await user.click(buttons[buttons.length - 1]);
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(mocks.settingsUpdate).toHaveBeenCalledWith(

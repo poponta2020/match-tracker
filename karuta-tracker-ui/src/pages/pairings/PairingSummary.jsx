@@ -194,7 +194,12 @@ const PairingSummary = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="札ルール一覧" backTo="/pairings" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (

@@ -113,7 +113,14 @@ export default function MentorManagement() {
     p => p.id !== currentPlayer.id && p.organizationIds?.includes(Number(selectedOrgId))
   );
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="メンター管理" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
     <>

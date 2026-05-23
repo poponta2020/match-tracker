@@ -238,7 +238,14 @@ const NotificationSettings = () => {
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="通知設定" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   const showOrgHeaders = playerOrgIds.length > 1;
 

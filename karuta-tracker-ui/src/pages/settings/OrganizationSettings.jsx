@@ -66,7 +66,14 @@ const OrganizationSettings = () => {
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="参加練習会" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
     <>

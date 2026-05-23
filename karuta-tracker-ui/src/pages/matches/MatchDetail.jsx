@@ -79,21 +79,29 @@ const MatchDetail = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="試合詳細" backTo="/matches" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   if (!match) {
     return (
-      <div className="text-center py-12">
-        <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-600 text-lg">試合記録が見つかりません</p>
-        <Link
-          to="/matches"
-          className="inline-block mt-4 text-primary-600 hover:text-primary-700"
-        >
-          試合記録一覧に戻る
-        </Link>
-      </div>
+      <>
+        <PageHeader title="試合詳細" backTo="/matches" />
+        <div className="text-center py-12">
+          <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-600 text-lg">試合記録が見つかりません</p>
+          <Link
+            to="/matches"
+            className="inline-block mt-4 text-primary-600 hover:text-primary-700"
+          >
+            試合記録一覧に戻る
+          </Link>
+        </div>
+      </>
     );
   }
 

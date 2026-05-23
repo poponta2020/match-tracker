@@ -36,19 +36,29 @@ const Profile = () => {
   }, [currentPlayer, navigate]);
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="プロフィール" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-        <p className="text-red-800">{error}</p>
-      </div>
+      <>
+        <PageHeader title="プロフィール" backTo="/settings" />
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          <p className="text-red-800">{error}</p>
+        </div>
+      </>
     );
   }
 
-  if (!player) return null;
+  if (!player) {
+    return <PageHeader title="プロフィール" backTo="/settings" />;
+  }
 
   const roleLabel = {
     SUPER_ADMIN: { text: 'スーパー管理者', cls: 'bg-purple-100 text-purple-700' },

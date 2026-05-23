@@ -182,7 +182,14 @@ const SystemSettings = () => {
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="システム設定" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
     <>
