@@ -249,6 +249,34 @@ describe('MatchList', () => {
     expect(queryDetailButton()).toBeNull();
   });
 
+  it('行内表示: 日付 M/D と「会場名 N試合目」がそれぞれ独立した要素として表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchDate: '2026-05-23', venueName: '本郷', matchNumber: 3 })],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.getByText('5/23')).toBeInTheDocument();
+    expect(screen.getByText('本郷 3試合目')).toBeInTheDocument();
+    // 旧フォーマット `M/D 会場名(N)` の括弧表記が混在していないこと
+    expect(screen.queryByText(/\(3\)/)).toBeNull();
+  });
+
+  it('行内表示: venueName が空の場合は「N試合目」のみが表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchDate: '2026-05-23', venueName: null, matchNumber: 5 })],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.getByText('5/23')).toBeInTheDocument();
+    expect(screen.getByText('5試合目')).toBeInTheDocument();
+    // 旧フォーマット `M/D (N)` の括弧表記が混在していないこと
+    expect(screen.queryByText(/\(5\)/)).toBeNull();
+  });
+
   it('メンター関係 API 失敗時: メモアイコンが描画されず、画面はクラッシュしない', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     setupDefaultMocks({
