@@ -10,11 +10,11 @@ import {
   User,
   Edit,
   Trash2,
-  ArrowLeft,
   AlertCircle,
   MapPin,
 } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const MatchDetail = () => {
   const { id } = useParams();
@@ -80,21 +80,29 @@ const MatchDetail = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="試合詳細" backTo="/matches" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   if (!match) {
     return (
-      <div className="text-center py-12">
-        <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-gray-600 text-lg">試合記録が見つかりません</p>
-        <Link
-          to="/matches"
-          className="inline-block mt-4 text-primary-600 hover:text-primary-700"
-        >
-          試合記録一覧に戻る
-        </Link>
-      </div>
+      <>
+        <PageHeader title="試合詳細" backTo="/matches" />
+        <div className="text-center py-12">
+          <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-600 text-lg">試合記録が見つかりません</p>
+          <Link
+            to="/matches"
+            className="inline-block mt-4 text-primary-600 hover:text-primary-700"
+          >
+            試合記録一覧に戻る
+          </Link>
+        </div>
+      </>
     );
   }
 
@@ -110,16 +118,11 @@ const MatchDetail = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <>
+      <PageHeader title="試合詳細" backTo="/matches" />
+      <div className="max-w-3xl mx-auto">
       {/* ヘッダー */}
       <div className="mb-6">
-        <Link
-          to="/matches"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          試合記録一覧に戻る
-        </Link>
         <div className="flex justify-between items-start">
           <div>
             <p className="text-gray-600 mt-1">
@@ -325,7 +328,8 @@ const MatchDetail = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

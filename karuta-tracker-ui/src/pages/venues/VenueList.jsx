@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { venueAPI } from '../../api';
 import './VenueList.css';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 function VenueList() {
   const [venues, setVenues] = useState([]);
@@ -46,13 +47,19 @@ function VenueList() {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="会場管理" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (
-    <div className="venue-list-container">
+    <>
+      <PageHeader title="会場管理" backTo="/settings" />
+      <div className="venue-list-container">
       <div className="venue-list-header">
-        <h2>会場管理</h2>
         <button
           className="btn-primary"
           onClick={() => navigate('/venues/new')}
@@ -134,7 +141,8 @@ function VenueList() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { lineAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
-import { Bell, MessageSquare, Copy, RefreshCw, ExternalLink, AlertCircle, Check } from 'lucide-react';
+import { MessageSquare, Copy, RefreshCw, ExternalLink, AlertCircle, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const NotificationSettings = () => {
   const { currentPlayer } = useAuth();
@@ -237,7 +238,14 @@ const NotificationSettings = () => {
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="通知設定" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   const showOrgHeaders = playerOrgIds.length > 1;
 
@@ -278,12 +286,9 @@ const NotificationSettings = () => {
   const playerOrgs = organizations.filter(o => playerOrgIds.includes(o.id));
 
   return (
-    <div className="max-w-lg mx-auto p-4 space-y-6">
-      <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-        <Bell className="h-6 w-6" />
-        通知設定
-      </h1>
-
+    <>
+      <PageHeader title="通知設定" backTo="/settings" />
+      <div className="max-w-lg mx-auto p-4 space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
@@ -559,7 +564,8 @@ const NotificationSettings = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

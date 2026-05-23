@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { venueAPI } from '../../api';
+import PageHeader from '../../components/PageHeader';
 import './VenueForm.css';
 
 function VenueForm() {
@@ -190,15 +191,18 @@ function VenueForm() {
   };
 
   if (loading && isEditMode) {
-    return <div className="venue-form-container">読み込み中...</div>;
+    return (
+      <>
+        <PageHeader title={isEditMode ? '会場編集' : '新規会場登録'} backTo="/venues" />
+        <div className="venue-form-container">読み込み中...</div>
+      </>
+    );
   }
 
   return (
-    <div className="venue-form-container">
-      <div className="venue-form-header">
-        <h2>{isEditMode ? '会場編集' : '会場登録'}</h2>
-      </div>
-
+    <>
+      <PageHeader title={isEditMode ? '会場編集' : '新規会場登録'} backTo="/venues" />
+      <div className="venue-form-container">
       {error && <div className="error-message">{error}</div>}
 
       <form onSubmit={handleSubmit} className="venue-form">
@@ -310,7 +314,8 @@ function VenueForm() {
           </button>
         </div>
       </form>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, RotateCcw } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import PlayerChip from '../../components/PlayerChip';
+import PageHeader from '../../components/PageHeader';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
@@ -714,15 +715,20 @@ const PairingGenerator = () => {
 
   if (matchLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
-        <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
-      </div>
+      <>
+        <PageHeader title="組み合わせ作成" backTo="/settings" />
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
+          <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <PageHeader title="組み合わせ作成" backTo="/settings" />
+      <div className="space-y-6">
       {/* 日付選択 */}
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
         <div>
@@ -1190,7 +1196,8 @@ const PairingGenerator = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

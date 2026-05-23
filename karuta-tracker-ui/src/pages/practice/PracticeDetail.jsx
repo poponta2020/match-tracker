@@ -4,6 +4,7 @@ import { practiceAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
 import PlayerChip, { getKyuBorderColor } from '../../components/PlayerChip';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const PracticeDetail = () => {
   const navigate = useNavigate();
@@ -64,27 +65,37 @@ const PracticeDetail = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="練習詳細" backTo="/practice" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   if (error || !session) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-          {error || '練習記録が見つかりません'}
+      <>
+        <PageHeader title="練習詳細" backTo="/practice" />
+        <div className="max-w-4xl mx-auto">
+          <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+            {error || '練習記録が見つかりません'}
+          </div>
+          <button
+            onClick={() => navigate('/practice')}
+            className="mt-4 text-blue-600 hover:text-blue-800"
+          >
+            ← 一覧に戻る
+          </button>
         </div>
-        <button
-          onClick={() => navigate('/practice')}
-          className="mt-4 text-blue-600 hover:text-blue-800"
-        >
-          ← 一覧に戻る
-        </button>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <>
+      <PageHeader title="練習詳細" backTo="/practice" />
+      <div className="max-w-4xl mx-auto">
       <div className="flex justify-end items-center mb-6">
         <div className="space-x-4">
           <button
@@ -250,7 +261,8 @@ const PracticeDetail = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
-import { Copy, Check, ArrowLeft, RefreshCw, Home } from 'lucide-react';
+import { Copy, Check, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 /**
  * 札番号は01〜99, 00(=100番)の100枚
@@ -193,21 +194,18 @@ const PairingSummary = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader title="札ルール一覧" backTo="/pairings" />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate('/pairings')}
-          className="flex items-center gap-1 text-[#4a6b5a] hover:text-[#3d5a4c] text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          組み合わせに戻る
-        </button>
-      </div>
-
+    <>
+      <PageHeader title="札ルール一覧" backTo="/pairings" />
+      <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-[#374151]">LINE送信用テキスト</h2>
@@ -252,7 +250,8 @@ const PairingSummary = () => {
         <Home className="w-5 h-5" />
         ホームに戻る
       </button>
-    </div>
+      </div>
+    </>
   );
 };
 

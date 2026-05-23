@@ -4,8 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { lotteryAPI } from '../../api/lottery';
 import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin } from '../../utils/auth';
-import { ArrowLeft, Settings, Play, Check, Bell, BellRing } from 'lucide-react';
+import { Settings, Play, Check, Bell, BellRing } from 'lucide-react';
 import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
+import PageHeader from '../../components/PageHeader';
 
 /**
  * 抽選管理画面（ADMIN/SUPER_ADMIN用）
@@ -266,24 +267,21 @@ export default function LotteryManagement() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100">
-            <ArrowLeft size={20} className="text-[#374151]" />
+    <>
+      <PageHeader
+        title="抽選管理"
+        backTo="/settings"
+        rightActions={
+          <button
+            onClick={() => navigate(organizationId ? `/admin/settings?organizationId=${organizationId}` : '/admin/settings')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white border border-white rounded-lg hover:bg-white hover:text-[#4a6b5a] transition-colors"
+          >
+            <Settings size={14} />
+            システム設定
           </button>
-          <h1 className="text-xl font-bold text-[#374151]">抽選管理</h1>
-        </div>
-        <button
-          onClick={() => navigate(organizationId ? `/admin/settings?organizationId=${organizationId}` : '/admin/settings')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors"
-        >
-          <Settings size={14} />
-          システム設定
-        </button>
-      </div>
-
+        }
+      />
+      <div className="max-w-2xl mx-auto p-4">
       {/* 年月セレクター */}
       <div className="flex items-center justify-center gap-4 mb-6">
         <button onClick={() => changeMonth(-1)} className="p-2 rounded hover:bg-gray-100 text-[#374151]">&lt;</button>
@@ -546,6 +544,7 @@ export default function LotteryManagement() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

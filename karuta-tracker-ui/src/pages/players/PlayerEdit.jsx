@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { playerAPI } from '../../api/players';
 import { organizationAPI } from '../../api/organizations';
-import { User, Save, ArrowLeft, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Save, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const PlayerEdit = () => {
   const { id } = useParams();
@@ -237,30 +238,26 @@ const PlayerEdit = () => {
   };
 
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <>
+        <PageHeader
+          title={id ? '選手情報編集' : '選手新規登録'}
+          backTo={id ? `/players/${id}` : '/players'}
+        />
+        <LoadingScreen />
+      </>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate(id ? `/players/${id}` : '/players')}
-          className="flex items-center gap-2 text-primary-600 hover:text-primary-800"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          {id ? '選手詳細に戻る' : '選手一覧に戻る'}
-        </button>
-      </div>
-
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="bg-primary-600 text-white px-6 py-4">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <User className="w-8 h-8" />
-            {id ? '選手情報編集' : '選手新規登録'}
-          </h1>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+    <>
+      <PageHeader
+        title={id ? '選手情報編集' : '選手新規登録'}
+        backTo={id ? `/players/${id}` : '/players'}
+      />
+      <div className="space-y-6">
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
             <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-red-700">
               {error}
@@ -601,9 +598,10 @@ const PlayerEdit = () => {
               キャンセル
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

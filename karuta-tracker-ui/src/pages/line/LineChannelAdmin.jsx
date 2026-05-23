@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { lineAPI } from '../../api';
 import { Plus, Ban, Play, Unlink, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const TABS = [
   { key: 'PLAYER', label: '選手用' },
@@ -93,12 +94,20 @@ const LineChannelAdmin = () => {
     );
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="LINEチャネル管理" backTo="/settings" />
+        <LoadingScreen />
+      </>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto p-4 pt-16 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">LINEチャネル管理</h1>
+    <>
+      <PageHeader title="LINEチャネル管理" backTo="/settings" />
+      <div className="max-w-4xl mx-auto p-4 space-y-4">
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-1 bg-[#4a6b5a] text-white py-2 px-3 rounded-lg text-sm hover:bg-[#3d5a4c] transition-colors"
@@ -218,7 +227,8 @@ const LineChannelAdmin = () => {
             </tbody>
           </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 
