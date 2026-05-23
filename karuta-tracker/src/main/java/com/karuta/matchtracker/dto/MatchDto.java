@@ -37,6 +37,10 @@ public class MatchDto {
     private String player1KyuRank;
     private String player2KyuRank;
 
+    // 会場（venueName は enrichment で別途設定）
+    private Long venueId;
+    private String venueName;
+
     // フロントエンド用の追加フィールド
     private String opponentName;  // 対戦相手名（簡易表示用）
     private String result;         // 結果（勝ち/負け/引き分け）
@@ -68,6 +72,7 @@ public class MatchDto {
                 .player1KyuRank(match.getPlayer1KyuRank())
                 .player2KyuRank(match.getPlayer2KyuRank())
                 .opponentName(match.getOpponentName())
+                .venueId(match.getVenueId())
                 .createdAt(match.getCreatedAt())
                 .updatedAt(match.getUpdatedAt())
                 .createdBy(match.getCreatedBy())

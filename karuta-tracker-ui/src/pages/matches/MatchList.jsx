@@ -537,7 +537,11 @@ const MatchList = () => {
                       key={match.id}
                       className="flex items-center px-4 py-2"
                     >
-                      <span className="text-xs text-[#9ca3af] w-12 flex-shrink-0">{formatDate(match.matchDate)}</span>
+                      <span className="text-xs text-[#9ca3af] min-w-0 truncate mr-2 max-w-[50%]">
+                        {match.venueName
+                          ? `${formatDate(match.matchDate)} ${match.venueName}(${match.matchNumber})`
+                          : `${formatDate(match.matchDate)} (${match.matchNumber})`}
+                      </span>
                       {opponentLinkable ? (
                         <button
                           type="button"

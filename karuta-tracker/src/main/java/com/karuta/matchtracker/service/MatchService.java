@@ -18,7 +18,10 @@ import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.entity.MentorRelationship;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
+import com.karuta.matchtracker.entity.Venue;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,6 +53,8 @@ public class MatchService {
     private final MatchPairingRepository matchPairingRepository;
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final PracticeParticipantRepository practiceParticipantRepository;
+    private final VenueRepository venueRepository;
     private final MatchPersonalNoteRepository matchPersonalNoteRepository;
     private final MentorRelationshipRepository mentorRelationshipRepository;
     private final LineNotificationService lineNotificationService;
@@ -415,6 +420,10 @@ public class MatchService {
         // 対戦時の級位を記録
         setPlayerKyuRanks(match);
 
+        // 会場ID を決定（試合参加者基準: 簡易登録ではリクエストの playerId が参加者）
+        match.setVenueId(resolveVenueId(match.getMatchDate(), match.getMatchNumber(),
+                List.of(request.getPlayerId())));
+
         Match saved = matchRepository.save(match);
 
         // 個人メモ・お手付きを保存
@@ -479,6 +488,9 @@ public class MatchService {
             match.setCreatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
+            // 会場ID を決定（試合参加者基準: player1 と player2 の参加 venue を集約）
+            match.setVenueId(resolveVenueId(match.getMatchDate(), match.getMatchNumber(),
+                    List.of(match.getPlayer1Id(), match.getPlayer2Id())));
             saved = matchRepository.save(match);
             log.info("Upsert: created new match with id: {}", saved.getId());
         }
@@ -669,6 +681,52 @@ public class MatchService {
     }
 
     /**
+     * Match に紐付ける venue_id を決定する。
+     *
+     * 優先順位:
+     *   1. 試合参加者（player1 / player2 等）が同日・同試合番号に active 参加（WON / PENDING）した
+     *      practice_session の venue_id を集約し、一意であれば採用
+     *      （複数会場が混在する場合は次のフォールバックへ）
+     *   2. 同日の practice_sessions の venue_id が一意であればそれを採用
+     *      （同日複数会場が混在する場合は誤割り当てを避けるため NULL のまま）
+     *   3. いずれにも該当しなければ NULL
+     *
+     * 登録者（createdBy）ではなく試合参加者を基準にするのは、ADMIN による代理登録時に
+     * 管理者の参加会場が誤って入ることを防ぐため。
+     * matchNumber でも絞るのは、同日複数会場で選手が両方に参加している場合に
+     * 対象試合と無関係の参加会場が混ざって venue_id が一意決定できないのを防ぐため。
+     */
+    private Long resolveVenueId(LocalDate matchDate, Integer matchNumber, List<Long> participantPlayerIds) {
+        if (matchDate == null || matchNumber == null) {
+            return null;
+        }
+
+        // 1段目: 参加実績ベース（参加者全員の同日・同試合番号 active 参加 venue を集約）
+        java.util.Set<Long> participantVenues = new java.util.HashSet<>();
+        for (Long playerId : participantPlayerIds) {
+            if (playerId == null || playerId == 0L) {
+                continue;
+            }
+            participantVenues.addAll(
+                    practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(
+                            playerId, matchDate, matchNumber)
+            );
+        }
+        if (participantVenues.size() == 1) {
+            return participantVenues.iterator().next();
+        }
+
+        // 2段目: 同日の練習会場が一意なら採用
+        List<Long> sameDayVenues = practiceSessionRepository
+                .findDistinctVenueIdsBySessionDate(matchDate);
+        if (sameDayVenues.size() == 1) {
+            return sameDayVenues.get(0);
+        }
+
+        return null;
+    }
+
+    /**
      * 選手の存在確認
      */
     private void validatePlayerExists(Long playerId) {
@@ -689,6 +747,23 @@ public class MatchService {
         Map<Long, String> playerNames = new HashMap<>();
         playerRepository.findAllById(playerIds).forEach(p -> playerNames.put(p.getId(), p.getName()));
         return playerNames;
+    }
+
+    /**
+     * 試合リストから venue_id を収集し、会場名マップを一括取得（N+1 回避）
+     */
+    private Map<Long, String> collectVenueNames(List<Match> matches) {
+        List<Long> venueIds = matches.stream()
+                .map(Match::getVenueId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (venueIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> venueNames = new HashMap<>();
+        venueRepository.findAllById(venueIds).forEach(v -> venueNames.put(v.getId(), v.getName()));
+        return venueNames;
     }
 
     /**
@@ -720,10 +795,14 @@ public class MatchService {
         }
 
         Map<Long, String> playerNames = collectPlayerNames(matches);
+        Map<Long, String> venueNames = collectVenueNames(matches);
 
         return matches.stream()
                 .map(match -> {
                     MatchDto dto = MatchDto.fromEntity(match);
+                    if (match.getVenueId() != null) {
+                        dto.setVenueName(venueNames.get(match.getVenueId()));
+                    }
 
                     if (match.getPlayer1Id() != 0L && match.getPlayer2Id() != 0L) {
                         dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
@@ -776,10 +855,14 @@ public class MatchService {
         }
 
         Map<Long, String> playerNames = collectPlayerNames(matches);
+        Map<Long, String> venueNames = collectVenueNames(matches);
 
         return matches.stream()
                 .map(match -> {
                     MatchDto dto = MatchDto.fromEntity(match);
+                    if (match.getVenueId() != null) {
+                        dto.setVenueName(venueNames.get(match.getVenueId()));
+                    }
 
                     dto.setPlayer1Name(playerNames.get(match.getPlayer1Id()));
                     dto.setPlayer2Name(playerNames.get(match.getPlayer2Id()));
