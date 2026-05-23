@@ -507,6 +507,9 @@ const PracticeList = () => {
         console.error('Error refreshing session:', err);
       }
     }
+    // capacityStatus はサマリーAPI由来のため、月内サマリーも再取得して
+    // カレンダーの定員バッジを最新化する
+    fetchSessions();
   };
 
   // アコーディオンのトグル

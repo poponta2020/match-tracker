@@ -1128,13 +1128,13 @@ Entity Layer (JPA Entity)
 **説明**: 年月別練習日取得
 **権限**: なし
 
-#### GET /api/practice-sessions/year-month/summary?year={year}&month={month}&playerId={playerId}
+#### GET /api/practice-sessions/year-month/summary?year={year}&month={month}
 **説明**: 年月別練習日サマリー取得（カレンダー画面向け軽量レスポンス）
 **権限**: なし
 
 **特記事項**:
 - 参加者詳細（試合別参加者リスト、ランク・ロール）まではエンリッチせず、会場名と定員状況のみ付与
-- `playerId` 指定時は当該プレイヤーの所属団体に絞り込む
+- 認証済みユーザーがある場合（リクエスト属性 `currentUserId`）は当該プレイヤーの所属団体で絞り込む。`playerId` クエリパラメータは受け付けない
 - 月内全セッションの参加者を一括取得して集計するため N+1 にならない
 
 **レスポンス**: `List<PracticeSessionDto>`（サマリー版）
