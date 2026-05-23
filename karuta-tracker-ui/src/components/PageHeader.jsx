@@ -14,9 +14,9 @@ const PageHeader = ({ title, backTo, rightActions = null }) => {
         >
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <span className="text-lg font-semibold text-white truncate flex-1">
+        <h1 className="text-lg font-semibold text-white truncate flex-1 m-0">
           {title}
-        </span>
+        </h1>
         {rightActions}
       </div>
     </div>
