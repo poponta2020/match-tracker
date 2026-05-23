@@ -259,13 +259,14 @@ const CalendarSubscriptionPage = () => {
           onToggle={() => toggleAccordion('google')}
         >
           <ol className="list-decimal list-outside ml-5 space-y-1.5">
-            <li>PCのブラウザで <span className="font-mono">calendar.google.com</span> を開きます</li>
+            <li>ブラウザで <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" className="font-mono text-blue-600 hover:text-blue-800 underline">calendar.google.com</a> を開きます</li>
+            <li>画面下部で「表示：デスクトップ」を選択</li>
             <li>左サイドメニュー「他のカレンダー」の右にある「+」をクリック</li>
             <li>「URLで追加」を選択</li>
             <li>このページでコピーしたURLを貼り付け、「カレンダーを追加」をクリック</li>
           </ol>
           <p className="text-xs text-gray-500 mt-2">
-            ※ スマホアプリのGoogleカレンダーからは追加できません。PCブラウザで一度追加すれば、スマホのGoogleカレンダーアプリにも自動的に表示されます。
+            ※ スマホアプリのGoogleカレンダーからは追加できません。ブラウザのデスクトップ用画面から一度追加すれば、スマホのGoogleカレンダーアプリにも自動的に表示されます。
           </p>
         </AccordionItem>
         <AccordionItem
