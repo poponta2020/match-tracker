@@ -1142,7 +1142,7 @@ Entity Layer (JPA Entity)
 **権限**: なし
 
 **特記事項**:
-- 参加者詳細（試合別参加者リスト、ランク・ロール）まではエンリッチせず、会場名と定員状況のみ付与
+- 参加者詳細（試合別参加者リスト、ランク・ロール）まではエンリッチせず、会場名と試合別定員到達状況のみ付与
 - 認証済みユーザーがある場合（リクエスト属性 `currentUserId`）は当該プレイヤーの所属団体で絞り込む。`playerId` クエリパラメータは受け付けない
 - 月内全セッションの参加者を一括取得して集計するため N+1 にならない
 
@@ -1157,18 +1157,22 @@ Entity Layer (JPA Entity)
 | `venueName` | String | 会場名（サマリーAPIで付与） |
 | `capacity` | Integer | 定員（試合別の上限人数） |
 | `organizationId` | Long | 団体ID |
-| `capacityStatus` | String enum | セッションの定員到達状況。`AVAILABLE` / `NEARLY_FULL` / `FULL`。**サマリーAPIのみで返却**され、他のエンドポイント（`getById` / `getByDate` 等）では設定されない |
+| `matchCapacityStatuses` | `List<String enum>` | 試合単位の定員到達状況。要素 enum は `AVAILABLE` / `NEARLY_FULL` / `FULL`。`matchCapacityStatuses[i]` が第 `(i+1)` 試合の状態。長さは `min(totalMatches, 9)`。**サマリーAPIのみで返却**され、他のエンドポイント（`getById` / `getByDate` 等）では設定されない。算出不可時は `null` |
 
-**`capacityStatus` の判定ロジック:**
+**`matchCapacityStatuses` の判定ロジック:**
 
-- 実質枠取得人数 = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
-  - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
-- 判定優先順位:
-  1. `capacity == null || capacity <= 0` → `AVAILABLE`
-  2. `totalMatches == null || totalMatches <= 0` → `AVAILABLE`
-  3. 試合番号 1〜`totalMatches` の **全試合**で `effectiveCount >= capacity` → `FULL`
-  4. **いずれか1試合以上**で `effectiveCount >= capacity` → `NEARLY_FULL`
-  5. 上記以外 → `AVAILABLE`
+- 算出スキップ（`matchCapacityStatuses = null`）の条件:
+  - `capacity == null || capacity <= 0`
+  - `totalMatches == null || totalMatches <= 0 || totalMatches >= 10`
+  - 集計中に例外発生
+- 上記以外: 試合番号 1〜`totalMatches` の各試合について以下を算出:
+  - 実質枠取得人数 `effectiveCount` = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
+    - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
+  - 残り席数 `remaining` = `capacity - effectiveCount`
+  - 状態判定:
+    1. `effectiveCount >= capacity` （= `remaining <= 0`）→ `FULL`
+    2. `0 < remaining <= 2` → `NEARLY_FULL`
+    3. それ以外（= `remaining > 2`）→ `AVAILABLE`
 
 #### PUT /api/practice-sessions/{id}
 **説明**: 練習日更新

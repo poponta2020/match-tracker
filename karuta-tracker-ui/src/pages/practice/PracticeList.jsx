@@ -507,8 +507,8 @@ const PracticeList = () => {
         console.error('Error refreshing session:', err);
       }
     }
-    // capacityStatus はサマリーAPI由来のため、月内サマリーも再取得して
-    // カレンダーの定員バッジを最新化する
+    // matchCapacityStatuses はサマリーAPI由来のため、月内サマリーも再取得して
+    // カレンダーの試合別ステータスグリッドを最新化する
     fetchSessions();
   };
 
@@ -674,10 +674,12 @@ const PracticeList = () => {
 
                   if (bestStatus === 'confirmed') {
                     cellBorder = 'border-2 border-[#a3c4ad]';
-                    cellBg = 'bg-[#dce5de] hover:bg-[#cdd8cf]';
+                    // グリッド記号が読みやすいよう既存より一段薄くする
+                    cellBg = 'bg-[#e8efea] hover:bg-[#dee5e0]';
                   } else if (bestStatus === 'waitlisted') {
                     cellBorder = 'border-2 border-[#e8d48b]';
-                    cellBg = 'bg-[#fef9ed] hover:bg-[#fdf3d7]';
+                    // グリッド記号が読みやすいよう既存より一段薄くする
+                    cellBg = 'bg-[#fefcf5] hover:bg-[#fef8e8]';
                   }
 
                   return (
@@ -708,28 +710,33 @@ const PracticeList = () => {
                             );
                           })())}
                           {(() => {
-                            // 同日複数セッションは最も重い状態（FULL > NEARLY_FULL > AVAILABLE）を1つだけ表示
-                            const order = { FULL: 2, NEARLY_FULL: 1, AVAILABLE: 0 };
-                            const worst = daySessions.reduce((acc, s) => {
-                              const v = order[s.capacityStatus] ?? 0;
-                              return v > acc.value ? { value: v, status: s.capacityStatus } : acc;
-                            }, { value: 0, status: 'AVAILABLE' }).status;
-
-                            if (worst === 'NEARLY_FULL') {
-                              return (
-                                <div className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-medium inline-block">
-                                  残わずか
-                                </div>
-                              );
-                            }
-                            if (worst === 'FULL') {
-                              return (
-                                <div className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium inline-block">
-                                  満員
-                                </div>
-                              );
-                            }
-                            return null;
+                            // 試合別ステータスグリッド
+                            // 同日複数セッションの場合はごちゃつき回避のため非表示
+                            if (daySessions.length !== 1) return null;
+                            const statuses = daySessions[0].matchCapacityStatuses;
+                            if (!Array.isArray(statuses) || statuses.length === 0) return null;
+                            const validValues = new Set(['AVAILABLE', 'NEARLY_FULL', 'FULL']);
+                            if (!statuses.every((s) => validValues.has(s))) return null;
+                            const symbolFor = (s) => {
+                              if (s === 'FULL') return { ch: '×', cls: 'text-red-600' };
+                              if (s === 'NEARLY_FULL') return { ch: '△', cls: 'text-orange-500' };
+                              return { ch: '○', cls: 'text-green-600' };
+                            };
+                            return (
+                              <div
+                                data-testid="match-status-grid"
+                                className="mt-1 grid grid-cols-3 gap-x-1 gap-y-0.5 text-[9px] leading-none justify-items-center w-fit mx-auto"
+                              >
+                                {statuses.map((s, i) => {
+                                  const { ch, cls } = symbolFor(s);
+                                  return (
+                                    <span key={i} className={`${cls} font-bold leading-none`}>
+                                      {ch}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            );
                           })()}
                         </div>
                       )}

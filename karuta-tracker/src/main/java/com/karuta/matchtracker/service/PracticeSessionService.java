@@ -158,8 +158,8 @@ public class PracticeSessionService {
                 : venueRepository.findAllById(venueIds).stream()
                     .collect(Collectors.toMap(v -> v.getId(), v -> v.getName()));
 
-        // 定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）。
-        // 集計失敗時は capacityStatus を null のまま返し、カレンダー本体表示を阻害しない（防御的挙動）。
+        // 試合別定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）。
+        // 集計失敗時は matchCapacityStatuses を null のまま返し、カレンダー本体表示を阻害しない（防御的挙動）。
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
@@ -189,7 +189,7 @@ public class PracticeSessionService {
                                 )
                         ));
             } catch (Exception e) {
-                log.warn("Failed to aggregate capacityStatus for {}-{}; falling back to null", year, month, e);
+                log.warn("Failed to aggregate matchCapacityStatuses for {}-{}; falling back to null", year, month, e);
                 effectiveCountMap = Map.of();
                 capacityAggregationFailed = true;
             }
@@ -203,7 +203,7 @@ public class PracticeSessionService {
                 dto.setVenueName(venueNameMap.get(session.getVenueId()));
             }
             if (!finalAggregationFailed) {
-                dto.setCapacityStatus(computeCapacityStatus(session,
+                dto.setMatchCapacityStatuses(computeMatchCapacityStatuses(session,
                         finalEffectiveCountMap.getOrDefault(session.getId(), Map.of())));
             }
             return dto;
@@ -211,43 +211,41 @@ public class PracticeSessionService {
     }
 
     /**
-     * セッションの定員到達状況を判定する。
+     * セッションの試合別定員到達状況を算出する。
      *
-     * - capacity が null / 0 以下 → AVAILABLE
-     * - totalMatches が null / 0 以下 → AVAILABLE
-     * - 試合番号 1〜totalMatches で effectiveCount >= capacity を判定
-     *   - 全試合で達している → FULL
-     *   - いずれか1試合以上で達している → NEARLY_FULL
+     * - capacity が null / 0 以下 → null
+     * - totalMatches が null / 0 以下 / 10 以上 → null（3×3 グリッドに収まらない）
+     * - それ以外: 第 1〜第 totalMatches 試合まで、各試合について
+     *   - effectiveCount >= capacity → FULL
+     *   - 0 < (capacity - effectiveCount) <= 2 → NEARLY_FULL
      *   - それ以外 → AVAILABLE
      *
      * effectiveCount は WON + PENDING + OFFERED の合計（呼び出し側で算出済み）。
      */
-    private PracticeSessionDto.CapacityStatus computeCapacityStatus(
+    private List<PracticeSessionDto.CapacityStatus> computeMatchCapacityStatuses(
             PracticeSession session, Map<Integer, Long> effectiveCountByMatch) {
         Integer capacity = session.getCapacity();
         if (capacity == null || capacity <= 0) {
-            return PracticeSessionDto.CapacityStatus.AVAILABLE;
+            return null;
         }
         Integer totalMatches = session.getTotalMatches();
-        if (totalMatches == null || totalMatches <= 0) {
-            return PracticeSessionDto.CapacityStatus.AVAILABLE;
+        if (totalMatches == null || totalMatches <= 0 || totalMatches >= 10) {
+            return null;
         }
 
-        int matchesAtCapacity = 0;
+        List<PracticeSessionDto.CapacityStatus> statuses = new java.util.ArrayList<>(totalMatches);
         for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
             long effectiveCount = effectiveCountByMatch.getOrDefault(matchNumber, 0L);
-            if (effectiveCount >= capacity) {
-                matchesAtCapacity++;
+            long remaining = capacity - effectiveCount;
+            if (remaining <= 0) {
+                statuses.add(PracticeSessionDto.CapacityStatus.FULL);
+            } else if (remaining <= 2) {
+                statuses.add(PracticeSessionDto.CapacityStatus.NEARLY_FULL);
+            } else {
+                statuses.add(PracticeSessionDto.CapacityStatus.AVAILABLE);
             }
         }
-
-        if (matchesAtCapacity == 0) {
-            return PracticeSessionDto.CapacityStatus.AVAILABLE;
-        }
-        if (matchesAtCapacity == totalMatches) {
-            return PracticeSessionDto.CapacityStatus.FULL;
-        }
-        return PracticeSessionDto.CapacityStatus.NEARLY_FULL;
+        return statuses;
     }
 
     /**
