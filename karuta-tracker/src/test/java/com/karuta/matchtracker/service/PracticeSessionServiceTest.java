@@ -901,6 +901,27 @@ class PracticeSessionServiceTest {
     }
 
     @Test
+    @DisplayName("findSessionSummariesByYearMonth: 参加者集計の例外時もセッション一覧を返し capacityStatus は null にフォールバックする")
+    void findSessionSummariesByYearMonth_aggregationFailure_returnsSessionsWithoutCapacityStatus() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(2).capacity(2).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        // 参加者の一括取得で例外発生
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenThrow(new RuntimeException("DB error"));
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        // セッション本体は返り、capacityStatus は null（バッジ非表示扱い）
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(1L);
+        assertThat(result.get(0).getCapacityStatus()).isNull();
+    }
+
+    @Test
     @DisplayName("findSessionSummariesByYearMonth: OFFERED は effectiveCount に含める")
     void findSessionSummariesByYearMonth_offeredIncludedInEffectiveCount() {
         int year = today.getYear();

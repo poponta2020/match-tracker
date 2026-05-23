@@ -158,36 +158,51 @@ public class PracticeSessionService {
                 : venueRepository.findAllById(venueIds).stream()
                     .collect(Collectors.toMap(v -> v.getId(), v -> v.getName()));
 
-        // 定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）
+        // 定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）。
+        // 集計失敗時は capacityStatus を null のまま返し、カレンダー本体表示を阻害しない（防御的挙動）。
         List<Long> sessionIds = sessions.stream()
                 .map(PracticeSession::getId)
                 .collect(Collectors.toList());
-        // セッションID × 試合番号 → 実質枠取得人数（WON + PENDING + OFFERED）
-        Map<Long, Map<Integer, Long>> effectiveCountMap = sessionIds.isEmpty()
-                ? Map.of()
-                : practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
-                    .filter(p -> p.getMatchNumber() != null)
-                    .filter(p -> {
-                        ParticipantStatus s = p.getStatus();
-                        return s == ParticipantStatus.WON
-                                || s == ParticipantStatus.PENDING
-                                || s == ParticipantStatus.OFFERED;
-                    })
-                    .collect(Collectors.groupingBy(
-                            PracticeParticipant::getSessionId,
-                            Collectors.groupingBy(
-                                    PracticeParticipant::getMatchNumber,
-                                    Collectors.counting()
-                            )
-                    ));
+        Map<Long, Map<Integer, Long>> effectiveCountMap;
+        boolean capacityAggregationFailed = false;
+        if (sessionIds.isEmpty()) {
+            effectiveCountMap = Map.of();
+        } else {
+            try {
+                // セッションID × 試合番号 → 実質枠取得人数（WON + PENDING + OFFERED）
+                effectiveCountMap = practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                        .filter(p -> p.getMatchNumber() != null)
+                        .filter(p -> {
+                            ParticipantStatus s = p.getStatus();
+                            return s == ParticipantStatus.WON
+                                    || s == ParticipantStatus.PENDING
+                                    || s == ParticipantStatus.OFFERED;
+                        })
+                        .collect(Collectors.groupingBy(
+                                PracticeParticipant::getSessionId,
+                                Collectors.groupingBy(
+                                        PracticeParticipant::getMatchNumber,
+                                        Collectors.counting()
+                                )
+                        ));
+            } catch (Exception e) {
+                log.warn("Failed to aggregate capacityStatus for {}-{}; falling back to null", year, month, e);
+                effectiveCountMap = Map.of();
+                capacityAggregationFailed = true;
+            }
+        }
 
+        final Map<Long, Map<Integer, Long>> finalEffectiveCountMap = effectiveCountMap;
+        final boolean finalAggregationFailed = capacityAggregationFailed;
         return sessions.stream().map(session -> {
             PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
             if (session.getVenueId() != null) {
                 dto.setVenueName(venueNameMap.get(session.getVenueId()));
             }
-            dto.setCapacityStatus(computeCapacityStatus(session,
-                    effectiveCountMap.getOrDefault(session.getId(), Map.of())));
+            if (!finalAggregationFailed) {
+                dto.setCapacityStatus(computeCapacityStatus(session,
+                        finalEffectiveCountMap.getOrDefault(session.getId(), Map.of())));
+            }
             return dto;
         }).collect(Collectors.toList());
     }
