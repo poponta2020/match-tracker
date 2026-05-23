@@ -134,8 +134,8 @@ status: completed
 - `karuta-tracker-ui/src/pages/matches/MatchList.jsx`
   - 試合一覧の行レンダリング部分（535-580行付近）の JSX を CSS Grid ベースに書き換える。
   - 列順を `[日付] [名前] [勝敗] [会場 N試合目] [メモ] [手N]` に変更。
-  - 列幅は実装者裁量で Tailwind の grid template column で固定値を持たせる（例: `grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_auto] items-center gap-x-2`）。
-  - 名前列・会場列は `truncate min-w-0`、固定列は `flex-shrink-0`。
+  - 列幅は Tailwind の grid template column で固定 rem 値を持たせる（例: `grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_minmax(0,1.4fr)_1.75rem_2.5rem] items-center gap-x-2`）。`auto` 列を使うと行ごとにコンテンツ依存で track 幅が変わり、列揃え要件を満たせないため使用禁止。
+  - 名前列・会場列は `truncate min-w-0` を付ける（Grid セル内で省略表示するため）。固定 rem 幅の列は Grid track 幅で位置が決まるので `flex-shrink-0` は不要。
   - 既存の `formatDate()` / `getResultDisplay()` / `getResultColor()` ユーティリティはそのまま使う。
 
 #### 状態管理
