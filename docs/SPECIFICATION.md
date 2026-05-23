@@ -223,6 +223,51 @@
   - 判定単位は「月単位」。個別セッションのロック判定は各画面で別途行う
 - **背景:** 旧仕様では右下「参加登録」と左下「参加キャンセル」の2フローティングボタンが分離していたが、本モーダルへの統合により単一エントリーポイント化された。左下のキャンセル専用フローティングは廃止
 
+#### 3.2.3.2 カレンダー画面のセル表示（定員状況バッジ）
+
+カレンダー画面（`/practice`）の各セルでは、日付・会場名に加えて**定員状況バッジ**を表示し、セルをタップしなくても空き状況を一目で把握できるようにする。
+
+- **対象画面:** `PracticeList.jsx` のカレンダー本体
+- **配置:** セル内の会場名の下に中央揃えで配置（小さなテキストバッジ）
+- **表示対象日:** 過去日も含めて全日付で判定・表示する
+
+**バッジ仕様:**
+
+| 状態（`capacityStatus`） | バッジ文言 | 配色 |
+|--------------------------|-----------|------|
+| `AVAILABLE`（空きあり） | （バッジなし） | — |
+| `NEARLY_FULL`（一部試合が満員） | `残わずか` | 黄系（`bg-yellow-100 text-yellow-800`） |
+| `FULL`（全試合が満員） | `満員` | 赤系（`bg-red-100 text-red-700`） |
+
+**判定ロジック（バックエンドの `findSessionSummariesByYearMonth` で算出）:**
+
+- 「実質枠取得人数」 = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
+  - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
+  - `PENDING` を含めるのは抽選なし運用（`pairingIncludesPending = true`）でも「実質枠を取っている」とみなすため
+  - `OFFERED`（繰り上げ通知応答待ち）は名目上枠を確保しているのでカウントに含める
+- セッションの `capacityStatus` 判定（優先順位順）:
+  1. `capacity == null || capacity <= 0` → `AVAILABLE`
+  2. `totalMatches == null || totalMatches <= 0` → `AVAILABLE`
+  3. 試合番号 1〜`totalMatches` の **全試合**で `effectiveCount >= capacity` → `FULL`
+  4. **いずれか1試合以上**で `effectiveCount >= capacity` → `NEARLY_FULL`
+  5. 上記以外 → `AVAILABLE`
+
+**同日複数セッションの扱い:**
+
+- 同一日に複数団体のセッションがある場合は、**セル全体で1つだけ**バッジを表示する
+- 表示する状態は最も重いものを採用: `FULL` > `NEARLY_FULL` > `AVAILABLE`
+- 例: 同日に `FULL` と `NEARLY_FULL` のセッションが共存する場合 → 「満員」のみ表示
+
+**防御的挙動:**
+
+- フロントエンドは `capacityStatus` が未定義／不明値のとき、バッジを表示しない（`AVAILABLE` 扱い）
+- バックエンドの集計でエラーが起きた場合も `capacityStatus = null` にフォールバックし、カレンダー表示を阻害しない
+
+**API対応:**
+
+- 本フィールドはサマリーAPI（`GET /api/practice-sessions/year-month/summary`）のレスポンスでのみ返却される
+- `getById` / `getByDate` などの詳細APIには現状返さない（必要になれば別途追加）
+
 #### 3.2.4 参加キャンセル画面（/practice/cancel）
 
 WON（抽選済みの当選）登録と PENDING（抽選前の参加申込）の両方をキャンセルできる専用ページ。カレンダー画面の「出欠登録」モーダル経由で遷移。
