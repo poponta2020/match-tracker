@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockNavigate = vi.fn();
@@ -25,6 +25,7 @@ vi.mock('../../api', () => ({
 vi.mock('../../api/organizations', () => ({
   organizationAPI: {
     getAll: vi.fn().mockResolvedValue({ data: [] }),
+    getPlayerOrganizations: vi.fn().mockResolvedValue({ data: [] }),
   },
 }));
 
@@ -314,6 +315,43 @@ describe('PracticeParticipation 保存フロー（SaveProgressOverlay）', () =>
 
     await user.click(screen.getByRole('button', { name: 'カレンダーに戻る' }));
     expect(mockNavigate).toHaveBeenCalledWith('/practice');
+  });
+
+  it('再レンダー前に同一セッションの複数チェックを連続クリックしても両方とも保持される (stale closure 回帰)', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    practiceAPI.registerParticipations.mockResolvedValue({ data: {} });
+
+    render(<PracticeParticipation />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).toBeNull());
+
+    const checkboxes = screen.getAllByRole('checkbox');
+
+    // setParticipations をオブジェクト直接渡しで書くと、同一 act 内の
+    // 2 つ目のクリックが 1 つ目の state 更新を spread で上書きしてしまう。
+    // 関数形式 (prev => ...) で書かれていればこのバッチでも両方残る。
+    act(() => {
+      fireEvent.click(checkboxes[0]);
+      fireEvent.click(checkboxes[1]);
+    });
+
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+
+    const saveButton = await screen.findByRole('button', { name: /保存する/ });
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(practiceAPI.registerParticipations).toHaveBeenCalled();
+    });
+
+    const callArgs = practiceAPI.registerParticipations.mock.calls[0][0];
+    expect(callArgs.participations).toEqual(
+      expect.arrayContaining([
+        { sessionId: 100, matchNumber: 1 },
+        { sessionId: 100, matchNumber: 2 },
+      ]),
+    );
+    expect(callArgs.participations).toHaveLength(2);
   });
 
   it('保存失敗: error オーバーレイにサーバーメッセージ表示 →「閉じる」で idle、チェック状態を保持', async () => {

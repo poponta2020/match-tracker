@@ -132,20 +132,21 @@ const PracticeParticipation = () => {
     // 締切後の既存登録はチェック外し不可
     if (isLockedRegistration(sessionId, matchNumber)) return;
 
-    const sessionParticipations = participations[sessionId] || [];
-    const isChecked = sessionParticipations.includes(matchNumber);
-
-    if (isChecked) {
-      setParticipations({
-        ...participations,
-        [sessionId]: sessionParticipations.filter((m) => m !== matchNumber),
-      });
-    } else {
-      setParticipations({
-        ...participations,
+    // 連続タップ時の stale closure を避けるため setState を関数形式で呼ぶ
+    setParticipations((prev) => {
+      const sessionParticipations = prev[sessionId] || [];
+      const isChecked = sessionParticipations.includes(matchNumber);
+      if (isChecked) {
+        return {
+          ...prev,
+          [sessionId]: sessionParticipations.filter((m) => m !== matchNumber),
+        };
+      }
+      return {
+        ...prev,
         [sessionId]: [...sessionParticipations, matchNumber],
-      });
-    }
+      };
+    });
   };
 
   // 変更があるかチェック（抽選済みセッションの変更は除外）
