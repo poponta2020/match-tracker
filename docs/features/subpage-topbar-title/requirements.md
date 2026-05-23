@@ -53,9 +53,16 @@ status: completed
 | `/pairings` | `pairings/PairingGenerator.jsx` | 組み合わせ作成 | H1なし、追加のみ |
 | `/venues` | `venues/VenueList.jsx` | 会場管理 | H1なし、追加のみ |
 | `/admin/lottery` | `lottery/LotteryManagement.jsx` | 抽選管理 | インラインヘッダー（戻る矢印+H1+「システム設定」ボタン）を削除。「システム設定」ボタンを `rightActions` に移動 |
-| `/admin/settings` | `settings/SystemSettings.jsx` | システム設定 | 「システム設定」H1（Settingsアイコン付き）を削除 |
 | `/admin/line/channels` | `line/LineChannelAdmin.jsx` | LINEチャネル管理 | 「LINEチャネル管理」H1 を削除 |
 | `/admin/line/schedule` | `line/LineScheduleAdmin.jsx` | LINE通知スケジュール | 「LINE通知スケジュール」H1（Calendarアイコン付き）を削除 |
+
+##### A'. 抽選管理から入る画面（戻る → `/admin/lottery`）
+
+| パス | コンポーネント | タイトル | 既存本文H1の扱い |
+|---|---|---|---|
+| `/admin/settings` | `settings/SystemSettings.jsx` | システム設定 | 「システム設定」H1（Settingsアイコン付き）を削除 |
+
+> 設定グリッドに「システム設定」のメニュー項目はなく、主要導線は `LotteryManagement` 画面右上の「システム設定」ボタンから到達する。そのため戻る先を `/admin/lottery` に揃え、抽選管理ワークフローへ復帰できるようにする。
 
 ##### B. リスト→詳細/編集（戻る → 親リスト）
 
@@ -293,6 +300,7 @@ return (
 ### 6.6 戻る先のグルーピング根拠
 
 - **設定グリッドから入る画面 → `/settings`**：ユーザーは設定ページから来たという文脈を持って入るため、戻る先は設定ページ。
+- **抽選管理から入る画面 → `/admin/lottery`**（システム設定）：`SystemSettings` は設定グリッドに項目がなく、`LotteryManagement` 画面右上の「システム設定」ボタンが主要導線。`/settings` を戻る先にすると元の抽選管理ワークフローへ復帰できないため、例外的に `/admin/lottery` に揃える。
 - **リスト→詳細/編集 → 親リスト**：標準的なリスト/詳細パターン。
 - **ホームから入る画面 → `/`**：通知・抽選結果・キャンセル待ち・オファー応答はホームの導線（ベルアイコン、抽選通知）から到達するため、戻る先はホーム。
 - **`Profile`**：HomeのUserアイコンと設定グリッドの両方から到達するが、設定サブページパターンに揃えて `/settings`。Homeから来た場合はボトムナビのHomeで戻れる。

@@ -31,7 +31,7 @@ status: completed
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx` — `<PageHeader title="組み合わせ作成" backTo="/settings" />` を追加。既存H1なし。
   - `karuta-tracker-ui/src/pages/venues/VenueList.jsx` — `<PageHeader title="会場管理" backTo="/settings" />` を追加。既存H1なし。
   - `karuta-tracker-ui/src/pages/lottery/LotteryManagement.jsx` — `<PageHeader title="抽選管理" backTo="/settings" rightActions={<システム設定ボタン />} />` を追加。インラインヘッダー（戻る矢印 + H1 + システム設定ボタンを含む `<div>` ブロック）を削除し、システム設定ボタンを `rightActions` 経由でトップバー右端へ移動。
-  - `karuta-tracker-ui/src/pages/settings/SystemSettings.jsx` — `<PageHeader title="システム設定" backTo="/settings" />` を追加。`<h1>...システム設定...</h1>`（Settings アイコン付き）を削除。
+  - `karuta-tracker-ui/src/pages/settings/SystemSettings.jsx` — `<PageHeader title="システム設定" backTo="/admin/lottery" />` を追加。`<h1>...システム設定...</h1>`（Settings アイコン付き）を削除。**設定グリッドに「システム設定」メニュー項目はなく、`LotteryManagement` 画面右上の「システム設定」ボタンから到達する画面のため、戻る先は抽選管理に揃える（他のAグループ画面と異なる例外）。**
   - `karuta-tracker-ui/src/pages/line/LineChannelAdmin.jsx` — `<PageHeader title="LINEチャネル管理" backTo="/settings" />` を追加。`<h1>LINEチャネル管理</h1>` を削除。
   - `karuta-tracker-ui/src/pages/line/LineScheduleAdmin.jsx` — `<PageHeader title="LINE通知スケジュール" backTo="/settings" />` を追加。`<h1>...LINE通知スケジュール...</h1>`（Calendar アイコン付き）を削除。
 - **依存タスク:** タスク1
