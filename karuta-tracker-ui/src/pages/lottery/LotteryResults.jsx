@@ -4,6 +4,7 @@ import { lotteryAPI } from '../../api/lottery';
 import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin } from '../../utils/auth';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 import { buildCopyText, hasAnyWaitlisted } from './lotteryResultText';
 
 /**
@@ -198,9 +199,9 @@ export default function LotteryResults() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-xl font-bold mb-4">抽選結果</h1>
-
+    <>
+      <PageHeader title="抽選結果" backTo="/" />
+      <div className="max-w-2xl mx-auto p-4">
       {/* 月選択 */}
       <div className="flex items-center justify-center gap-4 mb-6">
         <button onClick={() => changeMonth(-1)} className="p-2 rounded hover:bg-gray-100">&lt;</button>
@@ -336,6 +337,7 @@ export default function LotteryResults() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

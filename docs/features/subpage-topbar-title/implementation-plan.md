@@ -20,7 +20,7 @@ status: completed
 - **対応Issue:** #728
 
 ### タスク2: Aグループ（設定サブページ群）への PageHeader 適用
-- [ ] 完了
+- [x] 完了
 - **概要:** 設定画面のグリッドから到達するサブページ群に `PageHeader` を適用する。戻る先は `/settings` で統一。既存の本文H1（およびアイコン）を削除する。`LotteryManagement` のみ `rightActions` で「システム設定」ボタンをトップバー右端に移す。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/Profile.jsx` — `<PageHeader title="プロフィール" backTo="/settings" />` を追加。本文の `{player.name}` 表示は残す。
@@ -38,7 +38,7 @@ status: completed
 - **対応Issue:** #729
 
 ### タスク3: Bグループ（リスト→詳細・編集）への PageHeader 適用
-- [ ] 完了
+- [x] 完了
 - **概要:** リストから詳細・編集に遷移する画面に `PageHeader` を適用する。戻る先は親リスト（`PlayerEdit` 編集時のみ選手詳細）。既存のインライン「戻る」リンクと本文H1を削除する。`PlayerEdit` と `VenueForm` はタイトルが動的（新規/編集）。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchDetail.jsx` — `<PageHeader title="試合詳細" backTo="/matches" />` を追加。本文先頭のインライン「← 試合記録一覧に戻る」リンクを削除。
@@ -50,7 +50,7 @@ status: completed
 - **対応Issue:** #730
 
 ### タスク4: Cグループ（ホーム導線）への PageHeader 適用
-- [ ] 完了
+- [x] 完了
 - **概要:** ホームから到達する画面（通知一覧・抽選結果・キャンセル待ち・繰り上げ参加応答）に `PageHeader` を適用する。戻る先は `/`。`NotificationList` のみ `rightActions` で「すべて削除」ボタンをトップバー右端に移す。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/notifications/NotificationList.jsx` — `<PageHeader title="通知" backTo="/" rightActions={<すべて削除ボタン />} />` を追加。`<h1>通知</h1>` と「すべて削除」ボタンを含むラッパーdivを削除し、ボタンを `rightActions` 経由でトップバー右端へ移動。

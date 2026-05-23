@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { notificationAPI } from '../../api/notifications';
 import { lotteryAPI } from '../../api/lottery';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 /**
  * 通知一覧画面
@@ -110,19 +111,22 @@ export default function NotificationList() {
     n.type === 'LOTTERY_WAITLISTED' && n.referenceType === 'PRACTICE_SESSION' && n.referenceId;
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">通知</h1>
-        {notifications.length > 0 && !loading && (
-          <button
-            onClick={handleDeleteAll}
-            disabled={deleting}
-            className="px-3 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50">
-            {deleting ? '削除中...' : 'すべて削除'}
-          </button>
-        )}
-      </div>
-
+    <>
+      <PageHeader
+        title="通知"
+        backTo="/"
+        rightActions={
+          notifications.length > 0 && !loading ? (
+            <button
+              onClick={handleDeleteAll}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50">
+              {deleting ? '削除中...' : 'すべて削除'}
+            </button>
+          ) : null
+        }
+      />
+      <div className="max-w-2xl mx-auto p-4">
       {loading ? (
         <LoadingScreen />
       ) : notifications.length === 0 ? (
@@ -160,6 +164,7 @@ export default function NotificationList() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

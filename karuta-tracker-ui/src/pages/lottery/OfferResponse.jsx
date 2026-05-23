@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { lotteryAPI } from '../../api/lottery';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 /**
  * 繰り上げ参加承認画面（統合オファー対応）
@@ -220,10 +221,10 @@ export default function OfferResponse() {
   }
 
   return (
-    <div className="max-w-md mx-auto p-4">
+    <>
+      <PageHeader title="繰り上げ参加のご連絡" backTo="/" />
+      <div className="max-w-md mx-auto p-4">
       <div className="bg-white rounded-lg shadow p-6">
-        <h1 className="text-xl font-bold mb-4 text-center">繰り上げ参加のご連絡</h1>
-
         {/* オファー詳細情報 */}
         {offerDetail && (
           <div className="mb-4 p-3 bg-blue-50 rounded text-sm space-y-1">
@@ -295,6 +296,7 @@ export default function OfferResponse() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
