@@ -82,7 +82,7 @@ const Profile = () => {
         {/* ヘッダー：名前 + ロール + 編集ボタン */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#374151]">{player.name}</h1>
+            <h2 className="text-2xl font-bold text-[#374151]">{player.name}</h2>
             <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs font-medium rounded ${roleLabel.cls}`}>
               {roleLabel.text}
             </span>
