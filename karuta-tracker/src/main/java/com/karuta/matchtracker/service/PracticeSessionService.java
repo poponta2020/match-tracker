@@ -170,6 +170,9 @@ public class PracticeSessionService {
         } else {
             try {
                 // セッションID × 試合番号 → 実質枠取得人数（WON + PENDING + OFFERED）
+                // matchNumber == null は BYE（抜け番）扱い。既存の enrichDtoWithMatchDetails と
+                // 同じ運用に揃えるため試合別集計から除外する（エンティティのコメントとは異なるが
+                // 実運用に整合）。
                 effectiveCountMap = practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
                         .filter(p -> p.getMatchNumber() != null)
                         .filter(p -> {
