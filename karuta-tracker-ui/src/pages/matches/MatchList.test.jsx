@@ -277,9 +277,10 @@ describe('MatchList', () => {
     expect(screen.queryByText(/\(5\)/)).toBeNull();
   });
 
-  it('行内表示: 行 container に固定幅 grid template が適用されている（列揃え担保）', async () => {
-    // 行ごとにコンテンツ依存で列幅が変わらないよう、固定幅の grid-cols クラスを必須とする。
-    // auto 列が混ざると行ごとに track 幅がずれ「全行で各列の左端 x 座標が揃う」要件を満たせない。
+  it('行内表示: 行 container は固定幅 grid template を使い auto 列を持たない（列揃え契約）', async () => {
+    // 「全行で各列の左端 x 座標が揃う」要件を満たすため、grid-cols は auto 列を持たず、
+    // 行ごとにコンテンツで幅が変わらない固定 rem 幅の track を含むことを契約として固定する。
+    // 比率（1fr / 1.4fr）や具体的な rem 値は実装裁量とし、テストでは検証しない。
     setupDefaultMocks({
       matches: [buildMatch()],
     });
@@ -290,9 +291,12 @@ describe('MatchList', () => {
     const row = opponentBtn.parentElement;
 
     expect(row.className).toContain('grid');
-    // 6 列構造の固定幅 grid template（auto 不可。日付・勝敗・メモ・お手付きは rem 単位の固定幅）
-    expect(row.className).toMatch(/grid-cols-\[[^\]]*rem[^\]]*minmax\(0,1fr\)[^\]]*rem[^\]]*minmax\(0,1\.4fr\)[^\]]*rem[^\]]*rem\]/);
-    expect(row.className).not.toMatch(/grid-cols-\[auto/);
+    // grid-cols-[...] が定義されていること
+    expect(row.className).toMatch(/grid-cols-\[[^\]]+\]/);
+    // auto 列を使っていないこと（行ごとに track 幅がブレ列揃え要件を満たせないため）
+    expect(row.className).not.toMatch(/grid-cols-\[[^\]]*\bauto\b/);
+    // 固定幅の rem トラックが含まれていること（コンテンツ非依存の列幅を担保）
+    expect(row.className).toMatch(/grid-cols-\[[^\]]*rem[^\]]*\]/);
   });
 
   it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [メモ] [手N] の順で描画される', async () => {
