@@ -420,8 +420,8 @@ public class MatchService {
         // 対戦時の級位を記録
         setPlayerKyuRanks(match);
 
-        // 会場ID を決定（PracticeParticipant 経由優先、同日一意ならフォールバック）
-        match.setVenueId(resolveVenueId(match.getMatchDate(), match.getCreatedBy()));
+        // 会場ID を決定（試合参加者基準: 簡易登録ではリクエストの playerId が参加者）
+        match.setVenueId(resolveVenueId(match.getMatchDate(), List.of(request.getPlayerId())));
 
         Match saved = matchRepository.save(match);
 
@@ -487,8 +487,9 @@ public class MatchService {
             match.setCreatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
-            // 会場ID を決定（PracticeParticipant 経由優先、同日一意ならフォールバック）
-            match.setVenueId(resolveVenueId(match.getMatchDate(), match.getCreatedBy()));
+            // 会場ID を決定（試合参加者基準: player1 と player2 の参加 venue を集約）
+            match.setVenueId(resolveVenueId(match.getMatchDate(),
+                    List.of(match.getPlayer1Id(), match.getPlayer2Id())));
             saved = matchRepository.save(match);
             log.info("Upsert: created new match with id: {}", saved.getId());
         }
@@ -682,23 +683,33 @@ public class MatchService {
      * Match に紐付ける venue_id を決定する。
      *
      * 優先順位:
-     *   1. createdBy が同日に参加した practice_session の venue_id
+     *   1. 試合参加者（player1 / player2 等）が同日に active 参加（WON / PENDING）した
+     *      practice_session の venue_id を集約し、一意であれば採用
+     *      （複数会場が混在する場合は次のフォールバックへ）
      *   2. 同日の practice_sessions の venue_id が一意であればそれを採用
      *      （同日複数会場が混在する場合は誤割り当てを避けるため NULL のまま）
      *   3. いずれにも該当しなければ NULL
+     *
+     * 登録者（createdBy）ではなく試合参加者を基準にするのは、ADMIN による代理登録時に
+     * 管理者の参加会場が誤って入ることを防ぐため。
      */
-    private Long resolveVenueId(LocalDate matchDate, Long createdBy) {
+    private Long resolveVenueId(LocalDate matchDate, List<Long> participantPlayerIds) {
         if (matchDate == null) {
             return null;
         }
 
-        // 1段目: 参加実績ベース
-        if (createdBy != null) {
-            List<Long> participantVenues = practiceParticipantRepository
-                    .findVenueIdsByPlayerIdAndSessionDate(createdBy, matchDate);
-            if (!participantVenues.isEmpty()) {
-                return participantVenues.get(0);
+        // 1段目: 参加実績ベース（参加者全員の active 参加 venue を集約し、一意なら採用）
+        java.util.Set<Long> participantVenues = new java.util.HashSet<>();
+        for (Long playerId : participantPlayerIds) {
+            if (playerId == null || playerId == 0L) {
+                continue;
             }
+            participantVenues.addAll(
+                    practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(playerId, matchDate)
+            );
+        }
+        if (participantVenues.size() == 1) {
+            return participantVenues.iterator().next();
         }
 
         // 2段目: 同日の練習会場が一意なら採用

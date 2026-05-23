@@ -1612,6 +1612,80 @@ class MatchServiceTest {
             verify(matchRepository).save(captor.capture());
             assertThat(captor.getValue().getVenueId()).isNull();
         }
+
+        @Test
+        @DisplayName("createMatch: ADMIN 代理登録でも player1/player2 の参加 venue が採用される（登録者基準のリグレッション防止）")
+        void shouldResolveVenueBasedOnParticipantsNotCreatedBy() {
+            LocalDate today = LocalDate.now();
+            MatchCreateRequest request = MatchCreateRequest.builder()
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(1L)
+                    .scoreDifference(5)
+                    .createdBy(99L)
+                    .build();
+
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            // player1, player2 が同じ会場 (10) に active 参加
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of(10L));
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(2L, today))
+                    .thenReturn(List.of(10L));
+
+            // ADMIN (id=99) が代理登録（player1/2 のいずれでもない）
+            matchService.createMatch(request, 99L, Player.Role.ADMIN);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            // ADMIN(99)の参加 venue ではなく、player1/2 の参加 venue (=10) が採用される
+            assertThat(captor.getValue().getVenueId()).isEqualTo(10L);
+            // 1段目で確定したので 2段目 fallback は呼ばれない
+            verify(practiceSessionRepository, never()).findDistinctVenueIdsBySessionDate(any());
+            // ADMIN(99)のクエリは呼ばれない（参加者基準なので player1/2 のみ）
+            verify(practiceParticipantRepository, never())
+                    .findVenueIdsByPlayerIdAndSessionDate(eq(99L), any());
+        }
+
+        @Test
+        @DisplayName("createMatch: player1 と player2 が別会場に参加している場合は同日一意 fallback")
+        void shouldFallbackWhenPlayer1AndPlayer2DifferOnVenue() {
+            LocalDate today = LocalDate.now();
+            MatchCreateRequest request = MatchCreateRequest.builder()
+                    .matchDate(today)
+                    .matchNumber(1)
+                    .player1Id(1L)
+                    .player2Id(2L)
+                    .winnerId(1L)
+                    .scoreDifference(5)
+                    .createdBy(1L)
+                    .build();
+
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            // player1 と player2 が別会場に参加（参加者集約で size=2 → 1段目では確定しない）
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of(10L));
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(2L, today))
+                    .thenReturn(List.of(20L));
+            // 2段目: 同日一意 venue = 30
+            when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
+                    .thenReturn(List.of(30L));
+
+            matchService.createMatch(request, 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            assertThat(captor.getValue().getVenueId()).isEqualTo(30L);
+        }
     }
 
 }

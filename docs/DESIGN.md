@@ -225,9 +225,10 @@ Entity Layer (JPA Entity)
 **特殊ロジック**:
 - `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証
 - `venue_id` は新規登録時に `MatchService.resolveVenueId()` で自動決定:
-  1. `created_by` が同日に参加した `practice_sessions` の `venue_id`（最優先）
+  1. 試合参加者（簡易登録は `request.playerId`、詳細登録は `player1_id` / `player2_id`）が同日に active 参加（`status IN ('WON','PENDING')`）した `practice_sessions` の `venue_id` を集約し、一意であれば採用
   2. 同日の `practice_sessions` の `venue_id` が一意であればその値（複数会場が混在する日は NULL のまま、誤割り当てを回避）
   3. いずれにも該当しなければ NULL
+- `created_by` ではなく試合参加者を基準にするのは、ADMIN 代理登録時に管理者の参加 venue が誤って入るのを防ぐため
 - 更新時は `venue_id` を変更しない（不変）
 
 ---
