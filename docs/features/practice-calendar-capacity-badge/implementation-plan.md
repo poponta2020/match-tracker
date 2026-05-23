@@ -18,7 +18,7 @@ status: completed
   - 既存テストがコンパイル・パスする
 
 ### タスク2: バックエンド サービスで capacityStatus を集計
-- [ ] 完了
+- [x] 完了
 - **概要:** `PracticeSessionService.findSessionSummariesByYearMonth` で月内全セッションの参加者を一括取得し、各セッションの `capacityStatus` を計算して DTO にセットする。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeSessionService.java` — 既存メソッド `findSessionSummariesByYearMonth(int, int, Long)` に集計処理を追加。`practiceParticipantRepository.findBySessionIdIn(sessionIds)` で参加者を一括取得し、セッション × 試合番号 × ステータス でカウント。`effectiveCount = WON + PENDING + OFFERED` を試合ごとに計算し、判定ルールに従い `AVAILABLE / NEARLY_FULL / FULL` を決定して DTO にセット
