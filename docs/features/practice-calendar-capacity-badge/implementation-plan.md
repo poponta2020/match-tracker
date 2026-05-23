@@ -87,7 +87,7 @@ status: completed
   - `npm run lint` がパスする
 
 ### タスク6: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** `docs/SPECIFICATION.md`, `docs/SCREEN_LIST.md`, `docs/DESIGN.md` のカレンダー画面およびAPI設計の節に定員状況バッジを追記する。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 練習カレンダー画面の仕様に「定員状況バッジ」の節を追加（判定ロジック・配色・配置）

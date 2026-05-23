@@ -1128,6 +1128,39 @@ Entity Layer (JPA Entity)
 **説明**: 年月別練習日取得
 **権限**: なし
 
+#### GET /api/practice-sessions/year-month/summary?year={year}&month={month}&playerId={playerId}
+**説明**: 年月別練習日サマリー取得（カレンダー画面向け軽量レスポンス）
+**権限**: なし
+
+**特記事項**:
+- 参加者詳細（試合別参加者リスト、ランク・ロール）まではエンリッチせず、会場名と定員状況のみ付与
+- `playerId` 指定時は当該プレイヤーの所属団体に絞り込む
+- 月内全セッションの参加者を一括取得して集計するため N+1 にならない
+
+**レスポンス**: `List<PracticeSessionDto>`（サマリー版）
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `id` | Long | 練習セッションID |
+| `sessionDate` | LocalDate | 練習日 |
+| `totalMatches` | Integer | 総試合数 |
+| `venueId` | Long | 会場ID |
+| `venueName` | String | 会場名（サマリーAPIで付与） |
+| `capacity` | Integer | 定員（試合別の上限人数） |
+| `organizationId` | Long | 団体ID |
+| `capacityStatus` | String enum | セッションの定員到達状況。`AVAILABLE` / `NEARLY_FULL` / `FULL`。**サマリーAPIのみで返却**され、他のエンドポイント（`getById` / `getByDate` 等）では設定されない |
+
+**`capacityStatus` の判定ロジック:**
+
+- 実質枠取得人数 = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
+  - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
+- 判定優先順位:
+  1. `capacity == null || capacity <= 0` → `AVAILABLE`
+  2. `totalMatches == null || totalMatches <= 0` → `AVAILABLE`
+  3. 試合番号 1〜`totalMatches` の **全試合**で `effectiveCount >= capacity` → `FULL`
+  4. **いずれか1試合以上**で `effectiveCount >= capacity` → `NEARLY_FULL`
+  5. 上記以外 → `AVAILABLE`
+
 #### PUT /api/practice-sessions/{id}
 **説明**: 練習日更新
 **権限**: SUPER_ADMIN
