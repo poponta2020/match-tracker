@@ -15,7 +15,7 @@ status: completed
 - **対応Issue:** #740
 
 ### タスク2: `Match` エンティティに `venueId` 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** Match エンティティに `@Column(name = "venue_id")` で `venueId: Long` フィールドを追加
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/Match.java` — `venueId` フィールド追加
@@ -23,7 +23,7 @@ status: completed
 - **対応Issue:** #741
 
 ### タスク3: `MatchDto` に `venueId`/`venueName` 追加
-- [ ] 完了
+- [x] 完了
 - **概要:** MatchDto に `venueId: Long`, `venueName: String` を追加し、`fromEntity()` に `venueId` セット処理を追加（venueName は別途 enrichment）
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/MatchDto.java` — フィールド追加・`fromEntity()` 更新
@@ -31,17 +31,17 @@ status: completed
 - **対応Issue:** #742
 
 ### タスク4: `MatchService.resolveVenueId()` 実装と create/upsert への組み込み
-- [ ] 完了
-- **概要:** PracticeParticipant 優先・PlayerOrganization フォールバックで venue_id を決定するヘルパーメソッドを実装。create / upsert 系メソッドから呼ぶ
+- [x] 完了
+- **概要:** PracticeParticipant 経由優先・同日 practice_sessions が一意ならフォールバックで venue_id を決定するヘルパーメソッドを実装。create / upsert 系メソッドから呼ぶ
 - **変更対象ファイル:**
-  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchService.java` — `resolveVenueId()` 追加、`createMatchSimple()`/`createMatch()`/`upsertMatch()` で呼出
-  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PracticeParticipantRepository.java` — 必要に応じてクエリメソッド追加（例: `findBySessionDateAndPlayerIdWithSession`）
-  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PlayerOrganizationRepository.java` — 必要に応じてクエリメソッド追加
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchService.java` — `resolveVenueId()` 追加、`createMatchSimple()`/`createMatch()`（新規作成パスのみ）で呼出
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PracticeParticipantRepository.java` — `findVenueIdsByPlayerIdAndSessionDate()` 追加
+  - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/PracticeSessionRepository.java` — `findDistinctVenueIdsBySessionDate()` 追加
 - **依存タスク:** タスク2、タスク3
 - **対応Issue:** #743
 
 ### タスク5: `MatchService` の enrichment で `venueName` を解決
-- [ ] 完了
+- [x] 完了
 - **概要:** 一覧・詳細レスポンスに venueName を含めるため、enrich メソッド内でバッチ取得 (N+1 回避)。Venue を `venueRepository.findAllById(...)` で一度に取得し Map にして紐付け
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/MatchService.java` — `enrichMatchesWithPlayerPerspective()` / `enrichMatchesWithPlayerNames()` を拡張
@@ -50,7 +50,7 @@ status: completed
 - **対応Issue:** #744
 
 ### タスク6: バックエンド単体テスト追加・更新
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchServiceTest` で venue_id 解決ロジック（PracticeParticipant 経由・PlayerOrganization 経由・該当なし NULL）の3パターンを検証。既存テストの fixture も venueId に対応
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/MatchServiceTest.java` — テスト追加
@@ -59,7 +59,7 @@ status: completed
 - **対応Issue:** #745
 
 ### タスク7: `MatchList.jsx` 表示書式変更
-- [ ] 完了
+- [x] 完了
 - **概要:** 日付ラベルを `5/23 あかなら・すずらん(2)` / 会場不明時は `5/23 (2)` の書式に変更。文字スタイルは現状の `text-xs text-[#9ca3af]` を維持。固定幅 `w-12` を廃止し、`min-w-0 truncate` で長い会場名に対応
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchList.jsx` — 日付ブロックのレンダリング書き換え
@@ -67,7 +67,7 @@ status: completed
 - **対応Issue:** #746
 
 ### タスク8: `MatchDetail.jsx` に会場カード追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 「詳細情報」セクションの grid を `md:grid-cols-3` に変更し、「会場」カード（MapPin 等のアイコン + 会場名）を追加。会場情報がない場合は「—」を表示
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchDetail.jsx` — grid 拡張・会場カード追加
@@ -75,7 +75,7 @@ status: completed
 - **対応Issue:** #747
 
 ### タスク9: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.md のドキュメント更新ルールに従い、`docs/SPECIFICATION.md`、`docs/SCREEN_LIST.md`、`docs/DESIGN.md` を更新
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 対戦結果一覧画面・試合詳細画面の項に会場・試合番号表示を追記

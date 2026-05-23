@@ -208,6 +208,7 @@ Entity Layer (JPA Entity)
 | winner_id | BIGINT | NOT NULL, FK | 勝者ID |
 | score_difference | INT | NOT NULL | 枚数差（1～50） |
 | opponent_name | VARCHAR(100) | | 未登録選手名（簡易登録用） |
+| venue_id | BIGINT | FK(venues.id) ON DELETE SET NULL | 試合が行われた会場ID（NULL可。古いデータで backfill 不可・PracticeSession 削除済みの場合は NULL） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | updated_by | BIGINT | NOT NULL | 更新者ID |
 | created_at | DATETIME | NOT NULL | 登録日時 |
@@ -219,9 +220,15 @@ Entity Layer (JPA Entity)
 - `idx_matches_date_player2` (match_date, player2_id)
 - `idx_matches_winner` (winner_id)
 - `idx_matches_date_match_number` (match_date, match_number)
+- `idx_matches_venue` (venue_id)
 
 **特殊ロジック**:
 - `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証
+- `venue_id` は新規登録時に `MatchService.resolveVenueId()` で自動決定:
+  1. `created_by` が同日に参加した `practice_sessions` の `venue_id`（最優先）
+  2. 同日の `practice_sessions` の `venue_id` が一意であればその値（複数会場が混在する日は NULL のまま、誤割り当てを回避）
+  3. いずれにも該当しなければ NULL
+- 更新時は `venue_id` を変更しない（不変）
 
 ---
 

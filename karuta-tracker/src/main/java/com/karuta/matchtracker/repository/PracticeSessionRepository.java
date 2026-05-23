@@ -82,4 +82,12 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
      */
     @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.sessionDate >= :date ORDER BY ps.sessionDate DESC")
     List<LocalDate> findSessionDates(@Param("date") LocalDate date);
+
+    /**
+     * 指定日の practice_sessions の venue_id を重複排除して取得（venue_id IS NOT NULL のみ）
+     * Match の venue_id 決定で「同日一意なら採用」のチェックに使用する。
+     */
+    @Query("SELECT DISTINCT ps.venueId FROM PracticeSession ps " +
+           "WHERE ps.sessionDate = :sessionDate AND ps.venueId IS NOT NULL")
+    List<Long> findDistinctVenueIdsBySessionDate(@Param("sessionDate") LocalDate sessionDate);
 }

@@ -12,7 +12,9 @@ import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
+import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.repository.VenueRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,6 +55,12 @@ class MatchServiceTest {
 
     @Mock
     private PracticeSessionRepository practiceSessionRepository;
+
+    @Mock
+    private PracticeParticipantRepository practiceParticipantRepository;
+
+    @Mock
+    private VenueRepository venueRepository;
 
     @Mock
     private MatchPersonalNoteRepository matchPersonalNoteRepository;
@@ -1512,6 +1520,97 @@ class MatchServiceTest {
             assertThatThrownBy(() -> matchService.findById(1L, 10L, 2L))
                     .isInstanceOf(ForbiddenException.class)
                     .hasMessageContaining("メンター関係");
+        }
+    }
+
+    @Nested
+    @DisplayName("venue_id 解決ロジック (createMatchSimple 経由)")
+    class VenueResolutionTests {
+
+        private MatchSimpleCreateRequest buildSimpleRequest(LocalDate date) {
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(date);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
+            return request;
+        }
+
+        private void stubCommonCreatePath(LocalDate date) {
+            when(practiceSessionRepository.existsBySessionDate(date)).thenReturn(true);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
+        }
+
+        @Test
+        @DisplayName("PracticeParticipant 経由で venue_id が解決される")
+        void shouldResolveVenueIdViaPracticeParticipant() {
+            LocalDate today = LocalDate.now();
+            stubCommonCreatePath(today);
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of(10L));
+
+            matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            assertThat(captor.getValue().getVenueId()).isEqualTo(10L);
+            // 1段目で見つかったので 2段目は呼ばれない
+            verify(practiceSessionRepository, never()).findDistinctVenueIdsBySessionDate(any());
+        }
+
+        @Test
+        @DisplayName("PracticeParticipant 経由で見つからない場合、同日一意の venue が採用される")
+        void shouldResolveVenueIdViaSameDayUniqueVenue() {
+            LocalDate today = LocalDate.now();
+            stubCommonCreatePath(today);
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
+                    .thenReturn(List.of(20L));
+
+            matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            assertThat(captor.getValue().getVenueId()).isEqualTo(20L);
+        }
+
+        @Test
+        @DisplayName("同日複数の練習会場が混在する場合は venue_id を NULL のままにする")
+        void shouldLeaveVenueIdNullWhenMultipleVenuesOnSameDay() {
+            LocalDate today = LocalDate.now();
+            stubCommonCreatePath(today);
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
+                    .thenReturn(List.of(20L, 30L));
+
+            matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            assertThat(captor.getValue().getVenueId()).isNull();
+        }
+
+        @Test
+        @DisplayName("該当する練習会がない場合は venue_id を NULL のままにする")
+        void shouldLeaveVenueIdNullWhenNoMatchingSession() {
+            LocalDate today = LocalDate.now();
+            stubCommonCreatePath(today);
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+                    .thenReturn(List.of());
+            when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
+                    .thenReturn(List.of());
+
+            matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            assertThat(captor.getValue().getVenueId()).isNull();
         }
     }
 

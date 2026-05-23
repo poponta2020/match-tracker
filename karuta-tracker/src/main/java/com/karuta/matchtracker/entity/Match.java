@@ -91,6 +91,12 @@ public class Match {
     private String opponentName;
 
     /**
+     * 試合が行われた会場のID（NULL可: 古いデータで backfill 不可・PracticeSession 削除済み等）
+     */
+    @Column(name = "venue_id")
+    private Long venueId;
+
+    /**
      * 作成者のID
      */
     @Column(name = "created_by", nullable = false)
