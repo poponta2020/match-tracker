@@ -33,7 +33,7 @@ status: completed
   - `WAITLISTED / DECLINED / CANCELLED / WAITLIST_DECLINED` はカウントに含めない
 
 ### タスク3: バックエンド サービスのユニットテストを追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `findSessionSummariesByYearMonth` の `capacityStatus` 計算ロジックをカバーするテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/PracticeSessionServiceTest.java`（既存ファイル）または同 service の専用テストクラス — 以下のケースを追加:
