@@ -10,10 +10,10 @@ import {
   User,
   Edit,
   Trash2,
-  ArrowLeft,
   AlertCircle,
 } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import PageHeader from '../../components/PageHeader';
 
 const MatchDetail = () => {
   const { id } = useParams();
@@ -109,16 +109,11 @@ const MatchDetail = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <>
+      <PageHeader title="試合詳細" backTo="/matches" />
+      <div className="max-w-3xl mx-auto">
       {/* ヘッダー */}
       <div className="mb-6">
-        <Link
-          to="/matches"
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          試合記録一覧に戻る
-        </Link>
         <div className="flex justify-between items-start">
           <div>
             <p className="text-gray-600 mt-1">
@@ -314,7 +309,8 @@ const MatchDetail = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 
