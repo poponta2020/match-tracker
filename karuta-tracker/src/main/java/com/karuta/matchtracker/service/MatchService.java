@@ -421,7 +421,8 @@ public class MatchService {
         setPlayerKyuRanks(match);
 
         // 会場ID を決定（試合参加者基準: 簡易登録ではリクエストの playerId が参加者）
-        match.setVenueId(resolveVenueId(match.getMatchDate(), List.of(request.getPlayerId())));
+        match.setVenueId(resolveVenueId(match.getMatchDate(), match.getMatchNumber(),
+                List.of(request.getPlayerId())));
 
         Match saved = matchRepository.save(match);
 
@@ -488,7 +489,7 @@ public class MatchService {
             match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
             // 会場ID を決定（試合参加者基準: player1 と player2 の参加 venue を集約）
-            match.setVenueId(resolveVenueId(match.getMatchDate(),
+            match.setVenueId(resolveVenueId(match.getMatchDate(), match.getMatchNumber(),
                     List.of(match.getPlayer1Id(), match.getPlayer2Id())));
             saved = matchRepository.save(match);
             log.info("Upsert: created new match with id: {}", saved.getId());
@@ -683,7 +684,7 @@ public class MatchService {
      * Match に紐付ける venue_id を決定する。
      *
      * 優先順位:
-     *   1. 試合参加者（player1 / player2 等）が同日に active 参加（WON / PENDING）した
+     *   1. 試合参加者（player1 / player2 等）が同日・同試合番号に active 参加（WON / PENDING）した
      *      practice_session の venue_id を集約し、一意であれば採用
      *      （複数会場が混在する場合は次のフォールバックへ）
      *   2. 同日の practice_sessions の venue_id が一意であればそれを採用
@@ -692,20 +693,23 @@ public class MatchService {
      *
      * 登録者（createdBy）ではなく試合参加者を基準にするのは、ADMIN による代理登録時に
      * 管理者の参加会場が誤って入ることを防ぐため。
+     * matchNumber でも絞るのは、同日複数会場で選手が両方に参加している場合に
+     * 対象試合と無関係の参加会場が混ざって venue_id が一意決定できないのを防ぐため。
      */
-    private Long resolveVenueId(LocalDate matchDate, List<Long> participantPlayerIds) {
-        if (matchDate == null) {
+    private Long resolveVenueId(LocalDate matchDate, Integer matchNumber, List<Long> participantPlayerIds) {
+        if (matchDate == null || matchNumber == null) {
             return null;
         }
 
-        // 1段目: 参加実績ベース（参加者全員の active 参加 venue を集約し、一意なら採用）
+        // 1段目: 参加実績ベース（参加者全員の同日・同試合番号 active 参加 venue を集約）
         java.util.Set<Long> participantVenues = new java.util.HashSet<>();
         for (Long playerId : participantPlayerIds) {
             if (playerId == null || playerId == 0L) {
                 continue;
             }
             participantVenues.addAll(
-                    practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(playerId, matchDate)
+                    practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(
+                            playerId, matchDate, matchNumber)
             );
         }
         if (participantVenues.size() == 1) {

@@ -94,8 +94,9 @@ ALTER TABLE matches ADD CONSTRAINT fk_matches_venue
     FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE SET NULL;
 CREATE INDEX idx_matches_venue ON matches(venue_id);
 
--- 2) backfill: 試合参加者（player1 / player2）が active 参加（WON / PENDING）した
+-- 2) backfill: 試合参加者（player1 / player2）が同日・同試合番号に active 参加した
 --    practice_sessions の venue_id を集約し、一意であれば採用
+--    match_number IS NULL は legacy データ（全試合参加）を拾うために含める
 UPDATE matches m SET venue_id = subq.venue_id
 FROM (
   SELECT m.id AS match_id, MIN(ps.venue_id) AS venue_id
@@ -103,6 +104,7 @@ FROM (
   JOIN practice_participants pp ON pp.player_id IN (m.player1_id, m.player2_id)
   JOIN practice_sessions ps ON ps.id = pp.session_id
   WHERE ps.session_date = m.match_date
+    AND (pp.match_number = m.match_number OR pp.match_number IS NULL)
     AND ps.venue_id IS NOT NULL
     AND pp.status IN ('WON', 'PENDING')
     AND m.venue_id IS NULL
@@ -129,10 +131,11 @@ WHERE m.match_date = subq.session_date
 `MatchService` の create / upsert メソッド内で、Match エンティティ生成後 `matchRepository.save()` 直前に以下のロジックで venue_id を解決する。
 
 **優先順位:**
-1. **試合参加者（簡易登録は `request.playerId`、詳細登録は `player1Id` / `player2Id`）が同日に active 参加（`status IN ('WON','PENDING')`）した practice_session の venue_id を集約**
+1. **試合参加者（簡易登録は `request.playerId`、詳細登録は `player1Id` / `player2Id`）が同日・同試合番号に active 参加（`status IN ('WON','PENDING')`）した practice_session の venue_id を集約**
    - 参加者全員の venue を集めて重複排除し、結果が一意であれば採用
    - 結果が複数（参加者が別会場に参加）であれば、誤割り当てを避けるため次のフォールバックに進む
    - `createdBy` ではなく試合参加者を基準にするのは、ADMIN が代理登録するケースで管理者の参加会場が誤って入るリスクを排除するため
+   - `match_number` でも絞るのは、同日複数会場で選手が両方に参加している場合に、対象試合と無関係の参加会場が混ざって venue_id が一意決定できなくなるのを防ぐため。`match_number IS NULL`（全試合参加を意味する legacy データ）も対象に含める
    - キャンセル系（`CANCELLED` / `WAITLISTED` / `OFFERED` / `DECLINED` / `WAITLIST_DECLINED`）は実際に試合をしていない参加履歴のため除外
 2. **同日に練習が行われた venue_id（同日のすべての practice_sessions の venue_id が一意であれば採用）**
    - 同日に複数会場で練習が行われていた場合は採用せず NULL のまま（誤った会場を割り当てるリスクを回避）
@@ -267,7 +270,7 @@ CLAUDE.md の **DBマイグレーション適用ルール** に従う:
 | 3 | 会場名と試合番号の書式 | `5/23 あかなら・すずらん(2)`（括弧は試合番号のみ、スペース区切り） | `5/23 (会場名) N試合目` | ユーザー要望通り。よりコンパクト |
 | 4 | 長い会場名の処理 | 末尾「...」で省略 | 対戦相手名を省略 / 2段折返し | 対戦相手の視認性を維持。truncate で自然 |
 | 5 | 会場情報なし時の表示 | 「5/23 (2)」（会場のみスキップ） | 完全に何も追加表示しない / プレースホルダー | 試合番号は常に有用な情報。スペース詰めで自然 |
-| 6 | venue_id 決定ロジック | 試合参加者（player1 / player2）の active 参加 venue が一意なら採用 → 同日一意 venue にフォールバック | createdBy の参加 venue を採用 / 全ステータスで参加履歴を拾う | createdBy 基準だと ADMIN 代理登録時に管理者の参加 venue が誤って入る。全ステータスだとキャンセル待ち・辞退済みの venue まで拾うため、active（WON / PENDING）参加に絞る |
+| 6 | venue_id 決定ロジック | 試合参加者（player1 / player2）の同日・同試合番号 active 参加 venue が一意なら採用 → 同日一意 venue にフォールバック | createdBy の参加 venue を採用 / 全ステータス / match_number で絞らない | createdBy 基準は ADMIN 代理登録時に管理者の参加 venue が誤って入る。全ステータスはキャンセル待ち・辞退済みの venue まで拾う。match_number を絞らないと同日複数会場・別試合番号の参加レコードが混ざり venue_id が NULL に落ちるため、(WON/PENDING) かつ同試合番号 (or NULL) に限定する |
 | 7 | 既存 Match の backfill | マイグレーション SQL で自動実施 | NULL のまま放置 / 手動運用 | 古いデータも会場が見える方が UX 良い。SQL 1回実行で完結 |
 | 8 | MatchCreateRequest の拡張 | 拡張しない（バックエンドで自動推定） | venue_id を必須フィールドに追加 | フォーム改修不要。既存フローへの破壊的変更を回避 |
 | 9 | MatchDetail での表示 | 詳細情報 grid を 3 カラム化 | ヘッダ部分に追加 / 別セクション化 | 既存の「試合日」「試合番号」と整合 |

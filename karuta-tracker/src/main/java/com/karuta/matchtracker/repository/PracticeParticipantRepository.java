@@ -321,18 +321,24 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                             @Param("matchNumber") Integer matchNumber);
 
     /**
-     * 特定の選手が同日に active な状態（WON / PENDING）で参加した practice_sessions の
+     * 特定の選手が同日 / 同試合番号に active 参加（WON / PENDING）した practice_sessions の
      * venue_id を取得。キャンセル系・キャンセル待ち系のステータスは除外する。
      * （ParticipantStatus.isActive() と整合）
+     *
+     * `match_number IS NULL`（全試合参加を示す legacy データ）も対象に含める。
+     * match_number で絞らないと、同日複数会場・別試合番号の参加レコードまで混ざり
+     * venue_id が一意に決まらず NULL に落ちるケースが発生するため。
      */
     @Query("SELECT ps.venueId FROM PracticeParticipant pp " +
            "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
            "WHERE pp.playerId = :playerId AND ps.sessionDate = :sessionDate " +
+           "AND (pp.matchNumber = :matchNumber OR pp.matchNumber IS NULL) " +
            "AND pp.status IN ('WON', 'PENDING') " +
            "AND ps.venueId IS NOT NULL " +
            "ORDER BY ps.id ASC")
-    List<Long> findVenueIdsByPlayerIdAndSessionDate(@Param("playerId") Long playerId,
-                                                    @Param("sessionDate") LocalDate sessionDate);
+    List<Long> findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(@Param("playerId") Long playerId,
+                                                                  @Param("sessionDate") LocalDate sessionDate,
+                                                                  @Param("matchNumber") Integer matchNumber);
 
     /**
      * 指定月・指定団体のセッションで落選した選手IDリストを取得（月内優先当選判定用）

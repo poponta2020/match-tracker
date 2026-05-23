@@ -1550,7 +1550,7 @@ class MatchServiceTest {
         void shouldResolveVenueIdViaPracticeParticipant() {
             LocalDate today = LocalDate.now();
             stubCommonCreatePath(today);
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of(10L));
 
             matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
@@ -1567,7 +1567,7 @@ class MatchServiceTest {
         void shouldResolveVenueIdViaSameDayUniqueVenue() {
             LocalDate today = LocalDate.now();
             stubCommonCreatePath(today);
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of());
             when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
                     .thenReturn(List.of(20L));
@@ -1584,7 +1584,7 @@ class MatchServiceTest {
         void shouldLeaveVenueIdNullWhenMultipleVenuesOnSameDay() {
             LocalDate today = LocalDate.now();
             stubCommonCreatePath(today);
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of());
             when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
                     .thenReturn(List.of(20L, 30L));
@@ -1601,7 +1601,7 @@ class MatchServiceTest {
         void shouldLeaveVenueIdNullWhenNoMatchingSession() {
             LocalDate today = LocalDate.now();
             stubCommonCreatePath(today);
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of());
             when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
                     .thenReturn(List.of());
@@ -1633,9 +1633,9 @@ class MatchServiceTest {
             when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
             // player1, player2 が同じ会場 (10) に active 参加
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of(10L));
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(2L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(2L, today, 1))
                     .thenReturn(List.of(10L));
 
             // ADMIN (id=99) が代理登録（player1/2 のいずれでもない）
@@ -1649,7 +1649,7 @@ class MatchServiceTest {
             verify(practiceSessionRepository, never()).findDistinctVenueIdsBySessionDate(any());
             // ADMIN(99)のクエリは呼ばれない（参加者基準なので player1/2 のみ）
             verify(practiceParticipantRepository, never())
-                    .findVenueIdsByPlayerIdAndSessionDate(eq(99L), any());
+                    .findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(eq(99L), any(), any());
         }
 
         @Test
@@ -1672,9 +1672,9 @@ class MatchServiceTest {
             when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
             // player1 と player2 が別会場に参加（参加者集約で size=2 → 1段目では確定しない）
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(1L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
                     .thenReturn(List.of(10L));
-            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDate(2L, today))
+            when(practiceParticipantRepository.findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(2L, today, 1))
                     .thenReturn(List.of(20L));
             // 2段目: 同日一意 venue = 30
             when(practiceSessionRepository.findDistinctVenueIdsBySessionDate(today))
@@ -1685,6 +1685,30 @@ class MatchServiceTest {
             ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
             verify(matchRepository).save(captor.capture());
             assertThat(captor.getValue().getVenueId()).isEqualTo(30L);
+        }
+
+        @Test
+        @DisplayName("同じ選手が同日別試合番号で別会場に参加していても、対象試合番号の venue だけ採用する（match_number 絞り込み）")
+        void shouldFilterByMatchNumberAndIgnoreOtherMatchNumberVenues() {
+            LocalDate today = LocalDate.now();
+            // buildSimpleRequest の matchNumber は常に 1
+            stubCommonCreatePath(today);
+            // 対象試合番号=1 の venue は会場A (10) のみ
+            when(practiceParticipantRepository
+                    .findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(1L, today, 1))
+                    .thenReturn(List.of(10L));
+
+            matchService.createMatchSimple(buildSimpleRequest(today), 1L, Player.Role.PLAYER);
+
+            ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+            verify(matchRepository).save(captor.capture());
+            // 同じ選手が matchNumber=2 で会場B に参加していたとしても、対象 matchNumber=1 の
+            // クエリしか呼ばれないため venue=10 で一意特定される
+            assertThat(captor.getValue().getVenueId()).isEqualTo(10L);
+            verify(practiceParticipantRepository, never())
+                    .findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(any(), any(), eq(2));
+            // 1段目で確定したので 2段目 fallback は呼ばれない
+            verify(practiceSessionRepository, never()).findDistinctVenueIdsBySessionDate(any());
         }
     }
 
