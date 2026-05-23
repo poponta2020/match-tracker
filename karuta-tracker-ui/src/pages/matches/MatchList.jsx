@@ -535,7 +535,7 @@ const MatchList = () => {
                   return (
                     <div
                       key={match.id}
-                      className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1.4fr)_auto_auto] items-center gap-x-2 px-4 py-2"
+                      className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_minmax(0,1.4fr)_1.75rem_2.5rem] items-center gap-x-2 px-4 py-2"
                     >
                       <span className="text-xs text-[#9ca3af]">
                         {formatDate(match.matchDate)}
@@ -581,7 +581,7 @@ const MatchList = () => {
                         </span>
                       ) : (
                         <span aria-hidden="true" className="text-xs invisible">
-                          手0
+                          手99
                         </span>
                       )}
                     </div>

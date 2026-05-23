@@ -277,6 +277,24 @@ describe('MatchList', () => {
     expect(screen.queryByText(/\(5\)/)).toBeNull();
   });
 
+  it('行内表示: 行 container に固定幅 grid template が適用されている（列揃え担保）', async () => {
+    // 行ごとにコンテンツ依存で列幅が変わらないよう、固定幅の grid-cols クラスを必須とする。
+    // auto 列が混ざると行ごとに track 幅がずれ「全行で各列の左端 x 座標が揃う」要件を満たせない。
+    setupDefaultMocks({
+      matches: [buildMatch()],
+    });
+
+    renderMatchList('/matches');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    const row = opponentBtn.parentElement;
+
+    expect(row.className).toContain('grid');
+    // 6 列構造の固定幅 grid template（auto 不可。日付・勝敗・メモ・お手付きは rem 単位の固定幅）
+    expect(row.className).toMatch(/grid-cols-\[[^\]]*rem[^\]]*minmax\(0,1fr\)[^\]]*rem[^\]]*minmax\(0,1\.4fr\)[^\]]*rem[^\]]*rem\]/);
+    expect(row.className).not.toMatch(/grid-cols-\[auto/);
+  });
+
   it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [メモ] [手N] の順で描画される', async () => {
     setupDefaultMocks({
       matches: [buildMatch({
