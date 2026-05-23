@@ -158,13 +158,96 @@ public class PracticeSessionService {
                 : venueRepository.findAllById(venueIds).stream()
                     .collect(Collectors.toMap(v -> v.getId(), v -> v.getName()));
 
+        // 定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）。
+        // 集計失敗時は capacityStatus を null のまま返し、カレンダー本体表示を阻害しない（防御的挙動）。
+        List<Long> sessionIds = sessions.stream()
+                .map(PracticeSession::getId)
+                .collect(Collectors.toList());
+        Map<Long, Map<Integer, Long>> effectiveCountMap;
+        boolean capacityAggregationFailed = false;
+        if (sessionIds.isEmpty()) {
+            effectiveCountMap = Map.of();
+        } else {
+            try {
+                // セッションID × 試合番号 → 実質枠取得人数（WON + PENDING + OFFERED）
+                // matchNumber == null は BYE（抜け番）扱い。既存の enrichDtoWithMatchDetails と
+                // 同じ運用に揃えるため試合別集計から除外する（エンティティのコメントとは異なるが
+                // 実運用に整合）。
+                effectiveCountMap = practiceParticipantRepository.findBySessionIdIn(sessionIds).stream()
+                        .filter(p -> p.getMatchNumber() != null)
+                        .filter(p -> {
+                            ParticipantStatus s = p.getStatus();
+                            return s == ParticipantStatus.WON
+                                    || s == ParticipantStatus.PENDING
+                                    || s == ParticipantStatus.OFFERED;
+                        })
+                        .collect(Collectors.groupingBy(
+                                PracticeParticipant::getSessionId,
+                                Collectors.groupingBy(
+                                        PracticeParticipant::getMatchNumber,
+                                        Collectors.counting()
+                                )
+                        ));
+            } catch (Exception e) {
+                log.warn("Failed to aggregate capacityStatus for {}-{}; falling back to null", year, month, e);
+                effectiveCountMap = Map.of();
+                capacityAggregationFailed = true;
+            }
+        }
+
+        final Map<Long, Map<Integer, Long>> finalEffectiveCountMap = effectiveCountMap;
+        final boolean finalAggregationFailed = capacityAggregationFailed;
         return sessions.stream().map(session -> {
             PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
             if (session.getVenueId() != null) {
                 dto.setVenueName(venueNameMap.get(session.getVenueId()));
             }
+            if (!finalAggregationFailed) {
+                dto.setCapacityStatus(computeCapacityStatus(session,
+                        finalEffectiveCountMap.getOrDefault(session.getId(), Map.of())));
+            }
             return dto;
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * セッションの定員到達状況を判定する。
+     *
+     * - capacity が null / 0 以下 → AVAILABLE
+     * - totalMatches が null / 0 以下 → AVAILABLE
+     * - 試合番号 1〜totalMatches で effectiveCount >= capacity を判定
+     *   - 全試合で達している → FULL
+     *   - いずれか1試合以上で達している → NEARLY_FULL
+     *   - それ以外 → AVAILABLE
+     *
+     * effectiveCount は WON + PENDING + OFFERED の合計（呼び出し側で算出済み）。
+     */
+    private PracticeSessionDto.CapacityStatus computeCapacityStatus(
+            PracticeSession session, Map<Integer, Long> effectiveCountByMatch) {
+        Integer capacity = session.getCapacity();
+        if (capacity == null || capacity <= 0) {
+            return PracticeSessionDto.CapacityStatus.AVAILABLE;
+        }
+        Integer totalMatches = session.getTotalMatches();
+        if (totalMatches == null || totalMatches <= 0) {
+            return PracticeSessionDto.CapacityStatus.AVAILABLE;
+        }
+
+        int matchesAtCapacity = 0;
+        for (int matchNumber = 1; matchNumber <= totalMatches; matchNumber++) {
+            long effectiveCount = effectiveCountByMatch.getOrDefault(matchNumber, 0L);
+            if (effectiveCount >= capacity) {
+                matchesAtCapacity++;
+            }
+        }
+
+        if (matchesAtCapacity == 0) {
+            return PracticeSessionDto.CapacityStatus.AVAILABLE;
+        }
+        if (matchesAtCapacity == totalMatches) {
+            return PracticeSessionDto.CapacityStatus.FULL;
+        }
+        return PracticeSessionDto.CapacityStatus.NEARLY_FULL;
     }
 
     /**
