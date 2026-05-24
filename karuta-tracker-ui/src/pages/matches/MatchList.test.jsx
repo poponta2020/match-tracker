@@ -277,6 +277,91 @@ describe('MatchList', () => {
     expect(screen.queryByText(/\(5\)/)).toBeNull();
   });
 
+  it('行内表示: 行 container は固定幅 grid template を使い auto 列を持たない（列揃え契約）', async () => {
+    // 「全行で各列の左端 x 座標が揃う」要件を満たすため、grid-cols は auto 列を持たず、
+    // 行ごとにコンテンツで幅が変わらない固定 rem 幅の track を含むことを契約として固定する。
+    // 比率（1fr / 1.4fr）や具体的な rem 値は実装裁量とし、テストでは検証しない。
+    setupDefaultMocks({
+      matches: [buildMatch()],
+    });
+
+    renderMatchList('/matches');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    const row = opponentBtn.parentElement;
+
+    expect(row.className).toContain('grid');
+    // grid-cols-[...] が定義されていること
+    expect(row.className).toMatch(/grid-cols-\[[^\]]+\]/);
+    // auto 列を使っていないこと（行ごとに track 幅がブレ列揃え要件を満たせないため）
+    expect(row.className).not.toMatch(/grid-cols-\[[^\]]*\bauto\b/);
+    // 固定幅の rem トラックが含まれていること（コンテンツ非依存の列幅を担保）
+    expect(row.className).toMatch(/grid-cols-\[[^\]]*rem[^\]]*\]/);
+  });
+
+  it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [メモ] [手N] の順で描画される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        venueName: '本郷',
+        matchNumber: 3,
+        result: '勝ち',
+        scoreDifference: 5,
+        myPersonalNotes: 'メモ本文',
+        myOtetsukiCount: 2,
+      })],
+    });
+
+    renderMatchList('/matches');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    const row = opponentBtn.parentElement;
+    const cells = Array.from(row.children);
+
+    expect(cells[0]).toHaveTextContent('5/23');
+    expect(cells[1]).toHaveTextContent('山田太郎');
+    expect(cells[2]).toHaveTextContent('〇5');
+    expect(cells[3]).toHaveTextContent('本郷 3試合目');
+    expect(cells[4]).toHaveAttribute('aria-label', '対戦詳細を見る');
+    expect(cells[5]).toHaveTextContent('手2');
+  });
+
+  it('行内表示: メモアイコン非表示・お手付き null の行でも 6 列構造が維持される（列幅確保）', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        player1Id: 2,
+        player2Id: 3,
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        venueName: '本郷',
+        matchNumber: 3,
+        result: '負け',
+        scoreDifference: 1,
+        menteePersonalNotes: '',
+        menteeOtetsukiCount: null,
+      })],
+      mentees: [],
+    });
+
+    renderMatchList('/matches?playerId=2');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(mentorRelationshipAPI.getMyMentees).toHaveBeenCalled();
+    });
+
+    const row = opponentBtn.parentElement;
+    const cells = Array.from(row.children);
+
+    // 6 列構造が維持されること
+    expect(cells).toHaveLength(6);
+    // メモ列（列5）は描画されているが invisible で空間を確保
+    expect(cells[4]).toHaveAttribute('aria-hidden', 'true');
+    // 手 N 列（列6）も同様に空間を確保
+    expect(cells[5]).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('メンター関係 API 失敗時: メモアイコンが描画されず、画面はクラッシュしない', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     setupDefaultMocks({

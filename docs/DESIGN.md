@@ -1955,7 +1955,7 @@ Entity Layer (JPA Entity)
 | 練習日一覧 | /practice | 全員 | カレンダー形式練習日一覧（参加状況バッジ表示） |
 | 練習日登録・編集 | /practice/new, /practice/:id/edit | SUPER_ADMIN | 練習日作成・更新 |
 | 練習参加登録 | /practice/participation | 全員 | 月単位参加登録 |
-| 試合一覧 | /matches | 全員 | 試合一覧 |
+| 試合一覧 | /matches | 全員 | 試合一覧。各行は CSS Grid 6 列（`[日付] [対戦相手名] [勝敗] [会場 N試合目] [メモアイコン] [手N]`）で列揃え。メモアイコン・お手付きは非表示行でも `invisible` プレースホルダで列幅を確保 |
 | 試合登録・編集 | /matches/new, /matches/:id/edit | 全員 | 試合登録・更新 |
 | 試合詳細 | /matches/:id | 全員 | 試合詳細表示 |
 | 試合結果表示 | /matches/results | 全員 | 日付別試合結果ビュー |
