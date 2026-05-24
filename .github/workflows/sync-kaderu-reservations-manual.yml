@@ -4,6 +4,12 @@ name: Sync Kaderu Reservations (manual, per-org)
 # match-tracker アプリの「Kaderuから取り込み」ボタンから workflow_dispatch で起動される。
 # 既存の sync-kaderu-reservations.yml (cron) と同じ concurrency グループを使うため、
 # cron と手動の重複起動は自動的に直列化される。
+#
+# run-name に inputs.eventId を埋め込むことで、バックエンドの scheduler が
+# workflow run と KaderuSyncTriggerEvent を一意に相関できる。
+# (近接ディスパッチによる run_id 誤割当を防ぐため)
+
+run-name: 'Kaderu sync [event:${{ inputs.eventId }}] ${{ inputs.org }}'
 
 on:
   workflow_dispatch:
@@ -15,6 +21,10 @@ on:
         options:
           - hokudai
           - wasura
+      eventId:
+        description: 'match-tracker 側の KaderuSyncTriggerEvent ID (相関ID)'
+        required: true
+        type: string
 
 concurrency:
   group: kaderu-reservation-sync

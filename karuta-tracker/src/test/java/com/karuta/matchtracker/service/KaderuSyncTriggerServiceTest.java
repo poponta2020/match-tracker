@@ -16,10 +16,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+
+import static org.mockito.Mockito.inOrder;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -66,12 +69,12 @@ class KaderuSyncTriggerServiceTest {
     // =======================
 
     @Test
-    @DisplayName("triggerSync: 通常成功で PENDING イベントを保存し DTO を返す（githubRunId は常に null）")
-    void triggerSync_savesPendingEvent_withNullRunId() {
+    @DisplayName("triggerSync: 通常成功で PENDING イベントを saveAndFlush → dispatch (eventId を input に含める)")
+    void triggerSync_savesPendingEvent_thenDispatchesWithEventId() {
         when(eventRepository.findFirstByOrganizationIdAndStatusOrderByTriggeredAtDesc(1L, SyncStatus.PENDING))
                 .thenReturn(Optional.empty());
         when(organizationRepository.findById(1L)).thenReturn(Optional.of(hokudai));
-        when(eventRepository.save(any(KaderuSyncTriggerEvent.class)))
+        when(eventRepository.saveAndFlush(any(KaderuSyncTriggerEvent.class)))
                 .thenAnswer(inv -> {
                     KaderuSyncTriggerEvent e = inv.getArgument(0);
                     e.setId(100L);
@@ -87,17 +90,22 @@ class KaderuSyncTriggerServiceTest {
         assertThat(dto.getStatus()).isEqualTo(SyncStatus.PENDING);
         assertThat(dto.getGithubRunId()).isNull();
 
+        // 保存 → dispatch の順序を厳密に検証（dispatch が先に走ったら未追跡 workflow が起動する）
+        InOrder inOrder = inOrder(eventRepository, gitHubActionsClient);
+        inOrder.verify(eventRepository).saveAndFlush(any(KaderuSyncTriggerEvent.class));
         ArgumentCaptor<Map<String, Object>> inputsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(gitHubActionsClient).dispatchWorkflow(
+        inOrder.verify(gitHubActionsClient).dispatchWorkflow(
                 eq("sync-kaderu-reservations-manual.yml"), eq("main"), inputsCaptor.capture());
-        assertThat(inputsCaptor.getValue()).containsEntry("org", "hokudai");
+        assertThat(inputsCaptor.getValue())
+                .containsEntry("org", "hokudai")
+                .containsEntry("eventId", "100"); // 相関 ID は文字列で渡す
 
-        // 仕様変更: triggerSync は run_id 解決を試みず scheduler に委ねる
+        // triggerSync は run_id 解決を試みず scheduler に委ねる
         verify(gitHubActionsClient, never()).listRecentRuns(any(), any());
     }
 
     @Test
-    @DisplayName("triggerSync: 同一団体の PENDING が存在すれば 409 (事前チェック)")
+    @DisplayName("triggerSync: 同一団体の PENDING が存在すれば 409 (事前チェック) — dispatch も save も呼ばない")
     void triggerSync_throws409_whenPendingExists() {
         KaderuSyncTriggerEvent existing = KaderuSyncTriggerEvent.builder()
                 .id(99L).organizationId(1L).status(SyncStatus.PENDING).build();
@@ -109,22 +117,45 @@ class KaderuSyncTriggerServiceTest {
                 .hasMessageContaining("同期が既に実行中");
 
         verify(gitHubActionsClient, never()).dispatchWorkflow(any(), any(), any());
-        verify(eventRepository, never()).save(any());
+        verify(eventRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    @DisplayName("triggerSync: insert 時の DataIntegrityViolationException も 409 に変換する (race 対策)")
-    void triggerSync_convertsConstraintViolation_to409() {
+    @DisplayName("triggerSync: saveAndFlush 時の DataIntegrityViolationException は 409 に変換し、dispatch は呼ばれない")
+    void triggerSync_convertsConstraintViolation_to409_andDoesNotDispatch() {
         when(eventRepository.findFirstByOrganizationIdAndStatusOrderByTriggeredAtDesc(1L, SyncStatus.PENDING))
                 .thenReturn(Optional.empty());
         when(organizationRepository.findById(1L)).thenReturn(Optional.of(hokudai));
-        when(eventRepository.save(any(KaderuSyncTriggerEvent.class)))
+        when(eventRepository.saveAndFlush(any(KaderuSyncTriggerEvent.class)))
                 .thenThrow(new DataIntegrityViolationException(
                         "duplicate key value violates unique constraint \"uk_kaderu_sync_pending\""));
 
         assertThatThrownBy(() -> service.triggerSync(7L, 1L))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("同期が既に実行中");
+
+        // race の loser は workflow を起動してはならない
+        verify(gitHubActionsClient, never()).dispatchWorkflow(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("triggerSync: dispatch 失敗時は @Transactional が rollback するため例外をそのまま伝播する")
+    void triggerSync_propagatesDispatchFailure() {
+        when(eventRepository.findFirstByOrganizationIdAndStatusOrderByTriggeredAtDesc(1L, SyncStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(organizationRepository.findById(1L)).thenReturn(Optional.of(hokudai));
+        when(eventRepository.saveAndFlush(any(KaderuSyncTriggerEvent.class)))
+                .thenAnswer(inv -> {
+                    KaderuSyncTriggerEvent e = inv.getArgument(0);
+                    e.setId(101L);
+                    return e;
+                });
+        org.mockito.Mockito.doThrow(new RuntimeException("GitHub Actions 5xx"))
+                .when(gitHubActionsClient).dispatchWorkflow(any(), any(), any());
+
+        assertThatThrownBy(() -> service.triggerSync(7L, 1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("GitHub Actions");
     }
 
     @Test
@@ -210,7 +241,7 @@ class KaderuSyncTriggerServiceTest {
         when(eventRepository.findById(100L)).thenReturn(Optional.of(event));
         when(gitHubActionsClient.getWorkflowRun(123456L))
                 .thenReturn(Optional.of(new WorkflowRun(123456L, "completed", "success",
-                        "2026-05-24T15:00:00Z", "https://x")));
+                        "2026-05-24T15:00:00Z", "https://x", "Kaderu sync [event:100] hokudai")));
         when(gitHubActionsClient.fetchWorkflowLogText(123456L))
                 .thenReturn(Optional.of("[hokudai] 処理結果:\n  新規作成: 3件\n  会場拡張: 1件\n  スキップ: 5件"));
         when(organizationRepository.findById(1L)).thenReturn(Optional.of(hokudai));
@@ -237,7 +268,7 @@ class KaderuSyncTriggerServiceTest {
         when(eventRepository.findById(100L)).thenReturn(Optional.of(event));
         when(gitHubActionsClient.getWorkflowRun(123456L))
                 .thenReturn(Optional.of(new WorkflowRun(123456L, "completed", "failure",
-                        "2026-05-24T15:00:00Z", "https://x")));
+                        "2026-05-24T15:00:00Z", "https://x", "Kaderu sync [event:100] hokudai")));
         when(organizationRepository.findById(1L)).thenReturn(Optional.of(hokudai));
 
         service.processPendingEvent(100L);
@@ -269,7 +300,7 @@ class KaderuSyncTriggerServiceTest {
     }
 
     @Test
-    @DisplayName("processPendingEvent: github_run_id 未解決なら listRecentRuns で補完する")
+    @DisplayName("processPendingEvent: github_run_id 未解決なら run-name の [event:<id>] トークンで一意特定して補完")
     void processPendingEvent_resolvesRunId_whenNull() {
         KaderuSyncTriggerEvent event = KaderuSyncTriggerEvent.builder()
                 .id(100L).organizationId(1L).triggeredByPlayerId(7L)
@@ -278,12 +309,16 @@ class KaderuSyncTriggerServiceTest {
                 .githubRunId(null)
                 .build();
         when(eventRepository.findById(100L)).thenReturn(Optional.of(event));
+        // 別団体の run と混在しても displayTitle トークンで誤割当しないことを検証する
         when(gitHubActionsClient.listRecentRuns(eq("sync-kaderu-reservations-manual.yml"), any(Instant.class)))
-                .thenReturn(List.of(new WorkflowRun(123L, "queued", null, "2026-05-24T15:00:00Z", "https://x")));
-        when(eventRepository.existsByGithubRunId(123L)).thenReturn(false);
-        // run の status は queued なので completion 確定はしない（save は run_id 補完で1回呼ばれる）
+                .thenReturn(List.of(
+                        new WorkflowRun(999L, "queued", null, "2026-05-24T15:00:00Z", "https://x",
+                                "Kaderu sync [event:99] wasura"),
+                        new WorkflowRun(123L, "queued", null, "2026-05-24T15:00:10Z", "https://x",
+                                "Kaderu sync [event:100] hokudai")));
         when(gitHubActionsClient.getWorkflowRun(123L))
-                .thenReturn(Optional.of(new WorkflowRun(123L, "queued", null, "2026-05-24T15:00:00Z", "https://x")));
+                .thenReturn(Optional.of(new WorkflowRun(123L, "queued", null, "2026-05-24T15:00:10Z", "https://x",
+                        "Kaderu sync [event:100] hokudai")));
 
         service.processPendingEvent(100L);
 
@@ -295,7 +330,7 @@ class KaderuSyncTriggerServiceTest {
     }
 
     @Test
-    @DisplayName("processPendingEvent: github_run_id 未解決で listRecentRuns 空 → 何もせず次回ティック待ち")
+    @DisplayName("processPendingEvent: listRecentRuns に自分の eventId を含む run がなければ何もせず次回ティック待ち")
     void processPendingEvent_skipsWhenRunIdUnresolved() {
         KaderuSyncTriggerEvent event = KaderuSyncTriggerEvent.builder()
                 .id(100L).organizationId(1L).triggeredByPlayerId(7L)
@@ -304,12 +339,15 @@ class KaderuSyncTriggerServiceTest {
                 .githubRunId(null)
                 .build();
         when(eventRepository.findById(100L)).thenReturn(Optional.of(event));
+        // 別 event のみ含まれており自分の token はない
         when(gitHubActionsClient.listRecentRuns(any(), any(Instant.class)))
-                .thenReturn(List.of());
+                .thenReturn(List.of(new WorkflowRun(999L, "queued", null,
+                        "2026-05-24T15:00:00Z", "https://x", "Kaderu sync [event:99] wasura")));
 
         service.processPendingEvent(100L);
 
         assertThat(event.getStatus()).isEqualTo(SyncStatus.PENDING);
+        assertThat(event.getGithubRunId()).isNull();
         verify(eventRepository, never()).save(any());
         verify(gitHubActionsClient, never()).getWorkflowRun(anyLong());
     }
@@ -338,7 +376,8 @@ class KaderuSyncTriggerServiceTest {
                 .build();
         when(eventRepository.findById(100L)).thenReturn(Optional.of(event));
         when(gitHubActionsClient.getWorkflowRun(123L))
-                .thenReturn(Optional.of(new WorkflowRun(123L, "in_progress", null, "2026-05-24T15:00:00Z", "https://x")));
+                .thenReturn(Optional.of(new WorkflowRun(123L, "in_progress", null, "2026-05-24T15:00:00Z",
+                        "https://x", "Kaderu sync [event:100] hokudai")));
 
         service.processPendingEvent(100L);
 
@@ -368,7 +407,7 @@ class KaderuSyncTriggerServiceTest {
         when(eventRepository.findById(1L)).thenThrow(new RuntimeException("boom"));
         when(eventRepository.findById(2L)).thenReturn(Optional.of(ev2));
         when(gitHubActionsClient.getWorkflowRun(22L))
-                .thenReturn(Optional.of(new WorkflowRun(22L, "in_progress", null, null, null)));
+                .thenReturn(Optional.of(new WorkflowRun(22L, "in_progress", null, null, null, null)));
 
         service.pollPendingEvents();
 

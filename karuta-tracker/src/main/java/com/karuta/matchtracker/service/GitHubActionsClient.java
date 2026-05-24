@@ -227,7 +227,8 @@ public class GitHubActionsClient {
             String status,
             String conclusion,
             @JsonProperty("created_at") String createdAt,
-            @JsonProperty("html_url") String htmlUrl) {
+            @JsonProperty("html_url") String htmlUrl,
+            @JsonProperty("display_title") String displayTitle) {
 
         /** status が "completed" なら true。それ以外 (queued / in_progress / null) は false。 */
         public boolean isCompleted() {

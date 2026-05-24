@@ -2822,16 +2822,19 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   KaderuSyncTriggerService.triggerSync(playerId, orgId)
    1. PENDING 重複チェック (高速 path) → あれば 409 (DuplicateResourceException)
    2. organizations.code 取得 (なければ 404)
-   3. GitHubActionsClient.dispatchWorkflow(
-        "sync-kaderu-reservations-manual.yml", "main", {org: code})
+   3. KaderuSyncTriggerEvent を PENDING (github_run_id=null) で saveAndFlush
+       - DB 側の UNIQUE 部分インデックス uk_kaderu_sync_pending が同時リクエストの
+         race を確定的に検知 (DataIntegrityViolationException → 409 に変換)
+       - dispatch より「先に」DB を占有することで、loser リクエストは UNIQUE 違反で
+         止まり workflow を起動しない
+   4. GitHubActionsClient.dispatchWorkflow(
+        "sync-kaderu-reservations-manual.yml", "main",
+        {org: code, eventId: <event.id>})
        - 環境変数 GITHUB_PAT で Bearer 認証
        - 未設定なら 503 (ResponseStatusException)
-       - 失敗なら 500 (RuntimeException)
-   4. KaderuSyncTriggerEvent を PENDING (github_run_id=null) で保存
-       - DB 側の UNIQUE 部分インデックス uk_kaderu_sync_pending が同時リクエストの
-         race を防ぐ (DataIntegrityViolationException → 409 に変換)
-       - run_id 解決はあえて行わず scheduler に委ねる：複数団体の近接ディスパッチで
-         他団体の run_id を誤割当する race を避けるため
+       - 失敗なら 500 (RuntimeException) → @Transactional が save を rollback
+       - eventId は workflow の run-name に埋め込まれ、scheduler が display_title
+         の "[event:<id>]" トークンで run ↔ event を一意に相関させる相関 ID
    ↓
 [GitHub Actions: sync-kaderu-reservations-manual.yml]
   workflow_dispatch (inputs.org)
@@ -2843,7 +2846,8 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   KaderuSyncTriggerService.pollPendingEvents()
    for each PENDING event:
      a. triggered_at から30分超過 → FAILED + 失敗通知 (fail-safe)
-     b. github_run_id が null → listRecentRuns で補完 (取れなければ次回)
+     b. github_run_id が null → listRecentRuns + display_title の "[event:<id>]"
+        トークン照合で一意特定 (取れなければ次回。triggered_at から30分以内のみ捜索)
      c. getWorkflowRun(runId) で status/conclusion 取得
      d. completed && success → COMPLETED 確定
         - fetchWorkflowLogText から「新規作成:X件 / 会場拡張:X件 / スキップ:X件」を

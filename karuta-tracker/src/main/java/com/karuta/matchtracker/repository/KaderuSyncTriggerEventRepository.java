@@ -21,16 +21,10 @@ public interface KaderuSyncTriggerEventRepository
     /**
      * 指定ステータスの全イベントを triggered_at 昇順で返す（スケジューラー巡回用）。
      *
-     * <p>古い順に処理することで、近接ディスパッチされた複数団体の event 同士で
-     * run_id の取り合いが起きた場合も、ディスパッチ順 (= run_id 昇順) とイベント順
-     * (= triggered_at 昇順) を一致させて正しく割当できる。
+     * <p>古い順に処理することで、scheduler の各 tick で event を作成順に巡回する。
+     * 相関 ID 方式 (run-name に [event:&lt;id&gt;] を埋める) で run と event を一意に
+     * 紐付けるため、処理順自体が誤割当の防御線にはならないが、ログの追跡性のため
+     * 順序を固定している。
      */
     List<KaderuSyncTriggerEvent> findAllByStatusOrderByTriggeredAtAsc(SyncStatus status);
-
-    /**
-     * 指定の GitHub run id を既に保持しているイベントがあるかを返す。
-     * 同時刻に複数団体の手動同期がディスパッチされた場合に、同じ run_id を
-     * 別イベントへ二重割当することを防ぐために使う。
-     */
-    boolean existsByGithubRunId(Long githubRunId);
 }

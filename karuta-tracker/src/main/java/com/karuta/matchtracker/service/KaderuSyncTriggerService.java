@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,11 +65,25 @@ public class KaderuSyncTriggerService {
     /**
      * 手動同期を起動する。
      *
-     * <p>run_id の解決はこのメソッド内では行わず、PENDING 状態で保存して scheduler に
-     * 委ねる。これは、ほぼ同時に複数団体（hokudai/wasura）のディスパッチが行われた場合に
-     * 「自分が dispatch した run」と「直前の別 dispatch の run」を区別できず、誤って
-     * 他団体の run_id を割り当ててしまう race を避けるため。scheduler は triggered_at
-     * 昇順で1イベントずつ処理するので、ディスパッチ順と整合した割当ができる。
+     * <p>順序が重要：
+     * <ol>
+     *   <li>事前重複チェック (409 fast-path)</li>
+     *   <li>団体取得 (404)</li>
+     *   <li>イベントを PENDING で {@code saveAndFlush} し、UNIQUE 部分インデックス
+     *       {@code uk_kaderu_sync_pending} を即座に判定 → 違反なら 409 に変換</li>
+     *   <li>{@code dispatchWorkflow} に {@code eventId} を相関 ID として渡す</li>
+     *   <li>dispatch 失敗時は {@code @Transactional} により save が rollback される
+     *       （未追跡の workflow を起動しない原則）</li>
+     * </ol>
+     *
+     * <p>同時リクエストの挙動 (R1, R2 が同一団体に対しほぼ同時に到達):
+     * <ul>
+     *   <li>R1: 事前チェック通過 → saveAndFlush で INSERT (UNIQUE 制約取得)</li>
+     *   <li>R2: 事前チェック通過 → saveAndFlush は UNIQUE 制約により R1 の commit/rollback まで block</li>
+     *   <li>R1: dispatch 成功 → method exit で commit → R2 は unique violation で 409。
+     *       R2 は dispatch を呼ばないので、workflow は1本だけ走る</li>
+     *   <li>R1: dispatch 失敗 → throw → rollback → R2 は INSERT 成功 → dispatch する</li>
+     * </ul>
      *
      * @param triggeredByPlayerId 押下者のプレイヤーID
      * @param organizationId      対象団体ID（Controller 側で実効ID解決済み）
@@ -97,14 +110,11 @@ public class KaderuSyncTriggerService {
                 .orElseThrow(() -> new ResourceNotFoundException("団体が見つかりません: id=" + organizationId));
         String orgCode = organization.getCode();
 
-        // 3. GitHub Actions に dispatch（失敗は ResponseStatusException / RuntimeException として伝播）
+        // 3. PENDING を先に保存（saveAndFlush で UNIQUE 制約を即時判定 → race を確実に検知）
         LocalDateTime triggeredAt = JstDateTimeUtil.now();
-        gitHubActionsClient.dispatchWorkflow(WORKFLOW_FILE, WORKFLOW_REF, Map.of("org", orgCode));
-
-        // 4. イベント保存（run_id は scheduler が後から補完する）
         KaderuSyncTriggerEvent saved;
         try {
-            saved = eventRepository.save(KaderuSyncTriggerEvent.builder()
+            saved = eventRepository.saveAndFlush(KaderuSyncTriggerEvent.builder()
                     .organizationId(organizationId)
                     .triggeredByPlayerId(triggeredByPlayerId)
                     .triggeredAt(triggeredAt)
@@ -112,12 +122,21 @@ public class KaderuSyncTriggerService {
                     .githubRunId(null)
                     .build());
         } catch (DataIntegrityViolationException e) {
-            // 事前チェックを潜り抜けた同時リクエストとの race。UNIQUE 部分インデックス
-            // (uk_kaderu_sync_pending) が衝突を検知してくれる。
-            // この時点で workflow は既に dispatch 済みだが、scheduler は同一 org の
-            // 唯一の PENDING（先勝ちした方）にこの run_id を割り当てるため、データ整合性は保たれる。
             log.info("Duplicate PENDING detected at insert (race): organizationId={}", organizationId);
             throw new DuplicateResourceException("同一団体の同期が既に実行中です");
+        }
+
+        // 4. dispatch（失敗時は @Transactional が save を rollback する。未追跡 workflow を起動しない）
+        try {
+            gitHubActionsClient.dispatchWorkflow(WORKFLOW_FILE, WORKFLOW_REF, Map.of(
+                    "org", orgCode,
+                    // eventId は workflow の run-name に埋め込まれ、scheduler が
+                    // display_title で event ↔ run を一意に相関させる相関 ID。
+                    "eventId", String.valueOf(saved.getId())));
+        } catch (RuntimeException dispatchEx) {
+            log.warn("Kaderu dispatch failed; transaction will be rolled back: eventId={}, err={}",
+                    saved.getId(), dispatchEx.getMessage());
+            throw dispatchEx;
         }
 
         log.info("Kaderu manual sync triggered: eventId={}, organizationId={}, orgCode={}",
@@ -148,21 +167,29 @@ public class KaderuSyncTriggerService {
     }
 
     /**
-     * scheduler から呼ばれる run_id 解決。指定時刻以降に作成された未割当 run のうち
-     * 最も古いものを返す。triggered_at 昇順で1イベントずつ処理されるので、
-     * ディスパッチ順 (= run_id 昇順) と整合した割当ができる。
+     * scheduler から呼ばれる run_id 解決。workflow の run-name に埋め込まれた
+     * 相関 ID トークン {@code [event:<id>]} で対応する workflow run を一意に特定する。
      *
-     * <p>GitHub Actions が run を登録する前だと候補が空になり得る — その場合は null を返し、
-     * scheduler の次回ティックで再試行させる。
+     * <p>GitHub Actions が run を登録する前 (= dispatch 直後数秒) は候補に含まれず、
+     * 結果として null を返す。scheduler の次回ティックで再試行される。
+     *
+     * <p>display_title が null の run (旧形式 / 異なるワークフロー) は無視する。
      */
-    private Long resolveRunId(Instant lookupFrom) {
+    private Long resolveRunIdForEvent(KaderuSyncTriggerEvent event) {
+        Instant lookupFrom = event.getTriggeredAt().atZone(JstDateTimeUtil.JST).toInstant()
+                .minusSeconds(RUN_LOOKUP_BUFFER_SECONDS);
+        String correlationToken = buildCorrelationToken(event.getId());
         List<WorkflowRun> runs = gitHubActionsClient.listRecentRuns(WORKFLOW_FILE, lookupFrom);
         return runs.stream()
-                .sorted(Comparator.comparingLong(WorkflowRun::id))
-                .filter(r -> !eventRepository.existsByGithubRunId(r.id()))
+                .filter(r -> r.displayTitle() != null && r.displayTitle().contains(correlationToken))
                 .map(WorkflowRun::id)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Workflow の run-name に埋め込む相関 ID トークン (例: "[event:123]")。 */
+    static String buildCorrelationToken(long eventId) {
+        return "[event:" + eventId + "]";
     }
 
     /**
@@ -222,11 +249,9 @@ public class KaderuSyncTriggerService {
             return;
         }
 
-        // 2. run_id 補完
+        // 2. run_id 補完（run-name の相関 ID トークンで一意特定）
         if (event.getGithubRunId() == null) {
-            Instant lookupFrom = event.getTriggeredAt().atZone(JstDateTimeUtil.JST).toInstant()
-                    .minusSeconds(RUN_LOOKUP_BUFFER_SECONDS);
-            Long runId = resolveRunId(lookupFrom);
+            Long runId = resolveRunIdForEvent(event);
             if (runId == null) {
                 return; // 次回ティックで再試行
             }
