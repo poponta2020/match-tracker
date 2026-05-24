@@ -137,7 +137,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -204,7 +204,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(ownParticipation, otherParticipation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(ownSession, otherOrgSession));
@@ -242,7 +242,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(activeParticipation, inactiveParticipation));
         // 非アクティブは filter 後に除外されるので、ロード対象になるのは activeSession のみ
         when(practiceSessionRepository.findAllById(anyList()))
@@ -275,7 +275,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -312,7 +312,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(List.of(playerOrg));
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -344,7 +344,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -373,7 +373,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -398,7 +398,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(Collections.emptyList());
 
         // When
@@ -426,7 +426,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -463,7 +463,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -513,7 +513,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(participations);
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -560,7 +560,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(participations);
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -608,7 +608,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(participations);
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -646,7 +646,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(participations);
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -689,7 +689,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(participations);
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -723,7 +723,7 @@ class IcalCalendarFeedServiceTest {
         when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -774,7 +774,7 @@ class IcalCalendarFeedServiceTest {
         stubPlayerByToken();
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(List.of(playerOrg));
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(ownParticipation, guestParticipation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(ownSession, guestSession));
@@ -811,7 +811,7 @@ class IcalCalendarFeedServiceTest {
         stubPlayerByToken();
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(List.of(playerOrg));
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(participation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(session));
@@ -853,7 +853,7 @@ class IcalCalendarFeedServiceTest {
         stubPlayerByToken();
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(List.of(playerOrg));
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(List.of(guestParticipation));
         when(practiceSessionRepository.findAllById(anyList()))
                 .thenReturn(List.of(guestSession));
@@ -877,7 +877,7 @@ class IcalCalendarFeedServiceTest {
         stubPlayerByToken();
         when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                 .thenReturn(Collections.emptyList());
-        when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+        when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                 .thenReturn(Collections.emptyList());
 
         // When
@@ -1249,7 +1249,7 @@ class IcalCalendarFeedServiceTest {
             when(organizationRepository.findById(ORG_ID)).thenReturn(Optional.of(organization));
             when(playerOrganizationRepository.findByPlayerId(PLAYER_ID))
                     .thenReturn(Collections.emptyList());
-            when(practiceParticipantRepository.findUpcomingParticipations(eq(PLAYER_ID), any(LocalDate.class)))
+            when(practiceParticipantRepository.findAllParticipationsByPlayer(eq(PLAYER_ID)))
                     .thenReturn(List.of(participation));
             when(practiceSessionRepository.findAllById(anyList()))
                     .thenReturn(List.of(session));

@@ -27,7 +27,10 @@ CREATE UNIQUE INDEX uk_kaderu_sync_pending
 CREATE INDEX idx_kaderu_sync_status_triggered
     ON kaderu_sync_trigger_events (status, triggered_at);
 
--- line_message_log の notification_type CHECK 制約に Kaderu 同期通知を追加
+-- line_message_log の notification_type CHECK 制約に Kaderu 同期通知を追加。
+-- 注意: 既存リストを全列挙して置換するため、main の最新 enum 全種別を含める必要がある。
+-- 直近で追加された ADMIN_DENSUKE_PUSH_FAILED (PR #799) を含め忘れると本制約適用後に
+-- 当該通知の保存が失敗する。
 ALTER TABLE line_message_log DROP CONSTRAINT IF EXISTS line_message_log_notification_type_check;
 ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_check
     CHECK (notification_type IN (
@@ -47,6 +50,7 @@ ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_c
         'MENTOR_COMMENT',
         'MENTEE_MEMO_UPDATE',
         'DENSUKE_PAGE_CREATED',
+        'ADMIN_DENSUKE_PUSH_FAILED',
         'KADERU_SYNC_COMPLETED',
         'KADERU_SYNC_FAILED'
     ));

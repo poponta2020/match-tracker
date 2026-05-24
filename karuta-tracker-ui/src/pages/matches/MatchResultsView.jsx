@@ -426,7 +426,7 @@ const MatchResultsView = () => {
         </div>
 
         {/* データなしメッセージ */}
-        <div className="max-w-4xl mx-auto px-4 pt-20 py-12 text-center">
+        <div className="max-w-4xl mx-auto px-4 pt-3 py-12 text-center">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-8">
             <Calendar className="h-16 w-16 text-blue-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-blue-900 mb-2">
@@ -524,7 +524,7 @@ const MatchResultsView = () => {
       </div>
 
       {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+      <div className="max-w-4xl mx-auto px-6 pt-[50px] pb-6">
         <div className="divide-y divide-[#d4ddd7]">
           {currentPairings.map((pairing, index) => {
             const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);

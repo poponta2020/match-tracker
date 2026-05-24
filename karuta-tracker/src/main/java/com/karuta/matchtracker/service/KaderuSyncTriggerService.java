@@ -192,32 +192,6 @@ public class KaderuSyncTriggerService {
         return "[event:" + eventId + "]";
     }
 
-    /**
-     * 全 PENDING イベントを巡回し、状態確定 + 通知送信を行う。
-     *
-     * <p>1イベントごとに独立した tx を張り、外部 API 呼び出し失敗が他イベントに
-     * 波及しないよう catch する。Scheduler から30秒間隔で呼ばれる。
-     */
-    public void pollPendingEvents() {
-        List<Long> pendingIds;
-        try {
-            pendingIds = listPendingIds();
-        } catch (Exception e) {
-            log.warn("Failed to list pending kaderu sync events: {}", e.getMessage(), e);
-            return;
-        }
-        if (pendingIds.isEmpty()) return;
-
-        log.debug("Polling {} pending kaderu sync event(s)", pendingIds.size());
-        for (Long id : pendingIds) {
-            try {
-                processPendingEvent(id);
-            } catch (Exception e) {
-                log.warn("Failed to process pending kaderu sync event {}: {}", id, e.getMessage(), e);
-            }
-        }
-    }
-
     @Transactional(readOnly = true)
     public List<Long> listPendingIds() {
         // triggered_at 昇順で取得。ディスパッチ順 (= run_id 昇順) と整合した

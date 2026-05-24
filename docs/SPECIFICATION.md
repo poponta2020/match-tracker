@@ -600,7 +600,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 
 - 会場情報が取得できない場合は `N試合目` のみ表示
 - `N` は `Match.matchNumber`（その日の第N試合）をそのまま表示
-- 試合詳細画面（`/matches/:id`）の「詳細情報」セクションにも「会場」カードが並ぶ（試合日・試合番号と並ぶ第3要素）
+- 試合詳細画面（`/matches/:id`）では、試合日・試合番号・会場名は統合カード中段にテキスト1行（半角スペース2個区切り）で表示する
 - `opponentId` の計算: `match.player1Id === targetPlayerId ? match.player2Id : match.player1Id`
 - 列幅は固定 rem 値（実装値: `grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem]`）。`auto` を使うと行ごとに track 幅が変わり列揃え要件を満たせないため避ける
 
@@ -866,7 +866,6 @@ SUPER_ADMIN のみ操作可能。
 
 `Layout.jsx` にヘッダーバーを追加:
 - ページタイトル表示
-- 通知ベルアイコン（未読バッジ付き）→ `/notifications` に遷移
 - プロフィールアイコン → `/profile` に遷移
 
 ナビゲーションメニューに「抽選結果」「キャンセル待ち」リンクを追加。
@@ -901,6 +900,10 @@ SUPER_ADMIN のみ操作可能。
 #### 3.9.3 メンターコメント（フィードバック）
 
 試合詳細画面（`/matches/:id`）にコメントスレッドを表示。メンティー本人またはACTIVEメンター関係を持つメンターのみアクセス可能。
+
+**コメントスレッドの表示条件（試合詳細画面）:**
+- **メンター閲覧時**（`isOtherPlayer=true`）: ACTIVEメンター関係があれば常に表示
+- **メンティー本人閲覧時**（`isOtherPlayer=false`）: 自分以外の投稿者によるコメントが**1件以上ある場合のみ表示**（投稿フォーム含めて完全非表示。判定は `matchCommentsAPI.getComments` のレスポンスの `authorId !== currentPlayer.id` で行い、解除済みメンターからの過去コメントもカウント対象とする）
 
 **コメント機能:**
 - スレッド形式でコメントを表示（チャット風UI）
@@ -1088,6 +1091,63 @@ SUPER_ADMIN のみ操作可能。
 - `densuke_member_mappings`: プレイヤー×URLごとの伝助メンバーID（`mi` パラメータ）をキャッシュ
 - `densuke_row_ids`: URL×日付×試合番号ごとの `join-{id}` フィールドIDをキャッシュ
 
+#### 4.1.7.1 アプリ→伝助 練習日同期 (DensukeScheduleWriteService)
+
+アプリで新規練習日を追加した際に、対応する伝助ページの候補日程欄へ自動で末尾追記する機能。
+既存日程・既存参加者データ・既存 `densuke_row_ids` のインデックスは破壊されない（伝助の
+`POST /update` は末尾追記であることをスパイク調査で実証済み — `docs/features/densuke-schedule-write-sync/spike-findings.md` 参照）。
+削除は対象外（手動運用）。
+
+**同期トリガー（2 系統）:**
+1. **イベント駆動（即時 push）**: `PracticeSessionService.createSession` の `afterCommit` フックで
+   `DensukeScheduleWriteService.pushNewSchedulesToDensukeAsync(year, month, organizationId)` を
+   `@Async` で fire-and-forget 実行。即時 UX 向上のため、追加直後に伝助ページが更新される
+2. **スケジューラ（フォロー同期）**: 5 分スケジューラ `DensukeSyncService.syncAll()` の最初のステップで
+   `pushAllForCurrentAndNextMonth()` を実行。即時 push が失敗していた場合の自動回復を担う
+
+**push 対象判定:**
+- 対象 (year, month, organizationId) の `densuke_urls` レコードがなければ early return（伝助ページ未作成のケース）
+- 行ロック (`@Lock(PESSIMISTIC_WRITE)` の `findByYearAndMonthAndOrganizationIdForUpdate`) で取得し、並行 push の差分計算ズレを防ぐ
+- `DensukeImportService.findOrCreateSession` 経由のセッション作成では発火しない
+  （無限ループ防止 — `findOrCreateSession` は `practiceSessionRepository.save` を直接呼び `PracticeSessionService.createSession` を通らないため、afterCommit フックが入らない）
+- **過去日制約**: 伝助 `POST /update` は候補日程を**末尾追記**しかできず、伝助の既存最大日付より前の新規日付を
+  push すると、伝助 DOM 出現順とアプリ側日付昇順がずれて `DensukeWriteService.parseAndSaveRowIds` の row id
+  対応が誤り、参加者出欠が別日に書き込まれるデータ破壊リスクがある。よって**伝助の既存最大日付以前の新規セッション
+  は push せず、即時 push 経路では管理者へ LINE 通知**して伝助ページの管理画面から手動追加を促す。
+  スケジューラ経路はフラッディング防止で通知抑制（WARN ログのみ）。
+
+**差分計算:**
+- `DensukeScraper.scrape(url, year)` で伝助の現スケジュールを取得し、日付集合を得る
+- アプリの `practice_sessions` のうち伝助に存在しない日付のセッションのみを抽出
+- 差分が無ければ POST せず early return
+
+**スケジュール文字列:**
+- `DensukePageCreateService.buildScheduleText(newSessions, venueMap, scheduleMap)` を再利用（フォーマット一貫性確保）
+- 新規セッションが会場未設定・`venue_match_schedules` 不足の場合は `IllegalStateException` を捕捉して失敗通知に変換
+
+**HTTP 呼び出し:**
+- GET `/list?cd=...` で Cookie と `pageId`（`<input name="id">` の value）を取得（`DensukeWriteService.extractPageId` を package-private で共用）
+- POST `/update` (`cd`, `id`, `postfix=""`, `schedule`) を `application/x-www-form-urlencoded` で送信
+- 期待レスポンスは HTTP 302 Found（`Location` は `edit?cd=...&pw=...`）。302 以外は失敗扱い
+
+**失敗時の挙動:**
+- 即時 push 経路（`pushNewSchedulesToDensukeAsync` → `pushNewSchedulesToDensuke`）の失敗:
+  - HTTP 4xx/5xx・IOException・`pageId` 未検出・`buildScheduleText` の `IllegalStateException` を捕捉
+  - `LineNotificationService.sendDensukeScheduleSyncFailedNotification(organizationId, errorMessage)` で
+    団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_PUSH_FAILED`）
+  - 通知設定 ON/OFF は持たない（管理者向け重要通知のため常時送信）
+- スケジューラ経路（`pushSilently`）の失敗:
+  - WARN ログのみで管理者通知は発火しない（フラッディング防止）
+
+**スケジューラ実行順序（`DensukeSyncService.syncAll`）:**
+1. **スケジュール push** （`pushAllForCurrentAndNextMonth`）— 本機能
+2. 参加者書き込み（`writeToDensuke`、既存）
+3. 伝助→アプリ取り込み（`syncForMonth` × 当月・翌月、既存）
+
+**DB マイグレーション:**
+- 既存テーブル `densuke_urls` / `practice_sessions` / `venues` / `venue_match_schedules` への変更は不要
+- ただし新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED` は `line_message_log_notification_type_check` の CHECK 制約に追加する必要がある（`database/add_admin_densuke_push_failed_message_log_check.sql` を本番 DB に適用）。enum 名は VARCHAR(30) 内に収まる短縮形で命名しているため、カラム長拡張は不要
+
 #### 4.1.4 スクレイピング詳細
 
 伝助のHTMLテーブル構造:
@@ -1164,7 +1224,7 @@ WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 pla
 
 共通:
 1. リクエストの token から Player を検索（論理削除済みは404）
-2. `findUpcomingParticipations(playerId, today)` で参加練習を取得
+2. `findAllParticipationsByPlayer(playerId)` で**全期間（過去・未来とも）**の参加練習を取得（カレンダーアプリで過去を見返す体験を維持するため）
 3. `ParticipantStatus.isActive()`（WON / PENDING のみ）でフィルタ
 
 所属団体フィード (`/org/{orgId}.ics`):
@@ -2428,4 +2488,4 @@ UNIQUE制約: (player_id, organization_id)
 | Web Push通知のVAPID署名 | 完了 | `nl.martijndwars:web-push:5.1.1` + BouncyCastleによるRFC 8030準拠のVAPID署名付き実装 |
 | Service Worker | 完了 | `public/sw.js` — Push通知受信・表示・クリック時画面遷移を処理 |
 | 通知設定画面 | 完了 | `/settings/notifications` — LINE通知設定画面（Web Push UI は削除済み、バックエンド・SW・API・DBは保持） |
-| 管理者用抽選管理画面 | 部分実装 | PracticeListモーダル内に再抽選ボタンあり。専用管理画面は未作成 |
+| 管理者用抽選管理画面 | 完了 | `/admin/lottery` の `LotteryManagement.jsx` を提供。月別の抽選プレビュー・確定UIあり。なお、カレンダー練習日ポップアップ内のセッション単位「再抽選」ボタンはUIから非表示（APIは稼働継続） |

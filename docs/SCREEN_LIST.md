@@ -43,7 +43,7 @@
 |---|------|---------------------|---------------------|------|------|
 | 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ）。**各行は CSS Grid による 6 列のテーブル風レイアウトで列揃え**され、左から「日付 `M/D`」「対戦相手名」「勝敗（〇N/×N/△N）」「会場名 N試合目」「メモアイコン」「お手付き回数 `手N`」の順に並ぶ（会場不明時は `N試合目` のみ表示、長すぎる対戦相手名・会場名は truncate）。**カラム幅は `2rem / 6.125rem / 2.5rem / minmax(0,1fr) / 1.5rem / 2rem`** で、対戦相手名は `text-sm` の全角 7 文字分（`6.125rem` = 98px）固定、会場名列が残り幅を受け取る配分。メモアイコン・お手付きは非表示条件の行でも列幅を確保し、全行で各列の左端 x 座標が揃う。**行内タップ動線**: 対戦相手名タップで `/matches?playerId=<opponentId>` へ遷移（ゲスト選手は無効）、メモアイコンタップで対戦詳細へ遷移（自分閲覧時とメンター閲覧時のみ表示、メモ有/無で濃淡切替）。行全体タップによる詳細遷移は廃止 |
 | 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
-| 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンティー本人またはACTIVEメンターのみ表示。未通知コメントがある場合は「LINE通知を送信（N件）」ボタンを表示。コメント入力中はボトムナビを非表示にして誤タップを防止） | ALL | 試合詳細表示（自分のお手付き回数・個人メモを表示。詳細情報セクションに試合日・試合番号・会場の3カードを並べて表示。メンター関係がある場合はコメントスレッドを表示） |
+| 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンター閲覧時はACTIVEメンター関係があれば表示、メンティー本人画面では自分以外の投稿者のコメントが1件以上ある場合のみ表示。未通知コメントがある場合は「LINE通知を送信（N件）」ボタンを表示。コメント入力中はボトムナビを非表示にして誤タップを防止） | ALL | 試合詳細表示。**1つの統合カード**に「対戦相手名 〇/×/△ 枚数差（絶対値）」を上段、「試合日 第N試合 会場名」を1行で中段、「お手付き」「メモ」を下段に表示（メンター閲覧時はメンティーのお手付き・メモ、メンティー本人閲覧時は自分のお手付き・メモを統合カード内に表示）。表示条件を満たす場合のみコメントスレッドを表示 |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
 | 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。組み合わせ未作成時はメッセージ表示+ADMIN以上に作成画面への遷移ボタン。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
 | 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示）。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
@@ -54,7 +54,7 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal`, `AttendanceRegisterModal` | ALL | 練習日程一覧（月別カレンダー表示）。同一日に複数団体のセッションがある場合はカレンダーセルに団体ごとに表示。**会場名の下に試合別ステータスグリッドを表示**（試合番号順に左詰めで `○`／`△`／`×` を 3列固定 grid で配置: `○`＝空きあり（remaining > 2）／`△`＝残わずか（0 < remaining ≤ 2）／`×`＝満員（effectiveCount ≥ capacity）。effectiveCount は WON+PENDING+OFFERED）。**グリッド非表示条件**: 同日複数セッション／フォールバック適用後の有効 capacity が null・0 以下（有効 capacity = session.capacity を優先、null のときのみ venue 既定 capacity にフォールバック。session.capacity = 0 のような明示値は venue 既定値で上書きされずそのまま非表示）／totalMatches null・0 以下・10 以上／`matchCapacityStatuses` が null または不正値混入。同日複数セッションのときはグリッドそのものを描画せず会場名のみ。参加状況背景色（`confirmed` / `waitlisted`）はグリッド記号の可読性確保のため既存より一段薄くしている。`?openToday=true` パラメータ付きアクセス時は当日セッションのポップアップを自動表示（LINEリッチメニューからの導線）。出欠登録は右下フローティングボタン（**過去月のときは非表示**）と選択セッション詳細部のインラインボタン（過去日でない場合のみ表示）の「出欠登録」ボタンから `AttendanceRegisterModal` を開き、「参加登録」「キャンセル登録」を選択して各画面へ遷移する（カレンダー表示中の年月をクエリパラメータで引き継ぐ）。**カレンダー表示月の抽選確定状態（`PlayerParticipationStatusDto.lotteryExecuted`）に応じて当月扱い／来月扱いを判定し、`AttendanceRegisterModal` の「キャンセル登録」ボタン表示を切り替える**（当月扱い＝現在年月、または未来月で抽選確定済みセッションが1つ以上ある月：両ボタン表示／来月扱い＝未来月で抽選確定済みセッションが0個の月：「参加登録」のみ表示）。ADMIN+は隣室チェック対象会場（かでる和室4部屋 + 東🌸）で隣室が空きの場合「隣室を予約」→「予約完了を報告」→「会場を拡張」の3段階操作で会場拡張が可能（東🌸はPhase 1の会場予約プロキシ対象外なので「隣室を予約」をスキップし初期状態から「予約完了を報告」を表示）。**上部ナビバーの月送り右矢印の右側に「Kaderu: {orgCode}」小ボタンを団体ごとに配置**（ADMIN は自団体のみ、SUPER_ADMIN は全団体）。押下すると `POST /api/kaderu-sync/trigger` で GitHub Actions の手動同期 workflow を起動し、PENDING 中は「{orgCode} 同期中… mm:ss」表示で disabled。完了/失敗は押下者本人の LINE 通知（`KADERU_SYNC_COMPLETED` / `KADERU_SYNC_FAILED`）で通知され、ユーザーは画面を手動リロード |
+| 13 | `/practice` | `PracticeList.jsx` | `PlayerChip`, `MatchParticipantsEditModal`, `AttendanceRegisterModal` | ALL | 練習日程一覧（月別カレンダー表示）。同一日に複数団体のセッションがある場合はカレンダーセルに団体ごとに表示。**会場名の下に試合別ステータスグリッドを表示**（試合番号順に左詰めで `○`／`△`／`×` を 3列固定 grid で配置: `○`＝空きあり（remaining > 2）／`△`＝残わずか（0 < remaining ≤ 2）／`×`＝満員（effectiveCount ≥ capacity）。effectiveCount は WON+PENDING+OFFERED）。**グリッド非表示条件**: 同日複数セッション／フォールバック適用後の有効 capacity が null・0 以下（有効 capacity = session.capacity を優先、null のときのみ venue 既定 capacity にフォールバック。session.capacity = 0 のような明示値は venue 既定値で上書きされずそのまま非表示）／totalMatches null・0 以下・10 以上／`matchCapacityStatuses` が null または不正値混入。同日複数セッションのときはグリッドそのものを描画せず会場名のみ。参加状況背景色（`confirmed` / `waitlisted`）はグリッド記号の可読性確保のため既存より一段薄くしている。`?openToday=true` パラメータ付きアクセス時は当日セッションのポップアップを自動表示（LINEリッチメニューからの導線）。出欠登録は右下フローティングボタン（**過去月のときは非表示**）と選択セッション詳細部のインラインボタン（過去日でない場合のみ表示）の「出欠登録」ボタンから `AttendanceRegisterModal` を開き、「参加登録」「キャンセル登録」を選択して各画面へ遷移する（カレンダー表示中の年月をクエリパラメータで引き継ぐ）。**カレンダー表示月の抽選確定状態（`PlayerParticipationStatusDto.lotteryExecuted`）に応じて当月扱い／来月扱いを判定し、`AttendanceRegisterModal` の「キャンセル登録」ボタン表示を切り替える**（当月扱い＝現在年月、または未来月で抽選確定済みセッションが1つ以上ある月：両ボタン表示／来月扱い＝未来月で抽選確定済みセッションが0個の月：「参加登録」のみ表示）。ADMIN+は隣室チェック対象会場（かでる和室4部屋 + 東🌸）で隣室が空きの場合「隣室を予約」→「予約完了を報告」→「会場を拡張」の3段階操作で会場拡張が可能（東🌸はPhase 1の会場予約プロキシ対象外なので「隣室を予約」をスキップし初期状態から「予約完了を報告」を表示）。**練習日ポップアップではセッション単位の「再抽選」ボタンは表示しない**（バックエンドAPI `POST /api/lottery/re-execute/{sessionId}` はADMIN+で稼働継続だが、UIからの呼び出し導線は提供しない）。**上部ナビバーの月送り右矢印の右側に「Kaderu: {orgCode}」小ボタンを団体ごとに配置**（ADMIN は自団体のみ、SUPER_ADMIN は全団体）。押下すると `POST /api/kaderu-sync/trigger` で GitHub Actions の手動同期 workflow を起動し、PENDING 中は「{orgCode} 同期中… mm:ss」表示で disabled。完了/失敗は押下者本人の LINE 通知（`KADERU_SYNC_COMPLETED` / `KADERU_SYNC_FAILED`）で通知され、ユーザーは画面を手動リロード |
 | 14 | `/practice/new` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程作成 |
 | 15 | `/practice/:id` | `PracticeDetail.jsx` | — | ALL | 練習日程詳細 |
 | 16 | `/practice/:id/edit` | `PracticeForm.jsx` | 会場セレクタ、日付ピッカー | SUPER_ADMIN | 練習日程編集 |
@@ -177,7 +177,7 @@
 
 | コンポーネント | ファイル | 用途 |
 |---------------|---------|------|
-| `Layout` | `components/Layout.jsx` | ヘッダーバー（通知ベル・プロフィール）+ 下部ナビゲーション付き共通レイアウト。`BottomNavContext` の `isVisible` に応じてボトムナビの表示/非表示をスライドアニメーションで切り替え |
+| `Layout` | `components/Layout.jsx` | ヘッダーバー（プロフィール）+ 下部ナビゲーション付き共通レイアウト。`BottomNavContext` の `isVisible` に応じてボトムナビの表示/非表示をスライドアニメーションで切り替え |
 | `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック |
 | `AuthRoute` | `components/AuthRoute.jsx` | 認証状態による条件分岐レンダリング |
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
@@ -192,7 +192,6 @@
 | 要素 | 説明 |
 |------|------|
 | ページタイトル | 現在のパスに応じた画面タイトル |
-| 通知ベル | `/notifications` に遷移。未読数バッジ付き |
 | プロフィール | `/profile` に遷移 |
 
 ## 下部ナビゲーション（Layout）

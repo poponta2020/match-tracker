@@ -171,6 +171,15 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
     List<PracticeParticipant> findUpcomingParticipations(@Param("playerId") Long playerId,
                                                          @Param("fromDate") LocalDate fromDate);
 
+    /**
+     * 特定の選手が参加登録している全期間のセッションを、日付昇順で取得
+     */
+    @Query("SELECT pp FROM PracticeParticipant pp " +
+           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE pp.playerId = :playerId " +
+           "ORDER BY ps.sessionDate ASC, pp.matchNumber ASC")
+    List<PracticeParticipant> findAllParticipationsByPlayer(@Param("playerId") Long playerId);
+
     // ============================================================
     // 抽選システム用クエリ
     // ============================================================

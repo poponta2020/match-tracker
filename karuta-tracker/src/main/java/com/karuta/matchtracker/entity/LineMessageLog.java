@@ -77,6 +77,7 @@ public class LineMessageLog {
         MENTOR_COMMENT,
         MENTEE_MEMO_UPDATE,
         DENSUKE_PAGE_CREATED,
+        ADMIN_DENSUKE_PUSH_FAILED,
         KADERU_SYNC_COMPLETED,
         KADERU_SYNC_FAILED;
 

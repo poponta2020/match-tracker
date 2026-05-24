@@ -238,8 +238,9 @@ public class IcalCalendarFeedService {
     }
 
     private List<PracticeParticipant> loadActiveParticipations(Long playerId) {
-        LocalDate today = JstDateTimeUtil.today();
-        return practiceParticipantRepository.findUpcomingParticipations(playerId, today).stream()
+        // 全期間（過去・未来とも）を返す。カレンダーアプリで過去を見返す体験を維持するため。
+        // CANCELLED 等の非アクティブステータスは除外する。
+        return practiceParticipantRepository.findAllParticipationsByPlayer(playerId).stream()
                 .filter(p -> p.getStatus() != null && p.getStatus().isActive())
                 .collect(Collectors.toList());
     }

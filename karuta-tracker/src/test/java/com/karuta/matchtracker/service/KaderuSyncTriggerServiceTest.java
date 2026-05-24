@@ -388,31 +388,20 @@ class KaderuSyncTriggerServiceTest {
     }
 
     // =======================
-    // pollPendingEvents (外側ループ)
+    // listPendingIds (scheduler 入り口)
     // =======================
 
     @Test
-    @DisplayName("pollPendingEvents: 各イベントの例外は他に波及せず、リスト全件処理する")
-    void pollPendingEvents_catchesPerEventExceptions() {
-        KaderuSyncTriggerEvent ev1 = KaderuSyncTriggerEvent.builder()
-                .id(1L).organizationId(1L).status(SyncStatus.PENDING)
-                .triggeredAt(JstDateTimeUtil.now().minusMinutes(1))
-                .githubRunId(11L).triggeredByPlayerId(7L).build();
-        KaderuSyncTriggerEvent ev2 = KaderuSyncTriggerEvent.builder()
-                .id(2L).organizationId(2L).status(SyncStatus.PENDING)
-                .triggeredAt(JstDateTimeUtil.now().minusMinutes(1))
-                .githubRunId(22L).triggeredByPlayerId(7L).build();
+    @DisplayName("listPendingIds: triggered_at 昇順で event id 一覧を返す")
+    void listPendingIds_returnsIdsInTriggeredAtOrder() {
+        KaderuSyncTriggerEvent ev1 = KaderuSyncTriggerEvent.builder().id(1L).build();
+        KaderuSyncTriggerEvent ev2 = KaderuSyncTriggerEvent.builder().id(2L).build();
         when(eventRepository.findAllByStatusOrderByTriggeredAtAsc(SyncStatus.PENDING))
                 .thenReturn(List.of(ev1, ev2));
-        when(eventRepository.findById(1L)).thenThrow(new RuntimeException("boom"));
-        when(eventRepository.findById(2L)).thenReturn(Optional.of(ev2));
-        when(gitHubActionsClient.getWorkflowRun(22L))
-                .thenReturn(Optional.of(new WorkflowRun(22L, "in_progress", null, null, null, null)));
 
-        service.pollPendingEvents();
+        List<Long> ids = service.listPendingIds();
 
-        // 2件目もちゃんと処理されたこと（getWorkflowRun が呼ばれた）
-        verify(gitHubActionsClient).getWorkflowRun(22L);
+        assertThat(ids).containsExactly(1L, 2L);
     }
 
     // =======================

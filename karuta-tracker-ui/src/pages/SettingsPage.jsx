@@ -58,7 +58,7 @@ const SettingsPage = () => {
       </div>
 
       {/* グリッドコンテナ */}
-      <div className="grid grid-cols-3 gap-4 px-4">
+      <div className="grid grid-cols-3 gap-4 px-4 pt-2">
         {gridItems.map((item) => {
           const Icon = item.icon;
           return (

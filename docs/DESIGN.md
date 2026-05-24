@@ -1958,7 +1958,7 @@ Entity Layer (JPA Entity)
 | 練習参加登録 | /practice/participation | 全員 | 月単位参加登録 |
 | 試合一覧 | /matches | 全員 | 試合一覧。各行は CSS Grid 6 列（`grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem]` で `[日付] [対戦相手名] [勝敗] [会場 N試合目] [メモアイコン] [手N]`）で列揃え。対戦相手名は全角 7 文字分（`text-sm` × 7 = 6.125rem = 98px）固定、会場列が残り幅を受け取る。メモアイコン・お手付きは非表示行でも `invisible` プレースホルダで列幅を確保 |
 | 試合登録・編集 | /matches/new, /matches/:id/edit | 全員 | 試合登録・更新 |
-| 試合詳細 | /matches/:id | 全員 | 試合詳細表示 |
+| 試合詳細 | /matches/:id | 全員 | 試合詳細表示（試合結果・詳細情報・メモを1つの統合カードで表示。コメント欄は閲覧者種別に応じた表示条件あり。詳細は「7.6 メンター指名・コメントフロー」参照） |
 | 試合結果表示 | /matches/results | 全員 | 日付別試合結果ビュー |
 | 一括試合結果入力 | /matches/bulk-input | 全員 | 複数試合の一括入力 |
 | 対戦組み合わせ生成 | /pairings/generate | 全員 | 組み合わせ生成・表示 |
@@ -2061,7 +2061,7 @@ Entity Layer (JPA Entity)
 **パス**: `/`
 
 **表示内容**:
-- **ナビゲーションバー**: 選手名、ハンバーガーメニュー（プロフィール、管理メニュー、ログアウト）、未読通知バッジ
+- **ナビゲーションバー**: 選手名、プロフィールアイコン → `/profile` に遷移
 - **繰り上げオファーバナー**: 未応答の繰り上げ参加通知がある場合に表示。タップで通知一覧に遷移
 - **次の練習（NEXT / TODAY）**:
   - 次回参加予定の練習日・時間・会場・参加試合番号
@@ -2238,7 +2238,7 @@ Entity Layer (JPA Entity)
   - 選択された団体IDを `/api/lottery/results` および `/api/lottery/is-confirmed` の両方に渡し、コピー領域と確定状態判定を同じ団体スコープで揃える
   - 団体一覧取得前および切替直後の stale レスポンスを捨てるためのリクエストIDガードを `fetchResults` に持たせる
 
-**備考**: 抽選確定・再抽選・参加者の手動編集等の主要な管理操作は `/admin/lottery` 側に集約している。本画面で管理者向けに提供するのは、確定済み月の抽選落ちを LINE 告知用に整形・コピーする機能のみで、確定や再抽選は行わない。なお同等のコピー領域は `/admin/lottery`（抽選管理画面）のプレビュー段階／確定済み段階にも表示され、プレビュー段階のみ警告色で誤配信を抑止する。
+**備考**: 抽選確定・参加者の手動編集等の主要な管理操作は `/admin/lottery` 側に集約している。本画面で管理者向けに提供するのは、確定済み月の抽選落ちを LINE 告知用に整形・コピーする機能のみで、確定は行わない。なお同等のコピー領域は `/admin/lottery`（抽選管理画面）のプレビュー段階／確定済み段階にも表示され、プレビュー段階のみ警告色で誤配信を抑止する。**セッション単位の再抽選**は専用UIを提供せず、バックエンドAPI `POST /api/lottery/re-execute/{sessionId}`（ADMIN+）のみが稼働している（旧仕様で `/practice` の練習日ポップアップに存在した「再抽選」ボタンはUIから撤去済み）。
 
 ---
 
@@ -2591,8 +2591,14 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 4. メンターが承認（PUT /{id}/approve → ACTIVE）
    または拒否（PUT /{id}/reject → REJECTED）
 
+[コメントスレッドの表示条件（試合詳細画面）]
+- メンター閲覧時（他選手のページを `?playerId=` で開いた場合）: ACTIVEメンター関係があれば常に表示
+- メンティー本人画面: 自分以外の投稿者によるコメントが1件以上ある場合のみ表示（投稿フォーム含めて完全非表示）
+  - 判定は `matchCommentsAPI.getComments` のレスポンスを `authorId !== currentPlayer.id` で評価
+  - 解除済みメンターからの過去コメントもカウント対象
+
 [メンターコメントフロー（バッチ送信方式）]
-1. 試合詳細画面（/matches/:id）でメンティーまたはメンターがコメント投稿
+1. 試合詳細画面（/matches/:id）で上記表示条件を満たすメンティーまたはメンターがコメント投稿
    ↓
 2. POST /api/matches/{matchId}/comments → コメント作成（line_notified = false）
    ※ LINE通知は即時送信しない
@@ -3136,6 +3142,18 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - `warnIfDrifted()` で drift が `DRIFT_WARN_THRESHOLD_MINUTES = 10` 分を超える場合に WARN を出力。`title` 未取得時は WARN 抑制（空 title メンバーでの大量 WARN 防止）
     - 形式: `WARN Densuke change-time drift detected: phase=<Phase> session=<id> match=<n> player=<id> (<name>) densukeTitle=... detectedAt=... driftMinutes=<n>`
   - **DB / API / UI 変更なし** — ログのみで提供。drift 履歴の永続化やフロント表示は将来検討
+- **アプリ→伝助 練習日 push 同期（DensukeScheduleWriteService）**: アプリで新規練習日を追加した際に、伝助ページの候補日程欄へ末尾追記で自動同期する機能（追加のみ、削除対象外）。スパイク調査により伝助の `POST /update` で既存スケジュールに末尾追記できることが実証済みで、既存 `densuke_row_ids` のインデックスは破壊されない
+  - **トリガー**: ① `PracticeSessionService.createSession` の `afterCommit` フックで `pushNewSchedulesToDensukeAsync` を `@Async` で即時 push。② `DensukeSyncService.syncAll` の最初のステップで `pushAllForCurrentAndNextMonth` をフォロー同期（即時 push 失敗時の自動回復）
+  - **無限ループ防止**: `DensukeImportService.findOrCreateSession` は `practiceSessionRepository.save` を直接呼ぶため `createSession` を経由せず、伝助→アプリ取り込み起因の push 再帰は構造上発生しない
+  - **並行制御**: `DensukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate`（`@Lock(PESSIMISTIC_WRITE)`）で同一 (year, month, organizationId) の行ロックをかけ、並行 push の差分計算ズレを防止
+  - **差分計算**: `DensukeScraper.scrape` で伝助の現スケジュール（日付集合）を取得し、アプリ側 `practice_sessions` のうち伝助に存在しない日付のみを抽出。差分なしなら POST せず early return
+  - **過去日制約**: 伝助 `/update` は末尾追記しかできないため、伝助の既存最大日付より前の新規日付を push すると `DensukeWriteService.parseAndSaveRowIds` の row id 対応がずれて参加者出欠が別日に書き込まれるデータ破壊リスクがある。差分セッションのうち伝助既存最大日付以前のものは push せず、即時 push 経路のみ管理者へ LINE 通知して手動追加を促す（スケジューラ経路は通知抑制）
+  - **スケジュール文字列**: 既存 `DensukePageCreateService.buildScheduleText` を再利用（フォーマット一貫性）。会場未設定・`venue_match_schedules` 不足時の `IllegalStateException` は失敗通知に変換
+  - **HTTP 呼び出し**: GET `/list?cd=...` で Cookie と `pageId` を取得 → POST `/update`（`cd`, `id`, `postfix=""`, `schedule`）→ 期待レスポンス HTTP 302。`DensukeWriteService.extractPageId`（package-private に拡張）/ `extractCd` / `extractBase` を共用
+  - **失敗時挙動**: 即時 push 失敗時は `LineNotificationService.sendDensukeScheduleSyncFailedNotification` で団体の ADMIN/SUPER_ADMIN に LINE 通知（`ADMIN_DENSUKE_PUSH_FAILED`、preference カラム未追加で常時送信）。スケジューラ経路は WARN ログのみで通知抑制（フラッディング防止）
+  - **自己注入**: `@Lazy DensukeScheduleWriteService self` をコンストラクタで受け、`@Async` / `@Transactional` の AOP プロキシを通すため同一 bean 内呼び出しを `self.xxx()` 経由で行う
+  - **DB マイグレーション**: 新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED`（25 文字、VARCHAR(30) 内に収まる短縮命名）を `line_message_log_notification_type_check` の CHECK 制約に追加するマイグレーション SQL（`database/add_admin_densuke_push_failed_message_log_check.sql`）を本番 DB に適用する必要あり。テーブル定義の変更（カラム長拡張）は不要
+  - **設計判断（DB ロックと外部 HTTP のスコープ）**: `@Transactional` 内で `densuke_urls` 行ロック → 伝助 scrape → POST /update まで実行する設計。ロック粒度は (year, month, organizationId) 単位で限定的、保持時間は HTTP タイムアウト（各 10 秒、合計最大 30 秒）に律速され、`pushAllForCurrentAndNextMonth` は各 URL を順次処理するため DB コネクションプール圧迫リスクは抑えられる。将来パフォーマンスが課題化した場合は advisory lock や keyed lock で HTTP 前にトランザクションを閉じる設計に変更を検討（本 PR は現行方式維持、Codex Round 3 WARNING の現行維持判断）
 
 #### カレンダー購読（iCalフィード）
 - プレイヤーごとに発行された `ical_feed_token` を親トークンとし、**所属団体ごと + ゲスト参加** で別々のURLを発行
@@ -3148,6 +3166,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 - VEVENT.UID: `session-{sessionId}-player-{playerId}@match-tracker`
 - 表示名カスタマイズ: `player_organizations.calendar_display_name` で団体ごとに上書き可（ゲスト参加カレンダー内は `Organization.name` 固定）
 - 同期対象は `ParticipantStatus.isActive()`（WON / PENDING のみ、CANCELLED / DECLINED / WAITLISTED 等は除外）
+- **同期対象期間は全期間（過去・未来とも）**。`PracticeParticipantRepository.findAllParticipationsByPlayer(playerId)` で取得し、サーバ側で日付による絞り込みは行わない。カレンダーアプリで過去の練習を見返す体験（「数年前のこの日はここで練習していた」など）を維持するための設計判断
 - 設定画面 `CalendarSubscriptionPage.jsx` は「このページについて」常時表示ボックス・「登録手順を見る」アコーディオン（Google PCブラウザ / Apple iPhone）・各操作の説明サブテキストを含み、外部ドキュメント不要で利用方法が完結する
 - VEVENT 時刻はプレイヤーの参加 `match_number` から動的に算出（`IcalCalendarFeedService.buildEvent`）
   - `buildIcsForParticipations` で session 単位に `sessionMatchNumbers`（`match_number != null` のみ集計）と `sessionsWithNullMatchNumber` を構築し、`buildEvent` に `allHaveMatchNumber` フラグとして渡す

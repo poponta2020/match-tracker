@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
 import RoleRoute from './components/RoleRoute';
 import Layout from './components/Layout';
+import ScrollToTop from './components/ScrollToTop';
 import Login from './pages/Login';
 import InviteRegister from './pages/InviteRegister';
 import Home from './pages/Home';
@@ -64,6 +65,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
+        <ScrollToTop />
         <BottomNavProvider>
         <AuthProvider>
           <Routes>
