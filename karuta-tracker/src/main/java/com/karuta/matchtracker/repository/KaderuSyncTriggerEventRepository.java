@@ -22,4 +22,11 @@ public interface KaderuSyncTriggerEventRepository
      * 指定ステータスの全イベント（スケジューラー巡回用）。
      */
     List<KaderuSyncTriggerEvent> findAllByStatus(SyncStatus status);
+
+    /**
+     * 指定の GitHub run id を既に保持しているイベントがあるかを返す。
+     * 同時刻に複数団体の手動同期がディスパッチされた場合に、同じ run_id を
+     * 別イベントへ二重割当することを防ぐために使う。
+     */
+    boolean existsByGithubRunId(Long githubRunId);
 }
