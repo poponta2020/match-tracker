@@ -1065,14 +1065,22 @@ class DensukeImportServiceTest {
                 any(), anyMap());
     }
 
+    // ================================================================
+    // Venue デフォルト値反映テスト (Issue #779)
+    // findOrCreateSession で Venue の defaultMatchCount / capacity が
+    // practice_sessions に反映されることを検証する。
+    // ================================================================
+
     @Test
-    @DisplayName("伝助同期: venue 解決時、新規セッションに venue 既定 capacity がセットされる")
-    void testImportSetsCapacityFromVenueOnCreate() throws IOException {
+    @DisplayName("Venueデフォルト: 新規セッション + 会場名マッチで totalMatches/capacity が venue 値で設定される")
+    void testImportAppliesVenueDefaultsOnNewSession() throws IOException {
         DensukeData data = createSampleData();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(20).build();
+
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
-        when(venueRepository.findAll()).thenReturn(List.of(
-                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
                 .thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
@@ -1086,106 +1094,31 @@ class DensukeImportServiceTest {
 
         densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
-        ArgumentCaptor<PracticeSession> captor = ArgumentCaptor.forClass(PracticeSession.class);
-        verify(practiceSessionRepository, atLeastOnce()).save(captor.capture());
-        PracticeSession savedSession = captor.getAllValues().stream()
-                .filter(s -> LocalDate.of(2026, 4, 1).equals(s.getSessionDate()))
-                .findFirst().orElseThrow();
-        assertThat(savedSession.getVenueId()).isEqualTo(100L);
-        assertThat(savedSession.getCapacity()).isEqualTo(14);
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getSessionDate().equals(LocalDate.of(2026, 4, 1)) &&
+                session.getTotalMatches() == 5 &&
+                Integer.valueOf(20).equals(session.getCapacity()) &&
+                Long.valueOf(100L).equals(session.getVenueId())));
     }
 
     @Test
-    @DisplayName("伝助同期: 既存セッションの venueId が null で会場名が解決できると venueId と capacity の両方が補完される")
-    void testImportBackfillsVenueIdAndCapacityForExistingSession() throws IOException {
-        DensukeData data = createSampleData();
-        // 既存セッション: venueId と capacity の両方が NULL
-        PracticeSession existingSession = PracticeSession.builder().id(200L)
-                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3)
-                .venueId(null).capacity(null).build();
+    @DisplayName("Venueデフォルト: 新規セッション + 会場名未マッチ時は totalMatches=スケジュール由来, capacity=null")
+    void testImportFallsBackToScheduleMatchCountWhenVenueUnmatched() throws IOException {
+        // entry を1つに絞ることで save 呼び出し回数を1回に固定する。
+        // findOrCreateSession のフォールバック動作 (maxMatchByDate からの採用) を検証するのが目的。
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(LocalDate.of(2026, 4, 1));
+        entry.setMatchNumber(2); // この日の maxMatch は 2
+        entry.setVenueName("不明会場");
+        entry.getParticipants().add("田中");
+        data.getEntries().add(entry);
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        // venue は別名のみ登録 → 名前マッチしない
         when(venueRepository.findAll()).thenReturn(List.of(
-                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
-        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
-                .thenReturn(Optional.of(existingSession));
-        when(practiceSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
-                .thenReturn(Collections.emptyList());
-
-        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
-
-        // venue 補完経路で venueId / capacity の両方が venue から埋まる
-        assertThat(existingSession.getVenueId()).isEqualTo(100L);
-        assertThat(existingSession.getCapacity()).isEqualTo(14);
-        verify(practiceSessionRepository, atLeastOnce()).save(existingSession);
-    }
-
-    @Test
-    @DisplayName("伝助同期: 既存セッションの venueId 設定済みで capacity だけ NULL なら capacity を補完する")
-    void testImportBackfillsCapacityForExistingSessionWithVenueIdAndNullCapacity() throws IOException {
-        DensukeData data = createSampleData();
-        // 既存セッション: venueId は設定済み、capacity だけが NULL（本番データの主形状）
-        PracticeSession existingSession = PracticeSession.builder().id(200L)
-                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3)
-                .venueId(100L).capacity(null).build();
-
-        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
-        when(venueRepository.findAll()).thenReturn(List.of(
-                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
-        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
-                .thenReturn(Optional.of(existingSession));
-        when(practiceSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
-                .thenReturn(Collections.emptyList());
-
-        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
-
-        // venueId はそのまま、capacity が venue 既定値で補完される
-        assertThat(existingSession.getVenueId()).isEqualTo(100L);
-        assertThat(existingSession.getCapacity()).isEqualTo(14);
-        verify(practiceSessionRepository, atLeastOnce()).save(existingSession);
-    }
-
-    @Test
-    @DisplayName("伝助同期: 既存セッションの capacity が設定済みなら venue 補完で上書きされない")
-    void testImportDoesNotOverrideExistingCapacityOnVenueBackfill() throws IOException {
-        DensukeData data = createSampleData();
-        // 既存セッション: venueId のみ NULL、capacity は意図的に 0（定員無効運用想定）
-        PracticeSession existingSession = PracticeSession.builder().id(200L)
-                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3)
-                .venueId(null).capacity(0).build();
-
-        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
-        when(venueRepository.findAll()).thenReturn(List.of(
-                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
-        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
-                .thenReturn(Optional.of(existingSession));
-        when(practiceSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
-        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
-                .thenReturn(Collections.emptyList());
-
-        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
-
-        // venueId だけが補完され、capacity は維持される（明示的に 0 を意図したケースを尊重）
-        assertThat(existingSession.getVenueId()).isEqualTo(100L);
-        assertThat(existingSession.getCapacity()).isEqualTo(0);
-    }
-
-    @Test
-    @DisplayName("伝助同期: venue 未解決のとき、新規セッションの capacity は null のまま")
-    void testImportLeavesCapacityNullWhenVenueUnresolved() throws IOException {
-        DensukeData data = createSampleData();
-        // 伝助データの venue 名 "すずらん" は DB に存在しない（unmatched）
-        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
-        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
-        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+                Venue.builder().id(200L).name("別会場").defaultMatchCount(5).capacity(20).build()));
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
                 .thenReturn(Optional.empty());
         when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
@@ -1199,13 +1132,203 @@ class DensukeImportServiceTest {
 
         densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
 
-        ArgumentCaptor<PracticeSession> captor = ArgumentCaptor.forClass(PracticeSession.class);
-        verify(practiceSessionRepository, atLeastOnce()).save(captor.capture());
-        PracticeSession savedSession = captor.getAllValues().stream()
-                .filter(s -> LocalDate.of(2026, 4, 1).equals(s.getSessionDate()))
-                .findFirst().orElseThrow();
-        assertThat(savedSession.getVenueId()).isNull();
-        assertThat(savedSession.getCapacity()).isNull();
+        // totalMatches はスケジュールの最大試合番号 (=2)、capacity / venueId は null
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getTotalMatches() == 2 &&
+                session.getCapacity() == null &&
+                session.getVenueId() == null));
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッション (venueId=null, capacity=null) は会場名マッチで両方とも補完される")
+    void testImportFillsCapacityForExistingSessionWhenVenueMatched() throws IOException {
+        DensukeData data = createSampleData();
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(null)
+                .capacity(null)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // 既存セッションが補完保存される (ケースA)
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getId().equals(99L) &&
+                Long.valueOf(100L).equals(session.getVenueId()) &&
+                Integer.valueOf(20).equals(session.getCapacity()) &&
+                session.getTotalMatches() == 3)); // totalMatches は触らない
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッション (venueId=100, capacity=null) は capacity のみ補完される (ケースB)")
+    void testImportFillsCapacityForExistingSessionWhenVenueIdAlreadySet() throws IOException {
+        DensukeData data = createSampleData();
+        // venueId は既設定だが capacity が null
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(100L)
+                .capacity(null)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // ケースB: venueId は変えず、capacity だけ補完
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getId().equals(99L) &&
+                Long.valueOf(100L).equals(session.getVenueId()) &&
+                Integer.valueOf(20).equals(session.getCapacity()) &&
+                session.getTotalMatches() == 3));
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッションの capacity が設定済みなら Venue 値で上書きされない")
+    void testImportDoesNotOverwriteExistingCapacity() throws IOException {
+        DensukeData data = createSampleData();
+        // capacity が既に設定済み (=15)
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(100L)
+                .capacity(15)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // changed フラグが立たないので save は呼ばれない
+        verify(practiceSessionRepository, never()).save(any());
+        assertThat(existing.getCapacity()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッションの totalMatches は Venue.defaultMatchCount で上書きされない")
+    void testImportDoesNotOverwriteTotalMatchesOnExistingSession() throws IOException {
+        DensukeData data = createSampleData();
+        // totalMatches=2 で既設定。Venue は defaultMatchCount=5 だが触らない。
+        // capacity=null なので ケースB が動いて save は走る（capacity のみ補完）。
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(2)
+                .venueId(100L)
+                .capacity(null)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // totalMatches は触らない、capacity だけ補完される
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getId().equals(99L) &&
+                session.getTotalMatches() == 2 &&
+                Integer.valueOf(20).equals(session.getCapacity())));
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッション (venueId 設定済み) は伝助会場名が未マッチでも unmatched に記録されない (PR #781 回帰防止)")
+    void testImportDoesNotMarkUnmatchedVenueForExistingSessionWithVenueIdSet() throws IOException {
+        // 既存セッション: venueId / capacity 共に管理者設定済み。Venue 名は伝助側と異なる
+        DensukeData data = createSampleData(); // venueName="すずらん"
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(100L)
+                .capacity(15)
+                .build();
+        // venues テーブルには "すずらん" がない (= 名前マッチしない)
+        Venue otherVenue = Venue.builder()
+                .id(100L).name("別名会場").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(otherVenue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // 既存セッションで venueId が設定済みなので、伝助会場名が未マッチでも unmatched に記録しない
+        assertThat(result.getUnmatchedVenues()).isEmpty();
+        // capacity も既設定なので save は呼ばれない
+        verify(practiceSessionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Venueデフォルト: capacity が 0 のような明示値は venue 補完で上書きされない（定員無効運用想定）")
+    void testImportDoesNotOverwriteExplicitlySetZeroCapacityOnVenueBackfill() throws IOException {
+        DensukeData data = createSampleData();
+        // 既存セッション: venueId=null, capacity=0（管理者が意図的に定員無効化設定済み）
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(null)
+                .capacity(0)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(14).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // venueId は補完されるが、capacity=0 の明示値は維持される
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getId().equals(99L) &&
+                Long.valueOf(100L).equals(session.getVenueId()) &&
+                Integer.valueOf(0).equals(session.getCapacity())));
     }
 
 }
