@@ -45,7 +45,10 @@ public class GitHubActionsClient {
     private static final String ACCEPT_HEADER = "application/vnd.github+json";
 
     private final String pat;
-    private final String repo;
+    /** リポジトリ owner (GitHub の REST API パス {@code /repos/{owner}/{repo}/...} の第1パス変数)。 */
+    private final String owner;
+    /** リポジトリ name (REST API パスの第2パス変数)。 */
+    private final String repoName;
     private final RestClient restClient;
 
     /** ログ ZIP のダウンロードは S3 リダイレクトを跨ぐので JDK HttpClient を直接使う。 */
@@ -59,7 +62,17 @@ public class GitHubActionsClient {
             @Value("${GITHUB_REPO:poponta2020/match-tracker}") String repo,
             RestClient.Builder restClientBuilder) {
         this.pat = pat == null ? "" : pat.trim();
-        this.repo = repo;
+        // GITHUB_REPO は "owner/repo" 形式の単一文字列。Spring の UriBuilder は
+        // パス変数中の '/' を %2F にエンコードしてしまうので、コンストラクタで
+        // owner と repoName に分割して各 API パスでは2変数として渡す。
+        // (誤った "/repos/owner%2Frepo/actions/..." を防止)
+        String[] parts = repo == null ? new String[0] : repo.trim().split("/", -1);
+        if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
+            throw new IllegalArgumentException(
+                    "GITHUB_REPO must be in 'owner/repo' form (got: '" + repo + "')");
+        }
+        this.owner = parts[0];
+        this.repoName = parts[1];
         this.restClient = restClientBuilder
                 .baseUrl(GITHUB_API_BASE)
                 .defaultHeader("Accept", ACCEPT_HEADER)
@@ -72,7 +85,7 @@ public class GitHubActionsClient {
         if (pat.isEmpty()) {
             log.warn("GITHUB_PAT is not configured. Kaderu manual sync trigger will return 503 until set.");
         } else {
-            log.info("GitHubActionsClient initialized for repo={} (PAT length={})", repo, pat.length());
+            log.info("GitHubActionsClient initialized for repo={}/{} (PAT length={})", owner, repoName, pat.length());
         }
     }
 
@@ -92,7 +105,8 @@ public class GitHubActionsClient {
         );
         try {
             restClient.post()
-                    .uri("/repos/{repo}/actions/workflows/{file}/dispatches", repo, workflowFileName)
+                    .uri("/repos/{owner}/{repo}/actions/workflows/{file}/dispatches",
+                            owner, repoName, workflowFileName)
                     .header("Authorization", "Bearer " + pat)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
@@ -107,7 +121,8 @@ public class GitHubActionsClient {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Failed to dispatch workflow {} on repo {}: {}", workflowFileName, repo, e.getMessage(), e);
+            log.error("Failed to dispatch workflow {} on repo {}/{}: {}",
+                    workflowFileName, owner, repoName, e.getMessage(), e);
             throw new RuntimeException("GitHub Actionsの起動に失敗しました: " + e.getMessage(), e);
         }
     }
@@ -126,11 +141,11 @@ public class GitHubActionsClient {
         try {
             WorkflowRunsPage page = restClient.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/repos/{repo}/actions/workflows/{file}/runs")
+                            .path("/repos/{owner}/{repo}/actions/workflows/{file}/runs")
                             .queryParam("event", "workflow_dispatch")
                             .queryParam("created", createdFilter)
                             .queryParam("per_page", "20")
-                            .build(repo, workflowFileName))
+                            .build(owner, repoName, workflowFileName))
                     .header("Authorization", "Bearer " + pat)
                     .retrieve()
                     .body(WorkflowRunsPage.class);
@@ -149,7 +164,7 @@ public class GitHubActionsClient {
         ensurePatAvailable();
         try {
             WorkflowRun run = restClient.get()
-                    .uri("/repos/{repo}/actions/runs/{id}", repo, runId)
+                    .uri("/repos/{owner}/{repo}/actions/runs/{id}", owner, repoName, runId)
                     .header("Authorization", "Bearer " + pat)
                     .retrieve()
                     .body(WorkflowRun.class);
@@ -168,7 +183,8 @@ public class GitHubActionsClient {
      */
     public Optional<String> fetchWorkflowLogText(long runId) {
         ensurePatAvailable();
-        URI url = URI.create(GITHUB_API_BASE + "/repos/" + repo + "/actions/runs/" + runId + "/logs");
+        URI url = URI.create(GITHUB_API_BASE + "/repos/" + owner + "/" + repoName
+                + "/actions/runs/" + runId + "/logs");
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(url)
