@@ -208,11 +208,10 @@ const MatchDetail = () => {
           </span>
         </div>
 
-        {/* 中段: 詳細情報1行 */}
-        <div className="text-sm text-gray-600 text-center">
-          {new Date(match.matchDate).toLocaleDateString('ja-JP')}
-          {'  '}第{match.matchNumber}試合{'  '}
-          {match.venueName || '—'}
+        {/* 中段: 詳細情報1行
+            whitespace-pre-wrap: 半角スペース2個を視覚的にそのまま反映するため */}
+        <div className="text-sm text-gray-600 text-center whitespace-pre-wrap">
+          {`${new Date(match.matchDate).toLocaleDateString('ja-JP')}  第${match.matchNumber}試合  ${match.venueName || '—'}`}
         </div>
 
         {/* 下段: お手付き・メモ */}

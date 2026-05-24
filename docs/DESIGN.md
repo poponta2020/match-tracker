@@ -1958,7 +1958,7 @@ Entity Layer (JPA Entity)
 | 練習参加登録 | /practice/participation | 全員 | 月単位参加登録 |
 | 試合一覧 | /matches | 全員 | 試合一覧。各行は CSS Grid 6 列（`grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem]` で `[日付] [対戦相手名] [勝敗] [会場 N試合目] [メモアイコン] [手N]`）で列揃え。対戦相手名は全角 7 文字分（`text-sm` × 7 = 6.125rem = 98px）固定、会場列が残り幅を受け取る。メモアイコン・お手付きは非表示行でも `invisible` プレースホルダで列幅を確保 |
 | 試合登録・編集 | /matches/new, /matches/:id/edit | 全員 | 試合登録・更新 |
-| 試合詳細 | /matches/:id | 全員 | 試合詳細表示 |
+| 試合詳細 | /matches/:id | 全員 | 試合詳細表示（試合結果・詳細情報・メモを1つの統合カードで表示。コメント欄は閲覧者種別に応じた表示条件あり。詳細は「7.6 メンター指名・コメントフロー」参照） |
 | 試合結果表示 | /matches/results | 全員 | 日付別試合結果ビュー |
 | 一括試合結果入力 | /matches/bulk-input | 全員 | 複数試合の一括入力 |
 | 対戦組み合わせ生成 | /pairings/generate | 全員 | 組み合わせ生成・表示 |
@@ -2591,8 +2591,14 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 4. メンターが承認（PUT /{id}/approve → ACTIVE）
    または拒否（PUT /{id}/reject → REJECTED）
 
+[コメントスレッドの表示条件（試合詳細画面）]
+- メンター閲覧時（他選手のページを `?playerId=` で開いた場合）: ACTIVEメンター関係があれば常に表示
+- メンティー本人画面: 自分以外の投稿者によるコメントが1件以上ある場合のみ表示（投稿フォーム含めて完全非表示）
+  - 判定は `matchCommentsAPI.getComments` のレスポンスを `authorId !== currentPlayer.id` で評価
+  - 解除済みメンターからの過去コメントもカウント対象
+
 [メンターコメントフロー（バッチ送信方式）]
-1. 試合詳細画面（/matches/:id）でメンティーまたはメンターがコメント投稿
+1. 試合詳細画面（/matches/:id）で上記表示条件を満たすメンティーまたはメンターがコメント投稿
    ↓
 2. POST /api/matches/{matchId}/comments → コメント作成（line_notified = false）
    ※ LINE通知は即時送信しない
