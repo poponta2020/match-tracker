@@ -1138,4 +1138,26 @@ class PracticeSessionServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
     }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: session.capacity = 0 は venue 既定値で上書きされず非表示")
+    void findSessionSummariesByYearMonth_sessionCapacityZeroDoesNotFallbackToVenue() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // session.capacity を明示的に 0（定員無効化運用）と設定。venue には capacity=14 があっても
+        // 明示値を尊重して非表示にする。
+        Venue venue = Venue.builder().id(100L).name("会場A").capacity(14).build();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(0).venueId(100L).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(anyList())).thenReturn(List.of(venue));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
 }

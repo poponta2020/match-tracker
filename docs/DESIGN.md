@@ -1163,7 +1163,7 @@ Entity Layer (JPA Entity)
 
 - 判定に使う `capacity` は `session.capacity` を優先し、`session.capacity == null` のときは紐づく `venue.capacity`（venue 既定 capacity）にフォールバックする。これにより、伝助同期で作成された capacity 未設定セッションでもサマリーAPIがグリッドを返せるようになる（`LotteryService` の `processSession` 既存フォールバックと同じ思想で、表示側でも防御を二重化）。
 - 算出スキップ（`matchCapacityStatuses = null`）の条件:
-  - `session.capacity` と venue 既定 `capacity` の両方が `null` または `0` 以下
+  - フォールバック適用後の有効 `capacity` が `null` または `0` 以下（`session.capacity == null` の場合のみ `venue.capacity` にフォールバックする。`session.capacity = 0` のような明示値は venue 既定値で上書きせず、そのままスキップ判定に流す）
   - `totalMatches == null || totalMatches <= 0 || totalMatches >= 10`
   - 集計中に例外発生
 - 上記以外: 試合番号 1〜`totalMatches` の各試合について以下を算出:
