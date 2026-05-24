@@ -591,9 +591,9 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 | 列 | 要素 | 書式 | 幅ポリシー / スタイル |
 |---|---|---|---|
 | 1 | 日付 | `M/D`（例: `5/23`） | 固定幅。`text-xs text-[#9ca3af]` |
-| 2 | 対戦相手名 | 選手名 | 可変幅（`minmax(0,1fr)` + `truncate`）。リンク化時はテーマ色 `#4a6b5a` |
+| 2 | 対戦相手名 | 選手名 | 固定幅（`6.125rem` = `text-sm` の全角 7 文字分 + `truncate`）。リンク化時はテーマ色 `#4a6b5a` |
 | 3 | 勝敗 | `〇N` / `×N` / `△N`（N は枚数差） | 固定幅。`text-sm font-bold`、勝ち=緑 / 負け=赤 / 引き分け=グレー |
-| 4 | 会場・試合番号 | `会場名 N試合目`（例: `あかなら・すずらん 3試合目`） | 可変幅（`minmax(0,1.4fr)` + `truncate`）。`text-xs text-[#9ca3af]` |
+| 4 | 会場・試合番号 | `会場名 N試合目`（例: `あかなら・すずらん 3試合目`） | 可変幅（`minmax(0,1fr)` + `truncate`、残り幅を全て受け取る）。`text-xs text-[#9ca3af]` |
 | 5 | メモアイコン | 📝（`StickyNote`） | 固定幅。非表示条件の行でも `invisible` プレースホルダで列幅を確保 |
 | 6 | お手付き回数 | `手N`（例: `手2`） | 固定幅。`null` の行でも `invisible` プレースホルダで列幅を確保 |
 
@@ -601,7 +601,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - `N` は `Match.matchNumber`（その日の第N試合）をそのまま表示
 - 試合詳細画面（`/matches/:id`）の「詳細情報」セクションにも「会場」カードが並ぶ（試合日・試合番号と並ぶ第3要素）
 - `opponentId` の計算: `match.player1Id === targetPlayerId ? match.player2Id : match.player1Id`
-- 列幅は固定 rem 値（例: `grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_minmax(0,1.4fr)_1.75rem_2.5rem]`）。`auto` を使うと行ごとに track 幅が変わり列揃え要件を満たせないため避ける
+- 列幅は固定 rem 値（実装値: `grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem]`）。`auto` を使うと行ごとに track 幅が変わり列揃え要件を満たせないため避ける
 
 **メモアイコンの表示ルール:**
 
