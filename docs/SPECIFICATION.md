@@ -2388,4 +2388,4 @@ UNIQUE制約: (player_id, organization_id)
 | Web Push通知のVAPID署名 | 完了 | `nl.martijndwars:web-push:5.1.1` + BouncyCastleによるRFC 8030準拠のVAPID署名付き実装 |
 | Service Worker | 完了 | `public/sw.js` — Push通知受信・表示・クリック時画面遷移を処理 |
 | 通知設定画面 | 完了 | `/settings/notifications` — LINE通知設定画面（Web Push UI は削除済み、バックエンド・SW・API・DBは保持） |
-| 管理者用抽選管理画面 | 部分実装 | PracticeListモーダル内に再抽選ボタンあり。専用管理画面は未作成 |
+| 管理者用抽選管理画面 | 完了 | `/admin/lottery` の `LotteryManagement.jsx` を提供。月別の抽選プレビュー・確定UIあり。なお、カレンダー練習日ポップアップ内のセッション単位「再抽選」ボタンはUIから非表示（APIは稼働継続） |
