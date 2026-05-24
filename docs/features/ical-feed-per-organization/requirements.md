@@ -74,7 +74,7 @@ status: completed
 - 既存購読は無効化（404）、ユーザーは新URLで再登録が必要
 
 #### 同期対象
-- 既存と同じ（未来日 `session_date >= today`、`ParticipantStatus.isActive()` のみ＝WON/PENDING）
+- 既存と同じ（**全期間（過去・未来とも）**、`ParticipantStatus.isActive()` のみ＝WON/PENDING）
 - 各URLのスコープ：
   - 団体URL: `practice_session.organization_id == orgId` かつ「ユーザーが組織所属」のもの
   - ゲストURL: `practice_session.organization_id` が「ユーザーが所属していない団体」のもの
@@ -193,7 +193,7 @@ status: completed
 #### 処理フロー：`getOrgFeed(token, orgId)`
 1. `playerRepository.findByIcalFeedTokenAndActive(token)` で Player 取得（なければ404）
 2. プレイヤーが orgId に所属していなければ404（`playerOrganizationRepository.findByPlayerIdAndOrganizationId` でチェック）
-3. `practiceParticipantRepository.findUpcomingParticipations(playerId, today)` で全参加練習取得
+3. `practiceParticipantRepository.findAllParticipationsByPlayer(playerId)` で全期間の参加練習取得
 4. `session.organizationId == orgId` のもののみフィルタ
 5. `isActive()` でステータスフィルタ
 6. VCALENDAR を構築（X-WR-CALNAME に表示名）

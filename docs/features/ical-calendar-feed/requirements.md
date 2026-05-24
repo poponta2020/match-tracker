@@ -22,7 +22,7 @@ match-trackerに登録された全プレイヤー
 ### 2.2 利用シナリオ
 1. プレイヤーが設定画面で「カレンダー購読URL」を取得しコピーする
 2. Googleカレンダーで「他のカレンダー → URLで追加」にそのURLを貼り付ける
-3. 自分のGoogleカレンダーに購読カレンダーが追加され、未来の参加練習が「`{団体名}＠{会場名}`」というタイトルで表示される
+3. 自分のGoogleカレンダーに購読カレンダーが追加され、全期間（過去・未来とも）の参加練習が「`{団体名}＠{会場名}`」というタイトルで表示される
 4. 練習の追加・キャンセルなどがあった場合、購読側の自動取得タイミングで反映される（数時間ラグあり）
 5. URLが漏れたなどの理由で再発行したい場合、設定画面の「URL再発行」ボタンで無効化＋新URL発行できる
 6. 設定画面で所属団体ごとに表示名（団体名部分）をカスタマイズできる
@@ -41,7 +41,7 @@ match-trackerに登録された全プレイヤー
 | コピーボタン | URLをクリップボードへコピー |
 | 再発行ボタン | 確認ダイアログ：「再発行すると現在のURLは無効になり、Googleカレンダー側で再登録が必要です。続行しますか？」→ 確定で新URL発行 |
 | 表示名カスタマイズ | 所属団体ごとに入力欄。プレースホルダーに `Organization.name` を表示。空欄なら未設定扱い |
-| 説明文 | 「このURLをGoogleカレンダーの『他のカレンダー → URLで追加』で登録すると、未来の参加練習が自動表示されます。」 |
+| 説明文 | 「このURLをGoogleカレンダーの『他のカレンダー → URLで追加』で登録すると、参加練習が自動表示されます（過去の練習も含む）。」 |
 
 **削除するUI**：
 - 既存のGoogle Calendar OAuth同期ボタン（[SettingsPage.jsx:131](karuta-tracker-ui/src/pages/SettingsPage.jsx#L131) 付近）と関連state
@@ -59,7 +59,8 @@ match-trackerに登録された全プレイヤー
   - 既存プレイヤー：DBマイグレーション内で一括生成（NULL残りなし）
 
 #### 同期対象
-- ユーザーが参加する練習で、`session_date >= today` のもの
+- ユーザーが参加する練習のうち、**全期間（過去・未来とも）** を対象とする
+  - 「数年前のこの日はここで練習していた」というカレンダーアプリでの振り返り体験を維持するため
 - ステータス CANCELLED は **除外**（カレンダーに残ってると紛らわしいため）
 - ゲスト参加（未所属団体の練習）も含める
 
@@ -89,7 +90,7 @@ match-trackerに登録された全プレイヤー
 |--------|------|
 | token が存在しない | HTTP 404 |
 | token に対応するプレイヤーが論理削除済み | HTTP 404 |
-| 未来の参加練習が0件 | HTTP 200、VCALENDARコンポーネントのみ（VEVENTなし）を返す |
+| 参加練習が0件 | HTTP 200、VCALENDARコンポーネントのみ（VEVENTなし）を返す |
 
 ### 3.4 URL設計
 - フィード本体：`GET /ical/calendar/{token}.ics`
@@ -221,7 +222,7 @@ implementation 'net.sf.biweekly:biweekly:0.6.7'
 #### 処理フロー（フィード取得 `GET /ical/calendar/{token}.ics`）
 1. token から `playerRepository.findByIcalFeedToken(token)` でPlayer検索
 2. 該当なし or 論理削除済みなら404
-3. `practiceParticipantRepository.findUpcomingParticipations(playerId, today)` で参加練習取得
+3. `practiceParticipantRepository.findAllParticipationsByPlayer(playerId)` で全期間の参加練習取得
 4. ステータス CANCELLED を除外
 5. 各参加について：
    - 関連 PracticeSession / Organization / Venue / PlayerOrganization をまとめて取得

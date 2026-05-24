@@ -1224,7 +1224,7 @@ WARN Densuke change-time drift detected: phase=Phase3-C2 session=934 match=1 pla
 
 共通:
 1. リクエストの token から Player を検索（論理削除済みは404）
-2. `findUpcomingParticipations(playerId, today)` で参加練習を取得
+2. `findAllParticipationsByPlayer(playerId)` で**全期間（過去・未来とも）**の参加練習を取得（カレンダーアプリで過去を見返す体験を維持するため）
 3. `ParticipantStatus.isActive()`（WON / PENDING のみ）でフィルタ
 
 所属団体フィード (`/org/{orgId}.ics`):
