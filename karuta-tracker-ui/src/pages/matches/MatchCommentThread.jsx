@@ -14,7 +14,7 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   const [error, setError] = useState(null);
   const [notifying, setNotifying] = useState(false);
   const [notifySuccess, setNotifySuccess] = useState(false);
-  const bottomRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const navTimerRef = useRef(null);
   const { setVisible } = useBottomNav();
@@ -35,7 +35,10 @@ export default function MatchCommentThread({ matchId, menteeId }) {
   }, [matchId, menteeId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [comments]);
 
   const handleSubmit = async (e) => {
@@ -164,7 +167,7 @@ export default function MatchCommentThread({ matchId, menteeId }) {
       )}
 
       {/* コメント一覧 */}
-      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 bg-[#f0ebe4]">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 bg-[#f0ebe4]">
         {comments.length === 0 ? (
           <p className="text-gray-400 text-sm text-center py-4">まだコメントはありません</p>
         ) : (
@@ -240,7 +243,6 @@ export default function MatchCommentThread({ matchId, menteeId }) {
             );
           })
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* LINE通知送信ボタン */}
