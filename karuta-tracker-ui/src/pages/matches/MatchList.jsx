@@ -535,7 +535,7 @@ const MatchList = () => {
                   return (
                     <div
                       key={match.id}
-                      className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_minmax(0,1.4fr)_1.75rem_2.5rem] items-center gap-x-2 px-4 py-2"
+                      className="grid grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem] items-center gap-x-2 px-4 py-2"
                     >
                       <span className="text-xs text-[#9ca3af]">
                         {formatDate(match.matchDate)}
