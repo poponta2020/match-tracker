@@ -13,6 +13,7 @@ import com.karuta.matchtracker.service.GitHubActionsClient.WorkflowRun;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,8 +45,8 @@ public class KaderuSyncTriggerService {
     public static final String WORKFLOW_REF = "main";
 
     /**
-     * dispatch 直後の listRecentRuns 呼び出しでサーバ・GitHub 間のクロックずれを
-     * 吸収するためのバッファ秒数。triggered_at - 5s 以降の run を候補にする。
+     * scheduler が listRecentRuns を呼び出す際の時刻フィルタのバッファ秒数。
+     * サーバ・GitHub 間のクロックずれを吸収するため、triggered_at - 5s 以降の run を候補にする。
      */
     private static final int RUN_LOOKUP_BUFFER_SECONDS = 5;
 
@@ -65,10 +66,17 @@ public class KaderuSyncTriggerService {
     /**
      * 手動同期を起動する。
      *
+     * <p>run_id の解決はこのメソッド内では行わず、PENDING 状態で保存して scheduler に
+     * 委ねる。これは、ほぼ同時に複数団体（hokudai/wasura）のディスパッチが行われた場合に
+     * 「自分が dispatch した run」と「直前の別 dispatch の run」を区別できず、誤って
+     * 他団体の run_id を割り当ててしまう race を避けるため。scheduler は triggered_at
+     * 昇順で1イベントずつ処理するので、ディスパッチ順と整合した割当ができる。
+     *
      * @param triggeredByPlayerId 押下者のプレイヤーID
      * @param organizationId      対象団体ID（Controller 側で実効ID解決済み）
-     * @return 作成されたイベントの DTO（status=PENDING、run_id は埋まっている or null）
-     * @throws DuplicateResourceException 同一団体の PENDING が既に存在する場合
+     * @return 作成されたイベントの DTO（status=PENDING、run_id は常に null）
+     * @throws DuplicateResourceException 同一団体の PENDING が既に存在する場合（事前チェック or
+     *                                    UNIQUE 部分インデックス違反のいずれか）
      * @throws ResourceNotFoundException  organizationId が見つからない場合
      */
     @Transactional
@@ -79,7 +87,7 @@ public class KaderuSyncTriggerService {
             throw new IllegalArgumentException("organizationId は必須です");
         }
 
-        // 1. 重複起動チェック
+        // 1. 事前重複起動チェック（高速 path。確定的な防御は uk_kaderu_sync_pending の UNIQUE 制約）
         if (eventRepository.findFirstByOrganizationIdAndStatusOrderByTriggeredAtDesc(organizationId, SyncStatus.PENDING).isPresent()) {
             throw new DuplicateResourceException("同一団体の同期が既に実行中です");
         }
@@ -91,24 +99,29 @@ public class KaderuSyncTriggerService {
 
         // 3. GitHub Actions に dispatch（失敗は ResponseStatusException / RuntimeException として伝播）
         LocalDateTime triggeredAt = JstDateTimeUtil.now();
-        Instant lookupFrom = triggeredAt.atZone(JstDateTimeUtil.JST).toInstant()
-                .minusSeconds(RUN_LOOKUP_BUFFER_SECONDS);
         gitHubActionsClient.dispatchWorkflow(WORKFLOW_FILE, WORKFLOW_REF, Map.of("org", orgCode));
 
-        // 4. dispatch 直後に run_id を解決（取得失敗時は null のまま scheduler に委ねる）
-        Long resolvedRunId = resolveRunId(lookupFrom);
+        // 4. イベント保存（run_id は scheduler が後から補完する）
+        KaderuSyncTriggerEvent saved;
+        try {
+            saved = eventRepository.save(KaderuSyncTriggerEvent.builder()
+                    .organizationId(organizationId)
+                    .triggeredByPlayerId(triggeredByPlayerId)
+                    .triggeredAt(triggeredAt)
+                    .status(SyncStatus.PENDING)
+                    .githubRunId(null)
+                    .build());
+        } catch (DataIntegrityViolationException e) {
+            // 事前チェックを潜り抜けた同時リクエストとの race。UNIQUE 部分インデックス
+            // (uk_kaderu_sync_pending) が衝突を検知してくれる。
+            // この時点で workflow は既に dispatch 済みだが、scheduler は同一 org の
+            // 唯一の PENDING（先勝ちした方）にこの run_id を割り当てるため、データ整合性は保たれる。
+            log.info("Duplicate PENDING detected at insert (race): organizationId={}", organizationId);
+            throw new DuplicateResourceException("同一団体の同期が既に実行中です");
+        }
 
-        // 5. イベント保存
-        KaderuSyncTriggerEvent saved = eventRepository.save(KaderuSyncTriggerEvent.builder()
-                .organizationId(organizationId)
-                .triggeredByPlayerId(triggeredByPlayerId)
-                .triggeredAt(triggeredAt)
-                .status(SyncStatus.PENDING)
-                .githubRunId(resolvedRunId)
-                .build());
-
-        log.info("Kaderu manual sync triggered: eventId={}, organizationId={}, orgCode={}, runId={}",
-                saved.getId(), organizationId, orgCode, resolvedRunId);
+        log.info("Kaderu manual sync triggered: eventId={}, organizationId={}, orgCode={}",
+                saved.getId(), organizationId, orgCode);
         return KaderuSyncTriggerEventDto.fromEntity(saved, orgCode);
     }
 
@@ -135,8 +148,11 @@ public class KaderuSyncTriggerService {
     }
 
     /**
-     * dispatch 直後に listRecentRuns を1回試し、未割当の oldest run を返す。
-     * GitHub Actions が run を登録する前だと候補が空になり得る — その場合は null を返し、
+     * scheduler から呼ばれる run_id 解決。指定時刻以降に作成された未割当 run のうち
+     * 最も古いものを返す。triggered_at 昇順で1イベントずつ処理されるので、
+     * ディスパッチ順 (= run_id 昇順) と整合した割当ができる。
+     *
+     * <p>GitHub Actions が run を登録する前だと候補が空になり得る — その場合は null を返し、
      * scheduler の次回ティックで再試行させる。
      */
     private Long resolveRunId(Instant lookupFrom) {
@@ -177,7 +193,9 @@ public class KaderuSyncTriggerService {
 
     @Transactional(readOnly = true)
     public List<Long> listPendingIds() {
-        return eventRepository.findAllByStatus(SyncStatus.PENDING).stream()
+        // triggered_at 昇順で取得。ディスパッチ順 (= run_id 昇順) と整合した
+        // run_id 割当を行うために必須。
+        return eventRepository.findAllByStatusOrderByTriggeredAtAsc(SyncStatus.PENDING).stream()
                 .map(KaderuSyncTriggerEvent::getId)
                 .toList();
     }

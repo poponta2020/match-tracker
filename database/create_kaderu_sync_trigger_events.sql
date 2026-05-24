@@ -15,9 +15,12 @@ CREATE TABLE kaderu_sync_trigger_events (
     updated_at               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 同一団体のPENDINGを高速検索（重複起動チェック用、部分インデックス）
-CREATE INDEX idx_kaderu_sync_pending
-    ON kaderu_sync_trigger_events (organization_id, status)
+-- 同一団体のPENDINGは常に最大1件であることをDB制約で保証する。
+-- アプリ層の事前チェック (findFirstByOrganizationIdAndStatus...) は
+-- 同時多重リクエストでは race するため、UNIQUE 部分インデックスで重複起動を防ぐ。
+-- 違反は service 層で DataIntegrityViolationException → DuplicateResourceException (409) に変換される。
+CREATE UNIQUE INDEX uk_kaderu_sync_pending
+    ON kaderu_sync_trigger_events (organization_id)
     WHERE status = 'PENDING';
 
 -- スケジューラーが全PENDINGを古い順に巡回するため

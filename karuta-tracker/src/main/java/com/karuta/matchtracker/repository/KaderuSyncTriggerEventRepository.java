@@ -19,9 +19,13 @@ public interface KaderuSyncTriggerEventRepository
             Long organizationId, SyncStatus status);
 
     /**
-     * 指定ステータスの全イベント（スケジューラー巡回用）。
+     * 指定ステータスの全イベントを triggered_at 昇順で返す（スケジューラー巡回用）。
+     *
+     * <p>古い順に処理することで、近接ディスパッチされた複数団体の event 同士で
+     * run_id の取り合いが起きた場合も、ディスパッチ順 (= run_id 昇順) とイベント順
+     * (= triggered_at 昇順) を一致させて正しく割当できる。
      */
-    List<KaderuSyncTriggerEvent> findAllByStatus(SyncStatus status);
+    List<KaderuSyncTriggerEvent> findAllByStatusOrderByTriggeredAtAsc(SyncStatus status);
 
     /**
      * 指定の GitHub run id を既に保持しているイベントがあるかを返す。

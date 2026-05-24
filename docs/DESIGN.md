@@ -2820,15 +2820,18 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   KaderuSyncTriggerController
    ↓ (OrganizationScopeResolver で実効 orgId 解決)
   KaderuSyncTriggerService.triggerSync(playerId, orgId)
-   1. PENDING 重複チェック → あれば 409 (DuplicateResourceException)
+   1. PENDING 重複チェック (高速 path) → あれば 409 (DuplicateResourceException)
    2. organizations.code 取得 (なければ 404)
    3. GitHubActionsClient.dispatchWorkflow(
         "sync-kaderu-reservations-manual.yml", "main", {org: code})
        - 環境変数 GITHUB_PAT で Bearer 認証
        - 未設定なら 503 (ResponseStatusException)
        - 失敗なら 500 (RuntimeException)
-   4. listRecentRuns(triggered_at - 5s) で run_id を1回試行
-   5. KaderuSyncTriggerEvent を PENDING で保存
+   4. KaderuSyncTriggerEvent を PENDING (github_run_id=null) で保存
+       - DB 側の UNIQUE 部分インデックス uk_kaderu_sync_pending が同時リクエストの
+         race を防ぐ (DataIntegrityViolationException → 409 に変換)
+       - run_id 解決はあえて行わず scheduler に委ねる：複数団体の近接ディスパッチで
+         他団体の run_id を誤割当する race を避けるため
    ↓
 [GitHub Actions: sync-kaderu-reservations-manual.yml]
   workflow_dispatch (inputs.org)
