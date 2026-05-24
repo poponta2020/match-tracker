@@ -153,10 +153,10 @@ public class PracticeSessionService {
                 .distinct()
                 .collect(Collectors.toList());
 
-        Map<Long, String> venueNameMap = venueIds.isEmpty()
+        Map<Long, Venue> venueMap = venueIds.isEmpty()
                 ? Map.of()
                 : venueRepository.findAllById(venueIds).stream()
-                    .collect(Collectors.toMap(v -> v.getId(), v -> v.getName()));
+                    .collect(Collectors.toMap(Venue::getId, v -> v));
 
         // 試合別定員到達状況の集計のため、月内全セッションの参加者を一括取得（N+1回避）。
         // 集計失敗時は matchCapacityStatuses を null のまま返し、カレンダー本体表示を阻害しない（防御的挙動）。
@@ -199,12 +199,15 @@ public class PracticeSessionService {
         final boolean finalAggregationFailed = capacityAggregationFailed;
         return sessions.stream().map(session -> {
             PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
-            if (session.getVenueId() != null) {
-                dto.setVenueName(venueNameMap.get(session.getVenueId()));
+            Venue venue = session.getVenueId() != null ? venueMap.get(session.getVenueId()) : null;
+            if (venue != null) {
+                dto.setVenueName(venue.getName());
             }
             if (!finalAggregationFailed) {
+                Integer venueDefaultCapacity = venue != null ? venue.getCapacity() : null;
                 dto.setMatchCapacityStatuses(computeMatchCapacityStatuses(session,
-                        finalEffectiveCountMap.getOrDefault(session.getId(), Map.of())));
+                        finalEffectiveCountMap.getOrDefault(session.getId(), Map.of()),
+                        venueDefaultCapacity));
             }
             return dto;
         }).collect(Collectors.toList());
@@ -213,7 +216,9 @@ public class PracticeSessionService {
     /**
      * セッションの試合別定員到達状況を算出する。
      *
-     * - capacity が null / 0 以下 → null
+     * - capacity が null の場合は venueDefaultCapacity にフォールバックする
+     *   （伝助同期セッション等、セッション単体に capacity が入っていないケースの救済）
+     * - 上記フォールバック後も capacity が null / 0 以下 → null
      * - totalMatches が null / 0 以下 / 10 以上 → null（3×3 グリッドに収まらない）
      * - それ以外: 第 1〜第 totalMatches 試合まで、各試合について
      *   - effectiveCount >= capacity → FULL
@@ -223,8 +228,12 @@ public class PracticeSessionService {
      * effectiveCount は WON + PENDING + OFFERED の合計（呼び出し側で算出済み）。
      */
     private List<PracticeSessionDto.CapacityStatus> computeMatchCapacityStatuses(
-            PracticeSession session, Map<Integer, Long> effectiveCountByMatch) {
+            PracticeSession session, Map<Integer, Long> effectiveCountByMatch,
+            Integer venueDefaultCapacity) {
         Integer capacity = session.getCapacity();
+        if (capacity == null) {
+            capacity = venueDefaultCapacity;
+        }
         if (capacity == null || capacity <= 0) {
             return null;
         }

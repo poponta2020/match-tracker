@@ -8,6 +8,7 @@ import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
@@ -1052,6 +1053,111 @@ class PracticeSessionServiceTest {
         // セッション本体は返り、matchCapacityStatuses は null（グリッド非表示扱い）
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getId()).isEqualTo(1L);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: session.capacity 設定済みなら venue 既定値より session 値を優先")
+    void findSessionSummariesByYearMonth_sessionCapacityOverridesVenueDefault() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // venue.capacity=99 だが session.capacity=4 が優先される
+        Venue venue = Venue.builder().id(100L).name("会場A").capacity(99).build();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(4).venueId(100L).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(anyList())).thenReturn(List.of(venue));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 12L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 13L, 1, ParticipantStatus.WON)
+                ));
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        // session.capacity=4 で判定: 1試合目 effective=4 → FULL、2/3試合目 → AVAILABLE
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.FULL,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE
+                );
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: session.capacity が null でも venue 既定値があればフォールバックして判定される")
+    void findSessionSummariesByYearMonth_fallbackToVenueDefaultCapacity() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        Venue venue = Venue.builder().id(100L).name("わすらもち会場").capacity(4).build();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(null).venueId(100L).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(anyList())).thenReturn(List.of(venue));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        capacityTestParticipant(1L, 10L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 11L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 12L, 1, ParticipantStatus.WON),
+                        capacityTestParticipant(1L, 13L, 1, ParticipantStatus.WON)
+                ));
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        // venue 既定 capacity=4 で判定: 1試合目 effective=4 → FULL、2/3試合目 → AVAILABLE
+        assertThat(result.get(0).getMatchCapacityStatuses())
+                .containsExactly(
+                        PracticeSessionDto.CapacityStatus.FULL,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE,
+                        PracticeSessionDto.CapacityStatus.AVAILABLE
+                );
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: session.capacity も venue 既定 capacity も null なら matchCapacityStatuses=null")
+    void findSessionSummariesByYearMonth_bothCapacityNull_returnsNull() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        Venue venue = Venue.builder().id(100L).name("会場A").capacity(null).build();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(null).venueId(100L).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(anyList())).thenReturn(List.of(venue));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
+    }
+
+    @Test
+    @DisplayName("findSessionSummariesByYearMonth: session.capacity = 0 は venue 既定値で上書きされず非表示")
+    void findSessionSummariesByYearMonth_sessionCapacityZeroDoesNotFallbackToVenue() {
+        int year = today.getYear();
+        int month = today.getMonthValue();
+        // session.capacity を明示的に 0（定員無効化運用）と設定。venue には capacity=14 があっても
+        // 明示値を尊重して非表示にする。
+        Venue venue = Venue.builder().id(100L).name("会場A").capacity(14).build();
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).sessionDate(today).totalMatches(3).capacity(0).venueId(100L).build();
+        when(practiceSessionRepository.findByYearAndMonth(year, month))
+                .thenReturn(List.of(session));
+        when(venueRepository.findAllById(anyList())).thenReturn(List.of(venue));
+        when(practiceParticipantRepository.findBySessionIdIn(List.of(1L)))
+                .thenReturn(List.of());
+
+        List<PracticeSessionDto> result = practiceSessionService.findSessionSummariesByYearMonth(year, month, null);
+
+        assertThat(result).hasSize(1);
         assertThat(result.get(0).getMatchCapacityStatuses()).isNull();
     }
 }

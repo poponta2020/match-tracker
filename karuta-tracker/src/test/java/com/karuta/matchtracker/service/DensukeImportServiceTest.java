@@ -1299,4 +1299,36 @@ class DensukeImportServiceTest {
         verify(practiceSessionRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("Venueデフォルト: capacity が 0 のような明示値は venue 補完で上書きされない（定員無効運用想定）")
+    void testImportDoesNotOverwriteExplicitlySetZeroCapacityOnVenueBackfill() throws IOException {
+        DensukeData data = createSampleData();
+        // 既存セッション: venueId=null, capacity=0（管理者が意図的に定員無効化設定済み）
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(null)
+                .capacity(0)
+                .build();
+        Venue venue = Venue.builder()
+                .id(100L).name("すずらん").defaultMatchCount(5).capacity(14).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(venue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // venueId は補完されるが、capacity=0 の明示値は維持される
+        verify(practiceSessionRepository).save(argThat(session ->
+                session.getId().equals(99L) &&
+                Long.valueOf(100L).equals(session.getVenueId()) &&
+                Integer.valueOf(0).equals(session.getCapacity())));
+    }
+
 }

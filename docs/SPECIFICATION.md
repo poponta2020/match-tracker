@@ -251,6 +251,7 @@
 **判定ロジック（バックエンドの `findSessionSummariesByYearMonth` で算出）:**
 
 各試合について以下を計算:
+- 判定に使う `capacity` は `session.capacity` を優先し、`session.capacity == null` のときは紐づく `venue.capacity`（venue 既定 capacity）にフォールバックする。両方 `null` の場合は判定を行わず `matchCapacityStatuses = null` を返す（グリッド非表示）。
 - 実質枠取得人数 `effectiveCount` = `COUNT(WON) + COUNT(PENDING) + COUNT(OFFERED)`（試合番号別）
   - `WAITLISTED` / `DECLINED` / `CANCELLED` / `WAITLIST_DECLINED` はカウントに含めない
   - `PENDING` を含めるのは抽選なし運用（`pairingIncludesPending = true`）でも「実質枠を取っている」とみなすため
@@ -268,7 +269,7 @@
 以下のいずれかに該当する場合、グリッドそのものを描画しない（会場名のみのセルになる）:
 
 1. その日に練習セッションが **2件以上** ある（同日複数団体）
-2. セッションの `capacity` が `null` または `0` 以下
+2. 判定に使う有効 capacity が `null` または `0` 以下（有効 capacity は `session.capacity` を優先し、`session.capacity == null` の場合のみ `venue.capacity` にフォールバック。`session.capacity = 0` のように明示値が `0` 以下のときは venue 既定値にはフォールバックせずそのまま非表示）
 3. セッションの `totalMatches` が `null` または `0` 以下
 4. `matchCapacityStatuses` が `null`（バックエンド側で算出不可だった場合）
 5. `totalMatches >= 10`（3×3 グリッドに収まらない）
