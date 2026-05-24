@@ -89,7 +89,7 @@ status: completed
 - **対応Issue:** #806
 
 ### タスク5: フロントエンド（API client + PracticeList ボタン）
-- [ ] 完了
+- [x] 完了
 - **概要:** API クライアントと PracticeList のボタン・ポーリングを実装する
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/kaderuSync.js` （新規）
