@@ -812,48 +812,63 @@ public class DensukeImportService {
         Optional<PracticeSession> sessionOpt = practiceSessionRepository
                 .findBySessionDateAndOrganizationId(entry.getDate(), organizationId);
 
+        String venueName = venueByDate.get(entry.getDate());
+        Venue matchedVenue = (venueName != null) ? venueNameMap.get(venueName) : null;
+        if (venueName != null && matchedVenue == null) {
+            unmatchedVenueSet.add(venueName);
+        }
+
         if (sessionOpt.isPresent()) {
             PracticeSession session = sessionOpt.get();
-            if (session.getVenueId() == null) {
-                String venueName = venueByDate.get(entry.getDate());
-                if (venueName != null) {
-                    Venue venue = venueNameMap.get(venueName);
-                    if (venue != null) {
-                        session.setVenueId(venue.getId());
-                        practiceSessionRepository.save(session);
-                        result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
-                    } else {
-                        unmatchedVenueSet.add(venueName);
-                    }
+            boolean changed = false;
+
+            // ケースA: venueId が null かつ会場名マッチ時 → venueId と capacity を同時補完
+            if (session.getVenueId() == null && matchedVenue != null) {
+                session.setVenueId(matchedVenue.getId());
+                if (session.getCapacity() == null && matchedVenue.getCapacity() != null) {
+                    session.setCapacity(matchedVenue.getCapacity());
                 }
+                changed = true;
+                result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
+            }
+
+            // ケースB: venueId 既設定 かつ capacity が null → Venue から capacity 補完
+            if (session.getCapacity() == null && session.getVenueId() != null) {
+                Venue venueById = venueNameMap.values().stream()
+                        .filter(v -> session.getVenueId().equals(v.getId()))
+                        .findFirst().orElse(null);
+                if (venueById != null && venueById.getCapacity() != null) {
+                    session.setCapacity(venueById.getCapacity());
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                practiceSessionRepository.save(session);
             }
             return session;
         }
 
-        String venueName = venueByDate.get(entry.getDate());
-        Long venueId = null;
-        if (venueName != null) {
-            Venue venue = venueNameMap.get(venueName);
-            if (venue != null) {
-                venueId = venue.getId();
-            } else {
-                unmatchedVenueSet.add(venueName);
-            }
-        }
+        Long venueId = (matchedVenue != null) ? matchedVenue.getId() : null;
+        Integer capacity = (matchedVenue != null) ? matchedVenue.getCapacity() : null;
+        int totalMatches = (matchedVenue != null && matchedVenue.getDefaultMatchCount() != null)
+                ? matchedVenue.getDefaultMatchCount()
+                : maxMatchByDate.getOrDefault(entry.getDate(), 3);
 
-        int totalMatches = maxMatchByDate.getOrDefault(entry.getDate(), 3);
         PracticeSession session = PracticeSession.builder()
                 .sessionDate(entry.getDate())
                 .totalMatches(totalMatches)
                 .venueId(venueId)
+                .capacity(capacity)
                 .organizationId(organizationId)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
                 .build();
         session = practiceSessionRepository.save(session);
         result.setCreatedSessionCount(result.getCreatedSessionCount() + 1);
-        result.getDetails().add(String.format("%s 練習日を作成（会場: %s, %d試合）",
-                entry.getDate(), venueName != null ? venueName : "不明", totalMatches));
+        result.getDetails().add(String.format("%s 練習日を作成（会場: %s, %d試合, 定員: %s）",
+                entry.getDate(), venueName != null ? venueName : "不明",
+                totalMatches, capacity != null ? capacity.toString() : "未設定"));
         return session;
     }
 
