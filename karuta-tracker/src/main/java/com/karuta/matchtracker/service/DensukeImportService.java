@@ -834,6 +834,22 @@ public class DensukeImportService {
                         unmatchedVenueSet.add(venueName);
                     }
                 }
+            } else if (session.getCapacity() == null) {
+                // 既存セッションの venueId は設定済みだが capacity だけが NULL のケース
+                // （本番データの主形状: 伝助同期で venueId は入ったが capacity 未設定で蓄積された
+                // セッション）。サマリー API は venue 既定値フォールバックで救えるが、同一サービス内の
+                // WAITLISTED 昇格判定や空き通知は session.getCapacity() を直接見るため、ここで
+                // 補完しないと表示と挙動が乖離する。venueId から venue を逆引きして補完する。
+                Long venueId = session.getVenueId();
+                Venue venue = venueNameMap.values().stream()
+                        .filter(v -> venueId.equals(v.getId()))
+                        .findFirst().orElse(null);
+                if (venue != null && venue.getCapacity() != null) {
+                    session.setCapacity(venue.getCapacity());
+                    practiceSessionRepository.save(session);
+                    result.getDetails().add(String.format("%s capacity を補完: %d",
+                            entry.getDate(), venue.getCapacity()));
+                }
             }
             return session;
         }
