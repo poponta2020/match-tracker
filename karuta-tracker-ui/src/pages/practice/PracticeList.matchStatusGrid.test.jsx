@@ -108,11 +108,11 @@ describe('PracticeList 試合別ステータスグリッド', () => {
     const symbols = grid.querySelectorAll('span');
     expect(symbols).toHaveLength(3);
     expect(symbols[0].textContent).toBe('○');
-    expect(symbols[0].className).toContain('text-green-600');
+    expect(symbols[0].className).toContain('text-green-400');
     expect(symbols[1].textContent).toBe('△');
-    expect(symbols[1].className).toContain('text-orange-500');
+    expect(symbols[1].className).toContain('text-orange-300');
     expect(symbols[2].textContent).toBe('×');
-    expect(symbols[2].className).toContain('text-red-600');
+    expect(symbols[2].className).toContain('text-red-400');
   });
 
   it('7試合の場合は3列固定 grid で 3+3+1 のレイアウトとして描画される', async () => {

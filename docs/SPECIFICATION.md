@@ -236,9 +236,9 @@
 
 | 状態（`CapacityStatus`） | 記号 | 配色 |
 |--------------------------|------|------|
-| `AVAILABLE`（空きあり） | `○` | 緑（`text-green-600`） |
-| `NEARLY_FULL`（残り席数 1〜2） | `△` | オレンジ（`text-orange-500`） |
-| `FULL`（満員） | `×` | 赤（`text-red-600`） |
+| `AVAILABLE`（空きあり） | `○` | 緑（`text-green-400`） |
+| `NEARLY_FULL`（残り席数 1〜2） | `△` | オレンジ（`text-orange-300`） |
+| `FULL`（満員） | `×` | 赤（`text-red-400`） |
 
 - 記号は小さい文字（`text-[9px]` 程度）・`font-bold`
 - グリッドは **3列固定**（`grid-cols-3`）、最大3行 = 最大9試合

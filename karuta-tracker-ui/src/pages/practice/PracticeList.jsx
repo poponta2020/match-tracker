@@ -718,9 +718,9 @@ const PracticeList = () => {
                             const validValues = new Set(['AVAILABLE', 'NEARLY_FULL', 'FULL']);
                             if (!statuses.every((s) => validValues.has(s))) return null;
                             const symbolFor = (s) => {
-                              if (s === 'FULL') return { ch: '×', cls: 'text-red-600' };
-                              if (s === 'NEARLY_FULL') return { ch: '△', cls: 'text-orange-500' };
-                              return { ch: '○', cls: 'text-green-600' };
+                              if (s === 'FULL') return { ch: '×', cls: 'text-red-400' };
+                              if (s === 'NEARLY_FULL') return { ch: '△', cls: 'text-orange-300' };
+                              return { ch: '○', cls: 'text-green-400' };
                             };
                             return (
                               <div
