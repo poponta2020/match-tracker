@@ -2398,7 +2398,7 @@ public class LineNotificationService {
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
-            case ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED -> true;
+            case ADMIN_DENSUKE_PUSH_FAILED -> true;
         };
     }
 
@@ -2809,7 +2809,7 @@ public class LineNotificationService {
         try {
             List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
             if (memberships.isEmpty()) {
-                log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: no members in organization {}", organizationId);
+                log.info("ADMIN_DENSUKE_PUSH_FAILED: no members in organization {}", organizationId);
                 return;
             }
 
@@ -2823,7 +2823,7 @@ public class LineNotificationService {
                     .toList();
 
             if (targetAdmins.isEmpty()) {
-                log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: no admins in organization {}", organizationId);
+                log.info("ADMIN_DENSUKE_PUSH_FAILED: no admins in organization {}", organizationId);
                 return;
             }
 
@@ -2834,24 +2834,24 @@ public class LineNotificationService {
             for (Player admin : targetAdmins) {
                 try {
                     SendResult result = sendToPlayer(admin.getId(),
-                            LineNotificationType.ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED, message);
+                            LineNotificationType.ADMIN_DENSUKE_PUSH_FAILED, message);
                     if (result == SendResult.SUCCESS) {
                         sent++;
                     } else if (result == SendResult.FAILED) {
                         failed++;
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to send ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED to admin {}: {}",
+                    log.warn("Failed to send ADMIN_DENSUKE_PUSH_FAILED to admin {}: {}",
                             admin.getId(), e.getMessage());
                     failed++;
                 }
             }
 
-            log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: organizationId={}, adminCount={}, sent={}, failed={}",
+            log.info("ADMIN_DENSUKE_PUSH_FAILED: organizationId={}, adminCount={}, sent={}, failed={}",
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
             // @Async のスレッドで失敗しても呼び出し元には伝播しないため、ここで必ずログに落とす
-            log.warn("Async ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED dispatch failed: org={}, err={}",
+            log.warn("Async ADMIN_DENSUKE_PUSH_FAILED dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

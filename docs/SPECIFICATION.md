@@ -1126,7 +1126,7 @@ SUPER_ADMIN のみ操作可能。
 - 即時 push 経路（`pushNewSchedulesToDensukeAsync` → `pushNewSchedulesToDensuke`）の失敗:
   - HTTP 4xx/5xx・IOException・`pageId` 未検出・`buildScheduleText` の `IllegalStateException` を捕捉
   - `LineNotificationService.sendDensukeScheduleSyncFailedNotification(organizationId, errorMessage)` で
-    団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED`）
+    団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_PUSH_FAILED`）
   - 通知設定 ON/OFF は持たない（管理者向け重要通知のため常時送信）
 - スケジューラ経路（`pushSilently`）の失敗:
   - WARN ログのみで管理者通知は発火しない（フラッディング防止）
@@ -1137,8 +1137,8 @@ SUPER_ADMIN のみ操作可能。
 3. 伝助→アプリ取り込み（`syncForMonth` × 当月・翌月、既存）
 
 **DB マイグレーション:**
-- 不要（既存テーブル `densuke_urls` / `practice_sessions` / `venues` / `venue_match_schedules` のみ使用）
-- 新 enum 値 `ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED` は `line_message_log.notification_type`（VARCHAR(30)）に文字列保存のため追加マイグレーション不要
+- 既存テーブル `densuke_urls` / `practice_sessions` / `venues` / `venue_match_schedules` への変更は不要
+- ただし新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED` は `line_message_log_notification_type_check` の CHECK 制約に追加する必要がある（`database/add_admin_densuke_push_failed_message_log_check.sql` を本番 DB に適用）。enum 名は VARCHAR(30) 内に収まる短縮形で命名しているため、カラム長拡張は不要
 
 #### 4.1.4 スクレイピング詳細
 
