@@ -631,8 +631,10 @@ public class DensukeWriteService {
 
     /**
      * リスト画面の hidden input name="id" からページ固有IDを取得する。
+     * <p>package-private: 同パッケージの {@link DensukeScheduleWriteService} から流用するため
+     * 可視性を拡張している（伝助の編集系 POST に必要な pageId を共通取得する目的）。
      */
-    private String extractPageId(Document doc) {
+    String extractPageId(Document doc) {
         Element idInput = doc.selectFirst("input[name=id]");
         if (idInput != null) {
             return idInput.attr("value");

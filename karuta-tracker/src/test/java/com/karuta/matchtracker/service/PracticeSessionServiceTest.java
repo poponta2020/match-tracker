@@ -25,9 +25,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -38,7 +42,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -80,6 +86,9 @@ class PracticeSessionServiceTest {
 
     @Mock
     private DensukeSyncService densukeSyncService;
+
+    @Mock
+    private DensukeScheduleWriteService densukeScheduleWriteService;
 
     @Mock
     private AdjacentRoomService adjacentRoomService;
@@ -276,14 +285,106 @@ class PracticeSessionServiceTest {
         when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
         when(matchRepository.countByMatchDate(today)).thenReturn(0L);
 
-        // When
-        PracticeSessionDto result = practiceSessionService.createSession(request, 1L);
+        // createSession は afterCommit フックを TransactionSynchronizationManager に登録するため、
+        // 単体テストでは TransactionSynchronizationManager を mockStatic でモックして
+        // registerSynchronization の IllegalStateException を回避する。
+        try (MockedStatic<TransactionSynchronizationManager> txMock =
+                     mockStatic(TransactionSynchronizationManager.class)) {
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getSessionDate()).isEqualTo(today);
-        verify(practiceSessionRepository).existsBySessionDateAndOrganizationId(today, 1L);
-        verify(practiceSessionRepository).save(any(PracticeSession.class));
+            // When
+            PracticeSessionDto result = practiceSessionService.createSession(request, 1L);
+
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(result.getSessionDate()).isEqualTo(today);
+            verify(practiceSessionRepository).existsBySessionDateAndOrganizationId(today, 1L);
+            verify(practiceSessionRepository).save(any(PracticeSession.class));
+        }
+    }
+
+    @Test
+    @DisplayName("testCreateSessionTriggersAsyncDensukePushAfterCommit: createSession 成功（コミット）後に伝助 push 非同期メソッドが呼ばれる")
+    void testCreateSessionTriggersAsyncDensukePushAfterCommit() {
+        // Given: 練習日新規登録の通常フロー
+        LocalDate sessionDate = LocalDate.of(2026, 5, 10);
+        Long organizationId = 1L;
+        PracticeSession savedSession = PracticeSession.builder()
+                .id(1L).sessionDate(sessionDate).totalMatches(3).organizationId(organizationId).build();
+
+        PracticeSessionCreateRequest request = PracticeSessionCreateRequest.builder()
+                .sessionDate(sessionDate)
+                .totalMatches(3)
+                .organizationId(organizationId)
+                .build();
+        when(practiceSessionRepository.existsBySessionDateAndOrganizationId(sessionDate, organizationId)).thenReturn(false);
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(savedSession);
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(sessionDate)).thenReturn(0L);
+
+        // afterCommit フックを捕捉
+        ArgumentCaptor<TransactionSynchronization> syncCaptor =
+                ArgumentCaptor.forClass(TransactionSynchronization.class);
+
+        try (MockedStatic<TransactionSynchronizationManager> txMock =
+                     mockStatic(TransactionSynchronizationManager.class)) {
+
+            // When: createSession を実行
+            practiceSessionService.createSession(request, 99L);
+
+            // Then: registerSynchronization が呼ばれた
+            txMock.verify(() ->
+                    TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
+        }
+
+        // この時点では push はまだ呼ばれていない（afterCommit 未発火）
+        verify(densukeScheduleWriteService, never()).pushNewSchedulesToDensukeAsync(anyInt(), anyInt(), any());
+
+        // afterCommit を手動発火 → コミット成功をシミュレート
+        syncCaptor.getValue().afterCommit();
+
+        // Then: 伝助 push が (year, month, organizationId) で呼ばれる
+        verify(densukeScheduleWriteService).pushNewSchedulesToDensukeAsync(
+                eq(sessionDate.getYear()), eq(sessionDate.getMonthValue()), eq(organizationId));
+    }
+
+    @Test
+    @DisplayName("testCreateSessionDoesNotTriggerPushOnRollback: createSession でロールバックした場合は伝助 push が呼ばれない")
+    void testCreateSessionDoesNotTriggerPushOnRollback() {
+        // Given: 練習日新規登録の通常フロー（コミットせずロールバックさせるシナリオ）
+        LocalDate sessionDate = LocalDate.of(2026, 5, 10);
+        Long organizationId = 1L;
+        PracticeSession savedSession = PracticeSession.builder()
+                .id(1L).sessionDate(sessionDate).totalMatches(3).organizationId(organizationId).build();
+
+        PracticeSessionCreateRequest request = PracticeSessionCreateRequest.builder()
+                .sessionDate(sessionDate)
+                .totalMatches(3)
+                .organizationId(organizationId)
+                .build();
+        when(practiceSessionRepository.existsBySessionDateAndOrganizationId(sessionDate, organizationId)).thenReturn(false);
+        when(practiceSessionRepository.save(any(PracticeSession.class))).thenReturn(savedSession);
+        when(practiceParticipantRepository.findBySessionId(1L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(sessionDate)).thenReturn(0L);
+
+        ArgumentCaptor<TransactionSynchronization> syncCaptor =
+                ArgumentCaptor.forClass(TransactionSynchronization.class);
+
+        try (MockedStatic<TransactionSynchronizationManager> txMock =
+                     mockStatic(TransactionSynchronizationManager.class)) {
+
+            // When: createSession を実行（フックは登録される）
+            practiceSessionService.createSession(request, 99L);
+
+            txMock.verify(() ->
+                    TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
+        }
+
+        // ロールバックをシミュレート: afterCompletion(STATUS_ROLLED_BACK) のみ呼ぶ
+        // （afterCommit は呼ばない = TransactionSynchronization の標準動作）
+        syncCaptor.getValue().afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+        // Then: 伝助 push は呼ばれない
+        verify(densukeScheduleWriteService, never()).pushNewSchedulesToDensukeAsync(anyInt(), anyInt(), any());
     }
 
     @Test
