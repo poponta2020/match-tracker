@@ -820,6 +820,14 @@ public class DensukeImportService {
                     Venue venue = venueNameMap.get(venueName);
                     if (venue != null) {
                         session.setVenueId(venue.getId());
+                        // venueId 補完と同時に capacity も補完する。
+                        // venue 未解決のまま作成された既存セッション (capacity NULL) が
+                        // 後日 venue 解決できた場合、ここで capacity を埋めなければ
+                        // 抽選・繰り上げ・空き通知などが 0 枠扱い／不整合になる恐れがある。
+                        // ユーザーが意図的に capacity = 0 等を設定しているケースは上書きしない。
+                        if (session.getCapacity() == null && venue.getCapacity() != null) {
+                            session.setCapacity(venue.getCapacity());
+                        }
                         practiceSessionRepository.save(session);
                         result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
                     } else {

@@ -66,17 +66,6 @@ status: completed
 - **依存タスク:** なし
 - **対応Issue:** #771
 
-### タスク 6: 本番 DB に SQL 適用
-- [ ] 完了
-- **概要:** `CLAUDE.local.md` の接続情報を使って psql 経由で本番 DB に適用し、影響行数を確認する。
-- **変更対象ファイル:** なし（実行のみ）
-  - 事前確認: `SELECT COUNT(*) FROM practice_sessions WHERE capacity IS NULL AND venue_id IS NOT NULL;` → 45 を確認
-  - 実行: `PGPASSWORD='...' psql -h ... -U karuta -d karuta_tracker_k40h -f database/backfill_practice_session_capacity_from_venue.sql`
-  - 事後確認: 同じ COUNT クエリが 0 になること、団体別件数の再確認
-  - CLAUDE.md ルールに従い、適用タイミング（マージ前 or 直後）はユーザーと相談の上で実施
-- **依存タスク:** タスク 5
-- **対応Issue:** #772
-
 ### タスク 7: ドキュメント更新
 - [x] 完了
 - **概要:** 仕様書・設計書に capacity フォールバックの挙動を明記する。
@@ -101,6 +90,21 @@ status: completed
 2. **タスク 2** (DensukeImportService テスト) ← タスク 1 完了後
 3. **タスク 4** (PracticeSessionService テスト) ← タスク 3 完了後
 4. **タスク 7** (ドキュメント更新) ← タスク 1, 3 完了後
-5. **タスク 6** (本番 DB 適用) ← タスク 5 完了後、ユーザー確認の上で実施。通常はマージ後に実行
 
-すべてのタスクが完了 → `/prepare-pr` → `/review` → `/ship` の通常パイプラインへ。
+すべての実装タスクが完了 → `/review` → `/ship` の通常パイプラインへ。下記「マージ後運用タスク」はマージ完了後に別途実施する。
+
+---
+
+## マージ後運用タスク
+
+PR 本体の実装スコープには含めず、マージ後の運用作業として実施する。`status: completed` 判定の対象外。
+
+### タスク 6: 本番 DB に SQL 適用（マージ後運用タスク）
+- **概要:** `CLAUDE.local.md` の接続情報を使って psql 経由で本番 DB に適用し、影響行数を確認する。
+- **変更対象ファイル:** なし（実行のみ）
+  - 事前確認: `SELECT COUNT(*) FROM practice_sessions WHERE capacity IS NULL AND venue_id IS NOT NULL;` → 45 を確認
+  - 実行: `PGPASSWORD='...' psql -h ... -U karuta -d karuta_tracker_k40h -f database/backfill_practice_session_capacity_from_venue.sql`
+  - 事後確認: 同じ COUNT クエリが 0 になること、団体別件数の再確認
+  - CLAUDE.md ルールに従い、適用タイミング（マージ前 or 直後）はユーザーと相談の上で実施
+- **依存タスク:** タスク 5（SQL ファイルの作成）が前提
+- **対応Issue:** #772

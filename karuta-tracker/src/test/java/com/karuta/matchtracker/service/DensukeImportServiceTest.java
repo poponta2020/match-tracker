@@ -1096,6 +1096,61 @@ class DensukeImportServiceTest {
     }
 
     @Test
+    @DisplayName("伝助同期: 既存セッションの venueId が null で会場名が解決できると venueId と capacity の両方が補完される")
+    void testImportBackfillsVenueIdAndCapacityForExistingSession() throws IOException {
+        DensukeData data = createSampleData();
+        // 既存セッション: venueId と capacity の両方が NULL
+        PracticeSession existingSession = PracticeSession.builder().id(200L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3)
+                .venueId(null).capacity(null).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(
+                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existingSession));
+        when(practiceSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // venue 補完経路で venueId / capacity の両方が venue から埋まる
+        assertThat(existingSession.getVenueId()).isEqualTo(100L);
+        assertThat(existingSession.getCapacity()).isEqualTo(14);
+        verify(practiceSessionRepository, atLeastOnce()).save(existingSession);
+    }
+
+    @Test
+    @DisplayName("伝助同期: 既存セッションの capacity が設定済みなら venue 補完で上書きされない")
+    void testImportDoesNotOverrideExistingCapacityOnVenueBackfill() throws IOException {
+        DensukeData data = createSampleData();
+        // 既存セッション: venueId のみ NULL、capacity は意図的に 0（定員無効運用想定）
+        PracticeSession existingSession = PracticeSession.builder().id(200L)
+                .sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3)
+                .venueId(null).capacity(0).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(
+                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existingSession));
+        when(practiceSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(200L, 1))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // venueId だけが補完され、capacity は維持される（明示的に 0 を意図したケースを尊重）
+        assertThat(existingSession.getVenueId()).isEqualTo(100L);
+        assertThat(existingSession.getCapacity()).isEqualTo(0);
+    }
+
+    @Test
     @DisplayName("伝助同期: venue 未解決のとき、新規セッションの capacity は null のまま")
     void testImportLeavesCapacityNullWhenVenueUnresolved() throws IOException {
         DensukeData data = createSampleData();
