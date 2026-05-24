@@ -21,6 +21,7 @@ public class DensukeSyncService {
     private final DensukeWriteService densukeWriteService;
     private final DensukeImportService densukeImportService;
     private final DensukeUrlRepository densukeUrlRepository;
+    private final DensukeScheduleWriteService densukeScheduleWriteService;
 
     /**
      * 特定団体の伝助同期（書き込み + 読み取り）
@@ -41,9 +42,24 @@ public class DensukeSyncService {
 
     /**
      * 全団体の伝助同期（当月 + 翌月）
+     *
+     * <p>順序が重要:
+     * <ol>
+     *   <li>アプリ→伝助 スケジュール push（フォロー同期。即時 push 失敗時の自動回復）</li>
+     *   <li>アプリ→伝助 参加者 dirty 書き込み（スケジュールが揃った状態で書く）</li>
+     *   <li>伝助→アプリ 取り込み（伝助の最新状態を取り込む）</li>
+     * </ol>
      */
     public void syncAll() {
-        // ① アプリ→伝助: dirty=true の参加者を書き込む（全団体分を1回で処理）
+        // ① アプリ→伝助 スケジュール push（即時 push 失敗の自動回復用フォロー同期）
+        //    失敗は WARN ログのみで管理者通知は発火しない（DensukeScheduleWriteService 側で抑制済み、フラッディング防止）
+        try {
+            densukeScheduleWriteService.pushAllForCurrentAndNextMonth();
+        } catch (Exception e) {
+            log.warn("Densuke schedule push (scheduler) failed: {}", e.getMessage());
+        }
+
+        // ② アプリ→伝助: dirty=true の参加者を書き込む（全団体分を1回で処理）
         try {
             densukeWriteService.writeToDensuke();
         } catch (Exception e) {
@@ -52,7 +68,7 @@ public class DensukeSyncService {
 
         LocalDate now = JstDateTimeUtil.today();
 
-        // ② 伝助→アプリ: 当月・翌月の全団体のURLを読み取り
+        // ③ 伝助→アプリ: 当月・翌月の全団体のURLを読み取り
         syncForMonth(now.getYear(), now.getMonthValue());
         LocalDate nextMonth = now.plusMonths(1);
         syncForMonth(nextMonth.getYear(), nextMonth.getMonthValue());

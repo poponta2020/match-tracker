@@ -26,7 +26,7 @@ status: completed
 
 ### タスク2: DensukeScheduleWriteService 新規作成（コアサービス）
 
-- [ ] 完了
+- [x] 完了
 - **概要:** アプリ→伝助へのスケジュール push を担う新サービスを作成。差分検出 → POST /update → 失敗時通知のフローを実装。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeScheduleWriteService.java` (新規)
@@ -59,7 +59,7 @@ status: completed
 
 ### タスク3: PracticeSessionService.createSession に afterCommit + @Async フック追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** 練習日新規作成成功時に、afterCommit で伝助 push を非同期発火する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeSessionService.java` (L390-L453 `createSession`)
@@ -79,7 +79,7 @@ status: completed
 
 ### タスク4: DensukeSyncService にフォロー同期ステップを追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** 5分スケジューラ実行時に「アプリと伝助のスケジュール差分」もチェックして自動補完する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeSyncService.java`
