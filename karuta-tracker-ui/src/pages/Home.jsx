@@ -101,6 +101,11 @@ const Home = () => {
 
   const isMyself = (p) => p.id === currentPlayer?.id;
 
+  const formatTime = (time) => {
+    if (!time) return '';
+    return time.substring(0, 5); // "HH:MM:SS" -> "HH:MM"
+  };
+
   const now = new Date();
   const monthLabel = `${now.getMonth() + 1}月`;
 
@@ -194,7 +199,7 @@ const Home = () => {
                 {nextPractice.startTime && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#1A3654]" />
-                    <span className="text-[#374151]">{nextPractice.startTime}〜{nextPractice.endTime || ''}</span>
+                    <span className="text-[#374151]">{formatTime(nextPractice.startTime)}〜{formatTime(nextPractice.endTime)}</span>
                   </div>
                 )}
                 {/* 参加者セクション */}
