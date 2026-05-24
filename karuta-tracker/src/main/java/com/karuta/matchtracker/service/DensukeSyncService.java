@@ -25,6 +25,10 @@ public class DensukeSyncService {
 
     /**
      * 特定団体の伝助同期（書き込み + 読み取り）
+     *
+     * <p>順序は {@link #syncAll()} と揃える: スケジュール push → 参加者書き込み → 取り込み。
+     * 即時 push (afterCommit) が失敗した直後に管理者が団体別手動同期を実行した場合でも
+     * スケジュール差分が自動補完される（Codex Round 3 WARNING 1 対応）。
      */
     public DensukeImportService.ImportResult syncForOrganization(int year, int month, Long organizationId, Long userId) throws IOException {
         // ① 伝助URLを取得
@@ -32,10 +36,21 @@ public class DensukeSyncService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Densuke URL not found for " + year + "/" + month + " (orgId=" + organizationId + ")"));
 
-        // ② アプリ→伝助: 指定団体・指定年月のdirty=true 参加者のみを書き込む
+        // ② アプリ→伝助 スケジュール push（手動同期経路でも syncAll() と同じ順序に揃える）
+        //    失敗は WARN ログのみ。手動同期画面のメイン操作は writeToDensuke / import なので
+        //    スケジュール push の失敗で全体を中断しない。即時 push の失敗通知は afterCommit
+        //    フック側で既に発火しているため、ここではスケジューラ経路と同じく抑制する。
+        try {
+            densukeScheduleWriteService.pushSilently(year, month, organizationId);
+        } catch (Exception e) {
+            log.warn("Densuke schedule push (syncForOrganization) failed: orgId={}, {}/{}, err={}",
+                    organizationId, year, month, e.getMessage());
+        }
+
+        // ③ アプリ→伝助: 指定団体・指定年月のdirty=true 参加者のみを書き込む
         densukeWriteService.writeToDensukeForOrganization(densukeUrl);
 
-        // ③ 伝助→アプリ: 対象団体のURLからデータを読み取り
+        // ④ 伝助→アプリ: 対象団体のURLからデータを読み取り
         LocalDate targetMonth = LocalDate.of(year, month, 1);
         return densukeImportService.importFromDensuke(densukeUrl.getUrl(), targetMonth, userId, organizationId);
     }

@@ -53,6 +53,22 @@ import java.util.stream.Collectors;
  * <p>並行制御は {@link DensukeUrlRepository#findByYearAndMonthAndOrganizationIdForUpdate}
  * の行ロックでシリアライズする（伝助 read → write の間の他リクエスト割り込みによる
  * 差分計算ズレを防ぐ）。
+ *
+ * <p><b>設計判断: DB ロックと外部 HTTP のスコープ</b><br>
+ * {@code @Transactional} の中で {@code densuke_urls} 行ロックを取り、その後に伝助の
+ * scrape / GET /list / POST /update まで実行している。これは「伝助 read → アプリ差分計算
+ * → 伝助 write」の競合を最も簡潔に直列化する設計判断。ロック粒度は (year, month,
+ * organizationId) 単位で限定的、保持時間は HTTP タイムアウト（各 10 秒、合計最大 30 秒）に
+ * 律速される。
+ * <ul>
+ *   <li>同一 (year, month, organizationId) の並行 push は待たされる（意図通り）</li>
+ *   <li>{@link #pushAllForCurrentAndNextMonth} は各 URL を順次処理（並列なし）するため、
+ *       スケジューラから DB コネクションプールを大量消費する経路は無い</li>
+ *   <li>{@code @Async} エントリポイントは Spring の TaskExecutor の上限に律速される</li>
+ * </ul>
+ * 将来パフォーマンスが課題化した場合は、DB 行ロックではなく advisory lock や
+ * アプリケーション側 keyed lock に切り替えて HTTP 前にトランザクションを閉じる設計変更を
+ * 検討する（本 PR スコープでは現行方式を維持。Codex Round 3 WARNING 2 の現行維持判断）。
  */
 @Service
 @Slf4j

@@ -105,6 +105,38 @@ class DensukeSyncServiceTest {
     }
 
     @Test
+    @DisplayName("testSyncForOrganizationInvokesPushBeforeWrite: syncForOrganization も pushSilently → writeToDensukeForOrganization → importFromDensuke の順")
+    void testSyncForOrganizationInvokesPushBeforeWrite() throws Exception {
+        // Given: 手動同期経路（Round 3 WARNING 1 対応の検証）
+        DensukeUrl densukeUrl = DensukeUrl.builder()
+                .id(10L)
+                .year(2026)
+                .month(5)
+                .organizationId(1L)
+                .url("https://densuke.biz/list?cd=test")
+                .build();
+        DensukeImportService.ImportResult result = new DensukeImportService.ImportResult();
+
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 5, 1L))
+                .thenReturn(Optional.of(densukeUrl));
+        when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
+                .thenReturn(result);
+
+        // When
+        densukeSyncService.syncForOrganization(2026, 5, 1L, 99L);
+
+        // Then: pushSilently → writeToDensukeForOrganization → importFromDensuke の順
+        InOrder inOrder = inOrder(densukeScheduleWriteService, densukeWriteService, densukeImportService);
+        inOrder.verify(densukeScheduleWriteService).pushSilently(2026, 5, 1L);
+        inOrder.verify(densukeWriteService).writeToDensukeForOrganization(densukeUrl);
+        inOrder.verify(densukeImportService).importFromDensuke(
+                eq("https://densuke.biz/list?cd=test"),
+                any(LocalDate.class),
+                eq(99L),
+                eq(1L));
+    }
+
+    @Test
     @DisplayName("testSyncAllInvokesScheduleFollowUpSync: syncAll() が pushAllForCurrentAndNextMonth() を writeToDensuke() の前に呼ぶ")
     void testSyncAllInvokesScheduleFollowUpSync() throws Exception {
         // Given: スケジューラ経路の通常フロー
