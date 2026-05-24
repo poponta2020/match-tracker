@@ -26,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
@@ -57,6 +59,7 @@ public class PracticeSessionService {
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeSyncService densukeSyncService;
+    private final DensukeScheduleWriteService densukeScheduleWriteService;
     private final AdjacentRoomService adjacentRoomService;
     private final WaitlistPromotionService waitlistPromotionService;
     private final LotteryDeadlineHelper lotteryDeadlineHelper;
@@ -454,6 +457,26 @@ public class PracticeSessionService {
 
             practiceParticipantRepository.saveAll(practiceParticipants);
         }
+
+        // 伝助スケジュール push を afterCommit で非同期ディスパッチ。
+        // findOrCreateSession (DensukeImportService) は createSession を通らないので、
+        // 伝助→アプリ取り込み起因の無限ループは構造上発生しない。
+        // ロールバック時は afterCommit が呼ばれないので push されない（TransactionSynchronization の標準動作）。
+        final int pushYear = saved.getSessionDate().getYear();
+        final int pushMonth = saved.getSessionDate().getMonthValue();
+        final Long pushOrgId = organizationId;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    densukeScheduleWriteService.pushNewSchedulesToDensukeAsync(pushYear, pushMonth, pushOrgId);
+                } catch (Exception e) {
+                    // @Async ディスパッチ失敗の保険（RejectedExecutionException 等を握りつぶす）
+                    log.warn("Densuke schedule push async dispatch failed: orgId={}, year={}, month={}, err={}",
+                            pushOrgId, pushYear, pushMonth, e.getMessage());
+                }
+            }
+        });
 
         log.info("Successfully created practice session with id: {} and {} participants",
                 saved.getId(), participantIds.size());
