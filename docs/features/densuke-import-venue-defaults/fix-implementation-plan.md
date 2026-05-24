@@ -30,7 +30,7 @@ status: completed
 
 ### タスク2: DensukeImportService の単体テスト追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** タスク1で追加した Venue 値反映ロジックに対する単体テストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/DensukeImportServiceTest.java`
@@ -52,7 +52,7 @@ status: completed
 
 ### タスク3: ドキュメント更新
 
-- [ ] 完了
+- [x] 完了
 - **概要:** `CLAUDE.md` のドキュメント更新ルールに従い、仕様書・設計書を更新する。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 伝助同期セクションに「会場名一致時に Venue の `defaultMatchCount` / `capacity` が自動適用される」旨を追記
