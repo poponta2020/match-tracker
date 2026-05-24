@@ -654,7 +654,7 @@ class WaitlistPromotionServiceTest {
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1).build();
             PracticeSession session = PracticeSession.builder()
-                    .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).build();
+                    .id(100L).sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
             PracticeParticipant waitlisted = PracticeParticipant.builder()
                     .id(2L).sessionId(100L).playerId(20L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
@@ -671,7 +671,7 @@ class WaitlistPromotionServiceTest {
                             100L, 1, ParticipantStatus.WAITLISTED))
                     .thenReturn(Optional.of(waitlisted));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
-                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+                    .thenReturn(JstDateTimeUtil.now().plusDays(7));
 
             service.expireOffer(offered);
 
@@ -1061,16 +1061,16 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant p1 = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
             PracticeParticipant p2 = PracticeParticipant.builder()
                     .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
 
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
             Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
@@ -1139,16 +1139,16 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant valid = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0)) // 未来
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7)) // 未来
                     .build();
             PracticeParticipant expired = PracticeParticipant.builder()
                     .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0)) // 過去
+                    .offerDeadline(JstDateTimeUtil.now().minusDays(7)) // 過去
                     .build();
 
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(valid, expired));
@@ -1212,7 +1212,7 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant participant = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
 
             PracticeParticipant remaining = PracticeParticipant.builder()
@@ -1244,7 +1244,7 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant participant = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
             PracticeSession session = PracticeSession.builder().id(100L).build();
             Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
@@ -1271,7 +1271,7 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant participant = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
 
             when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
@@ -1302,13 +1302,13 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant participant = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
             PracticeParticipant nextWaitlisted = PracticeParticipant.builder()
                     .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
 
             when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
             when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
@@ -1323,7 +1323,7 @@ class WaitlistPromotionServiceTest {
                             100L, 1, ParticipantStatus.WAITLISTED))
                     .thenReturn(Optional.of(nextWaitlisted));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
-                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+                    .thenReturn(JstDateTimeUtil.now().plusDays(7));
             when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
 
             service.respondToOffer(1L, false);
@@ -1349,7 +1349,7 @@ class WaitlistPromotionServiceTest {
                     .id(6L).sessionId(100L).playerId(30L).matchNumber(3)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
                     .thenReturn(List.of(p1, p2));
@@ -1369,7 +1369,7 @@ class WaitlistPromotionServiceTest {
                             100L, 3, ParticipantStatus.WAITLISTED))
                     .thenReturn(Optional.of(nextForMatch3));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
-                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+                    .thenReturn(JstDateTimeUtil.now().plusDays(7));
             when(playerRepository.findById(10L)).thenReturn(Optional.of(Player.builder().id(10L).name("テスト選手").build()));
 
             service.respondToOfferAll(100L, 10L, false);
@@ -1385,10 +1385,10 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant participant = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0))
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7))
                     .build();
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
 
             when(practiceParticipantRepository.findById(1L)).thenReturn(Optional.of(participant));
             when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
@@ -1418,16 +1418,16 @@ class WaitlistPromotionServiceTest {
             PracticeParticipant valid = PracticeParticipant.builder()
                     .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2026, 5, 10, 18, 0)) // 未来
+                    .offerDeadline(JstDateTimeUtil.now().plusDays(7)) // 未来
                     .build();
             PracticeParticipant expired = PracticeParticipant.builder()
                     .id(2L).sessionId(100L).playerId(10L).matchNumber(3)
                     .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                    .offerDeadline(java.time.LocalDateTime.of(2020, 1, 1, 0, 0)) // 過去
+                    .offerDeadline(JstDateTimeUtil.now().minusDays(7)) // 過去
                     .build();
 
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
             Player triggerPlayer = Player.builder().id(10L).name("テスト選手").build();
 
             when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.OFFERED))
@@ -1488,10 +1488,10 @@ class WaitlistPromotionServiceTest {
                         100L, 1, ParticipantStatus.WAITLISTED))
                 .thenReturn(Optional.of(waitlisted));
         when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
-                .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+                .thenReturn(JstDateTimeUtil.now().plusDays(7));
 
         Optional<PracticeParticipant> result = service.promoteNextWaitlisted(
-                100L, 1, LocalDate.of(2026, 5, 5));
+                100L, 1, JstDateTimeUtil.today().plusDays(7));
 
         assertThat(result).isPresent();
         assertThat(result.get().getStatus()).isEqualTo(ParticipantStatus.OFFERED);
@@ -1515,7 +1515,7 @@ class WaitlistPromotionServiceTest {
                     .id(5L).sessionId(100L).playerId(20L).matchNumber(1)
                     .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
             PracticeSession session = PracticeSession.builder().id(100L)
-                    .sessionDate(LocalDate.of(2026, 5, 10)).build();
+                    .sessionDate(JstDateTimeUtil.today().plusDays(7)).build();
 
             when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
             when(practiceParticipantRepository
@@ -1527,7 +1527,7 @@ class WaitlistPromotionServiceTest {
                             100L, 1, ParticipantStatus.WAITLISTED))
                     .thenReturn(Optional.of(nextWaitlisted));
             when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
-                    .thenReturn(java.time.LocalDateTime.of(2026, 5, 10, 18, 0));
+                    .thenReturn(JstDateTimeUtil.now().plusDays(7));
 
             ExpireOfferResult result = service.expireOfferSuppressed(participant);
 

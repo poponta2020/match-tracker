@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.DensukeWriteStatusDto;
 import com.karuta.matchtracker.entity.*;
 import com.karuta.matchtracker.repository.*;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,24 +90,30 @@ class DensukeWriteServiceTest {
     @Test
     @DisplayName("dirty=trueの参加者がいない場合は何も書き込まない")
     void testWriteToDensuke_noDirtyParticipants_skipsWrite() {
+        // 実装は writeToDensuke() で今月と来月のURLを取得するため、
+        // 現在の年月を基準にテストデータを構築する
+        LocalDate today = JstDateTimeUtil.today();
+        int currentYear = today.getYear();
+        int currentMonth = today.getMonthValue();
+
         DensukeUrl url = DensukeUrl.builder()
-                .id(1L).year(2026).month(4).organizationId(1L)
+                .id(1L).year(currentYear).month(currentMonth).organizationId(1L)
                 .url("https://densuke.biz/list?cd=test123").build();
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
-                    if (y == 2026 && m == 4) return List.of(url);
+                    if (y == currentYear && m == currentMonth) return List.of(url);
                     return List.of();
                 });
 
         PracticeSession session = PracticeSession.builder()
-                .id(10L).sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+                .id(10L).sessionDate(today.withDayOfMonth(1)).totalMatches(3).build();
         when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), eq(1L)))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
-                    if (y == 2026 && m == 4) return List.of(session);
+                    if (y == currentYear && m == currentMonth) return List.of(session);
                     return Collections.emptyList();
                 });
 
@@ -165,24 +172,30 @@ class DensukeWriteServiceTest {
     @Test
     @DisplayName("BYE(matchNumber=null)のみdirtyの場合はプレイヤーの書き込みが発生しない")
     void testWriteToDensuke_byeOnlyDirty_skipsWrite() {
+        // 実装は writeToDensuke() で今月と来月のURLを取得するため、
+        // 現在の年月を基準にテストデータを構築する
+        LocalDate today = JstDateTimeUtil.today();
+        int currentYear = today.getYear();
+        int currentMonth = today.getMonthValue();
+
         DensukeUrl url = DensukeUrl.builder()
-                .id(1L).year(2026).month(4).organizationId(1L)
+                .id(1L).year(currentYear).month(currentMonth).organizationId(1L)
                 .url("https://densuke.biz/list?cd=test123").build();
         when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
-                    if (y == 2026 && m == 4) return List.of(url);
+                    if (y == currentYear && m == currentMonth) return List.of(url);
                     return List.of();
                 });
 
         PracticeSession session = PracticeSession.builder()
-                .id(10L).sessionDate(LocalDate.of(2026, 4, 1)).totalMatches(3).build();
+                .id(10L).sessionDate(today.withDayOfMonth(1)).totalMatches(3).build();
         when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), eq(1L)))
                 .thenAnswer(inv -> {
                     int y = (int) inv.getArgument(0);
                     int m = (int) inv.getArgument(1);
-                    if (y == 2026 && m == 4) return List.of(session);
+                    if (y == currentYear && m == currentMonth) return List.of(session);
                     return Collections.emptyList();
                 });
 
