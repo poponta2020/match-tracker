@@ -8,11 +8,13 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -186,6 +188,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(errorResponse);
+    }
+
+    /**
+     * 明示的に HTTP ステータスを指定した例外のハンドリング
+     * （GitHub PAT 未設定時の 503 など、外部依存の状態を直接ステータスに反映するケース）
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException ex,
+            HttpServletRequest request) {
+
+        HttpStatusCode status = ex.getStatusCode();
+        String message = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        if (status.is5xxServerError()) {
+            log.error("ResponseStatusException ({}): {}", status.value(), message, ex);
+        } else {
+            log.warn("ResponseStatusException ({}): {}", status.value(), message);
+        }
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                message,
+                status.value(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(status).body(errorResponse);
     }
 
     /**

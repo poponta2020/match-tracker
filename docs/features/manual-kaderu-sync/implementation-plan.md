@@ -25,7 +25,7 @@ status: completed
 - **対応Issue:** #803
 
 ### タスク2: GitHub Actions Client + Workflow 新設
-- [ ] 完了
+- [x] 完了
 - **概要:** GitHub Actions API を叩く Spring 用クライアントと、手動同期専用 workflow を追加する
 - **変更対象ファイル:**
   - `.github/workflows/sync-kaderu-reservations-manual.yml` （新規）
