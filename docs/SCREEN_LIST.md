@@ -177,7 +177,7 @@
 
 | コンポーネント | ファイル | 用途 |
 |---------------|---------|------|
-| `Layout` | `components/Layout.jsx` | ヘッダーバー（通知ベル・プロフィール）+ 下部ナビゲーション付き共通レイアウト。`BottomNavContext` の `isVisible` に応じてボトムナビの表示/非表示をスライドアニメーションで切り替え |
+| `Layout` | `components/Layout.jsx` | ヘッダーバー（プロフィール）+ 下部ナビゲーション付き共通レイアウト。`BottomNavContext` の `isVisible` に応じてボトムナビの表示/非表示をスライドアニメーションで切り替え |
 | `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック |
 | `AuthRoute` | `components/AuthRoute.jsx` | 認証状態による条件分岐レンダリング |
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
@@ -192,7 +192,6 @@
 | 要素 | 説明 |
 |------|------|
 | ページタイトル | 現在のパスに応じた画面タイトル |
-| 通知ベル | `/notifications` に遷移。未読数バッジ付き |
 | プロフィール | `/profile` に遷移 |
 
 ## 下部ナビゲーション（Layout）
