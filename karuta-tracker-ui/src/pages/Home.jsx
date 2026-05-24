@@ -23,7 +23,6 @@ const Home = () => {
   const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
   const [participationGroups, setParticipationGroups] = useState([]);
   const [hasPendingOffer, setHasPendingOffer] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
@@ -40,9 +39,6 @@ const Home = () => {
 
       // 繰り上げオファー
       setHasPendingOffer(data.hasPendingOffer || false);
-
-      // 未読通知数（HomeAPIのレスポンスから取得）
-      setUnreadCount(data.unreadNotificationCount || 0);
 
       // 次の練習情報（参加者リストも含まれている）
       if (data.nextPractice) {
@@ -116,7 +112,7 @@ const Home = () => {
   return (
     <div className="space-y-8">
       {/* ナビゲーションバー */}
-      <NavigationMenu unreadCount={unreadCount} />
+      <NavigationMenu />
 
       {/* コンテンツ */}
       <div className="pt-16">
