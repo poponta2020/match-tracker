@@ -2807,23 +2807,23 @@ public class LineNotificationService {
     @Async
     public void sendDensukeScheduleSyncFailedNotification(Long organizationId, String errorMessage) {
         try {
-            List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
-            if (memberships.isEmpty()) {
-                log.info("ADMIN_DENSUKE_PUSH_FAILED: no members in organization {}", organizationId);
-                return;
-            }
-
-            List<Long> playerIds = memberships.stream()
-                    .map(PlayerOrganization::getPlayerId)
-                    .toList();
-
-            List<Player> targetAdmins = playerRepository.findAllById(playerIds).stream()
+            // 既存の管理者通知（getAdminRecipientsForSession）と同じ解決ルールに揃える:
+            //   全 SUPER_ADMIN + admin_organization_id が該当団体の ADMIN
+            // player_organizations は「メンバーとしての参加団体」であり、管理権限の所属は
+            // players.admin_organization_id で表現される（Codex Round 4 WARNING 対応）。
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            // findByRoleAndActive 系は active=true（deleted_at IS NULL）で絞っているが、念のため二重防御
+            // および同一 player の重複（理論上は role 排他なので発生しないが）を除外
+            targetAdmins = targetAdmins.stream()
                     .filter(p -> p.getDeletedAt() == null)
-                    .filter(p -> p.getRole() == Player.Role.ADMIN || p.getRole() == Player.Role.SUPER_ADMIN)
+                    .distinct()
                     .toList();
 
             if (targetAdmins.isEmpty()) {
-                log.info("ADMIN_DENSUKE_PUSH_FAILED: no admins in organization {}", organizationId);
+                log.info("ADMIN_DENSUKE_PUSH_FAILED: no admins for organization {}", organizationId);
                 return;
             }
 
