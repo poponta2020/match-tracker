@@ -1,18 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { matchAPI } from '../../api';
+import { matchAPI, matchCommentsAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchCommentThread from './MatchCommentThread';
 import { useAuth } from '../../context/AuthContext';
-import {
-  Trophy,
-  Calendar,
-  User,
-  Edit,
-  Trash2,
-  AlertCircle,
-  MapPin,
-} from 'lucide-react';
+import { Edit, Trash2, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
 
@@ -29,6 +21,7 @@ const MatchDetail = () => {
   const isOtherPlayer = queryPlayerId && Number(queryPlayerId) !== currentPlayer?.id;
   const [hasMentorRelation, setHasMentorRelation] = useState(false);
   const [menteeIdForComments, setMenteeIdForComments] = useState(null);
+  const [commentsByOthersExist, setCommentsByOthersExist] = useState(false);
 
   useEffect(() => {
     const fetchMatch = async () => {
@@ -66,6 +59,21 @@ const MatchDetail = () => {
     };
     checkMentorRelation();
   }, [isOtherPlayer, queryPlayerId, currentPlayer]);
+
+  // メンティー本人画面でのコメント欄表示判定: 自分以外のコメントが1件以上あるか
+  useEffect(() => {
+    if (!menteeIdForComments) {
+      setCommentsByOthersExist(false);
+      return;
+    }
+    matchCommentsAPI.getComments(Number(id), menteeIdForComments)
+      .then(res => {
+        const hasOthers = res.data.some(c => c.authorId !== currentPlayer?.id);
+        setCommentsByOthersExist(hasOthers);
+      })
+      .catch(() => setCommentsByOthersExist(false));
+  }, [id, menteeIdForComments, currentPlayer?.id]);
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -106,16 +114,41 @@ const MatchDetail = () => {
     );
   }
 
-  const getResultColor = (result) => {
+  const getResultMark = (result) => {
     switch (result) {
       case '勝ち':
-        return 'text-green-600 bg-green-50 border-green-200';
+        return '○';
       case '負け':
-        return 'text-red-600 bg-red-50 border-red-200';
+        return '×';
+      case '引き分け':
+        return '△';
       default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
+        return result;
     }
   };
+
+  const getResultTextColor = (result) => {
+    switch (result) {
+      case '勝ち':
+        return 'text-green-600';
+      case '負け':
+        return 'text-red-600';
+      default:
+        return 'text-gray-600';
+    }
+  };
+
+  // メンター閲覧時は queryPlayerId（メンティー）視点で対戦相手を計算する
+  const perspectivePlayerId = queryPlayerId ? Number(queryPlayerId) : currentPlayer?.id;
+  const opponentId = match.player1Id === perspectivePlayerId
+    ? match.player2Id
+    : match.player1Id;
+  const canNavigateOpponent = opponentId && opponentId !== 0;
+
+  // メンター閲覧時はメンティーのメモ、本人閲覧時は自分のメモを表示
+  const otetsukiCount = isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount;
+  const personalNotes = isOtherPlayer ? match.menteePersonalNotes : match.myPersonalNotes;
+  const hasNotes = otetsukiCount != null || personalNotes;
 
   return (
     <>
@@ -154,146 +187,57 @@ const MatchDetail = () => {
         </div>
       </div>
 
-      {/* 試合結果カード */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="text-center mb-6">
-          <div
-            className={`inline-block px-8 py-4 rounded-lg border-2 ${getResultColor(
-              match.result
-            )}`}
-          >
-            <p className="text-4xl font-bold">{match.result}</p>
-          </div>
+      {/* 統合カード（試合結果 + 詳細情報 + メモ） */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6 space-y-4">
+        {/* 上段: 試合結果サマリ */}
+        <div className="text-center">
+          {canNavigateOpponent ? (
+            <button
+              onClick={() => navigate(`/matches?playerId=${opponentId}`)}
+              className="text-2xl font-semibold text-[#4a6b5a] hover:underline"
+            >
+              {match.opponentName}
+            </button>
+          ) : (
+            <span className="text-2xl font-semibold text-gray-900">
+              {match.opponentName}
+            </span>
+          )}
+          <span className={`text-2xl font-bold ml-3 ${getResultTextColor(match.result)}`}>
+            {getResultMark(match.result)} {Math.abs(match.scoreDifference)}
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">対戦相手</p>
-            <div className="flex items-center justify-center gap-2">
-              <User className="w-5 h-5 text-gray-400" />
-              {(() => {
-                // メンター閲覧時は queryPlayerId（メンティー）視点で対戦相手を計算する
-                const perspectivePlayerId = queryPlayerId ? Number(queryPlayerId) : currentPlayer?.id;
-                const opponentId = match.player1Id === perspectivePlayerId
-                  ? match.player2Id
-                  : match.player1Id;
-                return opponentId && opponentId !== 0 ? (
-                  <button
-                    onClick={() => navigate(`/matches?playerId=${opponentId}`)}
-                    className="text-xl font-semibold text-[#4a6b5a] hover:underline"
-                  >
-                    {match.opponentName}
-                  </button>
-                ) : (
-                  <p className="text-xl font-semibold text-gray-900">
-                    {match.opponentName}
-                  </p>
-                );
-              })()}
-            </div>
-          </div>
-
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">枚数差</p>
-            <p className="text-xl font-semibold text-gray-900">
-              {match.scoreDifference > 0 ? '+' : ''}
-              {match.scoreDifference}枚
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 詳細情報 */}
-      <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">詳細情報</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-gray-400" />
-            <div>
-              <p className="text-sm text-gray-600">試合日</p>
-              <p className="font-medium text-gray-900">
-                {new Date(match.matchDate).toLocaleDateString('ja-JP')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Trophy className="w-5 h-5 text-gray-400" />
-            <div>
-              <p className="text-sm text-gray-600">試合番号</p>
-              <p className="font-medium text-gray-900">
-                第{match.matchNumber}試合
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <MapPin className="w-5 h-5 text-gray-400" />
-            <div>
-              <p className="text-sm text-gray-600">会場</p>
-              <p className="font-medium text-gray-900">
-                {match.venueName || '—'}
-              </p>
-            </div>
-          </div>
+        {/* 中段: 詳細情報1行
+            whitespace-pre-wrap: 半角スペース2個を視覚的にそのまま反映するため */}
+        <div className="text-sm text-gray-600 text-center whitespace-pre-wrap">
+          {`${new Date(match.matchDate).toLocaleDateString('ja-JP')}  第${match.matchNumber}試合  ${match.venueName || '—'}`}
         </div>
 
-        {(match.myOtetsukiCount != null || match.myPersonalNotes) && (
-          <div className="pt-4 border-t border-gray-200 space-y-3">
-            {match.myOtetsukiCount != null && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">お手付き回数</p>
-                <p className="text-gray-900">{match.myOtetsukiCount} 回</p>
+        {/* 下段: お手付き・メモ */}
+        {hasNotes && (
+          <div className="pt-4 border-t border-gray-200 space-y-2">
+            {otetsukiCount != null && (
+              <div className="text-gray-900">
+                <span className="text-gray-600">お手付き:</span> {otetsukiCount} 回
               </div>
             )}
-            {match.myPersonalNotes && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">メモ</p>
-                <p className="text-gray-900 whitespace-pre-wrap">{match.myPersonalNotes}</p>
+            {personalNotes && (
+              <div className="text-gray-900">
+                <span className="text-gray-600">メモ:</span>{' '}
+                <span className="whitespace-pre-wrap">{personalNotes}</span>
               </div>
             )}
           </div>
         )}
-
-        <div className="pt-4 border-t border-gray-200">
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>
-              作成日:{' '}
-              {new Date(match.createdAt).toLocaleDateString('ja-JP')}
-            </span>
-            {match.updatedAt !== match.createdAt && (
-              <span>
-                更新日:{' '}
-                {new Date(match.updatedAt).toLocaleDateString('ja-JP')}
-              </span>
-            )}
-          </div>
-        </div>
       </div>
 
-
-      {/* メンティーのメモ（メンター閲覧時） */}
-      {isOtherPlayer && (match.menteePersonalNotes || match.menteeOtetsukiCount != null) && (
-        <div className="bg-white rounded-lg shadow-sm p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">メンティーのメモ</h2>
-          {match.menteeOtetsukiCount != null && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">お手付き回数</p>
-              <p className="text-gray-900">{match.menteeOtetsukiCount} 回</p>
-            </div>
-          )}
-          {match.menteePersonalNotes && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">メモ</p>
-              <p className="text-gray-900 whitespace-pre-wrap">{match.menteePersonalNotes}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* コメントスレッド */}
-      {hasMentorRelation && menteeIdForComments && (
+      {/* コメントスレッド
+          - メンター閲覧時: メンター関係(ACTIVE)があれば常に表示
+          - メンティー本人: 自分以外のコメントが1件以上あるときのみ表示 */}
+      {menteeIdForComments &&
+        ((isOtherPlayer && hasMentorRelation) ||
+          (!isOtherPlayer && commentsByOthersExist)) && (
         <MatchCommentThread matchId={Number(id)} menteeId={menteeIdForComments} />
       )}
 
