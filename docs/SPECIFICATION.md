@@ -1107,6 +1107,11 @@ SUPER_ADMIN のみ操作可能。
 - 行ロック (`@Lock(PESSIMISTIC_WRITE)` の `findByYearAndMonthAndOrganizationIdForUpdate`) で取得し、並行 push の差分計算ズレを防ぐ
 - `DensukeImportService.findOrCreateSession` 経由のセッション作成では発火しない
   （無限ループ防止 — `findOrCreateSession` は `practiceSessionRepository.save` を直接呼び `PracticeSessionService.createSession` を通らないため、afterCommit フックが入らない）
+- **過去日制約**: 伝助 `POST /update` は候補日程を**末尾追記**しかできず、伝助の既存最大日付より前の新規日付を
+  push すると、伝助 DOM 出現順とアプリ側日付昇順がずれて `DensukeWriteService.parseAndSaveRowIds` の row id
+  対応が誤り、参加者出欠が別日に書き込まれるデータ破壊リスクがある。よって**伝助の既存最大日付以前の新規セッション
+  は push せず、即時 push 経路では管理者へ LINE 通知**して伝助ページの管理画面から手動追加を促す。
+  スケジューラ経路はフラッディング防止で通知抑制（WARN ログのみ）。
 
 **差分計算:**
 - `DensukeScraper.scrape(url, year)` で伝助の現スケジュールを取得し、日付集合を得る

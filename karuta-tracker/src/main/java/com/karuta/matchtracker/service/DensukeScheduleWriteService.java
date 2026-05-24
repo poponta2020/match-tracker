@@ -192,12 +192,47 @@ public class DensukeScheduleWriteService {
             return;
         }
 
-        // 4. 差分セッション（アプリにあって伝助にない日付）
-        List<PracticeSession> newSessions = sessions.stream()
+        // 4. 差分セッション計算と「過去日 vs 末尾追記可能日」の分割。
+        //    伝助の POST /update は候補日程を末尾追記しかできないため、伝助の既存最大日付より前の日付を
+        //    push すると伝助DOM上の出現順 [既存..., 過去日] とアプリ側の日付昇順 [過去日, 既存...] が
+        //    ずれる。後続の DensukeWriteService.parseAndSaveRowIds は両者をインデックスで対応付けるため、
+        //    新規の過去日に他日付の join-* (row id) が紐づき、参加者出欠が別日に書き込まれるデータ破壊が
+        //    発生する（Codex レビュー Round 2 CRITICAL）。よって伝助の既存最大日付以前の新規セッションは
+        //    push せず、即時 push 経路のみ管理者へ通知して手動対応に回す。
+        LocalDate maxExistingDate = existingDensukeDates.stream().max(LocalDate::compareTo).orElse(null);
+        List<PracticeSession> diffSessions = sessions.stream()
                 .filter(s -> !existingDensukeDates.contains(s.getSessionDate()))
                 .toList();
+        List<PracticeSession> newSessions;
+        List<PracticeSession> skippedPastSessions;
+        if (maxExistingDate == null) {
+            // 伝助に既存日程が無いなら row id ずれの問題は発生しない（初回 push 相当）
+            newSessions = diffSessions;
+            skippedPastSessions = List.of();
+        } else {
+            newSessions = diffSessions.stream()
+                    .filter(s -> s.getSessionDate().isAfter(maxExistingDate))
+                    .toList();
+            skippedPastSessions = diffSessions.stream()
+                    .filter(s -> !s.getSessionDate().isAfter(maxExistingDate))
+                    .toList();
+        }
+
+        // 過去日がスキップされたら管理者へ通知（即時 push 経路のみ。スケジューラ経路はフラッディング防止で抑制）
+        if (!skippedPastSessions.isEmpty() && notifyOnFailure) {
+            String pastDates = skippedPastSessions.stream()
+                    .map(s -> s.getSessionDate().toString())
+                    .collect(Collectors.joining(", "));
+            String msg = String.format(
+                    "伝助スケジュール push スキップ (%d年%d月): 過去日 [%s] は伝助の既存最大日付 %s より前のため自動追加できません。"
+                            + "伝助ページの管理画面から手動で追加してください（row id 整合性保護のため）。",
+                    year, month, pastDates, maxExistingDate);
+            log.warn(msg);
+            lineNotificationService.sendDensukeScheduleSyncFailedNotification(organizationId, msg);
+        }
+
         if (newSessions.isEmpty()) {
-            log.debug("No schedule diff for {}/{} (orgId={}), nothing to push", year, month, organizationId);
+            log.debug("No pushable schedule diff for {}/{} (orgId={}), nothing to push", year, month, organizationId);
             return;
         }
 

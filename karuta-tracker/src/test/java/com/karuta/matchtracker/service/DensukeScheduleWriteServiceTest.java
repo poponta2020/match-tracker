@@ -32,6 +32,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
@@ -106,8 +107,12 @@ class DensukeScheduleWriteServiceTest {
      * 1セッション (2026/5/10) を持つアプリ側データを返す。
      */
     private PracticeSession buildAppSession(LocalDate date) {
+        return buildAppSessionWithId(10L, date);
+    }
+
+    private PracticeSession buildAppSessionWithId(Long id, LocalDate date) {
         return PracticeSession.builder()
-                .id(10L).sessionDate(date).venueId(20L).totalMatches(3).organizationId(ORG_ID)
+                .id(id).sessionDate(date).venueId(20L).totalMatches(3).organizationId(ORG_ID)
                 .build();
     }
 
@@ -390,6 +395,99 @@ class DensukeScheduleWriteServiceTest {
             // Then: HTTP 失敗でも通知は呼ばれない
             verify(lineNotificationService, never())
                     .sendDensukeScheduleSyncFailedNotification(any(), any());
+        }
+    }
+
+    @Test
+    @DisplayName("testPushSkipsPastDatesAndNotifiesAdmin: 伝助の既存最大日付より前の新規セッションは push せず管理者通知に回す（row id ずれ防止）")
+    void testPushSkipsPastDatesAndNotifiesAdmin() throws IOException {
+        // Given: 伝助に 5/20 あり、アプリに 5/10（過去日 — スキップ対象）と 5/25（push 対象）
+        LocalDate existingDate = LocalDate.of(YEAR, MONTH, 20);
+        LocalDate pastDate = LocalDate.of(YEAR, MONTH, 10);
+        LocalDate futureDate = LocalDate.of(YEAR, MONTH, 25);
+        DensukeUrl url = buildDensukeUrl();
+        PracticeSession pastSession = buildAppSessionWithId(10L, pastDate);
+        PracticeSession futureSession = buildAppSessionWithId(11L, futureDate);
+
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate(YEAR, MONTH, ORG_ID))
+                .thenReturn(Optional.of(url));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(YEAR, MONTH, ORG_ID))
+                .thenReturn(List.of(pastSession, futureSession));
+        when(densukeScraper.scrape(DENSUKE_URL, YEAR))
+                .thenReturn(buildDensukeData(List.of(existingDate))); // 伝助には 5/20 のみ
+        when(venueRepository.findAllById(any())).thenReturn(List.of(buildVenue()));
+        when(venueMatchScheduleRepository.findByVenueIdIn(any())).thenReturn(buildSchedules());
+        when(densukePageCreateService.buildScheduleText(any(), any(), any()))
+                .thenReturn(new DensukePageCreateService.BuildResult("5/25(月) テスト会場 1試合目\n2試合目\n3試合目\n", 3));
+        when(densukeWriteService.extractPageId(any(Document.class))).thenReturn(PAGE_ID);
+
+        Connection getConn = org.mockito.Mockito.mock(Connection.class);
+        Connection postConn = org.mockito.Mockito.mock(Connection.class);
+        Connection.Response listResp = org.mockito.Mockito.mock(Connection.Response.class);
+        Connection.Response updateResp = org.mockito.Mockito.mock(Connection.Response.class);
+
+        try (MockedStatic<Jsoup> jsoupMock = mockStatic(Jsoup.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+            stubJsoupCalls(jsoupMock, getConn, postConn, listResp, updateResp, 302, false);
+
+            // When
+            service.pushNewSchedulesToDensuke(YEAR, MONTH, ORG_ID);
+
+            // Then: 過去日スキップの通知が1回呼ばれる
+            verify(lineNotificationService)
+                    .sendDensukeScheduleSyncFailedNotification(eq(ORG_ID), contains("過去日"));
+            // buildScheduleText は未来日 (5/25) のみで呼ばれる（過去日 5/10 は除外）
+            verify(densukePageCreateService).buildScheduleText(
+                    argThat(list -> list.size() == 1
+                            && list.get(0).getSessionDate().equals(futureDate)),
+                    any(), any());
+            // POST /update も実行される
+            verify(postConn).execute();
+        }
+    }
+
+    @Test
+    @DisplayName("testPushSilentlyDoesNotNotifyForPastDates: pushSilently 経路では過去日スキップでも通知が呼ばれない（フラッディング防止）")
+    void testPushSilentlyDoesNotNotifyForPastDates() throws IOException {
+        // Given: 伝助に 5/20 あり、アプリに 5/10（過去日）と 5/25（未来日）。pushSilently 経路
+        LocalDate existingDate = LocalDate.of(YEAR, MONTH, 20);
+        LocalDate pastDate = LocalDate.of(YEAR, MONTH, 10);
+        LocalDate futureDate = LocalDate.of(YEAR, MONTH, 25);
+        DensukeUrl url = buildDensukeUrl();
+        PracticeSession pastSession = buildAppSessionWithId(10L, pastDate);
+        PracticeSession futureSession = buildAppSessionWithId(11L, futureDate);
+
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate(YEAR, MONTH, ORG_ID))
+                .thenReturn(Optional.of(url));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(YEAR, MONTH, ORG_ID))
+                .thenReturn(List.of(pastSession, futureSession));
+        when(densukeScraper.scrape(DENSUKE_URL, YEAR))
+                .thenReturn(buildDensukeData(List.of(existingDate)));
+        when(venueRepository.findAllById(any())).thenReturn(List.of(buildVenue()));
+        when(venueMatchScheduleRepository.findByVenueIdIn(any())).thenReturn(buildSchedules());
+        when(densukePageCreateService.buildScheduleText(any(), any(), any()))
+                .thenReturn(new DensukePageCreateService.BuildResult("5/25(月) テスト会場 1試合目\n2試合目\n3試合目\n", 3));
+        when(densukeWriteService.extractPageId(any(Document.class))).thenReturn(PAGE_ID);
+
+        Connection getConn = org.mockito.Mockito.mock(Connection.class);
+        Connection postConn = org.mockito.Mockito.mock(Connection.class);
+        Connection.Response listResp = org.mockito.Mockito.mock(Connection.Response.class);
+        Connection.Response updateResp = org.mockito.Mockito.mock(Connection.Response.class);
+
+        try (MockedStatic<Jsoup> jsoupMock = mockStatic(Jsoup.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+            stubJsoupCalls(jsoupMock, getConn, postConn, listResp, updateResp, 302, false);
+
+            // When: pushSilently (notifyOnFailure=false)
+            service.pushSilently(YEAR, MONTH, ORG_ID);
+
+            // Then: 過去日スキップでも通知は呼ばれない
+            verify(lineNotificationService, never())
+                    .sendDensukeScheduleSyncFailedNotification(any(), any());
+            // 未来日 (5/25) のみが push 対象
+            verify(densukePageCreateService).buildScheduleText(
+                    argThat(list -> list.size() == 1
+                            && list.get(0).getSessionDate().equals(futureDate)),
+                    any(), any());
+            verify(postConn).execute();
         }
     }
 }
