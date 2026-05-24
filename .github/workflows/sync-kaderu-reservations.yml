@@ -31,10 +31,19 @@ jobs:
         working-directory: ./scripts/room-checker
         run: npx playwright install --with-deps chromium
 
-      - name: Sync reservations to practice sessions
+      - name: Sync reservations (hokudai)
         working-directory: ./scripts/room-checker
-        run: node sync-reservations.js --months 2
+        run: node sync-reservations.js --org hokudai --months 2
         env:
           KADERU_USER_ID: ${{ secrets.KADERU_USER_ID }}
           KADERU_PASSWORD: ${{ secrets.KADERU_PASSWORD }}
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
+
+      - name: Sync reservations (wasura)
+        if: always()
+        working-directory: ./scripts/room-checker
+        run: node sync-reservations.js --org wasura --months 2
+        env:
+          KADERU_USER_ID: ${{ secrets.WASURA_KADERU_USER_ID }}
+          KADERU_PASSWORD: ${{ secrets.WASURA_KADERU_PASSWORD }}
           DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
