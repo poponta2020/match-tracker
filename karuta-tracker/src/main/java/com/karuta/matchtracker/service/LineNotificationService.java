@@ -2397,6 +2397,10 @@ public class LineNotificationService {
             case MENTOR_COMMENT -> pref.getMentorComment();
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
+            // KADERU_SYNC_* は押下者本人への明示的なフィードバックなので preference を持たず常時送信。
+            // 実際の sendKaderuSync* メソッドは isNotificationEnabled を経由せず直接送るため、
+            // この switch に到達することは想定していないが、enum 網羅のため定義する。
+            case KADERU_SYNC_COMPLETED, KADERU_SYNC_FAILED -> true;
         };
     }
 
