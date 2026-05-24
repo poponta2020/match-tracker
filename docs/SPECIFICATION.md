@@ -965,6 +965,9 @@ SUPER_ADMIN のみ操作可能。
 2. **スクレイピング**: Jsoupで伝助のHTML（`table.listtbl`）をパースし、日付・試合番号・参加者を抽出
 3. **データ取り込み**:
    - 練習セッションが存在しない日付は自動作成
+     - 伝助の会場名がアプリの `venues.name` と一致する場合、新規セッションの `totalMatches` に `venue.defaultMatchCount`、`capacity` に `venue.capacity` を採用する
+     - 会場名がマッチしない場合は `totalMatches` を伝助スケジュールの最大試合番号（なければ既定 3）にフォールバックし、`capacity` は null とする
+   - 既存セッションへの補完: `venueId` が未設定で会場名マッチ時に `venueId` と `capacity` を同時補完。`venueId` 既設定でも `capacity` のみ null の場合は Venue から逆引きして補完する（管理者が設定済みの `capacity` / `totalMatches` / `venueId` は上書きしない）
    - 参加者名をアプリの選手名と突合し、一致すれば参加登録
    - 伝助から消えた参加者は `dirty=false`（伝助側から追加された）場合のみDBから削除。`dirty=true`（アプリ側で操作済み）の場合はスキップ
    - 未登録の名前は `unmatchedNames` としてレスポンスに含め、一括登録→再同期のフローを提供
