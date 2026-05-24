@@ -1065,4 +1065,64 @@ class DensukeImportServiceTest {
                 any(), anyMap());
     }
 
+    @Test
+    @DisplayName("伝助同期: venue 解決時、新規セッションに venue 既定 capacity がセットされる")
+    void testImportSetsCapacityFromVenueOnCreate() throws IOException {
+        DensukeData data = createSampleData();
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(
+                Venue.builder().id(100L).name("すずらん").capacity(14).build()));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.empty());
+        when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
+            PracticeSession s = inv.getArgument(0);
+            s.setId(1L);
+            return s;
+        });
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        ArgumentCaptor<PracticeSession> captor = ArgumentCaptor.forClass(PracticeSession.class);
+        verify(practiceSessionRepository, atLeastOnce()).save(captor.capture());
+        PracticeSession savedSession = captor.getAllValues().stream()
+                .filter(s -> LocalDate.of(2026, 4, 1).equals(s.getSessionDate()))
+                .findFirst().orElseThrow();
+        assertThat(savedSession.getVenueId()).isEqualTo(100L);
+        assertThat(savedSession.getCapacity()).isEqualTo(14);
+    }
+
+    @Test
+    @DisplayName("伝助同期: venue 未解決のとき、新規セッションの capacity は null のまま")
+    void testImportLeavesCapacityNullWhenVenueUnresolved() throws IOException {
+        DensukeData data = createSampleData();
+        // 伝助データの venue 名 "すずらん" は DB に存在しない（unmatched）
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.empty());
+        when(practiceSessionRepository.save(any())).thenAnswer(inv -> {
+            PracticeSession s = inv.getArgument(0);
+            s.setId(1L);
+            return s;
+        });
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        ArgumentCaptor<PracticeSession> captor = ArgumentCaptor.forClass(PracticeSession.class);
+        verify(practiceSessionRepository, atLeastOnce()).save(captor.capture());
+        PracticeSession savedSession = captor.getAllValues().stream()
+                .filter(s -> LocalDate.of(2026, 4, 1).equals(s.getSessionDate()))
+                .findFirst().orElseThrow();
+        assertThat(savedSession.getVenueId()).isNull();
+        assertThat(savedSession.getCapacity()).isNull();
+    }
+
 }

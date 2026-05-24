@@ -832,10 +832,12 @@ public class DensukeImportService {
 
         String venueName = venueByDate.get(entry.getDate());
         Long venueId = null;
+        Integer venueCapacity = null;
         if (venueName != null) {
             Venue venue = venueNameMap.get(venueName);
             if (venue != null) {
                 venueId = venue.getId();
+                venueCapacity = venue.getCapacity();
             } else {
                 unmatchedVenueSet.add(venueName);
             }
@@ -846,6 +848,7 @@ public class DensukeImportService {
                 .sessionDate(entry.getDate())
                 .totalMatches(totalMatches)
                 .venueId(venueId)
+                .capacity(venueCapacity)
                 .organizationId(organizationId)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
