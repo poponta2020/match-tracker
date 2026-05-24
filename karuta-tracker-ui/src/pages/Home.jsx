@@ -115,7 +115,7 @@ const Home = () => {
       <NavigationMenu />
 
       {/* コンテンツ */}
-      <div className="pt-16">
+      <div className="pt-2">
         {/* 繰り上げオファーバナー */}
         {hasPendingOffer && (
           <Link

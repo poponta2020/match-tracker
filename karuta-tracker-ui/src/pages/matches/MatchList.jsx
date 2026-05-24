@@ -444,7 +444,7 @@ const MatchList = () => {
       </div>
 
       {/* コンテンツ（上部パディング追加） */}
-      <div className={`${showPlayerSearch ? 'pt-36' : 'pt-24'} space-y-6 transition-all`}>
+      <div className={`${showPlayerSearch ? 'pt-[86px]' : 'pt-[38px]'} space-y-6 transition-all`}>
       {/* 統計 */}
       {rankStatistics && (
         <div className="space-y-3">
