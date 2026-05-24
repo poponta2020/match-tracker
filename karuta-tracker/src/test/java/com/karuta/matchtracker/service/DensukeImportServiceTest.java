@@ -1267,4 +1267,36 @@ class DensukeImportServiceTest {
                 Integer.valueOf(20).equals(session.getCapacity())));
     }
 
+    @Test
+    @DisplayName("Venueデフォルト: 既存セッション (venueId 設定済み) は伝助会場名が未マッチでも unmatched に記録されない (PR #781 回帰防止)")
+    void testImportDoesNotMarkUnmatchedVenueForExistingSessionWithVenueIdSet() throws IOException {
+        // 既存セッション: venueId / capacity 共に管理者設定済み。Venue 名は伝助側と異なる
+        DensukeData data = createSampleData(); // venueName="すずらん"
+        PracticeSession existing = PracticeSession.builder().id(99L)
+                .sessionDate(LocalDate.of(2026, 4, 1))
+                .totalMatches(3)
+                .venueId(100L)
+                .capacity(15)
+                .build();
+        // venues テーブルには "すずらん" がない (= 名前マッチしない)
+        Venue otherVenue = Venue.builder()
+                .id(100L).name("別名会場").defaultMatchCount(5).capacity(20).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1, player2));
+        when(venueRepository.findAll()).thenReturn(List.of(otherVenue));
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(any(), eq(1L)))
+                .thenReturn(Optional.of(existing));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(anyLong(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 10L, 1L);
+
+        // 既存セッションで venueId が設定済みなので、伝助会場名が未マッチでも unmatched に記録しない
+        assertThat(result.getUnmatchedVenues()).isEmpty();
+        // capacity も既設定なので save は呼ばれない
+        verify(practiceSessionRepository, never()).save(any());
+    }
+
 }

@@ -814,22 +814,25 @@ public class DensukeImportService {
 
         String venueName = venueByDate.get(entry.getDate());
         Venue matchedVenue = (venueName != null) ? venueNameMap.get(venueName) : null;
-        if (venueName != null && matchedVenue == null) {
-            unmatchedVenueSet.add(venueName);
-        }
 
         if (sessionOpt.isPresent()) {
             PracticeSession session = sessionOpt.get();
             boolean changed = false;
 
-            // ケースA: venueId が null かつ会場名マッチ時 → venueId と capacity を同時補完
-            if (session.getVenueId() == null && matchedVenue != null) {
-                session.setVenueId(matchedVenue.getId());
-                if (session.getCapacity() == null && matchedVenue.getCapacity() != null) {
-                    session.setCapacity(matchedVenue.getCapacity());
+            // ケースA: venueId が null かつ会場名マッチ時 → venueId と capacity を同時補完。
+            //   venueId が null かつ venueName 指定ありで未マッチの場合のみ unmatched に記録する
+            //   （venueId 既設定のセッションでは管理者が手動で会場を設定済みのため警告対象外）
+            if (session.getVenueId() == null) {
+                if (matchedVenue != null) {
+                    session.setVenueId(matchedVenue.getId());
+                    if (session.getCapacity() == null && matchedVenue.getCapacity() != null) {
+                        session.setCapacity(matchedVenue.getCapacity());
+                    }
+                    changed = true;
+                    result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
+                } else if (venueName != null) {
+                    unmatchedVenueSet.add(venueName);
                 }
-                changed = true;
-                result.getDetails().add(String.format("%s 会場を補完: %s", entry.getDate(), venueName));
             }
 
             // ケースB: venueId 既設定 かつ capacity が null → Venue から capacity 補完
@@ -849,6 +852,10 @@ public class DensukeImportService {
             return session;
         }
 
+        // 新規セッション作成: venueName 指定ありで未マッチなら unmatched に記録
+        if (venueName != null && matchedVenue == null) {
+            unmatchedVenueSet.add(venueName);
+        }
         Long venueId = (matchedVenue != null) ? matchedVenue.getId() : null;
         Integer capacity = (matchedVenue != null) ? matchedVenue.getCapacity() : null;
         int totalMatches = (matchedVenue != null && matchedVenue.getDefaultMatchCount() != null)
