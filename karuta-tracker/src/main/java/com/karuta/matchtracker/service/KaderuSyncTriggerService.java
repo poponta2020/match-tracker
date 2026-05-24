@@ -16,12 +16,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Kaderu 予約取り込み手動トリガーのアプリケーションサービス。
@@ -46,9 +49,18 @@ public class KaderuSyncTriggerService {
      */
     private static final int RUN_LOOKUP_BUFFER_SECONDS = 5;
 
+    /** PENDING が完了しないまま放置される最大時間。これを超えたら fail-safe で FAILED に確定。 */
+    private static final long PENDING_TIMEOUT_MINUTES = 30;
+
+    /** sync-reservations.js が出力する集計行のパターン。 */
+    private static final Pattern CREATED_PATTERN = Pattern.compile("新規作成:\\s*(\\d+)件");
+    private static final Pattern EXPANDED_PATTERN = Pattern.compile("会場拡張:\\s*(\\d+)件");
+    private static final Pattern SKIPPED_PATTERN = Pattern.compile("スキップ:\\s*(\\d+)件");
+
     private final KaderuSyncTriggerEventRepository eventRepository;
     private final OrganizationRepository organizationRepository;
     private final GitHubActionsClient gitHubActionsClient;
+    private final LineNotificationService lineNotificationService;
 
     /**
      * 手動同期を起動する。
@@ -135,5 +147,144 @@ public class KaderuSyncTriggerService {
                 .map(WorkflowRun::id)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * 全 PENDING イベントを巡回し、状態確定 + 通知送信を行う。
+     *
+     * <p>1イベントごとに独立した tx を張り、外部 API 呼び出し失敗が他イベントに
+     * 波及しないよう catch する。Scheduler から30秒間隔で呼ばれる。
+     */
+    public void pollPendingEvents() {
+        List<Long> pendingIds;
+        try {
+            pendingIds = listPendingIds();
+        } catch (Exception e) {
+            log.warn("Failed to list pending kaderu sync events: {}", e.getMessage(), e);
+            return;
+        }
+        if (pendingIds.isEmpty()) return;
+
+        log.debug("Polling {} pending kaderu sync event(s)", pendingIds.size());
+        for (Long id : pendingIds) {
+            try {
+                processPendingEvent(id);
+            } catch (Exception e) {
+                log.warn("Failed to process pending kaderu sync event {}: {}", id, e.getMessage(), e);
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> listPendingIds() {
+        return eventRepository.findAllByStatus(SyncStatus.PENDING).stream()
+                .map(KaderuSyncTriggerEvent::getId)
+                .toList();
+    }
+
+    /**
+     * 1つの PENDING イベントを処理する：
+     * <ol>
+     *   <li>{@link #PENDING_TIMEOUT_MINUTES} 超過なら FAILED 確定 + 失敗通知</li>
+     *   <li>github_run_id が未解決なら listRecentRuns で補完</li>
+     *   <li>workflow run の status/conclusion を取得し、completed なら COMPLETED/FAILED に確定 + 通知</li>
+     * </ol>
+     */
+    @Transactional
+    public void processPendingEvent(Long eventId) {
+        KaderuSyncTriggerEvent event = eventRepository.findById(eventId).orElse(null);
+        if (event == null || event.getStatus() != SyncStatus.PENDING) {
+            return;
+        }
+        LocalDateTime now = JstDateTimeUtil.now();
+
+        // 1. タイムアウト fail-safe
+        if (Duration.between(event.getTriggeredAt(), now).toMinutes() >= PENDING_TIMEOUT_MINUTES) {
+            finalizeFailed(event, "30分タイムアウト");
+            return;
+        }
+
+        // 2. run_id 補完
+        if (event.getGithubRunId() == null) {
+            Instant lookupFrom = event.getTriggeredAt().atZone(JstDateTimeUtil.JST).toInstant()
+                    .minusSeconds(RUN_LOOKUP_BUFFER_SECONDS);
+            Long runId = resolveRunId(lookupFrom);
+            if (runId == null) {
+                return; // 次回ティックで再試行
+            }
+            event.setGithubRunId(runId);
+            eventRepository.save(event);
+        }
+
+        // 3. run の状態取得
+        Optional<WorkflowRun> runOpt = gitHubActionsClient.getWorkflowRun(event.getGithubRunId());
+        if (runOpt.isEmpty()) {
+            return; // 取得失敗。次回ティックで再試行
+        }
+        WorkflowRun run = runOpt.get();
+        if (!run.isCompleted()) {
+            return; // まだ queued / in_progress
+        }
+
+        if (run.isSuccess()) {
+            String summary = extractSummary(event.getGithubRunId());
+            finalizeCompleted(event, summary);
+        } else {
+            String reason = "workflow " + (run.conclusion() != null ? run.conclusion() : "failure");
+            finalizeFailed(event, reason);
+        }
+    }
+
+    private void finalizeCompleted(KaderuSyncTriggerEvent event, String summary) {
+        event.setStatus(SyncStatus.COMPLETED);
+        event.setCompletedAt(JstDateTimeUtil.now());
+        event.setSummary(summary);
+        eventRepository.save(event);
+
+        String orgCode = organizationRepository.findById(event.getOrganizationId())
+                .map(Organization::getCode).orElse(null);
+        log.info("KaderuSync event {} COMPLETED (orgCode={}, summary={})",
+                event.getId(), orgCode, summary);
+        lineNotificationService.sendKaderuSyncCompletedNotification(
+                event.getTriggeredByPlayerId(), orgCode, summary);
+    }
+
+    private void finalizeFailed(KaderuSyncTriggerEvent event, String reason) {
+        event.setStatus(SyncStatus.FAILED);
+        event.setCompletedAt(JstDateTimeUtil.now());
+        event.setFailureReason(reason);
+        eventRepository.save(event);
+
+        String orgCode = organizationRepository.findById(event.getOrganizationId())
+                .map(Organization::getCode).orElse(null);
+        log.warn("KaderuSync event {} FAILED (orgCode={}, reason={})",
+                event.getId(), orgCode, reason);
+        lineNotificationService.sendKaderuSyncFailedNotification(
+                event.getTriggeredByPlayerId(), orgCode, reason);
+    }
+
+    /**
+     * workflow run のログを取得し、{@code 新規作成: X件 / 会場拡張: X件 / スキップ: X件}
+     * 形式の集計行を抽出してサマリー文字列に整形する。取得や解析に失敗したら null。
+     */
+    String extractSummary(long runId) {
+        Optional<String> logOpt = gitHubActionsClient.fetchWorkflowLogText(runId);
+        if (logOpt.isEmpty()) return null;
+        String logText = logOpt.get();
+        String created = firstMatch(logText, CREATED_PATTERN);
+        String expanded = firstMatch(logText, EXPANDED_PATTERN);
+        String skipped = firstMatch(logText, SKIPPED_PATTERN);
+        if (created == null && expanded == null && skipped == null) {
+            return null;
+        }
+        return String.format("新規 %s件 / 拡張 %s件 / スキップ %s件",
+                created != null ? created : "?",
+                expanded != null ? expanded : "?",
+                skipped != null ? skipped : "?");
+    }
+
+    private static String firstMatch(String text, Pattern pattern) {
+        Matcher m = pattern.matcher(text);
+        return m.find() ? m.group(1) : null;
     }
 }

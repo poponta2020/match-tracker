@@ -69,7 +69,7 @@ status: completed
 - **対応Issue:** #805
 
 ### タスク4: ポーリング Scheduler + LINE通知メソッド追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 30秒間隔で PENDING を巡回し、workflow 完了を検知してイベント確定 + LINE通知を行う
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/scheduler/KaderuSyncStatusPollingScheduler.java` （新規）

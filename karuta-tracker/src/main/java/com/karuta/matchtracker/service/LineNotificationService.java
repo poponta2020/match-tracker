@@ -2793,6 +2793,63 @@ public class LineNotificationService {
         }
     }
 
+    /**
+     * Kaderu予約取り込み手動トリガーの完了通知を、押下者本人へ LINE 送信する。
+     *
+     * <p>preference (opt-in/opt-out) はチェックしない。本通知は押下者本人の
+     * 明示的な操作に対するフィードバックなので、設定の有無に関わらず常に送信する。
+     *
+     * <p>非同期実行 ({@link Async})。例外は呼び出しスレッドへ伝播しないため
+     * メソッド全体を try/catch で包んでログに落とす。
+     *
+     * @param triggeredByPlayerId 押下者のプレイヤーID
+     * @param organizationCode    対象団体コード (例: "hokudai")
+     * @param summary             同期結果サマリー (例: "新規 3件 / 拡張 1件 / スキップ 5件")。
+     *                            ログ抽出失敗時は null で、代替メッセージを表示する
+     */
+    @Async
+    public void sendKaderuSyncCompletedNotification(Long triggeredByPlayerId, String organizationCode, String summary) {
+        try {
+            String resultLine = (summary != null && !summary.isBlank())
+                    ? "結果: " + summary
+                    : "結果: 詳細は GitHub Actions ログを確認してください";
+            String message = String.format(
+                    "Kaderu予約取り込みが完了しました\n（団体: %s）\n%s",
+                    organizationCode != null ? organizationCode : "?", resultLine);
+            sendToPlayer(triggeredByPlayerId, LineNotificationType.KADERU_SYNC_COMPLETED, message);
+            log.info("KADERU_SYNC_COMPLETED: playerId={}, orgCode={}", triggeredByPlayerId, organizationCode);
+        } catch (Exception e) {
+            log.warn("Async KADERU_SYNC_COMPLETED dispatch failed: playerId={}, err={}",
+                    triggeredByPlayerId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Kaderu予約取り込み手動トリガーの失敗通知を、押下者本人へ LINE 送信する。
+     * preference はチェックしない（理由は {@link #sendKaderuSyncCompletedNotification} と同じ）。
+     *
+     * @param triggeredByPlayerId 押下者のプレイヤーID
+     * @param organizationCode    対象団体コード
+     * @param failureReason       失敗理由 (workflow conclusion 文字列 / "30分タイムアウト" 等)
+     */
+    @Async
+    public void sendKaderuSyncFailedNotification(Long triggeredByPlayerId, String organizationCode, String failureReason) {
+        try {
+            String reasonLine = (failureReason != null && !failureReason.isBlank())
+                    ? "理由: " + failureReason + "（GitHub Actions ログを確認してください）"
+                    : "理由: workflow failure（GitHub Actions ログを確認してください）";
+            String message = String.format(
+                    "Kaderu予約取り込みに失敗しました\n（団体: %s）\n%s",
+                    organizationCode != null ? organizationCode : "?", reasonLine);
+            sendToPlayer(triggeredByPlayerId, LineNotificationType.KADERU_SYNC_FAILED, message);
+            log.info("KADERU_SYNC_FAILED: playerId={}, orgCode={}, reason={}",
+                    triggeredByPlayerId, organizationCode, failureReason);
+        } catch (Exception e) {
+            log.warn("Async KADERU_SYNC_FAILED dispatch failed: playerId={}, err={}",
+                    triggeredByPlayerId, e.getMessage(), e);
+        }
+    }
+
     public SendResult sendMentorCommentFlexNotification(Long authorId, Long menteeId,
                                                          Match match, List<MatchComment> comments,
                                                          boolean isMenteeAuthor) {
