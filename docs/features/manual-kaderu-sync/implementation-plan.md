@@ -123,7 +123,7 @@ status: completed
 - **対応Issue:** #808
 
 ### タスク7: SPECIFICATION.md / DESIGN.md / SCREEN_LIST.md 更新
-- [ ] 完了
+- [x] 完了
 - **概要:** ドキュメントを最新化する（CLAUDE.md「ドキュメント更新ルール」遵守）
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md`
