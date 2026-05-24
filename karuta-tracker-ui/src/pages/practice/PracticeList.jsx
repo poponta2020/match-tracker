@@ -634,7 +634,7 @@ const PracticeList = () => {
       </div>
 
       {/* コンテンツ（上部パディング追加） */}
-      <div className="pt-2">
+      <div className="pt-3">
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
           {error}
