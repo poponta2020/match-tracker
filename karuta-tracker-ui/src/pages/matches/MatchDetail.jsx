@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { matchAPI } from '../../api';
+import { matchAPI, matchCommentsAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchCommentThread from './MatchCommentThread';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,7 @@ const MatchDetail = () => {
   const isOtherPlayer = queryPlayerId && Number(queryPlayerId) !== currentPlayer?.id;
   const [hasMentorRelation, setHasMentorRelation] = useState(false);
   const [menteeIdForComments, setMenteeIdForComments] = useState(null);
+  const [commentsByOthersExist, setCommentsByOthersExist] = useState(false);
 
   useEffect(() => {
     const fetchMatch = async () => {
@@ -58,6 +59,21 @@ const MatchDetail = () => {
     };
     checkMentorRelation();
   }, [isOtherPlayer, queryPlayerId, currentPlayer]);
+
+  // メンティー本人画面でのコメント欄表示判定: 自分以外のコメントが1件以上あるか
+  useEffect(() => {
+    if (!menteeIdForComments) {
+      setCommentsByOthersExist(false);
+      return;
+    }
+    matchCommentsAPI.getComments(Number(id), menteeIdForComments)
+      .then(res => {
+        const hasOthers = res.data.some(c => c.authorId !== currentPlayer?.id);
+        setCommentsByOthersExist(hasOthers);
+      })
+      .catch(() => setCommentsByOthersExist(false));
+  }, [id, menteeIdForComments, currentPlayer?.id]);
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -217,8 +233,12 @@ const MatchDetail = () => {
         )}
       </div>
 
-      {/* コメントスレッド */}
-      {hasMentorRelation && menteeIdForComments && (
+      {/* コメントスレッド
+          - メンター閲覧時: メンター関係(ACTIVE)があれば常に表示
+          - メンティー本人: 自分以外のコメントが1件以上あるときのみ表示 */}
+      {menteeIdForComments &&
+        ((isOtherPlayer && hasMentorRelation) ||
+          (!isOtherPlayer && commentsByOthersExist)) && (
         <MatchCommentThread matchId={Number(id)} menteeId={menteeIdForComments} />
       )}
 
