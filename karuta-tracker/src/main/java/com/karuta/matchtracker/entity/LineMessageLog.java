@@ -76,7 +76,8 @@ public class LineMessageLog {
         ADMIN_SAME_DAY_CONFIRMATION,
         MENTOR_COMMENT,
         MENTEE_MEMO_UPDATE,
-        DENSUKE_PAGE_CREATED;
+        DENSUKE_PAGE_CREATED,
+        ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED;
 
         /** 通知種別に対応するチャネル用途を返す */
         public ChannelType getRequiredChannelType() {

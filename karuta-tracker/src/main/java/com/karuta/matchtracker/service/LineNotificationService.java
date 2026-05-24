@@ -2397,6 +2397,8 @@ public class LineNotificationService {
             case MENTOR_COMMENT -> pref.getMentorComment();
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
+            // 管理者向け重要通知。preference カラム未追加のため常時有効
+            case ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED -> true;
         };
     }
 
@@ -2785,6 +2787,71 @@ public class LineNotificationService {
         } catch (Exception e) {
             // @Async のスレッドで失敗しても呼び出し元には伝播しないため、ここで必ずログに落とす
             log.warn("Async DENSUKE_PAGE_CREATED dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 伝助スケジュール同期失敗を、指定団体の管理者（ADMIN / SUPER_ADMIN）へ LINE 送信する。
+     * push 失敗時の管理者向け重要通知。preference の ON/OFF 制御は持たず常時送信される
+     * （{@link #isLineTypeEnabled} の switch ケースで {@code true} を返す）。
+     *
+     * <p>非同期実行（{@link Async}）。呼び出し元 push 処理のレスポンス時間が LINE API
+     * レイテンシに引きずられないよう、Spring の TaskExecutor 上で fire-and-forget で走らせる。
+     * 例外は {@code @Async} により呼び出しスレッドには伝播しないため、メソッド全体を try/catch
+     * で包んで必ずログに残す。
+     *
+     * @param organizationId 対象団体 ID
+     * @param errorMessage   エラー詳細メッセージ（HTTP ステータス・例外内容など）
+     */
+    @Async
+    public void sendDensukeScheduleSyncFailedNotification(Long organizationId, String errorMessage) {
+        try {
+            List<PlayerOrganization> memberships = playerOrganizationRepository.findByOrganizationId(organizationId);
+            if (memberships.isEmpty()) {
+                log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: no members in organization {}", organizationId);
+                return;
+            }
+
+            List<Long> playerIds = memberships.stream()
+                    .map(PlayerOrganization::getPlayerId)
+                    .toList();
+
+            List<Player> targetAdmins = playerRepository.findAllById(playerIds).stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .filter(p -> p.getRole() == Player.Role.ADMIN || p.getRole() == Player.Role.SUPER_ADMIN)
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: no admins in organization {}", organizationId);
+                return;
+            }
+
+            String message = "[伝助スケジュール同期エラー]\n" + errorMessage;
+
+            int sent = 0;
+            int failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED, message);
+                    if (result == SendResult.SUCCESS) {
+                        sent++;
+                    } else if (result == SendResult.FAILED) {
+                        failed++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+
+            log.info("ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            // @Async のスレッドで失敗しても呼び出し元には伝播しないため、ここで必ずログに落とす
+            log.warn("Async ADMIN_DENSUKE_SCHEDULE_SYNC_FAILED dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }
