@@ -539,7 +539,8 @@ const PracticeList = () => {
     return sessionDate < today;
   };
 
-  // 再抽選実行
+  // 再抽選実行（UI からは非表示。将来 UI 復活時に呼び出す想定で関数のみ残置）
+  // eslint-disable-next-line no-unused-vars
   const handleReLottery = async (sessionId) => {
     if (!window.confirm('このセッションの再抽選を実行しますか？\n※繰り上げ当選者は維持されます')) return;
     try {
@@ -1013,15 +1014,6 @@ const PracticeList = () => {
                   className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   出欠登録
-                </button>
-              )}
-              {isAdmin() && !isPastDate(selectedSession.sessionDate) && (
-                <button
-                  onClick={() => handleReLottery(selectedSession.id)}
-                  className="flex-1 py-2 text-sm font-medium text-orange-600 border border-orange-400 rounded-lg hover:bg-orange-600 hover:text-white transition-colors whitespace-nowrap flex items-center justify-center gap-1"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  再抽選
                 </button>
               )}
               {isSuperAdmin() && (
