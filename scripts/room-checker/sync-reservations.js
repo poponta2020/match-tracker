@@ -11,15 +11,16 @@
  *   4. 既存セッションがあればスキップ（隣室追加の場合は拡張）
  *
  * Usage:
- *   node sync-reservations.js [--months 2] [--dry-run]
+ *   node sync-reservations.js --org <code> [--months 2] [--dry-run]
  *
  * Options:
+ *   --org      対象団体コード（必須、例: hokudai / wasura）
  *   --months   取得月数（デフォルト2）
  *   --dry-run  DB書き込みを行わず、処理内容のみ表示
  *
  * 環境変数:
- *   KADERU_USER_ID  - 利用者ID
- *   KADERU_PASSWORD - パスワード
+ *   KADERU_USER_ID  - 利用者ID（団体ごとに workflow 側で切り替え）
+ *   KADERU_PASSWORD - パスワード（団体ごとに workflow 側で切り替え）
  *   DATABASE_URL or DB_URL + DB_USERNAME + DB_PASSWORD - PostgreSQL接続情報
  */
 
@@ -106,9 +107,9 @@ function buildConnectionString() {
 // スクレイピング実行
 // ============================================================
 
-function runScraper(months) {
+function runScraper(months, orgCode) {
   const scraperPath = path.join(__dirname, "scrape-mypage.js");
-  console.log("スクレイピング実行中...");
+  console.log(`[${orgCode}] スクレイピング実行中...`);
 
   const output = execFileSync(
     "node",
@@ -123,7 +124,7 @@ function runScraper(months) {
   );
 
   const reservations = JSON.parse(output.trim());
-  console.log(`スクレイピング完了: ${reservations.length}件の夜間予約を取得`);
+  console.log(`[${orgCode}] スクレイピング完了: ${reservations.length}件の夜間予約を取得`);
   return reservations;
 }
 
@@ -137,11 +138,11 @@ function runScraper(months) {
  * @param {Array} reservations - スクレイピング結果
  * @returns {Map<string, {venueIds: number[], resolvedVenueId: number}>}
  */
-function groupByDateAndResolveVenue(reservations) {
+function groupByDateAndResolveVenue(reservations, orgCode) {
   // 「取消」ステータスを除外
   const active = reservations.filter((r) => r.status !== "取消");
   console.log(
-    `ステータスフィルタ: ${reservations.length}件 → ${active.length}件（取消${reservations.length - active.length}件除外）`
+    `[${orgCode}] ステータスフィルタ: ${reservations.length}件 → ${active.length}件（取消${reservations.length - active.length}件除外）`
   );
 
   // 日付ごとに部屋をグルーピング
@@ -190,7 +191,7 @@ function groupByDateAndResolveVenue(reservations) {
           resolvedVenueId: null,
         });
         console.warn(
-          `${date}: 隣室ペア以外の複数部屋が予約されています: ${ids.join(", ")}。自動登録をスキップします。手動で確認してください。`
+          `[${orgCode}] ${date}: 隣室ペア以外の複数部屋が予約されています: ${ids.join(", ")}。自動登録をスキップします。手動で確認してください。`
         );
       }
     }
@@ -240,16 +241,17 @@ function checkExpansion(existingVenueId, resolvedVenueId, reservedVenueIds) {
 // DB操作
 // ============================================================
 
-async function syncToDb(dbClient, dateVenueMap, dryRun) {
-  // hokudai の organization_id を取得
+async function syncToDb(dbClient, dateVenueMap, dryRun, orgCode) {
+  // 指定された団体の organization_id を取得
   const orgResult = await dbClient.query(
-    "SELECT id FROM organizations WHERE code = 'hokudai'"
+    "SELECT id FROM organizations WHERE code = $1",
+    [orgCode]
   );
   if (orgResult.rows.length === 0) {
-    throw new Error("組織 'hokudai' が見つかりません");
+    throw new Error(`組織 '${orgCode}' が見つかりません`);
   }
   const organizationId = Number(orgResult.rows[0].id);
-  console.log(`組織ID: ${organizationId} (hokudai)`);
+  console.log(`[${orgCode}] 組織ID: ${organizationId}`);
 
   // Venue情報を一括取得
   const venueResult = await dbClient.query(
@@ -409,29 +411,38 @@ async function main() {
   const args = process.argv.slice(2);
   let months = 2;
   let dryRun = false;
+  let orgCode = null;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--dry-run") {
       dryRun = true;
     } else if (args[i] === "--months" && args[i + 1]) {
       months = parseInt(args[i + 1]) || 2;
       i++;
+    } else if (args[i] === "--org" && args[i + 1]) {
+      orgCode = args[i + 1];
+      i++;
     }
   }
 
+  if (!orgCode) {
+    console.error("--org <code> is required (例: --org hokudai / --org wasura)");
+    process.exit(1);
+  }
+
   if (dryRun) {
-    console.log("=== DRY-RUN モード（DB書き込みなし）===\n");
+    console.log(`[${orgCode}] === DRY-RUN モード（DB書き込みなし）===\n`);
   }
 
   // 1. スクレイピング
-  const reservations = runScraper(months);
+  const reservations = runScraper(months, orgCode);
   if (reservations.length === 0) {
-    console.log("夜間予約が見つかりませんでした。終了します。");
+    console.log(`[${orgCode}] 夜間予約が見つかりませんでした。終了します。`);
     return;
   }
 
   // 2. 日付ごとにグルーピング・会場決定
-  const dateVenueMap = groupByDateAndResolveVenue(reservations);
-  console.log(`\n処理対象: ${dateVenueMap.size}日分\n`);
+  const dateVenueMap = groupByDateAndResolveVenue(reservations, orgCode);
+  console.log(`\n[${orgCode}] 処理対象: ${dateVenueMap.size}日分\n`);
 
   // 3. DB同期
   const connectionString = buildConnectionString();
@@ -442,18 +453,18 @@ async function main() {
 
   try {
     await dbClient.connect();
-    console.log("DB接続成功");
+    console.log(`[${orgCode}] DB接続成功`);
 
-    const { stats, details } = await syncToDb(dbClient, dateVenueMap, dryRun);
+    const { stats, details } = await syncToDb(dbClient, dateVenueMap, dryRun, orgCode);
 
     // 結果サマリー
     console.log("\n========================================");
-    console.log("処理結果:");
+    console.log(`[${orgCode}] 処理結果:`);
     console.log(`  新規作成: ${stats.created}件`);
     console.log(`  会場拡張: ${stats.expanded}件`);
     console.log(`  スキップ: ${stats.skipped}件`);
     console.log("========================================");
-    console.log("\n詳細:");
+    console.log(`\n[${orgCode}] 詳細:`);
     for (const d of details) {
       console.log(`  ${d}`);
     }
