@@ -98,7 +98,7 @@ status: completed
 
 ### タスク5: 単体テスト追加
 
-- [ ] 完了
+- [x] 完了
 - **概要:** タスク1-4 で追加したロジックに対する単体テストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/DensukeScheduleWriteServiceTest.java` (新規)

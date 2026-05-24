@@ -5,6 +5,7 @@ import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +31,7 @@ class DensukeSyncServiceTest {
     @Mock private DensukeWriteService densukeWriteService;
     @Mock private DensukeImportService densukeImportService;
     @Mock private DensukeUrlRepository densukeUrlRepository;
+    @Mock private DensukeScheduleWriteService densukeScheduleWriteService;
 
     @InjectMocks
     private DensukeSyncService densukeSyncService;
@@ -99,5 +102,33 @@ class DensukeSyncServiceTest {
                 any(LocalDate.class),
                 eq(DensukeImportService.SYSTEM_USER_ID),
                 eq(1L));
+    }
+
+    @Test
+    @DisplayName("testSyncAllInvokesScheduleFollowUpSync: syncAll() が pushAllForCurrentAndNextMonth() を writeToDensuke() の前に呼ぶ")
+    void testSyncAllInvokesScheduleFollowUpSync() throws Exception {
+        // Given: スケジューラ経路の通常フロー
+        DensukeUrl densukeUrl = DensukeUrl.builder()
+                .id(10L)
+                .year(2026)
+                .month(5)
+                .organizationId(1L)
+                .url("https://densuke.biz/list?cd=test")
+                .build();
+        DensukeImportService.ImportResult result = new DensukeImportService.ImportResult();
+
+        when(densukeUrlRepository.findByYearAndMonth(anyInt(), anyInt()))
+                .thenReturn(List.of(densukeUrl));
+        when(densukeImportService.importFromDensuke(any(), any(), any(), any()))
+                .thenReturn(result);
+
+        // When
+        densukeSyncService.syncAll();
+
+        // Then: スケジュール push フォロー同期が writeToDensuke の前に呼ばれる
+        verify(densukeScheduleWriteService).pushAllForCurrentAndNextMonth();
+        InOrder inOrder = inOrder(densukeScheduleWriteService, densukeWriteService);
+        inOrder.verify(densukeScheduleWriteService).pushAllForCurrentAndNextMonth();
+        inOrder.verify(densukeWriteService).writeToDensuke();
     }
 }
