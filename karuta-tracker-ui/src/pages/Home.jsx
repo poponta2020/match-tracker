@@ -162,6 +162,28 @@ const Home = () => {
                   </span>
                 )}
               </div>
+            ) : nextPractice.registered === true ? (
+              <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ChevronsRight className="w-6 h-6 text-white/80" />
+                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/70 decoration-2">NEXT</h2>
+                  <span className="text-sm font-semibold text-white/90">
+                    {(() => {
+                      const d = new Date(nextPractice.sessionDate);
+                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
+                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                    })()}
+                  </span>
+                  {nextPractice.venueName && (
+                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
+                  )}
+                </div>
+                {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
+                  <span className="text-xs text-white/70">
+                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
+                  </span>
+                )}
+              </div>
             ) : (
               <div className="bg-[#f9f6f2] border-b border-[#1A3654]/20 px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -178,19 +200,15 @@ const Home = () => {
                     <span className="text-sm text-[#1A3654]/70">{nextPractice.venueName}</span>
                   )}
                 </div>
-                {nextPractice.registered === false ? (
+                {nextPractice.registered === false && (
                   <Link to="/practice/participation" className="text-xs font-semibold text-[#1A3654]/70 hover:text-[#1A3654] flex items-center gap-0.5">
                     参加登録 <ArrowRight className="w-3 h-3" />
                   </Link>
-                ) : nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                  <span className="text-xs text-[#1A3654]/60">
-                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
-                  </span>
                 )}
               </div>
             )}
             {/* ボディ */}
-            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#1A3654]/5' : 'bg-[#f9f6f2]'}`}>
+            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#1A3654]/5' : nextPractice.registered === true ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
               <div className="space-y-2">
                 {nextPractice.startTime && (
                   <div className="flex items-center gap-2">
