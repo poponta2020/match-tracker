@@ -164,9 +164,18 @@ const PracticeList = () => {
     let cancelled = false;
 
     const fetchAll = async () => {
+      // 受信時刻（クライアント時計）を測ることで、その後の経過秒は
+      // バックエンドの elapsedSeconds + (Date.now() - receivedAtMs) で補間する。
+      // pendingEvent.triggeredAt はタイムゾーンなしの LocalDateTime のため、
+      // new Date(...) でブラウザのローカル時刻として解釈されてしまうと
+      // JST 以外の端末で経過秒がずれる（バックエンド側でJST採番のため）。
       const results = await Promise.all(kaderuVisibleOrgs.map((o) =>
         kaderuSyncAPI.getStatus(o.id)
-          .then((r) => ({ orgId: o.id, pendingEvent: r.data?.pendingEvent ?? null }))
+          .then((r) => ({
+            orgId: o.id,
+            pendingEvent: r.data?.pendingEvent ?? null,
+            receivedAtMs: Date.now(),
+          }))
           .catch(() => null)
       ));
       if (cancelled) return;
@@ -174,7 +183,11 @@ const PracticeList = () => {
         const next = { ...prev };
         for (const result of results) {
           if (result == null) continue;
-          next[result.orgId] = { ...next[result.orgId], pendingEvent: result.pendingEvent };
+          next[result.orgId] = {
+            ...next[result.orgId],
+            pendingEvent: result.pendingEvent,
+            receivedAtMs: result.receivedAtMs,
+          };
         }
         return next;
       });
@@ -209,7 +222,7 @@ const PracticeList = () => {
       const res = await kaderuSyncAPI.trigger(orgId);
       setKaderuSyncStatus((prev) => ({
         ...prev,
-        [orgId]: { pendingEvent: res.data, triggering: false },
+        [orgId]: { pendingEvent: res.data, triggering: false, receivedAtMs: Date.now() },
       }));
       setKaderuSyncMessage({
         type: 'success',
@@ -236,7 +249,11 @@ const PracticeList = () => {
           .then((r) => {
             setKaderuSyncStatus((prev) => ({
               ...prev,
-              [orgId]: { ...prev[orgId], pendingEvent: r.data?.pendingEvent ?? null },
+              [orgId]: {
+                ...prev[orgId],
+                pendingEvent: r.data?.pendingEvent ?? null,
+                receivedAtMs: Date.now(),
+              },
             }));
           })
           .catch(() => {});
@@ -244,12 +261,18 @@ const PracticeList = () => {
     }
   };
 
-  const formatKaderuElapsed = (pendingEvent) => {
-    if (!pendingEvent?.triggeredAt) return '0:00';
-    const triggeredMs = new Date(pendingEvent.triggeredAt).getTime();
-    const elapsedSec = Math.max(0, Math.floor((Date.now() - triggeredMs) / 1000));
-    const m = Math.floor(elapsedSec / 60);
-    const s = elapsedSec % 60;
+  // 経過時間表示はバックエンドが算出した elapsedSeconds を基準に、
+  // 受信時刻からの差分でクライアント側補間する。
+  // triggeredAt (TZ なし LocalDateTime) を new Date() で解釈すると JST 以外の端末で
+  // ずれるため、ここでは triggeredAt は使わない。
+  const formatKaderuElapsed = (orgState) => {
+    const pending = orgState?.pendingEvent;
+    if (!pending) return '0:00';
+    const baseSec = typeof pending.elapsedSeconds === 'number' ? pending.elapsedSeconds : 0;
+    const receivedAtMs = orgState.receivedAtMs ?? Date.now();
+    const totalSec = Math.max(0, baseSec + Math.floor((Date.now() - receivedAtMs) / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -763,7 +786,7 @@ const PracticeList = () => {
                   title={pending ? `${org.code} 同期中` : `${org.code} のKaderu予約を取り込み`}
                 >
                   {pending
-                    ? `${org.code} 同期中… ${formatKaderuElapsed(pending)}`
+                    ? `${org.code} 同期中… ${formatKaderuElapsed(orgState)}`
                     : `Kaderu: ${org.code}`}
                 </button>
               );
