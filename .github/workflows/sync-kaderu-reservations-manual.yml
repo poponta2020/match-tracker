@@ -1,0 +1,71 @@
+name: Sync Kaderu Reservations (manual, per-org)
+
+# 手動同期専用ワークフロー。
+# match-tracker アプリの「Kaderuから取り込み」ボタンから workflow_dispatch で起動される。
+# 既存の sync-kaderu-reservations.yml (cron) と同じ concurrency グループを使うため、
+# cron と手動の重複起動は自動的に直列化される。
+#
+# run-name に inputs.eventId を埋め込むことで、バックエンドの scheduler が
+# workflow run と KaderuSyncTriggerEvent を一意に相関できる。
+# (近接ディスパッチによる run_id 誤割当を防ぐため)
+
+run-name: 'Kaderu sync [event:${{ inputs.eventId }}] ${{ inputs.org }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      org:
+        description: '対象団体コード'
+        required: true
+        type: choice
+        options:
+          - hokudai
+          - wasura
+      eventId:
+        description: 'match-tracker 側の KaderuSyncTriggerEvent ID (相関ID)'
+        required: true
+        type: string
+
+concurrency:
+  group: kaderu-reservation-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./scripts/room-checker
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./scripts/room-checker
+        run: npx playwright install --with-deps chromium
+
+      - name: Sync reservations (hokudai)
+        if: inputs.org == 'hokudai'
+        working-directory: ./scripts/room-checker
+        run: node sync-reservations.js --org hokudai --months 2
+        env:
+          KADERU_USER_ID: ${{ secrets.KADERU_USER_ID }}
+          KADERU_PASSWORD: ${{ secrets.KADERU_PASSWORD }}
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
+
+      - name: Sync reservations (wasura)
+        if: inputs.org == 'wasura'
+        working-directory: ./scripts/room-checker
+        run: node sync-reservations.js --org wasura --months 2
+        env:
+          KADERU_USER_ID: ${{ secrets.WASURA_KADERU_USER_ID }}
+          KADERU_PASSWORD: ${{ secrets.WASURA_KADERU_PASSWORD }}
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
