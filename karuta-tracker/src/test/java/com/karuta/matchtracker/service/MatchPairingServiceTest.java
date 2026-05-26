@@ -2015,4 +2015,103 @@ class MatchPairingServiceTest {
             verify(matchPairingRepository).save(any(MatchPairing.class));
         }
     }
+
+    /**
+     * review round 4 で導入した「両プレイヤーが同一セッションに参加している場合のみ
+     * organizationId を返す」設計のテスト。片方の選手だけが別団体セッションにも
+     * 参加しているケースで、団体一意特定不能として null を返すことを検証する。
+     */
+    @Nested
+    @DisplayName("getOrganizationIdByPairingId メソッド")
+    class GetOrganizationIdByPairingIdTests {
+
+        @Test
+        @DisplayName("両プレイヤーが参加する単一セッションがあれば organizationId を返す")
+        void shouldReturnOrgIdWhenBothPlayersParticipate() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Long pairingId = 10L;
+            Long orgId = 100L;
+            MatchPairing pairing = createMatchPairing(pairingId, sessionDate, 1, 1L, 2L);
+            PracticeSession session = createSession(500L, sessionDate);
+            session.setOrganizationId(orgId);
+
+            when(matchPairingRepository.findById(pairingId)).thenReturn(Optional.of(pairing));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(session));
+            when(practiceParticipantRepository.findBySessionId(500L)).thenReturn(List.of(
+                    createPracticeParticipant(500L, 1, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(500L, 1, 2L, ParticipantStatus.WON)));
+
+            // When
+            Long resolved = matchPairingService.getOrganizationIdByPairingId(pairingId);
+
+            // Then
+            assertThat(resolved).isEqualTo(orgId);
+        }
+
+        @Test
+        @DisplayName("片方の選手だけが別団体セッションに参加していてもそのセッションは候補外（団体一意特定不能で null）")
+        void shouldReturnNullWhenOnlyOnePlayerParticipates() {
+            // Given: 同日に2セッション。team A は両参加だが、team B は player1 のみ参加。
+            // 旧実装はどちらのセッションも片方参加で「最初に見つかったほう」を返してしまうが、
+            // 新実装は team A の orgId に一意特定される。一方、team A 側に両参加セッションがない
+            // ケース（下記）では null を返すべき。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Long pairingId = 10L;
+            MatchPairing pairing = createMatchPairing(pairingId, sessionDate, 1, 1L, 2L);
+
+            PracticeSession sessionA = createSession(500L, sessionDate);
+            sessionA.setOrganizationId(100L);
+            PracticeSession sessionB = createSession(600L, sessionDate);
+            sessionB.setOrganizationId(200L);
+
+            when(matchPairingRepository.findById(pairingId)).thenReturn(Optional.of(pairing));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(sessionA, sessionB));
+            // sessionA: player1 のみ参加（player2 は参加していない）
+            when(practiceParticipantRepository.findBySessionId(500L)).thenReturn(List.of(
+                    createPracticeParticipant(500L, 1, 1L, ParticipantStatus.WON)));
+            // sessionB: player2 のみ参加（player1 は参加していない）
+            when(practiceParticipantRepository.findBySessionId(600L)).thenReturn(List.of(
+                    createPracticeParticipant(600L, 1, 2L, ParticipantStatus.WON)));
+
+            // When
+            Long resolved = matchPairingService.getOrganizationIdByPairingId(pairingId);
+
+            // Then: 両参加セッションが0件 → null（ADMIN/PLAYER 側で ForbiddenException となる）
+            assertThat(resolved).isNull();
+        }
+
+        @Test
+        @DisplayName("同日に両プレイヤー参加セッションが2件ある場合は null を返す（団体一意特定不能）")
+        void shouldReturnNullWhenMultipleSessionsMatch() {
+            // Given
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Long pairingId = 10L;
+            MatchPairing pairing = createMatchPairing(pairingId, sessionDate, 1, 1L, 2L);
+
+            PracticeSession sessionA = createSession(500L, sessionDate);
+            sessionA.setOrganizationId(100L);
+            PracticeSession sessionB = createSession(600L, sessionDate);
+            sessionB.setOrganizationId(200L);
+
+            when(matchPairingRepository.findById(pairingId)).thenReturn(Optional.of(pairing));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(sessionA, sessionB));
+            // 両セッションに両プレイヤーが参加している
+            when(practiceParticipantRepository.findBySessionId(500L)).thenReturn(List.of(
+                    createPracticeParticipant(500L, 1, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(500L, 1, 2L, ParticipantStatus.WON)));
+            when(practiceParticipantRepository.findBySessionId(600L)).thenReturn(List.of(
+                    createPracticeParticipant(600L, 1, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(600L, 1, 2L, ParticipantStatus.WON)));
+
+            // When
+            Long resolved = matchPairingService.getOrganizationIdByPairingId(pairingId);
+
+            // Then: 候補2件 → null（団体一意特定不能で安全側拒否）
+            assertThat(resolved).isNull();
+        }
+    }
 }

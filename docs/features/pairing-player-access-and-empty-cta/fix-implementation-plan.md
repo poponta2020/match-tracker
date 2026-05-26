@@ -107,3 +107,11 @@ status: completed
 - **PLAYER 一括結果入力の認可拡張**: `POST /api/matches/detailed`（`MatchController.createMatchDetailed`）と `PUT /api/matches/{id}/detailed`（`MatchService.updateMatch`）の PLAYER 認可を「自分の試合のみ」から「自分の試合 OR 所属団体セッション」へ拡張。`POST /api/bye-activities/batch`（`ByeActivityController.createBatch`）も PLAYER 開放し、`validateScopeByDate` を新設して所属団体スコープを強制。
 - **既知の制限（CRITICAL 2 を将来課題化）**: PLAYER が同日に複数所属団体のセッションを持つ場合、フロントから `organizationId` を渡していないため `resolveOrganizationIdForScopedWrite` が ForbiddenException で拒否する（安全側フォールバック）。複数団体運用の同日重複は実発生がレアと判断し本 PR では据え置き。完全対応には PairingGenerator / BulkResultInput / MatchResultsView から `organizationId` を一貫して伝播させるか、書き込み API のスコープキーを `sessionId` に変える設計変更が必要。別 Issue 化推奨。
 - **Service 層直接テスト追加**: `MatchPairingServiceTest` で `create` / `createBatch` / `updatePlayer` の organizationId 指定時の所属外ID拒否・待機者ID拒否・updatePlayer の所属外 newPlayerId 拒否・organizationId=null の既存経路維持を直接担保。
+
+### review round 3（CRITICAL 2）
+- **Match 書き込み経路の厳密化**: `MatchService.createMatch` / `updateMatch` に `validatePlayerCanWriteMatch` を追加し、PLAYER 一括結果入力で `player1Id` / `player2Id` の両方が所属団体セッション参加者であることを検証。同日複数所属団体時は403で安全側拒否。`MatchController.createMatchDetailed` の認可は `createdBy` 一致のみに簡素化し、選手スコープ検証は Service 側に集約。
+- **ByeActivity 書き込み経路の厳密化**: `ByeActivityService.createBatch(... organizationId)` を新設し、組織スコープ実行時は対象セッション参加者の playerId 範囲でのみ論理削除＋ items の playerId 検証。`ByeActivityController.createBatch` で `resolveOrganizationIdForScopedWrite` ヘルパーを追加し、同日複数所属団体時は403拒否。SUPER_ADMIN 経路（organizationId == null）は従来通り全レコード論理削除。
+
+### review round 4（CRITICAL 1 / WARNING 1）
+- **ペアリングID団体判定の厳密化**: `MatchPairingService.getOrganizationIdByPairingId` を「両プレイヤーが同一セッションに参加している場合のみ organizationId を返す」設計に変更。0件または複数件の場合は null を返し、`validateScopeByPairingId` の null チェックにより ADMIN/PLAYER で ForbiddenException となる。これにより、片方の選手だけが別団体セッションにも参加しているケースで別団体のペアリングを差し替えできる経路を塞いだ。
+- **既知の制限（WARNING を将来課題化）**: ペアリング書き込み・抜け番活動一括の選手スコープ検証は「セッション全体の参加者」しか見ておらず、`PracticeParticipant.matchNumber` や参加ステータス（WON / PENDING / CANCELLED / WAITLISTED）までは見ていない。UI は試合番号・ステータスで絞っているが、PLAYER が直接 API で別試合番号・対象外ステータスの選手IDを渡せば書き込みに含められる。試合番号＋ステータスを含む厳密スコープは後続課題として別 Issue で対応予定。
