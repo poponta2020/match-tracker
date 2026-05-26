@@ -31,6 +31,9 @@ CREATE INDEX idx_kaderu_sync_status_triggered
 -- 注意: 既存リストを全列挙して置換するため、main の最新 enum 全種別を含める必要がある。
 -- 直近で追加された ADMIN_DENSUKE_PUSH_FAILED (PR #799) を含め忘れると本制約適用後に
 -- 当該通知の保存が失敗する。
+-- 履歴: Kaderu 通知は当初 KADERU_SYNC_* で実装したが、ADMIN チャネル経由で送信させるため
+-- ADMIN_KADERU_SYNC_* に rename した (PR #830, database/rename_kaderu_sync_to_admin_kaderu_sync.sql)。
+-- fresh DB 構築時に本 SQL だけ参照しても整合性を保てるよう、CHECK 制約リストも新名で記述する。
 ALTER TABLE line_message_log DROP CONSTRAINT IF EXISTS line_message_log_notification_type_check;
 ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_check
     CHECK (notification_type IN (
@@ -51,6 +54,6 @@ ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_c
         'MENTEE_MEMO_UPDATE',
         'DENSUKE_PAGE_CREATED',
         'ADMIN_DENSUKE_PUSH_FAILED',
-        'KADERU_SYNC_COMPLETED',
-        'KADERU_SYNC_FAILED'
+        'ADMIN_KADERU_SYNC_COMPLETED',
+        'ADMIN_KADERU_SYNC_FAILED'
     ));
