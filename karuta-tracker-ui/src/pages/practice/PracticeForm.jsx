@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { practiceAPI, venueAPI } from '../../api';
+import { practiceAPI, venueAPI, kaderuSyncAPI } from '../../api';
 import { isSuperAdmin, isAdmin, getCurrentPlayer } from '../../utils/auth';
 import { organizationAPI } from '../../api/organizations';
 import { ChevronLeft, ChevronRight, X, MapPin, Save, Trash2, FileText } from 'lucide-react';
@@ -137,6 +137,10 @@ const PracticeForm = () => {
   const [success, setSuccess] = useState('');
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(null);
+  // Kaderu同期トリガー: { [orgId]: { pendingEvent, triggering, receivedAtMs } }
+  const [kaderuSyncStatus, setKaderuSyncStatus] = useState({});
+  const [kaderuSyncMessage, setKaderuSyncMessage] = useState(null); // { type: 'success' | 'error', text: string }
+  const [, setKaderuTick] = useState(0); // 1秒タイマーで再レンダリングして経過時間を更新
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -166,6 +170,138 @@ const PracticeForm = () => {
     };
     fetchData();
   }, [year, month]);
+
+  // ===== Kaderu同期手動トリガー =====
+  // ADMIN は自団体のみ、SUPER_ADMIN は全団体のボタンを表示する。
+  const kaderuVisibleOrgs = useMemo(() => {
+    const player = getCurrentPlayer();
+    if (!player) return [];
+    if (isSuperAdmin()) {
+      return [...organizations].sort((a, b) => a.id - b.id);
+    }
+    if (isAdmin() && player.adminOrganizationId) {
+      return organizations.filter((o) => o.id === player.adminOrganizationId);
+    }
+    return [];
+  }, [organizations]);
+
+  // 30秒間隔で各団体のステータスをポーリングし、ボタンの活性/非活性を更新
+  useEffect(() => {
+    if (kaderuVisibleOrgs.length === 0) return;
+    let cancelled = false;
+
+    const fetchAll = async () => {
+      // 受信時刻（クライアント時計）を測ることで、その後の経過秒は
+      // バックエンドの elapsedSeconds + (Date.now() - receivedAtMs) で補間する。
+      // pendingEvent.triggeredAt はタイムゾーンなしの LocalDateTime のため、
+      // new Date(...) でブラウザのローカル時刻として解釈されてしまうと
+      // JST 以外の端末で経過秒がずれる（バックエンド側でJST採番のため）。
+      const results = await Promise.all(kaderuVisibleOrgs.map((o) =>
+        kaderuSyncAPI.getStatus(o.id)
+          .then((r) => ({
+            orgId: o.id,
+            pendingEvent: r.data?.pendingEvent ?? null,
+            receivedAtMs: Date.now(),
+          }))
+          .catch(() => null)
+      ));
+      if (cancelled) return;
+      setKaderuSyncStatus((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          if (result == null) continue;
+          next[result.orgId] = {
+            ...next[result.orgId],
+            pendingEvent: result.pendingEvent,
+            receivedAtMs: result.receivedAtMs,
+          };
+        }
+        return next;
+      });
+    };
+
+    fetchAll();
+    const interval = setInterval(fetchAll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [kaderuVisibleOrgs]);
+
+  // PENDING がある間、1秒ごとに再レンダリングして経過時間表示を更新
+  const hasKaderuPending = useMemo(
+    () => kaderuVisibleOrgs.some((o) => kaderuSyncStatus[o.id]?.pendingEvent),
+    [kaderuVisibleOrgs, kaderuSyncStatus]
+  );
+  useEffect(() => {
+    if (!hasKaderuPending) return;
+    const interval = setInterval(() => setKaderuTick((t) => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [hasKaderuPending]);
+
+  const handleKaderuSync = async (orgId) => {
+    setKaderuSyncStatus((prev) => ({
+      ...prev,
+      [orgId]: { ...prev[orgId], triggering: true },
+    }));
+    setKaderuSyncMessage(null);
+    try {
+      const res = await kaderuSyncAPI.trigger(orgId);
+      setKaderuSyncStatus((prev) => ({
+        ...prev,
+        [orgId]: { pendingEvent: res.data, triggering: false, receivedAtMs: Date.now() },
+      }));
+      setKaderuSyncMessage({
+        type: 'success',
+        text: 'Kaderu同期を開始しました。完了後にLINEでお知らせします（5分後を目安に画面をリロードしてください）',
+      });
+      setTimeout(() => setKaderuSyncMessage(null), 8000);
+    } catch (err) {
+      setKaderuSyncStatus((prev) => ({
+        ...prev,
+        [orgId]: { ...prev[orgId], triggering: false },
+      }));
+      const status = err.response?.status;
+      const fallback = status === 409
+        ? '同期は既に実行中です'
+        : 'Kaderu同期の起動に失敗しました';
+      setKaderuSyncMessage({
+        type: 'error',
+        text: err.response?.data?.message || fallback,
+      });
+      setTimeout(() => setKaderuSyncMessage(null), 6000);
+      // 409 のときは状態を即座に反映するため status を再取得
+      if (status === 409) {
+        kaderuSyncAPI.getStatus(orgId)
+          .then((r) => {
+            setKaderuSyncStatus((prev) => ({
+              ...prev,
+              [orgId]: {
+                ...prev[orgId],
+                pendingEvent: r.data?.pendingEvent ?? null,
+                receivedAtMs: Date.now(),
+              },
+            }));
+          })
+          .catch(() => {});
+      }
+    }
+  };
+
+  // 経過時間表示はバックエンドが算出した elapsedSeconds を基準に、
+  // 受信時刻からの差分でクライアント側補間する。
+  // triggeredAt (TZ なし LocalDateTime) を new Date() で解釈すると JST 以外の端末で
+  // ずれるため、ここでは triggeredAt は使わない。
+  const formatKaderuElapsed = (orgState) => {
+    const pending = orgState?.pendingEvent;
+    if (!pending) return '0:00';
+    const baseSec = typeof pending.elapsedSeconds === 'number' ? pending.elapsedSeconds : 0;
+    const receivedAtMs = orgState.receivedAtMs ?? Date.now();
+    const totalSec = Math.max(0, baseSec + Math.floor((Date.now() - receivedAtMs) / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   // カレンダー生成
   const generateCalendar = () => {
@@ -293,10 +429,35 @@ const PracticeForm = () => {
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
           <h1 className="text-lg font-semibold text-white">{monthStr}</h1>
-          <button onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
-            <ChevronRight className="w-6 h-6 text-white" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => changeMonth(1)}
+              className="p-2 hover:bg-[#3d5a4c] rounded-full transition-colors">
+              <ChevronRight className="w-6 h-6 text-white" />
+            </button>
+            {kaderuVisibleOrgs.map((org) => {
+              const orgState = kaderuSyncStatus[org.id] || {};
+              const pending = orgState.pendingEvent;
+              const triggering = orgState.triggering;
+              const disabled = triggering || !!pending;
+              return (
+                <button
+                  key={org.id}
+                  onClick={() => handleKaderuSync(org.id)}
+                  disabled={disabled}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+                    disabled
+                      ? 'bg-[#3d5a4c] text-[#9ca3af] cursor-not-allowed'
+                      : 'bg-white text-[#4a6b5a] hover:bg-[#f9f6f2]'
+                  }`}
+                  title={pending ? `${org.code} 同期中` : `${org.code} のKaderu予約を取り込み`}
+                >
+                  {pending
+                    ? `${org.code} 同期中… ${formatKaderuElapsed(orgState)}`
+                    : `Kaderu: ${org.code}`}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -311,6 +472,17 @@ const PracticeForm = () => {
         )}
         {success && (
           <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>
+        )}
+        {kaderuSyncMessage && (
+          <div
+            className={`mb-4 p-3 border rounded-lg text-sm ${
+              kaderuSyncMessage.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}
+          >
+            {kaderuSyncMessage.text}
+          </div>
         )}
 
         {/* カレンダー */}

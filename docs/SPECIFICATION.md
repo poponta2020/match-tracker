@@ -1489,9 +1489,9 @@ cron による30分ごとの同期に加え、ADMIN+ ユーザーが任意のタ
 
 **起動 UI**
 
-- 練習日一覧画面（`/practice`）の上部ナビバーに、団体ごとに小ボタン（例: `Kaderu: hokudai`, `Kaderu: wasura`）を配置
+- 練習日登録画面（`/practice/new`）の上部ナビバーに、団体ごとに小ボタン（例: `Kaderu: hokudai`, `Kaderu: wasura`）を配置
 - ADMIN は自団体のボタンのみ、SUPER_ADMIN は全団体のボタンが表示される
-- PLAYER には非表示
+- PLAYER には非表示（`/practice/new` 自体が ADMIN+ 限定なので二重ガード）
 
 **動作**
 
