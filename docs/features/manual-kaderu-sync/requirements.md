@@ -71,7 +71,7 @@ status: completed
 | `ADMIN_KADERU_SYNC_COMPLETED` | workflow の conclusion が `success` で終了 | `Kaderu予約取り込みが完了しました\n（団体: hokudai）\n結果: 新規 3件 / 拡張 1件 / スキップ 5件` |
 | `ADMIN_KADERU_SYNC_FAILED` | workflow の conclusion が `failure` / `cancelled` / `timed_out` で終了 | `Kaderu予約取り込みに失敗しました\n（団体: hokudai）\n理由: workflow failure（GitHub Actions ログを確認してください）` |
 
-- チャネル種別: PLAYER チャネル（押下者本人の LINE userId 宛）
+- チャネル種別: ADMIN チャネル（押下者本人の ADMIN LINE userId 宛）。`/practice/new` は ADMIN+ 限定なので押下者は必ず ADMIN チャネル binding を持っている前提
 - 月次 200通制限は通常通り適用される
 
 ### 3.3 ビジネスルール

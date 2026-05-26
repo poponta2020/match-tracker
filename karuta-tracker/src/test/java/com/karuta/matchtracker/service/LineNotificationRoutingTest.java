@@ -26,7 +26,9 @@ class LineNotificationRoutingTest {
 
     @ParameterizedTest
     @EnumSource(value = LineNotificationType.class, names = {
-        "ADMIN_WAITLIST_UPDATE", "ADMIN_SAME_DAY_CONFIRMATION"
+        "ADMIN_WAITLIST_UPDATE", "ADMIN_SAME_DAY_CONFIRMATION",
+        "ADMIN_SAME_DAY_CANCEL", "ADMIN_DENSUKE_PUSH_FAILED",
+        "ADMIN_KADERU_SYNC_COMPLETED", "ADMIN_KADERU_SYNC_FAILED"
     })
     @DisplayName("管理者向け通知はADMINチャネルにルーティングされる")
     void adminNotificationsShouldRouteToAdminChannel(LineNotificationType type) {
