@@ -94,7 +94,8 @@ public class ByeActivityController {
         log.info("抜け番活動一括作成: date={}, matchNumber={}, count={}", date, matchNumber, items.size());
         validateScopeByDate(date, httpRequest);
         Long userId = (Long) httpRequest.getAttribute("currentUserId");
-        List<ByeActivityDto> created = byeActivityService.createBatch(date, matchNumber, items, userId);
+        Long organizationId = resolveOrganizationIdForScopedWrite(date, httpRequest);
+        List<ByeActivityDto> created = byeActivityService.createBatch(date, matchNumber, items, userId, organizationId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -166,4 +167,34 @@ public class ByeActivityController {
         throw new ForbiddenException("操作権限がありません");
     }
 
+    /**
+     * 書き込みリクエストの団体スコープに使う organizationId を、ロールに応じて解決する。
+     *
+     * - SUPER_ADMIN: null（組織非限定）。
+     * - ADMIN: adminOrganizationId。
+     * - PLAYER: 対象日付の PracticeSession のうち所属団体に属するものの組織ID。
+     *   2件以上該当する場合は ForbiddenException で安全側拒否（団体一意特定不能）。
+     */
+    private Long resolveOrganizationIdForScopedWrite(LocalDate date, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if ("ADMIN".equals(role)) {
+            return (Long) httpRequest.getAttribute("adminOrganizationId");
+        }
+        if ("PLAYER".equals(role)) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            if (currentUserId == null) return null;
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            List<Long> matchedOrgIds = practiceSessionRepository.findByDateRange(date, date).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                    .filter(playerOrgIds::contains)
+                    .distinct()
+                    .toList();
+            if (matchedOrgIds.size() > 1) {
+                throw new ForbiddenException(
+                        "同日に複数の所属団体で練習があるため、操作対象の団体を特定できません");
+            }
+            return matchedOrgIds.isEmpty() ? null : matchedOrgIds.get(0);
+        }
+        return null;
+    }
 }

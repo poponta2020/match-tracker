@@ -4,6 +4,8 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.ActivityType;
 import com.karuta.matchtracker.entity.ByeActivity;
 import com.karuta.matchtracker.entity.PracticeParticipant;
+import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.repository.ByeActivityRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -107,14 +109,53 @@ public class ByeActivityService {
     }
 
     /**
-     * 抜け番活動を一括作成（管理者用）
+     * 抜け番活動を一括作成（SUPER_ADMIN 経路：組織非限定）。
+     * 既存挙動を維持するためのオーバーロード。
      * @Transactional により削除→再作成がアトミックに実行される
      */
     @Transactional
     public List<ByeActivityDto> createBatch(LocalDate date, Integer matchNumber, List<ByeActivityBatchItemRequest> items, Long userId) {
-        // 既存の同日同試合番号のレコードを論理削除してから再作成
-        byeActivityRepository.softDeleteBySessionDateAndMatchNumber(date, matchNumber);
-        byeActivityRepository.flush(); // 論理削除をDBに反映してからINSERT
+        return createBatch(date, matchNumber, items, userId, null);
+    }
+
+    /**
+     * 抜け番活動を一括作成（組織スコープ対応）。
+     *
+     * organizationId が指定された場合（ADMIN / PLAYER 経路）は、対象セッション
+     * 参加者でない選手IDを含むリクエストを ForbiddenException で拒否し、
+     * 論理削除も対象セッション参加者の playerId 範囲に限定する。これにより、
+     * 同日に他団体のセッションがあっても他団体の抜け番活動は維持される。
+     *
+     * organizationId == null（SUPER_ADMIN 経路）は従来どおり全レコード対象。
+     */
+    @Transactional
+    public List<ByeActivityDto> createBatch(LocalDate date, Integer matchNumber,
+                                             List<ByeActivityBatchItemRequest> items,
+                                             Long userId, Long organizationId) {
+        if (organizationId != null) {
+            // ADMIN / PLAYER 経路: セッション参加者のみ操作可能
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(date, organizationId);
+            for (ByeActivityBatchItemRequest item : items) {
+                if (!sessionPlayerIds.contains(item.getPlayerId())) {
+                    throw new ForbiddenException("対象セッションの参加者でない選手の抜け番活動は登録できません");
+                }
+            }
+            // 対象セッション参加者のレコードのみ論理削除
+            List<ByeActivity> existing = byeActivityRepository
+                    .findBySessionDateAndMatchNumber(date, matchNumber).stream()
+                    .filter(a -> sessionPlayerIds.contains(a.getPlayerId()))
+                    .collect(Collectors.toList());
+            LocalDateTime now = JstDateTimeUtil.now();
+            for (ByeActivity activity : existing) {
+                activity.setDeletedAt(now);
+            }
+            byeActivityRepository.saveAll(existing);
+            byeActivityRepository.flush();
+        } else {
+            // SUPER_ADMIN 経路: 既存挙動（同日同試合番号の全レコード論理削除）
+            byeActivityRepository.softDeleteBySessionDateAndMatchNumber(date, matchNumber);
+            byeActivityRepository.flush();
+        }
 
         List<ByeActivity> entities = items.stream()
                 .map(item -> {
@@ -132,7 +173,8 @@ public class ByeActivityService {
                 .collect(Collectors.toList());
 
         List<ByeActivity> saved = byeActivityRepository.saveAll(entities);
-        log.info("抜け番活動記録一括作成: date={}, match={}, count={}", date, matchNumber, saved.size());
+        log.info("抜け番活動記録一括作成: date={}, match={}, count={}, organizationId={}",
+                date, matchNumber, saved.size(), organizationId);
 
         // バッチ内の全選手に対してPracticeParticipant評価を実行
         saved.stream()
@@ -144,6 +186,21 @@ public class ByeActivityService {
         return saved.stream()
                 .map(a -> ByeActivityDto.fromEntity(a, playerNames.getOrDefault(a.getPlayerId(), "不明")))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 指定日・組織の練習セッション参加者IDセットを取得する。
+     * organizationId が null の場合は組織非限定（最初に見つかったセッション）。
+     */
+    private Set<Long> getSessionAllPlayerIds(LocalDate sessionDate, Long organizationId) {
+        Optional<PracticeSession> sessionOpt = organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                : practiceSessionRepository.findBySessionDate(sessionDate);
+        return sessionOpt
+                .map(session -> practiceParticipantRepository.findBySessionId(session.getId()).stream()
+                        .map(PracticeParticipant::getPlayerId)
+                        .collect(Collectors.toSet()))
+                .orElse(Collections.emptySet());
     }
 
     /**

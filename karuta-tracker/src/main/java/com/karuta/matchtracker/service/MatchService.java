@@ -451,6 +451,18 @@ public class MatchService {
             throw new IllegalArgumentException("試合記録は練習日として登録されている日のみ登録可能です");
         }
 
+        // PLAYER の一括結果入力経路（自分が当事者でない試合）では、対象試合の両選手が
+        // PLAYER の所属団体セッション参加者であることを検証する。同日に複数の所属団体
+        // セッションがある場合は対象団体が一意に決まらないため安全側で403拒否。
+        if (currentUserRole == Role.PLAYER && currentUserId != null) {
+            boolean isOwnMatch = currentUserId.equals(request.getPlayer1Id())
+                    || currentUserId.equals(request.getPlayer2Id());
+            if (!isOwnMatch) {
+                validatePlayerCanWriteMatch(request.getMatchDate(), currentUserId,
+                        request.getPlayer1Id(), request.getPlayer2Id());
+            }
+        }
+
         // 選手の存在確認
         validatePlayerExists(request.getPlayer1Id());
         validatePlayerExists(request.getPlayer2Id());
@@ -551,14 +563,16 @@ public class MatchService {
         }
         Long effectiveUserId = currentUserId != null ? currentUserId : updatedBy;
 
-        // PLAYER は対象試合の参加者のみ更新可。ただし、対象試合の練習日に
-        // 自身の所属団体のセッションがあれば、所属団体内の一括結果入力経路として
-        // 他選手間の試合も更新可能（PR #828 で PLAYER 一括入力を開放）。
+        // PLAYER は対象試合の参加者のみ更新可。ただし、対象試合の両選手が
+        // 自身の所属団体のセッション参加者である場合は、所属団体内の一括結果入力
+        // 経路として他選手間の試合も更新可能（PR #828 で PLAYER 一括入力を開放）。
+        // 同日に複数所属団体セッションがある場合は対象団体が一意に決まらないため403。
         if (currentUserRole == Role.PLAYER) {
             boolean isOwnMatch = effectiveUserId.equals(match.getPlayer1Id())
                     || effectiveUserId.equals(match.getPlayer2Id());
-            if (!isOwnMatch && !canPlayerWriteToSessionOnDate(match.getMatchDate(), effectiveUserId)) {
-                throw new ForbiddenException("参加していない試合を更新する権限がありません");
+            if (!isOwnMatch) {
+                validatePlayerCanWriteMatch(match.getMatchDate(), effectiveUserId,
+                        match.getPlayer1Id(), match.getPlayer2Id());
             }
         }
 
@@ -1018,15 +1032,38 @@ public class MatchService {
     }
 
     /**
-     * PLAYER による書き込みリクエストで、対象日付のセッションが PLAYER の所属団体に
-     * 存在するかを判定する。一括結果入力経路（自分が当事者でない試合）の認可判定に使用。
-     * 所属団体なし／対象日にセッションなしの場合は false（書き込み不可）。
+     * PLAYER の一括結果入力経路（自分が当事者でない試合）で、対象試合の両選手が
+     * PLAYER の所属団体セッションの参加者であることを検証する。
+     *
+     * 失敗条件（いずれも ForbiddenException）：
+     *  - 所属団体が空
+     *  - 対象日付に所属団体のセッションが0件
+     *  - 対象日付に所属団体のセッションが2件以上（団体一意特定不能・安全側拒否）
+     *  - player1Id / player2Id のいずれかが対象セッション参加者でない
      */
-    private boolean canPlayerWriteToSessionOnDate(LocalDate date, Long userId) {
-        List<Long> orgIds = organizationService.getPlayerOrganizationIds(userId);
-        if (orgIds.isEmpty()) return false;
-        return practiceSessionRepository.findByDateRange(date, date).stream()
-                .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
-                .anyMatch(orgIds::contains);
+    private void validatePlayerCanWriteMatch(LocalDate matchDate, Long playerUserId,
+                                              Long player1Id, Long player2Id) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(playerUserId);
+        if (orgIds.isEmpty()) {
+            throw new ForbiddenException("所属団体のセッション以外の試合は登録できません");
+        }
+        List<com.karuta.matchtracker.entity.PracticeSession> matchedSessions =
+                practiceSessionRepository.findByDateRange(matchDate, matchDate).stream()
+                        .filter(s -> orgIds.contains(s.getOrganizationId()))
+                        .toList();
+        if (matchedSessions.isEmpty()) {
+            throw new ForbiddenException("所属団体のセッション以外の試合は登録できません");
+        }
+        if (matchedSessions.size() > 1) {
+            throw new ForbiddenException(
+                    "同日に複数の所属団体で練習があるため、操作対象の団体を特定できません");
+        }
+        Long sessionId = matchedSessions.get(0).getId();
+        java.util.Set<Long> participantIds = practiceParticipantRepository.findBySessionId(sessionId).stream()
+                .map(com.karuta.matchtracker.entity.PracticeParticipant::getPlayerId)
+                .collect(Collectors.toSet());
+        if (!participantIds.contains(player1Id) || !participantIds.contains(player2Id)) {
+            throw new ForbiddenException("対象セッションの参加者でない選手の試合は登録できません");
+        }
     }
 }
