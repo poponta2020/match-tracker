@@ -32,7 +32,7 @@ status: completed
 - **対応Issue:** （Issue作成後に記入）
 
 ### タスク2: フロントエンドのルートを PLAYER 以上に開放
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #824
 - **概要:** `/pairings`, `/pairings/summary`, `/matches/bulk-input/:sessionId` の3ルートを `RoleProtectedPage requiredRole="ADMIN"` から `ProtectedPage` に変更し、ログイン済みなら誰でもアクセス可能にする。
 - **変更対象ファイル:**
