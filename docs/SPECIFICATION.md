@@ -1499,7 +1499,7 @@ cron による30分ごとの同期に加え、ADMIN+ ユーザーが任意のタ
 2. `kaderu_sync_trigger_events` テーブルに `status='PENDING'` でイベントを記録
 3. フロントは30秒間隔で `GET /api/kaderu-sync/status` をポーリングし、PENDING がある間はボタンを `{orgCode} 同期中… mm:ss` 表示で disabled
 4. バックエンドの `KaderuSyncStatusPollingScheduler`（30秒間隔）が workflow run の完了を検知し、`COMPLETED` / `FAILED` に確定
-5. 押下者本人の LINE に `KADERU_SYNC_COMPLETED` / `KADERU_SYNC_FAILED` 通知を送信（preference の opt-in/opt-out は不問）
+5. 押下者本人の LINE に `ADMIN_KADERU_SYNC_COMPLETED` / `ADMIN_KADERU_SYNC_FAILED` 通知を送信（preference の opt-in/opt-out は不問）
 6. ユーザーは LINE 通知を受けてから画面を手動リロード
 
 **LINE 通知の例**

@@ -68,8 +68,8 @@ status: completed
 #### 3.2.2 通知種別とメッセージ
 | `LineNotificationType` | 送信条件 | メッセージ例 |
 |------------------------|----------|--------------|
-| `KADERU_SYNC_COMPLETED` | workflow の conclusion が `success` で終了 | `Kaderu予約取り込みが完了しました\n（団体: hokudai）\n結果: 新規 3件 / 拡張 1件 / スキップ 5件` |
-| `KADERU_SYNC_FAILED` | workflow の conclusion が `failure` / `cancelled` / `timed_out` で終了 | `Kaderu予約取り込みに失敗しました\n（団体: hokudai）\n理由: workflow failure（GitHub Actions ログを確認してください）` |
+| `ADMIN_KADERU_SYNC_COMPLETED` | workflow の conclusion が `success` で終了 | `Kaderu予約取り込みが完了しました\n（団体: hokudai）\n結果: 新規 3件 / 拡張 1件 / スキップ 5件` |
+| `ADMIN_KADERU_SYNC_FAILED` | workflow の conclusion が `failure` / `cancelled` / `timed_out` で終了 | `Kaderu予約取り込みに失敗しました\n（団体: hokudai）\n理由: workflow failure（GitHub Actions ログを確認してください）` |
 
 - チャネル種別: PLAYER チャネル（押下者本人の LINE userId 宛）
 - 月次 200通制限は通常通り適用される
@@ -175,8 +175,8 @@ CREATE INDEX idx_kaderu_sync_status_triggered
 ```
 
 #### `LineMessageLog.LineNotificationType` enum 拡張
-- `KADERU_SYNC_COMPLETED` を追加
-- `KADERU_SYNC_FAILED` を追加
+- `ADMIN_KADERU_SYNC_COMPLETED` を追加
+- `ADMIN_KADERU_SYNC_FAILED` を追加
 
 ### 4.3 フロントエンド設計
 
@@ -235,8 +235,8 @@ List<KaderuSyncTriggerEvent> findAllByStatus(SyncStatus status);
 - 各イベントについて:
   1. `githubRunId` が null なら、`listRecentRuns` から `triggered_at` 以降の run を探して埋める
   2. `getWorkflowRun(githubRunId)` で status/conclusion を取得
-  3. `status=completed && conclusion=success` → `COMPLETED` に確定、`KADERU_SYNC_COMPLETED` 通知送信、summary を script のログから抽出（後述）
-  4. `status=completed && conclusion in [failure, cancelled, timed_out]` → `FAILED` に確定、`KADERU_SYNC_FAILED` 通知送信
+  3. `status=completed && conclusion=success` → `COMPLETED` に確定、`ADMIN_KADERU_SYNC_COMPLETED` 通知送信、summary を script のログから抽出（後述）
+  4. `status=completed && conclusion in [failure, cancelled, timed_out]` → `FAILED` に確定、`ADMIN_KADERU_SYNC_FAILED` 通知送信
   5. `triggered_at + 30分` を超えた PENDING → `FAILED` に確定（fail-safe）
 
 #### Summary 抽出方針

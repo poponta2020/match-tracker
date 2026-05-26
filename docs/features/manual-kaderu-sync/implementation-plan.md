@@ -19,7 +19,7 @@ status: completed
     - `findFirstByOrganizationIdAndStatusOrderByTriggeredAtDesc(Long, SyncStatus)`
     - `findAllByStatus(SyncStatus)`
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineMessageLog.java`
-    - enum `LineNotificationType` に `KADERU_SYNC_COMPLETED` / `KADERU_SYNC_FAILED` を追加
+    - enum `LineNotificationType` に `ADMIN_KADERU_SYNC_COMPLETED` / `ADMIN_KADERU_SYNC_FAILED` を追加
 - **本番DB適用:** PR作成時にユーザーへ依頼（CLAUDE.md「DBマイグレーション適用ルール」遵守）
 - **依存タスク:** なし
 - **対応Issue:** #803
@@ -144,14 +144,14 @@ status: completed
     - ADMIN ユーザーで `/practice` を開き、ボタンが見えることを確認
     - ボタン押下 → トースト表示、ボタンが `同期中…` でdisabledになること
     - 経過秒数が1秒ごとに更新されること
-    - 数分後、`KADERU_SYNC_COMPLETED` LINE通知が押下者本人に届くこと
+    - 数分後、`ADMIN_KADERU_SYNC_COMPLETED` LINE通知が押下者本人に届くこと
     - 画面をリロードして、新しい練習日が表示されること
     - ボタンが再度有効になること
   - **重複防止:**
     - ボタン押下後、即座にもう1回押下しようとすると disabled で押せないこと
     - 別タブで `POST /api/kaderu-sync/trigger` を直接叩くと 409 が返ること
   - **異常系:**
-    - GITHUB_PAT を一時的に無効化して workflow を起動 → `KADERU_SYNC_FAILED` 通知が届くこと
+    - GITHUB_PAT を一時的に無効化して workflow を起動 → `ADMIN_KADERU_SYNC_FAILED` 通知が届くこと
     - 30分タイムアウトのfail-safe動作確認（PENDING を手動でDB挿入してテストするか、本番運用時に確認）
 - **依存タスク:** タスク1〜7 全て + タスク6 のPAT登録完了
 - **対応Issue:** #810
