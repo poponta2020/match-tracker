@@ -137,6 +137,7 @@
 - **既知の制限**:
   - PLAYER が複数団体に所属し、同日に複数所属団体のセッションが存在する場合、書き込み API の対象団体が一意に決まらないため `ForbiddenException` で拒否される（安全側フォールバック）。`/pairings` / `/matches/bulk-input` から `organizationId` を渡す設計拡張は別 Issue で対応予定
   - 対戦組み合わせ書き込み（`create` / `createBatch` / `updatePlayer` / `auto-match`）および抜け番活動一括（`bye-activities/batch`）の選手スコープ検証は、対象セッションの **全参加者**（`PracticeParticipant.session_id` ベース）で行っており、`PracticeParticipant.matchNumber` や参加ステータス（WON / PENDING / CANCELLED / WAITLISTED）までは見ていない。そのため UI が試合番号・ステータスで除外している選手 ID を PLAYER が直接 API で渡せば、別試合番号にしか割り当たっていない選手や対象外ステータスの選手でも書き込みに含められる。試合番号＋ステータスを含む厳密スコープは後続課題として別 Issue で対応予定（UI 経路では従来通り絞り込み済み）
+  - **読み取り系 API の団体スコープ**: PLAYER 開放した `/pairings` / `/matches/bulk-input/:sessionId` 画面が呼ぶ読み取り API（`GET /api/match-pairings/date`、`GET /api/practice-sessions/{id}` 等）は `organizationId` 未指定時に **全団体検索**として動作する。`OrganizationScopeResolver` は PLAYER が未指定の場合 `null`（組織非限定）を返す仕様のため、同日に複数団体のセッションがある日付で PLAYER が `/pairings` を開くと他団体のペアリングも返り得る。また `PracticeSessionController.getSessionById` は `@RequireRole` も団体スコープ検証も持たないため、PLAYER が URL の `sessionId` を他団体のものに変更すれば他団体セッション情報を閲覧できる。これらは書き込み系のスコープ強制と非対称な状態で、書き込み（`resolveOrganizationIdForScopedWrite`）が他団体への書き込みを 403 拒否する一方、読み取りには同等の強制がない。読み取り API への団体スコープ追加（`@RequireRole`、`OrganizationScopeResolver` の PLAYER 未指定時の所属団体一意解決、`PairingGenerator` / `BulkResultInput` からの `organizationId` 一貫伝播）は後続課題として別 Issue で対応予定
 - SUPER_ADMINは全団体横断の管理権限
 
 #### 3.0.5 通知の団体分離

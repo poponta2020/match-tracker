@@ -115,3 +115,10 @@ status: completed
 ### review round 4（CRITICAL 1 / WARNING 1）
 - **ペアリングID団体判定の厳密化**: `MatchPairingService.getOrganizationIdByPairingId` を「両プレイヤーが同一セッションに参加している場合のみ organizationId を返す」設計に変更。0件または複数件の場合は null を返し、`validateScopeByPairingId` の null チェックにより ADMIN/PLAYER で ForbiddenException となる。これにより、片方の選手だけが別団体セッションにも参加しているケースで別団体のペアリングを差し替えできる経路を塞いだ。
 - **既知の制限（WARNING を将来課題化）**: ペアリング書き込み・抜け番活動一括の選手スコープ検証は「セッション全体の参加者」しか見ておらず、`PracticeParticipant.matchNumber` や参加ステータス（WON / PENDING / CANCELLED / WAITLISTED）までは見ていない。UI は試合番号・ステータスで絞っているが、PLAYER が直接 API で別試合番号・対象外ステータスの選手IDを渡せば書き込みに含められる。試合番号＋ステータスを含む厳密スコープは後続課題として別 Issue で対応予定。
+
+### review round 5（CRITICAL 1）
+- **既知の制限（CRITICAL を将来課題化）**: PLAYER 開放した `/pairings` / `/matches/bulk-input/:sessionId` の **読み取り系 API** に団体スコープ強制がない不整合を確認。書き込み系（`resolveOrganizationIdForScopedWrite`）は他団体書き込みを 403 で拒否する一方、`GET /api/match-pairings/date` は `OrganizationScopeResolver` が PLAYER 未指定で `null`（全団体）を返すため、同日に複数団体セッションがある日付で他団体のペアリングも返り得る。`PracticeSessionController.getSessionById` は `@RequireRole` も団体スコープ検証も持たず、PLAYER が URL の `sessionId` を他団体に変えるだけで閲覧できる。本 PR スコープ（書き込み系の PLAYER 開放）を大きく超えるため、SPECIFICATION.md の「既知の制限」節に詳細を明記し、別 Issue で対応する後続課題とする。読み取り系の修正対応案は以下:
+  - `PracticeSessionController.getSessionById` に `@RequireRole` と id ベース団体スコープ検証を追加
+  - `OrganizationScopeResolver` を PLAYER 未指定時に所属団体1件に解決、複数候補は 403
+  - `PairingGenerator` / `BulkResultInput` から読み取り時にも `organizationId` を一貫して伝播
+  - PLAYER が他団体 sessionId を指定すると 403 となるテスト追加
