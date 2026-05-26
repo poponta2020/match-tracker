@@ -6,7 +6,7 @@ status: completed
 ## 1. 概要
 
 ### 目的
-練習日一覧画面 (`/practice`) に「Kaderuから取り込み」ボタンを追加し、ADMIN+ ユーザーが任意のタイミングで Kaderu 予約取り込み workflow を手動起動できるようにする。同期の成功/失敗結果はLINE通知で押下者本人に届け、押下者は通知を受けて画面を手動リロードする運用とする。
+練習日登録画面 (`/practice/new`、ADMIN+ 限定) に「Kaderuから取り込み」ボタンを追加し、ADMIN+ ユーザーが任意のタイミングで Kaderu 予約取り込み workflow を手動起動できるようにする。同期の成功/失敗結果はLINE通知で押下者本人に届け、押下者は通知を受けて画面を手動リロードする運用とする。
 
 ### 背景・動機
 - 現状、Kaderu 予約は GitHub Actions の cron (`*/30 * * * *`) で自動同期されている
@@ -22,12 +22,12 @@ status: completed
 - **PLAYER:** この機能のUIは見えず、影響を受けない
 
 ### 利用シナリオ
-1. hokudai の ADMIN がかでるサイトで新規予約を入れた直後、match-tracker の `/practice` を開く
+1. hokudai の ADMIN がかでるサイトで新規予約を入れた直後、match-tracker の `/practice/new` を開く
 2. 上部ナビバーに「Kaderuから取り込み」ボタンが見える
 3. ボタンを押下する → トースト「Kaderu同期を開始しました。完了後にLINEでお知らせします（5分後を目安に画面をリロードしてください）」
 4. ボタンは「同期中…」表示でdisableされる
 5. 2〜5分後、押下者本人のLINEに「Kaderu予約取り込みが完了しました（団体: hokudai）。新規:3 拡張:1 スキップ:5」が届く
-6. ユーザーが `/practice` をリロード → 新しい練習日が表示される
+6. ユーザーが `/practice/new` をリロード → 新しい練習日が表示される
 7. 万が一 workflow が失敗した場合は、LINEで「Kaderu予約取り込みに失敗しました」と通知が届き、ボタンは再度押下可能になる
 
 ## 3. 機能要件
@@ -35,7 +35,7 @@ status: completed
 ### 3.1 画面仕様
 
 #### 3.1.1 ボタン表示位置
-- `PracticeList.jsx` の上部固定ナビゲーションバー内
+- `PracticeForm.jsx` の上部固定ナビゲーションバー内
 - 月ピッカー（中央）の右側、月送り右矢印より右に配置
 - ADMIN / SUPER_ADMIN にのみ表示。PLAYER には非表示
 
@@ -189,7 +189,7 @@ export const kaderuSyncAPI = {
 };
 ```
 
-#### `PracticeList.jsx` への追加
+#### `PracticeForm.jsx` への追加
 - 状態:
   - `kaderuSyncPendingEvent`: 現在の PENDING イベント or null
   - `kaderuSyncElapsedSec`: 経過秒数（1秒タイマーで増分）
@@ -334,7 +334,7 @@ jobs:
 ## 5. 影響範囲
 
 ### 変更が必要な既存ファイル
-- `karuta-tracker-ui/src/pages/practice/PracticeList.jsx` — ボタン追加、状態管理、ポーリング
+- `karuta-tracker-ui/src/pages/practice/PracticeForm.jsx` — ボタン追加、状態管理、ポーリング
 - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/LineMessageLog.java` — enum 2件追加
 
 ### 新規作成ファイル
