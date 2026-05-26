@@ -93,6 +93,7 @@ Entity Layer (JPA Entity)
 - パスワード平文比較
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
+- 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
 
@@ -2065,7 +2066,7 @@ Entity Layer (JPA Entity)
 - **繰り上げオファーバナー**: 未応答の繰り上げ参加通知がある場合に表示。タップで通知一覧に遷移
 - **次の練習（NEXT / TODAY）**:
   - 次回参加予定の練習日・時間・会場・参加試合番号
-  - 当日の場合は `TODAY` バッジ表示、ADMIN以上には「組み合わせを作成」ボタン
+  - 当日の場合は `TODAY` バッジ表示、全ロールに「組み合わせを作成」ボタン
   - 参加者一覧（段位順ソート、自分はハイライト、キャンセル待ちは別セクション）
 - **参加率TOP3（団体別フィルタリング）**:
   - 当月の参加率上位3名 + 自分がTOP3に入っていない場合は自分の参加率も表示
@@ -2085,7 +2086,7 @@ Entity Layer (JPA Entity)
 **ナビゲーション**:
 - 繰り上げオファーバナー → `/notifications`
 - 「参加登録」リンク → `/practice/participation`
-- 「組み合わせを作成」ボタン（ADMIN、当日のみ） → `/pairings?date={sessionDate}`
+- 「組み合わせを作成」ボタン（全ロール、当日のみ） → `/pairings?date={sessionDate}`
 
 ---
 
@@ -2265,7 +2266,7 @@ Entity Layer (JPA Entity)
 |-------|------|
 | SUPER_ADMIN | 最上位管理者。全機能アクセス可能。選手登録・削除、練習日作成・削除、ロール変更、抽選実行可能。 |
 | ADMIN | 管理者。対戦組み合わせ作成・削除、セッション再抽選可能。練習日作成・削除は不可。 |
-| PLAYER | 一般選手。基本機能（試合記録、参加登録、閲覧）のみ。 |
+| PLAYER | 一般選手。基本機能（試合記録、参加登録、閲覧、所属団体の対戦組み合わせ作成・編集）。組み合わせの削除は不可。 |
 
 ### 6.2 権限マトリックス
 
@@ -2283,8 +2284,9 @@ Entity Layer (JPA Entity)
 | | 練習日一覧・詳細 | ○ | ○ | ○ |
 | 練習参加 | 参加登録 | ○ | ○ | ○ |
 | | 参加状況閲覧 | ○ | ○ | ○ |
-| 対戦組み合わせ | 組み合わせ作成・削除 | ○ | ○ | × |
-| | 自動マッチング | ○ | ○ | × |
+| 対戦組み合わせ | 組み合わせ作成・選手差し替え | ○ | ○（自団体のみ） | ○（所属団体のみ） |
+| | 自動マッチング | ○ | ○（自団体のみ） | ○（所属団体のみ） |
+| | 組み合わせ削除（個別/一括/結果込みリセット） | ○ | ○（自団体のみ） | × |
 | | 組み合わせ閲覧 | ○ | ○ | ○ |
 | 会場管理 | 会場CRUD | ○ | ○ | ○ |
 | 抽選 | 月別抽選実行 | ○ | ○（自団体のみ） | × |

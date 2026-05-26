@@ -131,8 +131,9 @@
 #### 3.0.4 管理者の団体スコープ
 
 - ADMINは1つの団体にのみ紐づく（SUPER_ADMINが設定）
-- ADMINは自団体のリソースのみ操作可能（練習日の作成・編集・削除、組み合わせ作成・削除、抽選再実行・手動編集・結果通知、LINE送信、抜け番活動管理、伝助管理、システム設定）。他団体は一般ユーザーとしての閲覧のみ
-- スコープ検証は共通ユーティリティ `AdminScopeValidator` で統一的に実施
+- ADMINは自団体のリソースのみ操作可能（練習日の作成・編集・削除、組み合わせ削除、抽選再実行・手動編集・結果通知、LINE送信、抜け番活動管理、伝助管理、システム設定）。他団体は一般ユーザーとしての閲覧のみ
+- 対戦組み合わせの作成・自動マッチング・選手差し替えは PLAYER にも開放しており、PLAYER は所属団体（複数可）のセッションに対してのみ操作可能。削除系のみ ADMIN+ 専用
+- スコープ検証は ADMIN は共通ユーティリティ `AdminScopeValidator`、PLAYER は `MatchPairingController` 内の `validateScopeByDate` / `validateScopeByPairingId` で実施
 - SUPER_ADMINは全団体横断の管理権限
 
 #### 3.0.5 通知の団体分離
@@ -152,7 +153,7 @@
 | ナビゲーションバー | 選手名表示、ハンバーガーメニュー（プロフィール、管理メニュー、カレンダー購読、ログアウト） |
 | 繰り上げオファーバナー | 未応答の繰り上げ参加通知がある場合に表示。タップで通知一覧に遷移 |
 | 次の練習 | 次回参加予定の練習日・時間・会場・参加試合番号。当日の場合は `TODAY` バッジ表示 |
-| 組み合わせ作成リンク | ADMIN以上のみ。次の練習日の組み合わせ作成画面へのショートカット |
+| 組み合わせ作成リンク | 全ロール。次の練習日の組み合わせ作成画面へのショートカット |
 | 参加率TOP3（団体別） | 当月の参加率上位3名 + 自分の参加率。所属団体でフィルタリング。1団体所属時はラベルなしで1セクション、複数団体所属時は「全体→団体A→団体B」の順で複数セクション表示 |
 | 次回の参加者 | 次の練習の参加者一覧（段位順ソート、自分はハイライト） |
 
@@ -508,11 +509,11 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - システム未登録の選手との対戦も記録可能（`opponentName` フィールド使用）
 
 **詳細入力（一括入力）:**
-- ADMIN以上が練習日単位で全ペアの結果を一括入力
+- 全ロール（PLAYER+）が練習日単位で全ペアの結果を一括入力
 - 組み合わせ済みのペアが表示され、勝者と枚数差を入力するだけ
 - ペアの変更（選手の差し替え）も同画面で可能
 - お手付き・個人メモの入力は含まない（個人が別途入力）
-- 対戦組み合わせが未作成の場合は「対戦組み合わせが作成されていません」メッセージを表示。ADMIN以上には組み合わせ作成画面への遷移ボタンを表示
+- 対戦組み合わせが未作成の場合は「対戦組み合わせが作成されていません」メッセージを表示。組み合わせ作成画面への遷移ボタン（`/pairings?date=YYYY-MM-DD`）も全ロールに表示
 
 **ペアリング自動生成（本人入力時）:**
 - `MatchForm` から試合結果を登録する際、対応する `match_pairings` レコードが存在しない場合は自動生成する
@@ -1679,7 +1680,7 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 | `/matches/new` | 対戦登録 | ALL | 簡易入力フォーム |
 | `/matches/:id` | 対戦詳細 | ALL | 個別の対戦結果 |
 | `/matches/:id/edit` | 対戦編集 | ALL | 対戦結果の編集 |
-| `/matches/bulk-input/:sessionId` | 一括入力 | ADMIN+ | 練習日単位の結果一括入力（ADMINは自団体のみ） |
+| `/matches/bulk-input/:sessionId` | 一括入力 | PLAYER+ | 練習日単位の結果一括入力（ADMIN/PLAYERは自/所属団体のみ） |
 | `/matches/results/:sessionId?` | 結果閲覧 | ALL | 練習日の全結果を閲覧 |
 | `/practice` | 練習日一覧 | ALL | 練習セッション一覧 |
 | `/practice/new` | 練習日作成 | ADMIN+ | 新しい練習日の作成（ADMINは自団体のみ） |
@@ -1687,8 +1688,8 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 | `/practice/:id/edit` | 練習日編集 | ADMIN+ | 練習日の編集（ADMINは自団体のみ） |
 | `/practice/participation` | 出欠登録 | ALL | 月別カレンダーで参加登録。試合番号チェック欄はチェックボックス周囲もタップ可能。`?year=YYYY&month=M` で初期表示月を指定可（カレンダー画面の出欠登録モーダル経由で年月引き継ぎ）。**カレンダー表示月の抽選確定状態に応じて既存登録のチェック外しを切り替え**（当月扱い: 既存登録ロック／来月扱い: 既存登録もチェック外し可。判定は `resolveAttendanceMode`） |
 | `/practice/cancel` | 参加キャンセル | ALL | 理由付きキャンセル専用ページ。`?year=YYYY&month=M` で対象月を指定（カレンダー画面の出欠登録モーダル経由で年月引き継ぎ。クエリ未指定時は現在年月にフォールバック）。**画面内の月ナビゲーション（前月／翌月ボタン・年月ピッカー）は廃止**し、対象月は遷移元から渡された年月で固定 |
-| `/pairings` | 組み合わせ作成 | ADMIN+ | 手動/自動マッチング（ADMINは自団体のみ） |
-| `/pairings/summary` | 組み合わせサマリー | ADMIN+ | 札のルール表示 |
+| `/pairings` | 組み合わせ作成 | PLAYER+ | 手動/自動マッチング（ADMIN/PLAYERは自/所属団体のみ） |
+| `/pairings/summary` | 組み合わせサマリー | PLAYER+ | 札のルール表示 |
 | `/players` | 選手管理 | SUPER_ADMIN | 選手一覧・作成・削除 |
 | `/players/new` | 選手作成 | SUPER_ADMIN | 新規選手登録 |
 | `/players/:id` | 選手詳細 | ALL | 選手のプロフィール・戦績 |
@@ -1731,7 +1732,7 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 
 **ハンバーガーメニュー（ヘッダー）:**
 - プロフィール
-- 組み合わせ作成（ADMIN+ のみ）
+- 組み合わせ作成（全ロール）
 - 選手管理（SUPER_ADMIN のみ）
 - 会場管理（SUPER_ADMIN のみ）
 - 練習日程作成（ADMIN+ のみ）
@@ -2272,10 +2273,10 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号で取得 |
 | GET | `/exists?date=&matchNumber=` | ALL | 存在確認 |
 | GET | `/pair-history?player1Id=&player2Id=&sessionDate=` | ALL | ペアの対戦履歴 |
-| POST | `/` | ADMIN+ | 単一作成 |
-| POST | `/batch?date=&matchNumber=` | ADMIN+ | 一括作成 |
-| POST | `/auto-match` | ADMIN+ | 自動マッチング |
-| PUT | `/{id}/player?newPlayerId=&side=` | ADMIN+ | 選手差し替え |
+| POST | `/` | PLAYER+ | 単一作成（ADMIN/PLAYERは自/所属団体のみ） |
+| POST | `/batch?date=&matchNumber=` | PLAYER+ | 一括作成（ADMIN/PLAYERは自/所属団体のみ） |
+| POST | `/auto-match` | PLAYER+ | 自動マッチング（ADMIN/PLAYERは自/所属団体のみ） |
+| PUT | `/{id}/player?newPlayerId=&side=` | PLAYER+ | 選手差し替え（ADMIN/PLAYERは自/所属団体のみ） |
 | DELETE | `/{id}` | ADMIN+ | 単一削除 |
 | DELETE | `/{id}/with-result` | ADMIN+ | ペアリング+対応する試合結果を同時削除（リセット） |
 | DELETE | `/date-and-match?date=&matchNumber=` | ADMIN+ | 日付+試合番号の全削除 |
