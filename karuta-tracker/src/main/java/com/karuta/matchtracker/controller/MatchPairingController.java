@@ -5,7 +5,6 @@ import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.MatchPairingService;
-import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.util.OrganizationScopeResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -98,12 +97,12 @@ public class MatchPairingController {
      * 対戦組み合わせを作成
      */
     @PostMapping
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchPairingDto> create(
             @RequestBody MatchPairingCreateRequest request,
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ作成: {}", request);
-        validateAdminScopeByDate(request.getSessionDate(), httpRequest);
+        validateScopeByDate(request.getSessionDate(), httpRequest);
 
         Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
 
@@ -115,7 +114,7 @@ public class MatchPairingController {
      * 対戦組み合わせを一括作成
      */
     @PostMapping("/batch")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<MatchPairingDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
@@ -124,10 +123,10 @@ public class MatchPairingController {
         log.info("対戦組み合わせ一括作成: 日付={}, 試合番号={}, 件数={}, 待機者数={}",
                  date, matchNumber, request.getPairings().size(),
                  request.getWaitingPlayerIds() != null ? request.getWaitingPlayerIds().size() : 0);
-        validateAdminScopeByDate(date, httpRequest);
+        validateScopeByDate(date, httpRequest);
 
         Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
-        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        Long organizationId = resolveOrganizationIdForScopedWrite(date, httpRequest);
 
         List<MatchPairingDto> created = matchPairingService.createBatch(date, matchNumber, request.getPairings(), request.getWaitingPlayerIds(), createdBy, organizationId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -137,14 +136,14 @@ public class MatchPairingController {
      * 対戦組み合わせの選手を変更
      */
     @PutMapping("/{id}/player")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchPairingDto> updatePlayer(
             @PathVariable Long id,
             @RequestParam Long newPlayerId,
             @RequestParam String side,
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ選手変更: ID={}, newPlayerId={}, side={}", id, newPlayerId, side);
-        validateAdminScopeByPairingId(id, httpRequest);
+        validateScopeByPairingId(id, httpRequest);
         Long updatedBy = (Long) httpRequest.getAttribute("currentUserId");
         MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy);
         return ResponseEntity.ok(updated);
@@ -157,7 +156,7 @@ public class MatchPairingController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ削除: ID={}", id);
-        validateAdminScopeByPairingId(id, httpRequest);
+        validateScopeByPairingId(id, httpRequest);
         matchPairingService.delete(id);
         return ResponseEntity.noContent().build();
     }
@@ -172,8 +171,8 @@ public class MatchPairingController {
             @RequestParam Integer matchNumber,
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせ削除: 日付={}, 試合番号={}", date, matchNumber);
-        validateAdminScopeByDate(date, httpRequest);
-        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        validateScopeByDate(date, httpRequest);
+        Long organizationId = resolveOrganizationIdForScopedWrite(date, httpRequest);
         matchPairingService.deleteByDateAndMatchNumber(date, matchNumber, organizationId);
         return ResponseEntity.noContent().build();
     }
@@ -196,13 +195,13 @@ public class MatchPairingController {
      * 自動マッチングを実行
      */
     @PostMapping("/auto-match")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<AutoMatchingResult> autoMatch(
             @RequestBody AutoMatchingRequest request,
             HttpServletRequest httpRequest) {
         log.info("自動マッチング実行: {}", request);
-        validateAdminScopeByDate(request.getSessionDate(), httpRequest);
-        Long organizationId = (Long) httpRequest.getAttribute("adminOrganizationId");
+        validateScopeByDate(request.getSessionDate(), httpRequest);
+        Long organizationId = resolveOrganizationIdForScopedWrite(request.getSessionDate(), httpRequest);
         AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
         return ResponseEntity.ok(result);
     }
@@ -216,41 +215,115 @@ public class MatchPairingController {
             @PathVariable Long id,
             HttpServletRequest httpRequest) {
         log.info("対戦組み合わせリセット（結果込み）: ID={}", id);
-        validateAdminScopeByPairingId(id, httpRequest);
+        validateScopeByPairingId(id, httpRequest);
         MatchPairingDto result = matchPairingService.resetWithResult(id);
         return ResponseEntity.ok(result);
     }
 
     /**
-     * ADMINスコープ検証（日付ベース）
+     * 書き込みリクエストの団体スコープ検証（日付ベース）。
+     *
+     * - SUPER_ADMIN: スコープ強制なし。
+     * - ADMIN: 自団体のセッションが対象日付に存在しなければ ForbiddenException。
+     * - PLAYER: 所属団体のいずれかのセッションが対象日付に存在しなければ ForbiddenException。
+     * - その他のロール: ForbiddenException。
      */
-    private void validateAdminScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
+    private void validateScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        if (!"ADMIN".equals(role)) return;
+        if ("SUPER_ADMIN".equals(role)) return;
 
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        if (adminOrgId == null) {
-            throw new ForbiddenException("他団体の組み合わせは操作できません");
+        if ("ADMIN".equals(role)) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            if (adminOrgId == null) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
+                    .orElseThrow(() -> new ForbiddenException("他団体の組み合わせは操作できません"));
+            return;
         }
-        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
-                .orElseThrow(() -> new ForbiddenException("他団体の組み合わせは操作できません"));
+
+        if ("PLAYER".equals(role)) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            if (currentUserId == null) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            boolean accessible = practiceSessionRepository.findByDateRange(date, date).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                    .anyMatch(playerOrgIds::contains);
+            if (!accessible) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            return;
+        }
+
+        throw new ForbiddenException("操作権限がありません");
     }
 
     /**
-     * ADMINスコープ検証（MatchPairing IDベース：ペアリング所属組織で照合）
+     * 書き込みリクエストの団体スコープ検証（MatchPairing IDベース：ペアリング所属組織で照合）。
+     *
+     * - SUPER_ADMIN: スコープ強制なし。
+     * - ADMIN: 自団体と一致しなければ ForbiddenException。
+     * - PLAYER: 所属団体のいずれとも一致しなければ ForbiddenException。
+     * - その他のロール: ForbiddenException。
      */
-    private void validateAdminScopeByPairingId(Long pairingId, HttpServletRequest httpRequest) {
+    private void validateScopeByPairingId(Long pairingId, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        if (!"ADMIN".equals(role)) return;
+        if ("SUPER_ADMIN".equals(role)) return;
 
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        if (adminOrgId == null) {
-            throw new ForbiddenException("他団体の組み合わせは操作できません");
-        }
         Long pairingOrgId = matchPairingService.getOrganizationIdByPairingId(pairingId);
-        if (pairingOrgId == null || !adminOrgId.equals(pairingOrgId)) {
+        if (pairingOrgId == null) {
             throw new ForbiddenException("他団体の組み合わせは操作できません");
         }
+
+        if ("ADMIN".equals(role)) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            if (adminOrgId == null || !adminOrgId.equals(pairingOrgId)) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            return;
+        }
+
+        if ("PLAYER".equals(role)) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            if (currentUserId == null) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            if (!playerOrgIds.contains(pairingOrgId)) {
+                throw new ForbiddenException("他団体の組み合わせは操作できません");
+            }
+            return;
+        }
+
+        throw new ForbiddenException("操作権限がありません");
+    }
+
+    /**
+     * 書き込みリクエストの団体スコープに使う organizationId を、ロールに応じて解決する。
+     *
+     * - SUPER_ADMIN: null（組織非限定。サービス層は同日全セッションを対象に動作）。
+     * - ADMIN: adminOrganizationId。
+     * - PLAYER: 対象日付の PracticeSession のうち、所属団体に含まれるものの組織ID。
+     *   複数該当する場合は最初の1件を採用する（validateScopeByDate を先に通過させる前提）。
+     */
+    private Long resolveOrganizationIdForScopedWrite(LocalDate date, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if ("ADMIN".equals(role)) {
+            return (Long) httpRequest.getAttribute("adminOrganizationId");
+        }
+        if ("PLAYER".equals(role)) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            if (currentUserId == null) return null;
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            return practiceSessionRepository.findByDateRange(date, date).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                    .filter(playerOrgIds::contains)
+                    .findFirst()
+                    .orElse(null);
+        }
+        return null;
     }
 
     private boolean hasSessionOnDateForUser(LocalDate date, Long userId) {
