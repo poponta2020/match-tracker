@@ -33,7 +33,7 @@ const SettingsPage = () => {
     { label: 'メンター管理', icon: Users, path: '/settings/mentor', visible: true },
     { label: 'カレンダー購読', icon: Rss, path: '/settings/calendar', visible: true },
     { label: '練習日登録', icon: Calendar, path: '/practice/new', visible: isAdmin() },
-    { label: '組み合わせ作成', icon: Shuffle, path: '/pairings', visible: isAdmin() },
+    { label: '組み合わせ作成', icon: Shuffle, path: '/pairings', visible: true },
     { label: 'LINE通知スケジュール', icon: MessageSquare, path: '/admin/line/schedule', visible: isAdmin() },
     { label: '伝助管理', icon: ClipboardList, path: '/admin/densuke', visible: isAdmin() },
     { label: '抽選管理', icon: Dices, path: '/admin/lottery', visible: isAdmin() },

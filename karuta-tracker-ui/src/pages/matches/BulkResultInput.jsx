@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import { Save, AlertCircle, Pencil, X, BookOpen, User, Eye, UsersRound, MoreHorizontal } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { computeByePlayersByMatch } from './byePlayersLogic';
@@ -46,14 +45,6 @@ const BulkResultInput = () => {
   // 抜け番選手の算出（byePlayersLogic.js に切り出し済みの純粋関数を使用）
   const computeByePlayers = (sessionData, allPairings, allParticipants) =>
     computeByePlayersByMatch(sessionData, allPairings, allParticipants);
-
-  // 権限チェック
-  useEffect(() => {
-    if (!isAdmin() && !isSuperAdmin()) {
-      alert('この機能は管理者のみ利用できます');
-      navigate('/');
-    }
-  }, [navigate]);
 
   // データ取得
   useEffect(() => {
@@ -499,7 +490,7 @@ const BulkResultInput = () => {
             <p className="text-[#9b8a7e] text-sm mb-4">
               この試合の対戦組み合わせが作成されていません
             </p>
-            {(isAdmin() || isSuperAdmin()) && session && (
+            {session && (
               <button
                 onClick={() => navigate(`/pairings?date=${session.sessionDate}&matchNumber=${currentMatchNumber}`)}
                 className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] text-sm"

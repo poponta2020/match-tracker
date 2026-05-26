@@ -10,7 +10,6 @@ import {
   Trophy,
   User,
 } from 'lucide-react';
-import { isAdmin } from '../utils/auth';
 import { sortPlayersByRank } from '../utils/playerSort';
 import PlayerChip from '../components/PlayerChip';
 import LoadingScreen from '../components/LoadingScreen';
@@ -279,7 +278,7 @@ const Home = () => {
                     )}
                   </div>
                 )}
-                {nextPractice.today && isAdmin() && (
+                {nextPractice.today && (
                   <Link
                     to={`/pairings?date=${nextPractice.sessionDate}`}
                     className="mt-3 flex items-center justify-center gap-2 bg-[#1A3654] text-white font-medium py-2.5 rounded-lg hover:bg-[#122740] transition-colors shadow-sm"

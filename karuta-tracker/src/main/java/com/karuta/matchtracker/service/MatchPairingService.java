@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
@@ -114,9 +115,29 @@ public class MatchPairingService {
      */
     @Transactional
     public MatchPairingDto create(MatchPairingCreateRequest request, Long createdBy) {
+        return create(request, createdBy, null);
+    }
+
+    /**
+     * 対戦組み合わせを作成（組織スコープ付き）。
+     *
+     * organizationId が指定された場合、player1Id / player2Id が当該団体・対象日付の
+     * セッション参加者に含まれていることを検証する。組織非限定（SUPER_ADMIN 等）の
+     * ケースに後方互換性を持たせるため、null の場合は参加者検証をスキップする。
+     */
+    @Transactional
+    public MatchPairingDto create(MatchPairingCreateRequest request, Long createdBy, Long organizationId) {
         // バリデーション
         if (request.getPlayer1Id().equals(request.getPlayer2Id())) {
             throw new IllegalArgumentException("同じ選手を対戦相手に設定できません");
+        }
+
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(request.getSessionDate(), organizationId);
+            if (!sessionPlayerIds.contains(request.getPlayer1Id())
+                    || !sessionPlayerIds.contains(request.getPlayer2Id())) {
+                throw new ForbiddenException("対象セッションの参加者でない選手は組み合わせに含められません");
+            }
         }
 
         MatchPairing pairing = MatchPairing.builder()
@@ -141,6 +162,25 @@ public class MatchPairingService {
                                               Long organizationId) {
         // 組織スコープ: セッション参加者でフィルタ
         Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
+
+        // 組織スコープ実行（PLAYER / ADMIN）時は、新規ペアと待機者の選手IDが
+        // 当該セッション参加者であることを保存前に検証する。所属外IDをリクエストに
+        // 混入させて他団体・他セッションのデータを汚染する経路を遮断する。
+        if (organizationId != null) {
+            for (MatchPairingCreateRequest req : requests) {
+                if (!sessionPlayerIds.contains(req.getPlayer1Id())
+                        || !sessionPlayerIds.contains(req.getPlayer2Id())) {
+                    throw new ForbiddenException("対象セッションの参加者でない選手は組み合わせに含められません");
+                }
+            }
+            if (waitingPlayerIds != null) {
+                for (Long playerId : waitingPlayerIds) {
+                    if (!sessionPlayerIds.contains(playerId)) {
+                        throw new ForbiddenException("対象セッションの参加者でない選手は待機者に含められません");
+                    }
+                }
+            }
+        }
 
         // ロック済みペアリング（結果入力済み）を特定して保持
         boolean orgScoped = organizationId != null;
@@ -233,12 +273,31 @@ public class MatchPairingService {
      */
     @Transactional
     public MatchPairingDto updatePlayer(Long id, Long newPlayerId, String side, Long updatedBy) {
+        return updatePlayer(id, newPlayerId, side, updatedBy, null);
+    }
+
+    /**
+     * 対戦組み合わせの選手を更新（組織スコープ付き）。
+     *
+     * organizationId が指定された場合、newPlayerId が当該団体・対象日付のセッション
+     * 参加者に含まれることを検証する。所属外選手を差し替えに使う経路を遮断する。
+     * organizationId が null（SUPER_ADMIN 等の組織非限定）の場合は検証をスキップする。
+     */
+    @Transactional
+    public MatchPairingDto updatePlayer(Long id, Long newPlayerId, String side, Long updatedBy, Long organizationId) {
         if (!"player1".equals(side) && !"player2".equals(side)) {
             throw new IllegalArgumentException("sideは'player1'または'player2'を指定してください");
         }
 
         MatchPairing pairing = matchPairingRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
+
+        if (organizationId != null) {
+            Set<Long> sessionPlayerIds = getSessionAllPlayerIds(pairing.getSessionDate(), organizationId);
+            if (!sessionPlayerIds.contains(newPlayerId)) {
+                throw new ForbiddenException("対象セッションの参加者でない選手には差し替えできません");
+            }
+        }
 
         Long oldPlayer1Id = pairing.getPlayer1Id();
         Long oldPlayer2Id = pairing.getPlayer2Id();
@@ -368,26 +427,40 @@ public class MatchPairingService {
     }
 
     /**
-     * ペアリングIDから所属組織IDを取得（セッション参加者経由で一意特定）
-     * ペアリングのプレイヤーが参加しているセッションの組織IDを返す
+     * ペアリングIDから所属組織IDを取得（セッション参加者経由で一意特定）。
+     *
+     * 「両プレイヤーが同一セッションに参加している」セッションのみを候補とし、
+     * 一意（候補1件）の場合のみ organizationId を返す。0件または複数件の場合は
+     * null を返し、ADMIN/PLAYER のスコープ判定側で ForbiddenException として
+     * 安全側拒否される（片方の選手だけが別団体セッションにも参加していて、別団体
+     * セッションの organizationId が誤って一致してしまうケースを防ぐ）。
      */
     @Transactional(readOnly = true)
     public Long getOrganizationIdByPairingId(Long pairingId) {
         MatchPairing pairing = matchPairingRepository.findById(pairingId)
                 .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", pairingId));
 
-        // ペアリングの日付にあるセッション一覧から、プレイヤーが参加しているセッションを特定
+        // ペアリングの日付にあるセッション一覧から、両プレイヤーが参加しているセッションを特定
         List<com.karuta.matchtracker.entity.PracticeSession> sessions =
                 practiceSessionRepository.findByDateRange(pairing.getSessionDate(), pairing.getSessionDate());
+        List<Long> matchedOrgIds = new ArrayList<>();
         for (com.karuta.matchtracker.entity.PracticeSession session : sessions) {
-            boolean hasPlayer = practiceParticipantRepository.findBySessionId(session.getId()).stream()
-                    .anyMatch(pp -> pp.getPlayerId().equals(pairing.getPlayer1Id())
-                            || pp.getPlayerId().equals(pairing.getPlayer2Id()));
-            if (hasPlayer) {
-                return session.getOrganizationId();
+            java.util.Set<Long> participantIds = practiceParticipantRepository
+                    .findBySessionId(session.getId()).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeParticipant::getPlayerId)
+                    .collect(Collectors.toSet());
+            if (participantIds.contains(pairing.getPlayer1Id())
+                    && participantIds.contains(pairing.getPlayer2Id())) {
+                matchedOrgIds.add(session.getOrganizationId());
             }
         }
-        // セッションが見つからない場合はnull（SUPER_ADMINのみアクセス可）
+        // 両参加セッションが一意特定できる場合のみ organizationId を返す。
+        // 0件: ペアリング作成後にセッション参加者が変更されたなどで両者参加セッションなし。
+        // 複数件: 同日に複数団体で両者とも参加している → 団体一意特定不能。
+        // いずれも ADMIN/PLAYER のスコープ判定で ForbiddenException となる（安全側拒否）。
+        if (matchedOrgIds.size() == 1) {
+            return matchedOrgIds.get(0);
+        }
         return null;
     }
 

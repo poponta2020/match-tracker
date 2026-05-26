@@ -45,7 +45,7 @@
 | 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
 | 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンター閲覧時はACTIVEメンター関係があれば表示、メンティー本人画面では自分以外の投稿者のコメントが1件以上ある場合のみ表示。未通知コメントがある場合は「LINE通知を送信（N件）」ボタンを表示。コメント入力中はボトムナビを非表示にして誤タップを防止） | ALL | 試合詳細表示。**1つの統合カード**に「対戦相手名 〇/×/△ 枚数差（絶対値）」を上段、「試合日 第N試合 会場名」を1行で中段、「お手付き」「メモ」を下段に表示（メンター閲覧時はメンティーのお手付き・メモ、メンティー本人閲覧時は自分のお手付き・メモを統合カード内に表示）。表示条件を満たす場合のみコメントスレッドを表示 |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
-| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | ADMIN+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。組み合わせ未作成時はメッセージ表示+ADMIN以上に作成画面への遷移ボタン。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
+| 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | PLAYER+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。ADMIN/PLAYERは自/所属団体のみ。組み合わせ未作成時はメッセージ表示+全ロールに作成画面への遷移ボタン。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
 | 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示）。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
 
 ---
@@ -69,8 +69,8 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト（D&D / タップ選択対応）、対戦履歴（当日他試合で組まれたペアは `⚠今日` 赤字警告）、新規作成ドロップゾーン、DraggablePlayerChip、DroppableSlot、結果入力済ロック表示・リセットボタン | ADMIN+ | 組み合わせ作成（ドラッグ&ドロップ or タップ選択モード）。タップ選択はスマホ向け代替操作で、選手をタップで選択→別カード/空き枠/待機/新規ペアゾーンをタップで配置。結果入力済みペアリングはロック表示（グレーアウト+「結果入力済」バッジ）、個別リセット可能。**組み合わせ対象は団体の運用設定により切り替わる: 抽選あり運用 (MONTHLY+締め切りあり) は WON のみ / 抽選なし運用 (SAME_DAY または MONTHLY+締め切りなし) は WON+PENDING（バックエンドの `PracticeSessionDto.pairingIncludesPending` で判定）** |
-| 20 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | ADMIN+ | 組み合わせ一覧表示 |
+| 19 | `/pairings` | `PairingGenerator.jsx` | 参加者リスト、待機者リスト（D&D / タップ選択対応）、対戦履歴（当日他試合で組まれたペアは `⚠今日` 赤字警告）、新規作成ドロップゾーン、DraggablePlayerChip、DroppableSlot、結果入力済ロック表示・リセットボタン | PLAYER+ | 組み合わせ作成（ドラッグ&ドロップ or タップ選択モード）。ADMIN/PLAYERは自/所属団体のみ。削除系のみ ADMIN+ 専用。タップ選択はスマホ向け代替操作で、選手をタップで選択→別カード/空き枠/待機/新規ペアゾーンをタップで配置。結果入力済みペアリングはロック表示（グレーアウト+「結果入力済」バッジ）、個別リセット可能。**組み合わせ対象は団体の運用設定により切り替わる: 抽選あり運用 (MONTHLY+締め切りあり) は WON のみ / 抽選なし運用 (SAME_DAY または MONTHLY+締め切りなし) は WON+PENDING（バックエンドの `PracticeSessionDto.pairingIncludesPending` で判定）** |
+| 20 | `/pairings/summary` | `PairingSummary.jsx` | カレンダーピッカー、試合番号タブ | PLAYER+ | 組み合わせ一覧表示 |
 
 ---
 
@@ -211,7 +211,7 @@
 | メニュー項目 | 遷移先 | 権限 |
 |------------|--------|------|
 | プロフィール | `/profile` | ALL |
-| 組み合わせ作成 | `/pairings` | ADMIN+ |
+| 組み合わせ作成 | `/pairings` | ALL |
 | 選手管理 | `/players` | SUPER_ADMIN |
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | ADMIN+ |

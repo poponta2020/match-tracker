@@ -91,7 +91,7 @@ function App() {
             <Route path="/matches/new" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
             <Route path="/matches/:id" element={<ProtectedPage><MatchDetail /></ProtectedPage>} />
             <Route path="/matches/:id/edit" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
-            <Route path="/matches/bulk-input/:sessionId" element={<RoleProtectedPage requiredRole="ADMIN"><BulkResultInput /></RoleProtectedPage>} />
+            <Route path="/matches/bulk-input/:sessionId" element={<ProtectedPage><BulkResultInput /></ProtectedPage>} />
             <Route path="/matches/results/:sessionId?" element={<ProtectedPage><MatchResultsView /></ProtectedPage>} />
 
             {/* 練習 */}
@@ -108,8 +108,8 @@ function App() {
             <Route path="/lottery/offer-response" element={<ProtectedPage><OfferResponse /></ProtectedPage>} />
 
             {/* 組み合わせ */}
-            <Route path="/pairings" element={<RoleProtectedPage requiredRole="ADMIN"><PairingGenerator /></RoleProtectedPage>} />
-            <Route path="/pairings/summary" element={<RoleProtectedPage requiredRole="ADMIN"><PairingSummary /></RoleProtectedPage>} />
+            <Route path="/pairings" element={<ProtectedPage><PairingGenerator /></ProtectedPage>} />
+            <Route path="/pairings/summary" element={<ProtectedPage><PairingSummary /></ProtectedPage>} />
 
             {/* 選手 */}
             <Route path="/players" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerList /></RoleProtectedPage>} />

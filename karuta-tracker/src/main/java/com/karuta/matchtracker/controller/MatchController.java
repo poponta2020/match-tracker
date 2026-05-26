@@ -252,14 +252,11 @@ public class MatchController {
         log.info("POST /api/matches/detailed - Creating new match on {}", request.getMatchDate());
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
-        if (currentUserRole == Role.PLAYER) {
-            if (!currentUserId.equals(request.getCreatedBy())) {
-                throw new ForbiddenException("他のプレイヤーとして試合を登録する権限がありません");
-            }
-            if (!currentUserId.equals(request.getPlayer1Id()) && !currentUserId.equals(request.getPlayer2Id())) {
-                throw new ForbiddenException("参加していない試合を登録する権限がありません");
-            }
+        if (currentUserRole == Role.PLAYER && !currentUserId.equals(request.getCreatedBy())) {
+            throw new ForbiddenException("他のプレイヤーとして試合を登録する権限がありません");
         }
+        // 選手スコープの検証（自分の試合 / 所属団体セッション参加者・同日複数団体時の安全側拒否）は
+        // MatchService.createMatch 側で集中して実施する。
         MatchDto createdMatch = matchService.createMatch(request, currentUserId, currentUserRole);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMatch);
     }
@@ -335,4 +332,5 @@ public class MatchController {
         return sessions.stream().anyMatch(s ->
                 s.getOrganizationId() == null || orgIds.contains(s.getOrganizationId()));
     }
+
 }
