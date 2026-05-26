@@ -402,7 +402,7 @@ class MatchPairingControllerTest {
                     .createdBy(1L)
                     .build();
 
-            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), any()))
                     .thenReturn(created);
 
             // When & Then
@@ -417,7 +417,7 @@ class MatchPairingControllerTest {
                     .andExpect(jsonPath("$.player1Id").value(10))
                     .andExpect(jsonPath("$.player2Id").value(20));
 
-            verify(matchPairingService).create(any(MatchPairingCreateRequest.class), eq(1L));
+            verify(matchPairingService).create(any(MatchPairingCreateRequest.class), eq(1L), any());
         }
 
         @Test
@@ -437,7 +437,7 @@ class MatchPairingControllerTest {
                     .createdBy(1L)
                     .build();
 
-            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), any()))
                     .thenReturn(created);
 
             // When & Then
@@ -450,22 +450,60 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("PLAYER権限では403エラー")
-        void shouldReturn403ForPlayerRole() throws Exception {
-            // Given
+        @DisplayName("PLAYER権限で自分の所属団体のセッションなら作成できる")
+        void shouldCreatePairingAsPlayerForOwnOrg() throws Exception {
+            // Given: PLAYER が所属する団体 7L のセッションが当日存在する
             LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            Long orgId = 7L;
             MatchPairingCreateRequest request = new MatchPairingCreateRequest(
                     date, 1, 10L, 20L
             );
+            mockPlayerScopeForDate(date, playerUserId, orgId);
+
+            MatchPairingDto created = MatchPairingDto.builder()
+                    .id(1L).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A")
+                    .player2Id(20L).player2Name("選手B")
+                    .createdBy(playerUserId)
+                    .build();
+
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), eq(orgId)))
+                    .thenReturn(created);
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "PLAYER")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.id").value(1));
+
+            verify(matchPairingService).create(any(MatchPairingCreateRequest.class), eq(playerUserId), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のセッションは403")
+        void shouldReturn403ForPlayerOutsideOwnOrg() throws Exception {
+            // Given: PLAYER の所属団体に当日のセッションがない
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            MatchPairingCreateRequest request = new MatchPairingCreateRequest(
+                    date, 1, 10L, 20L
+            );
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(99L, date, 99L)));
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
 
-            verify(matchPairingService, never()).create(any(), anyLong());
+            verify(matchPairingService, never()).create(any(), anyLong(), any());
         }
 
         @Test
@@ -483,7 +521,7 @@ class MatchPairingControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
 
-            verify(matchPairingService, never()).create(any(), anyLong());
+            verify(matchPairingService, never()).create(any(), anyLong(), any());
         }
 
         @Test
@@ -495,7 +533,7 @@ class MatchPairingControllerTest {
                     date, 1, 10L, 10L
             );
 
-            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), any()))
                     .thenThrow(new IllegalArgumentException("Player cannot pair with themselves"));
 
             // When & Then
@@ -515,7 +553,7 @@ class MatchPairingControllerTest {
                     date, 1, 10L, 20L
             );
 
-            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), any()))
                     .thenThrow(new DuplicateResourceException("Match pairing already exists"));
 
             // When & Then
@@ -535,7 +573,7 @@ class MatchPairingControllerTest {
                     date, 1, 999L, 20L
             );
 
-            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong()))
+            when(matchPairingService.create(any(MatchPairingCreateRequest.class), anyLong(), any()))
                     .thenThrow(new ResourceNotFoundException("Player not found"));
 
             // When & Then
@@ -620,20 +658,55 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("PLAYER権限では403エラー")
-        void shouldReturn403ForPlayerRole() throws Exception {
+        @DisplayName("PLAYER権限で自分の所属団体のセッションなら一括作成できる")
+        void shouldCreateBatchPairingsAsPlayer() throws Exception {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
             MatchPairingBatchRequest batchRequest = MatchPairingBatchRequest.builder()
                     .pairings(Arrays.asList(
                             new MatchPairingCreateRequest(date, 1, 10L, 20L)
                     ))
                     .waitingPlayerIds(Collections.emptyList())
                     .build();
+            mockPlayerScopeForDate(date, playerUserId, orgId);
+            when(matchPairingService.createBatch(eq(date), eq(matchNumber), anyList(), anyList(), eq(playerUserId), eq(orgId)))
+                    .thenReturn(Collections.emptyList());
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "PLAYER")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("matchNumber", "1")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(batchRequest)))
+                    .andExpect(status().isCreated());
+
+            verify(matchPairingService).createBatch(eq(date), eq(matchNumber), anyList(), anyList(), eq(playerUserId), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のセッションは403")
+        void shouldReturn403ForPlayerBatchOutsideOwnOrg() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            MatchPairingBatchRequest batchRequest = MatchPairingBatchRequest.builder()
+                    .pairings(Arrays.asList(
+                            new MatchPairingCreateRequest(date, 1, 10L, 20L)
+                    ))
+                    .waitingPlayerIds(Collections.emptyList())
+                    .build();
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(99L, date, 99L)));
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings/batch")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -748,7 +821,7 @@ class MatchPairingControllerTest {
         void shouldReturn400ForInvalidSide() throws Exception {
             // Given
             Long id = 1L;
-            when(matchPairingService.updatePlayer(eq(id), eq(10L), eq("invalid"), anyLong()))
+            when(matchPairingService.updatePlayer(eq(id), eq(10L), eq("invalid"), anyLong(), any()))
                     .thenThrow(new IllegalArgumentException("sideは'player1'または'player2'を指定してください"));
 
             // When & Then
@@ -778,7 +851,57 @@ class MatchPairingControllerTest {
                             .param("side", "player1"))
                     .andExpect(status().isNotFound());
 
-            verify(matchPairingService, never()).updatePlayer(anyLong(), anyLong(), anyString(), anyLong());
+            verify(matchPairingService, never()).updatePlayer(anyLong(), anyLong(), anyString(), anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で自分の所属団体のペアリングなら選手差し替えできる")
+        void shouldUpdatePlayerAsPlayer() throws Exception {
+            // Given
+            Long pairingId = 1L;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(orgId));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(orgId);
+
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(pairingId).sessionDate(date).matchNumber(1)
+                    .player1Id(30L).player1Name("選手E").player2Id(20L).player2Name("選手B")
+                    .createdBy(playerUserId).build();
+            when(matchPairingService.updatePlayer(eq(pairingId), eq(30L), eq("player1"), eq(playerUserId), eq(orgId)))
+                    .thenReturn(dto);
+
+            // When & Then
+            mockMvc.perform(put("/api/match-pairings/{id}/player", pairingId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("newPlayerId", "30")
+                            .param("side", "player1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.player1Id").value(30));
+
+            verify(matchPairingService).updatePlayer(eq(pairingId), eq(30L), eq("player1"), eq(playerUserId), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のペアリングは403")
+        void shouldReturn403ForPlayerUpdateOutsideOwnOrg() throws Exception {
+            // Given
+            Long pairingId = 1L;
+            Long playerUserId = 10L;
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(99L);
+
+            // When & Then
+            mockMvc.perform(put("/api/match-pairings/{id}/player", pairingId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("newPlayerId", "30")
+                            .param("side", "player1"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).updatePlayer(anyLong(), anyLong(), anyString(), anyLong(), any());
         }
     }
 
@@ -1106,16 +1229,71 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("PLAYER権限では403エラー")
-        void shouldReturn403ForPlayerRole() throws Exception {
+        @DisplayName("PLAYER権限で自分の所属団体のセッションなら自動マッチングできる")
+        void shouldAutoMatchAsPlayer() throws Exception {
             // Given
             LocalDate date = LocalDate.of(2024, 1, 15);
-            List<Long> playerIds = Arrays.asList(1L, 2L);
+            Long playerUserId = 10L;
+            Long orgId = 7L;
             AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+            mockPlayerScopeForDate(date, playerUserId, orgId);
+
+            AutoMatchingResult result = AutoMatchingResult.builder()
+                    .pairings(Collections.emptyList())
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), eq(orgId)))
+                    .thenReturn(result);
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "PLAYER")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+
+            verify(matchPairingService).autoMatch(any(AutoMatchingRequest.class), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のセッションは403")
+        void shouldReturn403ForPlayerAutoMatchOutsideOwnOrg() throws Exception {
+            // Given
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(99L, date, 99L)));
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings/auto-match")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).autoMatch(any(), any());
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で同日に複数所属団体のセッションがあると403（曖昧性のため）")
+        void shouldReturn403ForPlayerWithAmbiguousMultiOrgSessions() throws Exception {
+            // Given: PLAYER が所属する団体 7L / 8L 両方のセッションが同日存在
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L, 8L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(
+                            buildSession(1L, date, 7L),
+                            buildSession(2L, date, 8L)));
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings/auto-match")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -1163,5 +1341,20 @@ class MatchPairingControllerTest {
         admin.setAdminOrganizationId(adminOrgId);
         when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
         when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(adminOrgId);
+    }
+
+    private void mockPlayerScopeForDate(LocalDate date, Long playerUserId, Long orgId) {
+        when(organizationService.getPlayerOrganizationIds(playerUserId))
+                .thenReturn(List.of(orgId));
+        when(practiceSessionRepository.findByDateRange(date, date))
+                .thenReturn(List.of(buildSession(1L, date, orgId)));
+    }
+
+    private PracticeSession buildSession(Long id, LocalDate date, Long orgId) {
+        PracticeSession session = new PracticeSession();
+        session.setId(id);
+        session.setSessionDate(date);
+        session.setOrganizationId(orgId);
+        return session;
     }
 }

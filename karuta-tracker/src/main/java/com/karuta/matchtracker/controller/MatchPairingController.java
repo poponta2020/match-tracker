@@ -105,8 +105,9 @@ public class MatchPairingController {
         validateScopeByDate(request.getSessionDate(), httpRequest);
 
         Long createdBy = (Long) httpRequest.getAttribute("currentUserId");
+        Long organizationId = resolveOrganizationIdForScopedWrite(request.getSessionDate(), httpRequest);
 
-        MatchPairingDto created = matchPairingService.create(request, createdBy);
+        MatchPairingDto created = matchPairingService.create(request, createdBy, organizationId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -145,7 +146,8 @@ public class MatchPairingController {
         log.info("対戦組み合わせ選手変更: ID={}, newPlayerId={}, side={}", id, newPlayerId, side);
         validateScopeByPairingId(id, httpRequest);
         Long updatedBy = (Long) httpRequest.getAttribute("currentUserId");
-        MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy);
+        Long organizationId = resolveOrganizationIdForScopedWriteByPairingId(id, httpRequest);
+        MatchPairingDto updated = matchPairingService.updatePlayer(id, newPlayerId, side, updatedBy, organizationId);
         return ResponseEntity.ok(updated);
     }
 
@@ -306,7 +308,10 @@ public class MatchPairingController {
      * - SUPER_ADMIN: null（組織非限定。サービス層は同日全セッションを対象に動作）。
      * - ADMIN: adminOrganizationId。
      * - PLAYER: 対象日付の PracticeSession のうち、所属団体に含まれるものの組織ID。
-     *   複数該当する場合は最初の1件を採用する（validateScopeByDate を先に通過させる前提）。
+     *   2件以上該当する（複数団体所属で同日に複数団体の練習がある）場合は、
+     *   どの団体のペアリングを操作しているか曖昧になり別団体データの誤汚染リスク
+     *   があるため ForbiddenException で拒否する（フロント側で organizationId を
+     *   明示する仕組みが整うまでの安全側フォールバック）。
      */
     private Long resolveOrganizationIdForScopedWrite(LocalDate date, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
@@ -317,11 +322,34 @@ public class MatchPairingController {
             Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
             if (currentUserId == null) return null;
             List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
-            return practiceSessionRepository.findByDateRange(date, date).stream()
+            List<Long> matchedOrgIds = practiceSessionRepository.findByDateRange(date, date).stream()
                     .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
                     .filter(playerOrgIds::contains)
-                    .findFirst()
-                    .orElse(null);
+                    .distinct()
+                    .toList();
+            if (matchedOrgIds.size() > 1) {
+                throw new ForbiddenException(
+                        "同日に複数の所属団体で練習があるため、操作対象の団体を特定できません");
+            }
+            return matchedOrgIds.isEmpty() ? null : matchedOrgIds.get(0);
+        }
+        return null;
+    }
+
+    /**
+     * MatchPairing ID を起点に、書き込みリクエストの団体スコープに使う organizationId を解決する。
+     *
+     * - SUPER_ADMIN: null（組織非限定）。
+     * - ADMIN: adminOrganizationId。
+     * - PLAYER: ペアリングの所属組織ID（既に validateScopeByPairingId で所属団体に含まれることが検証されている前提）。
+     */
+    private Long resolveOrganizationIdForScopedWriteByPairingId(Long pairingId, HttpServletRequest httpRequest) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if ("ADMIN".equals(role)) {
+            return (Long) httpRequest.getAttribute("adminOrganizationId");
+        }
+        if ("PLAYER".equals(role)) {
+            return matchPairingService.getOrganizationIdByPairingId(pairingId);
         }
         return null;
     }
