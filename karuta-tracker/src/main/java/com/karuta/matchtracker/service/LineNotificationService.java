@@ -2399,10 +2399,11 @@ public class LineNotificationService {
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED -> true;
-            // KADERU_SYNC_* は押下者本人への明示的なフィードバックなので preference を持たず常時送信。
-            // 実際の sendKaderuSync* メソッドは isNotificationEnabled を経由せず直接送るため、
-            // この switch に到達することは想定していないが、enum 網羅のため定義する。
-            case KADERU_SYNC_COMPLETED, KADERU_SYNC_FAILED -> true;
+            // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
+            // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
+            // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
+            // 押下者の ADMIN チャネル binding 経由で push される。
+            case ADMIN_KADERU_SYNC_COMPLETED, ADMIN_KADERU_SYNC_FAILED -> true;
         };
     }
 
@@ -2861,7 +2862,11 @@ public class LineNotificationService {
     }
 
     /**
-     * Kaderu予約取り込み手動トリガーの完了通知を、押下者本人へ LINE 送信する。
+     * Kaderu予約取り込み手動トリガーの完了通知を、押下者本人 (ADMIN+) へ LINE 送信する。
+     *
+     * <p>{@link LineNotificationType#ADMIN_KADERU_SYNC_COMPLETED} を用いることで
+     * 押下者の ADMIN チャネル binding 経由で push される。/practice/new は ADMIN+
+     * 限定なので、押下者は必ず ADMIN チャネルを持っている前提。
      *
      * <p>preference (opt-in/opt-out) はチェックしない。本通知は押下者本人の
      * 明示的な操作に対するフィードバックなので、設定の有無に関わらず常に送信する。
@@ -2883,16 +2888,16 @@ public class LineNotificationService {
             String message = String.format(
                     "Kaderu予約取り込みが完了しました\n（団体: %s）\n%s",
                     organizationCode != null ? organizationCode : "?", resultLine);
-            sendToPlayer(triggeredByPlayerId, LineNotificationType.KADERU_SYNC_COMPLETED, message);
-            log.info("KADERU_SYNC_COMPLETED: playerId={}, orgCode={}", triggeredByPlayerId, organizationCode);
+            sendToPlayer(triggeredByPlayerId, LineNotificationType.ADMIN_KADERU_SYNC_COMPLETED, message);
+            log.info("ADMIN_KADERU_SYNC_COMPLETED: playerId={}, orgCode={}", triggeredByPlayerId, organizationCode);
         } catch (Exception e) {
-            log.warn("Async KADERU_SYNC_COMPLETED dispatch failed: playerId={}, err={}",
+            log.warn("Async ADMIN_KADERU_SYNC_COMPLETED dispatch failed: playerId={}, err={}",
                     triggeredByPlayerId, e.getMessage(), e);
         }
     }
 
     /**
-     * Kaderu予約取り込み手動トリガーの失敗通知を、押下者本人へ LINE 送信する。
+     * Kaderu予約取り込み手動トリガーの失敗通知を、押下者本人 (ADMIN+) へ LINE 送信する。
      * preference はチェックしない（理由は {@link #sendKaderuSyncCompletedNotification} と同じ）。
      *
      * @param triggeredByPlayerId 押下者のプレイヤーID
@@ -2908,11 +2913,11 @@ public class LineNotificationService {
             String message = String.format(
                     "Kaderu予約取り込みに失敗しました\n（団体: %s）\n%s",
                     organizationCode != null ? organizationCode : "?", reasonLine);
-            sendToPlayer(triggeredByPlayerId, LineNotificationType.KADERU_SYNC_FAILED, message);
-            log.info("KADERU_SYNC_FAILED: playerId={}, orgCode={}, reason={}",
+            sendToPlayer(triggeredByPlayerId, LineNotificationType.ADMIN_KADERU_SYNC_FAILED, message);
+            log.info("ADMIN_KADERU_SYNC_FAILED: playerId={}, orgCode={}, reason={}",
                     triggeredByPlayerId, organizationCode, failureReason);
         } catch (Exception e) {
-            log.warn("Async KADERU_SYNC_FAILED dispatch failed: playerId={}, err={}",
+            log.warn("Async ADMIN_KADERU_SYNC_FAILED dispatch failed: playerId={}, err={}",
                     triggeredByPlayerId, e.getMessage(), e);
         }
     }

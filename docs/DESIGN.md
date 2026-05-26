@@ -2877,7 +2877,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 |---------|------|
 | `kaderu_sync_trigger_events` | INSERT (PENDING) / UPDATE (COMPLETED/FAILED + github_run_id + summary/failure_reason) |
 | `organizations` | SELECT (code 解決) |
-| `line_message_log` | INSERT (KADERU_SYNC_COMPLETED / KADERU_SYNC_FAILED) |
+| `line_message_log` | INSERT (ADMIN_KADERU_SYNC_COMPLETED / ADMIN_KADERU_SYNC_FAILED) |
 
 **ファイル構成**:
 
