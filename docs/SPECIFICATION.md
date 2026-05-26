@@ -134,6 +134,7 @@
 - ADMINは自団体のリソースのみ操作可能（練習日の作成・編集・削除、組み合わせ削除、抽選再実行・手動編集・結果通知、LINE送信、抜け番活動管理、伝助管理、システム設定）。他団体は一般ユーザーとしての閲覧のみ
 - 対戦組み合わせの作成・自動マッチング・選手差し替えは PLAYER にも開放しており、PLAYER は所属団体（複数可）のセッションに対してのみ操作可能。削除系のみ ADMIN+ 専用
 - スコープ検証は ADMIN は共通ユーティリティ `AdminScopeValidator`、PLAYER は `MatchPairingController` 内の `validateScopeByDate` / `validateScopeByPairingId` で実施
+- **既知の制限**: PLAYER が複数団体に所属し、同日に複数所属団体のセッションが存在する場合、書き込み API の対象団体が一意に決まらないため `ForbiddenException` で拒否される（安全側フォールバック）。`/pairings` / `/matches/bulk-input` から `organizationId` を渡す設計拡張は別 Issue で対応予定
 - SUPER_ADMINは全団体横断の管理権限
 
 #### 3.0.5 通知の団体分離

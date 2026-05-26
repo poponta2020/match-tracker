@@ -58,6 +58,7 @@ public class MatchService {
     private final MatchPersonalNoteRepository matchPersonalNoteRepository;
     private final MentorRelationshipRepository mentorRelationshipRepository;
     private final LineNotificationService lineNotificationService;
+    private final OrganizationService organizationService;
 
     /**
      * IDで試合結果を取得
@@ -550,9 +551,13 @@ public class MatchService {
         }
         Long effectiveUserId = currentUserId != null ? currentUserId : updatedBy;
 
-        // PLAYERは対象試合の参加者のみ更新可
+        // PLAYER は対象試合の参加者のみ更新可。ただし、対象試合の練習日に
+        // 自身の所属団体のセッションがあれば、所属団体内の一括結果入力経路として
+        // 他選手間の試合も更新可能（PR #828 で PLAYER 一括入力を開放）。
         if (currentUserRole == Role.PLAYER) {
-            if (!effectiveUserId.equals(match.getPlayer1Id()) && !effectiveUserId.equals(match.getPlayer2Id())) {
+            boolean isOwnMatch = effectiveUserId.equals(match.getPlayer1Id())
+                    || effectiveUserId.equals(match.getPlayer2Id());
+            if (!isOwnMatch && !canPlayerWriteToSessionOnDate(match.getMatchDate(), effectiveUserId)) {
                 throw new ForbiddenException("参加していない試合を更新する権限がありません");
             }
         }
@@ -1010,5 +1015,18 @@ public class MatchService {
         }
 
         return dtos;
+    }
+
+    /**
+     * PLAYER による書き込みリクエストで、対象日付のセッションが PLAYER の所属団体に
+     * 存在するかを判定する。一括結果入力経路（自分が当事者でない試合）の認可判定に使用。
+     * 所属団体なし／対象日にセッションなしの場合は false（書き込み不可）。
+     */
+    private boolean canPlayerWriteToSessionOnDate(LocalDate date, Long userId) {
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(userId);
+        if (orgIds.isEmpty()) return false;
+        return practiceSessionRepository.findByDateRange(date, date).stream()
+                .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                .anyMatch(orgIds::contains);
     }
 }

@@ -93,3 +93,17 @@ status: completed
 ## 実装後の追加対応
 
 - **Home.jsx の「組み合わせを作成」ボタン解放**: 要件定義書では明示されていなかったが、実装中にユーザー認識合わせを行い、当日かつ ADMIN のみ表示だったホーム画面のボタン（`Home.jsx` 行282〜290）も PLAYER 含む全ロール表示に変更した。設定メニュー（タスク3）・MatchResultsView の空状態CTA（タスク4）と挙動を揃え、UX の不整合を解消する目的。タスク5 のドキュメント更新と同コミットで対応。
+
+## レビュー対応（review round 1 / 2）
+
+### review round 1（CRITICAL 2 / WARNING 3）
+- BulkResultInput の内部ロールリダイレクトを撤去（PLAYER 開放）
+- MatchPairingService.create / createBatch / updatePlayer に「対象セッション参加者のみ」選手ID検証を追加
+- `resolveOrganizationIdForScopedWrite` は同日複数所属団体該当時 ForbiddenException で拒否（曖昧性回避）
+- PairingGenerator の「全削除」「結果込みリセット」を `isAdmin() || isSuperAdmin()` ガード
+- MatchPairingControllerTest に PLAYER 自所属団体成功・所属外403・複数団体曖昧性403 を追加
+
+### review round 2（CRITICAL 2 / WARNING 1）
+- **PLAYER 一括結果入力の認可拡張**: `POST /api/matches/detailed`（`MatchController.createMatchDetailed`）と `PUT /api/matches/{id}/detailed`（`MatchService.updateMatch`）の PLAYER 認可を「自分の試合のみ」から「自分の試合 OR 所属団体セッション」へ拡張。`POST /api/bye-activities/batch`（`ByeActivityController.createBatch`）も PLAYER 開放し、`validateScopeByDate` を新設して所属団体スコープを強制。
+- **既知の制限（CRITICAL 2 を将来課題化）**: PLAYER が同日に複数所属団体のセッションを持つ場合、フロントから `organizationId` を渡していないため `resolveOrganizationIdForScopedWrite` が ForbiddenException で拒否する（安全側フォールバック）。複数団体運用の同日重複は実発生がレアと判断し本 PR では据え置き。完全対応には PairingGenerator / BulkResultInput / MatchResultsView から `organizationId` を一貫して伝播させるか、書き込み API のスコープキーを `sessionId` に変える設計変更が必要。別 Issue 化推奨。
+- **Service 層直接テスト追加**: `MatchPairingServiceTest` で `create` / `createBatch` / `updatePlayer` の organizationId 指定時の所属外ID拒否・待機者ID拒否・updatePlayer の所属外 newPlayerId 拒否・organizationId=null の既存経路維持を直接担保。

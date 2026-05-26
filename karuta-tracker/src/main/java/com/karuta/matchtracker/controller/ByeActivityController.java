@@ -10,6 +10,7 @@ import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.ByeActivityRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.service.ByeActivityService;
+import com.karuta.matchtracker.service.OrganizationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class ByeActivityController {
     private final ByeActivityService byeActivityService;
     private final ByeActivityRepository byeActivityRepository;
     private final PracticeSessionRepository practiceSessionRepository;
+    private final OrganizationService organizationService;
 
     /**
      * 指定日の抜け番活動を取得（matchNumber指定時はその試合のみ）
@@ -77,17 +79,20 @@ public class ByeActivityController {
     }
 
     /**
-     * 抜け番活動を一括作成（管理者用）
+     * 抜け番活動を一括作成（PLAYER+: 所属団体スコープ強制）
+     *
+     * PLAYER もペアリング一括入力経路から抜け番活動をまとめて保存できるよう開放。
+     * ADMIN は自団体、PLAYER は所属団体のセッションに限り操作可能。
      */
     @PostMapping("/batch")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<List<ByeActivityDto>> createBatch(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
             @Valid @RequestBody List<ByeActivityBatchItemRequest> items,
             HttpServletRequest httpRequest) {
         log.info("抜け番活動一括作成: date={}, matchNumber={}, count={}", date, matchNumber, items.size());
-        validateAdminScopeByDate(date, httpRequest);
+        validateScopeByDate(date, httpRequest);
         Long userId = (Long) httpRequest.getAttribute("currentUserId");
         List<ByeActivityDto> created = byeActivityService.createBatch(date, matchNumber, items, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -117,23 +122,48 @@ public class ByeActivityController {
         log.info("抜け番活動削除: id={}", id);
         ByeActivity activity = byeActivityRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("ByeActivity", id));
-        validateAdminScopeByDate(activity.getSessionDate(), httpRequest);
+        validateScopeByDate(activity.getSessionDate(), httpRequest);
         byeActivityService.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * ADMINスコープ検証（日付ベース）
+     * 書き込みリクエストの団体スコープ検証（日付ベース）。
+     *
+     * - SUPER_ADMIN: スコープなし
+     * - ADMIN: 自団体のセッションが対象日付に存在しなければ ForbiddenException
+     * - PLAYER: 所属団体のいずれかのセッションが対象日付に存在しなければ ForbiddenException
      */
-    private void validateAdminScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
+    private void validateScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        if (!"ADMIN".equals(role)) return;
+        if ("SUPER_ADMIN".equals(role)) return;
 
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        if (adminOrgId == null) {
-            throw new ForbiddenException("他団体の抜け番活動は操作できません");
+        if ("ADMIN".equals(role)) {
+            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
+            if (adminOrgId == null) {
+                throw new ForbiddenException("他団体の抜け番活動は操作できません");
+            }
+            practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
+                    .orElseThrow(() -> new ForbiddenException("他団体の抜け番活動は操作できません"));
+            return;
         }
-        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
-                .orElseThrow(() -> new ForbiddenException("他団体の抜け番活動は操作できません"));
+
+        if ("PLAYER".equals(role)) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            if (currentUserId == null) {
+                throw new ForbiddenException("他団体の抜け番活動は操作できません");
+            }
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            boolean accessible = practiceSessionRepository.findByDateRange(date, date).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                    .anyMatch(playerOrgIds::contains);
+            if (!accessible) {
+                throw new ForbiddenException("他団体の抜け番活動は操作できません");
+            }
+            return;
+        }
+
+        throw new ForbiddenException("操作権限がありません");
     }
+
 }

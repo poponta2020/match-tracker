@@ -256,8 +256,12 @@ public class MatchController {
             if (!currentUserId.equals(request.getCreatedBy())) {
                 throw new ForbiddenException("他のプレイヤーとして試合を登録する権限がありません");
             }
-            if (!currentUserId.equals(request.getPlayer1Id()) && !currentUserId.equals(request.getPlayer2Id())) {
-                throw new ForbiddenException("参加していない試合を登録する権限がありません");
+            boolean isOwnMatch = currentUserId.equals(request.getPlayer1Id())
+                    || currentUserId.equals(request.getPlayer2Id());
+            // 個人入力経路（自分の試合）または、所属団体のセッションに当日参加可能な
+            // PLAYER による一括入力経路（他選手同士の結果含む）であれば許可。
+            if (!isOwnMatch && !canPlayerWriteToSessionOnDate(request.getMatchDate(), currentUserId)) {
+                throw new ForbiddenException("所属団体のセッション以外の試合は登録できません");
             }
         }
         MatchDto createdMatch = matchService.createMatch(request, currentUserId, currentUserRole);
@@ -334,5 +338,21 @@ public class MatchController {
         if (sessions.isEmpty()) return true;
         return sessions.stream().anyMatch(s ->
                 s.getOrganizationId() == null || orgIds.contains(s.getOrganizationId()));
+    }
+
+    /**
+     * PLAYER による書き込みリクエストで、対象日付のセッションが PLAYER の
+     * 所属団体に存在するかを判定する。一括入力経路（自分が当事者でない試合）の
+     * 認可判定に使用する。
+     *
+     * 防御的 fallback の hasSessionOnDateForUser とは異なり、所属団体なし or
+     * 対象日にセッションなしの場合は false を返し、書き込みを許可しない。
+     */
+    private boolean canPlayerWriteToSessionOnDate(LocalDate date, Long userId) {
+        java.util.List<Long> orgIds = organizationService.getPlayerOrganizationIds(userId);
+        if (orgIds.isEmpty()) return false;
+        return practiceSessionRepository.findByDateRange(date, date).stream()
+                .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                .anyMatch(orgIds::contains);
     }
 }
