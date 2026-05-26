@@ -55,7 +55,7 @@ status: completed
 - **対応Issue:** （Issue作成後に記入）
 
 ### タスク4: MatchResultsView の権限解放と空状態CTA追加
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #826
 - **概要:** `/matches/results` 画面で「結果を一括入力」ボタンのロール判定を撤去し、現在表示中の試合番号のペアリングが0件のときは代わりに「対戦組み合わせを作成」ボタン（遷移先 `/pairings?date=YYYY-MM-DD`）を表示する。
 - **変更対象ファイル:**

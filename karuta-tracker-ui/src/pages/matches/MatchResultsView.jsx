@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { isAdmin, isSuperAdmin } from '../../utils/auth';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Shuffle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { getByePlayerNamesForMatch } from './byePlayersLogic';
 
@@ -633,8 +632,17 @@ const MatchResultsView = () => {
           );
         })()}
 
-        {/* 管理者用：編集ボタン */}
-        {(isAdmin() || isSuperAdmin()) && session && (
+        {/* 編集ボタン or 組み合わせ作成導線 */}
+        {session && currentPairings.length === 0 && (
+          <button
+            onClick={() => navigate(`/pairings?date=${selectedDate}`)}
+            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
+          >
+            <Shuffle className="w-5 h-5" />
+            対戦組み合わせを作成
+          </button>
+        )}
+        {session && currentPairings.length > 0 && (
           <button
             onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
             className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
