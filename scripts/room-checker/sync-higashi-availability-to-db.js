@@ -18,7 +18,7 @@
  *   DATABASE_URL or DB_URL + DB_USERNAME + DB_PASSWORD
  */
 const { chromium } = require("playwright");
-const { Client } = require("pg");
+const { connectWithRetry } = require("./db-connect");
 
 const START_URL = "https://sapporo-community.jp/UserWebApp/Form/UserMenu.aspx";
 
@@ -196,8 +196,7 @@ async function main() {
   const { months } = parseArgs(process.argv);
   const connectionString = buildConnectionString();
 
-  const db = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
-  await db.connect();
+  const db = await connectWithRetry(connectionString);
   console.log("DB接続成功");
 
   const browser = await chromium.launch({ headless: true });

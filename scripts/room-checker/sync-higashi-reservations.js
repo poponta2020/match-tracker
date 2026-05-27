@@ -27,8 +27,8 @@
  */
 
 const { execFileSync } = require("child_process");
-const { Client } = require("pg");
 const path = require("path");
+const { connectWithRetry } = require("./db-connect");
 
 // ============================================================
 // 定数
@@ -409,15 +409,10 @@ async function main() {
 
   // 3. DB同期
   const connectionString = buildConnectionString();
-  const dbClient = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-  });
+  const dbClient = await connectWithRetry(connectionString);
+  console.log("DB接続成功");
 
   try {
-    await dbClient.connect();
-    console.log("DB接続成功");
-
     const { stats, details } = await syncToDb(dbClient, dateVenueMap, dryRun);
 
     // 結果サマリー
