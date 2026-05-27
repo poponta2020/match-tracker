@@ -1,5 +1,5 @@
 const { chromium } = require("playwright");
-const { Client } = require("pg");
+const { connectWithRetry } = require("./db-connect");
 
 const SITE_URL = "https://k2.p-kashikan.jp/kaderu27/index.php";
 
@@ -110,15 +110,11 @@ async function main() {
   if (!connectionString) {
     throw new Error('DATABASE_URL または DB_URL 環境変数が設定されていません');
   }
-  const dbClient = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-  });
+  const dbClient = await connectWithRetry(connectionString);
+  console.log("DB接続成功");
 
   let browser;
   try {
-    await dbClient.connect();
-    console.log("DB接続成功");
 
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
