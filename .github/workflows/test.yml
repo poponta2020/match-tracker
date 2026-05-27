@@ -56,3 +56,22 @@ jobs:
         path: |
           karuta-tracker/build/test-results/
           karuta-tracker/build/reports/jacoco/
+
+    # scripts/room-checker のリトライ・接続ユーティリティ (db-connect.js) の単体テスト。
+    # cron 系 workflow は本番同期スクリプトを走らせるだけでテストゲートにならないので、
+    # ここで PR CI に組み込んでリグレッションを検知する。
+    - name: Set up Node.js (for room-checker tests)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install room-checker dependencies (no Playwright browsers)
+      working-directory: ./scripts/room-checker
+      env:
+        # npm ci で playwright パッケージ自体は入れるが、Chromium バイナリ (~150MB) は不要なのでスキップ
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      run: npm ci
+
+    - name: Run room-checker tests (node --test)
+      working-directory: ./scripts/room-checker
+      run: npm test
