@@ -33,9 +33,15 @@ class MatchServiceMemoNotificationTest {
     @Mock private MatchPairingRepository matchPairingRepository;
     @Mock private PlayerRepository playerRepository;
     @Mock private PracticeSessionRepository practiceSessionRepository;
+    @Mock private PracticeParticipantRepository practiceParticipantRepository;
+    @Mock private VenueRepository venueRepository;
     @Mock private MatchPersonalNoteRepository matchPersonalNoteRepository;
     @Mock private MentorRelationshipRepository mentorRelationshipRepository;
     @Mock private LineNotificationService lineNotificationService;
+    // PR #828 で MatchService.updateMatch に追加された validatePlayerCanWriteMatch が
+    // OrganizationService.getPlayerOrganizationIds を呼ぶ。未モックだと null が @InjectMocks され
+    // throwsWhenPlayerIsNotParticipant で NPE になり ForbiddenException 到達前に落ちる。
+    @Mock private OrganizationService organizationService;
 
     @InjectMocks
     private MatchService matchService;
