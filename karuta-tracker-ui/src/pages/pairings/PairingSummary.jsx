@@ -274,7 +274,9 @@ const PairingSummary = () => {
   };
 
   const handleRegenerate = () => {
+    if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
     const rules = generateCardRules(matchData.length);
+    saveCardRules(date, rules);
     setCardRules(rules);
     setText(generateText(date, matchData, rules));
   };

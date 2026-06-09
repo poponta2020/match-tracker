@@ -53,7 +53,7 @@ status: completed
   - 試合数不一致のケースで `reconcileCardRules` の挙動どおりに表示されること
 
 ### タスク4: 「札を再生成」ボタンに確認ダイアログを追加し、上書き保存させる
-- [ ] 完了
+- [x] 完了
 - **概要:** `handleRegenerate` に `window.confirm` の確認ダイアログを追加し、OK 時のみ既存の再生成処理を実行する。再生成後は `saveCardRules(date, rules)` で localStorage を上書きする。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingSummary.jsx` — `handleRegenerate` 関数の変更
