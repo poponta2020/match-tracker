@@ -18,7 +18,7 @@ status: completed
   - 末尾追加された札ルールが3試合サイクル（一の位→抜き→十の位→一の位…）を `prefix` の末尾位置から正しく継続していること
 
 ### タスク2: localStorage アクセス用ユーティリティ関数の追加
-- [ ] 完了
+- [x] 完了
 - **概要:** `PairingSummary.jsx` 内に以下のユーティリティ関数を追加する。
   - `STORAGE_PREFIX = 'karuta-tracker:card-rules:'`
   - `loadCardRules(date)`: localStorage から復元。JSON パース失敗・配列でない・null は全て `null` を返す

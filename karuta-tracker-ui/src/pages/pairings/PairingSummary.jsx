@@ -110,6 +110,72 @@ function padName(name, width = 6) {
   return name + '\u3000'.repeat(width - name.length);
 }
 
+const STORAGE_PREFIX = 'karuta-tracker:card-rules:';
+
+/** localStorage から日付指定の札ルールを復元。失敗時は null を返す */
+function loadCardRules(date) {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + date);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** localStorage に日付指定の札ルールを保存。失敗時は黙ってスキップ */
+function saveCardRules(date, rules) {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + date, JSON.stringify(rules));
+  } catch {
+    // localStorage 不可環境はスキップ
+  }
+}
+
+/** クライアント端末ローカルタイムの今日（YYYY-MM-DD） */
+function getTodayLocalDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** STORAGE_PREFIX で始まるキーのうち、今日以外の日付のものを localStorage から削除 */
+function cleanupOldCardRules() {
+  try {
+    const today = getTodayLocalDateStr();
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(STORAGE_PREFIX)) {
+        const keyDate = key.substring(STORAGE_PREFIX.length);
+        if (keyDate !== today) toRemove.push(key);
+      }
+    }
+    for (const k of toRemove) localStorage.removeItem(k);
+  } catch {
+    // 失敗時はスキップ
+  }
+}
+
+/**
+ * 保存済み札ルールと試合数を突き合わせ、表示用配列と保存上書きの要否を返す
+ * - 一致: そのまま
+ * - 保存が長い: 先頭totalMatches分のみ返す（localStorage 側は保持）
+ * - 保存が短い: 末尾に不足分を追加生成（localStorage 側は上書き必要）
+ */
+function reconcileCardRules(stored, totalMatches) {
+  if (stored.length === totalMatches) return { rules: stored, changed: false };
+  if (stored.length > totalMatches) {
+    return { rules: stored.slice(0, totalMatches), changed: false };
+  }
+  const extended = generateCardRules(totalMatches, stored);
+  return { rules: extended, changed: true };
+}
+
 /**
  * テキスト生成
  */
