@@ -24,14 +24,22 @@ const tensDigit = (card) => parseInt(card[0], 10);
 /**
  * 札ルール生成（3試合サイクル）
  * @param {number} totalMatches 試合数
+ * @param {Array} [prefix=[]] 既存の札ルール配列。指定時はその末尾から続きを生成して `prefix.concat(extra)` を返す
  * @returns {Array<{type: string, digits: number[], removedCard: string|null, description: string}>}
  */
-function generateCardRules(totalMatches) {
-  const rules = [];
+function generateCardRules(totalMatches, prefix = []) {
+  const rules = prefix.length > 0 ? [...prefix] : [];
   let prevUnusedDigits = null; // 前の試合で使わなかった数字
   let prevUsedDigits = null;   // 前の試合で使った数字
 
-  for (let i = 0; i < totalMatches; i++) {
+  // prefix が与えられた場合、末尾ルールから状態を復元
+  if (prefix.length > 0) {
+    const last = prefix[prefix.length - 1];
+    prevUsedDigits = [...last.digits];
+    prevUnusedDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !last.digits.includes(d));
+  }
+
+  for (let i = rules.length; i < totalMatches; i++) {
     const cyclePos = i % 3;
 
     if (cyclePos === 0) {
