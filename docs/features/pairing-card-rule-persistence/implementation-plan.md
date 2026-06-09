@@ -35,7 +35,7 @@ status: completed
   - localStorage 不可環境（try で SecurityError 等を投げる場合）でも例外が外に漏れないこと
 
 ### タスク3: 画面ロード時の `useEffect` を localStorage 復元優先に変更
-- [ ] 完了
+- [x] 完了
 - **概要:** `PairingSummary.jsx` の `useEffect` 内で、`generateCardRules` を直接呼ぶ箇所を localStorage 復元優先のロジックに置き換える。具体的には：
   1. `cleanupOldCardRules()` を最初に呼んで古いキーを掃除
   2. 既存の対戦データ取得処理はそのまま

@@ -216,6 +216,9 @@ const PairingSummary = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // 古い日付の札ルールを localStorage から削除
+        cleanupOldCardRules();
+
         const sessionRes = await practiceAPI.getByDate(date);
         const totalMatches = sessionRes.data?.totalMatches || 3;
 
@@ -228,8 +231,17 @@ const PairingSummary = () => {
         const data = await Promise.all(promises);
         setMatchData(data);
 
-        // 札ルール生成
-        const rules = generateCardRules(totalMatches);
+        // 札ルール: localStorage 復元優先
+        let rules;
+        const stored = loadCardRules(date);
+        if (stored) {
+          const reconciled = reconcileCardRules(stored, totalMatches);
+          rules = reconciled.rules;
+          if (reconciled.changed) saveCardRules(date, rules);
+        } else {
+          rules = generateCardRules(totalMatches);
+          saveCardRules(date, rules);
+        }
         setCardRules(rules);
 
         // テキスト生成
