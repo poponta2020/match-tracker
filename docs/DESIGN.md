@@ -2202,6 +2202,50 @@ Entity Layer (JPA Entity)
 - 1日前: -100点、2日前: -50点、7日前: -14点
 - 貪欲法で最適ペアリング
 
+##### 札ルール一覧（PairingSummary） — 札ルールの日付別永続化
+
+**パス**: `/pairings/summary?date=YYYY-MM-DD`
+
+**目的**: 同一日内であれば対戦組み合わせを何度作り直しても「札ルール一覧」画面に表示される札ルール（一の位／十の位／抜き）が変わらないようにする（LINE 再配信時の整合性確保）。
+
+**localStorage キー設計**:
+- キー名: `karuta-tracker:card-rules:<YYYY-MM-DD>`（例: `karuta-tracker:card-rules:2026-06-09`）
+- `karuta-tracker:` プレフィックスは既存 localStorage（認証関連）との衝突回避
+- 値: `JSON.stringify(cardRules)` — `generateCardRules()` の戻り値配列をそのままシリアライズ
+
+**画面ロード時の処理順**（`useEffect` 内）:
+1. `cleanupOldCardRules()` で「クライアント端末ローカルタイムの今日」と一致しない日付の保存値をまとめて削除（過去日にアクセスしても保存しない）
+2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得
+3. `loadCardRules(date)` で復元を試行
+4. 復元成功時: `reconcileCardRules(stored, totalMatches)` で試合数差分を吸収（`changed: true` のときのみ `saveCardRules` で上書き）
+5. 復元失敗時: `generateCardRules(totalMatches)` で新規生成し `saveCardRules` で保存
+6. テキストは最新の対戦データ＋札ルールから `generateText` で再生成（対戦変更は自動反映）
+
+**試合数不一致のフォールバック**（`reconcileCardRules`）:
+- 一致: そのまま
+- 保存が短い（試合数が増えた）: `generateCardRules(totalMatches, stored)` で末尾追加 → 上書き
+- 保存が長い（試合数が減った）: 先頭 `totalMatches` 件のみ表示用に返却し、localStorage 側は保持（試合数が戻れば再利用可能）
+
+**`generateCardRules(totalMatches, prefix = [])` の続行ロジック**:
+- `prefix` 空: 現状どおり1試合目から3試合サイクル（1の位→抜き→十の位）でランダム生成
+- `prefix` 非空: 末尾ルールの `digits` から `prevUsedDigits` / `prevUnusedDigits` を復元し、`prefix.length` から続きを生成して `prefix.concat(extra)` を返す
+
+**「札を再生成」ボタン**:
+- 押下時 `window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')` を表示
+- OK のみ `generateCardRules` で再生成 → `saveCardRules` で上書き
+- キャンセル時は何も変化しない（誤タップで初回配信した札ルールを失うリスクを防ぐ）
+
+**例外処理**:
+- localStorage パース失敗・配列でない場合: `loadCardRules` が `null` 返却 → 新規生成にフォールバック
+- localStorage 利用不可（SecurityError／QuotaExceededError 等）: `saveCardRules` で try-catch 握り、保存スキップ（毎回ランダム生成にフォールバック）
+
+**設計判断**:
+- DB ではなく localStorage に保存: 運用は「同一管理者・同一端末・PWA ホーム画面追加」、別端末同期は不要のため、テーブル設計・本番マイグレーション・API 追加のコストに見合わない
+- 削除タイミングは画面ロード時のみ: 専用スケジューラやサービスワーカーは導入しない（シンプルさ優先）
+- 保存対象は札ルールのみ（テキスト全体は保存しない）: テキストは画面ロード時に最新の対戦データから再生成することで対戦変更が自動反映される
+
+**詳細仕様・要件**: `docs/features/pairing-card-rule-persistence/requirements.md`
+
 ---
 
 #### 5.3.4 会場管理
