@@ -112,13 +112,37 @@ function padName(name, width = 6) {
 
 const STORAGE_PREFIX = 'karuta-tracker:card-rules:';
 
-/** localStorage から日付指定の札ルールを復元。失敗時は null を返す */
+const VALID_RULE_TYPES = new Set(['ones', 'nuki', 'tens']);
+
+/**
+ * 保存済み札ルール要素の構造検証
+ * `digits` 配列長は 'ones'/'tens' で5、'nuki' で3 を要求する
+ */
+function isValidCardRule(rule) {
+  if (!rule || typeof rule !== 'object') return false;
+  if (!VALID_RULE_TYPES.has(rule.type)) return false;
+  if (!Array.isArray(rule.digits)) return false;
+  if (!rule.digits.every(d => Number.isInteger(d) && d >= 0 && d <= 9)) return false;
+  const expectedDigitsLen = rule.type === 'nuki' ? 3 : 5;
+  if (rule.digits.length !== expectedDigitsLen) return false;
+  if (typeof rule.description !== 'string') return false;
+  if (rule.removedCard !== null && typeof rule.removedCard !== 'string') return false;
+  return true;
+}
+
+/**
+ * localStorage から日付指定の札ルールを復元。失敗時は null を返す
+ * - 配列でない / 各要素が `isValidCardRule` を満たさない場合も null
+ *   （破損データや旧バージョンを取り込んで `generateCardRules` 続行時に
+ *   `last.digits` 参照で例外を投げるのを防ぐ）
+ */
 function loadCardRules(date) {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + date);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
+    if (!parsed.every(isValidCardRule)) return null;
     return parsed;
   } catch {
     return null;
@@ -232,15 +256,17 @@ const PairingSummary = () => {
         setMatchData(data);
 
         // 札ルール: localStorage 復元優先
+        // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
+        const canPersist = date === getTodayLocalDateStr();
         let rules;
         const stored = loadCardRules(date);
         if (stored) {
           const reconciled = reconcileCardRules(stored, totalMatches);
           rules = reconciled.rules;
-          if (reconciled.changed) saveCardRules(date, rules);
+          if (reconciled.changed && canPersist) saveCardRules(date, rules);
         } else {
           rules = generateCardRules(totalMatches);
-          saveCardRules(date, rules);
+          if (canPersist) saveCardRules(date, rules);
         }
         setCardRules(rules);
 
@@ -276,7 +302,8 @@ const PairingSummary = () => {
   const handleRegenerate = () => {
     if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
     const rules = generateCardRules(matchData.length);
-    saveCardRules(date, rules);
+    // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
+    if (date === getTodayLocalDateStr()) saveCardRules(date, rules);
     setCardRules(rules);
     setText(generateText(date, matchData, rules));
   };
