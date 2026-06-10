@@ -5,101 +5,22 @@ import { practiceAPI } from '../../api/practices';
 import { Copy, Check, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
+import {
+  generateCardRules,
+  loadCardRules,
+  saveCardRules,
+  getTodayLocalDateStr,
+  cleanupOldCardRules,
+  reconcileCardRules,
+} from './cardRules';
 
-/**
- * 札番号は01〜99, 00(=100番)の100枚
- * 2桁ゼロパディングで管理
- */
-const ALL_CARDS = Array.from({ length: 100 }, (_, i) => {
-  const num = (i + 1) % 100; // 1->01, 2->02, ..., 99->99, 100->00
-  return String(num).padStart(2, '0');
-});
-
-/** 札番号の1の位を取得 */
-const onesDigit = (card) => parseInt(card[1], 10);
-
-/** 札番号の10の位を取得 */
-const tensDigit = (card) => parseInt(card[0], 10);
-
-/**
- * 札ルール生成（3試合サイクル）
- * @param {number} totalMatches 試合数
- * @returns {Array<{type: string, digits: number[], removedCard: string|null, description: string}>}
- */
-function generateCardRules(totalMatches) {
-  const rules = [];
-  let prevUnusedDigits = null; // 前の試合で使わなかった数字
-  let prevUsedDigits = null;   // 前の試合で使った数字
-
-  for (let i = 0; i < totalMatches; i++) {
-    const cyclePos = i % 3;
-
-    if (cyclePos === 0) {
-      // ルール①: 1の位 — 0〜9から5つランダム
-      const allDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-      const chosen = pickRandom(allDigits, 5).sort((a, b) => a - b);
-      const unused = allDigits.filter(d => !chosen.includes(d));
-      prevUnusedDigits = unused;
-      prevUsedDigits = chosen;
-
-      rules.push({
-        type: 'ones',
-        digits: chosen,
-        removedCard: null,
-        description: `一の位${chosen.join('.')}`,
-      });
-    } else if (cyclePos === 1) {
-      // ルール②: 抜き — 前の試合で使わなかった5つから3つ選ぶ
-      const source = prevUnusedDigits || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-      const chosen = pickRandom(source, 3).sort((a, b) => a - b);
-
-      // 1の位 OR 10の位にchosenが含まれる札 → 51枚
-      const matchingCards = ALL_CARDS.filter(card =>
-        chosen.includes(onesDigit(card)) || chosen.includes(tensDigit(card))
-      );
-
-      // 51枚からランダムに1枚抜く
-      const removedCard = matchingCards[Math.floor(Math.random() * matchingCards.length)];
-
-      prevUsedDigits = chosen;
-      prevUnusedDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !chosen.includes(d));
-
-      rules.push({
-        type: 'nuki',
-        digits: chosen,
-        removedCard,
-        description: `${chosen.join('.')}　${parseInt(removedCard, 10) || 100}抜き`,
-      });
-    } else {
-      // ルール③: 10の位 — 前の試合の3つ以外の7つから5つ選ぶ
-      const source = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !prevUsedDigits.includes(d));
-      const chosen = pickRandom(source, 5).sort((a, b) => a - b);
-      const unused = source.filter(d => !chosen.includes(d));
-      prevUnusedDigits = unused;
-      prevUsedDigits = chosen;
-
-      rules.push({
-        type: 'tens',
-        digits: chosen,
-        removedCard: null,
-        description: `十の位${chosen.join('.')}`,
-      });
-    }
-  }
-
-  return rules;
-}
-
-/** 配列からn個ランダムに選ぶ */
-function pickRandom(arr, n) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, n);
-}
+// 札ルール関連の純粋関数は ./cardRules.js に extract（テスト可能化のため）。
+// PairingSummary 専用の関数（padName / generateText）のみ本ファイルに残す。
 
 /** 名前を全角6文字幅に左詰めパディング（全角スペースで埋める） */
 function padName(name, width = 6) {
   if (name.length >= width) return name;
-  return name + '\u3000'.repeat(width - name.length);
+  return name + '　'.repeat(width - name.length);
 }
 
 /**
@@ -142,6 +63,9 @@ const PairingSummary = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // 古い日付の札ルールを localStorage から削除
+        cleanupOldCardRules();
+
         const sessionRes = await practiceAPI.getByDate(date);
         const totalMatches = sessionRes.data?.totalMatches || 3;
 
@@ -154,8 +78,19 @@ const PairingSummary = () => {
         const data = await Promise.all(promises);
         setMatchData(data);
 
-        // 札ルール生成
-        const rules = generateCardRules(totalMatches);
+        // 札ルール: localStorage 復元優先
+        // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
+        const canPersist = date === getTodayLocalDateStr();
+        let rules;
+        const stored = loadCardRules(date);
+        if (stored) {
+          const reconciled = reconcileCardRules(stored, totalMatches);
+          rules = reconciled.rules;
+          if (reconciled.changed && canPersist) saveCardRules(date, rules);
+        } else {
+          rules = generateCardRules(totalMatches);
+          if (canPersist) saveCardRules(date, rules);
+        }
         setCardRules(rules);
 
         // テキスト生成
@@ -188,7 +123,10 @@ const PairingSummary = () => {
   };
 
   const handleRegenerate = () => {
+    if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
     const rules = generateCardRules(matchData.length);
+    // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
+    if (date === getTodayLocalDateStr()) saveCardRules(date, rules);
     setCardRules(rules);
     setText(generateText(date, matchData, rules));
   };
