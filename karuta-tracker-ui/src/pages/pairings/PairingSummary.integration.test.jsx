@@ -184,7 +184,15 @@ describe('PairingSummary 札ルール localStorage 永続化', () => {
 
   it('シナリオ(5b): 札再生成ボタンで confirm OK → localStorage 上書き', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const stored = generateCardRules(3);
+    // 識別用センチネル description を含む手作りの保存値。
+    // `generateCardRules` が生成する `一の位X.X.X.X.X` 等の形式とは
+    // 確実に区別でき、再生成で saveCardRules が呼ばれて上書きされた
+    // ことを確率に依存せず検証できる。
+    const stored = [
+      { type: 'ones', digits: [0, 1, 2, 3, 4], removedCard: null, description: 'SENTINEL_ONES' },
+      { type: 'nuki', digits: [5, 6, 7], removedCard: '57', description: 'SENTINEL_NUKI' },
+      { type: 'tens', digits: [0, 1, 2, 8, 9], removedCard: null, description: 'SENTINEL_TENS' },
+    ];
     localStorage.setItem(STORAGE_PREFIX + TODAY, JSON.stringify(stored));
 
     window.confirm = vi.fn().mockReturnValue(true);
@@ -194,6 +202,10 @@ describe('PairingSummary 札ルール localStorage 永続化', () => {
       expect(screen.getByRole('button', { name: /札を再生成/ })).toBeInTheDocument();
     });
 
+    // 初期ロード時は totalMatches=stored.length なので reconcile は
+    // `changed: false` を返す → saveCardRules は呼ばれず stored が温存される
+    expect(JSON.parse(localStorage.getItem(STORAGE_PREFIX + TODAY))).toEqual(stored);
+
     await user.click(screen.getByRole('button', { name: /札を再生成/ }));
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
@@ -202,8 +214,16 @@ describe('PairingSummary 札ルール localStorage 永続化', () => {
     expect(afterRegen[0].type).toBe('ones');
     expect(afterRegen[1].type).toBe('nuki');
     expect(afterRegen[2].type).toBe('tens');
-    // 構造は同じだが、再生成なので元の stored とは別物（高確率で異なる）
-    // 厳密一致は確率的に揺れるためチェックしない
+
+    // SENTINEL description は再生成後には存在しない（=上書きされた決定的証拠）。
+    // 再生成される description は `一の位...` / `...抜き` / `十の位...` 形式なので
+    // SENTINEL とは一致しえない。
+    expect(afterRegen[0].description).not.toBe('SENTINEL_ONES');
+    expect(afterRegen[1].description).not.toBe('SENTINEL_NUKI');
+    expect(afterRegen[2].description).not.toBe('SENTINEL_TENS');
+    expect(afterRegen[0].description).toMatch(/^一の位/);
+    expect(afterRegen[1].description).toMatch(/抜き$/);
+    expect(afterRegen[2].description).toMatch(/^十の位/);
   });
 
   it('過去日の再生成では localStorage に書き込まない', async () => {
