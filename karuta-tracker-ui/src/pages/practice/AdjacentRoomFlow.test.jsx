@@ -118,6 +118,12 @@ const renderListAndOpenSession = async (user) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // テスト用セッションは sessionDate: '2026-04-12'。PracticeList の `currentDate`
+  // は `new Date()` で初期化され、`getSessionsForDate(day)` は currentDate の
+  // 年月でセッションをフィルタするため、システム時刻を 2026-04-12 に固定しないと
+  // 日付セルクリックでセッションが見つからずモーダルが開かない。
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(2026, 3, 12, 12, 0, 0)); // 2026-04-12 12:00 ローカル
 
   practiceAPI.getSessionSummaries.mockResolvedValue({ data: [sessionSummary] });
   practiceAPI.getByYearMonth.mockResolvedValue({ data: [sessionSummary] });
@@ -156,6 +162,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   if (originalBroadcastChannel === undefined) {
     delete window.BroadcastChannel;
@@ -166,7 +173,7 @@ afterEach(() => {
 
 describe('adjacent room reservation proxy flow', () => {
   it('creates a proxy session, opens the proxy view, then keeps manual confirmation available', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     await user.click(screen.getByText('隣室を予約'));
@@ -200,7 +207,7 @@ describe('adjacent room reservation proxy flow', () => {
       response: { data: { errorCode: 'VENUE_NOT_SUPPORTED', message: 'unsupported venue' } },
     });
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     await user.click(screen.getByText('隣室を予約'));
@@ -218,7 +225,7 @@ describe('adjacent room reservation proxy flow', () => {
       response: { data: { errorCode: 'LOGIN_FAILED', message: 'ログインに失敗しました' } },
     });
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     await user.click(screen.getByText('隣室を予約'));
@@ -240,7 +247,7 @@ describe('adjacent room reservation proxy flow', () => {
       .mockResolvedValueOnce({ data: sessionWithAdjacentRoom })
       .mockResolvedValueOnce({ data: completedSession });
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     // Register a proxy token first so the completion handler accepts the notification
@@ -265,7 +272,7 @@ describe('adjacent room reservation proxy flow', () => {
   });
 
   it('ignores reservation-completed messages whose token does not match the registered proxy session', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     await user.click(screen.getByText('隣室を予約'));
@@ -289,7 +296,7 @@ describe('adjacent room reservation proxy flow', () => {
   });
 
   it('ignores window.message events from origins other than the API origin', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await renderListAndOpenSession(user);
 
     await user.click(screen.getByText('隣室を予約'));
@@ -320,7 +327,7 @@ describe('adjacent room reservation proxy flow', () => {
       data: { ...sessionWithAdjacentRoom, reservationConfirmedAt: '2026-04-12T10:00:00' },
     });
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PracticeList />);
 
     const dayCell = await screen.findByText('12');
