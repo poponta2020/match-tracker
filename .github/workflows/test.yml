@@ -75,3 +75,16 @@ jobs:
     - name: Run room-checker tests (node --test)
       working-directory: ./scripts/room-checker
       run: npm test
+
+    # karuta-tracker-ui の Vitest テスト（コンポーネント結合 + 純粋関数）。
+    # 同一ジョブ内で setup-node を共有するため、Node のセットアップは上の
+    # room-checker 用ステップを再利用する（追加の setup-node は不要）。
+    # lint は事前から多数のエラーが残っているため CI ゲートには含めない
+    # （別タスクで lint クリーンアップしてから組み込む方針）。
+    - name: Install karuta-tracker-ui dependencies
+      working-directory: ./karuta-tracker-ui
+      run: npm ci
+
+    - name: Run karuta-tracker-ui tests (vitest)
+      working-directory: ./karuta-tracker-ui
+      run: npm test
