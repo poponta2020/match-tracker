@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { matchAPI, matchCommentsAPI } from '../../api';
+import { matchAPI, matchCommentsAPI, matchVideoAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchCommentThread from './MatchCommentThread';
+import VideoRegisterModal from '../../components/VideoRegisterModal';
 import { useAuth } from '../../context/AuthContext';
-import { Edit, Trash2, AlertCircle } from 'lucide-react';
+import { ROLES } from '../../utils/auth';
+import { buildYoutubeEmbedUrl } from '../../utils/youtube';
+import { Edit, Trash2, AlertCircle, Youtube, ExternalLink, Plus } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
 
@@ -22,22 +25,28 @@ const MatchDetail = () => {
   const [hasMentorRelation, setHasMentorRelation] = useState(false);
   const [menteeIdForComments, setMenteeIdForComments] = useState(null);
   const [commentsByOthersExist, setCommentsByOthersExist] = useState(false);
+  // 試合動画セクション用の状態
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [videoDeleteConfirm, setVideoDeleteConfirm] = useState(false);
+  const [videoDeleting, setVideoDeleting] = useState(false);
+  const [videoError, setVideoError] = useState(null);
+
+  // 試合詳細の取得（動画の追加/編集/削除後の再取得でも使い回す）
+  const fetchMatch = useCallback(async () => {
+    try {
+      const params = queryPlayerId ? { playerId: queryPlayerId } : {};
+      const response = await matchAPI.getById(id, params);
+      setMatch(response.data);
+    } catch (error) {
+      console.error('試合記録の取得に失敗しました:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, queryPlayerId]);
 
   useEffect(() => {
-    const fetchMatch = async () => {
-      try {
-        const params = queryPlayerId ? { playerId: queryPlayerId } : {};
-        const response = await matchAPI.getById(id, params);
-        setMatch(response.data);
-      } catch (error) {
-        console.error('試合記録の取得に失敗しました:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMatch();
-  }, [id, queryPlayerId]);
+  }, [fetchMatch]);
 
   // メンター関係の確認
   useEffect(() => {
@@ -85,6 +94,33 @@ const MatchDetail = () => {
       setDeleting(false);
       setDeleteConfirm(false);
     }
+  };
+
+  // 動画の紐付け削除（YouTube上の動画は残る）
+  const handleVideoDelete = async () => {
+    if (!match?.video) return;
+    setVideoDeleting(true);
+    setVideoError(null);
+    try {
+      await matchVideoAPI.remove(match.video.id);
+      setVideoDeleteConfirm(false);
+      await fetchMatch();
+    } catch (error) {
+      console.error('動画の削除に失敗しました:', error);
+      // 確認モーダルを閉じ、動画セクション内にエラーを表示する
+      setVideoDeleteConfirm(false);
+      setVideoError(
+        error.response?.data?.message || '動画の削除に失敗しました'
+      );
+    } finally {
+      setVideoDeleting(false);
+    }
+  };
+
+  // 動画の追加/編集の成功時に試合詳細を再取得する
+  const handleVideoSuccess = () => {
+    setVideoError(null);
+    fetchMatch();
   };
 
   if (loading) {
@@ -149,6 +185,32 @@ const MatchDetail = () => {
   const otetsukiCount = isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount;
   const personalNotes = isOtherPlayer ? match.menteePersonalNotes : match.myPersonalNotes;
   const hasNotes = otetsukiCount != null || personalNotes;
+
+  // 試合動画セクション用の導出値
+  const video = match.video;
+  const isAdminUser =
+    currentPlayer?.role === ROLES.ADMIN || currentPlayer?.role === ROLES.SUPER_ADMIN;
+  // 編集・削除は登録者本人または管理者のみ（サーバー側でも所有者チェックあり）
+  const canManageVideo =
+    !!video && (video.createdBy === currentPlayer?.id || isAdminUser);
+  const videoEmbedUrl = video?.youtubeVideoId
+    ? buildYoutubeEmbedUrl(video.youtubeVideoId)
+    : null;
+  // 両選手が登録済みの試合のみ動画を追加できる（ゲスト/未登録相手は自然キーが成立しない）
+  const bothPlayersRegistered =
+    !!match.player1Id &&
+    !!match.player2Id &&
+    match.player1Id !== 0 &&
+    match.player2Id !== 0;
+  // VideoRegisterModal に渡す対象試合（MatchDto の自然キー項目をマッピング）
+  const videoMatchProp = {
+    matchDate: match.matchDate,
+    matchNumber: match.matchNumber,
+    player1Id: match.player1Id,
+    player2Id: match.player2Id,
+    player1Name: match.player1Name,
+    player2Name: match.player2Name,
+  };
 
   return (
     <>
@@ -232,6 +294,90 @@ const MatchDetail = () => {
         )}
       </div>
 
+      {/* 試合動画
+          - 動画あり: YouTube 埋め込み再生 + タイトル + 外部リンク（編集/削除は登録者本人 or 管理者のみ）
+          - 動画なし: 両選手が登録済みの試合のみ「動画を追加」ボタンを表示 */}
+      {(video || bothPlayersRegistered) && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <Youtube className="w-5 h-5 text-red-600" />
+              試合動画
+            </h2>
+            {video && canManageVideo && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowVideoModal(true)}
+                  className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                >
+                  <Edit className="w-4 h-4" />
+                  編集
+                </button>
+                <button
+                  onClick={() => {
+                    setVideoError(null);
+                    setVideoDeleteConfirm(true);
+                  }}
+                  className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors text-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  削除
+                </button>
+              </div>
+            )}
+          </div>
+
+          {videoError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span className="text-sm">{videoError}</span>
+            </div>
+          )}
+
+          {video ? (
+            <div>
+              {/* 16:9 レスポンシブ埋め込み */}
+              <div className="relative w-full overflow-hidden rounded-lg bg-black" style={{ paddingTop: '56.25%' }}>
+                <iframe
+                  src={videoEmbedUrl}
+                  title={video.title || '試合動画'}
+                  className="absolute inset-0 w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              </div>
+              {video.title && (
+                <p className="mt-3 text-gray-900 font-medium break-words">{video.title}</p>
+              )}
+              <a
+                href={video.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700"
+              >
+                <ExternalLink className="w-4 h-4" />
+                YouTubeで開く
+              </a>
+            </div>
+          ) : (
+            <div className="text-center py-2">
+              <p className="text-gray-500 text-sm mb-4">この試合の動画はまだ登録されていません。</p>
+              <button
+                onClick={() => {
+                  setVideoError(null);
+                  setShowVideoModal(true);
+                }}
+                className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                動画を追加
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* コメントスレッド
           - メンター閲覧時: メンター関係(ACTIVE)があれば常に表示
           - メンティー本人: 自分以外のコメントが1件以上あるときのみ表示 */}
@@ -264,6 +410,48 @@ const MatchDetail = () => {
               <button
                 onClick={() => setDeleteConfirm(false)}
                 disabled={deleting}
+                className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 動画 登録/編集モーダル（match prop は MatchDto の自然キー項目をマッピング） */}
+      {showVideoModal && (
+        <VideoRegisterModal
+          match={videoMatchProp}
+          video={canManageVideo ? video : null}
+          onClose={() => setShowVideoModal(false)}
+          onSuccess={handleVideoSuccess}
+        />
+      )}
+
+      {/* 動画 削除確認モーダル（紐付けのみ削除・YouTube上の動画は残る） */}
+      {videoDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
+              試合動画を削除
+            </h3>
+            <p className="text-gray-600 mb-6">
+              この試合に紐付けた動画を削除してもよろしいですか？
+              <br />
+              削除されるのは試合との紐付けのみで、YouTube上の動画は残ります。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleVideoDelete}
+                disabled={videoDeleting}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+              >
+                {videoDeleting ? '削除中...' : '削除する'}
+              </button>
+              <button
+                onClick={() => setVideoDeleteConfirm(false)}
+                disabled={videoDeleting}
                 className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium"
               >
                 キャンセル

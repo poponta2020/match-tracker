@@ -62,7 +62,8 @@ public class MatchDto {
      *
      * 同一自然キー（試合日・試合番号・両選手）の {@code match_videos} レコードが
      * 存在する場合のみ {@link MatchDto#video} に設定される。動画なしの試合では null。
-     * 再生・サムネイル表示に必要な最小限の項目のみを持つ。
+     * 再生・サムネイル表示と、編集・削除ボタンの表示判定（登録者本人チェック）に
+     * 必要な項目のみを持つ。
      */
     @Data
     @NoArgsConstructor
@@ -73,6 +74,7 @@ public class MatchDto {
         private String videoUrl;
         private String youtubeVideoId;
         private String title;
+        private Long createdBy;
 
         /**
          * 動画エンティティからネストDTOへ変換
@@ -89,6 +91,7 @@ public class MatchDto {
                     .videoUrl(video.getVideoUrl())
                     .youtubeVideoId(video.getYoutubeVideoId())
                     .title(video.getTitle())
+                    .createdBy(video.getCreatedBy())
                     .build();
         }
     }

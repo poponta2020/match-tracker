@@ -57,7 +57,7 @@ status: completed
 - **対応Issue:** #848
 
 ### タスク5: ① 試合詳細画面の動画セクション
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchDetail.jsx` の統合カード下に「試合動画」セクションを追加。動画あり→埋め込み再生+（登録者本人/ADMIN+のみ）編集・削除ボタン、動画なし→「動画を追加」ボタン（VideoRegisterModal・対象固定モード）
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchDetail.jsx` — 動画セクション追加（MatchDto.video を使用）
