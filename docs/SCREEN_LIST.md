@@ -50,6 +50,14 @@
 
 ---
 
+## 3.5 動画倉庫（videos）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 12.5 | `/videos` | `VideoLibrary.jsx` | `VideoPlayerModal`（再生モーダル）、`VideoRegisterModal`（試合選択モードの登録モーダル） | ALL | 動画倉庫（登録済み試合動画の一覧・検索・登録導線）。設定画面メニューの「動画倉庫」から遷移。**一覧**は YouTube サムネイル（`https://i.ytimg.com/vi/{youtubeVideoId}/mqdefault.jpg`・16:9）付きの縦リスト（モバイルファースト）で、各行に「試合日 第N試合」「対戦カード（player1Name vs player2Name）」「結果（`winnerId`/`scoreDifference` があれば『○○の勝ち（N枚差）』）」「動画タイトル（あれば truncate）」を表示。並びは `GET /api/match-videos/search` が返す試合日降順で、**ページングは `totalPages` を用いた「もっと見る」方式**（次ページを末尾に追記読み込み）。**検索・絞り込み**（変更時は page=0 から再検索）は ①選手絞り込み（`playerAPI.getAll` の選手を名前部分一致でフィルタするセレクト → `playerId`）②年月絞り込み（年セレクト＋月セレクト。未選択＝全期間、年のみ選択可 → `year`/`month`）③「自分が関わる動画」トグル（ON で `mine=true`。**選手絞り込みより優先**され、ON 中は選手絞り込みを無効化・クリア）。一覧タップで `VideoPlayerModal` をインライン再生（MatchVideoDto をそのまま渡す。結果入力済みなら「試合詳細を見る」リンクも表示）。**「動画を登録」ボタン**で `VideoRegisterModal` を試合選択モードで開き、登録成功時は一覧を再検索。0件時は空状態（条件なし時「動画がまだ登録されていません」／絞り込み時「条件に合う動画がありません」）を表示 |
+
+---
+
 ## 4. 練習管理（practice）
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
@@ -183,6 +191,8 @@
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
 | `PlayerChip` | `components/PlayerChip.jsx` | 選手バッジ |
 | `MatchParticipantsEditModal` | `components/MatchParticipantsEditModal.jsx` | 試合参加者編集モーダル |
+| `VideoPlayerModal` | `components/VideoPlayerModal.jsx` | 試合動画 再生モーダル（YouTube 埋め込み・対戦情報・`matchId` 非null時「試合詳細を見る」リンク）。倉庫一覧・当日結果一覧から利用 |
+| `VideoRegisterModal` | `components/VideoRegisterModal.jsx` | 試合動画 登録/編集モーダル。**固定モード**（`match` を渡す。試合詳細画面から URL 入力ステップのみ）と**選択モード**（`selectMode`。動画倉庫から ①試合選択→②URL 入力 の2段構成。①は「日付から」「選手から」のタブで候補を絞り込み登録済み試合はグレーアウト）の2モードを持つ |
 | `ErrorBoundary` | `components/ErrorBoundary.jsx` | エラーバウンダリ |
 
 ---
@@ -217,6 +227,7 @@
 | 練習日程作成 | `/practice/new` | ADMIN+ |
 | 参加練習会 | `/settings/organizations` | ALL |
 | メンター管理 | `/settings/mentor` | ALL |
+| 動画倉庫 | `/videos` | ALL |
 | 通知設定 | `/settings/notifications` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
@@ -290,6 +301,8 @@ karuta-tracker-ui/src/
     │   └── PlayerEdit.jsx
     ├── mentor/
     │   └── MentorManagement.jsx
+    ├── videos/
+    │   └── VideoLibrary.jsx
     ├── settings/
     │   ├── SystemSettings.jsx
     │   └── OrganizationSettings.jsx

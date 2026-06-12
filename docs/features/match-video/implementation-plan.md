@@ -84,7 +84,7 @@ status: completed
 - **対応Issue:** #851
 
 ### タスク8: ④ 動画倉庫画面
-- [ ] 完了
+- [x] 完了
 - **概要:** 新規画面 `/videos`（VideoLibrary.jsx）。サムネイル付きリスト（新しい順・ページング）、選手検索・年月絞り込み・「自分が関わる動画」トグル。一覧タップ→VideoPlayerModal。「動画を登録」→VideoRegisterModal に試合選択ステップ（日付起点/選手起点）を追加。設定画面メニューとルートも追加
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/videos/VideoLibrary.jsx` — 新規
