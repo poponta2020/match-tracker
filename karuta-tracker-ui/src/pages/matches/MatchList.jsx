@@ -12,6 +12,7 @@ import {
   ChevronDown,
   X,
   StickyNote,
+  Video,
 } from 'lucide-react';
 
 const MatchList = () => {
@@ -535,7 +536,7 @@ const MatchList = () => {
                   return (
                     <div
                       key={match.id}
-                      className="grid grid-cols-[1.75rem_5.25rem_2.5rem_minmax(0,1fr)_1.5rem_2rem] items-center gap-x-0.5 pl-2 pr-1 py-2"
+                      className="grid grid-cols-[1.75rem_5.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.5rem_2rem] items-center gap-x-0.5 pl-2 pr-1 py-2"
                     >
                       <span className="text-xs text-[#9ca3af]">
                         {formatDate(match.matchDate)}
@@ -561,6 +562,20 @@ const MatchList = () => {
                           ? `${match.venueName} ${match.matchNumber}試合目`
                           : `${match.matchNumber}試合目`}
                       </span>
+                      {match.video ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/matches/${match.id}${isOtherPlayer ? '?playerId=' + targetPlayerId : ''}`)}
+                          aria-label="試合動画を見る"
+                          className="p-1 text-[#c0392b]"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span aria-hidden="true" className="p-1 invisible">
+                          <Video className="w-3.5 h-3.5" />
+                        </span>
+                      )}
                       {showDetailButton && mentorCheckCompleted ? (
                         <button
                           type="button"
