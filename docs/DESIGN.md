@@ -775,6 +775,38 @@ Entity Layer (JPA Entity)
 
 ---
 
+#### match_videos（試合動画台帳）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 動画ID |
+| match_date | DATE | NOT NULL | 試合日 |
+| match_number | INT | NOT NULL | 試合番号（その日の何試合目か） |
+| player1_id | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 選手1ID（player1_id < player2_id を保証） |
+| player2_id | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 選手2ID |
+| provider | VARCHAR(20) | NOT NULL, DEFAULT 'YOUTUBE' | 動画プロバイダ（現状は YOUTUBE のみ） |
+| video_url | TEXT | NOT NULL | 動画URL |
+| youtube_video_id | VARCHAR(20) | | YouTube動画ID（埋め込み用） |
+| title | VARCHAR(255) | | 動画タイトル |
+| created_by | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 登録者ID |
+| updated_by | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 更新者ID |
+| created_at | DATETIME | NOT NULL | 登録日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE: `uq_match_videos_match` (match_date, match_number, player1_id, player2_id)
+
+**インデックス**:
+- `idx_match_videos_player1` (player1_id)
+- `idx_match_videos_player2` (player2_id)
+
+**特殊ロジック**:
+- `matches` / `match_pairings` とは FK を持たず、`(match_date, match_number, player1_id, player2_id)` の自然キーで対応付く。これにより結果未入力（ペアリングのみ）の試合にも動画を登録でき、結果入力後に自動で試合詳細へ表示される
+- `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証（`MatchVideo` エンティティ。選手IDのみ入れ替え）
+- 動画台帳（倉庫）のページング検索 `MatchVideoRepository.search()` は選手ID・開始日・終了日を全て nullable で受け取り、null の条件は無視する。年月絞り込みは呼び出し側で年月→開始日/終了日の範囲に変換して渡す
+  - nullable な `LocalDate` パラメータは、PostgreSQL JDBC の型推論で bytea と誤推論されるのを防ぐため JPQL の `CAST(:startDate AS date)` で明示的に date 型へキャストしている
+
+---
+
 ## 4. API設計
 
 ### 4.1 共通仕様
