@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #847
 
 ### タスク4: フロントエンド基盤（APIクライアント + 再生/登録モーダル）
-- [ ] 完了
+- [x] 完了
 - **概要:** 動画APIクライアントと、全画面で使い回す再生モーダル・登録/編集モーダルを実装する。再生は `youtube-nocookie.com/embed/{videoId}` iframe、サムネイルは `i.ytimg.com/vi/{videoId}/mqdefault.jpg`
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/matchVideos.js` — 新規（register / update / remove / getByDate / search）

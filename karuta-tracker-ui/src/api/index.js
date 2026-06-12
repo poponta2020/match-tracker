@@ -17,3 +17,4 @@ export { mentorRelationshipAPI } from './mentorRelationship';
 export { matchCommentsAPI } from './matchComments';
 export { default as venueReservationProxyAPI } from './venueReservationProxy';
 export { kaderuSyncAPI } from './kaderuSync';
+export { matchVideoAPI } from './matchVideos';
