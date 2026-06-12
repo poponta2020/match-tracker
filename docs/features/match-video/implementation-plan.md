@@ -36,7 +36,7 @@ status: completed
 - **対応Issue:** #846
 
 ### タスク3: MatchDto 拡張（video 付与）
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchDto` に `video: { id, videoUrl, youtubeVideoId, title } | null` を追加し、試合詳細（単体）と試合一覧（バッチ解決でN+1回避）の両方で動画有無を返せるようにする
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/MatchDto.java` — video フィールド追加

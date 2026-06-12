@@ -2796,6 +2796,18 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
   - 並びは matchDate DESC, matchNumber DESC
   - 一覧系は選手名解決・matches照合をバッチ取得（findAllById / findByMatchDateIn）で N+1 回避
   - レスポンスは PagedResponse<MatchVideoDto>（PageImpl 直接シリアライズの不安定さを回避）
+
+[既存の試合APIへの動画付与（MatchDto.video）]
+- MatchDto に `video: { id, videoUrl, youtubeVideoId, title } | null` を追加し、
+  ①試合詳細（単体取得）と③個人別一覧が既存APIのまま動画有無を取得できるようにする
+  （動画なしの試合は video=null。後方互換: 既存フィールドは不変、追加のみ）
+  - 単体取得: MatchService.findById → 試合の自然キー (match_date, match_number, p1<p2) で
+    MatchVideoRepository.findByMatchDateAndMatchNumberAndPlayers を1回呼び、ヒットすれば video をセット
+  - 個人別一覧: MatchService.findPlayerMatchesWithFilters → 対象選手の動画を
+    MatchVideoRepository.findByPlayerId で1クエリ取得し、(match_date, match_number, p1, p2) 正規化キーの
+    マップを構築して各試合に照合・セット（N+1回避）
+  - ②当日結果一覧は別API GET /api/match-videos?date= を使うため、video 付与は ①③ のみに限定する
+  - MatchDto.Video.fromEntity(MatchVideo) で MatchVideo → ネストDTO 変換（fromEntity 規約に従う）
 ```
 
 **関連クラス:**
@@ -2809,6 +2821,8 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 | `MatchVideoDto` | dto/ — `fromEntity(video, p1Name, p2Name, match)`。選手名と matches 照合結果（matchId/winnerId/scoreDifference）を含む |
 | `MatchVideoCreateRequest` / `MatchVideoUpdateRequest` | dto/ — 登録リクエスト（自然キー+URL）/ 更新リクエスト（URLのみ） |
 | `PagedResponse<T>` | dto/ — ページング結果の汎用レスポンス（content/page/size/totalElements/totalPages） |
+| `MatchDto.Video` | dto/ — `MatchDto` のネストDTO（id/videoUrl/youtubeVideoId/title）。`fromEntity(MatchVideo)`。動画なしは null |
+| `MatchService` | service/ — `MatchDto` への動画付与（単体: 自然キー1回照合 / 個人別一覧: findByPlayerId 1クエリ＋マップ照合でN+1回避）。①試合詳細・③個人別一覧のみ対象 |
 
 **DB変更:**
 
