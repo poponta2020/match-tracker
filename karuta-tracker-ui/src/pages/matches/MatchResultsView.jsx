@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
-import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
+import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI, matchVideoAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Shuffle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Shuffle, Video } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import VideoPlayerModal from '../../components/VideoPlayerModal';
 import { getByePlayerNamesForMatch } from './byePlayersLogic';
 
 // カレンダーピッカーコンポーネント
@@ -115,6 +116,8 @@ const MatchResultsView = () => {
   const [pairings, setPairings] = useState([]);
   const [matches, setMatches] = useState([]);
   const [byeActivitiesData, setByeActivitiesData] = useState([]); // 抜け番活動データ
+  const [videos, setVideos] = useState([]); // 当日の試合動画一覧（MatchVideoDto）
+  const [selectedVideo, setSelectedVideo] = useState(null); // 再生モーダルで表示中の動画
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -263,6 +266,28 @@ const MatchResultsView = () => {
     fetchDataByDate();
   }, [selectedDate]);
 
+  // 当日の試合動画一覧を取得（表示対象日が確定するたびに1回）
+  // 取得失敗時は静かに無視（バッジが出ないだけ。コンソールエラーのみ）
+  useEffect(() => {
+    if (!selectedDate) {
+      setVideos([]);
+      return;
+    }
+    let cancelled = false;
+    matchVideoAPI
+      .getByDate(selectedDate)
+      .then((res) => {
+        if (!cancelled) setVideos(res.data || []);
+      })
+      .catch((err) => {
+        console.error('試合動画の取得に失敗しました:', err);
+        if (!cancelled) setVideos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate]);
+
   // 前後の練習日に移動
   const goToPreviousDate = () => {
     const currentIndex = availableDates.indexOf(selectedDate);
@@ -299,6 +324,16 @@ const MatchResultsView = () => {
       m => m.matchNumber === matchNumber &&
            ((m.player1Id === player1Id && m.player2Id === player2Id) ||
             (m.player1Id === player2Id && m.player2Id === player1Id))
+    );
+  };
+
+  // 組（試合番号 + 選手ペア）に対応する動画を取得
+  // 動画側は player1Id < player2Id に正規化済みのため、組側のペアも正規化して照合する
+  const getVideoForPairing = (matchNumber, player1Id, player2Id) => {
+    const lo = Math.min(player1Id, player2Id);
+    const hi = Math.max(player1Id, player2Id);
+    return videos.find(
+      v => v.matchNumber === matchNumber && v.player1Id === lo && v.player2Id === hi
     );
   };
 
@@ -353,15 +388,18 @@ const MatchResultsView = () => {
 
   const currentByePlayers = getByePlayersForMatch(currentMatchNumber);
 
-  // 今日の日付を取得（YYYY-MM-DD形式）
-  const getTodayDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
-
-  // 選択中の日付が今日かチェック
-  const isToday = () => {
-    return selectedDate === getTodayDate();
+  // 「動画あり」バッジのタップ挙動
+  //  - 結果入力済み（match あり）: 試合詳細へ遷移（試合詳細画面に動画も表示される）
+  //  - 結果未入力（組み合わせのみ）: 試合詳細が存在しないため再生モーダルを開く
+  const handleVideoBadgeClick = (e, video, match) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const matchId = match?.id ?? video?.matchId;
+    if (matchId != null) {
+      navigate(`/matches/${matchId}`);
+    } else {
+      setSelectedVideo(video);
+    }
   };
 
   // データなし画面
@@ -529,6 +567,7 @@ const MatchResultsView = () => {
             const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
             const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
+            const video = getVideoForPairing(currentMatchNumber, pairing.player1Id, pairing.player2Id);
 
             return (
               <div key={index} className="py-4">
@@ -588,6 +627,21 @@ const MatchResultsView = () => {
                     >
                       {pairing.player2Name}
                     </Link>
+                  </div>
+                )}
+
+                {/* 動画ありバッジ（結果入力済みは試合詳細へ、未入力は再生モーダルを開く） */}
+                {video && (
+                  <div className="mt-1.5 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={(e) => handleVideoBadgeClick(e, video, match)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fdecea] text-[#c0392b] text-xs font-medium hover:bg-[#fbdad5] transition-colors"
+                      aria-label="試合動画あり"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      動画あり
+                    </button>
                   </div>
                 )}
               </div>
@@ -662,6 +716,11 @@ const MatchResultsView = () => {
         <Plus className="w-5 h-5" />
         <span className="text-sm font-medium">自分の結果を入力</span>
       </button>
+
+      {/* 試合動画 再生モーダル（結果未入力の組でバッジをタップしたとき） */}
+      {selectedVideo && (
+        <VideoPlayerModal video={selectedVideo} onClose={() => setSelectedVideo(null)} />
+      )}
     </div>
   );
 };

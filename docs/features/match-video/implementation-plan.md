@@ -66,7 +66,7 @@ status: completed
 - **対応Issue:** #849
 
 ### タスク6: ② 当日結果一覧の「動画あり」バッジ
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchResultsView.jsx` で `GET /api/match-videos?date=` を取得し、動画がある組にバッジ表示。タップ分岐: 結果入力済み→試合詳細へ遷移 / 未入力→VideoPlayerModal で再生。ペアリングとの照合は (matchNumber, p1<p2正規化済み選手ペア) で行う
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchResultsView.jsx` — バッジ表示・タップ分岐・モーダル組み込み
