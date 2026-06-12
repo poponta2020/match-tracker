@@ -158,6 +158,18 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             @Param("player2Id") Long player2Id);
 
     /**
+     * 複数の日付に該当する対戦結果を一括取得（一覧表示時のN+1回避用）
+     *
+     * 動画一覧（日付別・倉庫検索）で、各動画に対応する試合結果（matches）を
+     * バッチで照合するために使用する。
+     *
+     * @param dates 日付リスト
+     * @return 対戦結果のリスト
+     */
+    @Query("SELECT m FROM Match m WHERE m.matchDate IN :dates")
+    List<Match> findByMatchDateIn(@Param("dates") List<LocalDate> dates);
+
+    /**
      * 特定の選手の同日同試合番号の試合が存在するか確認
      *
      * @param playerId 選手ID

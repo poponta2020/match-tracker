@@ -1065,6 +1065,37 @@ Entity Layer (JPA Entity)
 
 ---
 
+### 4.3.1 試合動画API (`/api/match-videos`)
+
+動画台帳（YouTube限定公開URLと試合の紐付け）の管理API。詳細フローは「7.6.1 試合動画フロー」を参照。
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| POST | `/` | ALL | 動画登録 |
+| PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え（所有者チェックはサービス層） |
+| DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除） |
+| GET | `/?date=` | ALL | 指定日の動画一覧 |
+| GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング（`PagedResponse<MatchVideoDto>`） |
+
+**POST リクエスト**: `MatchVideoCreateRequest`
+```json
+{
+  "matchDate": "2026-06-12",
+  "matchNumber": 1,
+  "player1Id": 1,
+  "player2Id": 2,
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+}
+```
+
+**レスポンス**: `MatchVideoDto`
+- 選手名（`player1Name` / `player2Name`）は players テーブルから解決
+- `matchId` / `winnerId` / `scoreDifference` は同一自然キーの試合結果（`matches`）が存在する場合のみ設定（結果未入力なら null）
+
+**エラー**: 400「YouTubeのURLを入力してください」/ 404「対象の試合が見つかりません」/ 409「この試合には既に動画が登録されています」/ 403（編集・削除の権限なし）
+
+---
+
 ### 4.4 抜け番活動API
 
 #### GET /api/bye-activities?date={date}&matchNumber={matchNumber}
@@ -2730,6 +2761,61 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 | `line_message_log` CHECK制約 | `MENTOR_COMMENT` 追加 |
 | `LineNotificationType` enum | `MENTEE_MEMO_UPDATE` 追加 |
 | `line_message_log` CHECK制約 | `MENTEE_MEMO_UPDATE` 追加 |
+
+### 7.6.1 試合動画フロー
+
+練習試合の動画（YouTube限定公開）のURLを、試合の自然キー（試合日・試合番号・両選手）と紐付けて管理する「動画台帳」。`matches` / `match_pairings` とはFKを持たず、(match_date, match_number, player1_id, player2_id) の自然キーで対応付くため、**結果未入力（組み合わせのみ）段階でも登録でき、結果入力後は同一キーで自動的に試合詳細にも表示される**（付け替え処理不要）。
+
+```
+[動画登録フロー]
+1. 撮影者が YouTube アプリから限定公開でアップロード → URLをコピー
+   ↓
+2. アプリ（試合詳細 or 動画倉庫）で対象試合を選び POST /api/match-videos
+   ↓
+3. MatchVideoService.register:
+   a. YouTube URL検証・動画ID抽出（不正 → 400「YouTubeのURLを入力してください」）
+   b. キー正規化（player1Id < player2Id）
+   c. 対象試合の存在チェック（matches または match_pairings に同自然キー。
+      match_pairings は p1<p2 を保証しないため選手順序不問で照合）
+      → どちらにも無ければ 404「対象の試合が見つかりません」
+   d. 重複チェック（既に動画あり → 409「この試合には既に動画が登録されています」）
+   e. oEmbed API でタイトル取得（接続2秒・読取3秒。失敗時は title=null で続行＝fail-soft）
+   f. INSERT（created_by / updated_by = 操作ユーザー）
+   ※ LINE通知はタスク9（MATCH_VIDEO_REGISTERED）で追加
+
+[編集・削除フロー]
+- PUT /api/match-videos/{id}（URL差し替え）/ DELETE /api/match-videos/{id}（物理削除）
+- 権限: 登録者本人（created_by）or ADMIN/SUPER_ADMIN のみ（サービス層で所有者チェック）
+- 削除されるのは台帳の紐付けのみ。YouTube上の動画本体は残る
+
+[一覧・検索フロー]
+- GET /api/match-videos?date=  : 指定日の動画一覧（当日結果一覧の「動画あり」バッジ用）
+- GET /api/match-videos/search : 動画倉庫の検索（選手・年月絞り込み・mine トグル・ページング）
+  - mine=true は操作ユーザー自身を対象選手として扱う（playerId より優先）
+  - year/month はサービス層で startDate/endDate 範囲に変換してリポジトリへ渡す
+  - 並びは matchDate DESC, matchNumber DESC
+  - 一覧系は選手名解決・matches照合をバッチ取得（findAllById / findByMatchDateIn）で N+1 回避
+  - レスポンスは PagedResponse<MatchVideoDto>（PageImpl 直接シリアライズの不安定さを回避）
+```
+
+**関連クラス:**
+
+| クラス | 説明 |
+|--------|------|
+| `MatchVideo` | entity/ — 動画台帳エンティティ。自然キー + UNIQUE制約、`provider`（'YOUTUBE'固定）、`@PrePersist`/`@PreUpdate` で p1<p2 入れ替え |
+| `MatchVideoRepository` | repository/ — 自然キー検索・日付検索・選手検索（p1 OR p2）・倉庫検索（動的条件+ページング） |
+| `MatchVideoController` | controller/ — 動画CRUD + 日付別一覧 + 倉庫検索（5エンドポイント）。`@RequireRole` 全ロール |
+| `MatchVideoService` | service/ — 登録・URL差し替え・削除・検索。YouTube URL検証/ID抽出、oEmbedタイトル取得（短タイムアウト・fail-soft）、所有者チェック |
+| `MatchVideoDto` | dto/ — `fromEntity(video, p1Name, p2Name, match)`。選手名と matches 照合結果（matchId/winnerId/scoreDifference）を含む |
+| `MatchVideoCreateRequest` / `MatchVideoUpdateRequest` | dto/ — 登録リクエスト（自然キー+URL）/ 更新リクエスト（URLのみ） |
+| `PagedResponse<T>` | dto/ — ページング結果の汎用レスポンス（content/page/size/totalElements/totalPages） |
+
+**DB変更:**
+
+| 対象 | 変更内容 |
+|------|---------|
+| `match_videos` テーブル | タスク1で新規作成（自然キー + UNIQUE制約 `uq_match_videos_match`、provider/video_url/youtube_video_id/title） |
+| `MatchRepository` | `findByMatchDateIn(dates)` 追加（動画一覧で matches をバッチ照合し N+1 回避） |
 
 ### 7.7 隣室予約→会場拡張フロー
 

@@ -21,7 +21,7 @@ status: completed
 - **対応Issue:** #845
 
 ### タスク2: 動画 CRUD + 検索 API（Service / Controller / DTO）
-- [ ] 完了
+- [x] 完了
 - **概要:** 動画の登録・URL差し替え・削除・日付別一覧・倉庫検索のAPIを実装する。登録フロー: URL検証・videoId抽出 → キー正規化 → 対象試合存在チェック（matches または match_pairings）→ 重複チェック（409）→ oEmbedタイトル取得（fail-soft）→ INSERT。編集・削除は登録者本人 or ADMIN+ のみ（service層で所有者チェック）
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/MatchVideoDto.java` — 新規（`fromEntity()` 規約、選手名解決、入力済みの場合 matchId/結果情報を含む）

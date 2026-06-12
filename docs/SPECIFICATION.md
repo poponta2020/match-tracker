@@ -2268,6 +2268,81 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/{id}/detailed` | ALL | 詳細更新 |
 | DELETE | `/{id}` | ALL | 削除 |
 
+### 7.3.1 試合動画 (`/api/match-videos`)
+
+練習試合の動画（YouTube限定公開）のURLを、試合の自然キー（試合日・試合番号・両選手）と紐付けて管理する「動画台帳」のAPI。`matches` / `match_pairings` とはFKを持たず、(match_date, match_number, player1_id, player2_id) の自然キー（player1_id < player2_id にサービス層で正規化）で対応付く。
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| POST | `/` | ALL | 動画登録（登録は全選手可） |
+| PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え。所有者チェックはサービス層 |
+| DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除）。YouTube上の本体は残る |
+| GET | `/?date=` | ALL | 指定日の動画一覧（当日結果一覧の「動画あり」バッジ用） |
+| GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング |
+
+#### POST `/api/match-videos`
+**リクエスト**:
+```json
+{
+  "matchDate": "2026-06-12",
+  "matchNumber": 1,
+  "player1Id": 1,
+  "player2Id": 2,
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+}
+```
+**処理フロー**:
+1. YouTube URL検証・動画ID（11文字）抽出。受理形式: `youtube.com/watch?v=`、`youtu.be/`、`m.youtube.com/watch`、`youtube.com/shorts/`（www有無・http/https許容）
+2. キー正規化（player1Id < player2Id）
+3. 対象試合の存在チェック（`matches` または `match_pairings` に同自然キーが存在。match_pairings 側は選手順序不問で照合）
+4. 重複チェック（既に動画があれば409）
+5. oEmbed API（`https://www.youtube.com/oembed?url=<URL>&format=json`）からタイトル取得。接続2秒・読取3秒のタイムアウト。**取得失敗時は title=null で登録続行（fail-soft）**
+6. INSERT（created_by / updated_by = 操作ユーザー）
+
+#### GET `/api/match-videos/search`
+**クエリパラメータ**:
+- `playerId`: その選手が対戦者（player1 or player2）の動画に絞り込み（任意）
+- `year` + `month`: その年月の範囲に絞り込み（year のみなら年全体）（任意）
+- `mine`: `true` の場合は操作ユーザー自身を対象選手として扱う（`playerId` より優先）。デフォルト `false`
+- `page`: ページ番号（デフォルト0）/ `size`: 1ページ件数（デフォルト20、上限100）
+- 並び順: 試合日の新しい順 → 試合番号の降順
+
+**レスポンス**（`PagedResponse<MatchVideoDto>`。Spring の `Page` の直接シリアライズは不安定なため専用形式）:
+```json
+{
+  "content": [
+    {
+      "id": 100,
+      "matchDate": "2026-06-12",
+      "matchNumber": 1,
+      "player1Id": 1,
+      "player1Name": "山田太郎",
+      "player2Id": 2,
+      "player2Name": "佐藤花子",
+      "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "youtubeVideoId": "dQw4w9WgXcQ",
+      "title": "2026/6/12 第1試合",
+      "createdBy": 1,
+      "createdAt": "2026-06-12T20:00:00",
+      "matchId": 50,
+      "winnerId": 1,
+      "scoreDifference": 5
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+- `matchId` / `winnerId` / `scoreDifference` は、同一自然キーの試合結果（`matches`）が存在する場合のみ設定（結果未入力なら null）
+
+**エラー**:
+- 400: `YouTubeのURLを入力してください`（URL形式外・動画ID長不正）
+- 404: `対象の試合が見つかりません`（自然キー不一致）
+- 409: `この試合には既に動画が登録されています`（重複登録）
+- 403: 編集・削除の権限なし（登録者本人でも ADMIN+ でもない）
+
 ### 7.4 抜け番活動 (`/api/bye-activities`)
 
 | メソッド | パス | 権限 | 説明 |
