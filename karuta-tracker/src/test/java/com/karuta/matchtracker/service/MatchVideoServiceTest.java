@@ -63,6 +63,9 @@ class MatchVideoServiceTest {
     @Mock
     private PlayerRepository playerRepository;
 
+    @Mock
+    private LineNotificationService lineNotificationService;
+
     private MatchVideoService matchVideoService;
 
     private Player player1;
@@ -83,7 +86,7 @@ class MatchVideoServiceTest {
         // 個々のテストで fetchTitle の戻り値を制御するため spy 化する。
         MatchVideoService real = new MatchVideoService(
                 matchVideoRepository, matchRepository, matchPairingRepository,
-                playerRepository, RestClient.builder());
+                playerRepository, lineNotificationService, RestClient.builder());
         matchVideoService = spy(real);
     }
 
@@ -338,6 +341,83 @@ class MatchVideoServiceTest {
             ArgumentCaptor<MatchVideo> captor = ArgumentCaptor.forClass(MatchVideo.class);
             verify(matchVideoRepository).save(captor.capture());
             assertThat(captor.getValue().getTitle()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("登録時のLINE通知トリガ")
+    class RegisterNotification {
+
+        /** matches に試合がある状態で register を成功させる共通スタブ（saved.id=110）。 */
+        private void stubSuccessfulRegister(Long p1, Long p2) {
+            doReturn(null).when(matchVideoService).fetchTitle(anyString());
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(matchVideoRepository.save(any(MatchVideo.class)))
+                    .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(110L); return v; });
+            when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of(buildMatch(1L, 1L, 2L)));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+        }
+
+        @Test
+        @DisplayName("登録成功時、当事者・試合日・試合番号・matchId とともに通知メソッドが呼ばれる")
+        void testNotificationTriggeredOnRegister() {
+            stubSuccessfulRegister(1L, 2L);
+
+            // 登録者=99（第三者）
+            matchVideoService.register(createRequest(1L, 2L, VALID_URL), 99L);
+
+            // matches に結果があるので matchId=1L が渡る（リンク先 /matches/1）
+            verify(lineNotificationService).sendMatchVideoRegisteredNotification(
+                    eq(99L), eq(1L), eq(2L), eq(today), eq(1), eq(1L));
+        }
+
+        @Test
+        @DisplayName("登録者=player1 のとき、入力順が逆でも正規化後の当事者IDで通知が呼ばれる")
+        void testNotificationUsesNormalizedPlayerIds() {
+            stubSuccessfulRegister(1L, 2L);
+
+            // 入力は逆順 (p1=2, p2=1)、登録者=1（player1相当）
+            matchVideoService.register(createRequest(2L, 1L, VALID_URL), 1L);
+
+            // 正規化後 player1Id=1, player2Id=2 で通知が呼ばれる（除外判定は通知メソッド側の責務）
+            verify(lineNotificationService).sendMatchVideoRegisteredNotification(
+                    eq(1L), eq(1L), eq(2L), eq(today), eq(1), eq(1L));
+        }
+
+        @Test
+        @DisplayName("URL差し替え（updateUrl）では通知しない")
+        void testNoNotificationOnUpdate() {
+            doReturn("新タイトル").when(matchVideoService).fetchTitle(anyString());
+            MatchVideo video = buildVideo(210L, 10L);
+            when(matchVideoRepository.findById(210L)).thenReturn(Optional.of(video));
+            when(matchVideoRepository.save(any(MatchVideo.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            MatchVideoUpdateRequest req = new MatchVideoUpdateRequest();
+            req.setVideoUrl("https://youtu.be/abcdefghijk");
+            matchVideoService.updateUrl(210L, req, 10L, Role.PLAYER);
+
+            verifyNoInteractions(lineNotificationService);
+        }
+
+        @Test
+        @DisplayName("通知メソッドが例外を投げても register は成功し、結果DTOを返す（通知のtry-catchが効く）")
+        void testRegisterSucceedsWhenNotificationThrows() {
+            stubSuccessfulRegister(1L, 2L);
+            doThrow(new RuntimeException("LINE API down"))
+                    .when(lineNotificationService)
+                    .sendMatchVideoRegisteredNotification(any(), any(), any(), any(), any(), any());
+
+            MatchVideoDto result = matchVideoService.register(createRequest(1L, 2L, VALID_URL), 99L);
+
+            // 通知が例外を投げても登録自体は成功（保存済み・DTO返却）
+            assertThat(result).isNotNull();
+            assertThat(result.getId()).isEqualTo(110L);
+            verify(matchVideoRepository).save(any(MatchVideo.class));
         }
     }
 

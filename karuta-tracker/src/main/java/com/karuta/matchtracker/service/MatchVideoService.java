@@ -82,17 +82,20 @@ public class MatchVideoService {
     private final MatchRepository matchRepository;
     private final MatchPairingRepository matchPairingRepository;
     private final PlayerRepository playerRepository;
+    private final LineNotificationService lineNotificationService;
     private final RestClient oembedRestClient;
 
     public MatchVideoService(MatchVideoRepository matchVideoRepository,
                              MatchRepository matchRepository,
                              MatchPairingRepository matchPairingRepository,
                              PlayerRepository playerRepository,
+                             LineNotificationService lineNotificationService,
                              RestClient.Builder restClientBuilder) {
         this.matchVideoRepository = matchVideoRepository;
         this.matchRepository = matchRepository;
         this.matchPairingRepository = matchPairingRepository;
         this.playerRepository = playerRepository;
+        this.lineNotificationService = lineNotificationService;
         // oEmbed は外部I/O。接続・読取とも短いタイムアウトにし、失敗時は title=null で続行する。
         var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(2));
@@ -162,7 +165,21 @@ public class MatchVideoService {
         log.info("試合動画登録: id={}, matchDate={}, matchNumber={}, players=({},{}), by={}",
                 saved.getId(), matchDate, matchNumber, normP1, normP2, currentUserId);
 
-        return toDto(saved);
+        MatchVideoDto dto = toDto(saved);
+
+        // 新規登録時のみ、対戦当事者（登録者を除く）へ LINE 通知をトリガする。
+        // 通知の失敗で登録トランザクションを巻き戻さないよう、例外は握りつぶしてログのみ残す
+        // （URL差し替え updateUrl では通知しない）。matchId は結果入力済みのときのみ非null。
+        try {
+            Long matchId = dto != null ? dto.getMatchId() : null;
+            lineNotificationService.sendMatchVideoRegisteredNotification(
+                    currentUserId, normP1, normP2, matchDate, matchNumber, matchId);
+        } catch (Exception e) {
+            log.warn("試合動画登録のLINE通知に失敗（登録は継続）: videoId={}, error={}",
+                    saved.getId(), e.getMessage());
+        }
+
+        return dto;
     }
 
     // ===================== 更新（URL差し替え） =====================

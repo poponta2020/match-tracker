@@ -27,6 +27,7 @@ public class LineNotificationPreferenceDto {
     private boolean adminSameDayCancel;
     private boolean mentorComment;
     private boolean densukePageCreated;
+    private boolean matchVideoRegistered;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -46,6 +47,7 @@ public class LineNotificationPreferenceDto {
             .adminSameDayCancel(entity.getAdminSameDayCancel())
             .mentorComment(entity.getMentorComment())
             .densukePageCreated(entity.getDensukePageCreated())
+            .matchVideoRegistered(entity.getMatchVideoRegistered())
             .build();
     }
 }

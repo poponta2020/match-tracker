@@ -96,7 +96,7 @@ status: completed
 - **対応Issue:** #852
 
 ### タスク9: LINE通知（動画登録時に対戦当事者へ）
-- [ ] 完了
+- [x] 完了
 - **概要:** 動画登録時に対戦当事者（登録者自身を除く）へLINE通知を送る。通知種別 `MATCH_VIDEO_REGISTERED`（PLAYER向け・プレフィックスなし）を追加し、通知設定画面にトグルを追加（デフォルトON）
 - **変更対象ファイル:**
   - `database/add_match_video_registered_notification.sql` — 新規。`line_notification_preferences.match_video_registered` カラム追加 + `line_message_log` の notification_type CHECK制約更新（既存 `add_mentor_comment_notification.sql` と同パターン）。**本番DB適用必須**
