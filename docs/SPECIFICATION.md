@@ -2299,7 +2299,7 @@ UNIQUE制約: (player_id, organization_id)
 3. 対象試合の存在チェック（`matches` または `match_pairings` に同自然キーが存在。match_pairings 側は選手順序不問で照合）
 4. 重複チェック（既に動画があれば409）
 5. oEmbed API（`https://www.youtube.com/oembed?url=<URL>&format=json`）からタイトル取得。接続2秒・読取3秒のタイムアウト。**取得失敗時は title=null で登録続行（fail-soft）**
-6. INSERT（created_by / updated_by = 操作ユーザー）
+6. INSERT（created_by / updated_by = 操作ユーザー）。重複チェック（手順4）通過後〜INSERT間の同時登録で `uq_match_videos_match` 一意制約違反が発生した場合も、`DataIntegrityViolationException` を捕捉して409に変換する（TOCTOU競合の最終防衛）
 
 #### GET `/api/match-videos/search`
 **クエリパラメータ**:

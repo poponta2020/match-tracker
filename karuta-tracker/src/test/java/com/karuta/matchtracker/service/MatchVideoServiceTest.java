@@ -12,6 +12,7 @@ import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.MatchVideoRepository;
@@ -318,6 +319,24 @@ class MatchVideoServiceTest {
                     .hasMessage("この試合には既に動画が登録されています");
 
             verify(matchVideoRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("重複チェック通過後の同時登録で一意制約違反が起きたら409に変換される")
+        void testRegisterConcurrentUniqueViolation() {
+            // 事前の存在チェック・重複チェックは通過するが、save時にUNIQUE制約違反が発生する状況
+            // （別リクエストが先に同一自然キーを登録したTOCTOU競合）
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            doReturn(null).when(matchVideoService).fetchTitle(anyString());
+            when(matchVideoRepository.save(any(MatchVideo.class)))
+                    .thenThrow(new DataIntegrityViolationException("uq_match_videos_match violation"));
+
+            assertThatThrownBy(() -> matchVideoService.register(createRequest(1L, 2L, VALID_URL), 1L))
+                    .isInstanceOf(DuplicateResourceException.class)
+                    .hasMessage("この試合には既に動画が登録されています");
         }
 
         @Test

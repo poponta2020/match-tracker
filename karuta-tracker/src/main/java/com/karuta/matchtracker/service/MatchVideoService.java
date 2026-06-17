@@ -17,6 +17,7 @@ import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.MatchVideoRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -168,7 +169,17 @@ public class MatchVideoService {
                 .updatedBy(currentUserId)
                 .build();
 
-        MatchVideo saved = matchVideoRepository.save(video);
+        MatchVideo saved;
+        try {
+            saved = matchVideoRepository.save(video);
+        } catch (DataIntegrityViolationException e) {
+            // 重複チェック後〜save までの間に別リクエストが同一自然キーを登録した場合、
+            // uq_match_videos_match の一意制約違反となる。競合は重複として409に変換する
+            // （事前の findBy... チェックだけでは TOCTOU で取りこぼすため、最終防衛として扱う）。
+            log.info("試合動画の同時登録による一意制約違反を検知（409に変換）: matchDate={}, matchNumber={}, players=({},{})",
+                    matchDate, matchNumber, normP1, normP2);
+            throw new DuplicateResourceException(MSG_DUPLICATE);
+        }
         log.info("試合動画登録: id={}, matchDate={}, matchNumber={}, players=({},{}), by={}",
                 saved.getId(), matchDate, matchNumber, normP1, normP2, currentUserId);
 
