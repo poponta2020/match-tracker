@@ -22,9 +22,11 @@ public class MatchVideoCreateRequest {
     private Integer matchNumber;
 
     @NotNull(message = "選手1のIDは必須です")
+    @Positive(message = "選手1のIDが不正です")
     private Long player1Id;
 
     @NotNull(message = "選手2のIDは必須です")
+    @Positive(message = "選手2のIDが不正です")
     private Long player2Id;
 
     @NotBlank(message = "動画URLは必須です")

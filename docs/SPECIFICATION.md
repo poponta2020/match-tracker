@@ -2295,11 +2295,11 @@ UNIQUE制約: (player_id, organization_id)
 ```
 **処理フロー**:
 1. YouTube URL検証・動画ID（11文字）抽出。受理形式: `youtube.com/watch?v=`、`youtu.be/`、`m.youtube.com/watch`、`youtube.com/shorts/`（www有無・http/https許容）
-2. キー正規化（player1Id < player2Id）
+2. 選手IDバリデーション・キー正規化（player1Id < player2Id）。`player1Id`/`player2Id` は **正の値（`@Positive`）**であること（必須=`@NotNull`）。0（システム未登録ゲストの番兵値）や負値は **400**（`MethodArgumentNotValidException`）。正規化後に **同一選手（player1Id == player2Id）の場合は 400**（`対戦相手が不正です`）。サービス層でも正規化後の `normP1 <= 0` / `normP1 == normP2` を再チェックして二重防御する
 3. 対象試合の存在チェック（`matches` または `match_pairings` に同自然キーが存在。match_pairings 側は選手順序不問で照合）
 4. 重複チェック（既に動画があれば409）
 5. oEmbed API（`https://www.youtube.com/oembed?url=<URL>&format=json`）からタイトル取得。接続2秒・読取3秒のタイムアウト。**取得失敗時は title=null で登録続行（fail-soft）**
-6. INSERT（created_by / updated_by = 操作ユーザー）。重複チェック（手順4）通過後〜INSERT間の同時登録で `uq_match_videos_match` 一意制約違反が発生した場合も、`DataIntegrityViolationException` を捕捉して409に変換する（TOCTOU競合の最終防衛）
+6. INSERT（created_by / updated_by = 操作ユーザー）。重複チェック（手順4）通過後〜INSERT間の同時登録で発生した整合性違反のうち、**自然キーUNIQUE制約 `uq_match_videos_match` 由来のもののみ** 409 に変換する（TOCTOU競合の最終防衛）。判定は `DataIntegrityViolationException` の原因チェーン中の Hibernate `ConstraintViolationException#getConstraintName()`（大文字小文字非依存の部分一致、取得不可時はメッセージ）で行う。**FK違反・NOT NULL違反など一意制約以外の整合性エラーは409に変換せずそのまま伝播**させ、本来のステータス（500等）で扱う
 
 #### GET `/api/match-videos/search`
 **クエリパラメータ**:

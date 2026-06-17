@@ -13,6 +13,7 @@ import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.MatchVideoRepository;
@@ -31,6 +32,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.client.RestClient;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -337,6 +339,75 @@ class MatchVideoServiceTest {
             assertThatThrownBy(() -> matchVideoService.register(createRequest(1L, 2L, VALID_URL), 1L))
                     .isInstanceOf(DuplicateResourceException.class)
                     .hasMessage("この試合には既に動画が登録されています");
+        }
+
+        @Test
+        @DisplayName("同一選手ID（player1Id == player2Id）は400（IllegalArgumentException）で弾く")
+        void testRegisterSamePlayer() {
+            assertThatThrownBy(() -> matchVideoService.register(createRequest(5L, 5L, VALID_URL), 1L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("対戦相手が不正です");
+
+            // 存在チェック・保存に到達しない
+            verifyNoInteractions(matchRepository, matchPairingRepository, matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("ゲスト番兵値0などの非正IDは400（IllegalArgumentException）で弾く（DTO @Positive の防御的二重化）")
+        void testRegisterNonPositivePlayerId() {
+            // player2Id=0（システム未登録ゲストの番兵値）。正規化で normP1=0 となり防御ガードに掛かる
+            assertThatThrownBy(() -> matchVideoService.register(createRequest(0L, 3L, VALID_URL), 1L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("対戦相手が不正です");
+
+            verifyNoInteractions(matchRepository, matchPairingRepository, matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("自然キーUNIQUE制約（Hibernate getConstraintName）由来の整合性違反は409に変換される")
+        void testRegisterUniqueViolationByConstraintName() {
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            doReturn(null).when(matchVideoService).fetchTitle(anyString());
+            // メッセージには制約名を含めず、Hibernate の ConstraintViolationException#getConstraintName のみで判定させる
+            DataIntegrityViolationException dive = new DataIntegrityViolationException(
+                    "could not execute statement",
+                    new ConstraintViolationException(
+                            "constraint violation",
+                            new SQLException("duplicate key value"),
+                            "uq_match_videos_match"));
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class))).thenThrow(dive);
+
+            assertThatThrownBy(() -> matchVideoService.register(createRequest(1L, 2L, VALID_URL), 1L))
+                    .isInstanceOf(DuplicateResourceException.class)
+                    .hasMessage("この試合には既に動画が登録されています");
+        }
+
+        @Test
+        @DisplayName("一意制約以外（FK違反等）のDataIntegrityViolationExceptionは409に変換されずそのまま再throwされる")
+        void testRegisterNonUniqueIntegrityViolationRethrown() {
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            doReturn(null).when(matchVideoService).fetchTitle(anyString());
+            // 制約名・メッセージとも uq_match_videos_match を含まないFK違反相当の整合性違反
+            DataIntegrityViolationException dive = new DataIntegrityViolationException(
+                    "could not execute statement",
+                    new ConstraintViolationException(
+                            "foreign key violation",
+                            new SQLException("FK constraint failed"),
+                            "fk_match_videos_some_other"));
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class))).thenThrow(dive);
+
+            // 重複(409)に化けず、元のDataIntegrityViolationExceptionがそのまま伝播する
+            // （GlobalExceptionHandler 側で 500 等として扱われる）
+            assertThatThrownBy(() -> matchVideoService.register(createRequest(1L, 2L, VALID_URL), 1L))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .isNotInstanceOf(DuplicateResourceException.class)
+                    .isSameAs(dive);
         }
 
         @Test

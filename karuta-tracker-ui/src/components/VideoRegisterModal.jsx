@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { matchVideoAPI, pairingAPI, matchAPI, playerAPI } from '../api';
 import { isValidYoutubeUrl } from '../utils/youtube';
+import { todayLocalISODate } from '../utils/date';
 
 /**
  * 試合動画 登録/編集モーダル
@@ -402,7 +403,8 @@ const CandidateRow = ({ candidate, onSelect }) => {
  * (matchNumber, 正規化選手ペア) をキーに統合・重複排除した候補を表示する。
  */
 const DateSourceSelect = ({ onSelect }) => {
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // 初期日付はローカルタイムゾーン基準（toISOString は UTC 基準で JST 早朝に前日になるため使わない）
+  const [date, setDate] = useState(() => todayLocalISODate());
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

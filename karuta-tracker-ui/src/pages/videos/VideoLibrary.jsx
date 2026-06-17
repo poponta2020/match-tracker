@@ -144,63 +144,69 @@ const VideoLibrary = () => {
     [mine, playerId, year, month]
   );
 
-  // 条件変更時に page=0 から再検索
-  // 重複呼び出し防止用
-  const fetchingRef = useRef(false);
+  // 取得リクエストの連番。検索条件変更（page=0 再取得）と「もっと見る」（追記取得）の
+  // どちらも発行ごとにインクリメントし、レスポンス反映時に最新連番と一致する場合のみ反映する。
+  // これにより、検索条件を素早く切り替えた際に前リクエストの遅延レスポンスが新条件の一覧を
+  // 上書き（古い一覧が残る／順序・重複が崩れる）するのを防ぐ。条件変更時の取得自体は抑止しない。
+  const requestIdRef = useRef(0);
+
+  // 条件変更時に page=0 から再検索（取得は抑止せず、古いレスポンスのみ無視する）
   useEffect(() => {
-    let cancelled = false;
+    const myRequestId = ++requestIdRef.current;
 
     const fetchFirstPage = async () => {
-      if (fetchingRef.current) return;
-      fetchingRef.current = true;
+      setInitialLoading(true);
+      // 進行中の「もっと見る」があれば連番不一致で破棄されるが、その finally は
+      // setLoadingMore(false) をスキップするためここで明示的に解除しておく
+      // （新条件のリスト表示後にボタンが「読み込み中...」のまま固まるのを防ぐ）。
+      setLoadingMore(false);
+      setError(null);
       try {
-        setInitialLoading(true);
-        setError(null);
         const res = await matchVideoAPI.search(buildSearchParams(0));
-        if (cancelled) return;
+        // 自分の発行後に新しい取得（条件変更/もっと見る）が走っていたら stale なので捨てる
+        if (requestIdRef.current !== myRequestId) return;
         const data = res.data || {};
         setVideos(data.content || []);
         setPage(data.page ?? 0);
         setTotalPages(data.totalPages ?? 0);
         setTotalElements(data.totalElements ?? 0);
       } catch (err) {
-        if (!cancelled) {
-          console.error('動画一覧の取得に失敗しました:', err);
-          setError('動画一覧の取得に失敗しました');
-          setVideos([]);
-          setTotalPages(0);
-          setTotalElements(0);
-        }
+        if (requestIdRef.current !== myRequestId) return;
+        console.error('動画一覧の取得に失敗しました:', err);
+        setError('動画一覧の取得に失敗しました');
+        setVideos([]);
+        setTotalPages(0);
+        setTotalElements(0);
       } finally {
-        if (!cancelled) setInitialLoading(false);
-        fetchingRef.current = false;
+        if (requestIdRef.current === myRequestId) setInitialLoading(false);
       }
     };
 
     fetchFirstPage();
-    return () => {
-      cancelled = true;
-      fetchingRef.current = false;
-    };
   }, [buildSearchParams]);
 
-  // 「もっと見る」: 次ページを追記読み込み
+  // 「もっと見る」: 次ページを追記読み込み（同一条件の二重クリックは loadingMore で抑止）
   const handleLoadMore = async () => {
     if (loadingMore) return;
     const nextPage = page + 1;
+    const myRequestId = ++requestIdRef.current;
     setLoadingMore(true);
     try {
       const res = await matchVideoAPI.search(buildSearchParams(nextPage));
+      // 取得中に条件が変わって page=0 再取得が走った場合、この追記は別条件への append に
+      // なってしまうため捨てる（順序・重複の不整合を防ぐ）。
+      if (requestIdRef.current !== myRequestId) return;
       const data = res.data || {};
       setVideos((prev) => [...prev, ...(data.content || [])]);
       setPage(data.page ?? nextPage);
       setTotalPages(data.totalPages ?? totalPages);
       setTotalElements(data.totalElements ?? totalElements);
     } catch (err) {
+      if (requestIdRef.current !== myRequestId) return;
       console.error('追加読み込みに失敗しました:', err);
       setError('追加読み込みに失敗しました');
     } finally {
-      setLoadingMore(false);
+      if (requestIdRef.current === myRequestId) setLoadingMore(false);
     }
   };
 
@@ -240,10 +246,12 @@ const VideoLibrary = () => {
   // 登録成功時は一覧を再検索（page=0 から）
   const handleRegisterSuccess = () => {
     setShowRegisterModal(false);
-    // 条件はそのままに 1ページ目から再取得
+    // 条件はそのままに 1ページ目から再取得。連番を発行し、古いレスポンスのみ無視する。
+    const myRequestId = ++requestIdRef.current;
     matchVideoAPI
       .search(buildSearchParams(0))
       .then((res) => {
+        if (requestIdRef.current !== myRequestId) return;
         const data = res.data || {};
         setVideos(data.content || []);
         setPage(data.page ?? 0);
@@ -251,6 +259,7 @@ const VideoLibrary = () => {
         setTotalElements(data.totalElements ?? 0);
       })
       .catch((err) => {
+        if (requestIdRef.current !== myRequestId) return;
         console.error('動画一覧の再取得に失敗しました:', err);
       });
   };

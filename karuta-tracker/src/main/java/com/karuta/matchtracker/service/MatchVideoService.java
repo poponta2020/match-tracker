@@ -57,6 +57,10 @@ public class MatchVideoService {
     static final String MSG_MATCH_NOT_FOUND = "対象の試合が見つかりません";
     static final String MSG_DUPLICATE = "この試合には既に動画が登録されています";
     static final String MSG_FORBIDDEN = "この動画を編集・削除する権限がありません";
+    static final String MSG_INVALID_OPPONENT = "対戦相手が不正です";
+
+    /** 自然キーUNIQUE制約名（match_videos）。DataIntegrityViolation を重複(409)に変換する条件に使う。 */
+    static final String UNIQUE_CONSTRAINT_NAME = "uq_match_videos_match";
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -142,6 +146,14 @@ public class MatchVideoService {
         LocalDate matchDate = request.getMatchDate();
         Integer matchNumber = request.getMatchNumber();
 
+        // 選手IDの妥当性チェック（DTOの @Positive・@NotNull と二重防御）:
+        // ・正規化後に同一選手（normP1 == normP2）であれば対戦が成立しないため400で拒否する
+        // ・正の値であること（normP1 <= 0 は不正IDやゲスト番兵値0）を念のため確認する
+        //   ※ 通常は Controller の @Valid（@Positive）で 400 になるが、サービス直呼び出し時の保険として残す
+        if (normP1 <= 0 || normP1 == normP2) {
+            throw new IllegalArgumentException(MSG_INVALID_OPPONENT);
+        }
+
         // 対象試合の存在チェック（matches または match_pairings）
         if (!matchOrPairingExists(matchDate, matchNumber, normP1, normP2)) {
             throw new ResourceNotFoundException(MSG_MATCH_NOT_FOUND);
@@ -176,11 +188,18 @@ public class MatchVideoService {
             saved = matchVideoRepository.saveAndFlush(video);
         } catch (DataIntegrityViolationException e) {
             // 重複チェック後〜flush までの間に別リクエストが同一自然キーを登録した場合、
-            // uq_match_videos_match の一意制約違反となる。競合は重複として409に変換する
+            // uq_match_videos_match の一意制約違反となる。この競合のみ重複として409に変換する
             // （事前の findBy... チェックだけでは TOCTOU で取りこぼすため、最終防衛として扱う）。
-            log.info("試合動画の同時登録による一意制約違反を検知（409に変換）: matchDate={}, matchNumber={}, players=({},{})",
-                    matchDate, matchNumber, normP1, normP2);
-            throw new DuplicateResourceException(MSG_DUPLICATE);
+            // FK違反やNOT NULL違反など他の整合性エラーまで409にしないよう、自然キー制約由来かを判定し、
+            // 該当しなければそのまま再throwして本来のステータス（500等）で扱う。
+            if (isMatchVideoUniqueViolation(e)) {
+                log.info("試合動画の同時登録による一意制約違反を検知（409に変換）: matchDate={}, matchNumber={}, players=({},{})",
+                        matchDate, matchNumber, normP1, normP2);
+                throw new DuplicateResourceException(MSG_DUPLICATE);
+            }
+            log.error("試合動画登録で一意制約以外の整合性違反が発生（再throw）: matchDate={}, matchNumber={}, players=({},{})",
+                    matchDate, matchNumber, normP1, normP2, e);
+            throw e;
         }
         log.info("試合動画登録: id={}, matchDate={}, matchNumber={}, players=({},{}), by={}",
                 saved.getId(), matchDate, matchNumber, normP1, normP2, currentUserId);
@@ -340,6 +359,46 @@ public class MatchVideoService {
         return matchPairingRepository
                 .findBySessionDateAndMatchNumberAndPlayers(matchDate, matchNumber, normP1, normP2)
                 .isPresent();
+    }
+
+    /**
+     * 例外チェーンが match_videos の自然キーUNIQUE制約（{@code uq_match_videos_match}）違反に
+     * 起因するかを判定する。
+     *
+     * <p>判定優先順位:
+     * <ol>
+     *   <li>原因チェーンに Hibernate の {@link org.hibernate.exception.ConstraintViolationException} が
+     *       あれば {@code getConstraintName()} を制約名と照合（大文字小文字非依存・部分一致）。
+     *       これが最も堅牢（DBエラーメッセージのロケール差に依存しない）。</li>
+     *   <li>制約名が取得できない／Hibernate例外が無い場合のフォールバックとして、
+     *       原因チェーン各段の {@code getMessage()} に制約名が含まれるかで判定する。</li>
+     * </ol>
+     *
+     * FK違反・NOT NULL違反など他の整合性違反では false を返し、呼び出し側で再throwさせる。
+     *
+     * @param ex 捕捉した {@link DataIntegrityViolationException}
+     * @return 自然キーUNIQUE制約違反と判断できれば true
+     */
+    static boolean isMatchVideoUniqueViolation(DataIntegrityViolationException ex) {
+        String target = UNIQUE_CONSTRAINT_NAME.toLowerCase();
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof org.hibernate.exception.ConstraintViolationException cve) {
+                String name = cve.getConstraintName();
+                if (name != null && name.toLowerCase().contains(target)) {
+                    return true;
+                }
+            }
+            // フォールバック: 制約名が取れない／Hibernate例外でない場合はメッセージで判定する
+            String message = t.getMessage();
+            if (message != null && message.toLowerCase().contains(target)) {
+                return true;
+            }
+            // 自己参照ループ（getCause() が自身を返す壊れた例外）での無限ループを防ぐ
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
     }
 
     /**
