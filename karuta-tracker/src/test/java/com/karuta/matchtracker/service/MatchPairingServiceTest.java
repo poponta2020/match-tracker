@@ -222,6 +222,99 @@ class MatchPairingServiceTest {
     }
 
     @Nested
+    @DisplayName("getRecentByPlayerId メソッド（選手起点の最近ペアリング）")
+    class GetRecentByPlayerIdTests {
+
+        @Test
+        @DisplayName("指定選手が含まれる最近のペアリングを選手名付きで返す")
+        void shouldReturnRecentPairingsWithPlayerNames() {
+            // Given
+            Long playerId = 1L;
+            List<MatchPairing> pairings = Arrays.asList(
+                    createMatchPairing(10L, LocalDate.of(2024, 3, 2), 3, 1L, 2L),
+                    createMatchPairing(11L, LocalDate.of(2024, 3, 1), 1, 3L, 1L)
+            );
+            when(matchPairingRepository.findRecentByPlayerId(eq(playerId), any()))
+                    .thenReturn(pairings);
+            when(playerRepository.findAllById(anyList()))
+                    .thenReturn(Arrays.asList(player1, player2, player3));
+
+            // When
+            List<MatchPairingDto> result = matchPairingService.getRecentByPlayerId(playerId);
+
+            // Then: 選手名が解決され、リポジトリの並び順がそのまま維持される
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getId()).isEqualTo(10L);
+            assertThat(result.get(0).getSessionDate()).isEqualTo(LocalDate.of(2024, 3, 2));
+            assertThat(result.get(0).getMatchNumber()).isEqualTo(3);
+            assertThat(result.get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.get(0).getPlayer1Name()).isEqualTo("選手A");
+            assertThat(result.get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.get(0).getPlayer2Name()).isEqualTo("選手B");
+            assertThat(result.get(1).getId()).isEqualTo(11L);
+            assertThat(result.get(1).getPlayer1Name()).isEqualTo("選手C");
+            assertThat(result.get(1).getPlayer2Name()).isEqualTo("選手A");
+        }
+
+        @Test
+        @DisplayName("選手名解決は一括取得（findAllById）で行いN+1を避ける")
+        void shouldResolvePlayerNamesInBatch() {
+            // Given
+            Long playerId = 1L;
+            when(matchPairingRepository.findRecentByPlayerId(eq(playerId), any()))
+                    .thenReturn(Arrays.asList(
+                            createMatchPairing(10L, LocalDate.of(2024, 3, 2), 3, 1L, 2L),
+                            createMatchPairing(11L, LocalDate.of(2024, 3, 1), 1, 1L, 3L)
+                    ));
+            when(playerRepository.findAllById(anyList()))
+                    .thenReturn(Arrays.asList(player1, player2, player3));
+
+            // When
+            matchPairingService.getRecentByPlayerId(playerId);
+
+            // Then: 選手名解決は findAllById 1回のみ（個別 findById を使わない）
+            verify(playerRepository, times(1)).findAllById(anyList());
+            verify(playerRepository, never()).findById(anyLong());
+        }
+
+        @Test
+        @DisplayName("最大30件で制限して取得する（Pageable のサイズ検証）")
+        void shouldLimitToThirtyRecords() {
+            // Given
+            Long playerId = 1L;
+            when(matchPairingRepository.findRecentByPlayerId(eq(playerId), any()))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.getRecentByPlayerId(playerId);
+
+            // Then: PageRequest(0, 30) で呼ばれる
+            ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
+                    ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+            verify(matchPairingRepository).findRecentByPlayerId(eq(playerId), pageableCaptor.capture());
+            assertThat(pageableCaptor.getValue().getPageNumber()).isZero();
+            assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(30);
+        }
+
+        @Test
+        @DisplayName("ペアリングが無い選手は空リストを返す")
+        void shouldReturnEmptyListWhenNoPairings() {
+            // Given
+            Long playerId = 999L;
+            when(matchPairingRepository.findRecentByPlayerId(eq(playerId), any()))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            List<MatchPairingDto> result = matchPairingService.getRecentByPlayerId(playerId);
+
+            // Then: 個別 findById は使わない（N+1回避）。collectPlayerNames は空リストで呼ばれ得るため
+            // findAllById の呼び出し自体は許容する。
+            assertThat(result).isEmpty();
+            verify(playerRepository, never()).findById(anyLong());
+        }
+    }
+
+    @Nested
     @DisplayName("getByDateAndMatchNumber メソッド")
     class GetByDateAndMatchNumberTests {
 

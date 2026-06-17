@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.entity.MatchPairing;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -76,4 +77,18 @@ public interface MatchPairingRepository extends JpaRepository<MatchPairing, Long
             @Param("matchNumber") Integer matchNumber,
             @Param("player1Id") Long player1Id,
             @Param("player2Id") Long player2Id);
+
+    /**
+     * 指定選手が player1 または player2 に含まれる最近のペアリングを取得（sessionDate DESC, matchNumber DESC）。
+     *
+     * 動画倉庫の登録モーダル「選手起点」で、結果未入力（match_pairings にのみ存在）の試合も
+     * 選択肢に含めるために使用する。直近件数は {@code Pageable} で制限する。
+     *
+     * @param playerId 選手ID
+     * @param pageable ページング（件数制限・並びは本クエリの ORDER BY を優先）
+     * @return 対戦組み合わせのリスト（新しい順）
+     */
+    @Query("SELECT mp FROM MatchPairing mp WHERE (mp.player1Id = :playerId OR mp.player2Id = :playerId) " +
+           "ORDER BY mp.sessionDate DESC, mp.matchNumber DESC")
+    List<MatchPairing> findRecentByPlayerId(@Param("playerId") Long playerId, Pageable pageable);
 }

@@ -2308,6 +2308,7 @@ UNIQUE制約: (player_id, organization_id)
 - `mine`: `true` の場合は操作ユーザー自身を対象選手として扱う（`playerId` より優先）。デフォルト `false`
 - `page`: ページ番号（デフォルト0）/ `size`: 1ページ件数（デフォルト20、上限100）
 - 並び順: 試合日の新しい順 → 試合番号の降順
+- `year`/`month` のバリデーション（`year` 非null時のみ検証）: `month` は 1〜12、`year` は 2000〜2100。範囲外は **400**（`月は1〜12で指定してください` / `年は2000〜2100で指定してください`）。`month` だけ指定して `year` がない場合は `month` を無視（年月絞り込みなし）。これにより `month=13`/`month=0`/極端な `year` が `LocalDate.of` で `DateTimeException`→500 になるのを防ぐ
 
 **レスポンス**（`PagedResponse<MatchVideoDto>`。Spring の `Page` の直接シリアライズは不安定なため専用形式）:
 ```json
@@ -2371,6 +2372,7 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号で取得 |
 | GET | `/exists?date=&matchNumber=` | ALL | 存在確認 |
 | GET | `/pair-history?player1Id=&player2Id=&sessionDate=` | ALL | ペアの対戦履歴 |
+| GET | `/player/{playerId}` | ALL | 選手起点の最近ペアリング取得（動画倉庫の登録モーダル「選手起点」で結果未入力の試合も選べるようにする用途。閲覧は全選手可のため団体スコープなし） |
 | POST | `/` | PLAYER+ | 単一作成（ADMIN/PLAYERは自/所属団体のみ） |
 | POST | `/batch?date=&matchNumber=` | PLAYER+ | 一括作成（ADMIN/PLAYERは自/所属団体のみ） |
 | POST | `/auto-match` | PLAYER+ | 自動マッチング（ADMIN/PLAYERは自/所属団体のみ） |
@@ -2378,6 +2380,31 @@ UNIQUE制約: (player_id, organization_id)
 | DELETE | `/{id}` | ADMIN+ | 単一削除 |
 | DELETE | `/{id}/with-result` | ADMIN+ | ペアリング+対応する試合結果を同時削除（リセット） |
 | DELETE | `/date-and-match?date=&matchNumber=` | ADMIN+ | 日付+試合番号の全削除 |
+
+#### GET `/api/match-pairings/player/{playerId}`
+指定選手が `player1` または `player2` に含まれる**最近の**ペアリングを返す。動画倉庫の登録モーダル「選手起点」で、結果未入力（`match_pairings` にのみ存在し `matches` にはない）の試合も選択肢に含められるようにするための参照系API。
+
+- 並び順: `sessionDate DESC, matchNumber DESC`（新しい順）
+- 件数: 直近30件に制限
+- 権限: 全ロール（PLAYER含む。閲覧は全選手可のため団体スコープは適用しない）
+- 返すのは**ペアリング（組み合わせ）**であり、結果（`matches`）とは別物。フロントは「日付起点」と同様に `matches` と `pairings` を自然キーで統合・重複排除する
+- 選手名は `players` からバッチ解決（N+1回避）。`recentMatches` や試合結果（`hasResult` 等）は付与しない軽量レスポンス
+
+**レスポンス**（`MatchPairingDto` のリスト。日付起点と同じ形で扱える）:
+```json
+[
+  {
+    "id": 10,
+    "sessionDate": "2026-06-12",
+    "matchNumber": 1,
+    "player1Id": 1,
+    "player1Name": "山田太郎",
+    "player2Id": 2,
+    "player2Name": "佐藤花子"
+  }
+]
+```
+- 該当ペアリングが無い場合は空配列を返す
 
 ### 7.6 練習日 (`/api/practice-sessions`)
 

@@ -656,6 +656,61 @@ class MatchVideoServiceTest {
             assertThat(pageableCaptor.getValue().getPageNumber()).isZero();
             assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(20);
         }
+
+        @Test
+        @DisplayName("month=13 は400（IllegalArgumentException）で弾き検索しない")
+        void testSearchInvalidMonthTooLarge() {
+            assertThatThrownBy(() -> matchVideoService.search(1L, 2026, 13, false, 0, 20, 99L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("月は1〜12で指定してください");
+
+            verifyNoInteractions(matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("month=0 は400（IllegalArgumentException）で弾き検索しない")
+        void testSearchInvalidMonthZero() {
+            assertThatThrownBy(() -> matchVideoService.search(1L, 2026, 0, false, 0, 20, 99L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("月は1〜12で指定してください");
+
+            verifyNoInteractions(matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("極端に小さいyear(0)は400（IllegalArgumentException）で弾き検索しない")
+        void testSearchInvalidYearTooSmall() {
+            assertThatThrownBy(() -> matchVideoService.search(1L, 0, 6, false, 0, 20, 99L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("年は2000〜2100で指定してください");
+
+            verifyNoInteractions(matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("極端に大きいyear(99999)は400（IllegalArgumentException）で弾き検索しない")
+        void testSearchInvalidYearTooLarge() {
+            assertThatThrownBy(() -> matchVideoService.search(1L, 99999, null, false, 0, 20, 99L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("年は2000〜2100で指定してください");
+
+            verifyNoInteractions(matchVideoRepository);
+        }
+
+        @Test
+        @DisplayName("正常系(year=2026, month=6)は引き続きその月の範囲で検索できる")
+        void testSearchValidYearMonthStillWorks() {
+            Page<MatchVideo> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+            when(matchVideoRepository.search(any(), any(), any(), any())).thenReturn(page);
+
+            matchVideoService.search(1L, 2026, 6, false, 0, 20, 99L);
+
+            ArgumentCaptor<LocalDate> startCaptor = ArgumentCaptor.forClass(LocalDate.class);
+            ArgumentCaptor<LocalDate> endCaptor = ArgumentCaptor.forClass(LocalDate.class);
+            verify(matchVideoRepository).search(eq(1L), startCaptor.capture(), endCaptor.capture(), any());
+            assertThat(startCaptor.getValue()).isEqualTo(LocalDate.of(2026, 6, 1));
+            assertThat(endCaptor.getValue()).isEqualTo(LocalDate.of(2026, 6, 30));
+        }
     }
 
     // ===================== fixture builders =====================

@@ -52,6 +52,35 @@ const INVALID_URL_MESSAGE = 'YouTubeのURLを入力してください';
 // 選手ペアの正規化キー（動画側は player1Id < player2Id に正規化済み）
 const pairKey = (a, b) => `${Math.min(a, b)}-${Math.max(a, b)}`;
 const candidateKey = (matchNumber, p1, p2) => `${matchNumber}:${pairKey(p1, p2)}`;
+// 日付をまたぐ起点（選手起点）用の自然キー。
+// 日付・試合番号・正規化選手ペアで一意化する（動画側は p1<p2 に正規化済み）。
+const naturalKey = (date, matchNumber, p1, p2) => `${date}:${candidateKey(matchNumber, p1, p2)}`;
+
+/**
+ * 試合結果（matches）とペアリング（pairings）を自然キーで統合・重複排除するヘルパー。
+ *
+ * 同一自然キーが matches と pairings の両方に存在する場合は matches を優先する
+ * （結果・動画情報を持つため）。選手起点（PlayerSourceSelect）で使用する。
+ * 日付起点（DateSourceSelect）は単一日・別の登録済み判定（videoKeys）を使うため
+ * 従来どおりの専用ロジックを維持し、本ヘルパーは使わない。
+ *
+ * @param {Object} params
+ * @param {Array} params.matches  正規化済みスロット（matches 由来。優先）
+ * @param {Array} params.pairings 正規化済みスロット（pairings 由来）
+ *   各スロットの形状: { key, candidate }（key=自然キー文字列, candidate=表示・選択用オブジェクト）
+ * @returns {Array} 重複排除後の candidate 配列（matches を先に登録するため matches 優先）
+ */
+const mergeCandidates = ({ matches, pairings }) => {
+  const map = new Map();
+  // matches を先に登録（同一キーで上書きしないため、結果・動画を持つ matches が優先される）
+  matches.forEach((slot) => {
+    if (!map.has(slot.key)) map.set(slot.key, slot.candidate);
+  });
+  pairings.forEach((slot) => {
+    if (!map.has(slot.key)) map.set(slot.key, slot.candidate);
+  });
+  return [...map.values()];
+};
 
 const VideoRegisterModal = ({ match, selectMode = false, video, onClose, onSuccess }) => {
   const isEdit = Boolean(video);
@@ -511,12 +540,27 @@ const DateSourceSelect = ({ onSelect }) => {
   );
 };
 
+// 選手起点で表示する候補の最大件数（ペアリングAPIの「直近30件」に揃える）
+const PLAYER_CANDIDATE_LIMIT = 30;
+
 /**
  * 選手起点の試合選択
  *
- * 選手を選び、その選手の直近20件の試合を候補に表示する。
- * - 既に動画が紐付く試合（MatchDto.video != null）は選択不可
- * - 相手がシステム未登録（player2Id が 0 等）の試合は登録不可
+ * 選手を選び、その選手の直近の対戦を候補に表示する。
+ * 完了済み試合（matches）だけでなく、結果未入力の組み合わせ（pairings）も含めて
+ * 候補に出す（日付起点と同じ考え方）。
+ *
+ * 候補構築:
+ * - matchAPI.getByPlayerId（完了済み matches）と pairingAPI.getByPlayerId（組み合わせ）を
+ *   並行取得し、自然キー (日付, 試合番号, 正規化選手ペア) で統合・重複排除する
+ *   （同一キーは結果・動画を持つ matches を優先）。
+ * - 登録済み判定:
+ *   - matches 側: MatchDto.video != null
+ *   - pairings 側（対応する match が無いスロット）: matchVideoAPI.search でその選手の
+ *     登録済み動画一覧を取得し、自然キーの Set で照合する。
+ *   matches の .video と動画 Set のいずれかに該当すれば「登録済み」表示＋選択不可。
+ * - 相手がシステム未登録（相手 id が 0 / null）の試合は登録不可表示。
+ * - 並びは日付の新しい順（同日は試合番号の大きい順）。
  */
 const PlayerSourceSelect = ({ onSelect }) => {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -573,47 +617,107 @@ const PlayerSourceSelect = ({ onSelect }) => {
       return;
     }
     let cancelled = false;
-    const fetchMatches = async () => {
+    const fetchCandidates = async () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await matchAPI.getByPlayerId(selectedPlayer.id);
+        // 完了済み試合・組み合わせ・登録済み動画一覧を並行取得
+        const [matchesRes, pairingsRes, videosRes] = await Promise.all([
+          matchAPI.getByPlayerId(selectedPlayer.id).catch(() => ({ data: [] })),
+          pairingAPI.getByPlayerId(selectedPlayer.id).catch(() => ({ data: [] })),
+          matchVideoAPI
+            .search({ playerId: selectedPlayer.id, size: 100 })
+            .catch(() => ({ data: { content: [] } })),
+        ]);
         if (cancelled) return;
-        const sorted = (res.data || [])
-          .slice()
-          .sort((a, b) => new Date(b.matchDate) - new Date(a.matchDate))
-          .slice(0, 20);
 
-        const list = sorted.map((m) => {
-          // 対象選手を player1 側に固定して表示名を組み立てる
+        const matches = matchesRes.data || [];
+        const pairings = pairingsRes.data || [];
+        const videos = videosRes.data?.content || [];
+        const selfName = selectedPlayer.name;
+
+        // 登録済み動画の自然キー集合（pairings 側の登録済み判定に使用。
+        // matches 側は MatchDto.video でも判定するため OR で扱う）
+        const videoKeys = new Set(
+          videos.map((v) => naturalKey(v.matchDate, v.matchNumber, v.player1Id, v.player2Id))
+        );
+
+        // matches 由来スロット（結果・動画を持つため統合時に優先）
+        const matchSlots = matches.map((m) => {
+          // 対象選手を起点に表示の向きを保つ（self が実際に居る側を維持）
           const isP1 = m.player1Id === selectedPlayer.id;
           const opponentId = isP1 ? m.player2Id : m.player1Id;
-          const selfName = selectedPlayer.name;
           const opponentName = m.opponentName;
           const player1Name = isP1 ? selfName : opponentName;
           const player2Name = isP1 ? opponentName : selfName;
-          // 相手がシステム未登録（id が 0 / null）の場合は登録不可
           const opponentUnregistered = !opponentId || opponentId === 0;
-          const registered = m.video != null;
+          const key = naturalKey(m.matchDate, m.matchNumber, m.player1Id, m.player2Id);
+          const registered = m.video != null || videoKeys.has(key);
           return {
-            key: `${m.id}`,
-            matchDate: m.matchDate,
-            matchNumber: m.matchNumber,
-            player1Name,
-            player2Name,
-            registered,
-            disabled: opponentUnregistered,
-            disabledLabel: '相手未登録',
-            match: {
+            key,
+            candidate: {
+              key,
               matchDate: m.matchDate,
               matchNumber: m.matchNumber,
-              player1Id: m.player1Id,
-              player2Id: m.player2Id,
               player1Name,
               player2Name,
+              registered,
+              disabled: opponentUnregistered,
+              disabledLabel: '相手未登録',
+              match: {
+                matchDate: m.matchDate,
+                matchNumber: m.matchNumber,
+                player1Id: m.player1Id,
+                player2Id: m.player2Id,
+                player1Name,
+                player2Name,
+              },
             },
           };
         });
+
+        // pairings 由来スロット（結果未入力の組み合わせ。matches に無いものだけ採用される）
+        const pairingSlots = pairings.map((p) => {
+          // sessionDate を matchDate にマップ。表示の向きは self を維持
+          const matchDate = p.sessionDate;
+          const isP1 = p.player1Id === selectedPlayer.id;
+          const opponentId = isP1 ? p.player2Id : p.player1Id;
+          const opponentName = isP1 ? p.player2Name : p.player1Name;
+          const player1Name = isP1 ? selfName : opponentName;
+          const player2Name = isP1 ? opponentName : selfName;
+          const opponentUnregistered = !opponentId || opponentId === 0;
+          const key = naturalKey(matchDate, p.matchNumber, p.player1Id, p.player2Id);
+          return {
+            key,
+            candidate: {
+              key,
+              matchDate,
+              matchNumber: p.matchNumber,
+              player1Name,
+              player2Name,
+              registered: videoKeys.has(key),
+              disabled: opponentUnregistered,
+              disabledLabel: '相手未登録',
+              match: {
+                matchDate,
+                matchNumber: p.matchNumber,
+                player1Id: p.player1Id,
+                player2Id: p.player2Id,
+                player1Name,
+                player2Name,
+              },
+            },
+          };
+        });
+
+        // 統合・重複排除（同一自然キーは matches 優先）→ 日付の新しい順（同日は試合番号降順）
+        const list = mergeCandidates({ matches: matchSlots, pairings: pairingSlots })
+          .sort(
+            (a, b) =>
+              new Date(b.matchDate) - new Date(a.matchDate) ||
+              (b.matchNumber ?? 0) - (a.matchNumber ?? 0)
+          )
+          .slice(0, PLAYER_CANDIDATE_LIMIT);
         setCandidates(list);
       } catch (err) {
         if (!cancelled) {
@@ -625,7 +729,7 @@ const PlayerSourceSelect = ({ onSelect }) => {
         if (!cancelled) setLoading(false);
       }
     };
-    fetchMatches();
+    fetchCandidates();
     return () => {
       cancelled = true;
     };

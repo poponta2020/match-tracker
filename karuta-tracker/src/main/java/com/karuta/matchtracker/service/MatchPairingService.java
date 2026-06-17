@@ -15,6 +15,7 @@ import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,9 @@ public class MatchPairingService {
     private static final int MATCH_HISTORY_DAYS = 30;
     private static final double SAME_DAY_PENALTY_SCORE = -1000.0;
     private static final double INTERVAL_BASE_SCORE = 100.0;
+
+    /** 選手起点の最近ペアリング取得で返す最大件数。 */
+    private static final int RECENT_PAIRINGS_LIMIT = 30;
 
     private final MatchPairingRepository matchPairingRepository;
     private final MatchRepository matchRepository;
@@ -108,6 +112,30 @@ public class MatchPairingService {
         enrichWithRecentMatches(dtos, sessionDate, matchNumber);
         enrichWithMatchResults(dtos, sessionDate);
         return dtos;
+    }
+
+    /**
+     * 指定選手が player1 または player2 に含まれる最近のペアリングを取得する。
+     *
+     * 動画倉庫の登録モーダル「選手起点」で、結果未入力（match_pairings にのみ存在）の試合も
+     * 選択肢に含めるために使用する。並びは sessionDate DESC, matchNumber DESC、直近
+     * {@code RECENT_PAIRINGS_LIMIT} 件に制限する。選手名は一括解決して N+1 を回避する。
+     *
+     * <p>返すのはペアリング（組み合わせ）であり結果(matches)とは別物。recentMatches /
+     * 試合結果（hasResult 等）は付与しない（登録モーダルの選択肢用の軽量レスポンス）。</p>
+     *
+     * @param playerId 選手ID
+     * @return 最近のペアリングDTOのリスト（新しい順）
+     */
+    @Transactional(readOnly = true)
+    public List<MatchPairingDto> getRecentByPlayerId(Long playerId) {
+        List<MatchPairing> pairings = matchPairingRepository.findRecentByPlayerId(
+                playerId, PageRequest.of(0, RECENT_PAIRINGS_LIMIT));
+        // 選手名を一括解決（N+1回避）してから DTO へ変換する
+        Map<Long, String> playerNames = collectPlayerNames(pairings);
+        return pairings.stream()
+                .map(p -> convertToDtoWithCache(p, playerNames))
+                .collect(Collectors.toList());
     }
 
     /**

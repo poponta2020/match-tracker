@@ -94,6 +94,7 @@ Entity Layer (JPA Entity)
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
 - 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する
+- 選手起点の最近ペアリング取得 `GET /api/match-pairings/player/{playerId}`（`MatchPairingService.getRecentByPlayerId` / `MatchPairingRepository.findRecentByPlayerId`）は、`@RequireRole` 全ロールの参照系で団体スコープを適用しない（閲覧は全選手可。選手別履歴の参照という用途が getByDate 等の組織限定取得と異なるため）。`(player1Id = :playerId OR player2Id = :playerId)` で `sessionDate DESC, matchNumber DESC` 順・`Pageable` で直近30件に制限し、選手名は `collectPlayerNames` で一括解決（N+1回避）。動画倉庫の登録モーダル「選手起点」で結果未入力（`match_pairings` のみ）の試合も選択肢に含めるための軽量レスポンス（`recentMatches`・試合結果は付与しない）
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
 
@@ -804,6 +805,7 @@ Entity Layer (JPA Entity)
 - `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証（`MatchVideo` エンティティ。選手IDのみ入れ替え）
 - 動画台帳（倉庫）のページング検索 `MatchVideoRepository.search()` は選手ID・開始日・終了日を全て nullable で受け取り、null の条件は無視する。年月絞り込みは呼び出し側で年月→開始日/終了日の範囲に変換して渡す
   - nullable な `LocalDate` パラメータは、PostgreSQL JDBC の型推論で bytea と誤推論されるのを防ぐため JPQL の `CAST(:startDate AS date)` で明示的に date 型へキャストしている
+  - `MatchVideoService.search()` は範囲変換前に `year`/`month` を検証する（`year` 非null時のみ）。`month` は 1〜12（`MSG_INVALID_MONTH`）、`year` は 2000〜2100（`MSG_INVALID_YEAR`）。範囲外は `IllegalArgumentException`（GlobalExceptionHandler で400）。`month` 単独指定（`year==null`）は既存挙動どおり無視する。`LocalDate.of` の `DateTimeException`→500 を防ぐため、`YearMonthRange.of` 側にも month の防御的ガードを置く（ユーザー向け400メッセージは search 側で出す）
 
 ---
 

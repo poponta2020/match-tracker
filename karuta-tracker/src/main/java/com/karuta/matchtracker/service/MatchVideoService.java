@@ -60,6 +60,13 @@ public class MatchVideoService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int DEFAULT_PAGE_SIZE = 20;
 
+    /** 倉庫検索で受け付ける年の下限・上限（運用上妥当な範囲。範囲外は400で弾く）。 */
+    private static final int MIN_YEAR = 2000;
+    private static final int MAX_YEAR = 2100;
+
+    static final String MSG_INVALID_YEAR = "年は" + MIN_YEAR + "〜" + MAX_YEAR + "で指定してください";
+    static final String MSG_INVALID_MONTH = "月は1〜12で指定してください";
+
     private static final String OEMBED_ENDPOINT = "https://www.youtube.com/oembed";
 
     /**
@@ -280,7 +287,12 @@ public class MatchVideoService {
         LocalDate startDate = null;
         LocalDate endDate = null;
         if (year != null) {
+            // 不正な year/month をそのまま LocalDate.of に渡すと DateTimeException → 500 になり得るため、
+            // ここでユーザー向けの 400（IllegalArgumentException）として弾く。
+            // month==null の既存挙動（年のみ絞り込み）は変えず、year 非null時のみ検証する。
+            validateYear(year);
             if (month != null) {
+                validateMonth(month);
                 YearMonthRange range = YearMonthRange.of(year, month);
                 startDate = range.start();
                 endDate = range.end();
@@ -378,6 +390,26 @@ public class MatchVideoService {
         }
     }
 
+    /**
+     * 倉庫検索の year を検証する。範囲外は 400（IllegalArgumentException）。
+     * 極端な値（例: 0 や 99999）で {@code LocalDate.of} が DateTimeException を投げ 500 になるのを防ぐ。
+     */
+    private static void validateYear(int year) {
+        if (year < MIN_YEAR || year > MAX_YEAR) {
+            throw new IllegalArgumentException(MSG_INVALID_YEAR);
+        }
+    }
+
+    /**
+     * 倉庫検索の month を検証する。1〜12 以外は 400（IllegalArgumentException）。
+     * month=0 / month=13 等で {@code LocalDate.of} が DateTimeException を投げ 500 になるのを防ぐ。
+     */
+    private static void validateMonth(int month) {
+        if (month < 1 || month > 12) {
+            throw new IllegalArgumentException(MSG_INVALID_MONTH);
+        }
+    }
+
     private Pageable buildPageable(Integer page, Integer size) {
         int resolvedPage = (page == null || page < 0) ? 0 : page;
         int resolvedSize;
@@ -456,6 +488,11 @@ public class MatchVideoService {
      */
     record YearMonthRange(LocalDate start, LocalDate end) {
         static YearMonthRange of(int year, int month) {
+            // 防御的ガード（ユーザー向けの 400 メッセージは search 側の validateMonth/validateYear で出す）。
+            // 直接呼ばれた場合も DateTimeException → 500 にせず IllegalArgumentException(400) に倒す。
+            if (month < 1 || month > 12) {
+                throw new IllegalArgumentException(MSG_INVALID_MONTH);
+            }
             LocalDate start = LocalDate.of(year, month, 1);
             LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
             return new YearMonthRange(start, end);
