@@ -23,7 +23,7 @@ parent_issue: 855
 - **対応Issue:** #856
 
 ### タスク2: フロント DateSourceSelect を新APIに切り替え + テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** `matchVideoAPI.getDateCandidates(date)` を追加し、`VideoRegisterModal.jsx` の `DateSourceSelect` の候補取得を単一呼び出しに置き換える（pairings/matches/videos の3-wayクライアントマージを廃止）。`registered` フラグで「登録済み」グレーアウト＋選択不可、未登録相手（id 0/null）の「相手未登録」選択不可ガードは維持。選択時の送信ペイロード（自然キー）組み立ては従来どおり
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/matchVideos.js` — `getDateCandidates(date)` 追加（`GET /match-videos/date-candidates`）
