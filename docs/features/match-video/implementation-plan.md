@@ -13,7 +13,7 @@ status: completed
 - **概要:** 動画台帳テーブル `match_videos` を新設し、エンティティ・リポジトリを実装する。自然キー（match_date, match_number, player1_id, player2_id・p1<p2正規化）+ UNIQUE制約。provider カラム（'YOUTUBE' 固定）を含む
 - **変更対象ファイル:**
   - `database/create_match_videos.sql` — 新規。PostgreSQL用テーブル作成SQL（要件定義書 4.2 のDDL）。**本番DB（Render PostgreSQL）適用必須**
-  - `database/phase1_schema.sql` — CI用MySQLスキーマに match_videos を追記（CIでの利用有無を実装時に確認し、不要なら見送り）
+  - ~~`database/phase1_schema.sql` — CI用MySQLスキーマに match_videos を追記~~ → **見送り（確認済み）**。phase1_schema.sql は Phase1 MVP の凍結スナップショット（4テーブルのみ）で、CI・本番・ローカルのどの初期化経路でも未使用（CIは Testcontainers + Hibernate `ddl-auto=create-drop`）。Phase1以降の全テーブル（match_pairings/line_*/densuke_* 等約20テーブル）も未追記の運用のため、match_videos も追記しない。ファイル冒頭にこの位置づけを注記済み
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/entity/MatchVideo.java` — 新規。Match と同じ流儀（plain Long、`JstDateTimeUtil`、`@PrePersist`/`@PreUpdate` で p1<p2 入れ替え）
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/repository/MatchVideoRepository.java` — 新規。自然キー検索 / 日付検索 / 選手検索（p1 OR p2）/ 倉庫検索（年月・選手・ページング）
   - `docs/DESIGN.md` — テーブル定義を追記

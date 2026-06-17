@@ -182,7 +182,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(match));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> {
                         MatchVideo v = inv.getArgument(0);
                         v.setId(100L);
@@ -204,7 +204,7 @@ class MatchVideoServiceTest {
             assertThat(result.getScoreDifference()).isEqualTo(5);
 
             ArgumentCaptor<MatchVideo> captor = ArgumentCaptor.forClass(MatchVideo.class);
-            verify(matchVideoRepository).save(captor.capture());
+            verify(matchVideoRepository).saveAndFlush(captor.capture());
             assertThat(captor.getValue().getCreatedBy()).isEqualTo(1L);
             assertThat(captor.getValue().getUpdatedBy()).isEqualTo(1L);
             assertThat(captor.getValue().getProvider()).isEqualTo("YOUTUBE");
@@ -220,7 +220,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(buildPairing(1L, 2L)));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(101L); return v; });
             when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
@@ -245,7 +245,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(buildPairing(2L, 1L)));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(102L); return v; });
             when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
@@ -255,7 +255,7 @@ class MatchVideoServiceTest {
 
             assertThat(result.getId()).isEqualTo(102L);
             ArgumentCaptor<MatchVideo> captor = ArgumentCaptor.forClass(MatchVideo.class);
-            verify(matchVideoRepository).save(captor.capture());
+            verify(matchVideoRepository).saveAndFlush(captor.capture());
             assertThat(captor.getValue().getPlayer1Id()).isEqualTo(1L);
             assertThat(captor.getValue().getPlayer2Id()).isEqualTo(2L);
         }
@@ -268,7 +268,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(103L); return v; });
             when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
@@ -331,7 +331,7 @@ class MatchVideoServiceTest {
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
             doReturn(null).when(matchVideoService).fetchTitle(anyString());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenThrow(new DataIntegrityViolationException("uq_match_videos_match violation"));
 
             assertThatThrownBy(() -> matchVideoService.register(createRequest(1L, 2L, VALID_URL), 1L))
@@ -348,7 +348,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(104L); return v; });
             when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
@@ -358,7 +358,7 @@ class MatchVideoServiceTest {
             assertThat(result.getId()).isEqualTo(104L);
             assertThat(result.getTitle()).isNull();
             ArgumentCaptor<MatchVideo> captor = ArgumentCaptor.forClass(MatchVideo.class);
-            verify(matchVideoRepository).save(captor.capture());
+            verify(matchVideoRepository).saveAndFlush(captor.capture());
             assertThat(captor.getValue().getTitle()).isNull();
         }
     }
@@ -374,7 +374,7 @@ class MatchVideoServiceTest {
                     .thenReturn(Optional.of(buildMatch(1L, 1L, 2L)));
             when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
                     .thenReturn(Optional.empty());
-            when(matchVideoRepository.save(any(MatchVideo.class)))
+            when(matchVideoRepository.saveAndFlush(any(MatchVideo.class)))
                     .thenAnswer(inv -> { MatchVideo v = inv.getArgument(0); v.setId(110L); return v; });
             when(matchRepository.findByMatchDateIn(any())).thenReturn(List.of(buildMatch(1L, 1L, 2L)));
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
@@ -436,7 +436,7 @@ class MatchVideoServiceTest {
             // 通知が例外を投げても登録自体は成功（保存済み・DTO返却）
             assertThat(result).isNotNull();
             assertThat(result.getId()).isEqualTo(110L);
-            verify(matchVideoRepository).save(any(MatchVideo.class));
+            verify(matchVideoRepository).saveAndFlush(any(MatchVideo.class));
         }
     }
 

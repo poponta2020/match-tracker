@@ -171,9 +171,11 @@ public class MatchVideoService {
 
         MatchVideo saved;
         try {
-            saved = matchVideoRepository.save(video);
+            // saveAndFlush で INSERT を即時 flush し、UNIQUE 制約違反をこの try 内で確実に捕捉する
+            // （save だけだと flush が commit 時まで遅延し、例外が try 外に漏れて500化する恐れがある）。
+            saved = matchVideoRepository.saveAndFlush(video);
         } catch (DataIntegrityViolationException e) {
-            // 重複チェック後〜save までの間に別リクエストが同一自然キーを登録した場合、
+            // 重複チェック後〜flush までの間に別リクエストが同一自然キーを登録した場合、
             // uq_match_videos_match の一意制約違反となる。競合は重複として409に変換する
             // （事前の findBy... チェックだけでは TOCTOU で取りこぼすため、最終防衛として扱う）。
             log.info("試合動画の同時登録による一意制約違反を検知（409に変換）: matchDate={}, matchNumber={}, players=({},{})",
