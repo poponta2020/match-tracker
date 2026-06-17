@@ -72,6 +72,9 @@ class MatchVideoServiceTest {
     private PlayerRepository playerRepository;
 
     @Mock
+    private OrganizationService organizationService;
+
+    @Mock
     private LineNotificationService lineNotificationService;
 
     private MatchVideoService matchVideoService;
@@ -96,7 +99,8 @@ class MatchVideoServiceTest {
         // 個々のテストで fetchTitle の戻り値を制御するため spy 化する。
         MatchVideoService real = new MatchVideoService(
                 matchVideoRepository, matchRepository, matchPairingRepository,
-                matchPairingService, playerRepository, lineNotificationService, RestClient.builder());
+                matchPairingService, playerRepository, organizationService,
+                lineNotificationService, RestClient.builder());
         matchVideoService = spy(real);
     }
 
@@ -672,6 +676,8 @@ class MatchVideoServiceTest {
                     .thenReturn(List.of(buildPairingDto(1, 1L, "山田太郎", 2L, "佐藤花子")));
             when(matchRepository.findByMatchDateOrderByMatchNumber(today))
                     .thenReturn(List.of(buildMatch(50L, 1L, 2L)));
+            // matches の組織スコープ: 両選手(1,2)が当該団体所属 → 候補に残る
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
             when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
 
             List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
@@ -737,6 +743,8 @@ class MatchVideoServiceTest {
             when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
             when(matchRepository.findByMatchDateOrderByMatchNumber(today))
                     .thenReturn(List.of(buildMatch(60L, 1L, 2L)));
+            // matches の組織スコープ: 両選手(1,2)が当該団体所属 → 候補に残る
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
             when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
@@ -760,6 +768,8 @@ class MatchVideoServiceTest {
                             buildPairingDto(1, 1L, "山田太郎", 3L, "鈴木一郎")));
             when(matchRepository.findByMatchDateOrderByMatchNumber(today))
                     .thenReturn(List.of(buildMatchNumbered(70L, 2, 2L, 3L)));
+            // matches の組織スコープ: 両選手(2,3)が当該団体所属 → 候補に残る
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L, 3L));
             when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
             when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2, player3));
 
@@ -820,6 +830,97 @@ class MatchVideoServiceTest {
             // 名前も正規化後IDに対応（player1Id=1 → 山田太郎, player2Id=2 → 佐藤花子）
             assertThat(c.getPlayer1Name()).isEqualTo("山田太郎");
             assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+        }
+
+        @Test
+        @DisplayName("組織スコープ: 他団体の matches-only 候補（pairingなし）は organizationId 指定時に返らない")
+        void testOtherOrgMatchesOnlyCandidateExcluded() {
+            // pairings は空（当該団体のペアリングなし）。
+            // 同日に matches が2件: (1,2)=当該団体所属ペア / (8,9)=他団体ペア（pairingなし）。
+            when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of(
+                    buildMatchNumbered(80L, 1, 1L, 2L),   // 当該団体所属（1,2 とも所属）
+                    buildMatchNumbered(81L, 2, 8L, 9L)));  // 他団体（8,9 は当該団体に非所属）
+            // 当該団体所属選手は 1,2 のみ。8,9 は含まれない。
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            // 他団体ペア (8,9) の matches-only 候補は混入しない → 当該団体の (1,2) のみ
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.getMatchId()).isEqualTo(80L);
+            assertThat(c.getPlayer1Id()).isEqualTo(1L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+            // 念のため: matchId=81 / 選手8,9 を含む候補は存在しない
+            assertThat(result).noneMatch(x -> x.getMatchId() != null && x.getMatchId() == 81L);
+            assertThat(result).noneMatch(x -> x.getPlayer1Id() == 8L || x.getPlayer2Id() == 9L);
+        }
+
+        @Test
+        @DisplayName("組織スコープ: 両選手が当該団体所属の matches-only 候補は残る")
+        void testOwnOrgMatchesOnlyCandidateIncluded() {
+            // pairings は空。matches のみ存在し、両選手(1,2)が当該団体所属。
+            when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatch(82L, 1L, 2L)));
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.getMatchId()).isEqualTo(82L);
+            assertThat(c.isHasResult()).isTrue();
+            assertThat(c.getPlayer1Id()).isEqualTo(1L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("組織スコープ: 片方の選手のみ当該団体所属の matches は除外される（AND条件）")
+        void testMatchWithOnlyOneMemberExcluded() {
+            // pairings は空。matches は (1,9): player1(1)は所属だが player2(9)は非所属。
+            when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatch(83L, 1L, 9L)));
+            // 所属は 1,2 のみ。9 は非所属 → AND条件で除外される。
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            // 片方しか所属していない matches は候補にならない
+            assertThat(result).isEmpty();
+            // matches-only スロットが消えるため選手名解決も発生しない
+            verifyNoInteractions(playerRepository);
+        }
+
+        @Test
+        @DisplayName("組織スコープ: organizationId == null なら matches は日付全件・スコープしない（従来どおり）")
+        void testNullOrganizationDoesNotScopeMatches() {
+            // organizationId=null（組織非限定）。matches は別団体の選手を含む2件。
+            when(matchPairingService.getByDate(today, false, null)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of(
+                    buildMatchNumbered(84L, 1, 1L, 2L),
+                    buildMatchNumbered(85L, 2, 8L, 9L)));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            // 4選手すべての名前を解決できるようにする（matches-only スロット）
+            Player player8 = Player.builder().id(8L).name("田中次郎").build();
+            Player player9 = Player.builder().id(9L).name("高橋三郎").build();
+            when(playerRepository.findAllById(any()))
+                    .thenReturn(List.of(player1, player2, player8, player9));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, null);
+
+            // スコープなし: 両 matches とも候補に残る
+            assertThat(result).extracting(MatchVideoDateCandidateDto::getMatchId)
+                    .containsExactlyInAnyOrder(84L, 85L);
+            // null のときは組織所属判定（getOrganizationMemberPlayerIds）を一切呼ばない
+            verify(organizationService, never()).getOrganizationMemberPlayerIds(any());
         }
     }
 

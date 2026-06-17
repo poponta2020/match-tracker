@@ -101,6 +101,7 @@ public class MatchVideoService {
     private final MatchPairingRepository matchPairingRepository;
     private final MatchPairingService matchPairingService;
     private final PlayerRepository playerRepository;
+    private final OrganizationService organizationService;
     private final LineNotificationService lineNotificationService;
     private final RestClient oembedRestClient;
 
@@ -109,6 +110,7 @@ public class MatchVideoService {
                              MatchPairingRepository matchPairingRepository,
                              MatchPairingService matchPairingService,
                              PlayerRepository playerRepository,
+                             OrganizationService organizationService,
                              LineNotificationService lineNotificationService,
                              RestClient.Builder restClientBuilder) {
         this.matchVideoRepository = matchVideoRepository;
@@ -116,6 +118,7 @@ public class MatchVideoService {
         this.matchPairingRepository = matchPairingRepository;
         this.matchPairingService = matchPairingService;
         this.playerRepository = playerRepository;
+        this.organizationService = organizationService;
         this.lineNotificationService = lineNotificationService;
         // oEmbed は外部I/O。接続・読取とも短いタイムアウトにし、失敗時は title=null で続行する。
         var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
@@ -316,10 +319,18 @@ public class MatchVideoService {
      * <p><b>参加日スコープ（hasSessionOnDateForUser）は適用しない。</b>
      * 当メソッドは操作ユーザーIDを受け取らない設計のため、その日の練習に参加して
      * いないユーザー（撮影担当・第三者登録）でも候補が返ることが構造的に担保される。
-     * 一方、<b>組織スコープは維持する</b>: ペアリングは
-     * {@link MatchPairingService#getByDate(LocalDate, boolean, Long)} に
-     * {@code organizationId} を渡して当該団体のセッション参加者のもののみへ絞り込む
-     * （同日に複数団体のセッションがあっても他団体の組み合わせが混入しない）。</p>
+     * 一方、<b>組織スコープは pairings / matches の両方で対称に維持する</b>:
+     * <ul>
+     *   <li>ペアリングは {@link MatchPairingService#getByDate(LocalDate, boolean, Long)} に
+     *       {@code organizationId} を渡して当該団体のセッション参加者のもののみへ絞り込む。</li>
+     *   <li>試合結果（matches）は組織カラムを持たないため、{@code organizationId != null} の場合のみ
+     *       「両選手（player1Id・player2Id）が当該団体に所属する」ものだけを候補化する
+     *       （所属判定は {@link OrganizationService#getOrganizationMemberPlayerIds(Long)} を1クエリで解決）。</li>
+     * </ul>
+     * これにより、同日に複数団体の試合結果があっても、他団体の matches-only 候補が
+     * {@code organizationId} 指定時に混入しない（pairings/matches の組織スコープ対称化）。
+     * {@code organizationId == null}（組織非限定）の場合は matches を日付のみで取得し、
+     * スコープしない（アプリ全体の PLAYER 未指定時の挙動と一貫）。</p>
      *
      * <p>統合時、同一自然キーが pairings と matches の両方にある場合は
      * <b>matches を優先</b>する（{@code hasResult=true}, {@code matchId} 設定）。
@@ -339,10 +350,21 @@ public class MatchVideoService {
         //    light=false で MatchPairingService に委譲し、組織スコープ（団体一貫性）を担保する。
         List<MatchPairingDto> pairings = matchPairingService.getByDate(date, false, organizationId);
 
-        // 2. 試合結果取得（日付のみ）。matches に組織カラムはなく、MatchController.getByDate も
-        //    matches を組織で絞っていない（参加日スコープのみ）。よって日付のみで取得し、
-        //    団体一貫性は (1) のペアリング側の組織スコープで実質的に担保する。
+        // 2. 試合結果取得（日付）。matches に組織カラムはないため、組織スコープは
+        //    選手の所属（player_organizations）経由で適用する。
+        //    organizationId != null のときのみ、当該団体の所属選手ID集合を1クエリで取得し
+        //    （N+1回避）、「両選手が当該団体に所属する」matches だけを候補化する。
+        //    これで pairings 側の組織スコープと対称になり、同日に複数団体の試合結果が
+        //    あっても他団体の matches-only 候補が混入しない。
+        //    organizationId == null（組織非限定）は日付のみで取得しスコープしない。
         List<Match> matches = matchRepository.findByMatchDateOrderByMatchNumber(date);
+        if (organizationId != null) {
+            Set<Long> memberPlayerIds = organizationService.getOrganizationMemberPlayerIds(organizationId);
+            matches = matches.stream()
+                    .filter(m -> memberPlayerIds.contains(m.getPlayer1Id())
+                            && memberPlayerIds.contains(m.getPlayer2Id()))
+                    .collect(Collectors.toList());
+        }
 
         // 3. 登録済み動画を取得し、自然キー (matchNumber, min, max) の Set を構築。
         Set<String> registeredKeys = matchVideoRepository.findByMatchDate(date).stream()

@@ -2280,14 +2280,17 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え。所有者チェックはサービス層 |
 | DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除）。YouTube上の本体は残る |
 | GET | `/?date=` | ALL | 指定日の動画一覧（当日結果一覧の「動画あり」バッジ用） |
-| GET | `/date-candidates?date=&organizationId=` | ALL | 指定日の動画登録候補（動画倉庫の登録モーダル「日付から」用）。**参加日スコープなし**・**組織スコープあり** |
+| GET | `/date-candidates?date=&organizationId=` | ALL | 指定日の動画登録候補（動画倉庫の登録モーダル「日付から」用）。**参加日スコープなし**・**組織スコープあり（pairings/matches とも対称）** |
 | GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング |
 
 #### GET `/api/match-videos/date-candidates`
 動画倉庫の登録モーダル「日付から」で使用する読み取り専用の候補API。指定日の対戦カードを返す。
 
 - **参加日スコープ（`hasSessionOnDateForUser`）は適用しない**。その日の練習に参加していないユーザー（撮影担当者・第三者登録者・管理者代理登録）でも候補を選べる（動画登録は全選手可の仕様）。サービスは操作ユーザーIDを受け取らない設計のため、非参加でも候補が返ることが構造的に担保される
-- **組織スコープは維持**する。`OrganizationScopeResolver` で effectiveOrgId を解決（`search` と同じ流儀。ADMIN は自団体強制、PLAYER は所属団体のみ、SUPER_ADMIN は任意）し、ペアリング取得（`MatchPairingService.getByDate(date, light=false, organizationId)`）に渡して他団体の候補混入を防ぐ。`matches` には組織カラムがないため日付のみで取得し、団体一貫性はペアリング側の組織スコープで実質的に担保する
+- **組織スコープは pairings / matches の両方で対称に維持**する。`OrganizationScopeResolver` で effectiveOrgId を解決（`search` と同じ流儀。ADMIN は自団体強制、PLAYER は所属団体のみ、SUPER_ADMIN は任意）する。
+    - ペアリングは `MatchPairingService.getByDate(date, light=false, organizationId)` に渡して当該団体のセッション参加者のもののみへ絞り込む
+    - `matches` には組織カラムがないため、`organizationId` 指定時は**選手の所属（`player_organizations`）経由でスコープ**する。すなわち**両選手（player1Id・player2Id）が当該団体に所属する `matches` のみ**を候補化する（所属選手ID集合を1クエリで取得して照合し N+1 を回避）。これで pairings 側と対称になり、同日に複数団体の試合結果があっても**他団体の matches-only 候補が混入しない**
+    - `organizationId` 未指定（SUPER_ADMIN で組織非限定）の場合は `matches` を日付のみで取得しスコープしない（アプリ全体の組織未指定時の挙動と一貫）
 - サーバ側で 組み合わせ（`match_pairings`）+ 試合結果（`matches`）を**自然キー `(matchDate, matchNumber, min(p1,p2), max(p1,p2))` で統合・重複排除**する。同一キーが両方にある場合は **`matches` 優先**（結果情報を保持）
 - 各候補に `registered`（同自然キーの `match_videos` が登録済みか）・`hasResult`（同自然キーの `matches` があるか）・`matchId` を付与
 - 選手名は `players` からバッチ解決（N+1回避）。`matches` のみのスロットの選手名解決に使う（ペアリング由来は `MatchPairingDto` が既に選手名を保持）
