@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.MatchPairingDto;
 import com.karuta.matchtracker.dto.MatchVideoCreateRequest;
+import com.karuta.matchtracker.dto.MatchVideoDateCandidateDto;
 import com.karuta.matchtracker.dto.MatchVideoDto;
 import com.karuta.matchtracker.dto.MatchVideoUpdateRequest;
 import com.karuta.matchtracker.dto.PagedResponse;
@@ -64,6 +66,9 @@ class MatchVideoServiceTest {
     private MatchPairingRepository matchPairingRepository;
 
     @Mock
+    private MatchPairingService matchPairingService;
+
+    @Mock
     private PlayerRepository playerRepository;
 
     @Mock
@@ -73,6 +78,7 @@ class MatchVideoServiceTest {
 
     private Player player1;
     private Player player2;
+    private Player player3;
     private LocalDate today;
 
     private static final String VALID_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
@@ -84,12 +90,13 @@ class MatchVideoServiceTest {
 
         player1 = Player.builder().id(1L).name("山田太郎").build();
         player2 = Player.builder().id(2L).name("佐藤花子").build();
+        player3 = Player.builder().id(3L).name("鈴木一郎").build();
 
         // 実 RestClient.Builder を渡して構築（ネットワーク呼び出しは fetchTitle のスタブで遮断）。
         // 個々のテストで fetchTitle の戻り値を制御するため spy 化する。
         MatchVideoService real = new MatchVideoService(
                 matchVideoRepository, matchRepository, matchPairingRepository,
-                playerRepository, lineNotificationService, RestClient.builder());
+                matchPairingService, playerRepository, lineNotificationService, RestClient.builder());
         matchVideoService = spy(real);
     }
 
@@ -654,6 +661,169 @@ class MatchVideoServiceTest {
     }
 
     @Nested
+    @DisplayName("日付別候補（動画登録モーダル「日付から」用）")
+    class GetDateCandidates {
+
+        @Test
+        @DisplayName("pairings+matches を自然キーで統合・重複排除し、両方ある場合は matches を優先する（hasResult/matchId が付く）")
+        void testMergeMatchesPreferredOverPairing() {
+            // 同じ自然キー (matchNumber=1, 1-2) が pairings と matches の両方にある
+            when(matchPairingService.getByDate(today, false, 7L))
+                    .thenReturn(List.of(buildPairingDto(1, 1L, "山田太郎", 2L, "佐藤花子")));
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatch(50L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            // 重複排除されて1件のみ
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            // matches 優先: 結果情報が付く
+            assertThat(c.isHasResult()).isTrue();
+            assertThat(c.getMatchId()).isEqualTo(50L);
+            assertThat(c.getMatchNumber()).isEqualTo(1);
+            assertThat(c.getPlayer1Id()).isEqualTo(1L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+            assertThat(c.getMatchDate()).isEqualTo(today);
+        }
+
+        @Test
+        @DisplayName("pairing のみのスロットは hasResult=false / matchId=null になる")
+        void testPairingOnlySlotHasNoResult() {
+            when(matchPairingService.getByDate(today, false, 7L))
+                    .thenReturn(List.of(buildPairingDto(2, 1L, "山田太郎", 2L, "佐藤花子")));
+            // matches は別キー（試合番号が違う）→ 統合されない
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of());
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.isHasResult()).isFalse();
+            assertThat(c.getMatchId()).isNull();
+            // pairing 由来は選手名を引き継ぐ
+            assertThat(c.getPlayer1Name()).isEqualTo("山田太郎");
+            assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+        }
+
+        @Test
+        @DisplayName("registered: 同自然キーの動画があれば true、なければ false")
+        void testRegisteredFlag() {
+            // matchNumber=1 のスロットには動画あり、matchNumber=2 のスロットには動画なし
+            when(matchPairingService.getByDate(today, false, 7L))
+                    .thenReturn(List.of(
+                            buildPairingDto(1, 1L, "山田太郎", 2L, "佐藤花子"),
+                            buildPairingDto(2, 1L, "山田太郎", 3L, "鈴木一郎")));
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of());
+            // 動画は matchNumber=1, players (1,2) のみ登録済み
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of(buildVideo(900L, 1L)));
+            // 選手名は pairing DTO が既に保持しているため playerRepository は呼ばれない
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).hasSize(2);
+            MatchVideoDateCandidateDto m1 = result.stream().filter(c -> c.getMatchNumber() == 1).findFirst().orElseThrow();
+            MatchVideoDateCandidateDto m2 = result.stream().filter(c -> c.getMatchNumber() == 2).findFirst().orElseThrow();
+            assertThat(m1.isRegistered()).isTrue();
+            assertThat(m2.isRegistered()).isFalse();
+        }
+
+        @Test
+        @DisplayName("matches のみのスロットでも選手名がバッチ解決される")
+        void testPlayerNameResolutionForMatchesOnlySlot() {
+            // pairings は空。matches のみ存在 → 選手名は playerRepository から解決する
+            when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatch(60L, 1L, 2L)));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.getPlayer1Name()).isEqualTo("山田太郎");
+            assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+            assertThat(c.isHasResult()).isTrue();
+            assertThat(c.getMatchId()).isEqualTo(60L);
+        }
+
+        @Test
+        @DisplayName("matchNumber 昇順でソートして返す")
+        void testSortedByMatchNumber() {
+            // 入力順をわざと降順にして、出力が昇順になることを検証
+            when(matchPairingService.getByDate(today, false, 7L))
+                    .thenReturn(List.of(
+                            buildPairingDto(3, 1L, "山田太郎", 2L, "佐藤花子"),
+                            buildPairingDto(1, 1L, "山田太郎", 3L, "鈴木一郎")));
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatchNumbered(70L, 2, 2L, 3L)));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2, player3));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).extracting(MatchVideoDateCandidateDto::getMatchNumber)
+                    .containsExactly(1, 2, 3);
+        }
+
+        @Test
+        @DisplayName("組織スコープ: organizationId はペアリング取得（MatchPairingService.getByDate）にそのまま渡される")
+        void testOrganizationScopePassedToPairingService() {
+            when(matchPairingService.getByDate(today, false, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of());
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            matchVideoService.getDateCandidates(today, 7L);
+
+            // 参加日スコープなし・組織スコープありで light=false 委譲していることを検証
+            verify(matchPairingService).getByDate(today, false, 7L);
+        }
+
+        @Test
+        @DisplayName("参加日スコープに依存しない: currentUserId を受け取らず hasSessionOnDateForUser を呼ばない構造のため、非参加でも候補が返る")
+        void testNotDependentOnSessionParticipationScope() {
+            // 非参加ユーザーでも、サービスは currentUserId を一切受け取らず、
+            // ペアリングは MatchPairingService.getByDate（参加日スコープなし）から取得するため候補が返る。
+            when(matchPairingService.getByDate(today, false, null))
+                    .thenReturn(List.of(buildPairingDto(1, 1L, "山田太郎", 2L, "佐藤花子")));
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of());
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            // organizationId=null（組織非限定）でも候補が返ることを確認
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, null);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getMatchNumber()).isEqualTo(1);
+            // 参加日判定に関わる依存（PracticeSession/Participant 等）には一切アクセスしない
+            verify(matchPairingService).getByDate(today, false, null);
+        }
+
+        @Test
+        @DisplayName("pairing の選手順序が逆でも自然キー正規化され、生の正規化IDが入る")
+        void testPairingReverseOrderNormalized() {
+            // pairing は (player1=2, player2=1) の逆順。正規化後 (1,2) になり、名前も対応付け直す
+            when(matchPairingService.getByDate(today, false, 7L))
+                    .thenReturn(List.of(buildPairingDto(1, 2L, "佐藤花子", 1L, "山田太郎")));
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today)).thenReturn(List.of());
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            // 正規化後の生ID（1 < 2）がそのまま入る
+            assertThat(c.getPlayer1Id()).isEqualTo(1L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+            // 名前も正規化後IDに対応（player1Id=1 → 山田太郎, player2Id=2 → 佐藤花子）
+            assertThat(c.getPlayer1Name()).isEqualTo("山田太郎");
+            assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+        }
+    }
+
+    @Nested
     @DisplayName("倉庫検索（年月→範囲変換・mine・ページング）")
     class Search {
 
@@ -806,16 +976,33 @@ class MatchVideoServiceTest {
     // ===================== fixture builders =====================
 
     private Match buildMatch(Long id, Long p1, Long p2) {
+        return buildMatchNumbered(id, 1, p1, p2);
+    }
+
+    private Match buildMatchNumbered(Long id, Integer matchNumber, Long p1, Long p2) {
         return Match.builder()
                 .id(id)
                 .matchDate(today)
-                .matchNumber(1)
+                .matchNumber(matchNumber)
                 .player1Id(p1)
                 .player2Id(p2)
                 .winnerId(1L)
                 .scoreDifference(5)
                 .createdBy(1L)
                 .updatedBy(1L)
+                .build();
+    }
+
+    private MatchPairingDto buildPairingDto(Integer matchNumber, Long p1, String p1Name, Long p2, String p2Name) {
+        return MatchPairingDto.builder()
+                .id((long) matchNumber)
+                .sessionDate(today)
+                .matchNumber(matchNumber)
+                .player1Id(p1)
+                .player1Name(p1Name)
+                .player2Id(p2)
+                .player2Name(p2Name)
+                .createdBy(1L)
                 .build();
     }
 

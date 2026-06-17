@@ -1,7 +1,9 @@
 package com.karuta.matchtracker.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.karuta.matchtracker.dto.MatchPairingDto;
 import com.karuta.matchtracker.dto.MatchVideoCreateRequest;
+import com.karuta.matchtracker.dto.MatchVideoDateCandidateDto;
 import com.karuta.matchtracker.dto.MatchVideoDto;
 import com.karuta.matchtracker.dto.MatchVideoUpdateRequest;
 import com.karuta.matchtracker.dto.PagedResponse;
@@ -28,10 +30,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -93,6 +99,7 @@ public class MatchVideoService {
     private final MatchVideoRepository matchVideoRepository;
     private final MatchRepository matchRepository;
     private final MatchPairingRepository matchPairingRepository;
+    private final MatchPairingService matchPairingService;
     private final PlayerRepository playerRepository;
     private final LineNotificationService lineNotificationService;
     private final RestClient oembedRestClient;
@@ -100,12 +107,14 @@ public class MatchVideoService {
     public MatchVideoService(MatchVideoRepository matchVideoRepository,
                              MatchRepository matchRepository,
                              MatchPairingRepository matchPairingRepository,
+                             MatchPairingService matchPairingService,
                              PlayerRepository playerRepository,
                              LineNotificationService lineNotificationService,
                              RestClient.Builder restClientBuilder) {
         this.matchVideoRepository = matchVideoRepository;
         this.matchRepository = matchRepository;
         this.matchPairingRepository = matchPairingRepository;
+        this.matchPairingService = matchPairingService;
         this.playerRepository = playerRepository;
         this.lineNotificationService = lineNotificationService;
         // oEmbed は外部I/O。接続・読取とも短いタイムアウトにし、失敗時は title=null で続行する。
@@ -291,6 +300,135 @@ public class MatchVideoService {
     public List<MatchVideoDto> findByDate(LocalDate date) {
         List<MatchVideo> videos = matchVideoRepository.findByMatchDate(date);
         return enrich(videos);
+    }
+
+    // ===================== 日付別候補（動画登録モーダル「日付から」用） =====================
+
+    /**
+     * 指定日の動画登録候補を取得する（試合番号の昇順）。
+     *
+     * <p>動画倉庫の登録モーダル「日付から」で使用する読み取り専用の候補API。
+     * 組み合わせ（{@code match_pairings}）と試合結果（{@code matches}）を
+     * 自然キー {@code (matchDate, matchNumber, min(p1,p2), max(p1,p2))} で統合・重複排除し、
+     * 各候補に登録済みフラグ（{@code registered}）・結果有無（{@code hasResult}）・
+     * 試合ID（{@code matchId}）を付与して返す。</p>
+     *
+     * <p><b>参加日スコープ（hasSessionOnDateForUser）は適用しない。</b>
+     * 当メソッドは操作ユーザーIDを受け取らない設計のため、その日の練習に参加して
+     * いないユーザー（撮影担当・第三者登録）でも候補が返ることが構造的に担保される。
+     * 一方、<b>組織スコープは維持する</b>: ペアリングは
+     * {@link MatchPairingService#getByDate(LocalDate, boolean, Long)} に
+     * {@code organizationId} を渡して当該団体のセッション参加者のもののみへ絞り込む
+     * （同日に複数団体のセッションがあっても他団体の組み合わせが混入しない）。</p>
+     *
+     * <p>統合時、同一自然キーが pairings と matches の両方にある場合は
+     * <b>matches を優先</b>する（{@code hasResult=true}, {@code matchId} 設定）。
+     * pairings のみのスロットは {@code hasResult=false}, {@code matchId=null}。
+     * 選手名は {@code players} からバッチ解決して N+1 を回避する
+     * （matches のみのスロットの選手名解決に使う。pairings 由来は DTO が既に選手名を持つ）。</p>
+     *
+     * <p>{@code player1Id}/{@code player2Id} は正規化後（player1Id &lt; player2Id）の
+     * 生IDをそのまま入れる（フロントが生IDで「相手未登録」を判定するため）。</p>
+     *
+     * @param date           対戦日
+     * @param organizationId 組織スコープ（null は組織非限定。ペアリングの絞り込みにのみ使用）
+     * @return 候補DTOのリスト（matchNumber 昇順）
+     */
+    public List<MatchVideoDateCandidateDto> getDateCandidates(LocalDate date, Long organizationId) {
+        // 1. ペアリング取得（参加日スコープなし・組織スコープあり・選手名込み）。
+        //    light=false で MatchPairingService に委譲し、組織スコープ（団体一貫性）を担保する。
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, false, organizationId);
+
+        // 2. 試合結果取得（日付のみ）。matches に組織カラムはなく、MatchController.getByDate も
+        //    matches を組織で絞っていない（参加日スコープのみ）。よって日付のみで取得し、
+        //    団体一貫性は (1) のペアリング側の組織スコープで実質的に担保する。
+        List<Match> matches = matchRepository.findByMatchDateOrderByMatchNumber(date);
+
+        // 3. 登録済み動画を取得し、自然キー (matchNumber, min, max) の Set を構築。
+        Set<String> registeredKeys = matchVideoRepository.findByMatchDate(date).stream()
+                .map(v -> candidateKey(v.getMatchNumber(), v.getPlayer1Id(), v.getPlayer2Id()))
+                .collect(Collectors.toSet());
+
+        // 4. 自然キーで統合・重複排除。同一キーが pairings と matches の両方にある場合は
+        //    matches 優先（後勝ち。matches を後から put して上書きする）。
+        //    挿入順（pairings → matches）を保持するため LinkedHashMap を使う。
+        Map<String, MatchVideoDateCandidateDto> byKey = new LinkedHashMap<>();
+
+        for (MatchPairingDto p : pairings) {
+            long normP1 = Math.min(p.getPlayer1Id(), p.getPlayer2Id());
+            long normP2 = Math.max(p.getPlayer1Id(), p.getPlayer2Id());
+            String key = candidateKey(p.getMatchNumber(), normP1, normP2);
+            byKey.put(key, MatchVideoDateCandidateDto.builder()
+                    .matchDate(date)
+                    .matchNumber(p.getMatchNumber())
+                    .player1Id(normP1)
+                    .player1Name(normP1 == p.getPlayer1Id() ? p.getPlayer1Name() : p.getPlayer2Name())
+                    .player2Id(normP2)
+                    .player2Name(normP2 == p.getPlayer2Id() ? p.getPlayer2Name() : p.getPlayer1Name())
+                    .hasResult(false)
+                    .matchId(null)
+                    .build());
+        }
+
+        for (Match m : matches) {
+            long normP1 = Math.min(m.getPlayer1Id(), m.getPlayer2Id());
+            long normP2 = Math.max(m.getPlayer1Id(), m.getPlayer2Id());
+            String key = candidateKey(m.getMatchNumber(), normP1, normP2);
+            // matches 優先: pairings 由来のスロットがあっても上書きして結果情報を保持する。
+            // 選手名はこの時点では未解決（後段でバッチ解決）。
+            byKey.put(key, MatchVideoDateCandidateDto.builder()
+                    .matchDate(date)
+                    .matchNumber(m.getMatchNumber())
+                    .player1Id(normP1)
+                    .player2Id(normP2)
+                    .hasResult(true)
+                    .matchId(m.getId())
+                    .build());
+        }
+
+        List<MatchVideoDateCandidateDto> candidates = new ArrayList<>(byKey.values());
+
+        // 5. registered フラグ付与（同自然キーの動画があれば true）。
+        for (MatchVideoDateCandidateDto c : candidates) {
+            String key = candidateKey(c.getMatchNumber(), c.getPlayer1Id(), c.getPlayer2Id());
+            c.setRegistered(registeredKeys.contains(key));
+        }
+
+        // 6. 選手名のバッチ解決（N+1回避）。名前未設定のスロット（matches 由来）に名前を埋める。
+        //    pairings 由来は (4) で MatchPairingDto の名前を引き継ぎ済み。
+        List<Long> missingNameIds = candidates.stream()
+                .filter(c -> c.getPlayer1Name() == null || c.getPlayer2Name() == null)
+                .flatMap(c -> Stream.of(c.getPlayer1Id(), c.getPlayer2Id()))
+                .distinct()
+                .collect(Collectors.toList());
+        if (!missingNameIds.isEmpty()) {
+            Map<Long, String> playerNames = new HashMap<>();
+            playerRepository.findAllById(missingNameIds)
+                    .forEach(pl -> playerNames.put(pl.getId(), pl.getName()));
+            for (MatchVideoDateCandidateDto c : candidates) {
+                if (c.getPlayer1Name() == null) {
+                    c.setPlayer1Name(playerNames.get(c.getPlayer1Id()));
+                }
+                if (c.getPlayer2Name() == null) {
+                    c.setPlayer2Name(playerNames.get(c.getPlayer2Id()));
+                }
+            }
+        }
+
+        // 7. matchNumber 昇順でソートして返す。
+        candidates.sort(Comparator.comparing(MatchVideoDateCandidateDto::getMatchNumber,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return candidates;
+    }
+
+    /**
+     * 候補統合の自然キー（matchNumber, min(p1,p2), max(p1,p2)）を文字列で生成する。
+     * 呼び出し側で正規化済みの値を渡しても、安全のため min/max で再正規化する。
+     */
+    private static String candidateKey(Integer matchNumber, long playerA, long playerB) {
+        long smaller = Math.min(playerA, playerB);
+        long larger = Math.max(playerA, playerB);
+        return matchNumber + "|" + smaller + "|" + larger;
     }
 
     // ===================== 倉庫検索 =====================

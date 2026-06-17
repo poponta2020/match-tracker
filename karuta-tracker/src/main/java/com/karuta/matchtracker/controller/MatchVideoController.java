@@ -2,11 +2,13 @@ package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.MatchVideoCreateRequest;
+import com.karuta.matchtracker.dto.MatchVideoDateCandidateDto;
 import com.karuta.matchtracker.dto.MatchVideoDto;
 import com.karuta.matchtracker.dto.MatchVideoUpdateRequest;
 import com.karuta.matchtracker.dto.PagedResponse;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.MatchVideoService;
+import com.karuta.matchtracker.util.OrganizationScopeResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ import java.util.List;
 public class MatchVideoController {
 
     private final MatchVideoService matchVideoService;
+    private final OrganizationScopeResolver organizationScopeResolver;
 
     /**
      * 動画を登録する。
@@ -96,6 +99,33 @@ public class MatchVideoController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.debug("GET /api/match-videos?date={} - 日付別動画一覧", date);
         return ResponseEntity.ok(matchVideoService.findByDate(date));
+    }
+
+    /**
+     * 指定日の動画登録候補を取得する（動画倉庫の登録モーダル「日付から」用）。
+     *
+     * <p>組み合わせ（match_pairings）と試合結果（matches）を自然キーで統合・重複排除し、
+     * 各候補に登録済みフラグ（registered）・結果有無（hasResult）・試合ID（matchId）を付与して返す。</p>
+     *
+     * <p><b>参加日スコープ（hasSessionOnDateForUser）は適用しない</b>ため、その日の練習に
+     * 参加していないユーザー（撮影担当・第三者登録）でも候補を取得できる（動画登録は全選手可の仕様）。
+     * <b>組織スコープは維持</b>し、{@link OrganizationScopeResolver} で effectiveOrgId を解決して
+     * 他団体の候補混入を防ぐ（{@code search} と同じ流儀）。</p>
+     *
+     * @param date           対戦日
+     * @param organizationId 組織ID（任意。ロールごとのスコープ解決は OrganizationScopeResolver に委譲）
+     * @return 候補リスト（matchNumber 昇順）
+     */
+    @GetMapping("/date-candidates")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<List<MatchVideoDateCandidateDto>> getDateCandidates(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long organizationId,
+            HttpServletRequest httpRequest) {
+        log.debug("GET /api/match-videos/date-candidates?date={}, organizationId={} - 日付別動画登録候補",
+                date, organizationId);
+        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        return ResponseEntity.ok(matchVideoService.getDateCandidates(date, effectiveOrgId));
     }
 
     /**
