@@ -1077,13 +1077,14 @@ Entity Layer (JPA Entity)
 | PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え（所有者チェックはサービス層） |
 | DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除） |
 | GET | `/?date=` | ALL | 指定日の動画一覧 |
-| GET | `/date-candidates?date=&organizationId=` | ALL | 指定日の動画登録候補（登録モーダル「日付から」用。参加日スコープなし・組織スコープあり。`List<MatchVideoDateCandidateDto>`） |
+| GET | `/date-candidates?date=&organizationId=` | ALL | 指定日の動画登録候補（登録モーダル「日付から」用。参加日スコープなし・組織スコープあり〔pairings/matches とも対称〕。`List<MatchVideoDateCandidateDto>`） |
 | GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング（`PagedResponse<MatchVideoDto>`） |
 
 **GET `/date-candidates` レスポンス**: `List<MatchVideoDateCandidateDto>`
 - 組み合わせ（`match_pairings`）+ 試合結果（`matches`）を自然キー `(matchDate, matchNumber, min(p1,p2), max(p1,p2))` で統合・重複排除（同一キーは matches 優先）し、各候補に `registered` / `hasResult` / `matchId` を付与
 - **参加日スコープ（`hasSessionOnDateForUser`）は適用しない**（撮影担当・第三者登録など非参加ユーザーでも候補を選べる）。サービスは操作ユーザーIDを受け取らない
-- **組織スコープは維持**: `OrganizationScopeResolver` で effectiveOrgId を解決し、`MatchPairingService.getByDate(date, false, organizationId)` に渡す（`search` と同じ流儀）。`matches` は日付のみ取得（組織カラムなし）し、団体一貫性はペアリング側の組織スコープで担保
+- **組織スコープは pairings / matches の両方で対称に維持**: `OrganizationScopeResolver` で effectiveOrgId を解決し、`MatchPairingService.getByDate(date, false, organizationId)` に渡す（`search` と同じ流儀）。`matches` には組織カラムがないため、`organizationId` 指定時は**選手の所属（`player_organizations`）経由でスコープ**する（**両選手が当該団体所属の `matches` のみ**候補化。所属選手ID集合を1クエリで取得して照合し N+1 を回避）。これで pairings 側と対称になり、同日に複数団体の試合結果があっても他団体の matches-only 候補が混入しない。`organizationId` 未指定（組織非限定）の場合は `matches` を日付のみで取得しスコープしない
+- **既定組織スコープ解決（当エンドポイント限定の特例）**: フロントは `organizationId` を渡さず、`OrganizationScopeResolver` は PLAYER 未指定時に `null`（非限定）を返す。そのままでは同日の他団体候補が混入し得るため、`MatchVideoController` は effectiveOrgId が `null` のとき**操作ユーザーの所属団体がちょうど1件ならその団体IDで補完**してスコープする（`resolveDefaultOrganizationIdForCandidates`）。0/複数所属または `currentUserId` が null の場合は `null` のまま（＝非限定。複数所属時の一意解決はアプリ全体の別課題）。この特例は当エンドポイント限定で、他エンドポイントの「PLAYER 未指定→null」挙動は変えない。参加日スコープとは独立しており、非参加ユーザー（撮影担当等）でも所属団体の候補は見られる
 - 選手名は `players` からバッチ解決（N+1回避。matches のみスロットの名前解決に使用）。`player1Id`/`player2Id` は正規化後（p1<p2）の生IDをそのまま返す
 
 **POST リクエスト**: `MatchVideoCreateRequest`

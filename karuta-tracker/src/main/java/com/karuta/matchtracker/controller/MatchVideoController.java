@@ -8,6 +8,7 @@ import com.karuta.matchtracker.dto.MatchVideoUpdateRequest;
 import com.karuta.matchtracker.dto.PagedResponse;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.MatchVideoService;
+import com.karuta.matchtracker.service.OrganizationService;
 import com.karuta.matchtracker.util.OrganizationScopeResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -34,6 +35,7 @@ public class MatchVideoController {
 
     private final MatchVideoService matchVideoService;
     private final OrganizationScopeResolver organizationScopeResolver;
+    private final OrganizationService organizationService;
 
     /**
      * 動画を登録する。
@@ -112,6 +114,16 @@ public class MatchVideoController {
      * <b>組織スコープは維持</b>し、{@link OrganizationScopeResolver} で effectiveOrgId を解決して
      * 他団体の候補混入を防ぐ（{@code search} と同じ流儀）。</p>
      *
+     * <p><b>このエンドポイント限定の特例</b>: フロントは {@code organizationId} を渡さず、
+     * {@link OrganizationScopeResolver} は PLAYER 未指定時に {@code null}（組織非限定）を返すため、
+     * そのままでは同日の他団体候補が混入し得る。これを避けるため、effectiveOrgId が {@code null} の場合は
+     * <b>操作ユーザーの単一所属団体を既定スコープとして補完</b>する
+     * （{@link #resolveDefaultOrganizationIdForCandidates}）。動画登録候補は実運用上、操作者の所属団体に
+     * 限定するのが自然なため。0 または複数所属の場合は {@code null} のまま（＝非限定。複数所属時の一意解決は
+     * アプリ全体の別課題に委ねる）。この特例は当エンドポイント限定で、他エンドポイントの
+     * 「PLAYER 未指定→null」挙動は変えない。参加日スコープとは独立しており、非参加ユーザー
+     * （撮影担当等）でも所属団体の候補は見られる。</p>
+     *
      * @param date           対戦日
      * @param organizationId 組織ID（任意。ロールごとのスコープ解決は OrganizationScopeResolver に委譲）
      * @return 候補リスト（matchNumber 昇順）
@@ -125,7 +137,39 @@ public class MatchVideoController {
         log.debug("GET /api/match-videos/date-candidates?date={}, organizationId={} - 日付別動画登録候補",
                 date, organizationId);
         Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        // 動画登録候補は単一所属PLAYERを既定で所属団体にスコープする（当エンドポイント限定の特例）。
+        // OrganizationScopeResolver が null（PLAYER 未指定など組織非限定）を返したときのみ、
+        // 操作ユーザーの所属団体がちょうど1件ならその団体IDで補完し、他団体候補の混入を防ぐ。
+        if (effectiveOrgId == null) {
+            Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+            effectiveOrgId = resolveDefaultOrganizationIdForCandidates(currentUserId);
+        }
         return ResponseEntity.ok(matchVideoService.getDateCandidates(date, effectiveOrgId));
+    }
+
+    /**
+     * 動画登録候補（{@code date-candidates}）専用の既定組織スコープを解決する。
+     *
+     * <p>{@link OrganizationScopeResolver} が組織非限定（{@code null}）と判断した場合に限り呼ばれる。
+     * 操作ユーザーの所属団体が<b>ちょうど1件</b>のときだけその団体IDを返し、当該団体にスコープする。
+     * 0 件（未所属）または複数所属の場合は {@code null} を返し、従来どおり組織非限定として扱う
+     * （複数所属時の一意な団体決定はアプリ全体の別課題に委ねる）。</p>
+     *
+     * <p>SUPER_ADMIN 等で {@code currentUserId} が所属を持たない場合も自然に {@code null} に倒れる。
+     * この既定解決は当エンドポイント限定の特例であり、他エンドポイントの組織解決挙動には影響しない。</p>
+     *
+     * @param currentUserId 操作ユーザーID（null 可。null の場合は組織非限定）
+     * @return 単一所属ならその団体ID、0/複数所属または currentUserId が null なら {@code null}
+     */
+    Long resolveDefaultOrganizationIdForCandidates(Long currentUserId) {
+        if (currentUserId == null) {
+            return null;
+        }
+        List<Long> orgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+        if (orgIds != null && orgIds.size() == 1) {
+            return orgIds.get(0);
+        }
+        return null;
     }
 
     /**
