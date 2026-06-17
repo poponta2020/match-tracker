@@ -189,8 +189,6 @@ class MatchVideoControllerTest {
         void shouldNotScopeForSuperAdminWithoutExplicitOrg() throws Exception {
             // Given: SUPER_ADMIN(userId=1) は organizations を持たない（getPlayerOrganizationIds は空）。
             LocalDate date = LocalDate.of(2024, 1, 15);
-            when(organizationService.getPlayerOrganizationIds(1L))
-                    .thenReturn(Collections.emptyList());
             when(matchVideoService.getDateCandidates(eq(date), isNull()))
                     .thenReturn(Collections.emptyList());
 
@@ -201,6 +199,31 @@ class MatchVideoControllerTest {
                     .andExpect(status().isOk());
 
             verify(matchVideoService).getDateCandidates(eq(date), isNull());
+            // SUPER_ADMIN は既定解決（PLAYER 限定）に入らないため、所属引きを一切行わない。
+            verify(organizationService, never()).getPlayerOrganizationIds(any());
+        }
+
+        @Test
+        @DisplayName("SUPER_ADMIN が単一所属でも organizationId 未指定なら非限定（null）。所属団体に勝手に絞らない")
+        void shouldNotScopeForSuperAdminEvenWithSingleOrganization() throws Exception {
+            // Given: SUPER_ADMIN(userId=1) がたまたま1団体(7L)に所属していても、
+            //        SUPER_ADMIN は全団体横断のため、未指定時は所属団体に絞らず非限定（null）で呼ぶ。
+            //        ※ もし PLAYER 同様に既定解決していたら 7L に絞られてしまう（これが WARNING の指摘）。
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            when(matchVideoService.getDateCandidates(eq(date), isNull()))
+                    .thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-videos/date-candidates")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .param("date", "2024-01-15"))
+                    .andExpect(status().isOk());
+
+            // 非限定（null）で呼ばれ、単一所属の 7L には絞られない。
+            verify(matchVideoService).getDateCandidates(eq(date), isNull());
+            verify(matchVideoService, never()).getDateCandidates(eq(date), eq(7L));
+            // SUPER_ADMIN は既定解決の所属引き自体を行わない（ロールで早期に弾く）。
+            verify(organizationService, never()).getPlayerOrganizationIds(any());
         }
 
         @Test

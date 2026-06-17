@@ -322,7 +322,9 @@ public class MatchVideoService {
      * 一方、<b>組織スコープは pairings / matches の両方で対称に維持する</b>:
      * <ul>
      *   <li>ペアリングは {@link MatchPairingService#getByDate(LocalDate, boolean, Long)} に
-     *       {@code organizationId} を渡して当該団体のセッション参加者のもののみへ絞り込む。</li>
+     *       {@code light=true}・{@code organizationId} を渡して当該団体のセッション参加者の
+     *       もののみへ絞り込む。{@code light=true} は不要な recentMatches 取得を省くためで、
+     *       候補表示に必要な選手名・matchNumber は light でも DTO に含まれる。</li>
      *   <li>試合結果（matches）は組織カラムを持たないため、{@code organizationId != null} の場合のみ
      *       「両選手（player1Id・player2Id）が当該団体に所属する」ものだけを候補化する
      *       （所属判定は {@link OrganizationService#getOrganizationMemberPlayerIds(Long)} を1クエリで解決）。</li>
@@ -339,7 +341,10 @@ public class MatchVideoService {
      * （matches のみのスロットの選手名解決に使う。pairings 由来は DTO が既に選手名を持つ）。</p>
      *
      * <p>{@code player1Id}/{@code player2Id} は正規化後（player1Id &lt; player2Id）の
-     * 生IDをそのまま入れる（フロントが生IDで「相手未登録」を判定するため）。</p>
+     * 生IDをそのまま入れる（フロントが生IDで「相手未登録」を判定するため）。正規化・キー生成は
+     * {@code null} セーフで、選手IDが {@code null}（実運用では NOT NULL だが防御的に許容）でも
+     * {@link NullPointerException} で 500 にせず、{@code null} を維持したまま候補として返す
+     * （フロントが {@code 0/null} を「相手未登録（選択不可）」として表示制御する）。</p>
      *
      * @param date           対戦日
      * @param organizationId 組織スコープ（null は組織非限定。ペアリングの絞り込みにのみ使用）
@@ -347,8 +352,12 @@ public class MatchVideoService {
      */
     public List<MatchVideoDateCandidateDto> getDateCandidates(LocalDate date, Long organizationId) {
         // 1. ペアリング取得（参加日スコープなし・組織スコープあり・選手名込み）。
-        //    light=false で MatchPairingService に委譲し、組織スコープ（団体一貫性）を担保する。
-        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, false, organizationId);
+        //    light=true で MatchPairingService に委譲し、組織スコープ（団体一貫性）を担保する。
+        //    本APIは recentMatches（対戦履歴）を使わないため light=true とし、不要な履歴取得を避ける。
+        //    light=true でも convertToDtoWithCache が player1Id/player2Id/player1Name/player2Name/
+        //    matchNumber を必ず設定するため、候補表示に必要な選手名は欠落しない
+        //    （light は enrichWithRecentMatches の呼び出し有無だけを切り替える）。
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, true, organizationId);
 
         // 2. 試合結果取得（日付）。matches に組織カラムはないため、組織スコープは
         //    選手の所属（player_organizations）経由で適用する。
@@ -377,24 +386,32 @@ public class MatchVideoService {
         Map<String, MatchVideoDateCandidateDto> byKey = new LinkedHashMap<>();
 
         for (MatchPairingDto p : pairings) {
-            long normP1 = Math.min(p.getPlayer1Id(), p.getPlayer2Id());
-            long normP2 = Math.max(p.getPlayer1Id(), p.getPlayer2Id());
+            // 正規化は null セーフ（選手IDが null でも unboxing による NPE で 500 にしない）。
+            // 正規化後も null は維持し、フロントの「相手未登録(0/null)」判定を壊さない。
+            Long[] norm = normalizePlayerIds(p.getPlayer1Id(), p.getPlayer2Id());
+            Long normP1 = norm[0];
+            Long normP2 = norm[1];
             String key = candidateKey(p.getMatchNumber(), normP1, normP2);
+            // 名前は正規化で入れ替わったかに応じて対応付け直す。
+            // normP1 が元の player1Id と同一参照（入れ替えなし）なら player1Name、そうでなければ player2Name。
+            boolean swapped = normP1 != null && !normP1.equals(p.getPlayer1Id());
             byKey.put(key, MatchVideoDateCandidateDto.builder()
                     .matchDate(date)
                     .matchNumber(p.getMatchNumber())
                     .player1Id(normP1)
-                    .player1Name(normP1 == p.getPlayer1Id() ? p.getPlayer1Name() : p.getPlayer2Name())
+                    .player1Name(swapped ? p.getPlayer2Name() : p.getPlayer1Name())
                     .player2Id(normP2)
-                    .player2Name(normP2 == p.getPlayer2Id() ? p.getPlayer2Name() : p.getPlayer1Name())
+                    .player2Name(swapped ? p.getPlayer1Name() : p.getPlayer2Name())
                     .hasResult(false)
                     .matchId(null)
                     .build());
         }
 
         for (Match m : matches) {
-            long normP1 = Math.min(m.getPlayer1Id(), m.getPlayer2Id());
-            long normP2 = Math.max(m.getPlayer1Id(), m.getPlayer2Id());
+            // 正規化は null セーフ（matches の選手IDも NOT NULL だが防御的に null を許容）。
+            Long[] norm = normalizePlayerIds(m.getPlayer1Id(), m.getPlayer2Id());
+            Long normP1 = norm[0];
+            Long normP2 = norm[1];
             String key = candidateKey(m.getMatchNumber(), normP1, normP2);
             // matches 優先: pairings 由来のスロットがあっても上書きして結果情報を保持する。
             // 選手名はこの時点では未解決（後段でバッチ解決）。
@@ -421,6 +438,7 @@ public class MatchVideoService {
         List<Long> missingNameIds = candidates.stream()
                 .filter(c -> c.getPlayer1Name() == null || c.getPlayer2Name() == null)
                 .flatMap(c -> Stream.of(c.getPlayer1Id(), c.getPlayer2Id()))
+                .filter(java.util.Objects::nonNull) // null ID は findAllById に渡さない（防御的）
                 .distinct()
                 .collect(Collectors.toList());
         if (!missingNameIds.isEmpty()) {
@@ -444,13 +462,34 @@ public class MatchVideoService {
     }
 
     /**
-     * 候補統合の自然キー（matchNumber, min(p1,p2), max(p1,p2)）を文字列で生成する。
-     * 呼び出し側で正規化済みの値を渡しても、安全のため min/max で再正規化する。
+     * 候補統合の自然キー（matchNumber, min(p1,p2), max(p1,p2)）を文字列で生成する（null セーフ）。
+     *
+     * <p>呼び出し側で正規化済みの値を渡しても、安全のため {@link #normalizePlayerIds(Long, Long)} で
+     * 再正規化する。選手IDが {@code null}（実運用では NOT NULL のため通常来ないが、防御的に許容）でも
+     * {@link NullPointerException} で 500 にせず、{@code null} を含む安定したキー文字列を返す
+     * （{@code null} を {@code "null"} として文字列化）。これにより null を含む候補も
+     * 例外なく統合・重複排除できる。</p>
      */
-    private static String candidateKey(Integer matchNumber, long playerA, long playerB) {
-        long smaller = Math.min(playerA, playerB);
-        long larger = Math.max(playerA, playerB);
-        return matchNumber + "|" + smaller + "|" + larger;
+    private static String candidateKey(Integer matchNumber, Long playerA, Long playerB) {
+        Long[] norm = normalizePlayerIds(playerA, playerB);
+        return matchNumber + "|" + norm[0] + "|" + norm[1];
+    }
+
+    /**
+     * 選手IDペアを {@code [min, max]} に正規化する（null セーフ）。
+     *
+     * <p>両方とも非 null のときだけ {@code Math.min}/{@code Math.max} で大小を入れ替える。
+     * いずれかが {@code null} の場合は unboxing による {@link NullPointerException} を避けるため
+     * 入力順のまま返す（null を維持）。フロントは未登録相手を {@code 0/null} として
+     * 「相手未登録（選択不可）」と判定する契約のため、バックエンドは null を握りつぶさず保持する。</p>
+     *
+     * @return 長さ2の配列 {@code [小さい方 or null を含む第1要素, 大きい方 or 第2要素]}
+     */
+    private static Long[] normalizePlayerIds(Long playerA, Long playerB) {
+        if (playerA != null && playerB != null && playerA > playerB) {
+            return new Long[]{playerB, playerA};
+        }
+        return new Long[]{playerA, playerB};
     }
 
     // ===================== 倉庫検索 =====================

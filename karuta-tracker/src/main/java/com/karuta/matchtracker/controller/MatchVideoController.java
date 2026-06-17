@@ -114,15 +114,17 @@ public class MatchVideoController {
      * <b>組織スコープは維持</b>し、{@link OrganizationScopeResolver} で effectiveOrgId を解決して
      * 他団体の候補混入を防ぐ（{@code search} と同じ流儀）。</p>
      *
-     * <p><b>このエンドポイント限定の特例</b>: フロントは {@code organizationId} を渡さず、
+     * <p><b>このエンドポイント限定の特例（PLAYER 限定）</b>: フロントは {@code organizationId} を渡さず、
      * {@link OrganizationScopeResolver} は PLAYER 未指定時に {@code null}（組織非限定）を返すため、
-     * そのままでは同日の他団体候補が混入し得る。これを避けるため、effectiveOrgId が {@code null} の場合は
-     * <b>操作ユーザーの単一所属団体を既定スコープとして補完</b>する
+     * そのままでは同日の他団体候補が混入し得る。これを避けるため、<b>操作ロールが PLAYER で</b>
+     * effectiveOrgId が {@code null} の場合に限り、<b>操作ユーザーの単一所属団体を既定スコープとして補完</b>する
      * （{@link #resolveDefaultOrganizationIdForCandidates}）。動画登録候補は実運用上、操作者の所属団体に
      * 限定するのが自然なため。0 または複数所属の場合は {@code null} のまま（＝非限定。複数所属時の一意解決は
-     * アプリ全体の別課題に委ねる）。この特例は当エンドポイント限定で、他エンドポイントの
-     * 「PLAYER 未指定→null」挙動は変えない。参加日スコープとは独立しており、非参加ユーザー
-     * （撮影担当等）でも所属団体の候補は見られる。</p>
+     * アプリ全体の別課題に委ねる）。<b>SUPER_ADMIN / ADMIN ではこの既定解決を行わない</b>:
+     * SUPER_ADMIN は全団体横断（未指定なら非限定のまま）、ADMIN は {@code adminOrganizationId} で
+     * resolver がスコープ済みのため。SUPER_ADMIN がたまたま単一団体に所属していてもその団体に勝手に
+     * 絞らない。この特例は当エンドポイント限定で、他エンドポイントの「PLAYER 未指定→null」挙動は
+     * 変えない。参加日スコープとは独立しており、非参加ユーザー（撮影担当等）でも所属団体の候補は見られる。</p>
      *
      * @param date           対戦日
      * @param organizationId 組織ID（任意。ロールごとのスコープ解決は OrganizationScopeResolver に委譲）
@@ -138,9 +140,13 @@ public class MatchVideoController {
                 date, organizationId);
         Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
         // 動画登録候補は単一所属PLAYERを既定で所属団体にスコープする（当エンドポイント限定の特例）。
-        // OrganizationScopeResolver が null（PLAYER 未指定など組織非限定）を返したときのみ、
-        // 操作ユーザーの所属団体がちょうど1件ならその団体IDで補完し、他団体候補の混入を防ぐ。
-        if (effectiveOrgId == null) {
+        // OrganizationScopeResolver が null（PLAYER 未指定など組織非限定）を返し、かつ操作ロールが
+        // PLAYER のときに限り、操作ユーザーの所属団体がちょうど1件ならその団体IDで補完し、
+        // 他団体候補の混入を防ぐ。SUPER_ADMIN / ADMIN は既定解決の所属引きを行わず、
+        // resolver の結果（SUPER_ADMIN 未指定なら null＝非限定）のままにする
+        // （SUPER_ADMIN が単一所属を持っていてもその団体に勝手に絞らない）。
+        String currentUserRole = (String) httpRequest.getAttribute("currentUserRole");
+        if (effectiveOrgId == null && "PLAYER".equals(currentUserRole)) {
             Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
             effectiveOrgId = resolveDefaultOrganizationIdForCandidates(currentUserId);
         }
@@ -150,12 +156,14 @@ public class MatchVideoController {
     /**
      * 動画登録候補（{@code date-candidates}）専用の既定組織スコープを解決する。
      *
-     * <p>{@link OrganizationScopeResolver} が組織非限定（{@code null}）と判断した場合に限り呼ばれる。
-     * 操作ユーザーの所属団体が<b>ちょうど1件</b>のときだけその団体IDを返し、当該団体にスコープする。
+     * <p>操作ロールが <b>PLAYER</b> かつ {@link OrganizationScopeResolver} が組織非限定（{@code null}）と
+     * 判断した場合に限り呼ばれる（呼び出し側でロール判定済み）。操作ユーザーの所属団体が
+     * <b>ちょうど1件</b>のときだけその団体IDを返し、当該団体にスコープする。
      * 0 件（未所属）または複数所属の場合は {@code null} を返し、従来どおり組織非限定として扱う
      * （複数所属時の一意な団体決定はアプリ全体の別課題に委ねる）。</p>
      *
-     * <p>SUPER_ADMIN 等で {@code currentUserId} が所属を持たない場合も自然に {@code null} に倒れる。
+     * <p>SUPER_ADMIN / ADMIN ではそもそも呼ばれない（呼び出し側で PLAYER 限定にしているため）。
+     * 仮に PLAYER で {@code currentUserId} が所属を持たない場合も自然に {@code null} に倒れる。
      * この既定解決は当エンドポイント限定の特例であり、他エンドポイントの組織解決挙動には影響しない。</p>
      *
      * @param currentUserId 操作ユーザーID（null 可。null の場合は組織非限定）
