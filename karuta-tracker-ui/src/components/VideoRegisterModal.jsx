@@ -439,6 +439,8 @@ const DateSourceSelect = ({ onSelect }) => {
         const key = candidateKey(p.matchNumber, p.player1Id, p.player2Id);
         if (map.has(key)) return;
         const result = matchByKey.get(key);
+        // システム未登録の対戦相手（id=0/null）を含む試合は動画登録不可（試合詳細・選手起点と統一）
+        const unregistered = !p.player1Id || p.player1Id === 0 || !p.player2Id || p.player2Id === 0;
         map.set(key, {
           key,
           matchDate: targetDate,
@@ -446,6 +448,8 @@ const DateSourceSelect = ({ onSelect }) => {
           player1Name: p.player1Name,
           player2Name: p.player2Name,
           registered: videoKeys.has(key),
+          disabled: unregistered,
+          disabledLabel: '相手未登録',
           hasResult: Boolean(result),
           match: {
             matchDate: targetDate,
@@ -462,6 +466,8 @@ const DateSourceSelect = ({ onSelect }) => {
       matches.forEach((m) => {
         const key = candidateKey(m.matchNumber, m.player1Id, m.player2Id);
         if (map.has(key)) return;
+        // システム未登録の対戦相手（id=0/null）を含む試合は動画登録不可（試合詳細・選手起点と統一）
+        const unregistered = !m.player1Id || m.player1Id === 0 || !m.player2Id || m.player2Id === 0;
         map.set(key, {
           key,
           matchDate: targetDate,
@@ -469,6 +475,8 @@ const DateSourceSelect = ({ onSelect }) => {
           player1Name: m.player1Name,
           player2Name: m.player2Name,
           registered: videoKeys.has(key),
+          disabled: unregistered,
+          disabledLabel: '相手未登録',
           hasResult: true,
           match: {
             matchDate: targetDate,
