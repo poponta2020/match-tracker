@@ -299,7 +299,7 @@ describe('MatchList', () => {
     expect(row.className).toMatch(/grid-cols-\[[^\]]*rem[^\]]*\]/);
   });
 
-  it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [メモ] [手N] の順で描画される', async () => {
+  it('行内表示: 列順は [日付] [対戦相手名] [勝敗] [会場 N試合目] [動画] [メモ] [手N] の順で描画される', async () => {
     setupDefaultMocks({
       matches: [buildMatch({
         matchDate: '2026-05-23',
@@ -323,11 +323,15 @@ describe('MatchList', () => {
     expect(cells[1]).toHaveTextContent('山田太郎');
     expect(cells[2]).toHaveTextContent('〇5');
     expect(cells[3]).toHaveTextContent('本郷 3試合目');
-    expect(cells[4]).toHaveAttribute('aria-label', '対戦詳細を見る');
-    expect(cells[5]).toHaveTextContent('手2');
+    // 動画列（列5）: video が無い行ではプレースホルダー（invisible で空間確保）
+    expect(cells[4]).toHaveAttribute('aria-hidden', 'true');
+    // メモ列（列6）: 自分閲覧なので詳細ボタンが表示される
+    expect(cells[5]).toHaveAttribute('aria-label', '対戦詳細を見る');
+    // 手 N 列（列7）
+    expect(cells[6]).toHaveTextContent('手2');
   });
 
-  it('行内表示: メモアイコン非表示・お手付き null の行でも 6 列構造が維持される（列幅確保）', async () => {
+  it('行内表示: 動画なし・メモアイコン非表示・お手付き null の行でも 7 列構造が維持される（列幅確保）', async () => {
     setupDefaultMocks({
       matches: [buildMatch({
         player1Id: 2,
@@ -354,12 +358,78 @@ describe('MatchList', () => {
     const row = opponentBtn.parentElement;
     const cells = Array.from(row.children);
 
-    // 6 列構造が維持されること
-    expect(cells).toHaveLength(6);
-    // メモ列（列5）は描画されているが invisible で空間を確保
+    // 7 列構造が維持されること
+    expect(cells).toHaveLength(7);
+    // 動画列（列5）は描画されているが invisible で空間を確保
     expect(cells[4]).toHaveAttribute('aria-hidden', 'true');
-    // 手 N 列（列6）も同様に空間を確保
+    // メモ列（列6）も同様に空間を確保
     expect(cells[5]).toHaveAttribute('aria-hidden', 'true');
+    // 手 N 列（列7）も同様に空間を確保
+    expect(cells[6]).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('動画あり行（自分閲覧）: 動画列に「試合動画を見る」ボタンが表示され、タップで /matches/<id> に遷移する', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        venueName: '本郷',
+        matchNumber: 3,
+        result: '勝ち',
+        scoreDifference: 5,
+        myOtetsukiCount: 2,
+        video: {
+          id: 7,
+          videoUrl: 'https://youtu.be/abc123',
+          youtubeVideoId: 'abc123',
+          title: 'テスト動画',
+          createdBy: 1,
+        },
+      })],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches');
+
+    const opponentBtn = await screen.findByRole('button', { name: '山田太郎' });
+    const row = opponentBtn.parentElement;
+    const cells = Array.from(row.children);
+
+    // 動画列（列5）はプレースホルダーではなく実ボタン
+    const videoBtn = screen.getByRole('button', { name: '試合動画を見る' });
+    expect(cells[4]).toBe(videoBtn);
+    expect(videoBtn).not.toHaveAttribute('aria-hidden');
+
+    await user.click(videoBtn);
+    expect(mockNavigate).toHaveBeenCalledWith('/matches/100');
+  });
+
+  it('動画あり行（メンター閲覧）: 動画ボタンタップで /matches/<id>?playerId=<targetPlayerId> に遷移する', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({
+        player1Id: 2,
+        player2Id: 3,
+        matchDate: '2026-05-23',
+        opponentName: '山田太郎',
+        video: {
+          id: 7,
+          videoUrl: 'https://youtu.be/abc123',
+          youtubeVideoId: 'abc123',
+          title: 'テスト動画',
+          createdBy: 1,
+        },
+      })],
+      mentees: [{ menteeId: 2, status: 'ACTIVE' }],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches?playerId=2');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+
+    const videoBtn = screen.getByRole('button', { name: '試合動画を見る' });
+    await user.click(videoBtn);
+    expect(mockNavigate).toHaveBeenCalledWith('/matches/100?playerId=2');
   });
 
   it('メンター関係 API 失敗時: メモアイコンが描画されず、画面はクラッシュしない', async () => {

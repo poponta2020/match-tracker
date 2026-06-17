@@ -241,6 +241,67 @@ class MatchPairingControllerTest {
     }
 
     @Nested
+    @DisplayName("GET /api/match-pairings/player/{playerId}")
+    class GetRecentByPlayerTests {
+
+        @Test
+        @DisplayName("PLAYER は指定選手の最近ペアリングを取得できる")
+        void shouldGetRecentPairingsAsPlayer() throws Exception {
+            // Given
+            Long playerId = 10L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            List<MatchPairingDto> pairings = Arrays.asList(
+                    MatchPairingDto.builder().id(1L).sessionDate(date).matchNumber(2)
+                            .player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B").build(),
+                    MatchPairingDto.builder().id(2L).sessionDate(date).matchNumber(1)
+                            .player1Id(30L).player1Name("選手C").player2Id(10L).player2Name("選手A").build()
+            );
+            when(matchPairingService.getRecentByPlayerId(playerId)).thenReturn(pairings);
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/player/{playerId}", playerId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$", hasSize(2)))
+                    .andExpect(jsonPath("$[0].id").value(1))
+                    .andExpect(jsonPath("$[0].sessionDate").value("2024-01-15"))
+                    .andExpect(jsonPath("$[0].matchNumber").value(2))
+                    .andExpect(jsonPath("$[0].player1Id").value(10))
+                    .andExpect(jsonPath("$[0].player1Name").value("選手A"))
+                    .andExpect(jsonPath("$[0].player2Id").value(20))
+                    .andExpect(jsonPath("$[0].player2Name").value("選手B"))
+                    .andExpect(jsonPath("$[1].id").value(2));
+
+            verify(matchPairingService).getRecentByPlayerId(playerId);
+        }
+
+        @Test
+        @DisplayName("該当ペアリングが無い場合は空配列を返す")
+        void shouldReturnEmptyArrayWhenNoPairings() throws Exception {
+            // Given
+            Long playerId = 999L;
+            when(matchPairingService.getRecentByPlayerId(playerId)).thenReturn(Collections.emptyList());
+
+            // When & Then
+            mockMvc.perform(get("/api/match-pairings/player/{playerId}", playerId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$", hasSize(0)));
+
+            verify(matchPairingService).getRecentByPlayerId(playerId);
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしは 403")
+        void shouldReturn403WithoutAuthHeader() throws Exception {
+            mockMvc.perform(get("/api/match-pairings/player/{playerId}", 10L))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).getRecentByPlayerId(any());
+        }
+    }
+
+    @Nested
     @DisplayName("GET /api/match-pairings/date-and-match")
     class GetByDateAndMatchNumberTests {
 

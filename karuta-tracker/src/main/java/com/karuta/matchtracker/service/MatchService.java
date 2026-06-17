@@ -17,6 +17,8 @@ import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.entity.MentorRelationship;
 import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.entity.MatchVideo;
+import com.karuta.matchtracker.repository.MatchVideoRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -50,6 +52,7 @@ public class MatchService {
     static final String RESULT_DRAW = "引き分け";
 
     private final MatchRepository matchRepository;
+    private final MatchVideoRepository matchVideoRepository;
     private final MatchPairingRepository matchPairingRepository;
     private final PlayerRepository playerRepository;
     private final PracticeSessionRepository practiceSessionRepository;
@@ -86,7 +89,9 @@ public class MatchService {
                 ? enrichMatchesWithPlayerPerspective(List.of(match), viewedPlayerId)
                 : List.of(enrichMatchWithPlayerNames(match, currentPlayerId));
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(dtos, currentPlayerId, viewedPlayerId);
-        return enriched.get(0);
+        MatchDto result = enriched.get(0);
+        attachVideoToMatch(match, result);
+        return result;
     }
 
     /**
@@ -198,6 +203,7 @@ public class MatchService {
                     return true;
                 })
                 .collect(Collectors.toList());
+        attachVideosToMatchesForPlayer(filteredResult, playerId);
         return enrichDtosWithPersonalNotes(filteredResult, currentPlayerId, playerId);
     }
 
@@ -906,6 +912,71 @@ public class MatchService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 単一の試合DTOに、同一自然キーの動画があれば付与する（試合詳細・単体取得用）。
+     *
+     * 自然キー (match_date, match_number, player1_id, player2_id) で
+     * {@link MatchVideoRepository#findByMatchDateAndMatchNumberAndPlayers} を1回呼ぶ。
+     * 動画台帳は player1_id < player2_id を保証しているため、ここでも min/max に正規化して照合する。
+     * 未登録対戦相手（player2_id = 0）の試合は動画が存在しえないため、照合不要だがクエリしても空が返る。
+     *
+     * @param match 元の試合エンティティ（自然キーの参照元）
+     * @param dto   動画を設定する対象DTO
+     */
+    private void attachVideoToMatch(Match match, MatchDto dto) {
+        if (match == null || dto == null
+                || match.getPlayer1Id() == null || match.getPlayer2Id() == null) {
+            return;
+        }
+        Long p1 = Math.min(match.getPlayer1Id(), match.getPlayer2Id());
+        Long p2 = Math.max(match.getPlayer1Id(), match.getPlayer2Id());
+        matchVideoRepository
+                .findByMatchDateAndMatchNumberAndPlayers(match.getMatchDate(), match.getMatchNumber(), p1, p2)
+                .ifPresent(video -> dto.setVideo(MatchDto.Video.fromEntity(video)));
+    }
+
+    /**
+     * 個人別の試合一覧DTOに、対象選手の動画をバッチ照合して付与する（N+1回避）。
+     *
+     * 対象選手の全動画を {@link MatchVideoRepository#findByPlayerId} で1クエリ取得し、
+     * (match_date, match_number, player1_id, player2_id) 正規化キーのマップを構築してから
+     * 各DTOに照合する。動画なしのDTOは {@code video} を null のままにする。
+     *
+     * @param dtos     付与対象の試合DTOリスト
+     * @param playerId 一覧の対象選手ID（この選手の動画をまとめて引く）
+     */
+    private void attachVideosToMatchesForPlayer(List<MatchDto> dtos, Long playerId) {
+        if (dtos.isEmpty() || playerId == null) {
+            return;
+        }
+        Map<String, MatchVideo> videoMap = matchVideoRepository.findByPlayerId(playerId).stream()
+                .collect(Collectors.toMap(
+                        v -> naturalKey(v.getMatchDate(), v.getMatchNumber(), v.getPlayer1Id(), v.getPlayer2Id()),
+                        v -> v,
+                        (existing, replacement) -> existing));
+        if (videoMap.isEmpty()) {
+            return;
+        }
+        for (MatchDto dto : dtos) {
+            if (dto.getPlayer1Id() == null || dto.getPlayer2Id() == null) {
+                continue;
+            }
+            Long p1 = Math.min(dto.getPlayer1Id(), dto.getPlayer2Id());
+            Long p2 = Math.max(dto.getPlayer1Id(), dto.getPlayer2Id());
+            MatchVideo video = videoMap.get(naturalKey(dto.getMatchDate(), dto.getMatchNumber(), p1, p2));
+            if (video != null) {
+                dto.setVideo(MatchDto.Video.fromEntity(video));
+            }
+        }
+    }
+
+    /**
+     * 動画照合用の自然キー文字列を生成する（player1Id < player2Id 正規化済みを前提）。
+     */
+    private String naturalKey(LocalDate matchDate, Integer matchNumber, Long player1Id, Long player2Id) {
+        return matchDate + "|" + matchNumber + "|" + player1Id + "|" + player2Id;
     }
 
     /**

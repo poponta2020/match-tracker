@@ -41,12 +41,20 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ）。**各行は CSS Grid による 6 列のテーブル風レイアウトで列揃え**され、左から「日付 `M/D`」「対戦相手名」「勝敗（〇N/×N/△N）」「会場名 N試合目」「メモアイコン」「お手付き回数 `手N`」の順に並ぶ（会場不明時は `N試合目` のみ表示、長すぎる対戦相手名・会場名は truncate）。**カラム幅は `2rem / 6.125rem / 2.5rem / minmax(0,1fr) / 1.5rem / 2rem`** で、対戦相手名は `text-sm` の全角 7 文字分（`6.125rem` = 98px）固定、会場名列が残り幅を受け取る配分。メモアイコン・お手付きは非表示条件の行でも列幅を確保し、全行で各列の左端 x 座標が揃う。**行内タップ動線**: 対戦相手名タップで `/matches?playerId=<opponentId>` へ遷移（ゲスト選手は無効）、メモアイコンタップで対戦詳細へ遷移（自分閲覧時とメンター閲覧時のみ表示、メモ有/無で濃淡切替）。行全体タップによる詳細遷移は廃止 |
+| 7 | `/matches` | `MatchList.jsx` | `FilterBottomSheet` | ALL | 試合一覧（勝率・段位別統計・フィルタ）。**各行は CSS Grid による 7 列のテーブル風レイアウトで列揃え**され、左から「日付 `M/D`」「対戦相手名」「勝敗（〇N/×N/△N）」「会場名 N試合目」「動画アイコン」「メモアイコン」「お手付き回数 `手N`」の順に並ぶ（会場不明時は `N試合目` のみ表示、長すぎる対戦相手名・会場名は truncate）。**カラム幅は `1.75rem / 5.25rem / 2.5rem / minmax(0,1fr) / 1.5rem / 1.5rem / 2rem`** で、対戦相手名は `text-sm`（`5.25rem` = 84px）固定、会場名列が残り幅を受け取る配分。動画アイコン・メモアイコン・お手付きは非表示条件の行でも列幅を確保し、全行で各列の左端 x 座標が揃う。**動画アイコン列**: `MatchDto.video` が non-null の行のみ `Video` アイコン（lucide-react・`w-3.5 h-3.5`・赤系 `text-[#c0392b]` で当日結果一覧の「動画あり」バッジとトーンを合わせる）を表示し、動画なしの行は不可視プレースホルダーで列幅のみ確保。**行内タップ動線**: 対戦相手名タップで `/matches?playerId=<opponentId>` へ遷移（ゲスト選手は無効）、動画アイコンタップで対戦詳細 `/matches/{id}`（他選手閲覧時は `?playerId=` 付き）へ遷移（**閲覧制限なし＝自分・他選手いずれの一覧でも表示**）、メモアイコンタップで対戦詳細へ遷移（自分閲覧時とメンター閲覧時のみ表示、メモ有/無で濃淡切替）。行全体タップによる詳細遷移は廃止 |
 | 8 | `/matches/new` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト(0〜20)、個人メモ、抜け番活動種別選択、「抜け番として記録する」ボタン（ペアリング未作成時） | ALL | 試合結果入力（お手付き・個人メモ含む。抜け番の場合は活動記録。ペアリング未作成時は手動切替可能） |
-| 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンター閲覧時はACTIVEメンター関係があれば表示、メンティー本人画面では自分以外の投稿者のコメントが1件以上ある場合のみ表示。未通知コメントがある場合は「LINE通知を送信（N件）」ボタンを表示。コメント入力中はボトムナビを非表示にして誤タップを防止） | ALL | 試合詳細表示。**1つの統合カード**に「対戦相手名 〇/×/△ 枚数差（絶対値）」を上段、「試合日 第N試合 会場名」を1行で中段、「お手付き」「メモ」を下段に表示（メンター閲覧時はメンティーのお手付き・メモ、メンティー本人閲覧時は自分のお手付き・メモを統合カード内に表示）。表示条件を満たす場合のみコメントスレッドを表示 |
+| 9 | `/matches/:id` | `MatchDetail.jsx` | `MatchCommentThread`（メンター⇔メンティー間コメントスレッド。メンター閲覧時はACTIVEメンター関係があれば表示、メンティー本人画面では自分以外の投稿者のコメントが1件以上ある場合のみ表示。未通知コメントがある場合は「LINE通知を送信（N件）」ボタンを表示。コメント入力中はボトムナビを非表示にして誤タップを防止）、`VideoRegisterModal`（試合動画の登録/編集モーダル） | ALL | 試合詳細表示。**1つの統合カード**に「対戦相手名 〇/×/△ 枚数差（絶対値）」を上段、「試合日 第N試合 会場名」を1行で中段、「お手付き」「メモ」を下段に表示（メンター閲覧時はメンティーのお手付き・メモ、メンティー本人閲覧時は自分のお手付き・メモを統合カード内に表示）。表示条件を満たす場合のみコメントスレッドを表示。**統合カードの下に「試合動画」セクションを表示**（`MatchDto.video` の有無で内容を切替）。動画ありの場合は YouTube 埋め込みプレイヤー（`youtube-nocookie.com/embed/{youtubeVideoId}`・16:9 レスポンシブ・全画面可）をインライン再生し、動画タイトル（あれば）と「YouTubeで開く」リンク（`videoUrl`・新規タブ）を表示。**「編集」「削除」ボタンは登録者本人（`video.createdBy` == ログインユーザーID）または ADMIN/SUPER_ADMIN のみ表示**（編集は `VideoRegisterModal` を編集モードで開く、削除は確認ダイアログ「削除されるのは試合との紐付けのみで、YouTube上の動画は残ります」で `DELETE /api/match-videos/{id}` を実行）。動画なしの場合は**両選手が登録済みの試合のみ**「動画を追加」ボタンを表示（全ロール可、`VideoRegisterModal` を新規モードで開く。ゲスト/未登録相手の試合では非表示）。追加/編集/削除の成功時は試合詳細を再取得。削除APIのエラー（403等）はセクション内にメッセージ表示 |
 | 10 | `/matches/:id/edit` | `MatchForm.jsx` | 試合番号タブ、対戦相手選択、お手付き回数セレクト、個人メモ | ALL | 試合結果編集（お手付き・個人メモの編集含む） |
 | 11 | `/matches/bulk-input/:sessionId` | `BulkResultInput.jsx` | 組み合わせリスト、枚数差入力、抜け番活動入力、組み合わせ未作成メッセージ | PLAYER+ | 一括結果入力（抜け番の活動も含む。お手付き・個人メモは含まない）。ADMIN/PLAYERは自/所属団体のみ。組み合わせ未作成時はメッセージ表示+全ロールに作成画面への遷移ボタン。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
-| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示 | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示）。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定** |
+| 12 | `/matches/results/:sessionId?` | `MatchResultsView.jsx` | カレンダーピッカー、セッションナビ、抜け番活動表示、`VideoPlayerModal`（試合動画の再生モーダル） | ALL | 試合結果一覧（抜け番の活動もバッジ表示。自分の試合にお手付き・個人メモ表示）。**抜け番は試合ごとの組み合わせ対象参加者（抽選あり運用は WON のみ、抽選なし運用は WON+PENDING）からペア済み選手を除外して算出（CANCELLED 等は含めない）。組み合わせ対象に PENDING を含めるかは `PracticeSessionDto.pairingIncludesPending` フラグで判定**。**表示対象日が確定したら `GET /api/match-videos?date=YYYY-MM-DD` で当日の動画一覧を取得し、各組（試合番号＋選手ペア。選手ペアは `Math.min`/`Math.max` で正規化して動画側の `player1Id < player2Id` 正規化済みデータと照合）に対応する動画があれば、組のスコア/`vs` 行の下に「動画あり」バッジ（`Video` アイコン＋赤系の小バッジ）を表示。**バッジタップ時の挙動**: その組の結果が入力済み（対応する match レコードあり）なら試合詳細 `/matches/{matchId}` へ遷移、結果未入力（組み合わせのみ）なら `VideoPlayerModal` を開いてインライン再生（選手名タップの `/matches?playerId=...` 遷移と競合しないよう `stopPropagation`）。動画一覧の取得失敗時はバッジを出さず静かに無視（コンソールエラーのみ） |
+
+---
+
+## 3.5 動画倉庫（videos）
+
+| # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
+|---|------|---------------------|---------------------|------|------|
+| 12.5 | `/videos` | `VideoLibrary.jsx` | `VideoPlayerModal`（再生モーダル）、`VideoRegisterModal`（試合選択モードの登録モーダル） | ALL | 動画倉庫（登録済み試合動画の一覧・検索・登録導線）。設定画面メニューの「動画倉庫」から遷移。**一覧**は YouTube サムネイル（`https://i.ytimg.com/vi/{youtubeVideoId}/mqdefault.jpg`・16:9）付きの縦リスト（モバイルファースト）で、各行に「試合日 第N試合」「対戦カード（player1Name vs player2Name）」「結果（`winnerId`/`scoreDifference` があれば『○○の勝ち（N枚差）』）」「動画タイトル（あれば truncate）」を表示。並びは `GET /api/match-videos/search` が返す試合日降順で、**ページングは `totalPages` を用いた「もっと見る」方式**（次ページを末尾に追記読み込み）。**検索・絞り込み**（変更時は page=0 から再検索）は ①選手絞り込み（`playerAPI.getAll` の選手を名前部分一致でフィルタするセレクト → `playerId`）②年月絞り込み（年セレクト＋月セレクト。未選択＝全期間、年のみ選択可 → `year`/`month`）③「自分が関わる動画」トグル（ON で `mine=true`。**選手絞り込みより優先**され、ON 中は選手絞り込みを無効化・クリア）。一覧タップで `VideoPlayerModal` をインライン再生（MatchVideoDto をそのまま渡す。結果入力済みなら「試合詳細を見る」リンクも表示）。**「動画を登録」ボタン**で `VideoRegisterModal` を試合選択モードで開き、登録成功時は一覧を再検索。0件時は空状態（条件なし時「動画がまだ登録されていません」／絞り込み時「条件に合う動画がありません」）を表示 |
 
 ---
 
@@ -183,6 +191,8 @@
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
 | `PlayerChip` | `components/PlayerChip.jsx` | 選手バッジ |
 | `MatchParticipantsEditModal` | `components/MatchParticipantsEditModal.jsx` | 試合参加者編集モーダル |
+| `VideoPlayerModal` | `components/VideoPlayerModal.jsx` | 試合動画 再生モーダル（YouTube 埋め込み・対戦情報・`matchId` 非null時「試合詳細を見る」リンク）。倉庫一覧・当日結果一覧から利用 |
+| `VideoRegisterModal` | `components/VideoRegisterModal.jsx` | 試合動画 登録/編集モーダル。**固定モード**（`match` を渡す。試合詳細画面から URL 入力ステップのみ）と**選択モード**（`selectMode`。動画倉庫から ①試合選択→②URL 入力 の2段構成。①は「日付から」「選手から」のタブで候補を絞り込み登録済み試合はグレーアウト）の2モードを持つ |
 | `ErrorBoundary` | `components/ErrorBoundary.jsx` | エラーバウンダリ |
 
 ---
@@ -217,6 +227,7 @@
 | 練習日程作成 | `/practice/new` | ADMIN+ |
 | 参加練習会 | `/settings/organizations` | ALL |
 | メンター管理 | `/settings/mentor` | ALL |
+| 動画倉庫 | `/videos` | ALL |
 | 通知設定 | `/settings/notifications` | ALL |
 | LINEチャネル管理 | `/admin/line/channels` | SUPER_ADMIN |
 | LINE通知スケジュール | `/admin/line/schedule` | ADMIN+ |
@@ -290,6 +301,8 @@ karuta-tracker-ui/src/
     │   └── PlayerEdit.jsx
     ├── mentor/
     │   └── MentorManagement.jsx
+    ├── videos/
+    │   └── VideoLibrary.jsx
     ├── settings/
     │   ├── SystemSettings.jsx
     │   └── OrganizationSettings.jsx

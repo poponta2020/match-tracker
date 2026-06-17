@@ -79,7 +79,8 @@ public class LineMessageLog {
         DENSUKE_PAGE_CREATED,
         ADMIN_DENSUKE_PUSH_FAILED,
         ADMIN_KADERU_SYNC_COMPLETED,
-        ADMIN_KADERU_SYNC_FAILED;
+        ADMIN_KADERU_SYNC_FAILED,
+        MATCH_VIDEO_REGISTERED;
 
         /** 通知種別に対応するチャネル用途を返す */
         public ChannelType getRequiredChannelType() {

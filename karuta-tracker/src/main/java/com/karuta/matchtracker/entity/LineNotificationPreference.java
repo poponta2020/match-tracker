@@ -103,6 +103,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean densukePageCreated = true;
 
+    /** 試合動画登録通知 */
+    @Column(name = "match_video_registered", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT TRUE")
+    @Builder.Default
+    private Boolean matchVideoRegistered = true;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

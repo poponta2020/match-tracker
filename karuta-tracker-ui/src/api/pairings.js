@@ -13,6 +13,10 @@ export const pairingAPI = {
       params: { date, matchNumber },
     }),
 
+  // 指定選手が含まれる最近の対戦組み合わせを取得（sessionDate DESC, matchNumber DESC・直近30件）
+  getByPlayerId: (playerId) =>
+    apiClient.get(`/match-pairings/player/${playerId}`),
+
   // 対戦組み合わせが存在するか確認
   exists: (date, matchNumber) =>
     apiClient.get('/match-pairings/exists', {

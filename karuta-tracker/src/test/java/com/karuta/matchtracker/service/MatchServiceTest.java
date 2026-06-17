@@ -2,6 +2,7 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
+import com.karuta.matchtracker.entity.MatchVideo;
 import com.karuta.matchtracker.entity.MentorRelationship;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.exception.ForbiddenException;
@@ -10,6 +11,7 @@ import com.karuta.matchtracker.entity.MatchPairing;
 import com.karuta.matchtracker.repository.MatchPairingRepository;
 import com.karuta.matchtracker.repository.MatchPersonalNoteRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
+import com.karuta.matchtracker.repository.MatchVideoRepository;
 import com.karuta.matchtracker.repository.MentorRelationshipRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
@@ -46,6 +48,9 @@ class MatchServiceTest {
 
     @Mock
     private MatchRepository matchRepository;
+
+    @Mock
+    private MatchVideoRepository matchVideoRepository;
 
     @Mock
     private MatchPairingRepository matchPairingRepository;
@@ -1709,6 +1714,159 @@ class MatchServiceTest {
                     .findVenueIdsByPlayerIdAndSessionDateAndMatchNumber(any(), any(), eq(2));
             // 1段目で確定したので 2段目 fallback は呼ばれない
             verify(practiceSessionRepository, never()).findDistinctVenueIdsBySessionDate(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("試合動画 (video) 付与ロジック")
+    class MatchVideoEnrichmentTests {
+
+        private MatchVideo buildVideo(LocalDate matchDate, int matchNumber, long p1, long p2) {
+            return MatchVideo.builder()
+                    .id(100L)
+                    .matchDate(matchDate)
+                    .matchNumber(matchNumber)
+                    .player1Id(Math.min(p1, p2))
+                    .player2Id(Math.max(p1, p2))
+                    .videoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                    .youtubeVideoId("dQw4w9WgXcQ")
+                    .title("第1試合 山田太郎 vs 佐藤花子")
+                    .createdBy(1L)
+                    .updatedBy(1L)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("単体取得: 動画がある試合では video がセットされる")
+        void shouldAttachVideoOnFindByIdWhenVideoExists() {
+            // Given: testMatch (date=today, number=1, p1=1, p2=2) に動画が存在
+            MatchVideo video = buildVideo(today, 1, 1L, 2L);
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.of(video));
+
+            // When
+            MatchDto result = matchService.findById(1L, 1L);
+
+            // Then
+            assertThat(result.getVideo()).isNotNull();
+            assertThat(result.getVideo().getId()).isEqualTo(100L);
+            assertThat(result.getVideo().getVideoUrl())
+                    .isEqualTo("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+            assertThat(result.getVideo().getYoutubeVideoId()).isEqualTo("dQw4w9WgXcQ");
+            assertThat(result.getVideo().getTitle()).isEqualTo("第1試合 山田太郎 vs 佐藤花子");
+        }
+
+        @Test
+        @DisplayName("単体取得: 動画がない試合では video が null")
+        void shouldLeaveVideoNullOnFindByIdWhenNoVideo() {
+            // Given: 自然キー照合で動画が見つからない
+            when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+
+            // When
+            MatchDto result = matchService.findById(1L, 1L);
+
+            // Then
+            assertThat(result.getVideo()).isNull();
+        }
+
+        @Test
+        @DisplayName("単体取得: player1Id > player2Id でも min/max 正規化して照合する")
+        void shouldNormalizeKeyWhenAttachingVideoOnFindById() {
+            // Given: player1Id=5, player2Id=3 の試合（正規化前）。照合は (3,5) で行われる
+            Player p3 = Player.builder().id(3L).name("選手3").build();
+            Player p5 = Player.builder().id(5L).name("選手5").build();
+            Match match = Match.builder()
+                    .id(7L)
+                    .matchDate(today)
+                    .matchNumber(2)
+                    .player1Id(5L)
+                    .player2Id(3L)
+                    .winnerId(5L)
+                    .scoreDifference(4)
+                    .build();
+            MatchVideo video = buildVideo(today, 2, 3L, 5L);
+            when(matchRepository.findById(7L)).thenReturn(Optional.of(match));
+            when(playerRepository.findAllById(any())).thenReturn(List.of(p3, p5));
+            when(matchVideoRepository.findByMatchDateAndMatchNumberAndPlayers(today, 2, 3L, 5L))
+                    .thenReturn(Optional.of(video));
+
+            // When
+            MatchDto result = matchService.findById(7L, 5L);
+
+            // Then: 正規化キー (3,5) で照合され video がセットされる
+            assertThat(result.getVideo()).isNotNull();
+            assertThat(result.getVideo().getId()).isEqualTo(100L);
+            verify(matchVideoRepository).findByMatchDateAndMatchNumberAndPlayers(today, 2, 3L, 5L);
+        }
+
+        @Test
+        @DisplayName("個人別一覧: 動画がある試合のみ video がセットされ、findByPlayerId は1回だけ呼ばれる")
+        void shouldAttachVideosOnlyToMatchesWithVideoInPlayerList() {
+            // Given: player1(=1) の2試合。match1(vs3) に動画あり、match2(vs4) に動画なし
+            Player opponent1 = Player.builder().id(3L).name("対戦相手A").build();
+            Player opponent2 = Player.builder().id(4L).name("対戦相手B").build();
+            Match match1 = Match.builder()
+                    .id(1L).player1Id(1L).player2Id(3L)
+                    .matchDate(today).matchNumber(1).winnerId(1L).build();
+            Match match2 = Match.builder()
+                    .id(2L).player1Id(1L).player2Id(4L)
+                    .matchDate(today).matchNumber(2).winnerId(1L).build();
+
+            MatchVideo videoForMatch1 = buildVideo(today, 1, 1L, 3L);
+
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(matchRepository.findByPlayerId(1L)).thenReturn(List.of(match1, match2));
+            when(playerRepository.findById(3L)).thenReturn(Optional.of(opponent1));
+            when(playerRepository.findById(4L)).thenReturn(Optional.of(opponent2));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent1, opponent2));
+            // 対象選手の全動画を1クエリで返す（match1 のみ動画あり）
+            when(matchVideoRepository.findByPlayerId(1L)).thenReturn(List.of(videoForMatch1));
+
+            // When
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, null, null);
+
+            // Then
+            assertThat(result).hasSize(2);
+            MatchDto dto1 = result.stream().filter(d -> d.getId().equals(1L)).findFirst().orElseThrow();
+            MatchDto dto2 = result.stream().filter(d -> d.getId().equals(2L)).findFirst().orElseThrow();
+            assertThat(dto1.getVideo()).isNotNull();
+            assertThat(dto1.getVideo().getId()).isEqualTo(100L);
+            assertThat(dto1.getVideo().getYoutubeVideoId()).isEqualTo("dQw4w9WgXcQ");
+            assertThat(dto2.getVideo()).isNull();
+            // N+1回避: findByPlayerId は一覧全体で1回だけ
+            verify(matchVideoRepository, times(1)).findByPlayerId(1L);
+            // 一覧では自然キー単体照合クエリは使わない
+            verify(matchVideoRepository, never())
+                    .findByMatchDateAndMatchNumberAndPlayers(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("個人別一覧: 対象選手に動画が1件もなければ全試合の video が null")
+        void shouldLeaveAllVideosNullWhenPlayerHasNoVideos() {
+            // Given
+            Player opponent = Player.builder().id(3L).name("対戦相手A").build();
+            Match match = Match.builder()
+                    .id(1L).player1Id(1L).player2Id(3L)
+                    .matchDate(today).matchNumber(1).winnerId(1L).build();
+
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(matchRepository.findByPlayerId(1L)).thenReturn(List.of(match));
+            when(playerRepository.findById(3L)).thenReturn(Optional.of(opponent));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent));
+            when(matchVideoRepository.findByPlayerId(1L)).thenReturn(List.of());
+
+            // When
+            List<MatchDto> result = matchService.findPlayerMatchesWithFilters(1L, null, null, null, null);
+
+            // Then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getVideo()).isNull();
+            verify(matchVideoRepository, times(1)).findByPlayerId(1L);
         }
     }
 

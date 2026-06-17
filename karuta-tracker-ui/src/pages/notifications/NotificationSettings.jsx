@@ -264,6 +264,7 @@ const NotificationSettings = () => {
       { key: 'sameDayCancel', label: '当日キャンセル通知' },
       { key: 'sameDayVacancy', label: '空き募集通知' },
       { key: 'mentorComment', label: 'メンターコメント通知' },
+      { key: 'matchVideoRegistered', label: '試合動画登録通知' },
     );
     return types;
   };

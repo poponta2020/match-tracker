@@ -10,6 +10,7 @@ import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.repository.*;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * LINE通知オーケストレーションサービス
@@ -73,6 +75,14 @@ public class LineNotificationService {
     private static final int RESERVED_TIMEOUT_MINUTES = 10;
     private static final int MARK_SUCCEEDED_MAX_RETRIES = 2;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M月d日");
+
+    /**
+     * 試合動画登録通知のメッセージに埋め込むフロントエンド（SPA）のベースURL。
+     * /matches/{id} や /videos はフロント（Vercel・別ドメイン）のルートのため、
+     * バックエンドオリジンの app.base-url ではなくフロントURLを使う。本番は APP_FRONTEND_URL で上書き。
+     */
+    @Value("${app.frontend-url:http://localhost:5173}")
+    private String appFrontendUrl;
 
     /**
      * 送信成功後のステータス更新をリトライ付きで実行する。
@@ -1062,6 +1072,7 @@ public class LineNotificationService {
         pref.setAdminSameDayCancel(dto.isAdminSameDayCancel());
         pref.setMentorComment(dto.isMentorComment());
         pref.setDensukePageCreated(dto.isDensukePageCreated());
+        pref.setMatchVideoRegistered(dto.isMatchVideoRegistered());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -2397,6 +2408,7 @@ public class LineNotificationService {
             case MENTOR_COMMENT -> pref.getMentorComment();
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
+            case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
@@ -2794,6 +2806,97 @@ public class LineNotificationService {
             log.warn("Async DENSUKE_PAGE_CREATED dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
+    }
+
+    /**
+     * 試合動画の新規登録を、対戦当事者（player1 / player2）のうち登録者本人を除く選手へ LINE 送信する。
+     *
+     * <p>対象の決め方:
+     * <ul>
+     *   <li>登録者が当事者（player1 または player2）の場合 … 相手選手のみ</li>
+     *   <li>登録者が当事者でない（第三者）場合 … player1 / player2 の両方</li>
+     * </ul>
+     * 各対象者の {@code matchVideoRegistered} 設定が ON の者のみに送信する（設定レコード未存在時は
+     * デフォルト ON）。設定判定・LINE 未連携スキップ・月間上限・送信ログ記録は {@link #sendToPlayer}
+     * 経由で既存の個人宛通知と同じ流儀で処理される。</p>
+     *
+     * <p>メッセージは「○○さんが [試合日] の試合（[対戦カード]）に動画を登録しました」に続けて
+     * アプリ該当ページへのリンクを添える。結果入力済み（{@code matchId} あり）なら
+     * {@code /matches/{matchId}}、未入力なら {@code /videos} を指す。</p>
+     *
+     * <p>個別送信の失敗は警告ログに残し、他の対象者への送信は継続する。呼び出し元（登録処理）が
+     * この通知失敗で巻き戻らないよう、呼び出し側でも例外を握りつぶすこと。</p>
+     *
+     * @param registrantId 登録操作を行ったユーザー（選手）のID
+     * @param player1Id    対戦当事者1のID
+     * @param player2Id    対戦当事者2のID
+     * @param matchDate    試合日
+     * @param matchNumber  その日の第何試合目か
+     * @param matchId      対応する試合結果（matches）のID。結果未入力の場合は null
+     */
+    public void sendMatchVideoRegisteredNotification(Long registrantId, Long player1Id, Long player2Id,
+                                                     LocalDate matchDate, Integer matchNumber, Long matchId) {
+        // 通知対象 = 当事者から登録者本人を除いた選手（重複・null を除去）
+        List<Long> recipientIds = Stream.of(player1Id, player2Id)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .filter(id -> !id.equals(registrantId))
+                .collect(Collectors.toList());
+        if (recipientIds.isEmpty()) {
+            return;
+        }
+
+        // 登録者名・対戦カードの選手名を一括解決
+        List<Long> nameLookupIds = Stream.of(registrantId, player1Id, player2Id)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> playerNames = new HashMap<>();
+        playerRepository.findAllById(nameLookupIds)
+                .forEach(p -> playerNames.put(p.getId(), p.getName()));
+
+        String registrantName = playerNames.getOrDefault(registrantId, "誰か");
+        String matchCard = playerNames.getOrDefault(player1Id, "不明")
+                + " vs " + playerNames.getOrDefault(player2Id, "不明");
+        String dateStr = matchDate != null ? matchDate.format(DATE_FORMAT) : "";
+
+        // 結果入力済みなら試合詳細ページ、未入力なら動画倉庫ページへのリンク（フロントのルート）
+        String relativePath = matchId != null ? "/matches/" + matchId : "/videos";
+        String link = normalizedFrontendUrl() + relativePath;
+
+        String message = String.format("%sさんが%sの試合（%s）に動画を登録しました\n%s",
+                registrantName, dateStr, matchCard, link);
+
+        int sent = 0;
+        int failed = 0;
+        int skipped = 0;
+        for (Long recipientId : recipientIds) {
+            try {
+                SendResult result = sendToPlayer(recipientId, LineNotificationType.MATCH_VIDEO_REGISTERED, message);
+                if (result == SendResult.SUCCESS) {
+                    sent++;
+                } else if (result == SendResult.FAILED) {
+                    failed++;
+                } else {
+                    skipped++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to send MATCH_VIDEO_REGISTERED to player {}: {}", recipientId, e.getMessage());
+                failed++;
+            }
+        }
+
+        log.info("MATCH_VIDEO_REGISTERED: matchDate={}, matchNumber={}, registrantId={}, targetCount={}, sent={}, failed={}, skipped={}",
+                matchDate, matchNumber, registrantId, recipientIds.size(), sent, failed, skipped);
+    }
+
+    /** app.frontend-url の末尾スラッシュを除去して返す（リンク連結時の二重スラッシュ防止）。 */
+    private String normalizedFrontendUrl() {
+        String base = appFrontendUrl == null ? "" : appFrontendUrl;
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        return base;
     }
 
     /**

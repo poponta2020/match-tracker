@@ -14,6 +14,7 @@ import MatchForm from './pages/matches/MatchForm';
 import MatchDetail from './pages/matches/MatchDetail';
 import BulkResultInput from './pages/matches/BulkResultInput';
 import MatchResultsView from './pages/matches/MatchResultsView';
+import VideoLibrary from './pages/videos/VideoLibrary';
 import PracticeList from './pages/practice/PracticeList';
 import PracticeForm from './pages/practice/PracticeForm';
 import PracticeDetail from './pages/practice/PracticeDetail';
@@ -93,6 +94,9 @@ function App() {
             <Route path="/matches/:id/edit" element={<ProtectedPage><MatchForm /></ProtectedPage>} />
             <Route path="/matches/bulk-input/:sessionId" element={<ProtectedPage><BulkResultInput /></ProtectedPage>} />
             <Route path="/matches/results/:sessionId?" element={<ProtectedPage><MatchResultsView /></ProtectedPage>} />
+
+            {/* 動画倉庫 */}
+            <Route path="/videos" element={<ProtectedPage><VideoLibrary /></ProtectedPage>} />
 
             {/* 練習 */}
             <Route path="/practice" element={<ProtectedPage><PracticeList /></ProtectedPage>} />

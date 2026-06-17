@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.dto;
 
 import com.karuta.matchtracker.entity.Match;
+import com.karuta.matchtracker.entity.MatchVideo;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -52,6 +53,48 @@ public class MatchDto {
     // メンティーのメモ・お手付き（メンター関係がある場合のみ設定）
     private String menteePersonalNotes;
     private Integer menteeOtetsukiCount;
+
+    // 試合動画（同一自然キーの match_videos が存在する場合のみ設定。なければ null）
+    private Video video;
+
+    /**
+     * 試合に紐付く動画情報（ネスト構造）
+     *
+     * 同一自然キー（試合日・試合番号・両選手）の {@code match_videos} レコードが
+     * 存在する場合のみ {@link MatchDto#video} に設定される。動画なしの試合では null。
+     * 再生・サムネイル表示と、編集・削除ボタンの表示判定（登録者本人チェック）に
+     * 必要な項目のみを持つ。
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class Video {
+        private Long id;
+        private String videoUrl;
+        private String youtubeVideoId;
+        private String title;
+        private Long createdBy;
+
+        /**
+         * 動画エンティティからネストDTOへ変換
+         *
+         * @param video 動画エンティティ
+         * @return 動画ネストDTO（video が null の場合は null）
+         */
+        public static Video fromEntity(MatchVideo video) {
+            if (video == null) {
+                return null;
+            }
+            return Video.builder()
+                    .id(video.getId())
+                    .videoUrl(video.getVideoUrl())
+                    .youtubeVideoId(video.getYoutubeVideoId())
+                    .title(video.getTitle())
+                    .createdBy(video.getCreatedBy())
+                    .build();
+        }
+    }
 
     /**
      * エンティティからDTOへ変換

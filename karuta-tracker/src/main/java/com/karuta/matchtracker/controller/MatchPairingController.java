@@ -82,6 +82,24 @@ public class MatchPairingController {
     }
 
     /**
+     * 指定選手の最近の対戦組み合わせを取得
+     *
+     * 動画倉庫の登録モーダル「選手起点」で、結果未入力（match_pairings にのみ存在）の試合も
+     * 選択肢に含めるために使用する。指定選手が player1 または player2 に含まれるペアリングを
+     * sessionDate DESC, matchNumber DESC の新しい順で直近30件返す。
+     *
+     * <p>閲覧は全選手可のため団体スコープは適用しない（getByDate 等の書き込み系・組織限定取得とは
+     * 用途が異なる、選手別履歴の参照系）。返すのはペアリングであり結果(matches)とは別物。</p>
+     */
+    @GetMapping("/player/{playerId}")
+    @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
+    public ResponseEntity<List<MatchPairingDto>> getRecentByPlayer(@PathVariable Long playerId) {
+        log.info("選手起点の最近ペアリング取得: playerId={}", playerId);
+        List<MatchPairingDto> pairings = matchPairingService.getRecentByPlayerId(playerId);
+        return ResponseEntity.ok(pairings);
+    }
+
+    /**
      * 対戦組み合わせが存在するか確認
      */
     @GetMapping("/exists")

@@ -18,4 +18,6 @@ services:
         sync: false   # VercelのURLを設定（例: https://your-app.vercel.app）
       - key: APP_BASE_URL
         sync: false   # iCalフィードURLの公開オリジン（例: https://karuta-tracker-api.onrender.com）
+      - key: APP_FRONTEND_URL
+        sync: false   # LINE通知のアプリ画面リンク用フロントオリジン（CORS_ALLOWED_ORIGINS と同じVercelのURL。例: https://your-app.vercel.app）
     healthCheckPath: /ping

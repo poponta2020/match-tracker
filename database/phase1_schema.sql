@@ -4,6 +4,17 @@
 -- 作成日: 2025-11-06
 -- 対象テーブル: players, player_profiles, matches, practice_sessions
 -- ============================================
+-- 【重要・このファイルの位置づけ】
+-- 本ファイルは Phase 1 MVP 時点の MySQL スキーマの「凍結スナップショット」であり、
+-- 現行スキーマの正本ではない。Phase 1 以降に追加されたテーブル（match_pairings,
+-- match_comments, line_notification_preferences, line_message_log, match_videos,
+-- densuke_*, mentor_*, room_* 等）は本ファイルには含めず、database/ 配下の
+-- 逐次マイグレーションSQL（例: create_match_videos.sql）として個別に管理している。
+-- 初期化経路: テストは Testcontainers + Hibernate ddl-auto=create-drop、
+-- 本番/ローカルは Render PostgreSQL + 逐次マイグレーション。本ファイルはどの経路でも
+-- 読み込まれない（リポジトリ内から参照ゼロ）。そのため新規テーブルを本ファイルへ
+-- 追記する運用は行わない。
+-- ============================================
 
 -- データベース作成
 CREATE DATABASE IF NOT EXISTS karuta_tracker

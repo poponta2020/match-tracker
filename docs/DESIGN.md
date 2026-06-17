@@ -94,6 +94,7 @@ Entity Layer (JPA Entity)
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
 - 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する
+- 選手起点の最近ペアリング取得 `GET /api/match-pairings/player/{playerId}`（`MatchPairingService.getRecentByPlayerId` / `MatchPairingRepository.findRecentByPlayerId`）は、`@RequireRole` 全ロールの参照系で団体スコープを適用しない（閲覧は全選手可。選手別履歴の参照という用途が getByDate 等の組織限定取得と異なるため）。`(player1Id = :playerId OR player2Id = :playerId)` で `sessionDate DESC, matchNumber DESC` 順・`Pageable` で直近30件に制限し、選手名は `collectPlayerNames` で一括解決（N+1回避）。動画倉庫の登録モーダル「選手起点」で結果未入力（`match_pairings` のみ）の試合も選択肢に含めるための軽量レスポンス（`recentMatches`・試合結果は付与しない）
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
 
@@ -775,6 +776,39 @@ Entity Layer (JPA Entity)
 
 ---
 
+#### match_videos（試合動画台帳）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | BIGINT | PK, AUTO_INCREMENT | 動画ID |
+| match_date | DATE | NOT NULL | 試合日 |
+| match_number | INT | NOT NULL | 試合番号（その日の何試合目か） |
+| player1_id | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 選手1ID（player1_id < player2_id を保証） |
+| player2_id | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 選手2ID |
+| provider | VARCHAR(20) | NOT NULL, DEFAULT 'YOUTUBE' | 動画プロバイダ（現状は YOUTUBE のみ） |
+| video_url | TEXT | NOT NULL | 動画URL |
+| youtube_video_id | VARCHAR(20) | | YouTube動画ID（埋め込み用） |
+| title | VARCHAR(255) | | 動画タイトル |
+| created_by | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 登録者ID |
+| updated_by | BIGINT | NOT NULL, FK(players.id) ON DELETE RESTRICT | 更新者ID |
+| created_at | DATETIME | NOT NULL | 登録日時 |
+| updated_at | DATETIME | NOT NULL | 更新日時 |
+
+**制約**:
+- UNIQUE: `uq_match_videos_match` (match_date, match_number, player1_id, player2_id)
+
+**インデックス**:
+- `idx_match_videos_player1` (player1_id)
+- `idx_match_videos_player2` (player2_id)
+
+**特殊ロジック**:
+- `matches` / `match_pairings` とは FK を持たず、`(match_date, match_number, player1_id, player2_id)` の自然キーで対応付く。これにより結果未入力（ペアリングのみ）の試合にも動画を登録でき、結果入力後に自動で試合詳細へ表示される
+- `@PrePersist`/`@PreUpdate`で player1_id < player2_id を自動保証（`MatchVideo` エンティティ。選手IDのみ入れ替え）
+- 動画台帳（倉庫）のページング検索 `MatchVideoRepository.search()` は選手ID・開始日・終了日を全て nullable で受け取り、null の条件は無視する。年月絞り込みは呼び出し側で年月→開始日/終了日の範囲に変換して渡す
+  - nullable な `LocalDate` パラメータは、PostgreSQL JDBC の型推論で bytea と誤推論されるのを防ぐため JPQL の `CAST(:startDate AS date)` で明示的に date 型へキャストしている
+  - `MatchVideoService.search()` は範囲変換前に `year`/`month` を検証する（`year` 非null時のみ）。`month` は 1〜12（`MSG_INVALID_MONTH`）、`year` は 2000〜2100（`MSG_INVALID_YEAR`）。範囲外は `IllegalArgumentException`（GlobalExceptionHandler で400）。`month` 単独指定（`year==null`）は既存挙動どおり無視する。`LocalDate.of` の `DateTimeException`→500 を防ぐため、`YearMonthRange.of` 側にも month の防御的ガードを置く（ユーザー向け400メッセージは search 側で出す）
+
+---
+
 ## 4. API設計
 
 ### 4.1 共通仕様
@@ -1030,6 +1064,37 @@ Entity Layer (JPA Entity)
   "winRate": 0.65
 }
 ```
+
+---
+
+### 4.3.1 試合動画API (`/api/match-videos`)
+
+動画台帳（YouTube限定公開URLと試合の紐付け）の管理API。詳細フローは「7.6.1 試合動画フロー」を参照。
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| POST | `/` | ALL | 動画登録 |
+| PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え（所有者チェックはサービス層） |
+| DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除） |
+| GET | `/?date=` | ALL | 指定日の動画一覧 |
+| GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング（`PagedResponse<MatchVideoDto>`） |
+
+**POST リクエスト**: `MatchVideoCreateRequest`
+```json
+{
+  "matchDate": "2026-06-12",
+  "matchNumber": 1,
+  "player1Id": 1,
+  "player2Id": 2,
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+}
+```
+
+**レスポンス**: `MatchVideoDto`
+- 選手名（`player1Name` / `player2Name`）は players テーブルから解決
+- `matchId` / `winnerId` / `scoreDifference` は同一自然キーの試合結果（`matches`）が存在する場合のみ設定（結果未入力なら null）
+
+**エラー**: 400「YouTubeのURLを入力してください」/ 404「対象の試合が見つかりません」/ 409「この試合には既に動画が登録されています」/ 403（編集・削除の権限なし）
 
 ---
 
@@ -2698,6 +2763,75 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 | `line_message_log` CHECK制約 | `MENTOR_COMMENT` 追加 |
 | `LineNotificationType` enum | `MENTEE_MEMO_UPDATE` 追加 |
 | `line_message_log` CHECK制約 | `MENTEE_MEMO_UPDATE` 追加 |
+
+### 7.6.1 試合動画フロー
+
+練習試合の動画（YouTube限定公開）のURLを、試合の自然キー（試合日・試合番号・両選手）と紐付けて管理する「動画台帳」。`matches` / `match_pairings` とはFKを持たず、(match_date, match_number, player1_id, player2_id) の自然キーで対応付くため、**結果未入力（組み合わせのみ）段階でも登録でき、結果入力後は同一キーで自動的に試合詳細にも表示される**（付け替え処理不要）。
+
+```
+[動画登録フロー]
+1. 撮影者が YouTube アプリから限定公開でアップロード → URLをコピー
+   ↓
+2. アプリ（試合詳細 or 動画倉庫）で対象試合を選び POST /api/match-videos
+   ↓
+3. MatchVideoService.register:
+   a. YouTube URL検証・動画ID抽出（不正 → 400「YouTubeのURLを入力してください」）
+   b. キー正規化（player1Id < player2Id）
+   c. 対象試合の存在チェック（matches または match_pairings に同自然キー。
+      match_pairings は p1<p2 を保証しないため選手順序不問で照合）
+      → どちらにも無ければ 404「対象の試合が見つかりません」
+   d. 重複チェック（既に動画あり → 409「この試合には既に動画が登録されています」）
+   e. oEmbed API でタイトル取得（接続2秒・読取3秒。失敗時は title=null で続行＝fail-soft）
+   f. INSERT（created_by / updated_by = 操作ユーザー）
+   ※ LINE通知はタスク9（MATCH_VIDEO_REGISTERED）で追加
+
+[編集・削除フロー]
+- PUT /api/match-videos/{id}（URL差し替え）/ DELETE /api/match-videos/{id}（物理削除）
+- 権限: 登録者本人（created_by）or ADMIN/SUPER_ADMIN のみ（サービス層で所有者チェック）
+- 削除されるのは台帳の紐付けのみ。YouTube上の動画本体は残る
+
+[一覧・検索フロー]
+- GET /api/match-videos?date=  : 指定日の動画一覧（当日結果一覧の「動画あり」バッジ用）
+- GET /api/match-videos/search : 動画倉庫の検索（選手・年月絞り込み・mine トグル・ページング）
+  - mine=true は操作ユーザー自身を対象選手として扱う（playerId より優先）
+  - year/month はサービス層で startDate/endDate 範囲に変換してリポジトリへ渡す
+  - 並びは matchDate DESC, matchNumber DESC
+  - 一覧系は選手名解決・matches照合をバッチ取得（findAllById / findByMatchDateIn）で N+1 回避
+  - レスポンスは PagedResponse<MatchVideoDto>（PageImpl 直接シリアライズの不安定さを回避）
+
+[既存の試合APIへの動画付与（MatchDto.video）]
+- MatchDto に `video: { id, videoUrl, youtubeVideoId, title } | null` を追加し、
+  ①試合詳細（単体取得）と③個人別一覧が既存APIのまま動画有無を取得できるようにする
+  （動画なしの試合は video=null。後方互換: 既存フィールドは不変、追加のみ）
+  - 単体取得: MatchService.findById → 試合の自然キー (match_date, match_number, p1<p2) で
+    MatchVideoRepository.findByMatchDateAndMatchNumberAndPlayers を1回呼び、ヒットすれば video をセット
+  - 個人別一覧: MatchService.findPlayerMatchesWithFilters → 対象選手の動画を
+    MatchVideoRepository.findByPlayerId で1クエリ取得し、(match_date, match_number, p1, p2) 正規化キーの
+    マップを構築して各試合に照合・セット（N+1回避）
+  - ②当日結果一覧は別API GET /api/match-videos?date= を使うため、video 付与は ①③ のみに限定する
+  - MatchDto.Video.fromEntity(MatchVideo) で MatchVideo → ネストDTO 変換（fromEntity 規約に従う）
+```
+
+**関連クラス:**
+
+| クラス | 説明 |
+|--------|------|
+| `MatchVideo` | entity/ — 動画台帳エンティティ。自然キー + UNIQUE制約、`provider`（'YOUTUBE'固定）、`@PrePersist`/`@PreUpdate` で p1<p2 入れ替え |
+| `MatchVideoRepository` | repository/ — 自然キー検索・日付検索・選手検索（p1 OR p2）・倉庫検索（動的条件+ページング） |
+| `MatchVideoController` | controller/ — 動画CRUD + 日付別一覧 + 倉庫検索（5エンドポイント）。`@RequireRole` 全ロール |
+| `MatchVideoService` | service/ — 登録・URL差し替え・削除・検索。YouTube URL検証/ID抽出、oEmbedタイトル取得（短タイムアウト・fail-soft）、所有者チェック |
+| `MatchVideoDto` | dto/ — `fromEntity(video, p1Name, p2Name, match)`。選手名と matches 照合結果（matchId/winnerId/scoreDifference）を含む |
+| `MatchVideoCreateRequest` / `MatchVideoUpdateRequest` | dto/ — 登録リクエスト（自然キー+URL）/ 更新リクエスト（URLのみ） |
+| `PagedResponse<T>` | dto/ — ページング結果の汎用レスポンス（content/page/size/totalElements/totalPages） |
+| `MatchDto.Video` | dto/ — `MatchDto` のネストDTO（id/videoUrl/youtubeVideoId/title）。`fromEntity(MatchVideo)`。動画なしは null |
+| `MatchService` | service/ — `MatchDto` への動画付与（単体: 自然キー1回照合 / 個人別一覧: findByPlayerId 1クエリ＋マップ照合でN+1回避）。①試合詳細・③個人別一覧のみ対象 |
+
+**DB変更:**
+
+| 対象 | 変更内容 |
+|------|---------|
+| `match_videos` テーブル | タスク1で新規作成（自然キー + UNIQUE制約 `uq_match_videos_match`、provider/video_url/youtube_video_id/title） |
+| `MatchRepository` | `findByMatchDateIn(dates)` 追加（動画一覧で matches をバッチ照合し N+1 回避） |
 
 ### 7.7 隣室予約→会場拡張フロー
 
