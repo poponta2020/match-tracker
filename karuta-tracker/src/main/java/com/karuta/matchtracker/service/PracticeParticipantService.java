@@ -627,24 +627,9 @@ public class PracticeParticipantService {
                 .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
         if (sessions.isEmpty()) return List.of();
 
-        int totalScheduledMatches = sessions.stream()
-                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
-        if (totalScheduledMatches == 0) return List.of();
-
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-        List<Player> allPlayers = playerRepository.findAllActive();
-
-        Map<Long, Integer> counts = new HashMap<>();
-        allParticipants.forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
-        Map<Long, String> names = allPlayers.stream().collect(Collectors.toMap(Player::getId, Player::getName));
-
-        return counts.entrySet().stream()
-                .map(e -> ParticipationRateDto.builder()
-                        .playerId(e.getKey()).playerName(names.getOrDefault(e.getKey(), "不明"))
-                        .participatedMatches(e.getValue()).totalScheduledMatches(totalScheduledMatches)
-                        .rate((double) e.getValue() / totalScheduledMatches).build())
-                .collect(Collectors.toList());
+        return buildParticipationRates(sessions, allParticipants, null);
     }
 
     // === 団体フィルタ対応メソッド ===
@@ -683,29 +668,12 @@ public class PracticeParticipantService {
                 .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
         if (sessions.isEmpty()) return List.of();
 
-        int totalScheduledMatches = sessions.stream()
-                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
-        if (totalScheduledMatches == 0) return List.of();
-
         Set<Long> memberPlayerIds = playerOrganizationRepository.findByOrganizationId(organizationId).stream()
                 .map(PlayerOrganization::getPlayerId).collect(Collectors.toSet());
 
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-        Map<Long, String> names = playerRepository.findAllActive().stream()
-                .collect(Collectors.toMap(Player::getId, Player::getName));
-
-        Map<Long, Integer> counts = new HashMap<>();
-        allParticipants.stream()
-                .filter(pp -> memberPlayerIds.contains(pp.getPlayerId()))
-                .forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
-
-        return counts.entrySet().stream()
-                .map(e -> ParticipationRateDto.builder()
-                        .playerId(e.getKey()).playerName(names.getOrDefault(e.getKey(), "不明"))
-                        .participatedMatches(e.getValue()).totalScheduledMatches(totalScheduledMatches)
-                        .rate((double) e.getValue() / totalScheduledMatches).build())
-                .collect(Collectors.toList());
+        return buildParticipationRates(sessions, allParticipants, memberPlayerIds);
     }
 
     private List<ParticipationRateDto> computeAllParticipationRates(int year, int month, List<Long> organizationIds) {
@@ -714,10 +682,6 @@ public class PracticeParticipantService {
                 .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
         if (sessions.isEmpty()) return List.of();
 
-        int totalScheduledMatches = sessions.stream()
-                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
-        if (totalScheduledMatches == 0) return List.of();
-
         Set<Long> memberPlayerIds = organizationIds.stream()
                 .flatMap(orgId -> playerOrganizationRepository.findByOrganizationId(orgId).stream())
                 .map(PlayerOrganization::getPlayerId)
@@ -725,19 +689,65 @@ public class PracticeParticipantService {
 
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
+        return buildParticipationRates(sessions, allParticipants, memberPlayerIds);
+    }
+
+    /**
+     * セッション群と参加レコードから参加率DTOリストを構築する共通ロジック。
+     *
+     * 分子（participatedMatches）の数え方:
+     * <ul>
+     *   <li>ステータスが {@link ParticipantStatus#isActive()}（WON/PENDING）の行のみカウントする。
+     *       CANCELLED/DECLINED/WAITLISTED/OFFERED/WAITLIST_DECLINED は「参加」に含めない。
+     *       （status が null の legacy 行は WON 扱いとし、本サービス内の他処理と整合させる）</li>
+     *   <li>各セッションで参加数を totalMatches で上限キャップしてから合算する。
+     *       これにより matchNumber=null の抜け番行（仕様上カウント対象）を含めても、
+     *       分子が分母（Σ totalMatches）を超えず、参加率が 100% を超えない。</li>
+     * </ul>
+     *
+     * @param memberPlayerIds 対象プレイヤーのフィルタ。null の場合は全プレイヤーを対象とする。
+     */
+    private List<ParticipationRateDto> buildParticipationRates(
+            List<PracticeSession> sessions,
+            List<PracticeParticipant> allParticipants,
+            Set<Long> memberPlayerIds) {
+
+        int totalScheduledMatches = sessions.stream()
+                .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
+        if (totalScheduledMatches == 0) return List.of();
+
+        // セッションごとの予定試合数（参加数の上限値）
+        Map<Long, Integer> sessionCap = sessions.stream()
+                .collect(Collectors.toMap(PracticeSession::getId,
+                        s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0));
+
+        // playerId -> (sessionId -> 有効参加数) を集計
+        Map<Long, Map<Long, Integer>> perPlayerPerSession = new HashMap<>();
+        allParticipants.stream()
+                .filter(pp -> memberPlayerIds == null || memberPlayerIds.contains(pp.getPlayerId()))
+                .filter(pp -> pp.getStatus() == null || pp.getStatus().isActive())
+                .forEach(pp -> perPlayerPerSession
+                        .computeIfAbsent(pp.getPlayerId(), k -> new HashMap<>())
+                        .merge(pp.getSessionId(), 1, Integer::sum));
+
         Map<Long, String> names = playerRepository.findAllActive().stream()
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
-        Map<Long, Integer> counts = new HashMap<>();
-        allParticipants.stream()
-                .filter(pp -> memberPlayerIds.contains(pp.getPlayerId()))
-                .forEach(pp -> counts.merge(pp.getPlayerId(), 1, Integer::sum));
-
-        return counts.entrySet().stream()
-                .map(e -> ParticipationRateDto.builder()
-                        .playerId(e.getKey()).playerName(names.getOrDefault(e.getKey(), "不明"))
-                        .participatedMatches(e.getValue()).totalScheduledMatches(totalScheduledMatches)
-                        .rate((double) e.getValue() / totalScheduledMatches).build())
+        return perPlayerPerSession.entrySet().stream()
+                .map(entry -> {
+                    Long playerId = entry.getKey();
+                    // 各セッションで totalMatches を上限にキャップしてから合算
+                    int participated = entry.getValue().entrySet().stream()
+                            .mapToInt(e -> Math.min(e.getValue(), sessionCap.getOrDefault(e.getKey(), 0)))
+                            .sum();
+                    return ParticipationRateDto.builder()
+                            .playerId(playerId)
+                            .playerName(names.getOrDefault(playerId, "不明"))
+                            .participatedMatches(participated)
+                            .totalScheduledMatches(totalScheduledMatches)
+                            .rate((double) participated / totalScheduledMatches)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 }

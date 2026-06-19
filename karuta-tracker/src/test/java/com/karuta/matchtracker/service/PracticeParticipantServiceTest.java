@@ -977,4 +977,89 @@ class PracticeParticipantServiceTest {
         verify(lineNotificationService)
                 .sendSameDayJoinNotification(eq(session), eq(1), eq("テスト太郎"), eq(10L));
     }
+
+    @Test
+    @DisplayName("参加率TOP3(団体別): 全試合WON+抜け番(matchNumber=null)でも各セッションで予定試合数を上限にキャップし100%を超えない")
+    void getParticipationRateTop3_byeAndFullMatches_cappedAt100Percent() {
+        LocalDate today = LocalDate.of(2026, 6, 19);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+
+            PracticeSession session = createSession(100L, 7); // totalMatches=7
+            session.setSessionDate(LocalDate.of(2026, 6, 10));
+
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 6, ORG_ID))
+                    .thenReturn(List.of(session));
+            when(playerOrganizationRepository.findByOrganizationId(ORG_ID))
+                    .thenReturn(List.of(com.karuta.matchtracker.entity.PlayerOrganization.builder()
+                            .playerId(10L).organizationId(ORG_ID).build()));
+
+            // 全7試合WON + 抜け番(matchNumber=null, WON) = 8行
+            java.util.List<PracticeParticipant> participants = new java.util.ArrayList<>();
+            for (int m = 1; m <= 7; m++) {
+                participants.add(buildParticipant(100L, 10L, m, ParticipantStatus.WON));
+            }
+            participants.add(PracticeParticipant.builder()
+                    .sessionId(100L).playerId(10L).matchNumber(null).status(ParticipantStatus.WON).build());
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                    .thenReturn(participants);
+
+            com.karuta.matchtracker.entity.Player player = new com.karuta.matchtracker.entity.Player();
+            player.setId(10L);
+            player.setName("白石新菜");
+            when(playerRepository.findAllActive()).thenReturn(List.of(player));
+
+            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 =
+                    service.getParticipationRateTop3(2026, 6, ORG_ID);
+
+            assertThat(top3).hasSize(1);
+            // 8行あっても totalMatches=7 でキャップ
+            assertThat(top3.get(0).getParticipatedMatches()).isEqualTo(7);
+            assertThat(top3.get(0).getTotalScheduledMatches()).isEqualTo(7);
+            assertThat(top3.get(0).getRate()).isEqualTo(1.0); // 114%ではなく100%
+        }
+    }
+
+    @Test
+    @DisplayName("参加率TOP3(団体別): CANCELLED/WAITLISTED/DECLINED 等の無効ステータスは分子に含めない")
+    void getParticipationRateTop3_excludesInactiveStatuses() {
+        LocalDate today = LocalDate.of(2026, 6, 19);
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+
+            PracticeSession session = createSession(100L, 7); // totalMatches=7
+            session.setSessionDate(LocalDate.of(2026, 6, 10));
+
+            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 6, ORG_ID))
+                    .thenReturn(List.of(session));
+            when(playerOrganizationRepository.findByOrganizationId(ORG_ID))
+                    .thenReturn(List.of(com.karuta.matchtracker.entity.PlayerOrganization.builder()
+                            .playerId(10L).organizationId(ORG_ID).build()));
+
+            // 有効(WON×3, PENDING×1)=4、無効(CANCELLED/WAITLISTED/DECLINED)=3
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
+                    .thenReturn(List.of(
+                            buildParticipant(100L, 10L, 1, ParticipantStatus.WON),
+                            buildParticipant(100L, 10L, 2, ParticipantStatus.WON),
+                            buildParticipant(100L, 10L, 3, ParticipantStatus.WON),
+                            buildParticipant(100L, 10L, 4, ParticipantStatus.PENDING),
+                            buildParticipant(100L, 10L, 5, ParticipantStatus.CANCELLED),
+                            buildParticipant(100L, 10L, 6, ParticipantStatus.WAITLISTED),
+                            buildParticipant(100L, 10L, 7, ParticipantStatus.DECLINED)
+                    ));
+
+            com.karuta.matchtracker.entity.Player player = new com.karuta.matchtracker.entity.Player();
+            player.setId(10L);
+            player.setName("白石新菜");
+            when(playerRepository.findAllActive()).thenReturn(List.of(player));
+
+            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 =
+                    service.getParticipationRateTop3(2026, 6, ORG_ID);
+
+            assertThat(top3).hasSize(1);
+            assertThat(top3.get(0).getParticipatedMatches()).isEqualTo(4); // 有効4のみ
+            assertThat(top3.get(0).getTotalScheduledMatches()).isEqualTo(7);
+            assertThat(top3.get(0).getRate()).isEqualTo(4.0 / 7.0);
+        }
+    }
 }
