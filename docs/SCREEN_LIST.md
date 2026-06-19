@@ -192,7 +192,7 @@
 | `PlayerChip` | `components/PlayerChip.jsx` | 選手バッジ |
 | `MatchParticipantsEditModal` | `components/MatchParticipantsEditModal.jsx` | 試合参加者編集モーダル |
 | `VideoPlayerModal` | `components/VideoPlayerModal.jsx` | 試合動画 再生モーダル（YouTube 埋め込み・対戦情報・`matchId` 非null時「試合詳細を見る」リンク）。倉庫一覧・当日結果一覧から利用 |
-| `VideoRegisterModal` | `components/VideoRegisterModal.jsx` | 試合動画 登録/編集モーダル。**固定モード**（`match` を渡す。試合詳細画面から URL 入力ステップのみ）と**選択モード**（`selectMode`。動画倉庫から ①試合選択→②URL 入力 の2段構成。①は「日付から」「選手から」のタブで候補を絞り込み登録済み試合はグレーアウト）の2モードを持つ |
+| `VideoRegisterModal` | `components/VideoRegisterModal.jsx` | 試合動画 登録/編集モーダル。**固定モード**（`match` を渡す。試合詳細画面から URL 入力ステップのみ）と**選択モード**（`selectMode`。動画倉庫から ①試合選択→②URL 入力 の2段構成。①は「日付から」「選手から」のタブで候補を絞り込み登録済み試合はグレーアウト）の2モードを持つ。**「日付から」タブは `GET /api/match-videos/date-candidates` を使用し、参加日スコープに依存せず**（その日の練習に参加していない撮影担当・第三者でも候補が出る）、組み合わせ・試合結果を統合した当日の全カードを候補表示する（組織スコープは適用）。各候補は**登録済み（同自然キーの動画あり）はグレーアウトで選択不可**、**相手が未登録（`player1Id`/`player2Id` が `0`/`null`、ゲスト戦）も選択不可**（matches 由来のゲスト戦は相手名を `opponentName` で表示） |
 | `ErrorBoundary` | `components/ErrorBoundary.jsx` | エラーバウンダリ |
 
 ---

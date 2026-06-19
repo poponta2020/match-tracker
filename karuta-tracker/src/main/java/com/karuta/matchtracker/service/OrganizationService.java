@@ -64,6 +64,23 @@ public class OrganizationService {
     }
 
     /**
+     * 指定団体に所属する選手IDの集合を取得する（組織スコープのフィルタ用）。
+     *
+     * <p>{@code player_organizations} を1クエリで引き、所属選手IDの {@link Set} を返す。
+     * 呼び出し側で「両選手が当該団体に所属するか」を判定する際に N+1 を避けるために使う
+     * （例: 日付別の試合結果を組織スコープに絞り込む）。</p>
+     *
+     * @param organizationId 団体ID
+     * @return 所属選手IDの集合（所属者なしなら空集合）
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> getOrganizationMemberPlayerIds(Long organizationId) {
+        return playerOrganizationRepository.findByOrganizationId(organizationId).stream()
+                .map(PlayerOrganization::getPlayerId)
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * ユーザーの参加団体を更新（最低1つ必須）
      */
     @Transactional

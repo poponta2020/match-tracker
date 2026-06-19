@@ -1,7 +1,9 @@
 package com.karuta.matchtracker.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.karuta.matchtracker.dto.MatchPairingDto;
 import com.karuta.matchtracker.dto.MatchVideoCreateRequest;
+import com.karuta.matchtracker.dto.MatchVideoDateCandidateDto;
 import com.karuta.matchtracker.dto.MatchVideoDto;
 import com.karuta.matchtracker.dto.MatchVideoUpdateRequest;
 import com.karuta.matchtracker.dto.PagedResponse;
@@ -28,10 +30,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -93,20 +99,26 @@ public class MatchVideoService {
     private final MatchVideoRepository matchVideoRepository;
     private final MatchRepository matchRepository;
     private final MatchPairingRepository matchPairingRepository;
+    private final MatchPairingService matchPairingService;
     private final PlayerRepository playerRepository;
+    private final OrganizationService organizationService;
     private final LineNotificationService lineNotificationService;
     private final RestClient oembedRestClient;
 
     public MatchVideoService(MatchVideoRepository matchVideoRepository,
                              MatchRepository matchRepository,
                              MatchPairingRepository matchPairingRepository,
+                             MatchPairingService matchPairingService,
                              PlayerRepository playerRepository,
+                             OrganizationService organizationService,
                              LineNotificationService lineNotificationService,
                              RestClient.Builder restClientBuilder) {
         this.matchVideoRepository = matchVideoRepository;
         this.matchRepository = matchRepository;
         this.matchPairingRepository = matchPairingRepository;
+        this.matchPairingService = matchPairingService;
         this.playerRepository = playerRepository;
+        this.organizationService = organizationService;
         this.lineNotificationService = lineNotificationService;
         // oEmbed は外部I/O。接続・読取とも短いタイムアウトにし、失敗時は title=null で続行する。
         var requestFactory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
@@ -291,6 +303,261 @@ public class MatchVideoService {
     public List<MatchVideoDto> findByDate(LocalDate date) {
         List<MatchVideo> videos = matchVideoRepository.findByMatchDate(date);
         return enrich(videos);
+    }
+
+    // ===================== 日付別候補（動画登録モーダル「日付から」用） =====================
+
+    /**
+     * 指定日の動画登録候補を取得する（試合番号の昇順）。
+     *
+     * <p>動画倉庫の登録モーダル「日付から」で使用する読み取り専用の候補API。
+     * 組み合わせ（{@code match_pairings}）と試合結果（{@code matches}）を
+     * 自然キー {@code (matchDate, matchNumber, min(p1,p2), max(p1,p2))} で統合・重複排除し、
+     * 各候補に登録済みフラグ（{@code registered}）・結果有無（{@code hasResult}）・
+     * 試合ID（{@code matchId}）を付与して返す。</p>
+     *
+     * <p><b>参加日スコープ（hasSessionOnDateForUser）は適用しない。</b>
+     * 当メソッドは操作ユーザーIDを受け取らない設計のため、その日の練習に参加して
+     * いないユーザー（撮影担当・第三者登録）でも候補が返ることが構造的に担保される。
+     * 一方、<b>組織スコープは pairings / matches の両方で対称に維持する</b>:
+     * <ul>
+     *   <li>ペアリングは {@link MatchPairingService#getByDate(LocalDate, boolean, Long)} に
+     *       {@code light=true}・{@code organizationId} を渡して当該団体のセッション参加者の
+     *       もののみへ絞り込む。{@code light=true} は不要な recentMatches 取得を省くためで、
+     *       候補表示に必要な選手名・matchNumber は light でも DTO に含まれる。</li>
+     *   <li>試合結果（matches）は組織カラムを持たないため、{@code organizationId != null} の場合のみ
+     *       「<b>実在選手（id が 0/null でない）が全員当該団体に所属し、かつ実在所属メンバーが1名以上</b>」の
+     *       ものだけを候補化する（所属判定は {@link OrganizationService#getOrganizationMemberPlayerIds(Long)} を
+     *       1クエリで解決）。システム未登録の対戦相手はゲストID {@code 0} で保存されるため、
+     *       「両選手とも所属メンバー」固定だと <b>所属メンバー本人 vs ゲスト(0)</b> のゲスト戦が
+     *       {@code 0} を理由に丸ごと落ちてしまう。これを避けるため、ゲスト/未登録（{@code 0}/{@code null}）の
+     *       側は所属判定の母集合から除外して扱う（他団体ペアや(0,0)は従来どおり除外）。</li>
+     * </ul>
+     * これにより、同日に複数団体の試合結果があっても、他団体の matches-only 候補が
+     * {@code organizationId} 指定時に混入しない（pairings/matches の組織スコープ対称化）。
+     * {@code organizationId == null}（組織非限定）の場合は matches を日付のみで取得し、
+     * スコープしない（アプリ全体の PLAYER 未指定時の挙動と一貫）。</p>
+     *
+     * <p>matches 由来のゲスト戦は、正規化後に id が {@code 0}（または {@code null}）の側の名前へ
+     * {@link Match#getOpponentName()} を補完する（実在側は従来どおり {@code players} からバッチ解決）。
+     * ゲストは {@code @PrePersist} の正規化（player1Id &lt; player2Id）で {@code player1} 側に来るため、
+     * 通常は {@code player1Name} に opponentName が入る。この補完は {@code organizationId} の有無に
+     * 関わらず適用する。</p>
+     *
+     * <p>統合時、同一自然キーが pairings と matches の両方にある場合は
+     * <b>matches を優先</b>する（{@code hasResult=true}, {@code matchId} 設定）。
+     * pairings のみのスロットは {@code hasResult=false}, {@code matchId=null}。
+     * 選手名は {@code players} からバッチ解決して N+1 を回避する
+     * （matches のみのスロットの選手名解決に使う。pairings 由来は DTO が既に選手名を持つ）。</p>
+     *
+     * <p>{@code player1Id}/{@code player2Id} は正規化後（player1Id &lt; player2Id）の
+     * 生IDをそのまま入れる（フロントが生IDで「相手未登録」を判定するため）。正規化・キー生成は
+     * {@code null} セーフで、選手IDが {@code null}（実運用では NOT NULL だが防御的に許容）でも
+     * {@link NullPointerException} で 500 にせず、{@code null} を維持したまま候補として返す
+     * （フロントが {@code 0/null} を「相手未登録（選択不可）」として表示制御する）。</p>
+     *
+     * @param date           対戦日
+     * @param organizationId 組織スコープ（null は組織非限定。ペアリングの絞り込みにのみ使用）
+     * @return 候補DTOのリスト（matchNumber 昇順）
+     */
+    public List<MatchVideoDateCandidateDto> getDateCandidates(LocalDate date, Long organizationId) {
+        // 1. ペアリング取得（参加日スコープなし・組織スコープあり・選手名込み）。
+        //    light=true で MatchPairingService に委譲し、組織スコープ（団体一貫性）を担保する。
+        //    本APIは recentMatches（対戦履歴）を使わないため light=true とし、不要な履歴取得を避ける。
+        //    light=true でも convertToDtoWithCache が player1Id/player2Id/player1Name/player2Name/
+        //    matchNumber を必ず設定するため、候補表示に必要な選手名は欠落しない
+        //    （light は enrichWithRecentMatches の呼び出し有無だけを切り替える）。
+        List<MatchPairingDto> pairings = matchPairingService.getByDate(date, true, organizationId);
+
+        // 2. 試合結果取得（日付）。matches に組織カラムはないため、組織スコープは
+        //    選手の所属（player_organizations）経由で適用する。
+        //    organizationId != null のときのみ、当該団体の所属選手ID集合を1クエリで取得し
+        //    （N+1回避）、belongsToOrganization で候補化対象を絞る。
+        //    判定は「実在選手（id が 0/null でない）が全員所属、かつ実在所属メンバーが1名以上」。
+        //    これにより「所属メンバー vs ゲスト(0)」のゲスト戦（システム未登録相手戦）が
+        //    ゲストID 0 を理由に丸ごと落ちる不具合を避けつつ、他団体ペアや(0,0)は除外する。
+        //    これで pairings 側の組織スコープと対称になり、同日に複数団体の試合結果が
+        //    あっても他団体の matches-only 候補が混入しない。
+        //    organizationId == null（組織非限定）は日付のみで取得しスコープしない。
+        List<Match> matches = matchRepository.findByMatchDateOrderByMatchNumber(date);
+        if (organizationId != null) {
+            Set<Long> memberPlayerIds = organizationService.getOrganizationMemberPlayerIds(organizationId);
+            matches = matches.stream()
+                    .filter(m -> belongsToOrganization(m.getPlayer1Id(), m.getPlayer2Id(), memberPlayerIds))
+                    .collect(Collectors.toList());
+        }
+
+        // 3. 登録済み動画を取得し、自然キー (matchNumber, min, max) の Set を構築。
+        Set<String> registeredKeys = matchVideoRepository.findByMatchDate(date).stream()
+                .map(v -> candidateKey(v.getMatchNumber(), v.getPlayer1Id(), v.getPlayer2Id()))
+                .collect(Collectors.toSet());
+
+        // 4. 自然キーで統合・重複排除。同一キーが pairings と matches の両方にある場合は
+        //    matches 優先（後勝ち。matches を後から put して上書きする）。
+        //    挿入順（pairings → matches）を保持するため LinkedHashMap を使う。
+        Map<String, MatchVideoDateCandidateDto> byKey = new LinkedHashMap<>();
+
+        for (MatchPairingDto p : pairings) {
+            // 正規化は null セーフ（選手IDが null でも unboxing による NPE で 500 にしない）。
+            // 正規化後も null は維持し、フロントの「相手未登録(0/null)」判定を壊さない。
+            Long[] norm = normalizePlayerIds(p.getPlayer1Id(), p.getPlayer2Id());
+            Long normP1 = norm[0];
+            Long normP2 = norm[1];
+            String key = candidateKey(p.getMatchNumber(), normP1, normP2);
+            // 名前は正規化で入れ替わったかに応じて対応付け直す。
+            // normP1 が元の player1Id と同一参照（入れ替えなし）なら player1Name、そうでなければ player2Name。
+            boolean swapped = normP1 != null && !normP1.equals(p.getPlayer1Id());
+            byKey.put(key, MatchVideoDateCandidateDto.builder()
+                    .matchDate(date)
+                    .matchNumber(p.getMatchNumber())
+                    .player1Id(normP1)
+                    .player1Name(swapped ? p.getPlayer2Name() : p.getPlayer1Name())
+                    .player2Id(normP2)
+                    .player2Name(swapped ? p.getPlayer1Name() : p.getPlayer2Name())
+                    .hasResult(false)
+                    .matchId(null)
+                    .build());
+        }
+
+        for (Match m : matches) {
+            // 正規化は null セーフ（matches の選手IDも NOT NULL だが防御的に null を許容）。
+            Long[] norm = normalizePlayerIds(m.getPlayer1Id(), m.getPlayer2Id());
+            Long normP1 = norm[0];
+            Long normP2 = norm[1];
+            String key = candidateKey(m.getMatchNumber(), normP1, normP2);
+            // ゲスト（システム未登録相手）戦は player2Id=0 として保存され、@PrePersist の
+            // 正規化（player1Id<player2Id）で 0 が player1 側に来る。正規化後 0/null の側は
+            // players から名前解決できないため、その側の名前に Match.opponentName を入れる。
+            // 実在側（0/null でない側）は従来どおり後段のバッチ解決に委ねる（null のまま積む）。
+            String guestName = m.getOpponentName();
+            String player1Name = isGuestId(normP1) ? guestName : null;
+            String player2Name = isGuestId(normP2) ? guestName : null;
+            // matches 優先: pairings 由来のスロットがあっても上書きして結果情報を保持する。
+            // 実在側の選手名はこの時点では未解決（後段でバッチ解決）。
+            byKey.put(key, MatchVideoDateCandidateDto.builder()
+                    .matchDate(date)
+                    .matchNumber(m.getMatchNumber())
+                    .player1Id(normP1)
+                    .player1Name(player1Name)
+                    .player2Id(normP2)
+                    .player2Name(player2Name)
+                    .hasResult(true)
+                    .matchId(m.getId())
+                    .build());
+        }
+
+        List<MatchVideoDateCandidateDto> candidates = new ArrayList<>(byKey.values());
+
+        // 5. registered フラグ付与（同自然キーの動画があれば true）。
+        for (MatchVideoDateCandidateDto c : candidates) {
+            String key = candidateKey(c.getMatchNumber(), c.getPlayer1Id(), c.getPlayer2Id());
+            c.setRegistered(registeredKeys.contains(key));
+        }
+
+        // 6. 選手名のバッチ解決（N+1回避）。名前未設定の側（matches 由来の実在選手）に名前を埋める。
+        //    pairings 由来は (4) で MatchPairingDto の名前を引き継ぎ済み。
+        //    matches 由来のゲスト側は (4) で opponentName を設定済みのため、ここでは上書きしない
+        //    （setPlayer*Name は name==null の側のみ実行する）。
+        List<Long> missingNameIds = candidates.stream()
+                .filter(c -> c.getPlayer1Name() == null || c.getPlayer2Name() == null)
+                .flatMap(c -> Stream.of(c.getPlayer1Id(), c.getPlayer2Id()))
+                .filter(java.util.Objects::nonNull) // null ID は findAllById に渡さない（防御的）
+                .distinct()
+                .collect(Collectors.toList());
+        if (!missingNameIds.isEmpty()) {
+            Map<Long, String> playerNames = new HashMap<>();
+            playerRepository.findAllById(missingNameIds)
+                    .forEach(pl -> playerNames.put(pl.getId(), pl.getName()));
+            for (MatchVideoDateCandidateDto c : candidates) {
+                if (c.getPlayer1Name() == null) {
+                    c.setPlayer1Name(playerNames.get(c.getPlayer1Id()));
+                }
+                if (c.getPlayer2Name() == null) {
+                    c.setPlayer2Name(playerNames.get(c.getPlayer2Id()));
+                }
+            }
+        }
+
+        // 7. matchNumber 昇順でソートして返す。
+        candidates.sort(Comparator.comparing(MatchVideoDateCandidateDto::getMatchNumber,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return candidates;
+    }
+
+    /**
+     * 候補統合の自然キー（matchNumber, min(p1,p2), max(p1,p2)）を文字列で生成する（null セーフ）。
+     *
+     * <p>呼び出し側で正規化済みの値を渡しても、安全のため {@link #normalizePlayerIds(Long, Long)} で
+     * 再正規化する。選手IDが {@code null}（実運用では NOT NULL のため通常来ないが、防御的に許容）でも
+     * {@link NullPointerException} で 500 にせず、{@code null} を含む安定したキー文字列を返す
+     * （{@code null} を {@code "null"} として文字列化）。これにより null を含む候補も
+     * 例外なく統合・重複排除できる。</p>
+     */
+    private static String candidateKey(Integer matchNumber, Long playerA, Long playerB) {
+        Long[] norm = normalizePlayerIds(playerA, playerB);
+        return matchNumber + "|" + norm[0] + "|" + norm[1];
+    }
+
+    /**
+     * 選手IDペアを {@code [min, max]} に正規化する（null セーフ）。
+     *
+     * <p>両方とも非 null のときだけ {@code Math.min}/{@code Math.max} で大小を入れ替える。
+     * いずれかが {@code null} の場合は unboxing による {@link NullPointerException} を避けるため
+     * 入力順のまま返す（null を維持）。フロントは未登録相手を {@code 0/null} として
+     * 「相手未登録（選択不可）」と判定する契約のため、バックエンドは null を握りつぶさず保持する。</p>
+     *
+     * @return 長さ2の配列 {@code [小さい方 or null を含む第1要素, 大きい方 or 第2要素]}
+     */
+    private static Long[] normalizePlayerIds(Long playerA, Long playerB) {
+        if (playerA != null && playerB != null && playerA > playerB) {
+            return new Long[]{playerB, playerA};
+        }
+        return new Long[]{playerA, playerB};
+    }
+
+    /**
+     * 候補化対象の選手IDがゲスト番兵値（{@code 0}）または {@code null} かを判定する。
+     *
+     * <p>システム未登録の対戦相手は {@code matches} にゲストID {@code 0} で保存され、相手名は
+     * {@link Match#getOpponentName()} に入る（{@code players} には存在しない）。実在選手IDは正の値のため、
+     * {@code 0} または {@code null} は「実在しない（未登録）側」を表す。候補DTOではこの側の名前を
+     * {@code opponentName} で補完し、フロントの「相手未登録(0/null)」判定（選択不可）に渡す。</p>
+     */
+    private static boolean isGuestId(Long playerId) {
+        return playerId == null || playerId == 0L;
+    }
+
+    /**
+     * matches を組織スコープで候補化対象にするかを判定する（{@code organizationId != null} 時のみ使用）。
+     *
+     * <p>判定条件は「<b>実在選手（id が {@code 0}/{@code null} でない）が全員 {@code memberPlayerIds} に
+     * 含まれ、かつ実在所属メンバーが1名以上</b>」。これにより:</p>
+     * <ul>
+     *   <li>(所属メンバー, ゲスト{@code 0}) → 実在={メンバー}、全員所属・1名以上 → <b>含める</b>
+     *       （所属メンバー本人のゲスト戦をゲストID {@code 0} を理由に落とさない）</li>
+     *   <li>(所属メンバー, 所属メンバー) → 含める</li>
+     *   <li>(所属メンバー, 他団体) → 他団体が非所属 → 除外</li>
+     *   <li>({@code 0},{@code 0}) など実在メンバー0名 → 除外</li>
+     * </ul>
+     *
+     * <p>{@code null} セーフ（id が {@code null} でも unboxing による {@link NullPointerException} を出さない）。
+     * ゲスト/未登録（{@code 0}/{@code null}）の側は所属判定の母集合から除外して扱う。</p>
+     */
+    private static boolean belongsToOrganization(Long player1Id, Long player2Id, Set<Long> memberPlayerIds) {
+        int realMemberCount = 0;
+        for (Long id : new Long[]{player1Id, player2Id}) {
+            if (isGuestId(id)) {
+                // ゲスト(0)/未登録(null) は所属判定の対象外（落とす理由にしない）。
+                continue;
+            }
+            if (!memberPlayerIds.contains(id)) {
+                // 実在選手が1人でも非所属なら除外（他団体ペア等）。
+                return false;
+            }
+            realMemberCount++;
+        }
+        // 実在の所属メンバーが1名以上いることを要求（(0,0) 等の実在0名は除外）。
+        return realMemberCount > 0;
     }
 
     // ===================== 倉庫検索 =====================

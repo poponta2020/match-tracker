@@ -2280,7 +2280,46 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/{id}` | ALL（登録者本人 or ADMIN+） | URL差し替え。所有者チェックはサービス層 |
 | DELETE | `/{id}` | ALL（登録者本人 or ADMIN+） | 紐付け削除（物理削除）。YouTube上の本体は残る |
 | GET | `/?date=` | ALL | 指定日の動画一覧（当日結果一覧の「動画あり」バッジ用） |
+| GET | `/date-candidates?date=&organizationId=` | ALL | 指定日の動画登録候補（動画倉庫の登録モーダル「日付から」用）。**参加日スコープなし**・**組織スコープあり（pairings/matches とも対称）** |
 | GET | `/search?playerId=&year=&month=&mine=&page=&size=` | ALL | 動画倉庫の検索・ページング |
+
+#### GET `/api/match-videos/date-candidates`
+動画倉庫の登録モーダル「日付から」で使用する読み取り専用の候補API。指定日の対戦カードを返す。
+
+- **参加日スコープ（`hasSessionOnDateForUser`）は適用しない**。その日の練習に参加していないユーザー（撮影担当者・第三者登録者・管理者代理登録）でも候補を選べる（動画登録は全選手可の仕様）。サービスは操作ユーザーIDを受け取らない設計のため、非参加でも候補が返ることが構造的に担保される
+- **組織スコープは pairings / matches の両方で対称に維持**する。`OrganizationScopeResolver` で effectiveOrgId を解決（`search` と同じ流儀。ADMIN は自団体強制、PLAYER は所属団体のみ、SUPER_ADMIN は任意）する。
+    - ペアリングは `MatchPairingService.getByDate(date, light=true, organizationId)` に渡して当該団体のセッション参加者のもののみへ絞り込む（`light=true` で未使用の対戦履歴 `recentMatches` 取得を回避。選手名は light でも保持される）
+    - `matches` には組織カラムがないため、`organizationId` 指定時は**選手の所属（`player_organizations`）経由でスコープ**する。判定は**実在選手（id が 0 / null 以外）が全員当該団体に所属し、かつ実在所属メンバーが1名以上**の `matches` のみを候補化する（所属選手ID集合を1クエリで取得して照合し N+1 を回避）。**ゲスト/未登録相手（id 0・null）は所属判定から除外**するため、所属メンバー本人 vs 未登録相手の試合も候補に残る（フロントでは「相手未登録」として選択不可表示、相手名は `Match.opponentName` で補完）。これで pairings 側と対称になり、同日に複数団体の試合結果があっても**他団体の matches-only 候補が混入しない**
+    - `organizationId` 未指定（組織非限定）の場合は `matches` を日付のみで取得しスコープしない（アプリ全体の組織未指定時の挙動と一貫）
+- **既定組織スコープ解決（当エンドポイント限定の特例）**: フロントは `organizationId` を渡さず、`OrganizationScopeResolver` は PLAYER 未指定時に `null`（非限定）を返す。そのままでは同日の他団体候補が混入し得るため、`MatchVideoController` は effectiveOrgId が `null` のときに限り**操作ユーザーの所属団体を引き、ちょうど1団体所属ならその団体IDで補完**して当該団体にスコープする（`resolveDefaultOrganizationIdForCandidates`）。動画登録候補は実運用上、操作者の所属団体に限定するのが自然なため。挙動を正確に記すと:
+    - **単一所属PLAYER**（所属がちょうど1件）→ その所属団体IDでスコープ
+    - **複数所属 / 未所属**、または `currentUserId` が取れない場合 → `null` のまま（＝非限定。複数所属時の一意な団体決定はアプリ全体の別課題に委ねる）
+    - ADMIN は `adminOrganizationId`、組織IDを明示指定した PLAYER/SUPER_ADMIN はその団体IDで既にスコープ済みのため、この既定解決は走らない
+    - この特例は**当エンドポイント限定**で、他エンドポイントの「PLAYER 未指定→`null`」挙動は変えない。**参加日スコープとは独立**しており、非参加ユーザー（撮影担当等）でも所属団体の候補は見られる
+- サーバ側で 組み合わせ（`match_pairings`）+ 試合結果（`matches`）を**自然キー `(matchDate, matchNumber, min(p1,p2), max(p1,p2))` で統合・重複排除**する。同一キーが両方にある場合は **`matches` 優先**（結果情報を保持）
+- 各候補に `registered`（同自然キーの `match_videos` が登録済みか）・`hasResult`（同自然キーの `matches` があるか）・`matchId` を付与
+- 選手名は `players` からバッチ解決（N+1回避）。`matches` のみのスロットの選手名解決に使う（ペアリング由来は `MatchPairingDto` が既に選手名を保持）
+- `player1Id`/`player2Id` は自然キー正規化（player1Id < player2Id）後の**生IDをそのまま**返す（フロントが生IDで「相手未登録(0/null)」を判定するため）
+- 並び順: `matchNumber` 昇順
+
+**レスポンス**（`MatchVideoDateCandidateDto` のリスト・`matchNumber` 昇順）:
+```json
+[
+  {
+    "matchDate": "2026-06-12",
+    "matchNumber": 1,
+    "player1Id": 1,
+    "player1Name": "山田太郎",
+    "player2Id": 2,
+    "player2Name": "佐藤花子",
+    "hasResult": true,
+    "matchId": 100,
+    "registered": false
+  }
+]
+```
+- `hasResult`/`matchId`: 同自然キーの `matches` が存在する場合のみ true / 非null
+- `registered`: 同自然キーの `match_videos` が存在する場合 true（フロントの「登録済み」グレーアウト判定用）
 
 #### POST `/api/match-videos`
 **リクエスト**:
