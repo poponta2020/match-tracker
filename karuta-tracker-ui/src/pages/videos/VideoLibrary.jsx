@@ -27,18 +27,13 @@ import VideoRegisterModal from '../../components/VideoRegisterModal';
 
 const PAGE_SIZE = 20;
 
-// 試合日を「YYYY年M月D日(曜)」形式で表示
+// 試合日を「YYYY/MM/DD」形式で表示（matchDate は 'YYYY-MM-DD' 文字列）
 const formatMatchDate = (dateStr) => {
   if (!dateStr) return '';
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('ja-JP', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  });
+  return dateStr.replace(/-/g, '/');
 };
 
-// 結果テキスト（結果入力済みの場合のみ）: 「○○の勝ち（N枚差）」
+// 結果テキスト（結果入力済みの場合のみ）: 「勝者名〇N」（N=枚数差。対戦一覧の表記に揃える）
 const buildResultText = (video) => {
   if (video?.winnerId == null) return null;
   const winnerName =
@@ -49,7 +44,7 @@ const buildResultText = (video) => {
         : null;
   if (!winnerName) return null;
   const diff = video.scoreDifference != null ? Math.abs(video.scoreDifference) : null;
-  return diff != null ? `${winnerName}の勝ち（${diff}枚差）` : `${winnerName}の勝ち`;
+  return diff != null ? `${winnerName}〇${diff}` : `${winnerName}〇`;
 };
 
 // 年セレクトの選択肢（今年から過去6年分）
@@ -483,9 +478,6 @@ const VideoLibrary = () => {
                           <p className="mt-1 text-xs text-[#3d5a4c] font-medium truncate">
                             {resultText}
                           </p>
-                        )}
-                        {video.title && (
-                          <p className="mt-1 text-xs text-[#8a7568] truncate">{video.title}</p>
                         )}
                       </div>
                     </button>
