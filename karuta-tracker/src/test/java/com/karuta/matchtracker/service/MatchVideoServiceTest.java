@@ -992,6 +992,80 @@ class MatchVideoServiceTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).isRegistered()).isFalse();
         }
+
+        @Test
+        @DisplayName("組織スコープ: メンバー vs ゲスト(0) の matches-only 候補は残り、ゲスト側の名前が opponentName になる")
+        void testOrgScopeGuestMatchIncludedWithOpponentName() {
+            // pairings は空。matches は「所属メンバー(2) vs ゲスト(0)」のゲスト戦。
+            // 正規化（player1Id<player2Id）で 0 が player1 側、実在メンバー2 が player2 側に来る。
+            when(matchPairingService.getByDate(today, true, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildGuestMatch(86L, 1, 0L, 2L, "ゲスト選手")));
+            // 当該団体所属は 1,2。ゲスト0は所属に含まれないが、実在メンバー2が所属しているので残すべき。
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            // 実在側(2)の名前解決。ゲスト側(0)は findAllById に渡っても見つからない。
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player2));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            // ゲスト戦が候補ごと落ちずに残る（WARNING の本丸）。
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.getMatchId()).isEqualTo(86L);
+            assertThat(c.isHasResult()).isTrue();
+            // 正規化で 0 が player1 側、実在メンバー2 が player2 側。
+            assertThat(c.getPlayer1Id()).isEqualTo(0L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+            // ゲスト側(player1)の名前は opponentName、実在側(player2)はバッチ解決した選手名。
+            assertThat(c.getPlayer1Name()).isEqualTo("ゲスト選手");
+            assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+        }
+
+        @Test
+        @DisplayName("組織スコープ: メンバー vs 他団体メンバー の matches-only 候補は除外される")
+        void testOrgScopeMemberVsOtherOrgExcluded() {
+            // pairings は空。matches は「所属メンバー(2) vs 他団体メンバー(9)」。
+            when(matchPairingService.getByDate(today, true, 7L)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildMatch(87L, 2L, 9L)));
+            // 所属は 1,2 のみ。9 は非所属 → 実在選手の一方が非所属なので除外。
+            when(organizationService.getOrganizationMemberPlayerIds(7L)).thenReturn(java.util.Set.of(1L, 2L));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, 7L);
+
+            // 他団体メンバーを含む試合は候補にならない。
+            assertThat(result).isEmpty();
+            // matches-only スロットが消えるため選手名解決も発生しない。
+            verifyNoInteractions(playerRepository);
+        }
+
+        @Test
+        @DisplayName("organizationId == null でもゲスト戦の相手名が opponentName で埋まる")
+        void testGuestOpponentNameFilledWhenOrganizationNull() {
+            // organizationId=null（組織非限定）。matches は「実在選手(2) vs ゲスト(0)」のゲスト戦。
+            // 組織フィルタは通らないが、ゲスト側の名前補完は organizationId の有無に関わらず適用される。
+            when(matchPairingService.getByDate(today, true, null)).thenReturn(List.of());
+            when(matchRepository.findByMatchDateOrderByMatchNumber(today))
+                    .thenReturn(List.of(buildGuestMatch(88L, 1, 0L, 2L, "未登録の相手")));
+            when(matchVideoRepository.findByMatchDate(today)).thenReturn(List.of());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player2));
+
+            List<MatchVideoDateCandidateDto> result = matchVideoService.getDateCandidates(today, null);
+
+            assertThat(result).hasSize(1);
+            MatchVideoDateCandidateDto c = result.get(0);
+            assertThat(c.getMatchId()).isEqualTo(88L);
+            // null のときは組織所属判定を呼ばない。
+            verify(organizationService, never()).getOrganizationMemberPlayerIds(any());
+            // 正規化で 0 が player1 側、実在2 が player2 側。
+            assertThat(c.getPlayer1Id()).isEqualTo(0L);
+            assertThat(c.getPlayer2Id()).isEqualTo(2L);
+            // ゲスト側(player1)の名前が opponentName で埋まる。
+            assertThat(c.getPlayer1Name()).isEqualTo("未登録の相手");
+            assertThat(c.getPlayer2Name()).isEqualTo("佐藤花子");
+        }
     }
 
     @Nested
@@ -1159,6 +1233,27 @@ class MatchVideoServiceTest {
                 .player2Id(p2)
                 .winnerId(1L)
                 .scoreDifference(5)
+                .createdBy(1L)
+                .updatedBy(1L)
+                .build();
+    }
+
+    /**
+     * ゲスト（システム未登録相手）戦の Match を生成する。
+     * 実運用では {@code @PrePersist} の正規化で player1Id&lt;player2Id となり、ゲスト番兵値0が
+     * player1 側に来る。本ヘルパーは Builder 経由のため正規化は走らないので、その実機状態
+     * （player1Id=0・player2Id=実在ID）を明示的に渡して再現する。相手名は opponentName に入る。
+     */
+    private Match buildGuestMatch(Long id, Integer matchNumber, Long player1Id, Long player2Id, String opponentName) {
+        return Match.builder()
+                .id(id)
+                .matchDate(today)
+                .matchNumber(matchNumber)
+                .player1Id(player1Id)
+                .player2Id(player2Id)
+                .winnerId(player2Id)
+                .scoreDifference(3)
+                .opponentName(opponentName)
                 .createdBy(1L)
                 .updatedBy(1L)
                 .build();
