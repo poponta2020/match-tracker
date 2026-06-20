@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI, playerAPI } from '../../api';
+import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -13,6 +13,8 @@ import {
   X,
   StickyNote,
   Video,
+  BookOpen,
+  User,
 } from 'lucide-react';
 
 const MatchList = () => {
@@ -34,6 +36,7 @@ const MatchList = () => {
 
   const [matches, setMatches] = useState([]);
   const [filteredMatches, setFilteredMatches] = useState([]);
+  const [byeActivities, setByeActivities] = useState([]); // 読み・一人取りの抜け番活動
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterResult, setFilterResult] = useState('全て');
@@ -108,6 +111,7 @@ const MatchList = () => {
   useEffect(() => {
     setMatches([]);
     setFilteredMatches([]);
+    setByeActivities([]);
     setLoading(true);
   }, [targetPlayerId]);
 
@@ -212,10 +216,14 @@ const MatchList = () => {
         }
         // 両方未選択の場合は期間フィルタなし（総計）
 
-        // 並列で取得
-        const [matchesResponse, statsResponse] = await Promise.all([
+        // 並列で取得（抜け番=読み・一人取りも同時取得。失敗時は空配列でフォールバックし試合は表示）
+        const [matchesResponse, statsResponse, byeResponse] = await Promise.all([
           matchAPI.getByPlayerId(targetPlayerId, matchParams),
           matchAPI.getStatisticsByRank(targetPlayerId, statsParams),
+          byeActivityAPI.getByPlayer(targetPlayerId).catch((e) => {
+            console.error('抜け番活動の取得に失敗しました:', e);
+            return { data: [] };
+          }),
         ]);
 
         if (cancelled) return;
@@ -227,35 +235,33 @@ const MatchList = () => {
         setFilteredMatches(sortedMatches);
         setRankStatistics(statsResponse.data);
 
-        // 利用可能な年と月を抽出（文字列パースでタイムゾーン問題を回避）
-        const years = [...new Set(sortedMatches.map(m => {
-          const [year] = m.matchDate.split('-').map(Number);
-          return year;
-        }))].sort((a, b) => b - a);
-        setAvailableYears(years);
+        // 抜け番は読み・一人取りのみ対象
+        const byeList = (byeResponse.data || []).filter(
+          (a) => a.activityType === 'READING' || a.activityType === 'SOLO_PICK'
+        );
+        setByeActivities(byeList);
 
-        // 選択中の年の月を抽出
+        // 年/月セレクトの選択肢は試合(matchDate)と抜け番(sessionDate)の両方から生成
+        // （試合がなく抜け番のみの年月にも期間フィルタで到達できるようにする）
+        const allDates = [
+          ...sortedMatches.map((m) => m.matchDate),
+          ...byeList.map((a) => a.sessionDate),
+        ].filter(Boolean);
+        setAvailableYears(
+          [...new Set(allDates.map((d) => Number(d.split('-')[0])))].sort((a, b) => b - a)
+        );
         if (selectedYear) {
-          const months = [...new Set(
-            sortedMatches
-              .filter(m => {
-                const [year] = m.matchDate.split('-').map(Number);
-                return year === Number(selectedYear);
-              })
-              .map(m => {
-                const [, month] = m.matchDate.split('-').map(Number);
-                return month;
-              })
+          const monthsForYear = [...new Set(
+            allDates
+              .filter((d) => Number(d.split('-')[0]) === Number(selectedYear))
+              .map((d) => Number(d.split('-')[1]))
           )].sort((a, b) => b - a);
-          setAvailableMonths(months);
-
-          // 選択中の月が利用可能な月に含まれていない場合のみ、最新の月を選択
-          // ただし、初期表示時は今月を優先
-          if (months.length > 0 && selectedMonth && !months.includes(Number(selectedMonth))) {
-            setSelectedMonth(months[0]);
+          setAvailableMonths(monthsForYear);
+          // 選択中の月に試合も抜け番も無い場合のみ最新月へ補正（抜け番のみの月は補正しない）
+          if (monthsForYear.length > 0 && selectedMonth && !monthsForYear.includes(Number(selectedMonth))) {
+            setSelectedMonth(monthsForYear[0]);
           }
         } else {
-          // 「すべての年」選択時は月の選択肢を空にする（月は「すべての月」固定）
           setAvailableMonths([]);
         }
       } catch (error) {
@@ -333,6 +339,9 @@ const MatchList = () => {
     return 'text-gray-600 font-bold';
   };
 
+  // 抜け番活動（読み・一人取り）の表示ラベルとアイコン
+  const ACTIVITY_LABEL = { READING: '読み', SOLO_PICK: '一人取り' };
+  const ACTIVITY_ICON = { READING: BookOpen, SOLO_PICK: User };
 
   if (loading) {
     return <LoadingScreen />;
@@ -345,6 +354,55 @@ const MatchList = () => {
     searchTerm,
     filterResult !== '全て' ? filterResult : '',
   ].filter(Boolean).length;
+
+  // 会場マップ（日付 -> 会場名）。抜け番行の会場名を同日の試合から借用する
+  const venueByDate = {};
+  for (const m of matches) {
+    if (m.venueName && !venueByDate[m.matchDate]) {
+      venueByDate[m.matchDate] = m.venueName;
+    }
+  }
+
+  // 期間フィルタ後の抜け番（読み・一人取り）
+  const periodFilteredBye = byeActivities.filter((a) => {
+    if (!selectedYear) return true; // 全期間
+    const [y, mo] = a.sessionDate.split('-').map(Number);
+    if (selectedMonth) return y === Number(selectedYear) && mo === Number(selectedMonth);
+    return y === Number(selectedYear);
+  });
+
+  // 読み・一人取りの回数（統計エリアに併記。期間フィルタ連動）
+  const readingCount = periodFilteredBye.filter((a) => a.activityType === 'READING').length;
+  const soloPickCount = periodFilteredBye.filter((a) => a.activityType === 'SOLO_PICK').length;
+
+  // 相手前提フィルタ（結果/相手名/級・性別・利き手）が有効なときは抜け番行を出さない
+  const showByeRows =
+    filterResult === '全て' &&
+    !searchTerm &&
+    !filterKyuRank &&
+    !filterGender &&
+    !filterDominantHand;
+
+  // 試合行と抜け番行をマージし、日付降順→試合番号降順で並べる
+  const displayRows = [
+    ...filteredMatches.map((m) => ({
+      type: 'match',
+      date: m.matchDate,
+      matchNumber: m.matchNumber,
+      m,
+    })),
+    ...(showByeRows
+      ? periodFilteredBye.map((a) => ({
+          type: 'bye',
+          date: a.sessionDate,
+          matchNumber: a.matchNumber,
+          a,
+        }))
+      : []),
+  ].sort((x, y) => {
+    if (x.date !== y.date) return x.date < y.date ? 1 : -1; // 日付降順
+    return y.matchNumber - x.matchNumber; // 試合番号降順
+  });
 
   return (
     <div className="space-y-6 pb-20">
@@ -494,11 +552,29 @@ const MatchList = () => {
               );
             })}
           </div>
+
+          {/* 読み・一人取りの回数（期間フィルタ連動・0回は非表示） */}
+          {(readingCount > 0 || soloPickCount > 0) && (
+            <div className="flex items-center gap-4 px-1 text-sm text-[#6b7280]">
+              {readingCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                  読み {readingCount}回
+                </span>
+              )}
+              {soloPickCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" aria-hidden="true" />
+                  一人取り {soloPickCount}回
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 試合一覧 */}
-      {filteredMatches.length === 0 ? (
+      {/* 試合一覧（読み・一人取りの抜け番行を含む） */}
+      {displayRows.length === 0 ? (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-12 text-center">
           <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600 text-lg mb-2">試合記録がありません</p>
@@ -520,7 +596,33 @@ const MatchList = () => {
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="divide-y divide-[#e5e0da]">
-                {filteredMatches.map((match) => {
+                {displayRows.map((row) => {
+                  if (row.type === 'bye') {
+                    const a = row.a;
+                    const label = ACTIVITY_LABEL[a.activityType] || a.activityTypeDisplay;
+                    const ActivityIcon = ACTIVITY_ICON[a.activityType] || BookOpen;
+                    const byeVenueName = venueByDate[a.sessionDate];
+                    return (
+                      <div
+                        key={`bye-${a.id}`}
+                        className="flex items-center gap-x-0.5 pl-2 pr-1 py-2"
+                      >
+                        <span className="text-xs text-[#9ca3af] w-7 flex-shrink-0">
+                          {formatDate(a.sessionDate)}
+                        </span>
+                        <ActivityIcon
+                          className="w-3.5 h-3.5 text-[#6b7280] flex-shrink-0 ml-0.5"
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm text-[#6b7280] min-w-0 truncate">
+                          {byeVenueName
+                            ? `${byeVenueName} ${a.matchNumber}試合目 ${label}`
+                            : `${a.matchNumber}試合目 ${label}`}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const match = row.m;
                   const opponentId = match.player1Id === targetPlayerId
                     ? match.player2Id
                     : match.player1Id;
@@ -535,7 +637,7 @@ const MatchList = () => {
 
                   return (
                     <div
-                      key={match.id}
+                      key={`match-${match.id}`}
                       className="grid grid-cols-[1.75rem_5.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.5rem_2rem] items-center gap-x-0.5 pl-2 pr-1 py-2"
                     >
                       <span className="text-xs text-[#9ca3af]">

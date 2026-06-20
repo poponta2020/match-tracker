@@ -21,6 +21,9 @@ vi.mock('../../api', () => ({
     getById: vi.fn(),
     getAll: vi.fn(),
   },
+  byeActivityAPI: {
+    getByPlayer: vi.fn(),
+  },
 }));
 
 vi.mock('../../api/mentorRelationship', () => ({
@@ -35,14 +38,24 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 vi.mock('../../components/FilterBottomSheet', () => ({
-  default: () => null,
+  default: ({ setFilterResult, setSearchTerm, setSelectedMonth, availableYears, availableMonths }) => (
+    <div data-testid="filter-bottom-sheet">
+      <span data-testid="available-years">{(availableYears || []).join(',')}</span>
+      <span data-testid="available-months">{(availableMonths || []).join(',')}</span>
+      {(availableMonths || []).map((mo) => (
+        <button key={mo} type="button" onClick={() => setSelectedMonth(mo)}>{`__select_month_${mo}`}</button>
+      ))}
+      <button type="button" onClick={() => setFilterResult('勝ち')}>__filter_result_win</button>
+      <button type="button" onClick={() => setSearchTerm('該当なし検索語')}>__filter_search</button>
+    </div>
+  ),
 }));
 
 vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-import { matchAPI, playerAPI } from '../../api';
+import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchList from './MatchList';
 
@@ -75,11 +88,24 @@ const buildMatch = (overrides = {}) => ({
   ...overrides,
 });
 
-const setupDefaultMocks = ({ matches, mentees, mentorPromise } = {}) => {
+const buildBye = (overrides = {}) => ({
+  id: 500,
+  sessionDate: todayDateStr,
+  matchNumber: 1,
+  playerId: 1,
+  playerName: 'テスト選手',
+  activityType: 'READING',
+  activityTypeDisplay: '読み',
+  freeText: null,
+  ...overrides,
+});
+
+const setupDefaultMocks = ({ matches, mentees, mentorPromise, byeActivities } = {}) => {
   matchAPI.getByPlayerId.mockResolvedValue({ data: matches ?? [buildMatch()] });
   matchAPI.getStatisticsByRank.mockResolvedValue({ data: emptyRankStats });
   playerAPI.getById.mockResolvedValue({ data: { name: '対戦相手選手', kyuRank: 'B級' } });
   playerAPI.getAll.mockResolvedValue({ data: [] });
+  byeActivityAPI.getByPlayer.mockResolvedValue({ data: byeActivities ?? [] });
   if (mentorPromise) {
     mentorRelationshipAPI.getMyMentees.mockReturnValue(mentorPromise);
   } else {
@@ -448,5 +474,177 @@ describe('MatchList', () => {
     expect(queryDetailButton()).toBeNull();
 
     consoleErrorSpy.mockRestore();
+  });
+
+  // --- 読み・一人取り（抜け番）の表示 ---
+
+  it('読み行が日付降順→試合番号降順で該当位置に差し込まれる', async () => {
+    setupDefaultMocks({
+      matches: [
+        buildMatch({ id: 301, matchNumber: 3, opponentName: '山田太郎', venueName: '本郷' }),
+        buildMatch({ id: 302, matchNumber: 1, opponentName: '鈴木一郎', venueName: '本郷', player2Id: 5 }),
+      ],
+      byeActivities: [
+        buildBye({ id: 501, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    const byeText = await screen.findByText('本郷 2試合目 読み');
+    const listContainer = byeText.parentElement.parentElement;
+    const rows = Array.from(listContainer.children);
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain('本郷 3試合目');
+    expect(rows[1].textContent).toContain('本郷 2試合目 読み');
+    expect(rows[2].textContent).toContain('本郷 1試合目');
+  });
+
+  it('一人取りの行が表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 2, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 503, matchNumber: 1, activityType: 'SOLO_PICK', activityTypeDisplay: '一人取り' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('本郷 1試合目 一人取り')).toBeInTheDocument();
+  });
+
+  it('会場が特定できない日（その日に試合なし）は会場名を省略して表示する', async () => {
+    setupDefaultMocks({
+      matches: [],
+      byeActivities: [
+        buildBye({ id: 502, matchNumber: 4, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('4試合目 読み')).toBeInTheDocument();
+  });
+
+  it('期間フィルタ外の抜け番は表示されない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 504, sessionDate: '2020-01-10', matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.queryByText('1試合目 読み')).toBeNull();
+    expect(screen.queryByText(/読み\s*\d+回/)).toBeNull();
+  });
+
+  it('相手前提フィルタ（結果）が有効なときは読み・一人取り行を表示しない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 2, venueName: '本郷', result: '勝ち' })],
+      byeActivities: [
+        buildBye({ id: 505, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('本郷 1試合目 読み')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '__filter_result_win' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('本郷 1試合目 読み')).toBeNull();
+    });
+    expect(screen.getByText('本郷 2試合目')).toBeInTheDocument();
+  });
+
+  it('統計エリアに読み・一人取りの回数が活動別に表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 5, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 511, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+        buildBye({ id: 512, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+        buildBye({ id: 513, matchNumber: 4, activityType: 'SOLO_PICK', activityTypeDisplay: '一人取り' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('読み 2回')).toBeInTheDocument();
+    expect(screen.getByText('一人取り 1回')).toBeInTheDocument();
+  });
+
+  it('読み・一人取りが0回のときは回数表示を出さない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.queryByText(/読み\s*\d+回/)).toBeNull();
+    expect(screen.queryByText(/一人取り\s*\d+回/)).toBeNull();
+  });
+
+  it('試合がなく抜け番のみの年も期間フィルタの年候補に含まれる', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 521, sessionDate: '2020-03-10', matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(screen.getByTestId('available-years').textContent.split(',')).toContain('2020');
+    });
+  });
+
+  it('選択中の年で試合がなく抜け番のみの月も月候補に含まれる', async () => {
+    const curYear = new Date().getFullYear();
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 522, sessionDate: `${curYear}-01-05`, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(screen.getByTestId('available-months').textContent.split(',')).toContain('1');
+    });
+  });
+
+  it('抜け番のみの月を選択しても試合月へ戻されず、その月の読み行・回数が表示される', async () => {
+    const curYear = new Date().getFullYear();
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷', matchDate: `${curYear}-06-15` })],
+      byeActivities: [
+        buildBye({ id: 531, sessionDate: `${curYear}-03-10`, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches');
+
+    // 3月（抜け番のみ）が月候補に出るまで待つ
+    await waitFor(() => {
+      expect(screen.getByTestId('available-months').textContent.split(',')).toContain('3');
+    });
+
+    // 3月を選択 → 試合月(6月)へ戻されず、3月の読み行と回数が表示される
+    await user.click(screen.getByRole('button', { name: '__select_month_3' }));
+
+    expect(await screen.findByText('2試合目 読み')).toBeInTheDocument();
+    expect(screen.getByText('読み 1回')).toBeInTheDocument();
   });
 });
