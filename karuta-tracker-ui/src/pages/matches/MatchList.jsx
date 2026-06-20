@@ -115,35 +115,6 @@ const MatchList = () => {
     setLoading(true);
   }, [targetPlayerId]);
 
-  // 抜け番（読み・一人取り）を取得（targetPlayerId 変更時のみ。フィルタ変更では再取得しない）
-  // 取得失敗時は抜け番表示なしでフォールバック（試合履歴は従来どおり表示）
-  useEffect(() => {
-    let cancelled = false;
-    if (!targetPlayerId) {
-      setByeActivities([]);
-      return;
-    }
-    const fetchByeActivities = async () => {
-      try {
-        const res = await byeActivityAPI.getByPlayer(targetPlayerId);
-        if (cancelled) return;
-        const list = (res?.data || []).filter(
-          (a) => a.activityType === 'READING' || a.activityType === 'SOLO_PICK'
-        );
-        setByeActivities(list);
-      } catch (e) {
-        if (!cancelled) {
-          console.error('抜け番活動の取得に失敗しました:', e);
-          setByeActivities([]);
-        }
-      }
-    };
-    fetchByeActivities();
-    return () => {
-      cancelled = true;
-    };
-  }, [targetPlayerId]);
-
   // メンター関係チェック（詳細導線の表示判定に使用）
   useEffect(() => {
     let cancelled = false;
@@ -245,10 +216,14 @@ const MatchList = () => {
         }
         // 両方未選択の場合は期間フィルタなし（総計）
 
-        // 並列で取得
-        const [matchesResponse, statsResponse] = await Promise.all([
+        // 並列で取得（抜け番=読み・一人取りも同時取得。失敗時は空配列でフォールバックし試合は表示）
+        const [matchesResponse, statsResponse, byeResponse] = await Promise.all([
           matchAPI.getByPlayerId(targetPlayerId, matchParams),
           matchAPI.getStatisticsByRank(targetPlayerId, statsParams),
+          byeActivityAPI.getByPlayer(targetPlayerId).catch((e) => {
+            console.error('抜け番活動の取得に失敗しました:', e);
+            return { data: [] };
+          }),
         ]);
 
         if (cancelled) return;
@@ -260,17 +235,34 @@ const MatchList = () => {
         setFilteredMatches(sortedMatches);
         setRankStatistics(statsResponse.data);
 
-        // 選択中の月にその年の試合がない場合は最新の試合月へ補正（リストを即時表示するためフェッチ内で同期実行）
-        // ※年/月セレクトの選択肢(availableYears/availableMonths)は matches と抜け番をマージした別 effect で生成する
+        // 抜け番は読み・一人取りのみ対象
+        const byeList = (byeResponse.data || []).filter(
+          (a) => a.activityType === 'READING' || a.activityType === 'SOLO_PICK'
+        );
+        setByeActivities(byeList);
+
+        // 年/月セレクトの選択肢は試合(matchDate)と抜け番(sessionDate)の両方から生成
+        // （試合がなく抜け番のみの年月にも期間フィルタで到達できるようにする）
+        const allDates = [
+          ...sortedMatches.map((m) => m.matchDate),
+          ...byeList.map((a) => a.sessionDate),
+        ].filter(Boolean);
+        setAvailableYears(
+          [...new Set(allDates.map((d) => Number(d.split('-')[0])))].sort((a, b) => b - a)
+        );
         if (selectedYear) {
-          const matchMonths = [...new Set(
-            sortedMatches
-              .filter((m) => Number(m.matchDate.split('-')[0]) === Number(selectedYear))
-              .map((m) => Number(m.matchDate.split('-')[1]))
-          )];
-          if (matchMonths.length > 0 && selectedMonth && !matchMonths.includes(Number(selectedMonth))) {
-            setSelectedMonth(Math.max(...matchMonths));
+          const monthsForYear = [...new Set(
+            allDates
+              .filter((d) => Number(d.split('-')[0]) === Number(selectedYear))
+              .map((d) => Number(d.split('-')[1]))
+          )].sort((a, b) => b - a);
+          setAvailableMonths(monthsForYear);
+          // 選択中の月に試合も抜け番も無い場合のみ最新月へ補正（抜け番のみの月は補正しない）
+          if (monthsForYear.length > 0 && selectedMonth && !monthsForYear.includes(Number(selectedMonth))) {
+            setSelectedMonth(monthsForYear[0]);
           }
+        } else {
+          setAvailableMonths([]);
         }
       } catch (error) {
         if (!cancelled) {
@@ -327,31 +319,6 @@ const MatchList = () => {
 
     setFilteredMatches(filtered);
   }, [searchTerm, filterResult, matches, selectedYear, selectedMonth]);
-
-  // 期間フィルタの年/月セレクトの選択肢を matches と 抜け番(読み・一人取り) の両方から生成
-  // （試合がなく抜け番のみの年月にも期間フィルタで到達できるようにする。選択肢の生成のみで月補正は行わない）
-  useEffect(() => {
-    const dates = [
-      ...matches.map((m) => m.matchDate),
-      ...byeActivities.map((a) => a.sessionDate),
-    ].filter(Boolean);
-
-    setAvailableYears(
-      [...new Set(dates.map((d) => Number(d.split('-')[0])))].sort((a, b) => b - a)
-    );
-
-    if (selectedYear) {
-      setAvailableMonths(
-        [...new Set(
-          dates
-            .filter((d) => Number(d.split('-')[0]) === Number(selectedYear))
-            .map((d) => Number(d.split('-')[1]))
-        )].sort((a, b) => b - a)
-      );
-    } else {
-      setAvailableMonths([]);
-    }
-  }, [matches, byeActivities, selectedYear]);
 
   // 日付をM/D形式でフォーマット
   const formatDate = (dateString) => {

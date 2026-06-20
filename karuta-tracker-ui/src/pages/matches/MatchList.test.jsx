@@ -38,10 +38,13 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 vi.mock('../../components/FilterBottomSheet', () => ({
-  default: ({ setFilterResult, setSearchTerm, availableYears, availableMonths }) => (
+  default: ({ setFilterResult, setSearchTerm, setSelectedMonth, availableYears, availableMonths }) => (
     <div data-testid="filter-bottom-sheet">
       <span data-testid="available-years">{(availableYears || []).join(',')}</span>
       <span data-testid="available-months">{(availableMonths || []).join(',')}</span>
+      {(availableMonths || []).map((mo) => (
+        <button key={mo} type="button" onClick={() => setSelectedMonth(mo)}>{`__select_month_${mo}`}</button>
+      ))}
       <button type="button" onClick={() => setFilterResult('勝ち')}>__filter_result_win</button>
       <button type="button" onClick={() => setSearchTerm('該当なし検索語')}>__filter_search</button>
     </div>
@@ -619,5 +622,29 @@ describe('MatchList', () => {
     await waitFor(() => {
       expect(screen.getByTestId('available-months').textContent.split(',')).toContain('1');
     });
+  });
+
+  it('抜け番のみの月を選択しても試合月へ戻されず、その月の読み行・回数が表示される', async () => {
+    const curYear = new Date().getFullYear();
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷', matchDate: `${curYear}-06-15` })],
+      byeActivities: [
+        buildBye({ id: 531, sessionDate: `${curYear}-03-10`, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches');
+
+    // 3月（抜け番のみ）が月候補に出るまで待つ
+    await waitFor(() => {
+      expect(screen.getByTestId('available-months').textContent.split(',')).toContain('3');
+    });
+
+    // 3月を選択 → 試合月(6月)へ戻されず、3月の読み行と回数が表示される
+    await user.click(screen.getByRole('button', { name: '__select_month_3' }));
+
+    expect(await screen.findByText('2試合目 読み')).toBeInTheDocument();
+    expect(screen.getByText('読み 1回')).toBeInTheDocument();
   });
 });
