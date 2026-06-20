@@ -260,36 +260,17 @@ const MatchList = () => {
         setFilteredMatches(sortedMatches);
         setRankStatistics(statsResponse.data);
 
-        // 利用可能な年と月を抽出（文字列パースでタイムゾーン問題を回避）
-        const years = [...new Set(sortedMatches.map(m => {
-          const [year] = m.matchDate.split('-').map(Number);
-          return year;
-        }))].sort((a, b) => b - a);
-        setAvailableYears(years);
-
-        // 選択中の年の月を抽出
+        // 選択中の月にその年の試合がない場合は最新の試合月へ補正（リストを即時表示するためフェッチ内で同期実行）
+        // ※年/月セレクトの選択肢(availableYears/availableMonths)は matches と抜け番をマージした別 effect で生成する
         if (selectedYear) {
-          const months = [...new Set(
+          const matchMonths = [...new Set(
             sortedMatches
-              .filter(m => {
-                const [year] = m.matchDate.split('-').map(Number);
-                return year === Number(selectedYear);
-              })
-              .map(m => {
-                const [, month] = m.matchDate.split('-').map(Number);
-                return month;
-              })
-          )].sort((a, b) => b - a);
-          setAvailableMonths(months);
-
-          // 選択中の月が利用可能な月に含まれていない場合のみ、最新の月を選択
-          // ただし、初期表示時は今月を優先
-          if (months.length > 0 && selectedMonth && !months.includes(Number(selectedMonth))) {
-            setSelectedMonth(months[0]);
+              .filter((m) => Number(m.matchDate.split('-')[0]) === Number(selectedYear))
+              .map((m) => Number(m.matchDate.split('-')[1]))
+          )];
+          if (matchMonths.length > 0 && selectedMonth && !matchMonths.includes(Number(selectedMonth))) {
+            setSelectedMonth(Math.max(...matchMonths));
           }
-        } else {
-          // 「すべての年」選択時は月の選択肢を空にする（月は「すべての月」固定）
-          setAvailableMonths([]);
         }
       } catch (error) {
         if (!cancelled) {
@@ -346,6 +327,31 @@ const MatchList = () => {
 
     setFilteredMatches(filtered);
   }, [searchTerm, filterResult, matches, selectedYear, selectedMonth]);
+
+  // 期間フィルタの年/月セレクトの選択肢を matches と 抜け番(読み・一人取り) の両方から生成
+  // （試合がなく抜け番のみの年月にも期間フィルタで到達できるようにする。選択肢の生成のみで月補正は行わない）
+  useEffect(() => {
+    const dates = [
+      ...matches.map((m) => m.matchDate),
+      ...byeActivities.map((a) => a.sessionDate),
+    ].filter(Boolean);
+
+    setAvailableYears(
+      [...new Set(dates.map((d) => Number(d.split('-')[0])))].sort((a, b) => b - a)
+    );
+
+    if (selectedYear) {
+      setAvailableMonths(
+        [...new Set(
+          dates
+            .filter((d) => Number(d.split('-')[0]) === Number(selectedYear))
+            .map((d) => Number(d.split('-')[1]))
+        )].sort((a, b) => b - a)
+      );
+    } else {
+      setAvailableMonths([]);
+    }
+  }, [matches, byeActivities, selectedYear]);
 
   // 日付をM/D形式でフォーマット
   const formatDate = (dateString) => {

@@ -38,8 +38,10 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 vi.mock('../../components/FilterBottomSheet', () => ({
-  default: ({ setFilterResult, setSearchTerm }) => (
+  default: ({ setFilterResult, setSearchTerm, availableYears, availableMonths }) => (
     <div data-testid="filter-bottom-sheet">
+      <span data-testid="available-years">{(availableYears || []).join(',')}</span>
+      <span data-testid="available-months">{(availableMonths || []).join(',')}</span>
       <button type="button" onClick={() => setFilterResult('勝ち')}>__filter_result_win</button>
       <button type="button" onClick={() => setSearchTerm('該当なし検索語')}>__filter_search</button>
     </div>
@@ -584,5 +586,38 @@ describe('MatchList', () => {
     await screen.findByRole('button', { name: '山田太郎' });
     expect(screen.queryByText(/読み\s*\d+回/)).toBeNull();
     expect(screen.queryByText(/一人取り\s*\d+回/)).toBeNull();
+  });
+
+  it('試合がなく抜け番のみの年も期間フィルタの年候補に含まれる', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 521, sessionDate: '2020-03-10', matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(screen.getByTestId('available-years').textContent.split(',')).toContain('2020');
+    });
+  });
+
+  it('選択中の年で試合がなく抜け番のみの月も月候補に含まれる', async () => {
+    const curYear = new Date().getFullYear();
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 522, sessionDate: `${curYear}-01-05`, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    await waitFor(() => {
+      expect(screen.getByTestId('available-months').textContent.split(',')).toContain('1');
+    });
   });
 });
