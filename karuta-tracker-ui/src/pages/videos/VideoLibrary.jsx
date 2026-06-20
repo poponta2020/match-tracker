@@ -284,12 +284,12 @@ const VideoLibrary = () => {
       {/* コンテンツ（上部パディング） */}
       <div className="pt-[52px] px-4 space-y-4">
         {/* 絞り込みパネル */}
-        <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-3 space-y-3">
+        <div className="space-y-3 border-b border-[#ece6de] pb-4">
           {/* 自分が関わる動画トグル */}
           <button
             type="button"
             onClick={handleToggleMine}
-            className="w-full flex items-center justify-between gap-2 text-sm"
+            className="w-full flex items-center justify-between gap-2 text-sm border-b border-[#ece6de] pb-3"
           >
             <span className="font-medium text-[#5f3a2d]">自分が関わる動画</span>
             <span
@@ -421,7 +421,7 @@ const VideoLibrary = () => {
             <LoadingScreen />
           </div>
         ) : videos.length === 0 ? (
-          <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-12 text-center">
+          <div className="p-12 text-center">
             <Video className="w-16 h-16 text-[#d0c5b8] mx-auto mb-4" />
             <p className="text-[#5f3a2d] text-base mb-1">
               {mine || playerId || year
@@ -437,7 +437,7 @@ const VideoLibrary = () => {
         ) : (
           <>
             <p className="text-xs text-[#8a7568] px-1">{totalElements}件の動画</p>
-            <ul className="space-y-3">
+            <ul className="divide-y divide-[#ece6de] border-y border-[#ece6de]">
               {videos.map((video) => {
                 const resultText = buildResultText(video);
                 return (
@@ -445,7 +445,7 @@ const VideoLibrary = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedVideo(video)}
-                      className="w-full flex gap-3 bg-[#f9f6f2] rounded-lg shadow-sm p-3 text-left hover:bg-[#f3eee7] transition-colors"
+                      className="w-full flex gap-3 py-3 px-1 text-left hover:bg-[#f3eee7] transition-colors"
                     >
                       {/* サムネイル（16:9） */}
                       <div className="relative w-32 flex-shrink-0 rounded-md overflow-hidden bg-black" style={{ aspectRatio: '16 / 9' }}>
@@ -492,7 +492,7 @@ const VideoLibrary = () => {
                 type="button"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-[#82655a] bg-[#f9f6f2] border border-[#e2d9d0] rounded-lg hover:bg-[#f3eee7] disabled:opacity-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-[#82655a] hover:bg-[#f3eee7] disabled:opacity-50 transition-colors"
               >
                 {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
                 {loadingMore ? '読み込み中...' : 'もっと見る'}
