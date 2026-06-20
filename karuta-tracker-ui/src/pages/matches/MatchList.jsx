@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI, playerAPI } from '../../api';
+import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import LoadingScreen from '../../components/LoadingScreen';
@@ -13,6 +13,8 @@ import {
   X,
   StickyNote,
   Video,
+  BookOpen,
+  User,
 } from 'lucide-react';
 
 const MatchList = () => {
@@ -34,6 +36,7 @@ const MatchList = () => {
 
   const [matches, setMatches] = useState([]);
   const [filteredMatches, setFilteredMatches] = useState([]);
+  const [byeActivities, setByeActivities] = useState([]); // 読み・一人取りの抜け番活動
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterResult, setFilterResult] = useState('全て');
@@ -108,7 +111,37 @@ const MatchList = () => {
   useEffect(() => {
     setMatches([]);
     setFilteredMatches([]);
+    setByeActivities([]);
     setLoading(true);
+  }, [targetPlayerId]);
+
+  // 抜け番（読み・一人取り）を取得（targetPlayerId 変更時のみ。フィルタ変更では再取得しない）
+  // 取得失敗時は抜け番表示なしでフォールバック（試合履歴は従来どおり表示）
+  useEffect(() => {
+    let cancelled = false;
+    if (!targetPlayerId) {
+      setByeActivities([]);
+      return;
+    }
+    const fetchByeActivities = async () => {
+      try {
+        const res = await byeActivityAPI.getByPlayer(targetPlayerId);
+        if (cancelled) return;
+        const list = (res?.data || []).filter(
+          (a) => a.activityType === 'READING' || a.activityType === 'SOLO_PICK'
+        );
+        setByeActivities(list);
+      } catch (e) {
+        if (!cancelled) {
+          console.error('抜け番活動の取得に失敗しました:', e);
+          setByeActivities([]);
+        }
+      }
+    };
+    fetchByeActivities();
+    return () => {
+      cancelled = true;
+    };
   }, [targetPlayerId]);
 
   // メンター関係チェック（詳細導線の表示判定に使用）
@@ -333,6 +366,9 @@ const MatchList = () => {
     return 'text-gray-600 font-bold';
   };
 
+  // 抜け番活動（読み・一人取り）の表示ラベルとアイコン
+  const ACTIVITY_LABEL = { READING: '読み', SOLO_PICK: '一人取り' };
+  const ACTIVITY_ICON = { READING: BookOpen, SOLO_PICK: User };
 
   if (loading) {
     return <LoadingScreen />;
@@ -345,6 +381,51 @@ const MatchList = () => {
     searchTerm,
     filterResult !== '全て' ? filterResult : '',
   ].filter(Boolean).length;
+
+  // 会場マップ（日付 -> 会場名）。抜け番行の会場名を同日の試合から借用する
+  const venueByDate = {};
+  for (const m of matches) {
+    if (m.venueName && !venueByDate[m.matchDate]) {
+      venueByDate[m.matchDate] = m.venueName;
+    }
+  }
+
+  // 期間フィルタ後の抜け番（読み・一人取り）
+  const periodFilteredBye = byeActivities.filter((a) => {
+    if (!selectedYear) return true; // 全期間
+    const [y, mo] = a.sessionDate.split('-').map(Number);
+    if (selectedMonth) return y === Number(selectedYear) && mo === Number(selectedMonth);
+    return y === Number(selectedYear);
+  });
+
+  // 相手前提フィルタ（結果/相手名/級・性別・利き手）が有効なときは抜け番行を出さない
+  const showByeRows =
+    filterResult === '全て' &&
+    !searchTerm &&
+    !filterKyuRank &&
+    !filterGender &&
+    !filterDominantHand;
+
+  // 試合行と抜け番行をマージし、日付降順→試合番号降順で並べる
+  const displayRows = [
+    ...filteredMatches.map((m) => ({
+      type: 'match',
+      date: m.matchDate,
+      matchNumber: m.matchNumber,
+      m,
+    })),
+    ...(showByeRows
+      ? periodFilteredBye.map((a) => ({
+          type: 'bye',
+          date: a.sessionDate,
+          matchNumber: a.matchNumber,
+          a,
+        }))
+      : []),
+  ].sort((x, y) => {
+    if (x.date !== y.date) return x.date < y.date ? 1 : -1; // 日付降順
+    return y.matchNumber - x.matchNumber; // 試合番号降順
+  });
 
   return (
     <div className="space-y-6 pb-20">
@@ -497,8 +578,8 @@ const MatchList = () => {
         </div>
       )}
 
-      {/* 試合一覧 */}
-      {filteredMatches.length === 0 ? (
+      {/* 試合一覧（読み・一人取りの抜け番行を含む） */}
+      {displayRows.length === 0 ? (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm p-12 text-center">
           <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600 text-lg mb-2">試合記録がありません</p>
@@ -520,7 +601,33 @@ const MatchList = () => {
       ) : (
         <div className="bg-[#f9f6f2] rounded-lg shadow-sm overflow-hidden">
           <div className="divide-y divide-[#e5e0da]">
-                {filteredMatches.map((match) => {
+                {displayRows.map((row) => {
+                  if (row.type === 'bye') {
+                    const a = row.a;
+                    const label = ACTIVITY_LABEL[a.activityType] || a.activityTypeDisplay;
+                    const ActivityIcon = ACTIVITY_ICON[a.activityType] || BookOpen;
+                    const byeVenueName = venueByDate[a.sessionDate];
+                    return (
+                      <div
+                        key={`bye-${a.id}`}
+                        className="flex items-center gap-x-0.5 pl-2 pr-1 py-2"
+                      >
+                        <span className="text-xs text-[#9ca3af] w-7 flex-shrink-0">
+                          {formatDate(a.sessionDate)}
+                        </span>
+                        <ActivityIcon
+                          className="w-3.5 h-3.5 text-[#6b7280] flex-shrink-0 ml-0.5"
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm text-[#6b7280] min-w-0 truncate">
+                          {byeVenueName
+                            ? `${byeVenueName} ${a.matchNumber}試合目 ${label}`
+                            : `${a.matchNumber}試合目 ${label}`}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const match = row.m;
                   const opponentId = match.player1Id === targetPlayerId
                     ? match.player2Id
                     : match.player1Id;
@@ -535,7 +642,7 @@ const MatchList = () => {
 
                   return (
                     <div
-                      key={match.id}
+                      key={`match-${match.id}`}
                       className="grid grid-cols-[1.75rem_5.25rem_2.5rem_minmax(0,1fr)_1.5rem_1.5rem_2rem] items-center gap-x-0.5 pl-2 pr-1 py-2"
                     >
                       <span className="text-xs text-[#9ca3af]">
