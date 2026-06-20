@@ -21,6 +21,9 @@ vi.mock('../../api', () => ({
     getById: vi.fn(),
     getAll: vi.fn(),
   },
+  byeActivityAPI: {
+    getByPlayer: vi.fn(),
+  },
 }));
 
 vi.mock('../../api/mentorRelationship', () => ({
@@ -35,14 +38,19 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 vi.mock('../../components/FilterBottomSheet', () => ({
-  default: () => null,
+  default: ({ setFilterResult, setSearchTerm }) => (
+    <div data-testid="filter-bottom-sheet">
+      <button type="button" onClick={() => setFilterResult('勝ち')}>__filter_result_win</button>
+      <button type="button" onClick={() => setSearchTerm('該当なし検索語')}>__filter_search</button>
+    </div>
+  ),
 }));
 
 vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-import { matchAPI, playerAPI } from '../../api';
+import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchList from './MatchList';
 
@@ -75,11 +83,24 @@ const buildMatch = (overrides = {}) => ({
   ...overrides,
 });
 
-const setupDefaultMocks = ({ matches, mentees, mentorPromise } = {}) => {
+const buildBye = (overrides = {}) => ({
+  id: 500,
+  sessionDate: todayDateStr,
+  matchNumber: 1,
+  playerId: 1,
+  playerName: 'テスト選手',
+  activityType: 'READING',
+  activityTypeDisplay: '読み',
+  freeText: null,
+  ...overrides,
+});
+
+const setupDefaultMocks = ({ matches, mentees, mentorPromise, byeActivities } = {}) => {
   matchAPI.getByPlayerId.mockResolvedValue({ data: matches ?? [buildMatch()] });
   matchAPI.getStatisticsByRank.mockResolvedValue({ data: emptyRankStats });
   playerAPI.getById.mockResolvedValue({ data: { name: '対戦相手選手', kyuRank: 'B級' } });
   playerAPI.getAll.mockResolvedValue({ data: [] });
+  byeActivityAPI.getByPlayer.mockResolvedValue({ data: byeActivities ?? [] });
   if (mentorPromise) {
     mentorRelationshipAPI.getMyMentees.mockReturnValue(mentorPromise);
   } else {
@@ -448,5 +469,120 @@ describe('MatchList', () => {
     expect(queryDetailButton()).toBeNull();
 
     consoleErrorSpy.mockRestore();
+  });
+
+  // --- 読み・一人取り（抜け番）の表示 ---
+
+  it('読み行が日付降順→試合番号降順で該当位置に差し込まれる', async () => {
+    setupDefaultMocks({
+      matches: [
+        buildMatch({ id: 301, matchNumber: 3, opponentName: '山田太郎', venueName: '本郷' }),
+        buildMatch({ id: 302, matchNumber: 1, opponentName: '鈴木一郎', venueName: '本郷', player2Id: 5 }),
+      ],
+      byeActivities: [
+        buildBye({ id: 501, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    const byeText = await screen.findByText('本郷 2試合目 読み');
+    const listContainer = byeText.parentElement.parentElement;
+    const rows = Array.from(listContainer.children);
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain('本郷 3試合目');
+    expect(rows[1].textContent).toContain('本郷 2試合目 読み');
+    expect(rows[2].textContent).toContain('本郷 1試合目');
+  });
+
+  it('一人取りの行が表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 2, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 503, matchNumber: 1, activityType: 'SOLO_PICK', activityTypeDisplay: '一人取り' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('本郷 1試合目 一人取り')).toBeInTheDocument();
+  });
+
+  it('会場が特定できない日（その日に試合なし）は会場名を省略して表示する', async () => {
+    setupDefaultMocks({
+      matches: [],
+      byeActivities: [
+        buildBye({ id: 502, matchNumber: 4, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('4試合目 読み')).toBeInTheDocument();
+  });
+
+  it('期間フィルタ外の抜け番は表示されない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 504, sessionDate: '2020-01-10', matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.queryByText('1試合目 読み')).toBeNull();
+    expect(screen.queryByText(/読み\s*\d+回/)).toBeNull();
+  });
+
+  it('相手前提フィルタ（結果）が有効なときは読み・一人取り行を表示しない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 2, venueName: '本郷', result: '勝ち' })],
+      byeActivities: [
+        buildBye({ id: 505, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('本郷 1試合目 読み')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '__filter_result_win' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('本郷 1試合目 読み')).toBeNull();
+    });
+    expect(screen.getByText('本郷 2試合目')).toBeInTheDocument();
+  });
+
+  it('統計エリアに読み・一人取りの回数が活動別に表示される', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 5, venueName: '本郷' })],
+      byeActivities: [
+        buildBye({ id: 511, matchNumber: 2, activityType: 'READING', activityTypeDisplay: '読み' }),
+        buildBye({ id: 512, matchNumber: 1, activityType: 'READING', activityTypeDisplay: '読み' }),
+        buildBye({ id: 513, matchNumber: 4, activityType: 'SOLO_PICK', activityTypeDisplay: '一人取り' }),
+      ],
+    });
+
+    renderMatchList('/matches');
+
+    expect(await screen.findByText('読み 2回')).toBeInTheDocument();
+    expect(screen.getByText('一人取り 1回')).toBeInTheDocument();
+  });
+
+  it('読み・一人取りが0回のときは回数表示を出さない', async () => {
+    setupDefaultMocks({
+      matches: [buildMatch({ matchNumber: 1, venueName: '本郷' })],
+      byeActivities: [],
+    });
+
+    renderMatchList('/matches');
+
+    await screen.findByRole('button', { name: '山田太郎' });
+    expect(screen.queryByText(/読み\s*\d+回/)).toBeNull();
+    expect(screen.queryByText(/一人取り\s*\d+回/)).toBeNull();
   });
 });
