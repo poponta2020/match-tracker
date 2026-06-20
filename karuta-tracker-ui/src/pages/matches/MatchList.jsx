@@ -398,6 +398,10 @@ const MatchList = () => {
     return y === Number(selectedYear);
   });
 
+  // 読み・一人取りの回数（統計エリアに併記。期間フィルタ連動）
+  const readingCount = periodFilteredBye.filter((a) => a.activityType === 'READING').length;
+  const soloPickCount = periodFilteredBye.filter((a) => a.activityType === 'SOLO_PICK').length;
+
   // 相手前提フィルタ（結果/相手名/級・性別・利き手）が有効なときは抜け番行を出さない
   const showByeRows =
     filterResult === '全て' &&
@@ -575,6 +579,24 @@ const MatchList = () => {
               );
             })}
           </div>
+
+          {/* 読み・一人取りの回数（期間フィルタ連動・0回は非表示） */}
+          {(readingCount > 0 || soloPickCount > 0) && (
+            <div className="flex items-center gap-4 px-1 text-sm text-[#6b7280]">
+              {readingCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                  読み {readingCount}回
+                </span>
+              )}
+              {soloPickCount > 0 && (
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" aria-hidden="true" />
+                  一人取り {soloPickCount}回
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
