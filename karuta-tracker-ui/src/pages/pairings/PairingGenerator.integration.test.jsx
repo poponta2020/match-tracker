@@ -829,4 +829,44 @@ describe('手動ロック（pairing-manual-lock）', () => {
       expect(isPairingLocked(pairings, 1)).toBe(false);
     });
   });
+
+  describe('ロック実行の前提条件（未完成行が混在する場合はロックしない）', () => {
+    // 本番 handleLockPairing の早期 return 条件を再現:
+    // 対象組が揃っていても、未完成（片側空欄）の未ロック組が混在すると createBatch が
+    // バックエンドで弾かれるためロックを実行しない（保存ボタンと同じ制約・迂回防止）
+    const canLock = (pairing, pairings) => {
+      if (!pairing.player1Id || !pairing.player2Id) return false;
+      if (pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))) return false;
+      return true;
+    };
+
+    it('全組が揃っていれば完成済みの組はロック可能', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: 4, hasResult: false, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(true);
+    });
+
+    it('未完成（片側空欄）の未ロック組が混在するとロック不可（createBatch 迂回防止）', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: null, hasResult: false, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+
+    it('未完成行があっても結果入力済み/手動ロック済みは未完成チェックの対象外', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 5, player2Id: null, hasResult: true, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(true);
+    });
+
+    it('対象組自体が片側空欄ならロック不可', () => {
+      const pairings = [{ player1Id: 1, player2Id: null, hasResult: false, locked: false }];
+      expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+  });
 });

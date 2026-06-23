@@ -503,6 +503,12 @@ const PairingGenerator = () => {
       setError('両方の選手が揃っている組のみロックできます');
       return;
     }
+    // 未完成（片側空欄）の未ロック組が混在する場合、createBatch がバックエンドで弾かれる。
+    // 保存ボタンと同じ制約を課し、未完成行を揃えるか削除してからロックさせる（迂回防止）。
+    if (pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))) {
+      setError('選手が片側だけの未完成の組があります。すべての組を揃えるか削除してからロックしてください');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -793,6 +799,10 @@ const PairingGenerator = () => {
 
   // ロック済み（結果入力済み or 手動ロック）でないペアリングが存在するか
   const hasUnlockedPairings = pairings.some(p => !(p.hasResult || p.locked));
+  // 未完成（片側空欄）の未ロック組が存在するか（手動ロックボタンの無効化に使用）
+  const hasIncompleteUnlockedPairings = pairings.some(
+    p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id)
+  );
 
   if (matchLoading) {
     return (
@@ -1100,9 +1110,11 @@ const PairingGenerator = () => {
                     {pairing.player1Id && pairing.player2Id && (
                       <button
                         onClick={() => handleLockPairing(pairing)}
-                        disabled={loading}
+                        disabled={loading || hasIncompleteUnlockedPairings}
                         className="flex items-center gap-1 text-xs text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 whitespace-nowrap flex-shrink-0"
-                        title="この組をロック（自動組み合わせ・一括保存・回戦削除から保護）"
+                        title={hasIncompleteUnlockedPairings
+                          ? '未完成の組（選手が片側空欄）があるためロックできません'
+                          : 'この組をロック（自動組み合わせ・一括保存・回戦削除から保護）'}
                       >
                         <Lock className="w-3.5 h-3.5" />
                         ロック
