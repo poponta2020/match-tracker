@@ -37,7 +37,7 @@ status: completed
 - **対応Issue:** #903
 
 ### タスク3: ロック判定の一般化（createBatch / autoMatch / 回戦削除）
-- [ ] 完了
+- [x] 完了
 - **概要:** 保護対象判定を `hasResult` から `hasResult OR locked` に一般化し、手動ロック組も保持・除外対象に含める。
 - **変更対象ファイル:**
   - `karuta-tracker/.../service/MatchPairingService.java`

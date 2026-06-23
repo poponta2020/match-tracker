@@ -211,7 +211,7 @@ public class MatchPairingService {
             }
         }
 
-        // ロック済みペアリング（結果入力済み）を特定して保持
+        // ロック済みペアリング（結果入力済み or 手動ロック）を特定して保持
         boolean orgScoped = organizationId != null;
         List<MatchPairing> existingPairings = filterPairingsBySession(
                 matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
@@ -222,12 +222,10 @@ public class MatchPairingService {
         List<MatchPairing> lockedPairings = new ArrayList<>();
 
         for (MatchPairing pairing : existingPairings) {
-            Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-            Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-            boolean hasResult = existingMatches.stream().anyMatch(m ->
-                    (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
-                    (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
-            if (hasResult) {
+            // 保護対象 = 結果入力済み OR 手動ロック
+            if (isLockedPairing(pairing, existingMatches)) {
+                Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+                Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
                 lockedPairKeys.add(getPairKey(p1, p2));
                 lockedPlayerIds.add(pairing.getPlayer1Id());
                 lockedPlayerIds.add(pairing.getPlayer2Id());
@@ -386,14 +384,9 @@ public class MatchPairingService {
         List<Match> existingMatches = filterMatchesBySession(
                 matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
 
+        // 保護対象（結果入力済み or 手動ロック）は削除しない
         List<MatchPairing> toDelete = existingPairings.stream()
-                .filter(pairing -> {
-                    Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-                    Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-                    return existingMatches.stream().noneMatch(m ->
-                            (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
-                            (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
-                })
+                .filter(pairing -> !isLockedPairing(pairing, existingMatches))
                 .collect(Collectors.toList());
 
         matchPairingRepository.deleteAll(toDelete);
@@ -616,7 +609,7 @@ public class MatchPairingService {
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
 
-        // ロック済みペアリング（結果入力済み）を特定して除外（組織スコープ付き）
+        // ロック済みペアリング（結果入力済み or 手動ロック）を特定して除外（組織スコープ付き）
         Set<Long> sessionPlayerIds = getSessionAllPlayerIds(sessionDate, organizationId);
         boolean orgScoped = organizationId != null;
         List<MatchPairing> existingPairings = filterPairingsBySession(
@@ -635,20 +628,20 @@ public class MatchPairingService {
         for (MatchPairing pairing : existingPairings) {
             Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
             Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-            boolean hasResult = existingMatches.stream().anyMatch(m ->
-                    (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
-                    (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
-            if (hasResult) {
+            // 対応するMatchから結果情報を取得（結果入力済みロックの判定にも使用）
+            Match matchResult = existingMatches.stream()
+                    .filter(m -> (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                                 (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2))
+                    .findFirst().orElse(null);
+            boolean hasResult = matchResult != null;
+            boolean manuallyLocked = Boolean.TRUE.equals(pairing.getLocked());
+            // 保護対象 = 結果入力済み OR 手動ロック。両選手を自動組み合わせ対象から除外する。
+            if (hasResult || manuallyLocked) {
                 lockedPlayerIds.add(pairing.getPlayer1Id());
                 lockedPlayerIds.add(pairing.getPlayer2Id());
                 Player player1 = allPlayerMap.get(pairing.getPlayer1Id());
                 Player player2 = allPlayerMap.get(pairing.getPlayer2Id());
 
-                // 対応するMatchから結果情報を取得
-                Match matchResult = existingMatches.stream()
-                        .filter(m -> (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
-                                     (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2))
-                        .findFirst().orElse(null);
                 String winnerName = null;
                 Integer scoreDiff = null;
                 if (matchResult != null) {
@@ -667,6 +660,8 @@ public class MatchPairingService {
                         .recentMatches(Collections.emptyList())
                         .winnerName(winnerName)
                         .scoreDifference(scoreDiff)
+                        .hasResult(hasResult)
+                        .locked(manuallyLocked)
                         .build());
             }
         }
@@ -1070,6 +1065,28 @@ public class MatchPairingService {
         long smaller = Math.min(player1, player2);
         long larger = Math.max(player1, player2);
         return smaller + "-" + larger;
+    }
+
+    /**
+     * 組が「保護対象（ロック扱い）」かどうかを判定する。
+     *
+     * <p>保護対象 = 手動ロック（{@code locked=true}）OR 結果入力済み（同回戦の matches に
+     * 当該ペアが存在）。createBatch / autoMatch / deleteByDateAndMatchNumber で、自動組み合わせ
+     * からの除外・一括保存での保持・回戦削除での保持の判定に共通利用し、二重実装を避ける。</p>
+     *
+     * @param pairing 判定対象のペアリング
+     * @param matches 同日・同回戦の試合結果（呼び出し側で取得済みのものを渡す）
+     * @return 手動ロック済み、または結果が存在すれば true
+     */
+    private boolean isLockedPairing(MatchPairing pairing, List<Match> matches) {
+        if (Boolean.TRUE.equals(pairing.getLocked())) {
+            return true;
+        }
+        Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        return matches.stream().anyMatch(m ->
+                (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
     }
 
     /**
