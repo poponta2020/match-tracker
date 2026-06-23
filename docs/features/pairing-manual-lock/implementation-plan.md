@@ -49,7 +49,7 @@ status: completed
 - **対応Issue:** #904
 
 ### タスク4: フロントエンド（API クライアント + PairingGenerator UI）
-- [ ] 完了
+- [x] 完了
 - **概要:** 鍵ボタン/解除ボタン、バッジ表示、保護判定の一般化を実装する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/pairings.js` — `lock(id)` / `unlock(id)`（PATCH）追加

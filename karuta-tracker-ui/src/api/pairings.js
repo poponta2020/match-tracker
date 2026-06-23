@@ -59,4 +59,10 @@ export const pairingAPI = {
   // ペアリングと対応する試合結果を同時に削除（リセット）
   resetWithResult: (id) =>
     apiClient.delete(`/match-pairings/${id}/with-result`),
+
+  // 組を手動ロック（二重ブッキング検証付き）。戻り値は更新後の MatchPairingDto
+  lock: (id) => apiClient.patch(`/match-pairings/${id}/lock`),
+
+  // 組の手動ロックを解除。戻り値は更新後の MatchPairingDto
+  unlock: (id) => apiClient.patch(`/match-pairings/${id}/unlock`),
 };

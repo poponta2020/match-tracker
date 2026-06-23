@@ -5,7 +5,7 @@ import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, RotateCcw } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import PlayerChip from '../../components/PlayerChip';
@@ -116,6 +116,7 @@ const PairingGenerator = () => {
       player2Name: p.player2Name,
       recentMatches: p.recentMatches || [],
       hasResult: p.hasResult || false,
+      locked: p.locked || false,
       winnerName: p.winnerName || null,
       scoreDifference: p.scoreDifference ?? null,
       matchId: p.matchId || null,
@@ -321,12 +322,18 @@ const PairingGenerator = () => {
         matchNumber,
       });
 
-      // ロック済みペアリングを先頭に配置し、新規ペアリングを後ろに追加
+      // ロック済みペアリング（結果入力済み or 手動ロック）を先頭に配置し、新規ペアリングを後ろに追加。
+      // DTO の hasResult / locked をそのまま尊重する（hasResult:true 固定にしない）。
       const locked = (response.data.lockedPairings || []).map(p => ({
         ...p,
-        hasResult: true,
+        hasResult: p.hasResult || false,
+        locked: p.locked || false,
       }));
-      const newPairings = response.data.pairings || [];
+      const newPairings = (response.data.pairings || []).map(p => ({
+        ...p,
+        hasResult: false,
+        locked: false,
+      }));
       const combined = [...locked, ...newPairings];
       setPairings(combined);
       setWaitingPlayers(response.data.waitingPlayers);
@@ -343,7 +350,14 @@ const PairingGenerator = () => {
         );
       }
       if (locked.length > 0) {
-        setNotice(prev => (prev ? prev + ' ' : '') + `結果入力済みの${locked.length}組はロックされています。`);
+        const resultLockedCount = locked.filter(p => p.hasResult).length;
+        const manualLockedCount = locked.filter(p => !p.hasResult && p.locked).length;
+        const parts = [];
+        if (resultLockedCount > 0) parts.push(`結果入力済みの${resultLockedCount}組`);
+        if (manualLockedCount > 0) parts.push(`手動ロックの${manualLockedCount}組`);
+        if (parts.length > 0) {
+          setNotice(prev => (prev ? prev + ' ' : '') + `${parts.join('・')}はロックされています。`);
+        }
       }
     } catch (err) {
       console.error('Auto matching failed:', err);
@@ -354,7 +368,7 @@ const PairingGenerator = () => {
   };
 
   const handleSave = async () => {
-    const unlockedPairings = pairings.filter(p => !p.hasResult);
+    const unlockedPairings = pairings.filter(p => !(p.hasResult || p.locked));
     if (unlockedPairings.length === 0 && waitingPlayers.length === 0) {
       setError('保存する組み合わせがありません');
       return;
@@ -364,9 +378,9 @@ const PairingGenerator = () => {
     setError('');
 
     try {
-      // ロック済みペアリングは送信対象から除外（バックエンド側でも保護されるが、明示的に除外）
+      // ロック済みペアリング（結果入力済み or 手動ロック）は送信対象から除外（バックエンド側でも保護されるが、明示的に除外）
       const requests = pairings
-        .filter((p) => !p.hasResult)
+        .filter((p) => !(p.hasResult || p.locked))
         .map((p) => ({
           player1Id: p.player1Id,
           player2Id: p.player2Id,
@@ -418,9 +432,9 @@ const PairingGenerator = () => {
   };
 
   const handleDeleteExisting = async () => {
-    const lockedCount = pairings.filter(p => p.hasResult).length;
+    const lockedCount = pairings.filter(p => p.hasResult || p.locked).length;
     const msg = lockedCount > 0
-      ? `結果入力済みの${lockedCount}組を除く組み合わせを削除しますか？\n（結果入力済みの組み合わせは個別にリセットしてください）`
+      ? `ロック済みの${lockedCount}組を除く組み合わせを削除しますか？\n（結果入力済み・手動ロックの組は保持されます。結果入力済みは個別にリセット、手動ロックは解除してください）`
       : '既存の組み合わせを削除しますか？';
     if (!window.confirm(msg)) {
       return;
@@ -483,14 +497,80 @@ const PairingGenerator = () => {
     }
   };
 
+  // 組を手動ロック（未保存の組は先に createBatch で保存して id を確定させてから lock を呼ぶ）
+  const handleLockPairing = async (pairing) => {
+    if (!pairing.player1Id || !pairing.player2Id) {
+      setError('両方の選手が揃っている組のみロックできます');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      let pairingId = pairing.id;
+      // 未保存（id 未付与）または未保存の変更がある場合は、現在の編集状態を保存して id を確定させる
+      if (!pairingId || hasUnsavedChanges) {
+        const requests = pairings
+          .filter((p) => !(p.hasResult || p.locked))
+          .map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id }));
+        const waitingIds = waitingPlayers.map((p) => p.id);
+        await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
+        const savedRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
+        const saved = (savedRes.data || []).find(p =>
+          (p.player1Id === pairing.player1Id && p.player2Id === pairing.player2Id) ||
+          (p.player1Id === pairing.player2Id && p.player2Id === pairing.player1Id));
+        if (!saved) {
+          setError('組み合わせの保存に失敗したためロックできませんでした');
+          return;
+        }
+        pairingId = saved.id;
+      }
+      await pairingAPI.lock(pairingId);
+      // 再取得して表示を更新
+      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
+      pairingsCache.current[matchNumber] = pairingsRes.data;
+      const hasData = pairingsRes.data && pairingsRes.data.length > 0;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
+      setCacheVersion(v => v + 1);
+      setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
+    } catch (err) {
+      console.error('Lock failed:', err);
+      setError(err?.response?.data?.message || 'ロックに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 組の手動ロックを解除し、ペアリングを再取得して表示を更新
+  const handleUnlockPairing = async (pairing) => {
+    if (!pairing.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      await pairingAPI.unlock(pairing.id);
+      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
+      pairingsCache.current[matchNumber] = pairingsRes.data;
+      const hasData = pairingsRes.data && pairingsRes.data.length > 0;
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
+      setCacheVersion(v => v + 1);
+      setHasUnsavedChanges(false);
+      unsavedDraft.current = null;
+    } catch (err) {
+      console.error('Unlock failed:', err);
+      setError(err?.response?.data?.message || 'ロック解除に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 配置実行（ドラッグ＆ドロップとタップ選択モードで共通）
   const executePlacement = useCallback((source, dest, draggedPlayerId, draggedPlayerName) => {
     if (!source || !dest) return;
 
-    // ロック済みペアリングへのドロップを防止
-    if (dest.slotType?.startsWith('pairing-') && pairings[dest.pairingIndex]?.hasResult) return;
-    // ロック済みペアリングからのドラッグを防止
-    if (source.type === 'pairing' && pairings[source.pairingIndex]?.hasResult) return;
+    // ロック済みペアリング（結果入力済み or 手動ロック）へのドロップを防止
+    if (dest.slotType?.startsWith('pairing-') && (pairings[dest.pairingIndex]?.hasResult || pairings[dest.pairingIndex]?.locked)) return;
+    // ロック済みペアリング（結果入力済み or 手動ロック）からのドラッグを防止
+    if (source.type === 'pairing' && (pairings[source.pairingIndex]?.hasResult || pairings[source.pairingIndex]?.locked)) return;
 
     const result = computeDragResult({
       source,
@@ -543,8 +623,8 @@ const PairingGenerator = () => {
   // タップ選択モード: チップタップ
   const handleChipClick = useCallback((playerId, playerName, source) => {
     if (isReadOnly || isViewMode) return;
-    // ロック済みペアリングのチップは選択・操作不可
-    if (source.type === 'pairing' && pairings[source.pairingIndex]?.hasResult) return;
+    // ロック済みペアリング（結果入力済み or 手動ロック）のチップは選択・操作不可
+    if (source.type === 'pairing' && (pairings[source.pairingIndex]?.hasResult || pairings[source.pairingIndex]?.locked)) return;
 
     // 未選択 → 選択開始
     if (!selectedPlayer) {
@@ -581,8 +661,8 @@ const PairingGenerator = () => {
     if (!selectedPlayer) return;
     // 待機行の活動プルダウン等、フォーム要素由来のクリックは誤配置防止のため無視
     if (e?.target?.closest?.('select, input, textarea, option')) return;
-    // ロック済みペアリングへの配置を防止
-    if (slotData.slotType?.startsWith('pairing-') && pairings[slotData.pairingIndex]?.hasResult) return;
+    // ロック済みペアリング（結果入力済み or 手動ロック）への配置を防止
+    if (slotData.slotType?.startsWith('pairing-') && (pairings[slotData.pairingIndex]?.hasResult || pairings[slotData.pairingIndex]?.locked)) return;
 
     executePlacement(selectedPlayer.source, slotData, selectedPlayer.playerId, selectedPlayer.playerName);
     setSelectedPlayer(null);
@@ -711,8 +791,8 @@ const PairingGenerator = () => {
     return !isParticipant && !isWaiting && !isInPairings;
   });
 
-  // ロック済みでないペアリングが存在するか
-  const hasUnlockedPairings = pairings.some(p => !p.hasResult);
+  // ロック済み（結果入力済み or 手動ロック）でないペアリングが存在するか
+  const hasUnlockedPairings = pairings.some(p => !(p.hasResult || p.locked));
 
   if (matchLoading) {
     return (
@@ -918,20 +998,28 @@ const PairingGenerator = () => {
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
             {pairings.map((pairing, index) => (
-              <div key={index} className={`px-3 py-2.5 ${pairing.hasResult ? 'bg-gray-50' : ''}`}>
-                {pairing.hasResult ? (
-                  /* ロック済み（結果入力済み）表示 */
+              <div key={index} className={`px-3 py-2.5 ${(pairing.hasResult || pairing.locked) ? 'bg-gray-50' : ''}`}>
+                {(pairing.hasResult || pairing.locked) ? (
+                  /* ロック済み（結果入力済み or 手動ロック）表示 */
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center justify-center gap-3">
                       <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>
                       <span className="text-gray-300 text-xs">vs</span>
                       <span className="font-medium text-gray-400 text-sm">{pairing.player2Name}</span>
                     </div>
-                    <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-                      <Lock className="w-3 h-3" />
-                      結果入力済
-                    </span>
-                    {!isReadOnly && !isViewMode && pairing.id && (isAdmin() || isSuperAdmin()) && (
+                    {pairing.hasResult && (
+                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        <Lock className="w-3 h-3" />
+                        結果入力済
+                      </span>
+                    )}
+                    {pairing.locked && !pairing.hasResult && (
+                      <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        <Lock className="w-3 h-3" />
+                        ロック
+                      </span>
+                    )}
+                    {!isReadOnly && !isViewMode && pairing.id && pairing.hasResult && (isAdmin() || isSuperAdmin()) && (
                       <button
                         onClick={() => handleResetPairing(pairing)}
                         disabled={loading}
@@ -940,6 +1028,17 @@ const PairingGenerator = () => {
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         リセット
+                      </button>
+                    )}
+                    {!isReadOnly && !isViewMode && pairing.id && pairing.locked && (
+                      <button
+                        onClick={() => handleUnlockPairing(pairing)}
+                        disabled={loading}
+                        className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-800 disabled:opacity-50 whitespace-nowrap"
+                        title="手動ロックを解除"
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        解除
                       </button>
                     )}
                   </div>
@@ -998,6 +1097,17 @@ const PairingGenerator = () => {
                           : <span className="text-[#4a6b5a]">初</span>
                       }
                     </span>
+                    {pairing.player1Id && pairing.player2Id && (
+                      <button
+                        onClick={() => handleLockPairing(pairing)}
+                        disabled={loading}
+                        className="flex items-center gap-1 text-xs text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 whitespace-nowrap flex-shrink-0"
+                        title="この組をロック（自動組み合わせ・一括保存・回戦削除から保護）"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        ロック
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1131,7 +1241,7 @@ const PairingGenerator = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={loading || pairings.some(p => !p.hasResult && (!p.player1Id || !p.player2Id))}
+                  disabled={loading || pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))}
                   className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />
