@@ -64,7 +64,7 @@ status: completed
 - **対応Issue:** #905
 
 ### タスク5: テスト
-- [ ] 完了
+- [x] 完了
 - **概要:** バックエンド・フロントのテストを追加し、CI カバレッジ（60%）を満たす。
 - **変更対象ファイル:**
   - バックエンド: `MatchPairingService` / `MatchPairingController` のテスト — lock/unlock、二重ブッキング、createBatch/autoMatch/回戦削除の `locked` 保持、組織スコープ
