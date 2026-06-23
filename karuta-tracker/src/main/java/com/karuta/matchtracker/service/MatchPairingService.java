@@ -3,6 +3,7 @@ package com.karuta.matchtracker.service;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Match;
 import com.karuta.matchtracker.entity.MatchPairing;
+import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.entity.ParticipantStatus;
@@ -442,6 +443,68 @@ public class MatchPairingService {
         matchPairingRepository.delete(pairing);
 
         return result;
+    }
+
+    /**
+     * 指定組を手動ロックする（二重ブッキング検証付き）。
+     *
+     * <p>同一 {@code (session_date, match_number)}・同一組織スコープ内で、対象組の2選手いずれかを
+     * 含む他の組が既に存在する場合は {@link DuplicateResourceException}（409 Conflict）を投げる。
+     * これにより「1選手1組」をサーバー側で担保する。</p>
+     *
+     * @param id ロック対象のペアリングID
+     * @param organizationId 組織スコープ（ADMIN/PLAYER は所属団体ID、SUPER_ADMIN は null で非限定）
+     * @return ロック後の MatchPairingDto
+     */
+    @Transactional
+    public MatchPairingDto lock(Long id, Long organizationId) {
+        MatchPairing pairing = matchPairingRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
+
+        // 二重ブッキング検証: 同回戦・同組織スコープの他組に対象2選手が含まれていないか確認する。
+        Set<Long> sessionPlayerIds = getSessionAllPlayerIds(pairing.getSessionDate(), organizationId);
+        boolean orgScoped = organizationId != null;
+        List<MatchPairing> sameRoundPairings = filterPairingsBySession(
+                matchPairingRepository.findBySessionDateAndMatchNumber(
+                        pairing.getSessionDate(), pairing.getMatchNumber()),
+                sessionPlayerIds, orgScoped);
+
+        for (MatchPairing other : sameRoundPairings) {
+            if (other.getId().equals(pairing.getId())) {
+                continue;
+            }
+            Long conflictPlayerId = null;
+            if (other.getPlayer1Id().equals(pairing.getPlayer1Id())
+                    || other.getPlayer2Id().equals(pairing.getPlayer1Id())) {
+                conflictPlayerId = pairing.getPlayer1Id();
+            } else if (other.getPlayer1Id().equals(pairing.getPlayer2Id())
+                    || other.getPlayer2Id().equals(pairing.getPlayer2Id())) {
+                conflictPlayerId = pairing.getPlayer2Id();
+            }
+            if (conflictPlayerId != null) {
+                String name = playerRepository.findById(conflictPlayerId)
+                        .map(Player::getName).orElse("選手");
+                throw new DuplicateResourceException(
+                        "選手「" + name + "」は既に同じ回戦の別の組に入っているため、ロックできません");
+            }
+        }
+
+        pairing.setLocked(true);
+        return convertToDto(matchPairingRepository.save(pairing));
+    }
+
+    /**
+     * 指定組の手動ロックを解除する。組自体は残り、通常の未ロック組（編集・削除・自動再生成の対象）に戻る。
+     *
+     * @param id 解除対象のペアリングID
+     * @return 解除後の MatchPairingDto
+     */
+    @Transactional
+    public MatchPairingDto unlock(Long id) {
+        MatchPairing pairing = matchPairingRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MatchPairing", id));
+        pairing.setLocked(false);
+        return convertToDto(matchPairingRepository.save(pairing));
     }
 
     /**

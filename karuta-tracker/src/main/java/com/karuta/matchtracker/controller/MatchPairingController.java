@@ -241,6 +241,42 @@ public class MatchPairingController {
     }
 
     /**
+     * 指定組を手動ロックする（二重ブッキング検証付き・即時反映）。
+     *
+     * 参加者なら誰でも（PLAYER/ADMIN/SUPER_ADMIN）実行可能。組織スコープは
+     * {@link #validateScopeByPairingId} で検証し、同回戦・同組織内で対象2選手が
+     * 既に別の組に入っている場合はサービス層で 409 Conflict を返す。
+     */
+    @PatchMapping("/{id}/lock")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<MatchPairingDto> lock(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("対戦組み合わせ手動ロック: ID={}", id);
+        validateScopeByPairingId(id, httpRequest);
+        Long organizationId = resolveOrganizationIdForScopedWriteByPairingId(id, httpRequest);
+        MatchPairingDto result = matchPairingService.lock(id, organizationId);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 指定組の手動ロックを解除する（即時反映）。組は残り、通常の未ロック組に戻る。
+     *
+     * 参加者なら誰でも（PLAYER/ADMIN/SUPER_ADMIN）実行可能。組織スコープは
+     * {@link #validateScopeByPairingId} で検証する。
+     */
+    @PatchMapping("/{id}/unlock")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<MatchPairingDto> unlock(
+            @PathVariable Long id,
+            HttpServletRequest httpRequest) {
+        log.info("対戦組み合わせ手動ロック解除: ID={}", id);
+        validateScopeByPairingId(id, httpRequest);
+        MatchPairingDto result = matchPairingService.unlock(id);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 書き込みリクエストの団体スコープ検証（日付ベース）。
      *
      * - SUPER_ADMIN: スコープ強制なし。

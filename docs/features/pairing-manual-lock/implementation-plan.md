@@ -27,7 +27,7 @@ status: completed
 - **対応Issue:** #902
 
 ### タスク2: lock/unlock エンドポイント + Service（二重ブッキング検証）
-- [ ] 完了
+- [x] 完了
 - **概要:** 組単位のロック/解除APIを追加。lock 時に「1選手1組」をサーバーで担保する。
 - **変更対象ファイル:**
   - `karuta-tracker/.../controller/MatchPairingController.java` — `PATCH /{id}/lock`・`PATCH /{id}/unlock` を追加（`@RequireRole({SUPER_ADMIN, ADMIN, PLAYER})`、`validateScopeByPairingId` 適用、戻り値 `MatchPairingDto`）
