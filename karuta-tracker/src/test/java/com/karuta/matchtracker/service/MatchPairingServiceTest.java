@@ -2362,5 +2362,74 @@ class MatchPairingServiceTest {
                 return deleted.size() == 1 && deleted.get(0).getId().equals(99L);
             }));
         }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumber: 片方だけ参加者（同一セッションに両者が揃わない）のペアもゾンビとして削除する")
+        void shouldDeleteHalfParticipantOrphanPairing() {
+            // Given: 参加者は 1,2 のみ。ペア(1,88) は 88 が非参加者で、同一セッションに両者が揃わない
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 2;
+            Long orgId = 7L;
+            MatchPairing halfOrphan = createMatchPairing(99L, sessionDate, matchNumber, 1L, 88L);
+            PracticeSession session = createSession(100L, sessionDate);
+
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgId))
+                    .thenReturn(Optional.of(session));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(session));
+            when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(100L, matchNumber, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(100L, matchNumber, 2L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(halfOrphan));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
+
+            // Then: 片方だけ参加のペア(99L)もゾンビとして削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(99L);
+            }));
+        }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumber: 両者が別々のセッション/団体に分かれて参加するペアもゾンビとして削除する")
+        void shouldDeleteCrossSessionPairingAsOrphan() {
+            // Given: 同日に2セッション。sessionA(団体7)={1,2}, sessionB={3,4}。
+            // ペア(1,3) はどのセッションでも両者が同時に参加していない
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 2;
+            Long orgId = 7L;
+            MatchPairing crossOrphan = createMatchPairing(99L, sessionDate, matchNumber, 1L, 3L);
+            PracticeSession sessionA = createSession(100L, sessionDate);
+            PracticeSession sessionB = createSession(200L, sessionDate);
+
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, orgId))
+                    .thenReturn(Optional.of(sessionA));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(Arrays.asList(sessionA, sessionB));
+            when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(100L, matchNumber, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(100L, matchNumber, 2L, ParticipantStatus.WON)));
+            when(practiceParticipantRepository.findBySessionId(200L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(200L, matchNumber, 3L, ParticipantStatus.WON),
+                    createPracticeParticipant(200L, matchNumber, 4L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(crossOrphan));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
+
+            // Then: 別セッションに分かれて参加するペア(99L)もゾンビとして削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(99L);
+            }));
+        }
     }
 }

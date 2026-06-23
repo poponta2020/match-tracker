@@ -249,8 +249,8 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
         matchPairingRepository.deleteAll(toDelete);
 
-        // 全セッション参加者外（ゾンビ）の既存ペアリングも掃除する。
-        // 参加者フィルタにより existingPairings から漏れた非参加者ペアは従来の削除対象にならず、
+        // ゾンビ（同一セッションに両選手が揃わない）既存ペアリングも掃除する。
+        // 組織スコープの参加者フィルタにより existingPairings から漏れたペアは従来の削除対象にならず、
         // 再生成のたびに重複が積み上がり、フロントの一括削除でも消せなかった（Issue #900）。
         deleteOrphanPairings(sessionDate, matchNumber);
 
@@ -437,48 +437,53 @@ public class MatchPairingService {
 
         matchPairingRepository.deleteAll(toDelete);
 
-        // 結果なしのゾンビ（全セッション参加者外）ペアも削除する。これにより、フロントの
-        // 「既存の組み合わせを削除」(deleteByDateAndMatchNumber) で非参加者ペアも消せるようになる（Issue #900）。
+        // 結果なしのゾンビ（同一セッションに両選手が揃わない）ペアも削除する。これにより、フロントの
+        // 「既存の組み合わせを削除」(deleteByDateAndMatchNumber) でこれらのペアも消せるようになる（Issue #900）。
         deleteOrphanPairings(sessionDate, matchNumber);
     }
 
     /**
-     * 当該日付の全セッション（全団体）参加者IDの和集合を返す。
-     * ゾンビ（当日のどのセッションの参加者でもないペア）の判定に使う。
+     * 当該日付の各セッション（全団体）ごとの参加者IDセットを返す。
+     * 「両選手が同時に参加しているセッションが1つも無い」ペア＝ゾンビ の判定に使う。
      */
-    private Set<Long> getAllSessionParticipantIdsOnDate(LocalDate sessionDate) {
+    private List<Set<Long>> getSessionParticipantSetsOnDate(LocalDate sessionDate) {
         List<com.karuta.matchtracker.entity.PracticeSession> sessions =
                 practiceSessionRepository.findByDateRange(sessionDate, sessionDate);
-        Set<Long> ids = new HashSet<>();
+        List<Set<Long>> participantSets = new ArrayList<>();
         for (com.karuta.matchtracker.entity.PracticeSession session : sessions) {
-            practiceParticipantRepository.findBySessionId(session.getId())
-                    .forEach(pp -> ids.add(pp.getPlayerId()));
+            Set<Long> ids = practiceParticipantRepository.findBySessionId(session.getId()).stream()
+                    .map(PracticeParticipant::getPlayerId)
+                    .collect(Collectors.toSet());
+            participantSets.add(ids);
         }
-        return ids;
+        return participantSets;
     }
 
     /**
-     * 当該(sessionDate, matchNumber)の「全セッション参加者外」かつ結果なしのペアリング(ゾンビ)を削除する。
+     * 当該(sessionDate, matchNumber)の「ゾンビ」ペアリングを削除する。
      *
-     * 非参加者ペアは組織スコープのフィルタ(filterPairingsBySession)から漏れ、createBatch /
-     * deleteByDateAndMatchNumber の通常削除対象にならず残り続ける（Issue #900）。両選手とも当日の
-     * どのセッションにも参加していないペアは誰にも属さない死にデータのため安全に削除できる。
-     * 結果(matches)が存在するペアは念のため除外する。参加者を判定できない日（参加者0）は
-     * 巻き込み削除を避けるためスキップする。
+     * ゾンビ = 当日のどのセッションを見ても両選手が同時に参加しているものが1つも無いペア、かつ結果なし。
+     * 組織スコープの通常削除(filterPairingsBySession orgScoped=true)は「両選手が当該団体セッション参加者」の
+     * ペアのみを対象にするため、(a)両者とも非参加 (b)片方だけ参加 (c)両者が別々のセッション/団体に分かれて
+     * 参加、のいずれも通常削除・フロント一括削除から漏れて残り続ける（Issue #900）。これらは特定セッション内の
+     * 対戦カードとして成立しないため安全に削除できる。結果(matches)が存在するペアは念のため除外する。
+     * 当日セッションの参加者を1人も判定できない場合（セッション未登録・全セッション参加者0）は、
+     * 全ペアの巻き込み削除を避けるためスキップする。
      */
     private void deleteOrphanPairings(LocalDate sessionDate, Integer matchNumber) {
-        Set<Long> allDayParticipantIds = getAllSessionParticipantIdsOnDate(sessionDate);
-        if (allDayParticipantIds.isEmpty()) {
+        List<Set<Long>> sessionParticipantSets = getSessionParticipantSetsOnDate(sessionDate);
+        // 参加者を1人も判定できない日は安全側でスキップ（全ペア巻き込み削除を防ぐ）
+        if (sessionParticipantSets.stream().allMatch(Set::isEmpty)) {
             return;
         }
         List<Match> matchesForNumber = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
         List<MatchPairing> orphans = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber).stream()
-                .filter(p -> !allDayParticipantIds.contains(p.getPlayer1Id())
-                        && !allDayParticipantIds.contains(p.getPlayer2Id()))
+                .filter(p -> sessionParticipantSets.stream().noneMatch(set ->
+                        set.contains(p.getPlayer1Id()) && set.contains(p.getPlayer2Id())))
                 .filter(p -> !hasResultForPair(p, matchesForNumber))
                 .collect(Collectors.toList());
         if (!orphans.isEmpty()) {
-            log.info("全セッション参加者外の組み合わせ(ゾンビ)を削除: date={}, matchNumber={}, 件数={}",
+            log.info("ゾンビ組み合わせ(同一セッションに両者が揃わない)を削除: date={}, matchNumber={}, 件数={}",
                     sessionDate, matchNumber, orphans.size());
             matchPairingRepository.deleteAll(orphans);
         }
