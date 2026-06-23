@@ -1144,6 +1144,7 @@ public class MatchPairingService {
                 .createdByName(playerNames.getOrDefault(pairing.getCreatedBy(), "Unknown"))
                 .createdAt(pairing.getCreatedAt())
                 .updatedAt(pairing.getUpdatedAt())
+                .locked(Boolean.TRUE.equals(pairing.getLocked()))
                 .build();
     }
 

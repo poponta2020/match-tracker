@@ -32,4 +32,7 @@ public class MatchPairingDto {
     private String winnerName;
     private Integer scoreDifference;
     private Long matchId;
+
+    /** 手動ロックフラグ（hasResult とは独立。結果未入力でもユーザーが明示的にロックした組は true） */
+    private boolean locked;
 }

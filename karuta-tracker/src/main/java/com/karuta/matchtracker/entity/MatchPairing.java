@@ -35,6 +35,15 @@ public class MatchPairing {
     @Column(name = "player2_id", nullable = false)
     private Long player2Id;
 
+    /**
+     * 手動ロックフラグ。true の場合、結果未入力でもこの組と両選手が
+     * 自動組み合わせ・一括保存・回戦削除から保護される（結果ロックと同等の扱い）。
+     * 既存行・builder 生成時は false（@Builder.Default で NULL を回避）。
+     */
+    @Column(name = "locked", nullable = false)
+    @Builder.Default
+    private Boolean locked = false;
+
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 
