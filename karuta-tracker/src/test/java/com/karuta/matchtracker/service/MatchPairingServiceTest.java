@@ -2396,14 +2396,14 @@ class MatchPairingServiceTest {
         }
 
         @Test
-        @DisplayName("deleteByDateAndMatchNumber: 両者が別々のセッション/団体に分かれて参加するペアもゾンビとして削除する")
-        void shouldDeleteCrossSessionPairingAsOrphan() {
-            // Given: 同日に2セッション。sessionA(団体7)={1,2}, sessionB={3,4}。
-            // ペア(1,3) はどのセッションでも両者が同時に参加していない
+        @DisplayName("deleteByDateAndMatchNumber: 組織スコープ操作では他団体参加者を含むゾンビペアを削除しない（団体隔離）")
+        void shouldNotDeleteOtherOrgZombieInOrgScopedDelete() {
+            // Given: Org A(7) session={1,2}。別セッション(団体B)={5,6}。
+            // ゾンビ(5,99): 5は団体Bの参加者、99は非参加者。Org A の操作では触ってはいけない
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 2;
             Long orgId = 7L;
-            MatchPairing crossOrphan = createMatchPairing(99L, sessionDate, matchNumber, 1L, 3L);
+            MatchPairing otherOrgZombie = createMatchPairing(77L, sessionDate, matchNumber, 5L, 99L);
             PracticeSession sessionA = createSession(100L, sessionDate);
             PracticeSession sessionB = createSession(200L, sessionDate);
 
@@ -2415,20 +2415,58 @@ class MatchPairingServiceTest {
                     createPracticeParticipant(100L, matchNumber, 1L, ParticipantStatus.WON),
                     createPracticeParticipant(100L, matchNumber, 2L, ParticipantStatus.WON)));
             when(practiceParticipantRepository.findBySessionId(200L)).thenReturn(Arrays.asList(
-                    createPracticeParticipant(200L, matchNumber, 3L, ParticipantStatus.WON),
-                    createPracticeParticipant(200L, matchNumber, 4L, ParticipantStatus.WON)));
+                    createPracticeParticipant(200L, matchNumber, 5L, ParticipantStatus.WON),
+                    createPracticeParticipant(200L, matchNumber, 6L, ParticipantStatus.WON)));
             when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
-                    .thenReturn(List.of(crossOrphan));
+                    .thenReturn(List.of(otherOrgZombie));
             when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
                     .thenReturn(Collections.emptyList());
 
             // When
             matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, orgId);
 
-            // Then: 別セッションに分かれて参加するペア(99L)もゾンビとして削除される
+            // Then: 他団体参加者(5)を含むペア(77L)はどの deleteAll でも削除されない
+            verify(matchPairingRepository, never()).deleteAll(argThat(list ->
+                    ((List<MatchPairing>) list).stream().anyMatch(p -> p.getId().equals(77L))));
+        }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumber: SUPER_ADMIN(organizationId=null)は団体横断でゾンビを掃除する")
+        void shouldDeleteCrossOrgZombieAsSuperAdmin() {
+            // Given: 当日3セッション。main={1,2}, B={3,4}, C={5,6}。
+            // ゾンビ(3,5)はどのセッションでも両者が揃わない。SUPER_ADMIN は団体横断で削除可
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 2;
+            MatchPairing crossOrgZombie = createMatchPairing(88L, sessionDate, matchNumber, 3L, 5L);
+            PracticeSession sessionMain = createSession(100L, sessionDate);
+            PracticeSession sessionB = createSession(200L, sessionDate);
+            PracticeSession sessionC = createSession(300L, sessionDate);
+
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(sessionMain));
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(Arrays.asList(sessionMain, sessionB, sessionC));
+            when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(100L, matchNumber, 1L, ParticipantStatus.WON),
+                    createPracticeParticipant(100L, matchNumber, 2L, ParticipantStatus.WON)));
+            when(practiceParticipantRepository.findBySessionId(200L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(200L, matchNumber, 3L, ParticipantStatus.WON),
+                    createPracticeParticipant(200L, matchNumber, 4L, ParticipantStatus.WON)));
+            when(practiceParticipantRepository.findBySessionId(300L)).thenReturn(Arrays.asList(
+                    createPracticeParticipant(300L, matchNumber, 5L, ParticipantStatus.WON),
+                    createPracticeParticipant(300L, matchNumber, 6L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(crossOrgZombie));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            // When: SUPER_ADMIN 経路 organizationId=null
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, null);
+
+            // Then: 団体横断ゾンビ(88L)が削除される
             verify(matchPairingRepository).deleteAll(argThat(list -> {
                 List<MatchPairing> deleted = (List<MatchPairing>) list;
-                return deleted.size() == 1 && deleted.get(0).getId().equals(99L);
+                return deleted.size() == 1 && deleted.get(0).getId().equals(88L);
             }));
         }
     }

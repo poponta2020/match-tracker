@@ -252,7 +252,7 @@ public class MatchPairingService {
         // ゾンビ（同一セッションに両選手が揃わない）既存ペアリングも掃除する。
         // 組織スコープの参加者フィルタにより existingPairings から漏れたペアは従来の削除対象にならず、
         // 再生成のたびに重複が積み上がり、フロントの一括削除でも消せなかった（Issue #900）。
-        deleteOrphanPairings(sessionDate, matchNumber);
+        deleteOrphanPairings(sessionDate, matchNumber, organizationId);
 
         // 新規ペアリングを構築する。重複大量登録(Issue #900)を防ぐため以下を同時に行う:
         //  - 無効ペア（null / 同一選手）を除外
@@ -439,7 +439,7 @@ public class MatchPairingService {
 
         // 結果なしのゾンビ（同一セッションに両選手が揃わない）ペアも削除する。これにより、フロントの
         // 「既存の組み合わせを削除」(deleteByDateAndMatchNumber) でこれらのペアも消せるようになる（Issue #900）。
-        deleteOrphanPairings(sessionDate, matchNumber);
+        deleteOrphanPairings(sessionDate, matchNumber, organizationId);
     }
 
     /**
@@ -460,33 +460,74 @@ public class MatchPairingService {
     }
 
     /**
-     * 当該(sessionDate, matchNumber)の「ゾンビ」ペアリングを削除する。
+     * 当該(sessionDate, matchNumber)の「ゾンビ」ペアリングを、操作スコープを尊重して削除する。
      *
      * ゾンビ = 当日のどのセッションを見ても両選手が同時に参加しているものが1つも無いペア、かつ結果なし。
      * 組織スコープの通常削除(filterPairingsBySession orgScoped=true)は「両選手が当該団体セッション参加者」の
      * ペアのみを対象にするため、(a)両者とも非参加 (b)片方だけ参加 (c)両者が別々のセッション/団体に分かれて
      * 参加、のいずれも通常削除・フロント一括削除から漏れて残り続ける（Issue #900）。これらは特定セッション内の
-     * 対戦カードとして成立しないため安全に削除できる。結果(matches)が存在するペアは念のため除外する。
-     * 当日セッションの参加者を1人も判定できない場合（セッション未登録・全セッション参加者0）は、
-     * 全ペアの巻き込み削除を避けるためスキップする。
+     * 対戦カードとして成立しないため掃除対象になり得る。
+     *
+     * ただし組織スコープ操作(organizationId != null)では他団体のデータを破壊しないよう、両選手とも
+     * 「当該団体の参加者」または「当日のどのセッションの参加者でもない(誰のものでもない)」ペアに限定する。
+     * 他団体の参加者を含むペアには手を出さない。SUPER_ADMIN(organizationId == null)は団体横断で全削除可。
+     * 結果(matches)が存在するペアは念のため除外する。当日セッションの参加者を1人も判定できない場合
+     * （セッション未登録・全セッション参加者0）は、全ペアの巻き込み削除を避けるためスキップする。
      */
-    private void deleteOrphanPairings(LocalDate sessionDate, Integer matchNumber) {
+    private void deleteOrphanPairings(LocalDate sessionDate, Integer matchNumber, Long organizationId) {
         List<Set<Long>> sessionParticipantSets = getSessionParticipantSetsOnDate(sessionDate);
         // 参加者を1人も判定できない日は安全側でスキップ（全ペア巻き込み削除を防ぐ）
         if (sessionParticipantSets.stream().allMatch(Set::isEmpty)) {
             return;
         }
+        // 組織スコープを尊重するための集合:
+        //  orgPlayerIds = 当該団体セッションの参加者（この団体のもの）。SUPER_ADMIN時は未使用。
+        //  allDayIds    = 当日全セッションの参加者（誰かのもの）
+        Set<Long> orgPlayerIds = organizationId != null
+                ? getSessionAllPlayerIds(sessionDate, organizationId)
+                : Collections.emptySet();
+        Set<Long> allDayIds = sessionParticipantSets.stream()
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
+
         List<Match> matchesForNumber = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
         List<MatchPairing> orphans = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber).stream()
+                // ゾンビ判定: 当日のどのセッションでも両選手が同時に参加していない
                 .filter(p -> sessionParticipantSets.stream().noneMatch(set ->
                         set.contains(p.getPlayer1Id()) && set.contains(p.getPlayer2Id())))
+                // 組織スコープを尊重: 他団体の参加者を含むペアは当該団体の操作では削除しない
+                .filter(p -> orphanCleanableInScope(p, organizationId, orgPlayerIds, allDayIds))
+                // 結果ありは念のため除外
                 .filter(p -> !hasResultForPair(p, matchesForNumber))
                 .collect(Collectors.toList());
         if (!orphans.isEmpty()) {
-            log.info("ゾンビ組み合わせ(同一セッションに両者が揃わない)を削除: date={}, matchNumber={}, 件数={}",
-                    sessionDate, matchNumber, orphans.size());
+            log.info("ゾンビ組み合わせ(同一セッションに両者が揃わない)を削除: date={}, matchNumber={}, organizationId={}, 件数={}",
+                    sessionDate, matchNumber, organizationId, orphans.size());
             matchPairingRepository.deleteAll(orphans);
         }
+    }
+
+    /**
+     * ゾンビペアが当該スコープで削除可能か判定する。
+     * SUPER_ADMIN(organizationId == null)は団体横断で全削除可。組織スコープ時は、両選手とも
+     * 「当該団体の参加者」または「当日のどのセッションの参加者でもない(誰のものでもない)」場合のみ
+     * 削除可とし、他団体の参加者を含むペアは保護する（組織スコープ尊重）。
+     */
+    private boolean orphanCleanableInScope(MatchPairing pairing, Long organizationId,
+                                           Set<Long> orgPlayerIds, Set<Long> allDayIds) {
+        if (organizationId == null) {
+            return true;
+        }
+        return isOwnOrUnowned(pairing.getPlayer1Id(), orgPlayerIds, allDayIds)
+                && isOwnOrUnowned(pairing.getPlayer2Id(), orgPlayerIds, allDayIds);
+    }
+
+    /**
+     * 当該選手が「自団体の参加者」または「当日どのセッションの参加者でもない(誰のものでもない)」か。
+     * 他団体セッションの参加者の場合のみ false（=他団体のもの）。
+     */
+    private boolean isOwnOrUnowned(Long playerId, Set<Long> orgPlayerIds, Set<Long> allDayIds) {
+        return orgPlayerIds.contains(playerId) || !allDayIds.contains(playerId);
     }
 
     /**
