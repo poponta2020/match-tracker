@@ -465,6 +465,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
   - **第2試合**: 抜き — 第1試合の残り5種から3種を選択、1枚を抜く
   - **第3試合**: 十の位 — 残り7種から5種を選択
 - テキストをクリップボードにコピー可能
+- **読手表示**: 各試合に「読み」に設定された抜け番選手（`ByeActivity.activityType = READING`）がいる場合、`{N}試合目` 行の直後に `【読手：○○】` 行を出力する（同一試合に複数いる場合は「、」区切り）。読手は `byeActivityAPI.getByDate(date)` で取得し、取得失敗時は読手なしでテキスト生成を継続する
 
 **札ルールの日付別永続化（localStorage）:**
 - 札ルールは URL クエリ `?date=YYYY-MM-DD` 単位で localStorage（キー `karuta-tracker:card-rules:<YYYY-MM-DD>`）に保存する

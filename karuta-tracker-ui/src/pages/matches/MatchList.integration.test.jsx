@@ -12,6 +12,9 @@ vi.mock('../../api', () => ({
     getById: vi.fn(),
     getAll: vi.fn(),
   },
+  byeActivityAPI: {
+    getByPlayer: vi.fn(),
+  },
 }));
 
 vi.mock('../../api/mentorRelationship', () => ({
@@ -33,7 +36,7 @@ vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div data-testid="loading-screen">Loading...</div>,
 }));
 
-import { matchAPI, playerAPI } from '../../api';
+import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchList from './MatchList';
 
@@ -73,6 +76,7 @@ describe('MatchList - 同一ルート内ナビゲーション統合テスト（�
     playerAPI.getById.mockResolvedValue({ data: { name: '対戦相手選手', kyuRank: 'B級' } });
     playerAPI.getAll.mockResolvedValue({ data: [] });
     mentorRelationshipAPI.getMyMentees.mockResolvedValue({ data: [] });
+    byeActivityAPI.getByPlayer.mockResolvedValue({ data: [] });
   });
 
   afterEach(() => {

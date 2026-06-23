@@ -7,6 +7,7 @@ import { STORAGE_PREFIX, generateCardRules } from './cardRules';
 const mocks = vi.hoisted(() => ({
   getByDate: vi.fn(),
   getByDateAndMatchNumber: vi.fn(),
+  byeGetByDate: vi.fn(),
 }));
 
 vi.mock('../../api/practices', () => ({
@@ -18,6 +19,12 @@ vi.mock('../../api/practices', () => ({
 vi.mock('../../api/pairings', () => ({
   pairingAPI: {
     getByDateAndMatchNumber: mocks.getByDateAndMatchNumber,
+  },
+}));
+
+vi.mock('../../api/byeActivities', () => ({
+  byeActivityAPI: {
+    getByDate: mocks.byeGetByDate,
   },
 }));
 
@@ -52,6 +59,7 @@ beforeEach(() => {
   mocks.getByDateAndMatchNumber.mockResolvedValue({
     data: [{ player1Name: '田中', player2Name: '佐藤' }],
   });
+  mocks.byeGetByDate.mockResolvedValue({ data: [] });
 });
 
 afterEach(() => {
@@ -240,5 +248,78 @@ describe('PairingSummary 札ルール localStorage 永続化', () => {
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem(STORAGE_PREFIX + pastDate)).toBeNull();
+  });
+});
+
+describe('PairingSummary 読手（読みに設定された抜け番選手）の表示', () => {
+  it('READING の抜け番選手が各試合に【読手：○○】として、ペアより前に出力される', async () => {
+    mocks.getByDate.mockResolvedValue({ data: { totalMatches: 2 } });
+    mocks.getByDateAndMatchNumber.mockResolvedValue({
+      data: [{ player1Name: '田中', player2Name: '佐藤' }],
+    });
+    mocks.byeGetByDate.mockResolvedValue({
+      data: [
+        { matchNumber: 1, playerName: '山田太郎', activityType: 'READING' },
+        { matchNumber: 2, playerName: '山田花子', activityType: 'READING' },
+        { matchNumber: 1, playerName: '見学者', activityType: 'OBSERVING' },
+      ],
+    });
+
+    renderAtDate(TODAY);
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+
+    const v = screen.getByRole('textbox').value;
+    expect(v).toContain('【読手：山田太郎】');
+    expect(v).toContain('【読手：山田花子】');
+    // READING 以外（見学）の選手は読手に含めない
+    expect(v).not.toContain('見学者');
+    // 読手行は対象試合のペア（田中）より前に置かれる
+    expect(v.indexOf('【読手：山田太郎】')).toBeLessThan(v.indexOf('田中'));
+  });
+
+  it('同一試合に読手が複数いる場合は「、」区切りで列挙される', async () => {
+    mocks.getByDate.mockResolvedValue({ data: { totalMatches: 1 } });
+    mocks.getByDateAndMatchNumber.mockResolvedValue({
+      data: [{ player1Name: '田中', player2Name: '佐藤' }],
+    });
+    mocks.byeGetByDate.mockResolvedValue({
+      data: [
+        { matchNumber: 1, playerName: '山田太郎', activityType: 'READING' },
+        { matchNumber: 1, playerName: '田中次郎', activityType: 'READING' },
+      ],
+    });
+
+    renderAtDate(TODAY);
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+
+    expect(screen.getByRole('textbox').value).toContain('【読手：山田太郎、田中次郎】');
+  });
+
+  it('読手が未設定の試合には【読手：】行を出力しない', async () => {
+    mocks.getByDate.mockResolvedValue({ data: { totalMatches: 1 } });
+    mocks.getByDateAndMatchNumber.mockResolvedValue({
+      data: [{ player1Name: '田中', player2Name: '佐藤' }],
+    });
+    mocks.byeGetByDate.mockResolvedValue({ data: [] });
+
+    renderAtDate(TODAY);
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+
+    expect(screen.getByRole('textbox').value).not.toContain('【読手：');
+  });
+
+  it('抜け番活動の取得に失敗しても読手なしでテキストを生成する', async () => {
+    mocks.getByDate.mockResolvedValue({ data: { totalMatches: 1 } });
+    mocks.getByDateAndMatchNumber.mockResolvedValue({
+      data: [{ player1Name: '田中', player2Name: '佐藤' }],
+    });
+    mocks.byeGetByDate.mockRejectedValue(new Error('network error'));
+
+    renderAtDate(TODAY);
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+
+    const v = screen.getByRole('textbox').value;
+    expect(v).toContain('田中');
+    expect(v).not.toContain('【読手：');
   });
 });
