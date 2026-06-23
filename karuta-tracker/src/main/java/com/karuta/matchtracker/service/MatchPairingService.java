@@ -168,6 +168,15 @@ public class MatchPairingService {
             }
         }
 
+        // 同日・同試合番号・同一ペア（順不同）が既に存在する場合は重複作成せず既存を返す（冪等化）。
+        // match_pairings のユニークインデックスと整合させ、二重POST等での重複行発生を防ぐ（Issue #900）。
+        Optional<MatchPairing> existing = matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(
+                request.getSessionDate(), request.getMatchNumber(),
+                request.getPlayer1Id(), request.getPlayer2Id());
+        if (existing.isPresent()) {
+            return convertToDto(existing.get());
+        }
+
         MatchPairing pairing = MatchPairing.builder()
                 .sessionDate(request.getSessionDate())
                 .matchNumber(request.getMatchNumber())
@@ -240,10 +249,29 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
         matchPairingRepository.deleteAll(toDelete);
 
-        // 新規ペアリングからロック済みプレイヤーを含むものを除外
+        // 全セッション参加者外（ゾンビ）の既存ペアリングも掃除する。
+        // 参加者フィルタにより existingPairings から漏れた非参加者ペアは従来の削除対象にならず、
+        // 再生成のたびに重複が積み上がり、フロントの一括削除でも消せなかった（Issue #900）。
+        deleteOrphanPairings(sessionDate, matchNumber);
+
+        // 新規ペアリングを構築する。重複大量登録(Issue #900)を防ぐため以下を同時に行う:
+        //  - 無効ペア（null / 同一選手）を除外
+        //  - ロック済みプレイヤーを含む新規、ロック済みペアと同一の新規を除外（既存ロックを維持）
+        //  - リクエスト内の同一ペア（順不同）の重複は初出のみ通して排除する。
+        //    フロントの pairings state に同一ペアが多重蓄積したペイロードでも1行に正規化される。
+        Set<String> seenPairKeys = new HashSet<>();
         List<MatchPairing> pairings = requests.stream()
+                .filter(request -> request.getPlayer1Id() != null && request.getPlayer2Id() != null)
+                .filter(request -> !request.getPlayer1Id().equals(request.getPlayer2Id()))
                 .filter(request -> !lockedPlayerIds.contains(request.getPlayer1Id())
                         && !lockedPlayerIds.contains(request.getPlayer2Id()))
+                .filter(request -> {
+                    String pairKey = getPairKey(request.getPlayer1Id(), request.getPlayer2Id());
+                    if (lockedPairKeys.contains(pairKey)) {
+                        return false;
+                    }
+                    return seenPairKeys.add(pairKey);
+                })
                 .map(request -> MatchPairing.builder()
                         .sessionDate(sessionDate)
                         .matchNumber(matchNumber)
@@ -327,6 +355,18 @@ public class MatchPairingService {
             }
         }
 
+        // 差し替え後のペア（順不同）が同日・同試合番号で既に別の組み合わせとして存在する場合は
+        // 重複になるため拒否する（match_pairings のユニークインデックスと整合, Issue #900）。
+        // エンティティ変更前に判定し、ユニーク制約由来の500ではなく明示的な検証エラーにする。
+        Long resultingPlayer1Id = "player1".equals(side) ? newPlayerId : pairing.getPlayer1Id();
+        Long resultingPlayer2Id = "player2".equals(side) ? newPlayerId : pairing.getPlayer2Id();
+        matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(
+                        pairing.getSessionDate(), pairing.getMatchNumber(), resultingPlayer1Id, resultingPlayer2Id)
+                .filter(other -> !other.getId().equals(pairing.getId()))
+                .ifPresent(other -> {
+                    throw new IllegalArgumentException("差し替え後の組み合わせは既に存在します");
+                });
+
         Long oldPlayer1Id = pairing.getPlayer1Id();
         Long oldPlayer2Id = pairing.getPlayer2Id();
 
@@ -396,6 +436,63 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
 
         matchPairingRepository.deleteAll(toDelete);
+
+        // 結果なしのゾンビ（全セッション参加者外）ペアも削除する。これにより、フロントの
+        // 「既存の組み合わせを削除」(deleteByDateAndMatchNumber) で非参加者ペアも消せるようになる（Issue #900）。
+        deleteOrphanPairings(sessionDate, matchNumber);
+    }
+
+    /**
+     * 当該日付の全セッション（全団体）参加者IDの和集合を返す。
+     * ゾンビ（当日のどのセッションの参加者でもないペア）の判定に使う。
+     */
+    private Set<Long> getAllSessionParticipantIdsOnDate(LocalDate sessionDate) {
+        List<com.karuta.matchtracker.entity.PracticeSession> sessions =
+                practiceSessionRepository.findByDateRange(sessionDate, sessionDate);
+        Set<Long> ids = new HashSet<>();
+        for (com.karuta.matchtracker.entity.PracticeSession session : sessions) {
+            practiceParticipantRepository.findBySessionId(session.getId())
+                    .forEach(pp -> ids.add(pp.getPlayerId()));
+        }
+        return ids;
+    }
+
+    /**
+     * 当該(sessionDate, matchNumber)の「全セッション参加者外」かつ結果なしのペアリング(ゾンビ)を削除する。
+     *
+     * 非参加者ペアは組織スコープのフィルタ(filterPairingsBySession)から漏れ、createBatch /
+     * deleteByDateAndMatchNumber の通常削除対象にならず残り続ける（Issue #900）。両選手とも当日の
+     * どのセッションにも参加していないペアは誰にも属さない死にデータのため安全に削除できる。
+     * 結果(matches)が存在するペアは念のため除外する。参加者を判定できない日（参加者0）は
+     * 巻き込み削除を避けるためスキップする。
+     */
+    private void deleteOrphanPairings(LocalDate sessionDate, Integer matchNumber) {
+        Set<Long> allDayParticipantIds = getAllSessionParticipantIdsOnDate(sessionDate);
+        if (allDayParticipantIds.isEmpty()) {
+            return;
+        }
+        List<Match> matchesForNumber = matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber);
+        List<MatchPairing> orphans = matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber).stream()
+                .filter(p -> !allDayParticipantIds.contains(p.getPlayer1Id())
+                        && !allDayParticipantIds.contains(p.getPlayer2Id()))
+                .filter(p -> !hasResultForPair(p, matchesForNumber))
+                .collect(Collectors.toList());
+        if (!orphans.isEmpty()) {
+            log.info("全セッション参加者外の組み合わせ(ゾンビ)を削除: date={}, matchNumber={}, 件数={}",
+                    sessionDate, matchNumber, orphans.size());
+            matchPairingRepository.deleteAll(orphans);
+        }
+    }
+
+    /**
+     * ペアリングに対応する試合結果（順不同ペア一致）が matches に存在するか。
+     */
+    private boolean hasResultForPair(MatchPairing pairing, List<Match> matches) {
+        Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
+        return matches.stream().anyMatch(m ->
+                (Math.min(m.getPlayer1Id(), m.getPlayer2Id()) == p1) &&
+                (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2));
     }
 
     /**

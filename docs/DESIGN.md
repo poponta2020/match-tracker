@@ -349,6 +349,14 @@ Entity Layer (JPA Entity)
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
+**ユニークインデックス**: `uq_match_pairings_date_number_players (session_date, match_number, LEAST(player1_id, player2_id), GREATEST(player1_id, player2_id))`（順不同ペアの関数ユニークインデックス。同日・同試合番号・同ペアの重複登録を防止。`match_pairings` は `matches` と異なり `player1_id < player2_id` を正規化しないため LEAST/GREATEST で順不同に正規化する。Hibernate では関数インデックスを管理できないため Render PostgreSQL へ手動適用。Issue #900）
+
+**重複・ゾンビ組み合わせ対策**（`MatchPairingService`、Issue #900）:
+- `create`: 同一（日・試合番号・順不同ペア）が既存なら重複作成せず既存を返す（冪等）。
+- `createBatch`: リクエスト内の同一ペア（順不同）を初出のみ採用して重複排除し、ロック済みペアと同一の新規も除外する。フロントの組み合わせ state に同一ペアが多重蓄積したペイロードでも1行に正規化される。
+- `createBatch` / `deleteByDateAndMatchNumber`: 「当日のどのセッション参加者でもない」かつ結果なしのペア（ゾンビ）も削除する。非参加者ペアは組織スコープのフィルタ（`filterPairingsBySession`）から漏れて従来は削除されず、再生成のたびに重複が累積し、フロントの一括削除でも消せなかった。
+- `updatePlayer`: 差し替え後のペアが同日・同試合番号で既存と重複する場合は検証エラー（ユニークインデックス由来の500を回避）。
+
 ---
 
 #### bye_activities（抜け番活動記録）
