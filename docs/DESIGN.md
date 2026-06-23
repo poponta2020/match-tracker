@@ -2300,11 +2300,11 @@ Entity Layer (JPA Entity)
 
 **画面ロード時の処理順**（`useEffect` 内）:
 1. `cleanupOldCardRules()` で「クライアント端末ローカルタイムの今日」と一致しない日付の保存値をまとめて削除（過去日にアクセスしても保存しない）
-2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得
+2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得。あわせて `byeActivityAPI.getByDate(date)` で抜け番活動を取得し、`activityType = READING`（読み）のものを「試合番号→読手名」マップ（`readersByMatch`）に集約（取得失敗時は読手なしで継続）
 3. `loadCardRules(date)` で復元を試行
 4. 復元成功時: `reconcileCardRules(stored, totalMatches)` で試合数差分を吸収（`changed: true` のときのみ `saveCardRules` で上書き）
 5. 復元失敗時: `generateCardRules(totalMatches)` で新規生成し `saveCardRules` で保存
-6. テキストは最新の対戦データ＋札ルールから `generateText` で再生成（対戦変更は自動反映）
+6. テキストは最新の対戦データ＋札ルール＋`readersByMatch` から `generateText` で再生成（対戦変更は自動反映）。各試合の `{N}試合目` 行直後に読手がいれば `【読手：○○】`（複数は「、」区切り）を出力
 
 **試合数不一致のフォールバック**（`reconcileCardRules`）:
 - 一致: そのまま
