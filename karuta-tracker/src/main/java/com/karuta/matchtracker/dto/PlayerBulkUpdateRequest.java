@@ -26,7 +26,7 @@ public class PlayerBulkUpdateRequest {
 
     @NotEmpty(message = "更新対象の選手が指定されていません")
     @Valid
-    private List<Item> updates;
+    private List<@NotNull(message = "更新対象に不正な(null)要素が含まれています") Item> updates;
 
     /**
      * 1選手分の更新内容。

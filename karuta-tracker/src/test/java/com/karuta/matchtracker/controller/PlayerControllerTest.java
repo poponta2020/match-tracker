@@ -463,6 +463,19 @@ class PlayerControllerTest {
     }
 
     @Test
+    @DisplayName("PUT /api/players/bulk - updates に null 要素があればバリデーションエラー(400)")
+    void testBulkUpdatePlayersNullElement() throws Exception {
+        // updates 配列に null 要素 → List<@NotNull Item> 違反で 400（NPEによる500ではない）
+        mockMvc.perform(put("/api/players/bulk")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"updates\":[null]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(playerService, never()).bulkUpdate(any(PlayerBulkUpdateRequest.class));
+    }
+
+    @Test
     @DisplayName("PUT /api/players/bulk - PLAYER ロールは権限エラー(403)")
     void testBulkUpdatePlayersForbidden() throws Exception {
         // Given
