@@ -171,13 +171,16 @@ const PlayerList = () => {
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">選手管理</h1>
-          <button
-            onClick={() => navigate('/players/new')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-white text-[#4a6b5a] rounded-lg hover:bg-white/90 transition-colors text-sm font-medium"
-          >
-            <UserPlus className="w-4 h-4" />
-            新規登録
-          </button>
+          {/* 個別の新規登録は SUPER_ADMIN 専用ルート（/players/new）のため、SUPER_ADMIN のみ表示 */}
+          {isSuperAdmin() && (
+            <button
+              onClick={() => navigate('/players/new')}
+              className="flex items-center gap-1.5 px-4 py-2 bg-white text-[#4a6b5a] rounded-lg hover:bg-white/90 transition-colors text-sm font-medium"
+            >
+              <UserPlus className="w-4 h-4" />
+              新規登録
+            </button>
+          )}
         </div>
       </div>
 

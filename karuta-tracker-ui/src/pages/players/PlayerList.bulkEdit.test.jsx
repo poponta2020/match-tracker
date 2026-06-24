@@ -111,4 +111,21 @@ describe('PlayerList - 選択UI・団体フィルタ・一括編集導線', () =
     const passed = mocks.navigate.mock.calls[0][1].state.players;
     expect(passed).toHaveLength(2);
   });
+
+  it('「新規登録」ボタンは SUPER_ADMIN のみ表示される', async () => {
+    // ADMIN: 非表示（/players/new は SUPER_ADMIN 専用のため）
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.getCurrentPlayer.mockReturnValue({ id: 99, role: 'ADMIN', adminOrganizationId: 10 });
+    const { unmount } = render(<PlayerList />);
+    await screen.findByText('北大太郎');
+    expect(screen.queryByRole('button', { name: /新規登録/ })).toBeNull();
+    unmount();
+
+    // SUPER_ADMIN: 表示
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.getCurrentPlayer.mockReturnValue({ id: 1, role: 'SUPER_ADMIN', adminOrganizationId: null });
+    render(<PlayerList />);
+    await screen.findByText('新一');
+    expect(screen.getByRole('button', { name: /新規登録/ })).toBeTruthy();
+  });
 });

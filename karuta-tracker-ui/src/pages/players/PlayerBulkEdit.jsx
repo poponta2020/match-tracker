@@ -276,6 +276,9 @@ const PlayerBulkEdit = () => {
         </div>
 
         {/* 選手ごとの編集 */}
+        <p className="text-xs text-gray-500 px-1">
+          ※ 値の設定・所属の追加のみ反映されます。級・段位・所属かるた会を空に戻す操作は保存されません（単体編集と同一）。
+        </p>
         <div className="space-y-3">
           {rows.map((row) => (
             <div key={row.id} className="bg-white shadow-sm rounded-lg p-4">
@@ -305,7 +308,8 @@ const PlayerBulkEdit = () => {
                     onChange={(e) => handleRowKyuChange(row.id, e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    <option value="">初心者</option>
+                    {/* 空（初心者）は現状表示用。一度設定したら空には戻せない（クリア非対応） */}
+                    <option value="" disabled>初心者</option>
                     {KYU_RANKS.map((k) => <option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
@@ -322,7 +326,7 @@ const PlayerBulkEdit = () => {
                     disabled={row.kyuRank !== 'A級'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    <option value="">未設定</option>
+                    <option value="" disabled>未設定</option>
                     {DAN_RANKS.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>

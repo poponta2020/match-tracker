@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
@@ -127,5 +127,12 @@ describe('PlayerBulkEdit', () => {
     expect(u.danRank).toBeNull();
     expect(u.karutaClub).toBeNull();
     expect(u.gender).toBe('男性');
+  });
+
+  it('級の空（初心者）オプションは無効化され、設定済みの値を空へ戻せない', () => {
+    renderWith({ players: makePlayers() });
+    const kyuSelect = screen.getByLabelText('新一の級');
+    const emptyOption = within(kyuSelect).getByRole('option', { name: '初心者' });
+    expect(emptyOption).toBeDisabled();
   });
 });
