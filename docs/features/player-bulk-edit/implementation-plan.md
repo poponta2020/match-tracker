@@ -26,7 +26,7 @@ status: completed
 - **対応Issue:** #885
 
 ### タスク3: フロント APIクライアント
-- [ ] 完了
+- [x] 完了
 - **概要:** 一括更新APIを呼ぶクライアントメソッドを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/players.js` — `bulkUpdate: (updates) => apiClient.put('/players/bulk', { updates })` を追加
