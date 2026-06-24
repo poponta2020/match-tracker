@@ -40,7 +40,7 @@ status: completed
 - **対応Issue:** #924
 
 ### タスク4: 一括入力 BulkResultInput をカルーセル化
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合ごとの入力部（勝者選択・枚数差セレクト・抜け番活動）を `renderPanel(matchNumber)` に切り出し、`MatchCarousel` でラップ。`onChange` で `setCurrentMatchNumber`。タブ自動スクロール追加。入力結果は全試合分保持されるためスワイプで消えないこと、下部固定の保存バーはカルーセル外で維持することを担保。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/BulkResultInput.jsx` — カルーセル化、タブ自動スクロール
