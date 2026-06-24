@@ -25,6 +25,7 @@ import PairingSummary from './pages/pairings/PairingSummary';
 import PlayerList from './pages/players/PlayerList';
 import PlayerDetail from './pages/players/PlayerDetail';
 import PlayerEdit from './pages/players/PlayerEdit';
+import PlayerBulkEdit from './pages/players/PlayerBulkEdit';
 import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import VenueList from './pages/venues/VenueList';
@@ -116,7 +117,8 @@ function App() {
             <Route path="/pairings/summary" element={<ProtectedPage><PairingSummary /></ProtectedPage>} />
 
             {/* 選手 */}
-            <Route path="/players" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerList /></RoleProtectedPage>} />
+            <Route path="/players" element={<RoleProtectedPage requiredRole="ADMIN"><PlayerList /></RoleProtectedPage>} />
+            <Route path="/players/bulk-edit" element={<RoleProtectedPage requiredRole="ADMIN"><PlayerBulkEdit /></RoleProtectedPage>} />
             <Route path="/players/new" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerEdit /></RoleProtectedPage>} />
             <Route path="/players/:id" element={<ProtectedPage><PlayerDetail /></ProtectedPage>} />
             <Route path="/players/:id/edit" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><PlayerEdit /></RoleProtectedPage>} />

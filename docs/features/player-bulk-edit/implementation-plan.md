@@ -46,7 +46,7 @@ status: completed
 - **対応Issue:** #887
 
 ### タスク5: 一括編集画面（PlayerBulkEdit）の新規作成・ルーティング
-- [ ] 完了
+- [x] 完了
 - **概要:** 選択選手を行で並べた編集テーブルと一括設定エリアを持つ新規ページを作成し、保存で一括更新APIを呼ぶ。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerBulkEdit.jsx` — 新規
