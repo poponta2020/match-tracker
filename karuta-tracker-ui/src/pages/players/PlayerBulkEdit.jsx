@@ -22,6 +22,12 @@ const PlayerBulkEdit = () => {
       kyuRank: p.kyuRank || '',
       danRank: p.danRank || '',
       karutaClub: p.karutaClub || '',
+      // 変更検出用の初期値スナップショット。未変更の項目は保存時に null（据え置き）で送り、
+      // 他管理者が同時に更新した項目を、一覧の古い値で巻き戻さないようにする。
+      originalGender: p.gender || '',
+      originalKyuRank: p.kyuRank || '',
+      originalDanRank: p.danRank || '',
+      originalKarutaClub: p.karutaClub || '',
       organizationIds: p.organizationIds || [],
       addOrgIds: [],
     }))
@@ -111,12 +117,14 @@ const PlayerBulkEdit = () => {
   };
 
   // ===== 保存 =====
+  // 変更した項目だけを送る（未変更は null＝据え置き）。要件「触れた項目だけが実際に変わる」に従い、
+  // 同時更新された他項目を一覧スナップショットの値で上書きしない。
   const buildUpdates = () => rows.map((r) => ({
     playerId: r.id,
-    gender: r.gender || null,
-    kyuRank: r.kyuRank || null,
-    danRank: r.danRank || null,
-    karutaClub: r.karutaClub || null,
+    gender: r.gender !== r.originalGender ? (r.gender || null) : null,
+    kyuRank: r.kyuRank !== r.originalKyuRank ? (r.kyuRank || null) : null,
+    danRank: r.danRank !== r.originalDanRank ? (r.danRank || null) : null,
+    karutaClub: r.karutaClub !== r.originalKarutaClub ? (r.karutaClub || null) : null,
     addOrganizationIds: r.addOrgIds,
   }));
 

@@ -150,6 +150,10 @@ const PlayerList = () => {
   const filteredIds = filteredPlayers.map(p => p.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
 
+  // 一括編集の対象は「現在表示中（フィルタ・検索後）かつ選択済み」の選手に限る。
+  // フィルタ/検索で非表示になった選択選手を誤って一括編集しないようにする。
+  const visibleSelectedPlayers = filteredPlayers.filter(p => selectedIds.has(p.id));
+
   const toggleSelectAll = () => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -163,9 +167,8 @@ const PlayerList = () => {
   };
 
   const goToBulkEdit = () => {
-    const selectedPlayers = players.filter(p => selectedIds.has(p.id));
-    if (selectedPlayers.length === 0) return;
-    navigate('/players/bulk-edit', { state: { players: selectedPlayers } });
+    if (visibleSelectedPlayers.length === 0) return;
+    navigate('/players/bulk-edit', { state: { players: visibleSelectedPlayers } });
   };
 
   if (loading) {
@@ -289,17 +292,17 @@ const PlayerList = () => {
               ? <><CheckSquare className="w-3.5 h-3.5" />全解除</>
               : <><Square className="w-3.5 h-3.5" />全選択</>}
           </button>
-          {selectedIds.size > 0 && (
-            <span className="text-xs text-[#4a6b5a] font-medium">{selectedIds.size}人選択中</span>
+          {visibleSelectedPlayers.length > 0 && (
+            <span className="text-xs text-[#4a6b5a] font-medium">{visibleSelectedPlayers.length}人選択中</span>
           )}
           <div className="flex-1" />
           <button
             onClick={goToBulkEdit}
-            disabled={selectedIds.size === 0}
+            disabled={visibleSelectedPlayers.length === 0}
             className="flex items-center gap-1.5 px-4 py-1.5 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors text-xs font-medium disabled:opacity-50"
           >
             <Pencil className="w-3.5 h-3.5" />
-            一括編集{selectedIds.size > 0 ? `（${selectedIds.size}人）` : ''}
+            一括編集{visibleSelectedPlayers.length > 0 ? `（${visibleSelectedPlayers.length}人）` : ''}
           </button>
         </div>
 

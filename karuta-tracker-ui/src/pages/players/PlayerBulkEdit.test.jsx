@@ -90,7 +90,12 @@ describe('PlayerBulkEdit', () => {
 
     await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
     const updates = mocks.bulkUpdate.mock.calls[0][0];
-    updates.forEach((u) => expect(u.addOrganizationIds).toContain(10));
+    updates.forEach((u) => {
+      expect(u.addOrganizationIds).toContain(10);
+      // 所属追加だけのつもりなら、未変更の属性は送らない（他項目を上書きしない）
+      expect(u.gender).toBeNull();
+      expect(u.kyuRank).toBeNull();
+    });
   });
 
   it('行ごとの性別変更が該当選手のみ保存ペイロードに反映される', async () => {
@@ -101,8 +106,8 @@ describe('PlayerBulkEdit', () => {
 
     await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
     const updates = mocks.bulkUpdate.mock.calls[0][0];
-    expect(updates.find((u) => u.playerId === 1).gender).toBe('女性');
-    expect(updates.find((u) => u.playerId === 2).gender).toBe('男性');
+    expect(updates.find((u) => u.playerId === 1).gender).toBe('女性'); // 変更した行のみ送信
+    expect(updates.find((u) => u.playerId === 2).gender).toBeNull();   // 未変更の行は null（据え置き）
   });
 
   it('保存ボタンで確認ダイアログを表示し、適用するで bulkUpdate を呼ぶ', async () => {
@@ -116,8 +121,8 @@ describe('PlayerBulkEdit', () => {
     await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
   });
 
-  it('未変更（空）の項目は null で送信され、バックエンドで据え置かれる（単体編集と同一挙動）', async () => {
-    // 級・段位・かるた会が空の新入生をそのまま保存 → null（据え置き）。性別は必須で常に値が入る
+  it('未変更の項目は（設定済みでも）null で送信され、据え置かれる（同時更新を巻き戻さない）', async () => {
+    // 何も触らずに保存 → 全項目 null（性別が設定済みでも送らない＝他者の更新を上書きしない）
     renderWith({ players: makePlayers() });
     await save();
 
@@ -126,7 +131,7 @@ describe('PlayerBulkEdit', () => {
     expect(u.kyuRank).toBeNull();
     expect(u.danRank).toBeNull();
     expect(u.karutaClub).toBeNull();
-    expect(u.gender).toBe('男性');
+    expect(u.gender).toBeNull(); // 設定済み(男性)でも未変更なら送らない
   });
 
   it('級の空（初心者）オプションは無効化され、設定済みの値を空へ戻せない', () => {

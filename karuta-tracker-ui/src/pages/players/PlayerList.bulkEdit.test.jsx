@@ -114,6 +114,26 @@ describe('PlayerList - 選択UI・団体フィルタ・一括編集導線', () =
     expect(passed).toHaveLength(2);
   });
 
+  it('フィルタで非表示になった選択選手は一括編集の対象から除外される', async () => {
+    render(<PlayerList />);
+    await screen.findByText('新一');
+
+    // すべて表示中に2人選択
+    await userEvent.click(screen.getByRole('button', { name: '新一を選択' }));
+    await userEvent.click(screen.getByRole('button', { name: '北大太郎を選択' }));
+
+    // 無所属でフィルタ → 北大太郎は非表示になる
+    await userEvent.selectOptions(screen.getByLabelText('団体で絞り込み'), 'NONE');
+    expect(screen.queryByText('北大太郎')).toBeNull();
+
+    // 一括編集には表示中の選択者（新一）のみ渡る
+    await userEvent.click(screen.getByRole('button', { name: /一括編集/ }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+    const passed = mocks.navigate.mock.calls[0][1].state.players;
+    expect(passed).toHaveLength(1);
+    expect(passed[0].id).toBe(1);
+  });
+
   it('「新規登録」ボタンは SUPER_ADMIN のみ表示される', async () => {
     // ADMIN: 非表示（/players/new は SUPER_ADMIN 専用のため）
     mocks.isSuperAdmin.mockReturnValue(false);
