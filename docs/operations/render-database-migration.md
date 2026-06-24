@@ -64,7 +64,7 @@ PGPASSWORD=旧DBのパスワード /usr/lib/postgresql/18/bin/pg_dump \
 
 **例:**
 ```bash
-PGPASSWORD=tQMNFG3XxpSo4CpFWipGwhInXMo2uv5N /usr/lib/postgresql/18/bin/pg_dump \
+PGPASSWORD=<旧DBのパスワード> /usr/lib/postgresql/18/bin/pg_dump \
   -h dpg-d6c3rgn5r7bs73an03pg-a.oregon-postgres.render.com \
   -U karuta \
   -d karuta_tracker \
@@ -133,7 +133,7 @@ PGPASSWORD=新DBのパスワード psql \
 
 **例:**
 ```bash
-PGPASSWORD=b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal psql \
+PGPASSWORD=<新DBのパスワード> psql \
   -h dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com \
   -U karuta \
   -d karuta_tracker_b297 \
@@ -181,7 +181,7 @@ export DB_PASSWORD="新DBのパスワード"
 ```bash
 export DB_URL="jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com/karuta_tracker_b297"
 export DB_USERNAME="karuta"
-export DB_PASSWORD="b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal"
+export DB_PASSWORD="<新DBのパスワード>"
 ```
 
 **重要:** JDBC URLには `?sslmode=require` などのクエリパラメータは**不要**です。
@@ -203,7 +203,7 @@ DB_PASSWORD = 新DBのパスワード
 ```
 DB_URL = jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a:5432/karuta_tracker_b297
 DB_USERNAME = karuta
-DB_PASSWORD = b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal
+DB_PASSWORD = <新DBのパスワード>
 ```
 
 **重要:**
