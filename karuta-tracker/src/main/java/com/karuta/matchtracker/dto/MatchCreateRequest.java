@@ -36,10 +36,16 @@ public class MatchCreateRequest {
     @NotNull(message = "勝者のIDは必須です")
     private Long winnerId;
 
-    @NotNull(message = "点差は必須です")
+    // 指導試合（isLesson=true）では枚数差を持たないため null 許容。
+    // 通常試合の枚数差未入力チェックはフロントエンドで実施する（既存仕様どおり）。
     @Min(value = -25, message = "点差は-25以上で入力してください")
     @Max(value = 25, message = "点差は25以下で入力してください")
     private Integer scoreDifference;
+
+    /**
+     * 指導試合フラグ（true=指導試合。winnerId=指導した側。scoreDifference は null 保存）
+     */
+    private Boolean isLesson;
 
     @NotNull(message = "登録者のIDは必須です")
     private Long createdBy;
@@ -60,13 +66,16 @@ public class MatchCreateRequest {
         Long smallerId = Math.min(player1Id, player2Id);
         Long largerId = Math.max(player1Id, player2Id);
 
+        boolean lesson = Boolean.TRUE.equals(isLesson);
         return Match.builder()
                 .matchDate(matchDate)
                 .matchNumber(matchNumber)
                 .player1Id(smallerId)
                 .player2Id(largerId)
                 .winnerId(winnerId)
-                .scoreDifference(scoreDifference)
+                // 指導試合では枚数差を保持しない（null）
+                .scoreDifference(lesson ? null : scoreDifference)
+                .isLesson(lesson)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
                 .build();

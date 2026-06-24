@@ -67,10 +67,19 @@ public class Match {
     private Long winnerId;
 
     /**
-     * 枚数差（0～25）
+     * 枚数差（0～25）。指導試合（isLesson=true）では記録しないため null。
      */
-    @Column(name = "score_difference", nullable = false)
+    @Column(name = "score_difference")
     private Integer scoreDifference;
+
+    /**
+     * 指導試合フラグ（true=上級者が初心者に教える指導試合。
+     * 勝者=指導した側、敗者=指導された側。score_difference は null）。
+     * 勝敗（winner_id）は通常どおり保持し、通常統計にも計上される。
+     */
+    @Builder.Default
+    @Column(name = "is_lesson", nullable = false)
+    private Boolean isLesson = false;
 
     /**
      * 選手1の対戦時の級位
