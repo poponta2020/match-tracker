@@ -7,6 +7,7 @@ import PlayerSearchCombobox from './PlayerSearchCombobox';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
+import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 
 afterEach(cleanup);
 
@@ -867,6 +868,81 @@ describe('手動ロック（pairing-manual-lock）', () => {
     it('対象組自体が片側空欄ならロック不可', () => {
       const pairings = [{ player1Id: 1, player2Id: null, hasResult: false, locked: false }];
       expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+  });
+});
+
+describe('LINE送信用テキスト生成導線（lineTextTarget）', () => {
+  describe('computeLineTextAvailability', () => {
+    it('全試合の組み合わせが揃っていれば allComplete=true', () => {
+      const map = { 1: true, 2: true, 3: true };
+      const { allComplete } = computeLineTextAvailability(3, map, 1);
+      expect(allComplete).toBe(true);
+    });
+
+    it('1試合でも欠けていれば allComplete=false', () => {
+      const map = { 1: true, 2: false, 3: true };
+      const { allComplete } = computeLineTextAvailability(3, map, 1);
+      expect(allComplete).toBe(false);
+    });
+
+    it('singleComplete は選択中の試合の完成状態を反映する', () => {
+      const map = { 1: true, 2: false, 3: true };
+      expect(computeLineTextAvailability(3, map, 1).singleComplete).toBe(true);
+      expect(computeLineTextAvailability(3, map, 2).singleComplete).toBe(false);
+      expect(computeLineTextAvailability(3, map, 3).singleComplete).toBe(true);
+    });
+
+    it('totalMatches=0 / undefined では allComplete=false', () => {
+      expect(computeLineTextAvailability(0, {}, 1).allComplete).toBe(false);
+      expect(computeLineTextAvailability(undefined, {}, 1).allComplete).toBe(false);
+    });
+
+    it('matchExistsMap が空でも例外を投げない', () => {
+      const { allComplete, singleComplete } = computeLineTextAvailability(3, {}, 1);
+      expect(allComplete).toBe(false);
+      expect(singleComplete).toBe(false);
+    });
+  });
+
+  describe('resolveLineTextTarget', () => {
+    it('希望が all で all 有効 → all', () => {
+      expect(resolveLineTextTarget('all', true, true)).toBe('all');
+    });
+
+    it('希望が single で single 有効 → single', () => {
+      expect(resolveLineTextTarget('single', true, true)).toBe('single');
+    });
+
+    it('希望 all が無効・single 有効 → single へフォールバック', () => {
+      expect(resolveLineTextTarget('all', false, true)).toBe('single');
+    });
+
+    it('希望 single が無効・all 有効 → all へフォールバック', () => {
+      expect(resolveLineTextTarget('single', true, false)).toBe('all');
+    });
+
+    it('両方無効 → null（セクション非表示）', () => {
+      expect(resolveLineTextTarget('all', false, false)).toBeNull();
+      expect(resolveLineTextTarget('single', false, false)).toBeNull();
+    });
+
+    it('all 有効のみ → all', () => {
+      expect(resolveLineTextTarget('all', true, false)).toBe('all');
+    });
+
+    it('single 有効のみ → single', () => {
+      expect(resolveLineTextTarget('single', false, true)).toBe('single');
+    });
+  });
+
+  describe('buildSummaryUrl', () => {
+    it('全試合は matchNumber を付けない', () => {
+      expect(buildSummaryUrl('2026-06-09', 2, 'all')).toBe('/pairings/summary?date=2026-06-09');
+    });
+
+    it('単一試合は matchNumber を付ける', () => {
+      expect(buildSummaryUrl('2026-06-09', 2, 'single')).toBe('/pairings/summary?date=2026-06-09&matchNumber=2');
     });
   });
 });

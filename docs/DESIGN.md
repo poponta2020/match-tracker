@@ -2315,47 +2315,57 @@ Entity Layer (JPA Entity)
 - 1日前: -100点、2日前: -50点、7日前: -14点
 - 貪欲法で最適ペアリング
 
-##### 札ルール一覧（PairingSummary） — 札ルールの日付別永続化
+##### 札ルール一覧（PairingSummary） — 札ルールの日付シード決定論化 ＆ LINE単一試合テキスト
 
-**パス**: `/pairings/summary?date=YYYY-MM-DD`
+**パス**: `/pairings/summary?date=YYYY-MM-DD[&matchNumber=N]`
 
-**目的**: 同一日内であれば対戦組み合わせを何度作り直しても「札ルール一覧」画面に表示される札ルール（一の位／十の位／抜き）が変わらないようにする（LINE 再配信時の整合性確保）。
+**目的**:
+- 同じ日の札ルール（一の位／十の位／抜き）を、いつ・どの端末で開いても同じにする（保存に頼らず決定論的に再現し、LINE 再配信や別端末でも整合）。
+- 全試合だけでなく、選択中の1試合分の組み合わせだけを、全試合と同一フォーマット・同一札ルールでテキスト化できるようにする。
 
-**localStorage キー設計**:
-- キー名: `karuta-tracker:card-rules:<YYYY-MM-DD>`（例: `karuta-tracker:card-rules:2026-06-09`）
-- `karuta-tracker:` プレフィックスは既存 localStorage（認証関連）との衝突回避
-- 値: `JSON.stringify(cardRules)` — `generateCardRules()` の戻り値配列をそのままシリアライズ
+**決定論生成（`cardRules.js`）**:
+- 札ルールは `(date, 再生成カウンタ nonce)` の純関数として生成する:
+  - `hashSeed(date, nonce)`: 文字列 `date#nonce` を 32bit 符号なし整数へ（FNV-1a 32bit）
+  - `mulberry32(seed)`: 32bit シードから決定論PRNG `() => number(0..1)` を生成
+  - `pickRandom(arr, n, rng)`: **seeded Fisher-Yates** で n 個選択（`sort(() => rng()-0.5)` は分布が偏り、決定論乱数では比較関数が非推移的になりエンジン依存になるため不採用）
+  - `generateCardRules(totalMatches, rng)`: 既存の3試合サイクル（1の位→抜き→十の位）と各サイクル間制約を `rng` で駆動。各試合が消費する乱数の本数・順序は試合番号のみで決まり `totalMatches` に依存しないため、**`totalMatches` を増やしても先頭の試合の札ルールは安定**する
+  - 公開ヘルパ `getCardRules(date, totalMatches)` = `generateCardRules(totalMatches, mulberry32(hashSeed(date, loadNonce(date))))`
 
-**画面ロード時の処理順**（`useEffect` 内）:
-1. `cleanupOldCardRules()` で「クライアント端末ローカルタイムの今日」と一致しない日付の保存値をまとめて削除（過去日にアクセスしても保存しない）
+**nonce（再生成カウンタ）の localStorage 管理**:
+- キー名: `karuta-tracker:card-nonce:<YYYY-MM-DD>`（`karuta-tracker:` プレフィックスで認証系キーと衝突回避）
+- 値: 整数文字列（既定 0）。`loadNonce`/`saveNonce` で入出力（不正値・利用不可環境では 0 にフォールバック）
+- `nonce=0`（既定）はシードが日付のみに依存 → **保存が無くても全端末・過去日・再訪で完全一致**。札ルール配列そのものは保存しない
+
+**画面ロード時の処理順**（`useEffect`、依存は `[date, matchNumberParam]`）:
+1. `cleanupOldCardRules()`: 旧形式の札ルール配列キー（`karuta-tracker:card-rules:<date>`）は全削除、`nonce` キーは「今日」以外を削除
 2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得。あわせて `byeActivityAPI.getByDate(date)` で抜け番活動を取得し、`activityType = READING`（読み）のものを「試合番号→読手名」マップ（`readersByMatch`）に集約（取得失敗時は読手なしで継続）
-3. `loadCardRules(date)` で復元を試行
-4. 復元成功時: `reconcileCardRules(stored, totalMatches)` で試合数差分を吸収（`changed: true` のときのみ `saveCardRules` で上書き）
-5. 復元失敗時: `generateCardRules(totalMatches)` で新規生成し `saveCardRules` で保存
-6. テキストは最新の対戦データ＋札ルール＋`readersByMatch` から `generateText` で再生成（対戦変更は自動反映）。各試合の `{N}試合目` 行直後に読手がいれば `【読手：○○】`（複数は「、」区切り）を出力
+3. URL `matchNumber` を検証し、`1..totalMatches` の有効値なら単一試合モードの対象試合番号（`targetMatchNumber`）、数値でない／範囲外なら `null`（全試合モード）
+4. `getCardRules(date, totalMatches)` で決定論的に札ルールを生成
+5. `generateText(date, matchData, cardRules, readersByMatch, targetMatchNumber)` でテキスト生成（対戦変更は自動反映）
 
-**試合数不一致のフォールバック**（`reconcileCardRules`）:
-- 一致: そのまま
-- 保存が短い（試合数が増えた）: `generateCardRules(totalMatches, stored)` で末尾追加 → 上書き
-- 保存が長い（試合数が減った）: 先頭 `totalMatches` 件のみ表示用に返却し、localStorage 側は保持（試合数が戻れば再利用可能）
-
-**`generateCardRules(totalMatches, prefix = [])` の続行ロジック**:
-- `prefix` 空: 現状どおり1試合目から3試合サイクル（1の位→抜き→十の位）でランダム生成
-- `prefix` 非空: 末尾ルールの `digits` から `prevUsedDigits` / `prevUnusedDigits` を復元し、`prefix.length` から続きを生成して `prefix.concat(extra)` を返す
+**`generateText` の単一試合モード**:
+- `targetMatchNumber` 指定時は、日付見出し（`M月D日`）＋対象 `N試合目` のブロック（札ルール `cardRules[N-1]`・読手・ペア）のみを出力する。出力ブロックは全試合テキストの該当ブロックと完全一致（札ルールが決定論化により一致するため）
+- 試合番号の対応: `matchNumber` は1始まり、`cardRules`/`matchData` は0始まり配列。`matchNumber=N → index N-1` を厳守し、表示番号も `N`
+- 対象試合のペアが空でもエラーにせず、日付見出し＋`N試合目　札ルール` を表示（URL直接アクセス防御）
 
 **「札を再生成」ボタン**:
-- 押下時 `window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')` を表示
-- OK のみ `generateCardRules` で再生成 → `saveCardRules` で上書き
-- キャンセル時は何も変化しない（誤タップで初回配信した札ルールを失うリスクを防ぐ）
+- **当日（今日）かつ全試合モード（`targetMatchNumber == null`）のときのみ表示**（`canRegenerate = targetMatchNumber == null && date === getTodayLocalDateStr()`）。単一試合モード・過去日・他日では非表示
+  - 過去日・他日を非表示にする理由: 決定論の既定札ルール（全端末一致）を表示して共有時の一貫性を保ち、cleanup の「今日以外の nonce 削除」方針との不整合（過去日で再生成しても次回ロードで既定に戻る）を解消する
+- 押下時 `window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')` を表示し、OK のみ `const nextNonce = loadNonce(date)+1; saveNonce(date, nextNonce)` の後 `getCardRules(date, totalMatches, nextNonce)` で再計算。`saveNonce` は localStorage 例外を握り潰すため、`nextNonce` を明示で渡して保存成否に依存せず画面を再生成する。キャンセル時は何も変化しない
+- 結果として、再生成していない既定状態は全端末で不変、再生成した端末（＝当日に再生成した端末）のみ枝分かれする（サーバ保存しない仕様上の許容事項）
 
-**例外処理**:
-- localStorage パース失敗・配列でない場合: `loadCardRules` が `null` 返却 → 新規生成にフォールバック
-- localStorage 利用不可（SecurityError／QuotaExceededError 等）: `saveCardRules` で try-catch 握り、保存スキップ（毎回ランダム生成にフォールバック）
+**対戦組み合わせ画面（PairingGenerator）の生成導線**:
+- 試合番号タブ直下に「全試合 / {N}試合目」セグメントトグル＋生成ボタンを表示（純粋ロジックは `lineTextTarget.js` に extract: `computeLineTextAvailability` / `resolveLineTextTarget` / `buildSummaryUrl`）
+- 有効条件: 全試合=全試合の組み合わせが揃っている（`allComplete`）、単一試合=選択中の試合が完成（`matchExistsMap[matchNumber]`）。両方無効ならセクション非表示
+- 希望ターゲット（`lineTextTarget` state）が無効になったら有効な方へ自動フォールバック（全試合優先）。タブ切替でラベルの数字と単一試合の対象が追従
+- 生成ボタンは対象に応じた URL（全試合 `/pairings/summary?date=...` / 単一試合 `…&matchNumber=N`）で本画面へ遷移
 
 **設計判断**:
-- DB ではなく localStorage に保存: 運用は「同一管理者・同一端末・PWA ホーム画面追加」、別端末同期は不要のため、テーブル設計・本番マイグレーション・API 追加のコストに見合わない
-- 削除タイミングは画面ロード時のみ: 専用スケジューラやサービスワーカーは導入しない（シンプルさ優先）
-- 保存対象は札ルールのみ（テキスト全体は保存しない）: テキストは画面ロード時に最新の対戦データから再生成することで対戦変更が自動反映される
+- 日付シード決定論（保存不要）を採用: 保存ゼロで全端末・過去日・再訪が一致し実装も最小。サーバ保存（DB変更・本番マイグレーション・API追加）のコストと Issue #518 型の事故リスクを避けつつ「ずれない」を満たす
+- 再生成を nonce で残す: 日付決定論のままでは同日で別ルールを出せないため、再生成カウンタで両立
+- seeded Fisher-Yates を採用: 均一かつエンジン非依存の決定性を担保
+- Part A（決定論化）を Part B（単一試合テキスト）より先に実装: 単一試合と全試合で札ルールが食い違わない一貫性を保存に頼らず根本保証
+- 旧形式の札ルール配列キーは読まず掃除のみ: デプロイ当日に旧形式で当日分が保存済みでも、新方式は日付シードから再計算するため当日の表示札ルールが一度だけ変わり得る（運用上の軽微な一回性）
 
 **詳細仕様・要件**: `docs/features/pairing-card-rule-persistence/requirements.md`
 
