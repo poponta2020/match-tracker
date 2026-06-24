@@ -40,6 +40,7 @@ public class MatchVideoDto {
     private Long matchId;
     private Long winnerId;
     private Integer scoreDifference;
+    private Boolean isLesson;       // 指導試合フラグ（match が存在する場合のみ設定。指導試合は「指導」表示）
 
     /**
      * エンティティからDTOへ変換
@@ -72,6 +73,7 @@ public class MatchVideoDto {
             dto.setMatchId(match.getId());
             dto.setWinnerId(match.getWinnerId());
             dto.setScoreDifference(match.getScoreDifference());
+            dto.setIsLesson(match.getIsLesson());
         }
         return dto;
     }

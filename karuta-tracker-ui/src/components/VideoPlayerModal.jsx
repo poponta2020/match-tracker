@@ -29,6 +29,8 @@ const formatMatchDate = (dateStr) => {
 // 結果テキスト（結果入力済みの場合のみ）: 「○○の勝ち（N枚差）」
 const buildResultText = (video) => {
   if (video?.winnerId == null) return null;
+  // 指導試合は勝敗ではなく「指導」と表示する
+  if (video.isLesson === true) return '指導';
   const winnerName =
     video.winnerId === video.player1Id
       ? video.player1Name

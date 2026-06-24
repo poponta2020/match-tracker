@@ -194,4 +194,19 @@ describe('VideoLibrary - 検索条件変更時の取得競合', () => {
     expect(await screen.findByText(/二人目/)).toBeTruthy();
     expect(screen.getByText(/一人目/)).toBeTruthy();
   });
+
+  it('指導試合の動画は結果欄を「指導」と表示する（勝敗・枚数差を出さない）', async () => {
+    const lessonVideo = {
+      ...video(5, '師範', '初心者'),
+      winnerId: 51, // player1Id = 5*10+1（指導した側）
+      isLesson: true,
+    };
+    mocks.videoSearch.mockResolvedValueOnce(pageResponse([lessonVideo]));
+
+    render(<VideoLibrary />);
+
+    // 「指導」と表示され、勝敗（〇）表記は出ない
+    expect(await screen.findByText('指導')).toBeTruthy();
+    expect(screen.queryByText(/〇/)).toBeNull();
+  });
 });
