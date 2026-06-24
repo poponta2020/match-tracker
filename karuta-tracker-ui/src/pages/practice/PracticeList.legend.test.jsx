@@ -159,6 +159,30 @@ describe('PracticeList 凡例（記号の見方）', () => {
     });
   });
 
+  it('localStorage が例外を投げる環境でも凡例を自動表示する（最悪毎回開くフォールバック）', async () => {
+    // プライベートモード等で localStorage アクセスが例外を投げる状況を再現
+    const throwBlocked = () => {
+      throw new Error('localStorage blocked');
+    };
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(throwBlocked);
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(throwBlocked);
+
+    try {
+      render(<PracticeList />);
+      await waitForLoaded();
+
+      // 既読判定ができなくても、初回ユーザーに見せるため凡例を自動表示する
+      expect(isLegendOpen()).toBe(true);
+    } finally {
+      getItemSpy.mockRestore();
+      setItemSpy.mockRestore();
+    }
+  });
+
   it('既読済み（localStorage 設定済み）のときはパネルが自動で開かない', async () => {
     localStorage.setItem(LEGEND_SEEN_KEY, '1');
     render(<PracticeList />);

@@ -65,7 +65,9 @@ const PracticeList = () => {
     try {
       return !localStorage.getItem('practiceCalendarLegendSeen');
     } catch {
-      return false;
+      // localStorage が使えない環境（プライベートモード等）では既読管理ができないため、
+      // 要件どおり「最悪毎回開く」フォールバック（true）にして初回ユーザーに必ず凡例を見せる
+      return true;
     }
   });
 
