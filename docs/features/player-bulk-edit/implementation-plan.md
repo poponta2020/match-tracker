@@ -17,7 +17,7 @@ status: completed
 - **対応Issue:** #884
 
 ### タスク2: バックエンドのテスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 一括更新サービス/エンドポイントの単体・結合テストを追加（Jacoco 最低カバレッジ60%維持）。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/PlayerServiceTest.java`（または新規テストクラス）— bulkUpdate の正常系（複数選手の属性更新＋org追加マージ）、org重複追加が二重登録されないこと、級↔段位連動、空 updates 等の境界

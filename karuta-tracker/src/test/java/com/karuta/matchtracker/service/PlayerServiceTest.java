@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.dto.PlayerBulkUpdateRequest;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -428,5 +429,209 @@ class PlayerServiceTest {
                 .hasMessageContaining("選手名またはパスワードが正しくありません");
 
         verify(playerRepository).findByNameAndActive("山田太郎");
+    }
+
+    // ===== bulkUpdate（一括更新） =====
+
+    @Test
+    @DisplayName("複数選手の players 列（性別・級・段位・かるた会）を一括更新できる")
+    void testBulkUpdateAppliesPlayerColumns() {
+        // Given
+        Player p1 = Player.builder().id(1L).name("一郎").gender(Player.Gender.男性)
+                .kyuRank(Player.KyuRank.E級).danRank(Player.DanRank.無段).build();
+        Player p2 = Player.builder().id(2L).name("二郎").gender(Player.Gender.女性)
+                .kyuRank(Player.KyuRank.E級).danRank(Player.DanRank.無段).build();
+
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L, 2L))).thenReturn(List.of());
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p1));
+        when(playerRepository.findById(2L)).thenReturn(Optional.of(p2));
+        when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(
+                        PlayerBulkUpdateRequest.Item.builder()
+                                .playerId(1L).gender(Player.Gender.その他)
+                                .kyuRank(Player.KyuRank.A級).danRank(Player.DanRank.四段)
+                                .karutaClub("北海道大学かるた会").build(),
+                        PlayerBulkUpdateRequest.Item.builder()
+                                .playerId(2L).gender(Player.Gender.女性)
+                                .kyuRank(Player.KyuRank.D級).danRank(Player.DanRank.初段)
+                                .karutaClub("わすらもち会").build()
+                ))
+                .build();
+
+        // When
+        List<PlayerDto> result = playerService.bulkUpdate(request);
+
+        // Then
+        assertThat(result).hasSize(2);
+        assertThat(p1.getGender()).isEqualTo(Player.Gender.その他);
+        assertThat(p1.getKyuRank()).isEqualTo(Player.KyuRank.A級);
+        assertThat(p1.getDanRank()).isEqualTo(Player.DanRank.四段);
+        assertThat(p1.getKarutaClub()).isEqualTo("北海道大学かるた会");
+        assertThat(p2.getKyuRank()).isEqualTo(Player.KyuRank.D級);
+        assertThat(p2.getDanRank()).isEqualTo(Player.DanRank.初段);
+        verify(playerRepository, times(2)).save(any(Player.class));
+        verify(playerOrganizationRepository, never()).save(any(PlayerOrganization.class));
+    }
+
+    @Test
+    @DisplayName("級↔段位は単体更新と同じくフロント算出値をそのまま保存する")
+    void testBulkUpdateStoresKyuDanPairAsGiven() {
+        // Given: フロントが算出した「A級→四段」のペアをそのまま受け取り保存する
+        Player p1 = Player.builder().id(1L).name("一郎").gender(Player.Gender.男性)
+                .kyuRank(Player.KyuRank.E級).danRank(Player.DanRank.無段).build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L))).thenReturn(List.of());
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p1));
+        when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).kyuRank(Player.KyuRank.A級).danRank(Player.DanRank.六段)
+                        .build()))
+                .build();
+
+        // When
+        playerService.bulkUpdate(request);
+
+        // Then
+        assertThat(p1.getKyuRank()).isEqualTo(Player.KyuRank.A級);
+        assertThat(p1.getDanRank()).isEqualTo(Player.DanRank.六段);
+    }
+
+    @Test
+    @DisplayName("所属団体の追加は既存に無いものだけ保存される（追加のみ・マージ）")
+    void testBulkUpdateAddsOnlyMissingOrganizations() {
+        // Given: 選手1は既に org 10 に所属
+        Player p1 = Player.builder().id(1L).name("一郎").gender(Player.Gender.男性).build();
+        PlayerOrganization existing = PlayerOrganization.builder()
+                .id(100L).playerId(1L).organizationId(10L).build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L))).thenReturn(List.of(existing));
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p1));
+        when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).addOrganizationIds(List.of(10L, 20L)) // 10は既存、20が新規
+                        .build()))
+                .build();
+
+        // When
+        List<PlayerDto> result = playerService.bulkUpdate(request);
+
+        // Then: org 20 のみ保存
+        ArgumentCaptor<PlayerOrganization> captor = ArgumentCaptor.forClass(PlayerOrganization.class);
+        verify(playerOrganizationRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getPlayerId()).isEqualTo(1L);
+        assertThat(captor.getValue().getOrganizationId()).isEqualTo(20L);
+        // 返却DTOの organizationIds は既存+追加
+        assertThat(result.get(0).getOrganizationIds()).containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    @Test
+    @DisplayName("既に所属している団体を追加しても二重登録されない（冪等）")
+    void testBulkUpdateOrganizationAddIsIdempotent() {
+        // Given
+        Player p1 = Player.builder().id(1L).name("一郎").gender(Player.Gender.男性).build();
+        PlayerOrganization existing = PlayerOrganization.builder()
+                .id(100L).playerId(1L).organizationId(10L).build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L))).thenReturn(List.of(existing));
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p1));
+        when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).addOrganizationIds(List.of(10L)).build()))
+                .build();
+
+        // When
+        playerService.bulkUpdate(request);
+
+        // Then: 既存と同じ org なので保存は呼ばれない
+        verify(playerOrganizationRepository, never()).save(any(PlayerOrganization.class));
+    }
+
+    @Test
+    @DisplayName("null 項目は更新対象外（指定された項目のみ反映）")
+    void testBulkUpdateOnlyNonNullFieldsApplied() {
+        // Given
+        Player p1 = Player.builder().id(1L).name("一郎")
+                .gender(Player.Gender.男性).kyuRank(Player.KyuRank.C級)
+                .danRank(Player.DanRank.弐段).karutaClub("既存会").build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L))).thenReturn(List.of());
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(p1));
+        when(playerRepository.save(any(Player.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 級・段位のみ変更、性別・かるた会は null（据え置き）
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).kyuRank(Player.KyuRank.B級).danRank(Player.DanRank.参段)
+                        .build()))
+                .build();
+
+        // When
+        playerService.bulkUpdate(request);
+
+        // Then
+        assertThat(p1.getKyuRank()).isEqualTo(Player.KyuRank.B級);
+        assertThat(p1.getDanRank()).isEqualTo(Player.DanRank.参段);
+        assertThat(p1.getGender()).isEqualTo(Player.Gender.男性);   // 据え置き
+        assertThat(p1.getKarutaClub()).isEqualTo("既存会");          // 据え置き
+    }
+
+    @Test
+    @DisplayName("空の updates では何も更新せず空リストを返す")
+    void testBulkUpdateEmptyUpdates() {
+        // Given
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of()).build();
+
+        // When
+        List<PlayerDto> result = playerService.bulkUpdate(request);
+
+        // Then
+        assertThat(result).isEmpty();
+        verifyNoInteractions(playerRepository);
+        verifyNoInteractions(playerOrganizationRepository);
+    }
+
+    @Test
+    @DisplayName("存在しない選手IDが含まれる場合 ResourceNotFoundException で全体ロールバック")
+    void testBulkUpdateNonexistentPlayerThrows() {
+        // Given
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(999L))).thenReturn(List.of());
+        when(playerRepository.findById(999L)).thenReturn(Optional.empty());
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(999L).gender(Player.Gender.男性).build()))
+                .build();
+
+        // When & Then
+        assertThatThrownBy(() -> playerService.bulkUpdate(request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Player");
+        verify(playerRepository, never()).save(any(Player.class));
+    }
+
+    @Test
+    @DisplayName("削除済みの選手が含まれる場合 IllegalStateException で全体ロールバック")
+    void testBulkUpdateDeletedPlayerThrows() {
+        // Given
+        Player deleted = Player.builder().id(1L).name("一郎").gender(Player.Gender.男性)
+                .deletedAt(LocalDateTime.now()).build();
+        when(playerOrganizationRepository.findByPlayerIdIn(List.of(1L))).thenReturn(List.of());
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(deleted));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).gender(Player.Gender.女性).build()))
+                .build();
+
+        // When & Then
+        assertThatThrownBy(() -> playerService.bulkUpdate(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("deleted player");
+        verify(playerRepository, never()).save(any(Player.class));
     }
 }
