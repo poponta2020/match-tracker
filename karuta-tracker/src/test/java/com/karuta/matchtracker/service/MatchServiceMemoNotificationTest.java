@@ -97,7 +97,7 @@ class MatchServiceMemoNotificationTest {
                     .thenReturn(Optional.of(MatchPersonalNote.builder()
                             .matchId(1L).playerId(1L).notes(null).build()));
 
-            matchService.updateMatch(1L, 1L, 5, 1L, "新しいメモ", null, 1L, Player.Role.PLAYER);
+            matchService.updateMatch(1L, 1L, 5, 1L, "新しいメモ", null, false, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
             verify(lineNotificationService, timeout(2000)).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("新しいメモ"));
@@ -111,7 +111,7 @@ class MatchServiceMemoNotificationTest {
                     .thenReturn(Optional.of(MatchPersonalNote.builder()
                             .matchId(1L).playerId(1L).notes("古いメモ").build()));
 
-            matchService.updateMatch(1L, 1L, 5, 1L, "更新されたメモ", null, 1L, Player.Role.PLAYER);
+            matchService.updateMatch(1L, 1L, 5, 1L, "更新されたメモ", null, false, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
             verify(lineNotificationService, timeout(2000)).sendMemoUpdateFlexNotification(eq(1L), any(Match.class), eq("更新されたメモ"));
@@ -128,7 +128,7 @@ class MatchServiceMemoNotificationTest {
             when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
 
             assertThrows(ForbiddenException.class, () ->
-                matchService.updateMatch(1L, 1L, 5, 999L, "悪意のあるメモ", null, 999L, Player.Role.PLAYER)
+                matchService.updateMatch(1L, 1L, 5, 999L, "悪意のあるメモ", null, false, 999L, Player.Role.PLAYER)
             );
 
             verify(matchRepository, never()).save(any());
@@ -143,7 +143,7 @@ class MatchServiceMemoNotificationTest {
 
             // updatedBy=1L(参加者)だが、currentUserId=999L(別ユーザー) → なりすまし防止
             assertThrows(IllegalArgumentException.class, () ->
-                matchService.updateMatch(1L, 1L, 5, 1L, "なりすましメモ", null, 999L, Player.Role.PLAYER)
+                matchService.updateMatch(1L, 1L, 5, 1L, "なりすましメモ", null, false, 999L, Player.Role.PLAYER)
             );
 
             verify(matchRepository, never()).save(any());
@@ -159,7 +159,7 @@ class MatchServiceMemoNotificationTest {
                     .thenReturn(Optional.of(MatchPersonalNote.builder()
                             .matchId(1L).playerId(1L).notes("同じメモ").build()));
 
-            matchService.updateMatch(1L, 1L, 5, 1L, "同じメモ", null, 1L, Player.Role.PLAYER);
+            matchService.updateMatch(1L, 1L, 5, 1L, "同じメモ", null, false, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
             verify(lineNotificationService, never()).sendMemoUpdateFlexNotification(anyLong(), any(), anyString());
@@ -170,7 +170,7 @@ class MatchServiceMemoNotificationTest {
         void doesNotNotifyWhenMemoIsNull() {
             setupCommonMocksForUpdate();
 
-            matchService.updateMatch(1L, 1L, 5, 1L, null, null, 1L, Player.Role.PLAYER);
+            matchService.updateMatch(1L, 1L, 5, 1L, null, null, false, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
             verify(lineNotificationService, never()).sendMemoUpdateFlexNotification(anyLong(), any(), anyString());
@@ -184,7 +184,7 @@ class MatchServiceMemoNotificationTest {
                     .thenReturn(Optional.of(MatchPersonalNote.builder()
                             .matchId(1L).playerId(1L).notes(null).build()));
 
-            matchService.updateMatch(1L, 1L, 5, 1L, "   ", null, 1L, Player.Role.PLAYER);
+            matchService.updateMatch(1L, 1L, 5, 1L, "   ", null, false, 1L, Player.Role.PLAYER);
             flushAfterCommitCallbacks();
 
             verify(lineNotificationService, never()).sendMemoUpdateFlexNotification(anyLong(), any(), anyString());

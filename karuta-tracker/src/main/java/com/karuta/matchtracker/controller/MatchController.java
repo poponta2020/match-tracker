@@ -298,15 +298,16 @@ public class MatchController {
     public ResponseEntity<MatchDto> updateMatchDetailed(
             @PathVariable Long id,
             @RequestParam Long winnerId,
-            @RequestParam Integer scoreDifference,
+            @RequestParam(required = false) Integer scoreDifference,
             @RequestParam Long updatedBy,
             @RequestParam(required = false) String personalNotes,
             @RequestParam(required = false) Integer otetsukiCount,
+            @RequestParam(required = false) Boolean isLesson,
             HttpServletRequest httpRequest) {
         log.info("PUT /api/matches/{}/detailed - Updating match (detailed)", id);
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
-        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount, currentUserId, currentUserRole);
+        MatchDto updatedMatch = matchService.updateMatch(id, winnerId, scoreDifference, updatedBy, personalNotes, otetsukiCount, isLesson, currentUserId, currentUserRole);
         return ResponseEntity.ok(updatedMatch);
     }
 

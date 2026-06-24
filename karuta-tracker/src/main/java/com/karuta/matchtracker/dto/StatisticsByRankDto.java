@@ -24,4 +24,16 @@ public class StatisticsByRankDto {
      * 級別統計マップ（キー: 級名、値: 統計）
      */
     private Map<String, RankStatisticsDto> byRank;
+
+    /**
+     * 指導回数（指導試合で勝ち＝指導した側だった試合数）。
+     * 総計と同じ期間・性別・利き手フィルタ適用後の値。級別には含めない。
+     */
+    private Long lessonGivenCount;
+
+    /**
+     * 被指導回数（指導試合で負け＝指導された側だった試合数）。
+     * 総計と同じ期間・性別・利き手フィルタ適用後の値。級別には含めない。
+     */
+    private Long lessonReceivedCount;
 }

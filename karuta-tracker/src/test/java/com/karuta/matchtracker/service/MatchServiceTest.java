@@ -312,6 +312,40 @@ class MatchServiceTest {
     }
 
     @Test
+    @DisplayName("指導試合として新規登録できる（isLesson=true・枚数差はnull保存）")
+    void testCreateLessonMatch() {
+        // Given
+        MatchCreateRequest request = MatchCreateRequest.builder()
+                .matchDate(today)
+                .matchNumber(1)
+                .player1Id(1L)
+                .player2Id(2L)
+                .winnerId(1L)          // 勝ち=指導した側
+                .scoreDifference(10)   // 指導試合では無視され null 保存される
+                .isLesson(true)
+                .createdBy(1L)
+                .build();
+
+        when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+        when(playerRepository.existsById(1L)).thenReturn(true);
+        when(playerRepository.existsById(2L)).thenReturn(true);
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+        // When
+        MatchDto result = matchService.createMatch(request, 1L, Player.Role.PLAYER);
+
+        // Then
+        ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+        verify(matchRepository).save(captor.capture());
+        Match saved = captor.getValue();
+        assertThat(saved.getIsLesson()).isTrue();
+        assertThat(saved.getScoreDifference()).isNull();
+        assertThat(saved.getWinnerId()).isEqualTo(1L);
+        assertThat(result.getIsLesson()).isTrue();
+    }
+
+    @Test
     @DisplayName("試合結果を更新できる")
     void testUpdateMatch() {
         // Given
@@ -320,7 +354,7 @@ class MatchServiceTest {
         when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
 
         // When
-        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null, 1L, Player.Role.PLAYER);
+        MatchDto result = matchService.updateMatch(1L, 2L, 3, 1L, null, null, false, 1L, Player.Role.PLAYER);
 
         // Then
         assertThat(result).isNotNull();
@@ -330,6 +364,27 @@ class MatchServiceTest {
         assertThat(saved.getWinnerId()).isEqualTo(2L);
         assertThat(saved.getScoreDifference()).isEqualTo(3);
         assertThat(saved.getUpdatedBy()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("指導試合として更新できる（isLesson=true・枚数差はnull保存）")
+    void testUpdateMatchAsLesson() {
+        // Given
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+        // When: winnerId=1L(指導した側)・scoreDifference=8は無視されnull保存・isLesson=true
+        MatchDto result = matchService.updateMatch(1L, 1L, 8, 1L, null, null, true, 1L, Player.Role.PLAYER);
+
+        // Then
+        ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+        verify(matchRepository).save(captor.capture());
+        Match saved = captor.getValue();
+        assertThat(saved.getIsLesson()).isTrue();
+        assertThat(saved.getScoreDifference()).isNull();
+        assertThat(saved.getWinnerId()).isEqualTo(1L);
+        assertThat(result.getIsLesson()).isTrue();
     }
 
     @Test
@@ -743,6 +798,46 @@ class MatchServiceTest {
 
             // Then
             assertThat(result.getTotal().getTotal()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("指導回数・被指導回数を集計でき、指導試合も通常統計に計上される")
+        void shouldCountLessonsGivenAndReceived() {
+            // Given
+            Player opponent = Player.builder()
+                    .id(3L)
+                    .name("初心者")
+                    .kyuRank(Player.KyuRank.E級)
+                    .build();
+
+            // 指導試合: player(1L) が勝ち = 指導した側
+            Match lessonGiven = Match.builder()
+                    .id(1L).player1Id(1L).player2Id(3L).matchDate(today)
+                    .winnerId(1L).isLesson(true).build();
+            // 指導試合: player(1L) が負け = 指導された側
+            Match lessonReceived = Match.builder()
+                    .id(2L).player1Id(1L).player2Id(3L).matchDate(today)
+                    .winnerId(3L).isLesson(true).build();
+            // 通常試合（勝ち）
+            Match normalWin = Match.builder()
+                    .id(3L).player1Id(1L).player2Id(3L).matchDate(today)
+                    .winnerId(1L).scoreDifference(5).isLesson(false).build();
+
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(matchRepository.findByPlayerId(1L))
+                    .thenReturn(List.of(lessonGiven, lessonReceived, normalWin));
+            when(playerRepository.findById(3L)).thenReturn(Optional.of(opponent));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1, opponent));
+
+            // When
+            StatisticsByRankDto result = matchService.getPlayerStatisticsByRank(1L, null, null, null, null);
+
+            // Then: 指導試合も通常統計（試合数・勝数）に計上される
+            assertThat(result.getTotal().getTotal()).isEqualTo(3);
+            assertThat(result.getTotal().getWins()).isEqualTo(2);
+            // 指導回数=1・被指導回数=1
+            assertThat(result.getLessonGivenCount()).isEqualTo(1);
+            assertThat(result.getLessonReceivedCount()).isEqualTo(1);
         }
     }
 
