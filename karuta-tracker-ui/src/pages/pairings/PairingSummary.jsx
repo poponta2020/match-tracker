@@ -7,12 +7,10 @@ import { Copy, Check, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
 import {
-  generateCardRules,
-  loadCardRules,
-  saveCardRules,
-  getTodayLocalDateStr,
+  getCardRules,
+  loadNonce,
+  saveNonce,
   cleanupOldCardRules,
-  reconcileCardRules,
 } from './cardRules';
 
 // 札ルール関連の純粋関数は ./cardRules.js に extract（テスト可能化のため）。
@@ -42,20 +40,28 @@ function buildReadersByMatch(activities) {
 /**
  * テキスト生成
  * @param {Object} readersByMatch { [試合番号]: [読手名, ...] }（読みに設定された抜け番選手）
+ * @param {number|null} targetMatchNumber 指定時はその試合（1始まり）のブロックのみ出力する単一試合モード。
+ *   日付見出しは常に付与し、出力ブロックは全試合テキストの該当ブロックと完全一致させる。
  */
-function generateText(date, matchData, cardRules, readersByMatch = {}) {
+function generateText(date, matchData, cardRules, readersByMatch = {}, targetMatchNumber = null) {
   const d = new Date(date + 'T00:00:00');
   const month = d.getMonth() + 1;
   const day = d.getDate();
   let text = `${month}月${day}日\n`;
 
+  let firstBlock = true;
   for (let i = 0; i < matchData.length; i++) {
+    const matchNumber = i + 1;
+    // 単一試合モード: 対象試合以外のブロックはスキップ
+    if (targetMatchNumber != null && matchNumber !== targetMatchNumber) continue;
+
     const match = matchData[i];
     const rule = cardRules[i];
-    if (i > 0) text += '\n';
-    text += `${i + 1}試合目　${rule ? rule.description : ''}\n`;
+    if (!firstBlock) text += '\n';
+    firstBlock = false;
+    text += `${matchNumber}試合目　${rule ? rule.description : ''}\n`;
 
-    const readers = readersByMatch[i + 1];
+    const readers = readersByMatch[matchNumber];
     if (readers && readers.length > 0) {
       text += `【読手：${readers.join('、')}】\n`;
     }
@@ -72,10 +78,13 @@ const PairingSummary = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const date = searchParams.get('date');
+  const matchNumberParam = searchParams.get('matchNumber');
   const [loading, setLoading] = useState(true);
   const [matchData, setMatchData] = useState([]);
   const [cardRules, setCardRules] = useState([]);
   const [readersByMatch, setReadersByMatch] = useState({});
+  // URL の matchNumber が有効（1..totalMatches）なら単一試合モードの対象試合番号。無効/未指定は null（全試合モード）。
+  const [targetMatchNumber, setTargetMatchNumber] = useState(null);
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef(null);
@@ -106,23 +115,20 @@ const PairingSummary = () => {
         setMatchData(data);
         setReadersByMatch(readers);
 
-        // 札ルール: localStorage 復元優先
-        // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
-        const canPersist = date === getTodayLocalDateStr();
-        let rules;
-        const stored = loadCardRules(date);
-        if (stored) {
-          const reconciled = reconcileCardRules(stored, totalMatches);
-          rules = reconciled.rules;
-          if (reconciled.changed && canPersist) saveCardRules(date, rules);
-        } else {
-          rules = generateCardRules(totalMatches);
-          if (canPersist) saveCardRules(date, rules);
-        }
+        // 単一試合モード判定: URL の matchNumber が 1..totalMatches なら対象試合番号、外なら全試合モードへフォールバック
+        const parsedMatchNumber = parseInt(matchNumberParam, 10);
+        const validTarget =
+          Number.isInteger(parsedMatchNumber) && parsedMatchNumber >= 1 && parsedMatchNumber <= totalMatches
+            ? parsedMatchNumber
+            : null;
+        setTargetMatchNumber(validTarget);
+
+        // 札ルール: 日付（＋再生成カウンタ nonce）シードから決定論的に生成（端末・再訪・過去日でブレない）
+        const rules = getCardRules(date, totalMatches);
         setCardRules(rules);
 
-        // テキスト生成
-        const generatedText = generateText(date, data, rules, readers);
+        // テキスト生成（単一試合モードでは対象試合のブロックのみ）
+        const generatedText = generateText(date, data, rules, readers, validTarget);
         setText(generatedText);
       } catch (err) {
         console.error('Failed to fetch pairing data:', err);
@@ -132,7 +138,7 @@ const PairingSummary = () => {
     };
 
     fetchData();
-  }, [date]);
+  }, [date, matchNumberParam]);
 
   const handleCopy = async () => {
     try {
@@ -152,11 +158,11 @@ const PairingSummary = () => {
 
   const handleRegenerate = () => {
     if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
-    const rules = generateCardRules(matchData.length);
-    // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
-    if (date === getTodayLocalDateStr()) saveCardRules(date, rules);
+    // 再生成カウンタ nonce を +1 して保存し、日付＋nonce シードで再計算する（単一試合モードでは非表示）
+    saveNonce(date, loadNonce(date) + 1);
+    const rules = getCardRules(date, matchData.length);
     setCardRules(rules);
-    setText(generateText(date, matchData, rules, readersByMatch));
+    setText(generateText(date, matchData, rules, readersByMatch, targetMatchNumber));
   };
 
   if (loading) {
@@ -176,13 +182,16 @@ const PairingSummary = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-[#374151]">LINE送信用テキスト</h2>
           <div className="flex gap-2">
-            <button
-              onClick={handleRegenerate}
-              className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              札を再生成
-            </button>
+            {/* 単一試合モードでは「札を再生成」を非表示（札ルールはその日全体の概念のため誤操作防止） */}
+            {targetMatchNumber == null && (
+              <button
+                onClick={handleRegenerate}
+                className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                札を再生成
+              </button>
+            )}
             <button
               onClick={handleCopy}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
@@ -205,7 +214,7 @@ const PairingSummary = () => {
         />
 
         <p className="text-xs text-[#6b7280]">
-          テキストは自由に編集できます。「札を再生成」で札ルールのみ再ランダムします。
+          テキストは自由に編集できます。{targetMatchNumber == null && '「札を再生成」で札ルールのみ再生成します。'}
         </p>
       </div>
 

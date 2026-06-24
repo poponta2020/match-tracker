@@ -15,6 +15,7 @@ import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
+import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 
 
@@ -44,6 +45,7 @@ const PairingGenerator = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 未保存の組み合わせがあるか
   const [isViewMode, setIsViewMode] = useState(false); // 既存組み合わせの閲覧モード
   const [waitingActivities, setWaitingActivities] = useState({}); // playerId -> { activityType, freeText }
+  const [lineTextTarget, setLineTextTarget] = useState('all'); // LINE送信用テキストの対象: 'all'(全試合) | 'single'(選択中の試合)
 
   const ACTIVITY_TYPES = [
     { value: 'READING', label: '読み' },
@@ -877,19 +879,58 @@ const PairingGenerator = () => {
           </div>
         </div>
 
-        {/* 全試合の組み合わせが揃った場合にテキスト生成ボタンを表示 */}
+        {/* LINE送信用テキスト生成導線（全試合／単一試合のセグメントトグル＋生成ボタン） */}
         {currentSession && (() => {
-          const total = currentSession.totalMatches || 10;
-          const allComplete = total > 0 && Array.from({ length: total }, (_, i) => i + 1).every(num => matchExistsMap[num]);
-          return allComplete ? (
-            <Link
-              to={`/pairings/summary?date=${sessionDate}`}
-              className="flex items-center justify-center gap-2 w-full bg-[#2d4a3e] text-white px-6 py-3 rounded-lg hover:bg-[#1e3a2e] transition-colors font-medium text-base shadow-md"
-            >
-              <FileText className="w-5 h-5" />
-              LINE送信用テキスト生成
-            </Link>
-          ) : null;
+          const { allComplete, singleComplete } = computeLineTextAvailability(
+            currentSession.totalMatches, matchExistsMap, matchNumber
+          );
+          // 希望ターゲットを有効性で解決（無効なら有効な方へフォールバック、両方無効なら非表示）
+          const target = resolveLineTextTarget(lineTextTarget, allComplete, singleComplete);
+          if (!target) return null;
+          const to = buildSummaryUrl(sessionDate, matchNumber, target);
+          return (
+            <div className="space-y-3">
+              {/* セグメントトグル: [ 全試合 | {matchNumber}試合目 ] */}
+              <div className="grid grid-cols-2 rounded-lg border border-[#a5b4aa] overflow-hidden text-sm font-medium">
+                <button
+                  type="button"
+                  onClick={() => setLineTextTarget('all')}
+                  disabled={!allComplete}
+                  className={`py-2 transition-colors ${
+                    target === 'all'
+                      ? 'bg-[#4a6b5a] text-white'
+                      : allComplete
+                        ? 'bg-white text-[#4a6b5a] hover:bg-[#e5ebe7]'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  全試合
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLineTextTarget('single')}
+                  disabled={!singleComplete}
+                  className={`py-2 border-l border-[#a5b4aa] transition-colors ${
+                    target === 'single'
+                      ? 'bg-[#4a6b5a] text-white'
+                      : singleComplete
+                        ? 'bg-white text-[#4a6b5a] hover:bg-[#e5ebe7]'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {matchNumber}試合目
+                </button>
+              </div>
+              {/* 生成ボタン（選択中セグメントに応じて遷移） */}
+              <Link
+                to={to}
+                className="flex items-center justify-center gap-2 w-full bg-[#2d4a3e] text-white px-6 py-3 rounded-lg hover:bg-[#1e3a2e] transition-colors font-medium text-base shadow-md"
+              >
+                <FileText className="w-5 h-5" />
+                LINE送信用テキスト生成
+              </Link>
+            </div>
+          );
         })()}
 
       </div>

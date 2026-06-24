@@ -1,6 +1,10 @@
 /**
- * 札ルール生成・localStorage 永続化のための純粋関数群。
+ * 札ルール生成のための純粋関数群。
  * `PairingSummary.jsx` から extract（テスト可能化のため）。
+ *
+ * 札ルールは「日付（＋再生成カウンタ nonce）をシードにした決定論的生成」で導出する。
+ * 同じ `(date, nonce)` なら必ず同じ札ルール列になり、端末・再訪・過去日でブレない。
+ * 札ルール配列そのものは localStorage に保存せず、再生成カウンタ nonce のみを保存する。
  */
 
 /**
@@ -18,35 +22,70 @@ export const onesDigit = (card) => parseInt(card[1], 10);
 /** 札番号の10の位を取得 */
 export const tensDigit = (card) => parseInt(card[0], 10);
 
-/** 配列からn個ランダムに選ぶ */
-export function pickRandom(arr, n) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, n);
+/**
+ * 文字列 `date#nonce` を 32bit 符号なし整数へハッシュする（FNV-1a 32bit）。
+ * 決定論PRNG `mulberry32` のシードとして用いる。
+ */
+export function hashSeed(date, nonce = 0) {
+  const str = `${date}#${nonce}`;
+  let h = 0x811c9dc5; // FNV-1a 32bit offset basis (2166136261)
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193); // FNV prime (16777619)
+  }
+  return h >>> 0;
+}
+
+/**
+ * 決定論的擬似乱数生成器（mulberry32）。
+ * 32bit シードから `() => number(0..1)` を返す。同一シードなら同一の数列。
+ */
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * 配列から n 個を選ぶ（部分 Fisher-Yates シャッフル）。
+ * `rng` は `() => number(0..1)` の乱数源。省略時は `Math.random`。
+ * `sort(() => rng()-0.5)` は分布が偏り、決定論的乱数では比較関数が非推移的になり
+ * エンジン依存の挙動を生むため、均一かつエンジン非依存な Fisher-Yates を用いる。
+ */
+export function pickRandom(arr, n, rng = Math.random) {
+  const a = [...arr];
+  const count = Math.min(n, a.length);
+  for (let i = 0; i < count; i++) {
+    const j = i + Math.floor(rng() * (a.length - i));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, count);
 }
 
 /**
  * 札ルール生成（3試合サイクル）
  * @param {number} totalMatches 試合数
- * @param {Array} [prefix=[]] 既存の札ルール配列。指定時はその末尾から続きを生成して `prefix.concat(extra)` を返す
+ * @param {() => number} [rng=Math.random] 乱数源。決定論化には seeded PRNG を渡す。
  * @returns {Array<{type: string, digits: number[], removedCard: string|null, description: string}>}
+ *
+ * 各試合が消費する乱数の本数・順序は試合番号のみで決まり `totalMatches` に依存しないため、
+ * 同一シードであれば `totalMatches` を増やしても先頭の試合の札ルールは安定する。
  */
-export function generateCardRules(totalMatches, prefix = []) {
-  const rules = prefix.length > 0 ? [...prefix] : [];
+export function generateCardRules(totalMatches, rng = Math.random) {
+  const rules = [];
   let prevUnusedDigits = null;
   let prevUsedDigits = null;
 
-  if (prefix.length > 0) {
-    const last = prefix[prefix.length - 1];
-    prevUsedDigits = [...last.digits];
-    prevUnusedDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !last.digits.includes(d));
-  }
-
-  for (let i = rules.length; i < totalMatches; i++) {
+  for (let i = 0; i < totalMatches; i++) {
     const cyclePos = i % 3;
 
     if (cyclePos === 0) {
       const allDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-      const chosen = pickRandom(allDigits, 5).sort((a, b) => a - b);
+      const chosen = pickRandom(allDigits, 5, rng).sort((a, b) => a - b);
       const unused = allDigits.filter(d => !chosen.includes(d));
       prevUnusedDigits = unused;
       prevUsedDigits = chosen;
@@ -59,13 +98,13 @@ export function generateCardRules(totalMatches, prefix = []) {
       });
     } else if (cyclePos === 1) {
       const source = prevUnusedDigits || [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-      const chosen = pickRandom(source, 3).sort((a, b) => a - b);
+      const chosen = pickRandom(source, 3, rng).sort((a, b) => a - b);
 
       const matchingCards = ALL_CARDS.filter(card =>
         chosen.includes(onesDigit(card)) || chosen.includes(tensDigit(card))
       );
 
-      const removedCard = matchingCards[Math.floor(Math.random() * matchingCards.length)];
+      const removedCard = matchingCards[Math.floor(rng() * matchingCards.length)];
 
       prevUsedDigits = chosen;
       prevUnusedDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !chosen.includes(d));
@@ -78,7 +117,7 @@ export function generateCardRules(totalMatches, prefix = []) {
       });
     } else {
       const source = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(d => !prevUsedDigits.includes(d));
-      const chosen = pickRandom(source, 5).sort((a, b) => a - b);
+      const chosen = pickRandom(source, 5, rng).sort((a, b) => a - b);
       const unused = source.filter(d => !chosen.includes(d));
       prevUnusedDigits = unused;
       prevUsedDigits = chosen;
@@ -95,52 +134,43 @@ export function generateCardRules(totalMatches, prefix = []) {
   return rules;
 }
 
+/** 旧形式（札ルール配列）の localStorage キー接頭辞。新方式では読まず、掃除対象のみ。 */
 export const STORAGE_PREFIX = 'karuta-tracker:card-rules:';
 
-const VALID_RULE_TYPES = new Set(['ones', 'nuki', 'tens']);
+/** 再生成カウンタ（nonce）の localStorage キー接頭辞。 */
+export const NONCE_PREFIX = 'karuta-tracker:card-nonce:';
 
 /**
- * 保存済み札ルール要素の構造検証
- * `digits` 配列長は 'ones'/'tens' で5、'nuki' で3 を要求する
+ * 日付ごとの再生成カウンタ nonce を localStorage から読む。
+ * 未保存・不正値・localStorage 不可環境では既定の 0 を返す（既定状態は全端末で一致）。
  */
-export function isValidCardRule(rule) {
-  if (!rule || typeof rule !== 'object') return false;
-  if (!VALID_RULE_TYPES.has(rule.type)) return false;
-  if (!Array.isArray(rule.digits)) return false;
-  if (!rule.digits.every(d => Number.isInteger(d) && d >= 0 && d <= 9)) return false;
-  const expectedDigitsLen = rule.type === 'nuki' ? 3 : 5;
-  if (rule.digits.length !== expectedDigitsLen) return false;
-  if (typeof rule.description !== 'string') return false;
-  if (rule.removedCard !== null && typeof rule.removedCard !== 'string') return false;
-  return true;
-}
-
-/**
- * localStorage から日付指定の札ルールを復元。失敗時は null を返す
- * - 配列でない / 各要素が `isValidCardRule` を満たさない場合も null
- *   （破損データや旧バージョンを取り込んで `generateCardRules` 続行時に
- *   `last.digits` 参照で例外を投げるのを防ぐ）
- */
-export function loadCardRules(date) {
+export function loadNonce(date) {
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + date);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    if (!parsed.every(isValidCardRule)) return null;
-    return parsed;
+    const raw = localStorage.getItem(NONCE_PREFIX + date);
+    if (raw == null) return 0;
+    const n = parseInt(raw, 10);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
   } catch {
-    return null;
+    return 0;
   }
 }
 
-/** localStorage に日付指定の札ルールを保存。失敗時は黙ってスキップ */
-export function saveCardRules(date, rules) {
+/** 日付ごとの再生成カウンタ nonce を localStorage に保存。失敗時は黙ってスキップ。 */
+export function saveNonce(date, n) {
   try {
-    localStorage.setItem(STORAGE_PREFIX + date, JSON.stringify(rules));
+    localStorage.setItem(NONCE_PREFIX + date, String(n));
   } catch {
     // localStorage 不可環境はスキップ
   }
+}
+
+/**
+ * 日付（＋保存済み nonce）から決定論的に札ルール列を生成する公開ヘルパ。
+ * 保存に依存せず、同じ日・同じ nonce なら常に同じ札ルールになる。
+ */
+export function getCardRules(date, totalMatches) {
+  const rng = mulberry32(hashSeed(date, loadNonce(date)));
+  return generateCardRules(totalMatches, rng);
 }
 
 /** クライアント端末ローカルタイムの今日（YYYY-MM-DD） */
@@ -152,15 +182,25 @@ export function getTodayLocalDateStr() {
   return `${y}-${m}-${day}`;
 }
 
-/** STORAGE_PREFIX で始まるキーのうち、今日以外の日付のものを localStorage から削除 */
+/**
+ * localStorage の掃除:
+ * - 旧形式の札ルール配列キー（STORAGE_PREFIX）は新方式で一切読まないため全削除する。
+ * - nonce キー（NONCE_PREFIX）は今日以外を削除する（今日分は再生成状態の保持のため残す）。
+ */
 export function cleanupOldCardRules() {
   try {
     const today = getTodayLocalDateStr();
     const toRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith(STORAGE_PREFIX)) {
-        const keyDate = key.substring(STORAGE_PREFIX.length);
+      if (!key) continue;
+      if (key.startsWith(STORAGE_PREFIX)) {
+        // 旧形式の札ルール配列キーは全削除
+        toRemove.push(key);
+        continue;
+      }
+      if (key.startsWith(NONCE_PREFIX)) {
+        const keyDate = key.substring(NONCE_PREFIX.length);
         if (keyDate !== today) toRemove.push(key);
       }
     }
@@ -168,19 +208,4 @@ export function cleanupOldCardRules() {
   } catch {
     // 失敗時はスキップ
   }
-}
-
-/**
- * 保存済み札ルールと試合数を突き合わせ、表示用配列と保存上書きの要否を返す
- * - 一致: そのまま
- * - 保存が長い: 先頭totalMatches分のみ返す（localStorage 側は保持）
- * - 保存が短い: 末尾に不足分を追加生成（localStorage 側は上書き必要）
- */
-export function reconcileCardRules(stored, totalMatches) {
-  if (stored.length === totalMatches) return { rules: stored, changed: false };
-  if (stored.length > totalMatches) {
-    return { rules: stored.slice(0, totalMatches), changed: false };
-  }
-  const extended = generateCardRules(totalMatches, stored);
-  return { rules: extended, changed: true };
 }

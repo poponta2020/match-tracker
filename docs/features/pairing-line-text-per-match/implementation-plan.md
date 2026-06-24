@@ -9,7 +9,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: cardRules.js を日付シード決定論化する（Part A 基盤）
-- [ ] 完了
+- [x] 完了
 - **概要:** 札ルール生成を `Math.random()` 依存から「日付（＋再生成カウンタ nonce）をシードにした決定論的生成」へ変更する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/cardRules.js`
@@ -25,7 +25,7 @@ status: completed
 - **対応Issue:** #893
 
 ### タスク2: cardRules のテストを決定性ベースへ更新する（Part A）
-- [ ] 完了
+- [x] 完了
 - **概要:** 決定論化に合わせ、同一シードで同一出力・シード継続で先頭安定を検証。prefix系テストを置換し、廃止関数のテストを整理。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/cardRules.test.js`
@@ -38,7 +38,7 @@ status: completed
 - **対応Issue:** #894
 
 ### タスク3: PairingSummary を改修する（Part A取得切替 ＋ Part B単一試合モード）
-- [ ] 完了
+- [x] 完了
 - **概要:** 札ルール取得を決定論ヘルパへ切替、再生成を nonce 化。URL `matchNumber` による単一試合モードを追加。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingSummary.jsx`
@@ -51,7 +51,7 @@ status: completed
 - **対応Issue:** #895
 
 ### タスク4: PairingGenerator に生成導線（セグメントトグル＋生成ボタン）を実装する（Part B）
-- [ ] 完了
+- [x] 完了
 - **概要:** 既存の単一「LINE送信用テキスト生成」Link を `[ 全試合 | 〇試合目 ]` セグメントトグル＋生成ボタンへ置換し、単一は `?matchNumber=N` を付けて遷移。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx`
@@ -63,7 +63,7 @@ status: completed
 - **対応Issue:** #896
 
 ### タスク5: フロントエンドの統合テストを追加する
-- [ ] 完了
+- [x] 完了
 - **概要:** 単一試合モード・決定性、トグル・遷移URLを検証。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/pairings/PairingSummary.integration.test.jsx` — `matchNumber` ありで単一試合テキスト（日付見出し＋N試合目＋札ルール＋ペア）、全試合の該当ブロックと一致、無効 matchNumber の全試合フォールバック、単一モードで再生成ボタン非表示
@@ -72,7 +72,7 @@ status: completed
 - **対応Issue:** #897
 
 ### タスク6: ドキュメントを更新する
-- [ ] 完了
+- [x] 完了
 - **概要:** 仕様・画面一覧・設計書へ本機能（Part A/B）を反映。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 札ルール決定論化、LINE単一試合テキスト生成
