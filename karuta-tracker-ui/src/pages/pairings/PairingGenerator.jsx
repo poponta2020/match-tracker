@@ -393,7 +393,7 @@ const PairingGenerator = () => {
       const waitingIds = waitingPlayers.map((p) => p.id);
       await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
 
-      // 抜け番活動も保存（活動が選択されている場合のみ）
+      // 抜け番活動を保存（空でも必ず呼ぶことで古いレコードを削除する）
       const byeItems = waitingPlayers
         .filter(p => waitingActivities[p.id]?.activityType)
         .map(p => ({
@@ -401,11 +401,9 @@ const PairingGenerator = () => {
           activityType: waitingActivities[p.id].activityType,
           freeText: waitingActivities[p.id].activityType === 'OTHER' ? waitingActivities[p.id].freeText : null,
         }));
-      if (byeItems.length > 0) {
-        await byeActivityAPI.createBatch(sessionDate, matchNumber, byeItems).catch(err => {
-          console.warn('抜け番活動の保存に失敗:', err);
-        });
-      }
+      await byeActivityAPI.createBatch(sessionDate, matchNumber, byeItems).catch(err => {
+        console.warn('抜け番活動の保存に失敗:', err);
+      });
 
       // 待機活動をリセット
       setWaitingActivities({});
