@@ -605,7 +605,7 @@ public class DensukeWriteService {
 
     /**
      * リスト画面のヘッダー行から全メンバーの名前→mi マッピングを構築する。
-     * 名前は絵文字を除去した状態で格納する。
+     * 名前は {@link DensukeScraper#normalizeMemberName(String)} で正規化（絵文字・不可視文字・全空白除去）した状態で格納する。
      */
     private Map<String, String> extractAllMemberMappings(Document doc) {
         Map<String, String> result = new LinkedHashMap<>();
