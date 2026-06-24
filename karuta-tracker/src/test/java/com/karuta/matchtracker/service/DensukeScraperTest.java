@@ -83,63 +83,85 @@ class DensukeScraperTest {
     }
 
     @Test
-    @DisplayName("stripLeadingEmoji: 名前の先頭の絵文字が除去される")
-    void testStripLeadingEmoji() {
-        assertThat(DensukeScraper.stripLeadingEmoji("🔰田中")).isEqualTo("田中");
-        assertThat(DensukeScraper.stripLeadingEmoji("🌟鈴木")).isEqualTo("鈴木");
-        assertThat(DensukeScraper.stripLeadingEmoji("🔰🌟佐藤")).isEqualTo("佐藤");
-        assertThat(DensukeScraper.stripLeadingEmoji("田中")).isEqualTo("田中");
-        assertThat(DensukeScraper.stripLeadingEmoji("")).isEqualTo("");
-        assertThat(DensukeScraper.stripLeadingEmoji(null)).isNull();
+    @DisplayName("normalizeMemberName: 名前の途中・連続の空白も全位置で除去される")
+    void testStripInteriorWhitespace() {
+        // 途中の半角スペース (U+0020)
+        assertThat(DensukeScraper.normalizeMemberName("星野 和夏")).isEqualTo("星野和夏");
+        // 途中の全角スペース (U+3000) — 本番で #159「星野　和夏」が #122「星野和夏」の重複として登録された事例
+        assertThat(DensukeScraper.normalizeMemberName("星野　和夏")).isEqualTo("星野和夏");
+        // 途中の NBSP (U+00A0)
+        assertThat(DensukeScraper.normalizeMemberName("星野 和夏")).isEqualTo("星野和夏");
+        // 途中のタブ (U+0009)
+        assertThat(DensukeScraper.normalizeMemberName("星野\t和夏")).isEqualTo("星野和夏");
+        // 連続・複数の混在空白（半角＋全角）
+        assertThat(DensukeScraper.normalizeMemberName("山 田　太 郎")).isEqualTo("山田太郎");
+        assertThat(DensukeScraper.normalizeMemberName("田中 　 鈴木")).isEqualTo("田中鈴木");
+        // 複合: 先頭絵文字 + 途中全角空白
+        assertThat(DensukeScraper.normalizeMemberName("🔰星野　和夏")).isEqualTo("星野和夏");
+        // 複合: 両端空白 + 途中空白
+        assertThat(DensukeScraper.normalizeMemberName("　星野 和夏　")).isEqualTo("星野和夏");
+        // 複合: 先頭BIDI制御 (U+202A, #671系) + 途中全角空白 の同時混入
+        assertThat(DensukeScraper.normalizeMemberName("‪星野　和夏")).isEqualTo("星野和夏");
     }
 
     @Test
-    @DisplayName("stripLeadingEmoji: 不可視Unicode文字（Variation Selector等）が除去される")
+    @DisplayName("normalizeMemberName: 名前の先頭の絵文字が除去される")
+    void testStripLeadingEmoji() {
+        assertThat(DensukeScraper.normalizeMemberName("🔰田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("🌟鈴木")).isEqualTo("鈴木");
+        assertThat(DensukeScraper.normalizeMemberName("🔰🌟佐藤")).isEqualTo("佐藤");
+        assertThat(DensukeScraper.normalizeMemberName("田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("")).isEqualTo("");
+        assertThat(DensukeScraper.normalizeMemberName(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("normalizeMemberName: 不可視Unicode文字（Variation Selector等）が除去される")
     void testStripInvisibleUnicodeChars() {
         // U+FE0E (Variation Selector-15) が先頭に付いたケース（実際に発生した不具合）
-        assertThat(DensukeScraper.stripLeadingEmoji("\uFE0E井桁堅章")).isEqualTo("井桁堅章");
+        assertThat(DensukeScraper.normalizeMemberName("\uFE0E井桁堅章")).isEqualTo("井桁堅章");
         // U+FE0F (Variation Selector-16)
-        assertThat(DensukeScraper.stripLeadingEmoji("\uFE0F田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("\uFE0F田中")).isEqualTo("田中");
         // 名前の中間に紛れ込んだ場合も除去
-        assertThat(DensukeScraper.stripLeadingEmoji("井桁\uFE0E堅章")).isEqualTo("井桁堅章");
+        assertThat(DensukeScraper.normalizeMemberName("井桁\uFE0E堅章")).isEqualTo("井桁堅章");
         // 絵文字 + Variation Selector の組み合わせ
-        assertThat(DensukeScraper.stripLeadingEmoji("🔰\uFE0E田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("🔰\uFE0E田中")).isEqualTo("田中");
     }
 
     @Test
-    @DisplayName("stripLeadingEmoji: 双方向制御文字 (Cf カテゴリ) が除去される (#671)")
+    @DisplayName("normalizeMemberName: 双方向制御文字 (Cf カテゴリ) が除去される (#671)")
     void testStripBidiControlChars() {
         // U+202A LEFT-TO-RIGHT EMBEDDING が先頭に付いた本番事例 (#671: 森保滉大の重複登録)
-        assertThat(DensukeScraper.stripLeadingEmoji("‪森保滉大")).isEqualTo("森保滉大");
+        assertThat(DensukeScraper.normalizeMemberName("‪森保滉大")).isEqualTo("森保滉大");
         // U+202A LRE + ⭐絵文字 の組み合わせ (id=140 のケース)
         // 先頭BIDIで絵文字剥がしループが止まる旧バグの回帰防止
-        assertThat(DensukeScraper.stripLeadingEmoji("‪⭐森保滉大")).isEqualTo("森保滉大");
+        assertThat(DensukeScraper.normalizeMemberName("‪⭐森保滉大")).isEqualTo("森保滉大");
         // U+200E LEFT-TO-RIGHT MARK
-        assertThat(DensukeScraper.stripLeadingEmoji("‎田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("‎田中")).isEqualTo("田中");
         // U+200F RIGHT-TO-LEFT MARK
-        assertThat(DensukeScraper.stripLeadingEmoji("‏田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("‏田中")).isEqualTo("田中");
         // U+202C POP DIRECTIONAL FORMATTING (末尾)
-        assertThat(DensukeScraper.stripLeadingEmoji("田中‬")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("田中‬")).isEqualTo("田中");
         // U+2068 FIRST STRONG ISOLATE + U+2069 POP DIRECTIONAL ISOLATE
-        assertThat(DensukeScraper.stripLeadingEmoji("⁨田中⁩")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("⁨田中⁩")).isEqualTo("田中");
         // U+00AD SOFT HYPHEN (中間に混入)
-        assertThat(DensukeScraper.stripLeadingEmoji("田­中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("田­中")).isEqualTo("田中");
     }
 
     @Test
-    @DisplayName("stripLeadingEmoji: 非ASCII空白 (NBSP/全角空白) も両端トリムされる")
-    void testStripUnicodeWhitespace() {
+    @DisplayName("normalizeMemberName: 両端の非ASCII空白 (NBSP/全角空白) が除去される")
+    void testStripEdgeUnicodeWhitespace() {
         // U+3000 IDEOGRAPHIC SPACE (全角空白)
-        assertThat(DensukeScraper.stripLeadingEmoji("　田中")).isEqualTo("田中");
-        assertThat(DensukeScraper.stripLeadingEmoji("田中　")).isEqualTo("田中");
-        assertThat(DensukeScraper.stripLeadingEmoji("　田中　")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("　田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("田中　")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("　田中　")).isEqualTo("田中");
         // U+00A0 NBSP
-        assertThat(DensukeScraper.stripLeadingEmoji(" 田中")).isEqualTo("田中");
-        assertThat(DensukeScraper.stripLeadingEmoji("田中 ")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName(" 田中")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("田中 ")).isEqualTo("田中");
         // ASCII space は従来通り
-        assertThat(DensukeScraper.stripLeadingEmoji("  田中  ")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("  田中  ")).isEqualTo("田中");
         // 絵文字 + 全角空白 の組み合わせ
-        assertThat(DensukeScraper.stripLeadingEmoji("🔰田中　")).isEqualTo("田中");
+        assertThat(DensukeScraper.normalizeMemberName("🔰田中　")).isEqualTo("田中");
     }
 
     @Test

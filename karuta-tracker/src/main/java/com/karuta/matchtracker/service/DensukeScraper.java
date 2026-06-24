@@ -100,7 +100,7 @@ public class DensukeScraper {
         for (int i = memberStartIdx; i < headerCells.size(); i++) {
             Element cell = headerCells.get(i);
             Element link = cell.selectFirst("a");
-            String name = stripLeadingEmoji(link != null ? link.text() : cell.text());
+            String name = normalizeMemberName(link != null ? link.text() : cell.text());
             memberNames.add(name);
 
             if (link != null) {
@@ -220,24 +220,37 @@ public class DensukeScraper {
     }
 
     /**
-     * 名前の先頭に付いている絵文字（Symbol カテゴリの文字）を除去し、
-     * 不可視のUnicode制御文字（FORMAT カテゴリ全般 + Variation Selector）を全体から除去する。
-     * 末尾の Unicode 空白（NBSP/全角空白を含む）も除去する。
-     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木", "︎井桁" → "井桁", "‪⭐森保滉大" → "森保滉大"
+     * 伝助インポート用にメンバー名を正規化する。次の順で名前を整える:
+     * <ol>
+     *   <li>不可視のUnicode制御文字（FORMAT カテゴリ全般 + Variation Selector）を名前全体から除去</li>
+     *   <li>あらゆる空白文字（半角 U+0020 / 全角 U+3000 / NBSP U+00A0 / タブ等。
+     *       {@code Character.isWhitespace || Character.isSpaceChar}）を名前全体（先頭・途中・末尾）から除去</li>
+     *   <li>先頭に残った絵文字（Symbol カテゴリ）を除去</li>
+     * </ol>
+     * これにより伝助側の表記ゆれ（先頭絵文字・不可視文字混入・名前途中の空白）を吸収し、
+     * 既存選手名との照合精度を高めて重複登録を防ぐ。空白の有無のみで区別される別人は存在しない前提。
+     * 例: "🔰田中" → "田中", "🌟鈴木" → "鈴木", "‪⭐森保滉大" → "森保滉大",
+     *     "星野　和夏" → "星野和夏", "山 田　太 郎" → "山田太郎"
+     *
+     * @param name 正規化対象の名前。{@code null} / 空文字はそのまま返す。
      */
-    static String stripLeadingEmoji(String name) {
+    static String normalizeMemberName(String name) {
         if (name == null || name.isEmpty()) return name;
 
-        // Step 1: 全体から不可視文字を除去
+        // Step 1: 名前全体から不可視文字と空白文字を除去
         // - Cf (FORMAT) カテゴリ全般: BIDIコントロール(LRM/RLM/LRE/RLE/PDF/LRO/RLO/LRI/RLI/FSI/PDI)、
         //   ゼロ幅スペース・接合子(ZWSP/ZWNJ/ZWJ)、BOM、Word Joiner、Soft Hyphen 等を一括除去。
         //   伝助からペーストされた名前に U+202A 等が混入していた既往不具合 (#671) を救済する。
         // - Variation Selectors (U+FE00-U+FE0F, U+E0100-U+E01EF) は Mn カテゴリのため別途明示除去。
+        // - 空白文字: 半角/全角/NBSP/タブ等を先頭・途中・末尾を問わず全位置から除去する。
+        //   伝助で名前途中に全角空白付きで入力された名前 (例 "星野　和夏") を既存 "星野和夏" と一致させ、
+        //   重複登録を防ぐ。String.trim() は U+0020 以下のみのため isWhitespace + isSpaceChar の和集合で判定。
         StringBuilder sb = new StringBuilder(name.length());
         name.codePoints().forEach(cp -> {
             if (Character.getType(cp) == Character.FORMAT) return;
             if (cp >= 0xFE00 && cp <= 0xFE0F) return;
             if (cp >= 0xE0100 && cp <= 0xE01EF) return;
+            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) return;
             sb.appendCodePoint(cp);
         });
         String cleaned = sb.toString();
@@ -256,35 +269,6 @@ public class DensukeScraper {
             }
         }
 
-        // Step 3: 末尾の Unicode 空白（U+00A0 NBSP / U+3000 全角空白 等）を含めて両端トリム。
-        // Java の String.trim() は U+0020 以下のみのため、isWhitespace + isSpaceChar の和集合で剥がす。
-        return stripUnicodeWhitespace(cleaned.substring(i));
-    }
-
-    /**
-     * 両端から Unicode の空白文字を除去する。
-     * String.strip() は Character.isWhitespace のみで NBSP (U+00A0) を残すため、
-     * Character.isSpaceChar(U+00A0/U+3000 等) との和集合で除去する。
-     */
-    private static String stripUnicodeWhitespace(String s) {
-        int start = 0;
-        int end = s.length();
-        while (start < end) {
-            int cp = s.codePointAt(start);
-            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
-                start += Character.charCount(cp);
-            } else {
-                break;
-            }
-        }
-        while (end > start) {
-            int cp = s.codePointBefore(end);
-            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
-                end -= Character.charCount(cp);
-            } else {
-                break;
-            }
-        }
-        return s.substring(start, end);
+        return cleaned.substring(i);
     }
 }

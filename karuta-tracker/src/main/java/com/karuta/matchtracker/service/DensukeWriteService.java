@@ -405,7 +405,7 @@ public class DensukeWriteService {
             List<String> errors,
             boolean lotteryConfirmation) throws IOException {
 
-        String strippedName = DensukeScraper.stripLeadingEmoji(playerName);
+        String strippedName = DensukeScraper.normalizeMemberName(playerName);
 
         // a. densuke_member_id を取得
         String mi = densukeMemberMappingRepository
@@ -617,7 +617,7 @@ public class DensukeWriteService {
         for (Element cell : headerRow.select("td")) {
             Element link = cell.selectFirst("a");
             if (link == null) continue;
-            String name = DensukeScraper.stripLeadingEmoji(link.text().trim());
+            String name = DensukeScraper.normalizeMemberName(link.text().trim());
             if (name.isEmpty()) continue;
 
             String href = link.attr("href");

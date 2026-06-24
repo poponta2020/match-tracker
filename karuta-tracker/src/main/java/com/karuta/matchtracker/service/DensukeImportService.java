@@ -79,7 +79,7 @@ public class DensukeImportService {
         Map<String, Long> playerNameMap = playerService.findAllPlayersRaw().stream()
                 .filter(p -> p.getDeletedAt() == null)
                 .collect(Collectors.toMap(
-                        p -> DensukeScraper.stripLeadingEmoji(p.getName()),
+                        p -> DensukeScraper.normalizeMemberName(p.getName()),
                         Player::getId, (a, b) -> a));
         Map<Long, String> playerIdMap = playerNameMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey, (a, b) -> a));
@@ -888,7 +888,7 @@ public class DensukeImportService {
                                          Long createdBy, Long organizationId) throws IOException {
         int created = 0;
         for (String rawName : names) {
-            String name = DensukeScraper.stripLeadingEmoji(rawName);
+            String name = DensukeScraper.normalizeMemberName(rawName);
             if (playerRepository.findByNameAndActive(name).isPresent()) {
                 continue;
             }

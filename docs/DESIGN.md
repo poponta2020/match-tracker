@@ -3396,6 +3396,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 - **認証**: `GET /densuke-url` は PLAYER 以上の認証が必要（未認証アクセス不可）
 - **権限**: ADMINは自団体の伝助URLのみ操作可能。SUPER_ADMINは全団体操作可能
 - **未登録者通知**: ADMINは自団体の未登録者のみ通知。SUPER_ADMINは全団体分を通知
+- **名前正規化（`DensukeScraper.normalizeMemberName()`）**: 伝助スクレイプ名・DB選手名の双方を単一関数で正規化してから突合し、表記ゆれによる重複登録を防ぐ。名前全体に3段階を適用する: ①不可視文字（`FORMAT`(Cf) カテゴリ全般＋バリエーションセレクター U+FE00–U+FE0F / U+E0100–U+E01EF）の除去（Issue #671）、②あらゆる空白（半角/全角/NBSP/タブ。`Character.isWhitespace || Character.isSpaceChar`）を先頭・途中・末尾すべてから除去（例 `星野　和夏`→`星野和夏`、本番 #159 の重複防止）、③先頭の絵文字（`OTHER_SYMBOL`/`MATH_SYMBOL`/`MODIFIER_SYMBOL`）除去（例 `🔰田中`→`田中`）。照合（`DensukeImportService` の playerNameMap キー生成）・自動登録（`registerAndSync`）・書き戻し（`DensukeWriteService` のメンバー突合・新規メンバー名）が同一関数を共有し全経路へ対称適用される。`null`/空文字は不変。空白の有無のみで区別される別人は存在しない前提
 - **キャッシュ**: `PlayerService.findAllPlayersRaw()` に Caffeine 60秒 TTL を適用（スケジューラーのDB負荷軽減）
 - **伝助ページ自動作成（DensukePageCreateService）**: アプリ側に登録された練習日（`practice_sessions` × `venues` × `venue_match_schedules`）から densuke.biz にページを新規発行
   - エンドポイント: `POST /api/practice-sessions/densuke/create-page`（ADMIN以上）
