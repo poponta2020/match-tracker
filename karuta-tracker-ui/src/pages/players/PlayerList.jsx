@@ -4,9 +4,14 @@ import { playerAPI } from '../../api/players';
 import { inviteAPI } from '../../api/invite';
 import { organizationAPI } from '../../api/organizations';
 import { useAuth } from '../../context/AuthContext';
-import { Search, UserPlus, ChevronRight, Link2, UserCheck, Copy, Check, X } from 'lucide-react';
+import { isSuperAdmin, getCurrentPlayer } from '../../utils/auth';
+import { Search, UserPlus, ChevronRight, Link2, UserCheck, Check, X, CheckSquare, Square, Pencil } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import LoadingScreen from '../../components/LoadingScreen';
+
+// 団体フィルタの特別値
+const ORG_FILTER_ALL = 'ALL';
+const ORG_FILTER_NONE = 'NONE';
 
 const PlayerList = () => {
   const navigate = useNavigate();
@@ -19,28 +24,44 @@ const PlayerList = () => {
   const [inviteMessage, setInviteMessage] = useState(null);
   const [inviteGenerating, setInviteGenerating] = useState(null);
   const [organizations, setOrganizations] = useState([]);
-  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  // 団体フィルタ兼招待先セレクト（すべて / 各団体ID / 無所属 を1つに統合）
+  // 初期値: ADMIN は自管轄団体、SUPER_ADMIN（および adminOrganizationId 未設定）は「すべて」
+  const [orgFilter, setOrgFilter] = useState(() => {
+    const p = getCurrentPlayer();
+    if (p && !isSuperAdmin() && p.adminOrganizationId) {
+      return String(p.adminOrganizationId);
+    }
+    return ORG_FILTER_ALL;
+  });
+  // 一括編集用の選択状態（選手ID）
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   useEffect(() => {
     fetchPlayers();
     organizationAPI.getAll()
-      .then(res => {
-        setOrganizations(res.data);
-        setSelectedOrgId(prev => prev || (res.data[0]?.id ?? null));
-      })
+      .then(res => setOrganizations(res.data))
       .catch(err => console.error('Failed to fetch organizations:', err));
   }, []);
 
   useEffect(() => {
     const sorted = sortPlayersByRank(players);
-    if (searchTerm) {
-      setFilteredPlayers(
-        sorted.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    } else {
-      setFilteredPlayers(sorted);
+    let result = sorted;
+
+    // 団体フィルタ（organizationIds で判定。空配列＝無所属）
+    if (orgFilter === ORG_FILTER_NONE) {
+      result = result.filter(p => !p.organizationIds || p.organizationIds.length === 0);
+    } else if (orgFilter !== ORG_FILTER_ALL) {
+      const orgId = Number(orgFilter);
+      result = result.filter(p => (p.organizationIds || []).includes(orgId));
     }
-  }, [searchTerm, players]);
+
+    // 名前検索（既存）
+    if (searchTerm) {
+      result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+
+    setFilteredPlayers(result);
+  }, [searchTerm, players, orgFilter]);
 
   const fetchPlayers = async () => {
     try {
@@ -79,7 +100,9 @@ const PlayerList = () => {
     return `${Math.floor(diffMonths / 12)}年前`;
   };
 
-  const targetOrgId = selectedOrgId;
+  // 具体的な団体を選択しているときのみ招待リンクを発行できる（「すべて / 無所属」では不可）
+  const isConcreteOrg = orgFilter !== ORG_FILTER_ALL && orgFilter !== ORG_FILTER_NONE;
+  const targetOrgId = isConcreteOrg ? Number(orgFilter) : null;
 
   const generateInviteLink = async (type) => {
     if (!targetOrgId) {
@@ -106,6 +129,36 @@ const PlayerList = () => {
     } finally {
       setInviteGenerating(null);
     }
+  };
+
+  // ===== 選択操作 =====
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const filteredIds = filteredPlayers.map(p => p.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        filteredIds.forEach(id => next.delete(id));
+      } else {
+        filteredIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const goToBulkEdit = () => {
+    const selectedPlayers = players.filter(p => selectedIds.has(p.id));
+    if (selectedPlayers.length === 0) return;
+    navigate('/players/bulk-edit', { state: { players: selectedPlayers } });
   };
 
   if (loading) {
@@ -147,22 +200,30 @@ const PlayerList = () => {
           />
         </div>
 
-        {/* 招待リンク */}
+        {/* 団体フィルタ（招待先と統合した1つのセレクト） */}
+        <div className="mb-3">
+          <label className="block text-[10px] text-[#6b7280] mb-1">団体で絞り込み</label>
+          <select
+            aria-label="団体で絞り込み"
+            value={orgFilter}
+            onChange={(e) => setOrgFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-[#d4ddd7] rounded-lg text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]"
+          >
+            <option value={ORG_FILTER_ALL}>すべての団体</option>
+            {organizations.map(org => (
+              <option key={org.id} value={String(org.id)}>{org.name}</option>
+            ))}
+            <option value={ORG_FILTER_NONE}>無所属</option>
+          </select>
+        </div>
+
+        {/* 招待リンク（具体的な団体選択時のみ発行可能） */}
         <div className="mb-3 bg-white rounded-xl shadow-sm p-3">
           <p className="text-xs text-[#6b7280] mb-2">招待リンクを発行してLINE等で共有</p>
-          {organizations.length > 0 && (
-            <div className="mb-2">
-              <label className="block text-[10px] text-[#6b7280] mb-1">招待先の団体</label>
-              <select
-                value={selectedOrgId || ''}
-                onChange={(e) => setSelectedOrgId(Number(e.target.value))}
-                className="w-full px-2 py-1.5 bg-white border border-[#d4ddd7] rounded text-xs text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#4a6b5a]"
-              >
-                {organizations.map(org => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
-            </div>
+          {!isConcreteOrg && (
+            <p className="text-[11px] text-[#9ca3af] mb-2">
+              招待リンクは具体的な団体を選択すると発行できます
+            </p>
           )}
           <div className="flex gap-2">
             <button
@@ -205,6 +266,31 @@ const PlayerList = () => {
           )}
         </div>
 
+        {/* 一括編集ツールバー */}
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            onClick={toggleSelectAll}
+            disabled={filteredPlayers.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#d4ddd7] text-[#4a6b5a] rounded-lg hover:bg-[#f0f4f1] transition-colors text-xs font-medium disabled:opacity-50"
+          >
+            {allFilteredSelected
+              ? <><CheckSquare className="w-3.5 h-3.5" />全解除</>
+              : <><Square className="w-3.5 h-3.5" />全選択</>}
+          </button>
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-[#4a6b5a] font-medium">{selectedIds.size}人選択中</span>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={goToBulkEdit}
+            disabled={selectedIds.size === 0}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors text-xs font-medium disabled:opacity-50"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            一括編集{selectedIds.size > 0 ? `（${selectedIds.size}人）` : ''}
+          </button>
+        </div>
+
         <div className="text-xs text-[#6b7280] mb-3">
           {filteredPlayers.length}人の選手
         </div>
@@ -213,7 +299,7 @@ const PlayerList = () => {
         {filteredPlayers.length === 0 ? (
           <div className="bg-[#f9f6f2] rounded-xl p-12 text-center">
             <p className="text-[#6b7280]">
-              {searchTerm ? '検索結果が見つかりませんでした' : '選手が登録されていません'}
+              {searchTerm || orgFilter !== ORG_FILTER_ALL ? '該当する選手が見つかりませんでした' : '選手が登録されていません'}
             </p>
           </div>
         ) : (
@@ -221,6 +307,7 @@ const PlayerList = () => {
             {filteredPlayers.map((player) => {
               const role = getRoleBadge(player.role);
               const profileDone = isProfileSet(player);
+              const checked = selectedIds.has(player.id);
 
               return (
                 <div
@@ -228,6 +315,16 @@ const PlayerList = () => {
                   className="flex items-center px-4 py-3 hover:bg-[#f9f9f7] active:bg-[#f0f4f1] transition-colors cursor-pointer"
                   onClick={() => navigate(`/players/${player.id}`)}
                 >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(player.id); }}
+                    className="mr-3 flex-shrink-0"
+                    aria-label={checked ? `${player.name}の選択を解除` : `${player.name}を選択`}
+                  >
+                    {checked
+                      ? <CheckSquare className="w-5 h-5 text-[#4a6b5a]" />
+                      : <Square className="w-5 h-5 text-[#cbd5d1]" />}
+                  </button>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-[#374151] truncate">

@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:** #886
 
 ### タスク4: 選手一覧（PlayerList）の選択UI・団体フィルタ・導線
-- [ ] 完了
+- [x] 完了
 - **概要:** 選手一覧にチェックボックス選択・団体フィルタ（すべて/団体別/無所属）・「一括編集」導線を追加し、既存の招待用団体セレクトを表示フィルタと統合する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerList.jsx`
