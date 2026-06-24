@@ -570,6 +570,18 @@ const MatchList = () => {
               )}
             </div>
           )}
+
+          {/* 指導・被指導の回数（総合統計の下に表示。値>0のときのみ・期間/属性フィルタ連動） */}
+          {((rankStatistics.lessonGivenCount ?? 0) > 0 || (rankStatistics.lessonReceivedCount ?? 0) > 0) && (
+            <div className="flex items-center gap-4 px-1 text-sm text-[#6b7280]">
+              {(rankStatistics.lessonGivenCount ?? 0) > 0 && (
+                <span>指導 {rankStatistics.lessonGivenCount}回</span>
+              )}
+              {(rankStatistics.lessonReceivedCount ?? 0) > 0 && (
+                <span>被指導 {rankStatistics.lessonReceivedCount}回</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -656,9 +668,13 @@ const MatchList = () => {
                           {match.opponentName}
                         </span>
                       )}
-                      <span className={`text-sm font-bold ${getResultColor(match.result)}`}>
-                        {getResultDisplay(match.result, match.scoreDifference)}
-                      </span>
+                      {match.isLesson ? (
+                        <span className="text-sm font-bold text-gray-500">指導</span>
+                      ) : (
+                        <span className={`text-sm font-bold ${getResultColor(match.result)}`}>
+                          {getResultDisplay(match.result, match.scoreDifference)}
+                        </span>
+                      )}
                       <span className="text-xs text-[#9ca3af] min-w-0 truncate">
                         {match.venueName
                           ? `${match.venueName} ${match.matchNumber}試合目`

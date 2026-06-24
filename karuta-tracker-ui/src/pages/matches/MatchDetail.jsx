@@ -265,9 +265,13 @@ const MatchDetail = () => {
               {match.opponentName}
             </span>
           )}
-          <span className={`text-2xl font-bold ml-3 ${getResultTextColor(match.result)}`}>
-            {getResultMark(match.result)} {Math.abs(match.scoreDifference)}
-          </span>
+          {match.isLesson ? (
+            <span className="text-2xl font-bold ml-3 text-gray-700">指導</span>
+          ) : (
+            <span className={`text-2xl font-bold ml-3 ${getResultTextColor(match.result)}`}>
+              {getResultMark(match.result)} {Math.abs(match.scoreDifference)}
+            </span>
+          )}
         </div>
 
         {/* 中段: 詳細情報1行
