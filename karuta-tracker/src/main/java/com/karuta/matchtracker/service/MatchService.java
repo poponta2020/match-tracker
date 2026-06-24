@@ -611,6 +611,10 @@ public class MatchService {
             if (scoreDifference < -25 || scoreDifference > 25) {
                 throw new IllegalArgumentException("枚数差は-25〜25の範囲で入力してください");
             }
+        } else if (match.getPlayer1Id() == null || match.getPlayer1Id() == 0L
+                || match.getPlayer2Id() == null || match.getPlayer2Id() == 0L) {
+            // 指導試合は登録済みプレイヤー同士のみ対象（未登録相手=player2Id 0 の簡易試合は不可）
+            throw new IllegalArgumentException("指導試合は登録済みプレイヤー同士の試合のみ対象です");
         }
         match.setWinnerId(winnerId);
         // 指導試合では枚数差を保持しない（null）

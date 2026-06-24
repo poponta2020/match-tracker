@@ -416,6 +416,25 @@ class MatchServiceTest {
     }
 
     @Test
+    @DisplayName("未登録相手の試合は指導試合に更新できない")
+    void testUpdateMatchRejectsLessonForUnregisteredOpponent() {
+        // Given: 未登録相手の簡易試合（player2Id=0）
+        Match simpleMatch = Match.builder()
+                .id(1L).matchDate(today).matchNumber(1)
+                .player1Id(1L).player2Id(0L).winnerId(1L)
+                .opponentName("未登録選手")
+                .createdBy(1L).updatedBy(1L).build();
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(simpleMatch));
+
+        // When & Then: isLesson=true への更新は登録済み同士でないため拒否
+        assertThatThrownBy(() ->
+                matchService.updateMatch(1L, 1L, null, 1L, null, null, true, 1L, Player.Role.PLAYER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("登録済みプレイヤー");
+        verify(matchRepository, never()).save(any(Match.class));
+    }
+
+    @Test
     @DisplayName("簡易更新は指導試合フラグを解除する（通常試合化）")
     void testUpdateMatchSimpleClearsLessonFlag() {
         // Given: 既存は指導試合
