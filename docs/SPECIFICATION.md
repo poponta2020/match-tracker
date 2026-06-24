@@ -490,7 +490,8 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 | `player1Id` | Long | Yes | 選手1 ID（常に player1Id < player2Id） |
 | `player2Id` | Long | Yes | 選手2 ID |
 | `winnerId` | Long | Yes | 勝者ID |
-| `scoreDifference` | Integer | Yes | 枚数差（0〜25） |
+| `scoreDifference` | Integer | No | 枚数差（0〜25）。指導試合では null |
+| `isLesson` | Boolean | Yes | 指導試合フラグ（true=指導試合。勝者=指導した側、敗者=指導された側。デフォルト false） |
 | `opponentName` | String(100) | No | 未登録の対戦相手名（簡易入力用） |
 | `createdBy` | Long | Yes | 登録者ID |
 | `updatedBy` | Long | Yes | 更新者ID |
@@ -498,6 +499,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **ビジネスルール:**
 - `player1Id < player2Id` はエンティティの `@PrePersist` / `@PreUpdate` で自動保証（必要に応じてスワップ）
 - これにより同じペアの対戦を一意に検索可能
+- **指導試合（`isLesson = true`）**: 上級者が初心者に教えながら行う試合。勝ち側＝指導した側、負け側＝指導された側。`scoreDifference` は持たない（null）。登録済みプレイヤー同士のみ対象（簡易入力フローは対象外）。勝敗（`winnerId`）は通常どおり保持し、勝数・負数・勝率・試合数の統計にも通常試合と同様に計上される（指導フラグは表示の差し替えと指導回数/被指導回数の集計にのみ用いる）
 
 #### 3.4.2 個人メモ・お手付き記録（MatchPersonalNote）
 
@@ -526,6 +528,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **詳細入力（一括入力）:**
 - 全ロール（PLAYER+）が練習日単位で全ペアの結果を一括入力
 - 組み合わせ済みのペアが表示され、勝者と枚数差を入力するだけ
+- 枚数差ピッカーの末尾で「指導」を選択でき、選ぶとその試合は指導試合（`isLesson = true`・枚数差なし）として記録される（両者黒・中央「指導」表示）
 - ペアの変更（選手の差し替え）も同画面で可能
 - お手付き・個人メモの入力は含まない（個人が別途入力）
 - 対戦組み合わせが未作成の場合は「対戦組み合わせが作成されていません」メッセージを表示。組み合わせ作成画面への遷移ボタン（`/pairings?date=YYYY-MM-DD`）も全ロールに表示
@@ -609,7 +612,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 |---|---|---|---|
 | 1 | 日付 | `M/D`（例: `5/23`） | 固定幅。`text-xs text-[#9ca3af]` |
 | 2 | 対戦相手名 | 選手名 | 固定幅（`6.125rem` = `text-sm` の全角 7 文字分 + `truncate`）。リンク化時はテーマ色 `#4a6b5a` |
-| 3 | 勝敗 | `〇N` / `×N` / `△N`（N は枚数差） | 固定幅。`text-sm font-bold`、勝ち=緑 / 負け=赤 / 引き分け=グレー |
+| 3 | 勝敗 | `〇N` / `×N` / `△N`（N は枚数差）。指導試合は「指導」 | 固定幅。`text-sm font-bold`、勝ち=緑 / 負け=赤 / 引き分け=グレー。指導試合は色付け・マークなしのグレーで「指導」表示 |
 | 4 | 会場・試合番号 | `会場名 N試合目`（例: `あかなら・すずらん 3試合目`） | 可変幅（`minmax(0,1fr)` + `truncate`、残り幅を全て受け取る）。`text-xs text-[#9ca3af]` |
 | 5 | メモアイコン | 📝（`StickyNote`） | 固定幅。非表示条件の行でも `invisible` プレースホルダで列幅を確保 |
 | 6 | お手付き回数 | `手N`（例: `手2`） | 固定幅。`null` の行でも `invisible` プレースホルダで列幅を確保 |
@@ -664,6 +667,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **回数表示:**
 - 統計エリア（級別統計の下）に、対象期間内の「`読み n回 ・ 一人取り m回`」を活動別に併記（期間フィルタ連動）
 - 回数が0の活動は非表示（両方0なら回数表示自体を出さない）。勝敗統計（総計・級別）には含めない
+- 同じく統計エリア（総合統計の下）に「`指導 n回 ・ 被指導 m回`」を併記（値が1以上のときのみ表示・期間/属性フィルタ連動）。指導回数＝指導試合で勝ち（指導した側）だった試合数、被指導回数＝指導試合で負け（指導された側）だった試合数。級別統計には含めない
 - 自分・他選手のどちらの対戦一覧でも表示する
 
 ### 3.5 統計機能
@@ -1869,7 +1873,8 @@ venues ──< venue_match_schedules (venueId)
 | player1_id | BIGINT | NOT NULL | 選手1（ID小さい方） |
 | player2_id | BIGINT | NOT NULL | 選手2（ID大きい方） |
 | winner_id | BIGINT | NOT NULL | 勝者ID |
-| score_difference | INT | NOT NULL | 枚数差（0〜25） |
+| score_difference | INT |  | 枚数差（0〜25）。指導試合では NULL |
+| is_lesson | BOOLEAN | NOT NULL DEFAULT FALSE | 指導試合フラグ（true=指導試合。勝者=指導した側） |
 | opponent_name | VARCHAR(100) | — | 未登録相手名 |
 | notes | TEXT | — | コメント |
 | created_by | BIGINT | NOT NULL | 登録者 |
@@ -2291,11 +2296,11 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/player/{id}/period/count?startDate=&endDate=` | ALL | 期間内件数（軽量） |
 | GET | `/between?player1Id=&player2Id=` | ALL | 2選手間の対戦履歴 |
 | GET | `/player/{id}/statistics` | ALL | 選手統計（勝率等） |
-| GET | `/player/{id}/statistics-by-rank` | ALL | 級別統計 |
+| GET | `/player/{id}/statistics-by-rank` | ALL | 級別統計（総合に指導回数 `lessonGivenCount` / 被指導回数 `lessonReceivedCount` を含む） |
 | POST | `/` | ALL | 簡易登録 |
-| POST | `/detailed` | ALL | 詳細登録 |
+| POST | `/detailed` | ALL | 詳細登録（`isLesson` 対応。指導時は枚数差 null） |
 | PUT | `/{id}` | ALL | 簡易更新 |
-| PUT | `/{id}/detailed` | ALL | 詳細更新 |
+| PUT | `/{id}/detailed` | ALL | 詳細更新（`isLesson` クエリパラメータ対応・`scoreDifference` 任意） |
 | DELETE | `/{id}` | ALL | 削除 |
 
 ### 7.3.1 試合動画 (`/api/match-videos`)

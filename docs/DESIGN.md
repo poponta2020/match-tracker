@@ -208,7 +208,8 @@ Entity Layer (JPA Entity)
 | player1_id | BIGINT | NOT NULL, FK | 選手1ID（player1_id < player2_id を保証） |
 | player2_id | BIGINT | NOT NULL, FK | 選手2ID |
 | winner_id | BIGINT | NOT NULL, FK | 勝者ID |
-| score_difference | INT | NOT NULL | 枚数差（1～50） |
+| score_difference | INT |  | 枚数差。指導試合（is_lesson=true）では NULL |
+| is_lesson | BOOLEAN | NOT NULL DEFAULT FALSE | 指導試合フラグ（true=上級者が初心者に教える指導試合。勝者=指導した側、敗者=指導された側） |
 | opponent_name | VARCHAR(100) | | 未登録選手名（簡易登録用） |
 | venue_id | BIGINT | FK(venues.id) ON DELETE SET NULL | 試合が行われた会場ID（NULL可。古いデータで backfill 不可・PracticeSession 削除済みの場合は NULL） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
