@@ -38,6 +38,7 @@ public class PlayerService {
 
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final OrganizationService organizationService;
 
     /**
      * 全てのアクティブな選手を取得（名前順）
@@ -189,7 +190,9 @@ public class PlayerService {
      *
      * <ul>
      *   <li>各選手の players 列（性別・級・段位・かるた会）を、指定された項目のみ上書きする。</li>
-     *   <li>addOrganizationIds の所属団体を追加する（追加のみ・冪等）。既に所属していれば二重登録しない。</li>
+     *   <li>addOrganizationIds の所属団体を追加する（追加のみ・冪等）。既に所属していれば二重登録しない。
+     *       追加は {@link OrganizationService#ensurePlayerBelongsToOrganization} 経由で行い、
+     *       単体更新・招待登録と同じく団体別の通知設定（push/LINE）も初期化する。</li>
      * </ul>
      *
      * 級↔段位の整合はフロントエンドで算出するため、単体更新と同様にここでは検証しない。
@@ -252,10 +255,8 @@ public class PlayerService {
             if (addIds != null) {
                 for (Long orgId : addIds) {
                     if (orgId != null && !existingOrgIds.contains(orgId)) {
-                        playerOrganizationRepository.save(PlayerOrganization.builder()
-                                .playerId(player.getId())
-                                .organizationId(orgId)
-                                .build());
+                        // 単体更新・招待登録と同じ正規経路を通し、団体別の通知設定（push/LINE）も初期化する
+                        organizationService.ensurePlayerBelongsToOrganization(player.getId(), orgId);
                         existingOrgIds.add(orgId);
                     }
                 }

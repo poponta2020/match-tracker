@@ -42,6 +42,9 @@ class PlayerServiceTest {
     @Mock
     private PlayerOrganizationRepository playerOrganizationRepository;
 
+    @Mock
+    private OrganizationService organizationService;
+
     @InjectMocks
     private PlayerService playerService;
 
@@ -472,7 +475,7 @@ class PlayerServiceTest {
         assertThat(p2.getKyuRank()).isEqualTo(Player.KyuRank.D級);
         assertThat(p2.getDanRank()).isEqualTo(Player.DanRank.初段);
         verify(playerRepository, times(2)).save(any(Player.class));
-        verify(playerOrganizationRepository, never()).save(any(PlayerOrganization.class));
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(any(), any());
     }
 
     @Test
@@ -519,11 +522,9 @@ class PlayerServiceTest {
         // When
         List<PlayerDto> result = playerService.bulkUpdate(request);
 
-        // Then: org 20 のみ保存
-        ArgumentCaptor<PlayerOrganization> captor = ArgumentCaptor.forClass(PlayerOrganization.class);
-        verify(playerOrganizationRepository, times(1)).save(captor.capture());
-        assertThat(captor.getValue().getPlayerId()).isEqualTo(1L);
-        assertThat(captor.getValue().getOrganizationId()).isEqualTo(20L);
+        // Then: 正規経路 ensurePlayerBelongsToOrganization 経由で org 20 のみ追加（通知設定も初期化される）
+        verify(organizationService).ensurePlayerBelongsToOrganization(1L, 20L);
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(1L, 10L);
         // 返却DTOの organizationIds は既存+追加
         assertThat(result.get(0).getOrganizationIds()).containsExactlyInAnyOrder(10L, 20L);
     }
@@ -547,8 +548,8 @@ class PlayerServiceTest {
         // When
         playerService.bulkUpdate(request);
 
-        // Then: 既存と同じ org なので保存は呼ばれない
-        verify(playerOrganizationRepository, never()).save(any(PlayerOrganization.class));
+        // Then: 既存と同じ org なので追加処理は呼ばれない（冪等）
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(any(), any());
     }
 
     @Test

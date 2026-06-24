@@ -115,4 +115,17 @@ describe('PlayerBulkEdit', () => {
     await userEvent.click(screen.getByRole('button', { name: '適用する' }));
     await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
   });
+
+  it('未変更（空）の項目は null で送信され、バックエンドで据え置かれる（単体編集と同一挙動）', async () => {
+    // 級・段位・かるた会が空の新入生をそのまま保存 → null（据え置き）。性別は必須で常に値が入る
+    renderWith({ players: makePlayers() });
+    await save();
+
+    await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
+    const u = mocks.bulkUpdate.mock.calls[0][0].find((x) => x.playerId === 1);
+    expect(u.kyuRank).toBeNull();
+    expect(u.danRank).toBeNull();
+    expect(u.karutaClub).toBeNull();
+    expect(u.gender).toBe('男性');
+  });
 });

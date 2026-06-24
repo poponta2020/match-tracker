@@ -291,7 +291,7 @@ const PlayerBulkEdit = () => {
                     onChange={(e) => setRow(row.id, { gender: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    <option value="">未設定</option>
+                    {/* 性別は必須のため空（未設定）の選択肢は設けない */}
                     {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
