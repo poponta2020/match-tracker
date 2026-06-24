@@ -149,17 +149,17 @@ const PracticeList = () => {
     selectedSessionRef.current = selectedSession;
   }, [selectedSession]);
 
-  // 初回訪問で凡例を自動表示したら、その場で既読フラグを保存し以降は手動表示のみにする（端末単位）
+  // 凡例が実際に表示された後（ローディング完了後）に既読フラグを保存する（端末単位）。
+  // ローディング中（LoadingScreen 表示中）に保存すると、凡例を視認する前に離脱しても既読扱いに
+  // なってしまうため、loading 完了を待ってから保存する。
   useEffect(() => {
-    if (!showLegend) return;
+    if (loading || !showLegend) return;
     try {
       localStorage.setItem('practiceCalendarLegendSeen', '1');
     } catch {
       // プライベートモード等で localStorage が使えない場合は既読管理を諦める（毎回自動表示されるが機能は阻害しない）
     }
-    // 初回マウント時の自動表示分だけ保存する意図。showLegend のトグルごとには実行しない
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loading, showLegend]);
 
   // 凡例パネルを開いている間だけ、画面外タップで閉じる（既存 YearMonthPicker と同方式）
   useEffect(() => {

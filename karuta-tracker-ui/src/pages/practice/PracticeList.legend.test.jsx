@@ -133,6 +133,32 @@ describe('PracticeList 凡例（記号の見方）', () => {
     });
   });
 
+  it('ローディング中は既読フラグを保存せず、表示完了後に保存する', async () => {
+    // getSessionSummaries の解決を保留してローディング状態を維持する
+    let resolveSessions;
+    practiceAPI.getSessionSummaries.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSessions = resolve;
+      }),
+    );
+
+    render(<PracticeList />);
+
+    // ローディング中（LoadingScreen 表示中）は凡例も既読フラグ保存も発生しない
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    expect(localStorage.getItem(LEGEND_SEEN_KEY)).toBeNull();
+
+    // データ解決 → ローディング完了
+    resolveSessions({ data: [] });
+
+    await waitForLoaded();
+    // 表示完了後に自動表示され、このタイミングで初めて既読フラグが保存される
+    expect(isLegendOpen()).toBe(true);
+    await waitFor(() => {
+      expect(localStorage.getItem(LEGEND_SEEN_KEY)).toBe('1');
+    });
+  });
+
   it('既読済み（localStorage 設定済み）のときはパネルが自動で開かない', async () => {
     localStorage.setItem(LEGEND_SEEN_KEY, '1');
     render(<PracticeList />);
