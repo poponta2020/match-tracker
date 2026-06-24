@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.karuta.matchtracker.entity.Match;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -56,6 +58,16 @@ public class MatchCreateRequest {
     @Min(value = 0, message = "お手付き回数は0以上で入力してください")
     @Max(value = 20, message = "お手付き回数は20以下で入力してください")
     private Integer otetsukiCount;
+
+    /**
+     * 通常試合では枚数差を必須とする（指導試合 isLesson=true のみ null 許容）。
+     * フロントの未入力チェックに加え、API レイヤーでもデータ整合性を担保する。
+     */
+    @JsonIgnore
+    @AssertTrue(message = "通常試合では枚数差は必須です")
+    public boolean isScoreDifferenceConsistent() {
+        return Boolean.TRUE.equals(isLesson) || scoreDifference != null;
+    }
 
     /**
      * リクエストからエンティティへ変換

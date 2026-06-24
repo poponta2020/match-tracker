@@ -602,6 +602,10 @@ public class MatchService {
         }
 
         boolean lesson = Boolean.TRUE.equals(isLesson);
+        // 通常試合では枚数差必須（指導試合のみ null 許容）。フロント任せにせず API でも担保する
+        if (!lesson && scoreDifference == null) {
+            throw new IllegalArgumentException("通常試合では枚数差は必須です");
+        }
         match.setWinnerId(winnerId);
         // 指導試合では枚数差を保持しない（null）
         match.setScoreDifference(lesson ? null : scoreDifference);
@@ -657,6 +661,7 @@ public class MatchService {
         match.setMatchNumber(request.getMatchNumber());
         match.setWinnerId(winnerId);
         match.setScoreDifference(Math.abs(request.getScoreDifference()));
+        match.setIsLesson(false); // 簡易更新は通常試合として扱う（指導試合フラグを解除し is_lesson=true と非null枚数差の矛盾を防ぐ）
         match.setOpponentName(request.getOpponentName());
         match.setUpdatedBy(currentUserId != null ? currentUserId : request.getPlayerId());
 

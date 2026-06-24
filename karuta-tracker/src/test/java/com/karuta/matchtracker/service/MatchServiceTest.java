@@ -388,6 +388,52 @@ class MatchServiceTest {
     }
 
     @Test
+    @DisplayName("通常試合の更新で枚数差がnullの場合はIllegalArgumentException")
+    void testUpdateMatchRejectsNullScoreForNonLesson() {
+        // Given
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+
+        // When & Then: 通常試合（isLesson=false）で scoreDifference=null は拒否
+        assertThatThrownBy(() ->
+                matchService.updateMatch(1L, 1L, null, 1L, null, null, false, 1L, Player.Role.PLAYER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("枚数差");
+        verify(matchRepository, never()).save(any(Match.class));
+    }
+
+    @Test
+    @DisplayName("簡易更新は指導試合フラグを解除する（通常試合化）")
+    void testUpdateMatchSimpleClearsLessonFlag() {
+        // Given: 既存は指導試合
+        Match lessonMatch = Match.builder()
+                .id(1L).matchDate(today).matchNumber(1)
+                .player1Id(1L).player2Id(2L).winnerId(1L)
+                .isLesson(true)
+                .createdBy(1L).updatedBy(1L).build();
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(lessonMatch));
+        when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+
+        MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+        request.setMatchDate(today);
+        request.setMatchNumber(1);
+        request.setPlayerId(1L);
+        request.setOpponentName("佐藤花子");
+        request.setResult("勝ち");
+        request.setScoreDifference(5);
+
+        // When
+        matchService.updateMatchSimple(1L, request, 1L, Player.Role.PLAYER);
+
+        // Then: 指導フラグが解除され、枚数差が保存される
+        ArgumentCaptor<Match> captor = ArgumentCaptor.forClass(Match.class);
+        verify(matchRepository).save(captor.capture());
+        assertThat(captor.getValue().getIsLesson()).isFalse();
+        assertThat(captor.getValue().getScoreDifference()).isEqualTo(5);
+    }
+
+    @Test
     @DisplayName("試合結果を削除できる")
     void testDeleteMatch() {
         // Given
