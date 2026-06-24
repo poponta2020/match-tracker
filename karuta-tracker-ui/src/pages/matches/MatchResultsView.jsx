@@ -5,7 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Shuffle, Video } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import VideoPlayerModal from '../../components/VideoPlayerModal';
+import MatchCarousel from '../../components/MatchCarousel';
 import { getByePlayerNamesForMatch } from './byePlayersLogic';
+import { scrollActiveTabIntoView } from './tabScroll';
 
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
@@ -119,6 +121,7 @@ const MatchResultsView = () => {
   const [videos, setVideos] = useState([]); // 当日の試合動画一覧（MatchVideoDto）
   const [selectedVideo, setSelectedVideo] = useState(null); // 再生モーダルで表示中の動画
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
+  const tabBarRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -288,6 +291,11 @@ const MatchResultsView = () => {
     };
   }, [selectedDate]);
 
+  // 試合番号が変わったら、アクティブタブを画面内へ自動スクロール
+  useEffect(() => {
+    scrollActiveTabIntoView(tabBarRef.current);
+  }, [currentMatchNumber]);
+
   // 前後の練習日に移動
   const goToPreviousDate = () => {
     const currentIndex = availableDates.indexOf(selectedDate);
@@ -371,7 +379,6 @@ const MatchResultsView = () => {
     );
   }
 
-  const currentPairings = getPairingsForMatch(currentMatchNumber);
   const totalMatches = session?.totalMatches || 0;
 
   // 対戦組み合わせに含まれていない参加者（抜けの選手）を算出
@@ -386,8 +393,6 @@ const MatchResultsView = () => {
     );
   };
 
-  const currentByePlayers = getByePlayersForMatch(currentMatchNumber);
-
   // 「動画あり」バッジのタップ挙動
   //  - 結果入力済み（match あり）: 試合詳細へ遷移（試合詳細画面に動画も表示される）
   //  - 結果未入力（組み合わせのみ）: 試合詳細が存在しないため再生モーダルを開く
@@ -400,6 +405,170 @@ const MatchResultsView = () => {
     } else {
       setSelectedVideo(video);
     }
+  };
+
+  // 1試合分のパネル（カルーセルの各ページ）。currentMatchNumber に依存せず
+  // matchNumber 引数だけで描画できるようにし、隣の試合のチラ見えにも対応する。
+  const renderMatchPanel = (matchNumber) => {
+    const matchPairings = getPairingsForMatch(matchNumber);
+    const byePlayers = getByePlayersForMatch(matchNumber);
+
+    return (
+      <div>
+        <div className="divide-y divide-[#d4ddd7]">
+          {matchPairings.map((pairing, index) => {
+            const match = getMatchResult(matchNumber, pairing.player1Id, pairing.player2Id);
+            const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
+            const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
+            const isLessonMatch = match && match.isLesson === true;
+            const video = getVideoForPairing(matchNumber, pairing.player1Id, pairing.player2Id);
+
+            return (
+              <div key={index} className="py-4">
+                {match ? (
+                  <>
+                    {/* 結果入力済み: A 〇 枚数差 × B（指導試合は両者黒・中央「指導」） */}
+                    <div className="flex items-center text-lg">
+                      <Link
+                        to={`/matches?playerId=${pairing.player1Id}`}
+                        className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      >
+                        {pairing.player1Name}
+                      </Link>
+                      {isLessonMatch ? (
+                        <div className="font-bold text-gray-700 w-[6.5rem] text-center flex-shrink-0">
+                          指導
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPlayer1Winner ? '〇' : '×'}
+                          </div>
+                          <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
+                            {match.scoreDifference}
+                          </div>
+                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPlayer2Winner ? '〇' : '×'}
+                          </div>
+                        </>
+                      )}
+                      <Link
+                        to={`/matches?playerId=${pairing.player2Id}`}
+                        className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
+                      >
+                        {pairing.player2Name}
+                      </Link>
+                    </div>
+                    {/* 自分の試合のお手付き・メモ表示 */}
+                    {currentPlayer && (match.player1Id === currentPlayer.id || match.player2Id === currentPlayer.id) && (match.myOtetsukiCount != null || match.myPersonalNotes) && (
+                      <div className="mt-1 flex items-center gap-3 justify-center text-xs text-[#9ca3af]">
+                        {match.myOtetsukiCount != null && (
+                          <span>お手付き: {match.myOtetsukiCount}回</span>
+                        )}
+                        {match.myPersonalNotes && (
+                          <span className="truncate max-w-[200px]">{match.myPersonalNotes}</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  // 未入力: A vs B
+                  <div className="flex items-center text-lg">
+                    <Link
+                      to={`/matches?playerId=${pairing.player1Id}`}
+                      className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate hover:underline"
+                    >
+                      {pairing.player1Name}
+                    </Link>
+                    <div className="text-sm font-medium text-[#9ca3af] w-8 text-center flex-shrink-0">
+                      vs
+                    </div>
+                    <Link
+                      to={`/matches?playerId=${pairing.player2Id}`}
+                      className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate hover:underline"
+                    >
+                      {pairing.player2Name}
+                    </Link>
+                  </div>
+                )}
+
+                {/* 動画ありバッジ（結果入力済みは試合詳細へ、未入力は再生モーダルを開く） */}
+                {video && (
+                  <div className="mt-1.5 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={(e) => handleVideoBadgeClick(e, video, match)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fdecea] text-[#c0392b] text-xs font-medium hover:bg-[#fbdad5] transition-colors"
+                      aria-label="試合動画あり"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      動画あり
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 抜け番の選手と活動 */}
+        {(() => {
+          const matchByeActivities = byeActivitiesData.filter(a => a.matchNumber === matchNumber);
+          // 活動記録のある抜け番 + 活動未記録の抜け番を統合
+          const byeWithActivities = matchByeActivities.map(a => ({
+            name: a.playerName,
+            activityType: a.activityType,
+            activityTypeDisplay: a.activityTypeDisplay,
+            freeText: a.freeText,
+          }));
+          const activityPlayerNames = new Set(matchByeActivities.map(a => a.playerName));
+          const byeWithoutActivities = byePlayers
+            .filter(name => !activityPlayerNames.has(name))
+            .map(name => ({ name, activityType: null, activityTypeDisplay: null, freeText: null }));
+          const allBye = [...byeWithActivities, ...byeWithoutActivities];
+
+          if (allBye.length === 0) return null;
+
+          return (
+            <div className="mt-4 bg-[#e5ebe7] rounded-lg p-3">
+              <div className="space-y-1.5">
+                {allBye.map((player, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-[#374151]">{player.name}</span>
+                      {player.activityTypeDisplay && (
+                        <span className="text-xs px-2 py-0.5 bg-white rounded-full text-[#6b7280]">
+                          {player.activityTypeDisplay}
+                          {player.freeText && `（${player.freeText}）`}
+                        </span>
+                      )}
+                    </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 編集ボタン or 組み合わせ作成導線 */}
+        {session && matchPairings.length === 0 && (
+          <button
+            onClick={() => navigate(`/pairings?date=${selectedDate}`)}
+            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
+          >
+            <Shuffle className="w-5 h-5" />
+            対戦組み合わせを作成
+          </button>
+        )}
+        {session && matchPairings.length > 0 && (
+          <button
+            onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
+            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
+          >
+            <Edit className="w-5 h-5" />
+            結果を一括入力
+          </button>
+        )}
+      </div>
+    );
   };
 
   // データなし画面
@@ -541,10 +710,11 @@ const MatchResultsView = () => {
 
           {/* タブバー */}
           {totalMatches > 0 && (
-            <div className="flex overflow-x-auto -mb-px">
+            <div ref={tabBarRef} className="flex overflow-x-auto -mb-px">
               {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
                 <button
                   key={num}
+                  data-active={currentMatchNumber === num}
                   onClick={() => setCurrentMatchNumber(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     currentMatchNumber === num
@@ -560,160 +730,14 @@ const MatchResultsView = () => {
         </div>
       </div>
 
-      {/* メインコンテンツ */}
+      {/* メインコンテンツ（試合番号スワイプ対応カルーセル） */}
       <div className="max-w-4xl mx-auto px-6 pt-[50px] pb-6">
-        <div className="divide-y divide-[#d4ddd7]">
-          {currentPairings.map((pairing, index) => {
-            const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
-            const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
-            const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
-            const isLessonMatch = match && match.isLesson === true;
-            const video = getVideoForPairing(currentMatchNumber, pairing.player1Id, pairing.player2Id);
-
-            return (
-              <div key={index} className="py-4">
-                {match ? (
-                  <>
-                    {/* 結果入力済み: A 〇 枚数差 × B（指導試合は両者黒・中央「指導」） */}
-                    <div className="flex items-center text-lg">
-                      <Link
-                        to={`/matches?playerId=${pairing.player1Id}`}
-                        className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
-                      >
-                        {pairing.player1Name}
-                      </Link>
-                      {isLessonMatch ? (
-                        <div className="font-bold text-gray-700 w-[6.5rem] text-center flex-shrink-0">
-                          指導
-                        </div>
-                      ) : (
-                        <>
-                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
-                            {isPlayer1Winner ? '〇' : '×'}
-                          </div>
-                          <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
-                            {match.scoreDifference}
-                          </div>
-                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
-                            {isPlayer2Winner ? '〇' : '×'}
-                          </div>
-                        </>
-                      )}
-                      <Link
-                        to={`/matches?playerId=${pairing.player2Id}`}
-                        className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
-                      >
-                        {pairing.player2Name}
-                      </Link>
-                    </div>
-                    {/* 自分の試合のお手付き・メモ表示 */}
-                    {currentPlayer && (match.player1Id === currentPlayer.id || match.player2Id === currentPlayer.id) && (match.myOtetsukiCount != null || match.myPersonalNotes) && (
-                      <div className="mt-1 flex items-center gap-3 justify-center text-xs text-[#9ca3af]">
-                        {match.myOtetsukiCount != null && (
-                          <span>お手付き: {match.myOtetsukiCount}回</span>
-                        )}
-                        {match.myPersonalNotes && (
-                          <span className="truncate max-w-[200px]">{match.myPersonalNotes}</span>
-                        )}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  // 未入力: A vs B
-                  <div className="flex items-center text-lg">
-                    <Link
-                      to={`/matches?playerId=${pairing.player1Id}`}
-                      className="flex-1 text-right pr-3 font-semibold text-gray-700 truncate hover:underline"
-                    >
-                      {pairing.player1Name}
-                    </Link>
-                    <div className="text-sm font-medium text-[#9ca3af] w-8 text-center flex-shrink-0">
-                      vs
-                    </div>
-                    <Link
-                      to={`/matches?playerId=${pairing.player2Id}`}
-                      className="flex-1 text-left pl-3 font-semibold text-gray-700 truncate hover:underline"
-                    >
-                      {pairing.player2Name}
-                    </Link>
-                  </div>
-                )}
-
-                {/* 動画ありバッジ（結果入力済みは試合詳細へ、未入力は再生モーダルを開く） */}
-                {video && (
-                  <div className="mt-1.5 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={(e) => handleVideoBadgeClick(e, video, match)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fdecea] text-[#c0392b] text-xs font-medium hover:bg-[#fbdad5] transition-colors"
-                      aria-label="試合動画あり"
-                    >
-                      <Video className="w-3.5 h-3.5" />
-                      動画あり
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 抜け番の選手と活動 */}
-        {(() => {
-          const matchByeActivities = byeActivitiesData.filter(a => a.matchNumber === currentMatchNumber);
-          // 活動記録のある抜け番 + 活動未記録の抜け番を統合
-          const byeWithActivities = matchByeActivities.map(a => ({
-            name: a.playerName,
-            activityType: a.activityType,
-            activityTypeDisplay: a.activityTypeDisplay,
-            freeText: a.freeText,
-          }));
-          const activityPlayerNames = new Set(matchByeActivities.map(a => a.playerName));
-          const byeWithoutActivities = currentByePlayers
-            .filter(name => !activityPlayerNames.has(name))
-            .map(name => ({ name, activityType: null, activityTypeDisplay: null, freeText: null }));
-          const allBye = [...byeWithActivities, ...byeWithoutActivities];
-
-          if (allBye.length === 0) return null;
-
-          return (
-            <div className="mt-4 bg-[#e5ebe7] rounded-lg p-3">
-              <div className="space-y-1.5">
-                {allBye.map((player, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="font-medium text-[#374151]">{player.name}</span>
-                      {player.activityTypeDisplay && (
-                        <span className="text-xs px-2 py-0.5 bg-white rounded-full text-[#6b7280]">
-                          {player.activityTypeDisplay}
-                          {player.freeText && `（${player.freeText}）`}
-                        </span>
-                      )}
-                    </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* 編集ボタン or 組み合わせ作成導線 */}
-        {session && currentPairings.length === 0 && (
-          <button
-            onClick={() => navigate(`/pairings?date=${selectedDate}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
-          >
-            <Shuffle className="w-5 h-5" />
-            対戦組み合わせを作成
-          </button>
-        )}
-        {session && currentPairings.length > 0 && (
-          <button
-            onClick={() => navigate(`/matches/bulk-input/${session.id}`)}
-            className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
-          >
-            <Edit className="w-5 h-5" />
-            結果を一括入力
-          </button>
-        )}
+        <MatchCarousel
+          totalMatches={totalMatches}
+          currentMatchNumber={currentMatchNumber}
+          onChange={setCurrentMatchNumber}
+          renderPanel={renderMatchPanel}
+        />
       </div>
 
       {/* FAB: 試合結果を追加 */}

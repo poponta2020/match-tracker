@@ -30,7 +30,7 @@ status: completed
 - **対応Issue:** #923
 
 ### タスク3: 結果一覧 MatchResultsView をカルーセル化
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合ごとの表示部（対戦組一覧・抜け番・下部の「結果を一括入力／対戦組み合わせを作成」ボタン）を `renderPanel(matchNumber)` に切り出し、`MatchCarousel` でラップ。`onChange` で `setCurrentMatchNumber`。試合切替時に上部タブのアクティブを画面内へ自動スクロール。日付ナビ・カレンダー・FABはカルーセル外で固定維持。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchResultsView.jsx` — カルーセル化、タブ自動スクロール
