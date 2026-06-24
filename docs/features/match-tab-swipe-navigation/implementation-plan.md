@@ -20,7 +20,7 @@ status: completed
 - **対応Issue:** #922
 
 ### タスク2: 共通カルーセル `MatchCarousel.jsx`（指追従）
-- [ ] 完了
+- [x] 完了
 - **概要:** 試合番号パネルを指追従で左右スライドさせる共通コンポーネント。結果一覧・一括入力で共用する。現在±1のウィンドウ描画、touchイベントでのドラッグ追従（translateX）、離したときのスナップ／戻し、端クランプ、確定時の `onChange` 呼び出しを担う。高さは表示中パネルに合わせて余白を出さない。
 - **props:** `totalMatches`, `currentMatchNumber`, `onChange(matchNumber)`, `renderPanel(matchNumber)`
 - **変更対象ファイル:**
