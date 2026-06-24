@@ -2183,6 +2183,7 @@ Entity Layer (JPA Entity)
 
 **動的タイトル / 動的 backTo**:
 - 同じコンポーネントが新規/編集で使い回されるページ（`PlayerEdit`, `VenueForm`）は `id` / `isEditMode` から動的に切り替える
+- `PairingGenerator` は `from` クエリパラメータが指定された場合（例: 結果入力画面「対戦変更」ボタンからの遷移）、`backTo={searchParams.get('from') || '/settings'}` で動的に戻り先を設定する
 
 **ローディング・エラー画面**:
 - `if (loading) return <LoadingScreen />` のような早期 return でも `<><PageHeader ... /><LoadingScreen /></>` で包み、空のベースナビバーが見えないようにする

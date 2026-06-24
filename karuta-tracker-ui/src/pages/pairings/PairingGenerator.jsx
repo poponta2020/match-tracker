@@ -26,6 +26,8 @@ const PairingGenerator = () => {
   const [sessionDate, setSessionDate] = useState(searchParams.get('date') || today);
   const initialMatchNumber = parseInt(searchParams.get('matchNumber'), 10);
   const [matchNumber, setMatchNumber] = useState(initialMatchNumber > 0 ? initialMatchNumber : 1);
+  // 戻り先: from クエリパラメータがあればそれを使う（結果入力画面からの遷移など）。無ければ従来どおり設定画面
+  const backTo = searchParams.get('from') || '/settings';
   const [participants, setParticipants] = useState([]);
   const [pairings, setPairings] = useState([]);
   const [waitingPlayers, setWaitingPlayers] = useState([]);
@@ -809,7 +811,7 @@ const PairingGenerator = () => {
   if (matchLoading) {
     return (
       <>
-        <PageHeader title="組み合わせ作成" backTo="/settings" />
+        <PageHeader title="組み合わせ作成" backTo={backTo} />
         <div className="flex flex-col items-center justify-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
           <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
@@ -820,7 +822,7 @@ const PairingGenerator = () => {
 
   return (
     <>
-      <PageHeader title="組み合わせ作成" backTo="/settings" />
+      <PageHeader title="組み合わせ作成" backTo={backTo} />
       <div className="space-y-6">
       {/* 日付選択 */}
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">

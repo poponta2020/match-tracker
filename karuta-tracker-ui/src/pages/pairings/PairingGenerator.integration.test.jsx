@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import { DndContext } from '@dnd-kit/core';
 import PlayerChip from '../../components/PlayerChip';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
@@ -944,5 +945,47 @@ describe('LINE送信用テキスト生成導線（lineTextTarget）', () => {
     it('単一試合は matchNumber を付ける', () => {
       expect(buildSummaryUrl('2026-06-09', 2, 'single')).toBe('/pairings/summary?date=2026-06-09&matchNumber=2');
     });
+  });
+});
+
+/**
+ * PairingGenerator backTo クエリパラメータ
+ *
+ * `from` クエリパラメータによる動的 backTo の挙動を検証する。
+ * PairingGenerator 本体の full render は API 依存が多いため、
+ * 同じ URLSearchParams ロジックをミニマルなコンポーネントで再現して確認する。
+ */
+const BackToResolver = ({ onResolved }) => {
+  const [searchParams] = useSearchParams();
+  const backTo = searchParams.get('from') || '/settings';
+  onResolved(backTo);
+  return null;
+};
+
+describe('PairingGenerator - backTo クエリパラメータ', () => {
+  afterEach(cleanup);
+
+  it('from パラメータが指定された場合はデコードされたパスを backTo に使用する', () => {
+    let captured = null;
+    render(
+      <MemoryRouter initialEntries={['/pairings?from=%2Fmatches%2Fbulk-input%2F42']}>
+        <Routes>
+          <Route path="/pairings" element={<BackToResolver onResolved={(v) => { captured = v; }} />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(captured).toBe('/matches/bulk-input/42');
+  });
+
+  it('from パラメータがない場合は /settings を backTo に使用する', () => {
+    let captured = null;
+    render(
+      <MemoryRouter initialEntries={['/pairings']}>
+        <Routes>
+          <Route path="/pairings" element={<BackToResolver onResolved={(v) => { captured = v; }} />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(captured).toBe('/settings');
   });
 });
