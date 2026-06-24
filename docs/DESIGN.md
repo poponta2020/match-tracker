@@ -3429,9 +3429,9 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 #### バックエンド起動
 ```bash
 cd karuta-tracker
-DB_URL="jdbc:postgresql://dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com:5432/karuta_tracker_b297" \
-DB_USERNAME="karuta" \
-DB_PASSWORD="b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal" \
+DB_URL="<CLAUDE.local.md の DB_URL>" \
+DB_USERNAME="<CLAUDE.local.md の DB_USERNAME>" \
+DB_PASSWORD="<CLAUDE.local.md の DB_PASSWORD>" \
 ./gradlew bootRun
 ```
 → `http://localhost:8080`

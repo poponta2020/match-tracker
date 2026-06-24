@@ -48,7 +48,7 @@ DB_HOST="dpg-d6t1e77kijhs73er5ug0-a.oregon-postgres.render.com"
 DB_PORT="5432"
 DB_NAME="karuta_tracker_b297"
 DB_USER="karuta"
-DB_PASS="b1FgPgpxsqE83Z1sVoRdes2EdxTAKAal"
+DB_PASS="${DB_PASS:?DB_PASS を環境変数で指定してください（値は CLAUDE.local.md 参照）}"
 
 # Content-Type判定
 CONTENT_TYPE="image/png"

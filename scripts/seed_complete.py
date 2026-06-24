@@ -19,7 +19,7 @@ DB_HOST = "dpg-d6c3rgn5r7bs73an03pg-a.oregon-postgres.render.com"
 DB_PORT = "5432"
 DB_NAME = "karuta_tracker"
 DB_USER = "karuta"
-DB_PASSWORD = "tQMNFG3XxpSo4CpFWipGwhInXMo2uv5N"
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 
 # 会場情報
 VENUES = [
