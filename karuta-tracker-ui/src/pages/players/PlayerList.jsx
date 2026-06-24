@@ -332,7 +332,9 @@ const PlayerList = () => {
                 >
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleSelect(player.id); }}
-                    className="mr-3 flex-shrink-0"
+                    /* 見た目は従来どおり（負マージンでレイアウトを相殺）にしつつ、タップ判定だけを
+                       「行の左端〜名前の直前・行の高さいっぱい」に拡大して誤タップでの詳細遷移を防ぐ */
+                    className="flex items-center self-stretch -my-3 py-3 -ml-4 pl-4 pr-3 flex-shrink-0"
                     aria-label={checked ? `${player.name}の選択を解除` : `${player.name}を選択`}
                   >
                     {checked
