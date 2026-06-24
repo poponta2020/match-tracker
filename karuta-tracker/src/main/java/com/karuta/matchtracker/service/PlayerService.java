@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -209,6 +210,19 @@ public class PlayerService {
 
         if (updates == null || updates.isEmpty()) {
             return List.of();
+        }
+
+        // 追加対象の団体IDを事前に存在確認（不正IDは更新前に弾き、all-or-nothing を維持。
+        // player_organizations にFKが無いため、孤児データの作成をサービス層で防ぐ）
+        List<Long> addOrgIdsToValidate = updates.stream()
+                .map(PlayerBulkUpdateRequest.Item::getAddOrganizationIds)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (!addOrgIdsToValidate.isEmpty()) {
+            organizationService.validateOrganizationsExist(addOrgIdsToValidate);
         }
 
         // 既存の所属団体をバッチ取得（N+1回避）。playerId -> 所属団体IDの可変リスト

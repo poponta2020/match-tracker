@@ -635,4 +635,24 @@ class PlayerServiceTest {
                 .hasMessageContaining("deleted player");
         verify(playerRepository, never()).save(any(Player.class));
     }
+
+    @Test
+    @DisplayName("存在しない団体IDが addOrganizationIds に含まれる場合、更新前に弾く（all-or-nothing）")
+    void testBulkUpdateValidatesOrganizationsExist() {
+        // Given: 団体存在検証で失敗させる
+        doThrow(new ResourceNotFoundException("指定された団体が見つかりません"))
+                .when(organizationService).validateOrganizationsExist(any());
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).addOrganizationIds(List.of(999L)).build()))
+                .build();
+
+        // When & Then: 検証は更新前に行われ、選手・所属は一切変更されない
+        assertThatThrownBy(() -> playerService.bulkUpdate(request))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(playerRepository, never()).save(any(Player.class));
+        verify(organizationService, never()).ensurePlayerBelongsToOrganization(any(), any());
+        verify(playerOrganizationRepository, never()).findByPlayerIdIn(any());
+    }
 }
