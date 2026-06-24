@@ -31,6 +31,10 @@ public class AutoMatchingResult {
         private List<MatchHistory> recentMatches;
         private String winnerName;
         private Integer scoreDifference;
+        /** 結果入力済みロックか（true=結果あり）。フロントの結果ロック表示判定に使用。 */
+        private boolean hasResult;
+        /** 手動ロックか（true=ユーザーが明示的にロック）。フロントの手動ロック表示判定に使用。 */
+        private boolean locked;
     }
 
     @Data

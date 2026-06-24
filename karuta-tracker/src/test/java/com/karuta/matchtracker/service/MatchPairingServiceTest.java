@@ -15,6 +15,8 @@ import com.karuta.matchtracker.repository.MatchRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.exception.DuplicateResourceException;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -1453,6 +1455,194 @@ class MatchPairingServiceTest {
             matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, null);
 
             // Then: 未ロックのペアリングのみ削除される
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+            }));
+        }
+    }
+
+    @Nested
+    @DisplayName("手動ロック機能（pairing-manual-lock）")
+    class ManualLockTests {
+
+        @Test
+        @DisplayName("lock: 二重ブッキングがなければ locked=true で保存する")
+        void shouldLockPairing() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            MatchPairing pairing = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(pairing));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(pairing));
+            when(matchPairingRepository.save(any(MatchPairing.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+
+            MatchPairingDto result = matchPairingService.lock(10L, null);
+
+            assertThat(result.isLocked()).isTrue();
+            verify(matchPairingRepository).save(matchPairingCaptor.capture());
+            assertThat(matchPairingCaptor.getValue().getLocked()).isTrue();
+        }
+
+        @Test
+        @DisplayName("lock: 同回戦の別組に対象選手が含まれる場合は DuplicateResourceException（保存しない）")
+        void shouldRejectLockWhenDoubleBooking() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            MatchPairing target = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            // 別組 (2L, 3L) が選手2Lを共有 → 二重ブッキング
+            MatchPairing other = createMatchPairing(11L, sessionDate, matchNumber, 2L, 3L);
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(target));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(target, other));
+            when(playerRepository.findById(2L)).thenReturn(Optional.of(player2));
+
+            assertThatThrownBy(() -> matchPairingService.lock(10L, null))
+                    .isInstanceOf(DuplicateResourceException.class)
+                    .hasMessageContaining("選手B");
+
+            verify(matchPairingRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("lock: 存在しないIDは ResourceNotFoundException")
+        void shouldThrowWhenLockMissingPairing() {
+            when(matchPairingRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> matchPairingService.lock(999L, null))
+                    .isInstanceOf(ResourceNotFoundException.class);
+            verify(matchPairingRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("unlock: locked=false で保存する（組は保持）")
+        void shouldUnlockPairing() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            MatchPairing pairing = createMatchPairing(10L, sessionDate, 1, 1L, 2L);
+            pairing.setLocked(true);
+            when(matchPairingRepository.findById(10L)).thenReturn(Optional.of(pairing));
+            when(matchPairingRepository.save(any(MatchPairing.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+
+            MatchPairingDto result = matchPairingService.unlock(10L);
+
+            assertThat(result.isLocked()).isFalse();
+            verify(matchPairingRepository).save(matchPairingCaptor.capture());
+            assertThat(matchPairingCaptor.getValue().getLocked()).isFalse();
+            verify(matchPairingRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("unlock: 存在しないIDは ResourceNotFoundException")
+        void shouldThrowWhenUnlockMissingPairing() {
+            when(matchPairingRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> matchPairingService.unlock(999L))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("createBatch: 手動ロック組（結果なし）が保持され、両選手が新規ペアから除外される")
+        void shouldPreserveManuallyLockedPairingInCreateBatch() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            MatchPairing unlocked = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(manualLocked, unlocked));
+            // 結果は存在しない（手動ロックのみ）
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            // 新規リクエスト: ロック済み選手(1L)を含むペアは除外され、(3L,4L)のみ保存される
+            List<MatchPairingCreateRequest> requests = Arrays.asList(
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 5L),
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 3L, 4L)
+            );
+            // saveAll はコピーを返す（本番の saved.addAll(lockedPairings) が引数リストを破壊的に
+            // 変更し、検証時にサイズが変わるのを防ぐ）
+            when(matchPairingRepository.saveAll(anyList())).thenAnswer(inv -> new ArrayList<>(inv.getArgument(0)));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2, player3, player4));
+
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, List.of(), createdBy, null);
+
+            // 未ロックの既存ペア(11L)のみ削除
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+            }));
+            // ロック済み選手(1L)を含む新規ペアは除外され、(3L,4L)のみ保存
+            verify(matchPairingRepository).saveAll(argThat(list -> {
+                List<MatchPairing> saved = (List<MatchPairing>) list;
+                return saved.size() == 1
+                        && saved.get(0).getPlayer1Id().equals(3L)
+                        && saved.get(0).getPlayer2Id().equals(4L);
+            }));
+        }
+
+        @Test
+        @DisplayName("autoMatch: 手動ロック組（結果なし）の選手を除外し、lockedPairings に locked=true / hasResult=false で含める")
+        void shouldExcludeManuallyLockedPlayersFromAutoMatch() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            // player1 vs player2 は手動ロック（結果なし）
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(manualLocked));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(result.getLockedPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion locked = result.getLockedPairings().get(0);
+            assertThat(locked.getId()).isEqualTo(10L);
+            assertThat(locked.isLocked()).isTrue();
+            assertThat(locked.isHasResult()).isFalse();
+        }
+
+        @Test
+        @DisplayName("deleteByDateAndMatchNumber: 手動ロック組（結果なし）が保持される")
+        void shouldPreserveManuallyLockedPairingOnDelete() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            MatchPairing unlocked = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Arrays.asList(manualLocked, unlocked));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+
+            matchPairingService.deleteByDateAndMatchNumber(sessionDate, matchNumber, null);
+
             verify(matchPairingRepository).deleteAll(argThat(list -> {
                 List<MatchPairing> deleted = (List<MatchPairing>) list;
                 return deleted.size() == 1 && deleted.get(0).getId().equals(11L);

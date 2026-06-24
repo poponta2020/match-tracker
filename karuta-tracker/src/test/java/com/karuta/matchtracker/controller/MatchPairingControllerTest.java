@@ -1382,6 +1382,121 @@ class MatchPairingControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("PATCH /api/match-pairings/{id}/lock・/unlock（手動ロック）")
+    class LockUnlockTests {
+
+        @Test
+        @DisplayName("PLAYER は自分の所属団体の組をロックできる")
+        void shouldLockAsPlayer() throws Exception {
+            Long pairingId = 1L;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(orgId));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(orgId);
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(pairingId).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B")
+                    .locked(true).createdBy(playerUserId).build();
+            when(matchPairingService.lock(eq(pairingId), eq(orgId))).thenReturn(dto);
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.locked").value(true));
+
+            verify(matchPairingService).lock(eq(pairingId), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("ADMIN は自団体の組をロックできる")
+        void shouldLockAsAdmin() throws Exception {
+            Long pairingId = 1L;
+            Long adminOrgId = 7L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            mockAdminScopeForPairingId(pairingId, 1L, adminOrgId);
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(pairingId).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player2Id(20L).locked(true).createdBy(1L).build();
+            when(matchPairingService.lock(eq(pairingId), eq(adminOrgId))).thenReturn(dto);
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.locked").value(true));
+        }
+
+        @Test
+        @DisplayName("二重ブッキング時は 409 Conflict")
+        void shouldReturn409OnDoubleBookingLock() throws Exception {
+            Long pairingId = 1L;
+            when(matchPairingService.lock(eq(pairingId), any()))
+                    .thenThrow(new DuplicateResourceException(
+                            "選手「選手B」は既に同じ回戦の別の組に入っているため、ロックできません"));
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isConflict());
+        }
+
+        @Test
+        @DisplayName("存在しないIDのロックは 404")
+        void shouldReturn404OnLockMissing() throws Exception {
+            Long pairingId = 999L;
+            when(matchPairingService.lock(eq(pairingId), any()))
+                    .thenThrow(new ResourceNotFoundException("MatchPairing", pairingId));
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしのロックは 403")
+        void shouldReturn403OnLockWithoutAuth() throws Exception {
+            mockMvc.perform(patch("/api/match-pairings/{id}/lock", 1L))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).lock(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("PLAYER は自分の所属団体の組のロックを解除できる")
+        void shouldUnlockAsPlayer() throws Exception {
+            Long pairingId = 1L;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(orgId));
+            when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(orgId);
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(pairingId).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player2Id(20L).locked(false).createdBy(playerUserId).build();
+            when(matchPairingService.unlock(pairingId)).thenReturn(dto);
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/unlock", pairingId)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.locked").value(false));
+
+            verify(matchPairingService).unlock(pairingId);
+        }
+
+        @Test
+        @DisplayName("存在しないIDの解除は 404")
+        void shouldReturn404OnUnlockMissing() throws Exception {
+            Long pairingId = 999L;
+            when(matchPairingService.unlock(pairingId))
+                    .thenThrow(new ResourceNotFoundException("MatchPairing", pairingId));
+
+            mockMvc.perform(patch("/api/match-pairings/{id}/unlock", pairingId)
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
     private void mockAdminScopeForDate(LocalDate date, Long adminUserId, Long adminOrgId) {
         Player admin = new Player();
         admin.setId(adminUserId);

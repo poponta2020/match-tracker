@@ -234,30 +234,38 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("同一試合番号に複数の対戦ペアリングを作成できる")
     void shouldAllowMultiplePairingsForSameMatchNumber() throws Exception {
-        // Given: テスト用選手を作成
+        // Given: テスト用選手を作成（異なる2ペア分）。
+        // 注: create() は Issue #900 で「同日・同試合番号・同一ペア（順不同）」を冪等化したため、
+        // 同一ペアを2回POSTしても1件にまとめられる。本テストは「同一試合番号に複数ペアが共存できる」
+        // ことを検証する趣旨のため、重複しない別ペアを2件作成して2行になることを確認する。
         Player player1 = createAndSavePlayer("重複選手A", "A級");
         Player player2 = createAndSavePlayer("重複選手B", "A級");
+        Player player3 = createAndSavePlayer("重複選手C", "A級");
+        Player player4 = createAndSavePlayer("重複選手D", "A級");
 
         LocalDate sessionDate = LocalDate.of(2024, 2, 14);
-        MatchPairingCreateRequest request = new MatchPairingCreateRequest(
+        MatchPairingCreateRequest request1 = new MatchPairingCreateRequest(
                 sessionDate, 1, player1.getId(), player2.getId()
         );
+        MatchPairingCreateRequest request2 = new MatchPairingCreateRequest(
+                sessionDate, 1, player3.getId(), player4.getId()
+        );
 
-        // When: 1回目の作成は成功
+        // When: 同一試合番号に異なる1ペア目を作成（成功）
         mockMvc.perform(post("/api/match-pairings")
                         .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
 
-        // When: 同じ日付と試合番号で2回目の作成も成功する（同一試合番号に複数ペアが存在可能）
+        // When: 同一試合番号に異なる2ペア目を作成（こちらも成功し共存する）
         mockMvc.perform(post("/api/match-pairings")
                         .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
 
-        // Then: データベースに2件保存されている
+        // Then: データベースに2件保存されている（同一試合番号に複数ペアが共存可能）
         List<com.karuta.matchtracker.entity.MatchPairing> pairings =
                 matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate);
         assertThat(pairings).hasSize(2);

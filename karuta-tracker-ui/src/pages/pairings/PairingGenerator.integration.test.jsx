@@ -732,3 +732,141 @@ describe('直近対戦日表示ロジック', () => {
     expect(classify(recentMatches, '2026-04-23')).toEqual({ kind: 'past', text: '03/05' });
   });
 });
+
+describe('手動ロック（pairing-manual-lock）', () => {
+  // 保護判定の一般化: 結果入力済み(hasResult) OR 手動ロック(locked)
+  const isProtected = (p) => !!(p.hasResult || p.locked);
+
+  describe('保護判定 isProtected', () => {
+    it('結果入力済みは保護対象', () => {
+      expect(isProtected({ hasResult: true, locked: false })).toBe(true);
+    });
+    it('手動ロックは保護対象', () => {
+      expect(isProtected({ hasResult: false, locked: true })).toBe(true);
+    });
+    it('両方 false は非保護', () => {
+      expect(isProtected({ hasResult: false, locked: false })).toBe(false);
+    });
+    it('結果入力済み＋手動ロックも保護対象', () => {
+      expect(isProtected({ hasResult: true, locked: true })).toBe(true);
+    });
+  });
+
+  describe('保存ボタン無効化（手動ロック組は片側空欄チェックから除外）', () => {
+    // 本番: pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))
+    const isSaveDisabled = (pairings, loading = false) =>
+      loading || pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id));
+
+    it('手動ロック組は player が片側空でも保存を妨げない', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: null, hasResult: false, locked: true }, // 手動ロック → 除外
+      ];
+      expect(isSaveDisabled(pairings)).toBe(false);
+    });
+
+    it('未ロックで片側空欄なら保存不可', () => {
+      const pairings = [
+        { player1Id: 3, player2Id: null, hasResult: false, locked: false },
+      ];
+      expect(isSaveDisabled(pairings)).toBe(true);
+    });
+  });
+
+  describe('handleAutoMatch の lockedPairings マッピング（DTO の hasResult/locked を尊重）', () => {
+    // 本番: locked.map(p => ({ ...p, hasResult: p.hasResult || false, locked: p.locked || false }))
+    const mapLocked = (lockedPairings) =>
+      (lockedPairings || []).map(p => ({ ...p, hasResult: p.hasResult || false, locked: p.locked || false }));
+
+    it('結果入力済みロックは hasResult=true / locked=false のまま', () => {
+      const result = mapLocked([{ id: 1, hasResult: true, locked: false }]);
+      expect(result[0].hasResult).toBe(true);
+      expect(result[0].locked).toBe(false);
+    });
+
+    it('手動ロック（結果なし）は locked=true / hasResult=false（hasResult:true 固定にしない）', () => {
+      const result = mapLocked([{ id: 2, hasResult: false, locked: true }]);
+      expect(result[0].hasResult).toBe(false);
+      expect(result[0].locked).toBe(true);
+    });
+  });
+
+  describe('ロックバッジ出し分け', () => {
+    // 本番レンダリングの分岐: hasResult なら「結果入力済」、locked && !hasResult なら「ロック」
+    const badgeFor = (p) => {
+      if (p.hasResult) return '結果入力済';
+      if (p.locked) return 'ロック';
+      return null;
+    };
+
+    it('結果入力済みは「結果入力済」バッジ', () => {
+      expect(badgeFor({ hasResult: true, locked: false })).toBe('結果入力済');
+    });
+    it('手動ロックは「ロック」バッジ', () => {
+      expect(badgeFor({ hasResult: false, locked: true })).toBe('ロック');
+    });
+    it('結果入力済み＋手動ロックは「結果入力済」を優先', () => {
+      expect(badgeFor({ hasResult: true, locked: true })).toBe('結果入力済');
+    });
+    it('未ロックはバッジなし', () => {
+      expect(badgeFor({ hasResult: false, locked: false })).toBeNull();
+    });
+  });
+
+  describe('ドラッグ/タップ操作ガード（手動ロック組は操作不可）', () => {
+    // 本番: pairings[idx]?.hasResult || pairings[idx]?.locked
+    const isPairingLocked = (pairings, idx) => !!(pairings[idx]?.hasResult || pairings[idx]?.locked);
+
+    const pairings = [
+      { player1Id: 1, player2Id: 2, hasResult: false, locked: true },  // 手動ロック
+      { player1Id: 3, player2Id: 4, hasResult: false, locked: false }, // 通常
+    ];
+
+    it('手動ロック組は操作ガードに引っかかる（ドロップ・ドラッグ不可）', () => {
+      expect(isPairingLocked(pairings, 0)).toBe(true);
+    });
+    it('未ロック組は操作可能', () => {
+      expect(isPairingLocked(pairings, 1)).toBe(false);
+    });
+  });
+
+  describe('ロック実行の前提条件（未完成行が混在する場合はロックしない）', () => {
+    // 本番 handleLockPairing の早期 return 条件を再現:
+    // 対象組が揃っていても、未完成（片側空欄）の未ロック組が混在すると createBatch が
+    // バックエンドで弾かれるためロックを実行しない（保存ボタンと同じ制約・迂回防止）
+    const canLock = (pairing, pairings) => {
+      if (!pairing.player1Id || !pairing.player2Id) return false;
+      if (pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))) return false;
+      return true;
+    };
+
+    it('全組が揃っていれば完成済みの組はロック可能', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: 4, hasResult: false, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(true);
+    });
+
+    it('未完成（片側空欄）の未ロック組が混在するとロック不可（createBatch 迂回防止）', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: null, hasResult: false, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+
+    it('未完成行があっても結果入力済み/手動ロック済みは未完成チェックの対象外', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 5, player2Id: null, hasResult: true, locked: false },
+      ];
+      expect(canLock(pairings[0], pairings)).toBe(true);
+    });
+
+    it('対象組自体が片側空欄ならロック不可', () => {
+      const pairings = [{ player1Id: 1, player2Id: null, hasResult: false, locked: false }];
+      expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+  });
+});

@@ -345,6 +345,7 @@ Entity Layer (JPA Entity)
 | match_number | INT | NOT NULL | 試合番号 |
 | player1_id | BIGINT | NOT NULL, FK | 選手1ID |
 | player2_id | BIGINT | NOT NULL, FK | 選手2ID |
+| locked | BOOLEAN | NOT NULL, DEFAULT FALSE | 手動ロックフラグ（結果未入力でも自動組み合わせ・一括保存・回戦削除から保護。`add_locked_to_match_pairings.sql`） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
@@ -1346,19 +1347,23 @@ Entity Layer (JPA Entity)
   ],
   "lockedPairings": [
     {
+      "id": 12,
       "player1Id": 3,
       "player1Name": "鈴木一郎",
       "player2Id": 4,
       "player2Name": "高橋次郎",
       "score": 0.0,
-      "recentMatches": []
+      "recentMatches": [],
+      "hasResult": true,
+      "locked": false
     }
   ]
 }
 ```
+**補足**: `lockedPairings` は結果入力済みロック（`hasResult=true`）と手動ロック（`locked=true`）の両方を含む。フロントは各要素の `hasResult` / `locked` でバッジ（「結果入力済」/「🔒 ロック」）を出し分ける（`hasResult:true` 固定にしない）。
 
 #### POST /api/match-pairings/batch?date={date}&matchNumber={matchNumber}
-**説明**: 一括組み合わせ作成（結果入力済みペアリングはロック保持）
+**説明**: 一括組み合わせ作成（結果入力済み・手動ロックのペアリングは保持し、両選手を新規ペアから除外）
 **権限**: SUPER_ADMIN, ADMIN
 **リクエスト**: `MatchPairingBatchRequest`
 ```json
@@ -1381,8 +1386,18 @@ Entity Layer (JPA Entity)
 **レスポンス**: 削除されたペアリング情報（`MatchPairingDto`、`hasResult=true`、`matchId`付き）
 
 #### DELETE /api/match-pairings/date-and-match?date={date}&matchNumber={matchNumber}
-**説明**: 組み合わせ削除
+**説明**: 組み合わせ削除（結果入力済み・手動ロックの組は保持）
 **権限**: SUPER_ADMIN, ADMIN
+
+#### PATCH /api/match-pairings/{id}/lock
+**説明**: 指定組を手動ロック（二重ブッキング検証付き）。同一 `(session_date, match_number)`・同一組織スコープ内で対象2選手のいずれかが別の組に含まれる場合は 409 Conflict（`DuplicateResourceException`）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`）
+**レスポンス**: 更新後の `MatchPairingDto`（`locked=true`）
+
+#### PATCH /api/match-pairings/{id}/unlock
+**説明**: 指定組の手動ロックを解除（`locked=false`。組は残り通常の未ロック組に戻る）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`）
+**レスポンス**: 更新後の `MatchPairingDto`（`locked=false`）
 
 ---
 
@@ -2278,15 +2293,19 @@ Entity Layer (JPA Entity)
   - 最近の対戦履歴（日付、何日前）
 - 手動調整: 選手カード同士のスワップ、待機リストとの入れ替え
 - 新規ペアリング作成ドロップゾーン（待機選手をドロップ/タップして新規行作成、待機選手選択時のみ表示）
-- 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化）
+- 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化。手動ロック組は空欄チェック対象外）
 - 待機者リスト（DroppableSlot、選手はDraggablePlayerChip）
+- 手動ロック（pairing-manual-lock）:
+  - 編集可能で両選手が揃った各組に「ロック」ボタン（鍵アイコン）。未保存の組は `createBatch` 保存で `id` を確定してから `PATCH /api/match-pairings/{id}/lock` を呼ぶ
+  - 手動ロック済み組は「🔒 ロック」バッジ＋全ロール向け「解除」ボタン（`PATCH /{id}/unlock` → 再取得）。結果入力済みロックは「結果入力済」バッジ＋ADMIN以上の「リセット」と区別
+  - ロック組と両選手は自動マッチング・一括保存・回戦削除から保護（保護判定 = `hasResult || locked`）。ロック時はサーバーで「1選手1組」を担保（二重ブッキングは 409）
 
 **タップ選択モードの state 設計**:
 - `selectedPlayer`: `{ playerId, playerName, source }` 形式（`source` は `DraggablePlayerChip.data.source` と同形）
 - `handleChipClick` / `handleSlotClick` でクリック発火、`executePlacement(dest)` 共通関数で `computeDragResult` 呼出し〜state 更新〜`fetchPairHistory` 発火までを実行
 - `handleDragStart` 冒頭で `setSelectedPlayer(null)` を呼び、D&D との状態不整合を防止
 - `selectedPlayer` が非 null の時のみ `document` クリックリスナーを張り、チップ/スロット以外のクリックで選択解除（チップ/スロット側は `e.stopPropagation()` で伝播停止）
-- 編集モード時のみ有効（`isReadOnly` / `isViewMode` / `hasResult` 時は早期 return）
+- 編集モード時のみ有効（`isReadOnly` / `isViewMode` / `hasResult` / `locked` 時は早期 return）
 
 **アルゴリズム**:
 - 過去30日の対戦履歴取得
@@ -2424,6 +2443,7 @@ Entity Layer (JPA Entity)
 | 対戦組み合わせ | 組み合わせ作成・選手差し替え | ○ | ○（自団体のみ） | ○（所属団体のみ） |
 | | 自動マッチング | ○ | ○（自団体のみ） | ○（所属団体のみ） |
 | | 組み合わせ削除（個別/一括/結果込みリセット） | ○ | ○（自団体のみ） | × |
+| | 組み合わせロック/解除（手動ロック） | ○ | ○（自団体のみ） | ○（所属団体のみ） |
 | | 組み合わせ閲覧 | ○ | ○ | ○ |
 | 会場管理 | 会場CRUD | ○ | ○ | ○ |
 | 抽選 | 月別抽選実行 | ○ | ○（自団体のみ） | × |
