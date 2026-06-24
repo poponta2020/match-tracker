@@ -61,7 +61,7 @@ status: completed
 - **対応Issue:** #888
 
 ### タスク6: フロントエンドのテスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 選択UI・団体フィルタ・一括編集画面の主要挙動のテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerList.*.test.jsx` — 団体フィルタ（無所属/自会）、選択と一括編集導線、招待ボタンの有効/無効
