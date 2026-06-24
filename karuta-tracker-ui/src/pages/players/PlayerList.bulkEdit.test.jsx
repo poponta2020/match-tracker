@@ -9,12 +9,13 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   isSuperAdmin: vi.fn(),
   getCurrentPlayer: vi.fn(),
+  currentPlayer: vi.fn(),
 }));
 
 vi.mock('../../api/players', () => ({ playerAPI: { getAll: mocks.getAll } }));
 vi.mock('../../api/organizations', () => ({ organizationAPI: { getAll: mocks.orgGetAll } }));
 vi.mock('../../api/invite', () => ({ inviteAPI: { createToken: mocks.createToken } }));
-vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ currentPlayer: { id: 1 } }) }));
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ currentPlayer: mocks.currentPlayer() }) }));
 vi.mock('../../utils/auth', () => ({
   isSuperAdmin: () => mocks.isSuperAdmin(),
   getCurrentPlayer: () => mocks.getCurrentPlayer(),
@@ -45,6 +46,7 @@ describe('PlayerList - 選択UI・団体フィルタ・一括編集導線', () =
     // 既定は SUPER_ADMIN（フィルタ初期値=すべて）
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.getCurrentPlayer.mockReturnValue({ id: 1, role: 'SUPER_ADMIN', adminOrganizationId: null });
+    mocks.currentPlayer.mockReturnValue({ id: 1, adminOrganizationId: null });
   });
 
   afterEach(() => cleanup());
@@ -127,5 +129,20 @@ describe('PlayerList - 選択UI・団体フィルタ・一括編集導線', () =
     render(<PlayerList />);
     await screen.findByText('新一');
     expect(screen.getByRole('button', { name: /新規登録/ })).toBeTruthy();
+  });
+
+  it('ADMINは自団体選択時のみ招待ボタンが有効（他団体選択時は発行先固定のため無効）', async () => {
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.getCurrentPlayer.mockReturnValue({ id: 99, role: 'ADMIN', adminOrganizationId: 10 });
+    mocks.currentPlayer.mockReturnValue({ id: 99, adminOrganizationId: 10 });
+    render(<PlayerList />);
+    await screen.findByText('北大太郎'); // 初期フィルタ=自団体(10)
+
+    // 自団体(10)選択中 → 有効
+    expect(screen.getByRole('button', { name: 'グループ用' })).toBeEnabled();
+
+    // 他団体(20)に変更 → 無効（招待トークンはサーバ側で自団体に固定されるため）
+    await userEvent.selectOptions(screen.getByLabelText('団体で絞り込み'), '20');
+    expect(screen.getByRole('button', { name: 'グループ用' })).toBeDisabled();
   });
 });

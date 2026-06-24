@@ -100,9 +100,16 @@ const PlayerList = () => {
     return `${Math.floor(diffMonths / 12)}年前`;
   };
 
-  // 具体的な団体を選択しているときのみ招待リンクを発行できる（「すべて / 無所属」では不可）
+  // 招待リンクの発行先団体。具体的な団体を選択しているときのみ発行できる（「すべて / 無所属」では不可）。
+  // ADMIN は招待トークンがサーバ側で自団体（adminOrganizationId）に固定されるため、自団体を選んでいる
+  // ときだけ有効化し、画面の選択団体と実際の発行先がズレないようにする（SUPER_ADMIN は選択団体をそのまま使える）。
   const isConcreteOrg = orgFilter !== ORG_FILTER_ALL && orgFilter !== ORG_FILTER_NONE;
-  const targetOrgId = isConcreteOrg ? Number(orgFilter) : null;
+  const selectedOrgId = isConcreteOrg ? Number(orgFilter) : null;
+  const adminOrgId = currentPlayer?.adminOrganizationId ?? null;
+  const canInvite = isSuperAdmin()
+    ? selectedOrgId !== null
+    : selectedOrgId !== null && selectedOrgId === adminOrgId;
+  const targetOrgId = canInvite ? selectedOrgId : null;
 
   const generateInviteLink = async (type) => {
     if (!targetOrgId) {
@@ -223,9 +230,11 @@ const PlayerList = () => {
         {/* 招待リンク（具体的な団体選択時のみ発行可能） */}
         <div className="mb-3 bg-white rounded-xl shadow-sm p-3">
           <p className="text-xs text-[#6b7280] mb-2">招待リンクを発行してLINE等で共有</p>
-          {!isConcreteOrg && (
+          {!canInvite && (
             <p className="text-[11px] text-[#9ca3af] mb-2">
-              招待リンクは具体的な団体を選択すると発行できます
+              {isConcreteOrg
+                ? '招待リンクは自分の管轄団体でのみ発行できます'
+                : '招待リンクは具体的な団体を選択すると発行できます'}
             </p>
           )}
           <div className="flex gap-2">
