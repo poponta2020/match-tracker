@@ -4,7 +4,7 @@ import { playerAPI } from '../../api/players';
 import { organizationAPI } from '../../api/organizations';
 import { Save, X, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
-import { KYU_RANKS, DAN_RANKS, defaultDanForKyu } from '../../utils/rank';
+import { KYU_RANKS, DAN_RANKS, A_CLASS_DAN_RANKS, defaultDanForKyu } from '../../utils/rank';
 
 const GENDERS = ['男性', '女性', 'その他'];
 
@@ -327,7 +327,10 @@ const PlayerBulkEdit = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="" disabled>未設定</option>
-                    {DAN_RANKS.map((d) => <option key={d} value={d}>{d}</option>)}
+                    {/* A級は手動指定（四段〜八段）。それ以外は級に連動した値を表示するため全段位を許容 */}
+                    {(row.kyuRank === 'A級' ? A_CLASS_DAN_RANKS : DAN_RANKS).map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </div>
 

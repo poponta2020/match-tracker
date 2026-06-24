@@ -135,4 +135,14 @@ describe('PlayerBulkEdit', () => {
     const emptyOption = within(kyuSelect).getByRole('option', { name: '初心者' });
     expect(emptyOption).toBeDisabled();
   });
+
+  it('A級では段位の選択肢が四段〜八段に限定される（不整合な低段位を選べない）', async () => {
+    renderWith({ players: makePlayers() });
+    await userEvent.selectOptions(screen.getByLabelText('新一の級'), 'A級');
+    const danSelect = screen.getByLabelText('新一の段位');
+    expect(within(danSelect).getByRole('option', { name: '四段' })).toBeTruthy();
+    expect(within(danSelect).getByRole('option', { name: '八段' })).toBeTruthy();
+    expect(within(danSelect).queryByRole('option', { name: '無段' })).toBeNull();
+    expect(within(danSelect).queryByRole('option', { name: '参段' })).toBeNull();
+  });
 });
