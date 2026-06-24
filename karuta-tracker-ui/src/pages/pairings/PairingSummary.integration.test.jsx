@@ -220,18 +220,20 @@ describe('PairingSummary 単一試合モード（Part B）', () => {
     expect(screen.getByRole('button', { name: /札を再生成/ })).toBeInTheDocument();
   });
 
-  it('無効な matchNumber（0 / 数値でない）も全試合モードにフォールバック', async () => {
-    renderAt(TODAY, 0);
-    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
-    expect(getValue()).toContain('1試合目');
-    expect(getValue()).toContain('3試合目');
-
-    cleanup();
-
-    renderAt(TODAY, 'abc');
-    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
-    expect(getValue()).toContain('1試合目');
-    expect(getValue()).toContain('3試合目');
+  it('無効な matchNumber（0 / 数値でない / 部分数値文字列 / 小数 / 指数表記 / 先頭ゼロ / 負値）は全試合モードにフォールバック', async () => {
+    // parseInt なら '2abc'→2 / '1.5'→1 / '1e2'→1 と先頭を拾ってしまうが、
+    // 文字列全体が正の整数でなければ単一試合モードに入らず全試合モードにする
+    for (const invalid of [0, 'abc', '2abc', '1.5', '1e2', '01', '-1']) {
+      renderAt(TODAY, invalid);
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+      const v = getValue();
+      expect(v).toContain('1試合目');
+      expect(v).toContain('2試合目');
+      expect(v).toContain('3試合目');
+      // 全試合モードなので再生成ボタンが表示される（単一試合モードでは非表示）
+      expect(screen.getByRole('button', { name: /札を再生成/ })).toBeInTheDocument();
+      cleanup();
+    }
   });
 
   it('対象試合のペアが空でもエラーにせず、日付見出し＋N試合目＋札ルールを表示（URL直接アクセス防御）', async () => {

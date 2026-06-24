@@ -115,8 +115,10 @@ const PairingSummary = () => {
         setMatchData(data);
         setReadersByMatch(readers);
 
-        // 単一試合モード判定: URL の matchNumber が 1..totalMatches なら対象試合番号、外なら全試合モードへフォールバック
-        const parsedMatchNumber = parseInt(matchNumberParam, 10);
+        // 単一試合モード判定: URL の matchNumber が「正の整数文字列」かつ 1..totalMatches なら対象試合番号、外なら全試合モードへフォールバック
+        // parseInt は '2abc'/'1.5'/'1e2' の先頭部分を拾ってしまうため、正規表現で文字列全体が整数か検証する
+        const isIntegerParam = /^[1-9]\d*$/.test(matchNumberParam ?? '');
+        const parsedMatchNumber = isIntegerParam ? Number(matchNumberParam) : NaN;
         const validTarget =
           Number.isInteger(parsedMatchNumber) && parsedMatchNumber >= 1 && parsedMatchNumber <= totalMatches
             ? parsedMatchNumber
