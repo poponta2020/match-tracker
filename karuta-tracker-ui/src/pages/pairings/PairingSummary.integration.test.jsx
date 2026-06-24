@@ -157,6 +157,35 @@ describe('PairingSummary 札ルールの日付シード決定論化（Part A）'
     expect(localStorage.getItem(NONCE_PREFIX + TODAY)).toBeNull();
     expect(getValue()).toBe(before);
   });
+
+  it('localStorage 保存に失敗しても「札を再生成」で画面の札ルールは変わる', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    window.confirm = vi.fn().mockReturnValue(true);
+
+    renderAt(TODAY);
+    await waitFor(() => expect(screen.getByRole('button', { name: /札を再生成/ })).toBeInTheDocument());
+    const before = getValue();
+
+    // saveNonce の localStorage.setItem を失敗させる（QuotaExceeded 等を模擬）
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+
+    await user.click(screen.getByRole('button', { name: /札を再生成/ }));
+
+    // 保存は失敗しても nextNonce で再計算されるため、画面の札ルールテキストは変わる
+    expect(getValue()).not.toBe(before);
+    setItemSpy.mockRestore();
+  });
+
+  it('過去日（今日以外）では「札を再生成」ボタンが非表示（当日のみ再生成可）', async () => {
+    renderAt('2026-06-08'); // 今日(2026-06-09)以外
+    await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /札を再生成/ })).not.toBeInTheDocument();
+    // テキスト自体は決定論の既定で表示される
+    expect(getValue()).toContain('1試合目');
+  });
 });
 
 describe('PairingSummary 単一試合モード（Part B）', () => {

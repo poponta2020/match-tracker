@@ -167,11 +167,13 @@ export function saveNonce(date, n) {
 }
 
 /**
- * 日付（＋保存済み nonce）から決定論的に札ルール列を生成する公開ヘルパ。
+ * 日付（＋ nonce）から決定論的に札ルール列を生成する公開ヘルパ。
  * 保存に依存せず、同じ日・同じ nonce なら常に同じ札ルールになる。
+ * `nonce` 省略時は保存済み nonce（既定 0）を読む。再生成時は確定済みの nonce を明示で渡すことで、
+ * localStorage 保存の成否に依存せず再計算できる。
  */
-export function getCardRules(date, totalMatches) {
-  const rng = mulberry32(hashSeed(date, loadNonce(date)));
+export function getCardRules(date, totalMatches, nonce = loadNonce(date)) {
+  const rng = mulberry32(hashSeed(date, nonce));
   return generateCardRules(totalMatches, rng);
 }
 

@@ -10,6 +10,7 @@ import {
   getCardRules,
   loadNonce,
   saveNonce,
+  getTodayLocalDateStr,
   cleanupOldCardRules,
 } from './cardRules';
 
@@ -160,12 +161,18 @@ const PairingSummary = () => {
 
   const handleRegenerate = () => {
     if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
-    // 再生成カウンタ nonce を +1 して保存し、日付＋nonce シードで再計算する（単一試合モードでは非表示）
-    saveNonce(date, loadNonce(date) + 1);
-    const rules = getCardRules(date, matchData.length);
+    // nextNonce をローカルで確定してから保存・再計算する。saveNonce は localStorage 例外を握り潰すため、
+    // 保存に失敗しても nextNonce を明示で渡すことで画面の札ルールは確実に再生成される（単一試合モードでは非表示）
+    const nextNonce = loadNonce(date) + 1;
+    saveNonce(date, nextNonce);
+    const rules = getCardRules(date, matchData.length, nextNonce);
     setCardRules(rules);
     setText(generateText(date, matchData, rules, readersByMatch, targetMatchNumber));
   };
+
+  // 「札を再生成」は当日（今日）かつ全試合モードのときのみ表示する。
+  // 過去日・他日は決定論の既定札ルール（全端末一致）を表示し、cleanup の nonce 削除方針とも整合させる。
+  const canRegenerate = targetMatchNumber == null && date === getTodayLocalDateStr();
 
   if (loading) {
     return (
@@ -184,8 +191,8 @@ const PairingSummary = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-[#374151]">LINE送信用テキスト</h2>
           <div className="flex gap-2">
-            {/* 単一試合モードでは「札を再生成」を非表示（札ルールはその日全体の概念のため誤操作防止） */}
-            {targetMatchNumber == null && (
+            {/* 「札を再生成」は当日かつ全試合モードのみ表示（単一試合モード・過去日では非表示） */}
+            {canRegenerate && (
               <button
                 onClick={handleRegenerate}
                 className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
@@ -216,7 +223,7 @@ const PairingSummary = () => {
         />
 
         <p className="text-xs text-[#6b7280]">
-          テキストは自由に編集できます。{targetMatchNumber == null && '「札を再生成」で札ルールのみ再生成します。'}
+          テキストは自由に編集できます。{canRegenerate && '「札を再生成」で札ルールのみ再生成します。'}
         </p>
       </div>
 

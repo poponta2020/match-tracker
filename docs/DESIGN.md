@@ -2348,9 +2348,10 @@ Entity Layer (JPA Entity)
 - 対象試合のペアが空でもエラーにせず、日付見出し＋`N試合目　札ルール` を表示（URL直接アクセス防御）
 
 **「札を再生成」ボタン**:
-- 単一試合モード（`targetMatchNumber != null`）では非表示（札ルールはその日全体の概念であり、単一試合画面からの全体再生成は誤操作・混乱のもと）
-- 全試合モードでは押下時 `window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')` を表示し、OK のみ `saveNonce(date, loadNonce(date)+1)` → `getCardRules` で再計算。キャンセル時は何も変化しない
-- 結果として、再生成していない既定状態は全端末で不変、再生成した端末のみ枝分かれする（サーバ保存しない仕様上の許容事項）
+- **当日（今日）かつ全試合モード（`targetMatchNumber == null`）のときのみ表示**（`canRegenerate = targetMatchNumber == null && date === getTodayLocalDateStr()`）。単一試合モード・過去日・他日では非表示
+  - 過去日・他日を非表示にする理由: 決定論の既定札ルール（全端末一致）を表示して共有時の一貫性を保ち、cleanup の「今日以外の nonce 削除」方針との不整合（過去日で再生成しても次回ロードで既定に戻る）を解消する
+- 押下時 `window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')` を表示し、OK のみ `const nextNonce = loadNonce(date)+1; saveNonce(date, nextNonce)` の後 `getCardRules(date, totalMatches, nextNonce)` で再計算。`saveNonce` は localStorage 例外を握り潰すため、`nextNonce` を明示で渡して保存成否に依存せず画面を再生成する。キャンセル時は何も変化しない
+- 結果として、再生成していない既定状態は全端末で不変、再生成した端末（＝当日に再生成した端末）のみ枝分かれする（サーバ保存しない仕様上の許容事項）
 
 **対戦組み合わせ画面（PairingGenerator）の生成導線**:
 - 試合番号タブ直下に「全試合 / {N}試合目」セグメントトグル＋生成ボタンを表示（純粋ロジックは `lineTextTarget.js` に extract: `computeLineTextAvailability` / `resolveLineTextTarget` / `buildSummaryUrl`）
