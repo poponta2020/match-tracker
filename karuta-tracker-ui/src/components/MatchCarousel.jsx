@@ -130,17 +130,28 @@ export default function MatchCarousel({ totalMatches, currentMatchNumber, onChan
           willChange: 'transform',
         }}
       >
-        {/* 前の試合（左にチラ見え）。高さに影響しないよう絶対配置 */}
+        {/* 前の試合（左にチラ見え）。高さに影響しないよう絶対配置。
+            チラ見え用のプレビューなので inert でフォーカス・操作対象から外す（a11y） */}
         {!atFirst && (
-          <div className="absolute top-0 left-0 w-full" style={{ transform: 'translateX(-100%)' }} aria-hidden="true">
+          <div
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: 'translateX(-100%)', pointerEvents: 'none' }}
+            aria-hidden="true"
+            inert
+          >
             {renderPanel(currentMatchNumber - 1)}
           </div>
         )}
         {/* 現在の試合（高さの基準） */}
         <div className="w-full">{renderPanel(currentMatchNumber)}</div>
-        {/* 次の試合（右にチラ見え） */}
+        {/* 次の試合（右にチラ見え）。同上、inert で操作対象から外す */}
         {!atLast && (
-          <div className="absolute top-0 left-0 w-full" style={{ transform: 'translateX(100%)' }} aria-hidden="true">
+          <div
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: 'translateX(100%)', pointerEvents: 'none' }}
+            aria-hidden="true"
+            inert
+          >
             {renderPanel(currentMatchNumber + 1)}
           </div>
         )}

@@ -54,6 +54,15 @@ describe('MatchCarousel', () => {
     expect(screen.getByTestId('panel-3')).toBeInTheDocument(); // 次
   });
 
+  it('前後（チラ見え）パネルは inert で操作対象外、現在パネルは操作可能', () => {
+    renderCarousel({ currentMatchNumber: 2 });
+    // 現在パネルは inert コンテナの中にいない
+    expect(screen.getByTestId('panel-2').closest('[inert]')).toBeNull();
+    // 前後パネルは inert コンテナの中にいる（タブ順・アクセシビリティツリーから除外）
+    expect(screen.getByTestId('panel-1').closest('[inert]')).not.toBeNull();
+    expect(screen.getByTestId('panel-3').closest('[inert]')).not.toBeNull();
+  });
+
   it('最初の試合では前パネルを描画しない', () => {
     renderCarousel({ currentMatchNumber: 1 });
     expect(screen.queryByTestId('panel-0')).not.toBeInTheDocument();
