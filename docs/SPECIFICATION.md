@@ -2281,9 +2281,18 @@ UNIQUE制約: (player_id, organization_id)
 | GET | `/role/{role}` | ALL | ロール別取得 |
 | GET | `/count` | ALL | アクティブ選手数 |
 | POST | `/` | SUPER_ADMIN | 選手作成 |
+| PUT | `/bulk` | ADMIN+ | 複数選手の一括更新（性別・級・段位・かるた会の上書き＋所属練習会の追加）。`/{id}` より優先してマッチ |
 | PUT | `/{id}` | ALL | 選手更新 |
 | DELETE | `/{id}` | SUPER_ADMIN | 選手論理削除 |
 | PUT | `/{id}/role?role=` | SUPER_ADMIN | ロール変更 |
+
+**一括更新 `PUT /bulk` の仕様**:
+- リクエスト: `{ "updates": [{ "playerId", "gender", "kyuRank", "danRank", "karutaClub", "addOrganizationIds": [orgId...] }] }`
+- `gender / kyuRank / danRank / karutaClub` は **指定された項目のみ** `players` 列を上書き（`null` は据え置き。級↔段位の整合は単体更新と同様にフロントで算出する）
+- `addOrganizationIds` は既存に無い団体のみ `player_organizations` に追加（**追加のみ・冪等**。`(player_id, organization_id)` ユニーク制約で二重登録を防止。削除は提供しない）。追加経路は単体更新・招待登録と共通の `OrganizationService.ensurePlayerBelongsToOrganization` で、団体別の通知設定（push/LINE）も初期化する
+- `addOrganizationIds` は保存前に全件の団体存在を検証し、存在しないIDが含まれる場合は更新前に 404（ResourceNotFound）で**全件失敗**（FK の無い `player_organizations` に孤児データを作らない）
+- 権限は `@RequireRole(ADMIN以上)` のみ。対象選手の団体スコープ検証は行わない（トラストベースで **ADMIN も全選手を編集可**）
+- 全件を1トランザクションで処理し、1件でも失敗すれば**全件ロールバック**（all-or-nothing）
 
 ### 7.2.1 招待トークン (`/api/invite-tokens`)
 

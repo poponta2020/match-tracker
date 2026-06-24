@@ -957,6 +957,31 @@ Entity Layer (JPA Entity)
 }
 ```
 
+#### PUT /api/players/bulk
+**説明**: 複数選手の一括更新（性別・級・段位・かるた会の上書き＋所属練習会の追加）
+**権限**: ADMIN+（`@RequireRole(SUPER_ADMIN, ADMIN)`）。対象選手の団体スコープ検証は行わない（トラストベースでADMINも全選手を編集可）
+**リクエスト**: `PlayerBulkUpdateRequest`
+```json
+{
+  "updates": [
+    {
+      "playerId": 12,
+      "gender": "男性",
+      "kyuRank": "E級",
+      "danRank": "無段",
+      "karutaClub": "北海道大学かるた会",
+      "addOrganizationIds": [3]
+    }
+  ]
+}
+```
+**レスポンス**: 更新後の `List<PlayerDto>`（`organizationIds` 付き）
+**挙動**:
+- `gender / kyuRank / danRank / karutaClub` は非 null の項目のみ `players` 列を上書き（級↔段位の整合は単体更新と同様フロントで算出）
+- `addOrganizationIds` は既存に無い団体のみ `player_organizations` に追加（追加のみ・冪等。`(player_id, organization_id)` ユニーク制約で二重登録を防止）
+- `@Transactional` による all-or-nothing（1件でも失敗すれば全件ロールバック）
+- `"/bulk"` は `"/{id}"` より優先してマッチするため単体更新と競合しない
+
 ---
 
 ### 4.2.1 招待トークンAPI (`/api/invite-tokens`)

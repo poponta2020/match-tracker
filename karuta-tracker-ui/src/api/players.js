@@ -13,6 +13,9 @@ export const playerAPI = {
   // 選手更新
   update: (id, data) => apiClient.put(`/players/${id}`, data),
 
+  // 選手一括更新（性別・級・段位・かるた会の上書き＋所属練習会の追加）
+  bulkUpdate: (updates) => apiClient.put('/players/bulk', { updates }),
+
   // 選手削除
   delete: (id) => apiClient.delete(`/players/${id}`),
 

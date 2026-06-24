@@ -86,10 +86,11 @@
 
 | # | パス | ページコンポーネント | 主要子コンポーネント | 権限 | 説明 |
 |---|------|---------------------|---------------------|------|------|
-| 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、招待リンク生成（グループ用/個人用、招待先団体セレクタで指定） | SUPER_ADMIN | 選手一覧 |
+| 21 | `/players` | `PlayerList.jsx` | 検索、段位ソート、ロールバッジ、選択チェックボックス・全選択、団体フィルタ（すべて/団体別/無所属、招待先セレクタと統合）、一括編集導線、招待リンク生成（具体的団体選択時のみ有効） | ADMIN+ | 選手一覧（ADMINは初期フィルタが自管轄団体） |
 | 22 | `/players/new` | `PlayerEdit.jsx` | — | SUPER_ADMIN | 選手新規作成 |
 | 23 | `/players/:id` | `PlayerDetail.jsx` | — | SUPER_ADMIN | 選手詳細 |
 | 24 | `/players/:id/edit` | `PlayerEdit.jsx` | ロールがADMINの場合に管理団体ドロップダウン表示（SUPER_ADMIN専用） | SUPER_ADMIN | 選手編集 |
+| 40 | `/players/bulk-edit` | `PlayerBulkEdit.jsx` | 全員一括設定（性別/級＋「全員をE級に」/かるた会/北大・わすら追加）、選手ごとの編集（級↔段位連動・A級のみ段位手動・練習会追加/取消）、確認ダイアログ | ADMIN+ | 選手の一括編集（選手一覧で選択した選手をまとめて編集。直接遷移時は一覧へリダイレクト） |
 
 ---
 
@@ -222,7 +223,7 @@
 |------------|--------|------|
 | プロフィール | `/profile` | ALL |
 | 組み合わせ作成 | `/pairings` | ALL |
-| 選手管理 | `/players` | SUPER_ADMIN |
+| 選手管理 | `/players` | ADMIN+ |
 | 会場管理 | `/venues` | SUPER_ADMIN |
 | 練習日程作成 | `/practice/new` | ADMIN+ |
 | 参加練習会 | `/settings/organizations` | ALL |
@@ -297,6 +298,7 @@ karuta-tracker-ui/src/
     │   └── PairingSummary.jsx
     ├── players/
     │   ├── PlayerList.jsx
+    │   ├── PlayerBulkEdit.jsx
     │   ├── PlayerDetail.jsx
     │   └── PlayerEdit.jsx
     ├── mentor/

@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.Organization;
 import com.karuta.matchtracker.entity.PlayerOrganization;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
@@ -14,8 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -83,5 +87,36 @@ class OrganizationServiceTest {
         verify(playerOrganizationRepository).save(any(PlayerOrganization.class));
         // 例外は握り潰されるので、通知設定は作成されない（既に別リクエストで作成済み）
         verify(pushNotificationPreferenceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("validateOrganizationsExist: 全て存在すれば例外を投げない")
+    void validateOrganizationsExist_allExist_passes() {
+        when(organizationRepository.findAllById(any()))
+                .thenReturn(List.of(
+                        Organization.builder().id(10L).build(),
+                        Organization.builder().id(20L).build()));
+
+        organizationService.validateOrganizationsExist(List.of(10L, 20L));
+
+        verify(organizationRepository).findAllById(any());
+    }
+
+    @Test
+    @DisplayName("validateOrganizationsExist: 存在しないIDがあれば ResourceNotFoundException")
+    void validateOrganizationsExist_missing_throws() {
+        when(organizationRepository.findAllById(any()))
+                .thenReturn(List.of(Organization.builder().id(10L).build())); // 20L が存在しない
+
+        assertThatThrownBy(() -> organizationService.validateOrganizationsExist(List.of(10L, 20L)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("validateOrganizationsExist: 空なら検証せず例外も投げない")
+    void validateOrganizationsExist_empty_skips() {
+        organizationService.validateOrganizationsExist(List.of());
+
+        verify(organizationRepository, never()).findAllById(any());
     }
 }

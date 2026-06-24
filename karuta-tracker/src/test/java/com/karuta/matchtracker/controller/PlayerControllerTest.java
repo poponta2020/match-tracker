@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.karuta.matchtracker.dto.PlayerBulkUpdateRequest;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -414,5 +415,81 @@ class PlayerControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(playerService, never()).login(any());
+    }
+
+    @Test
+    @DisplayName("PUT /api/players/bulk - 複数選手を一括更新できる（ADMIN）")
+    void testBulkUpdatePlayers() throws Exception {
+        // Given
+        PlayerDto updated = PlayerDto.builder()
+                .id(1L).name("一郎").kyuRank(Player.KyuRank.A級).danRank(Player.DanRank.四段).build();
+        when(playerService.bulkUpdate(any(PlayerBulkUpdateRequest.class))).thenReturn(List.of(updated));
+
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder()
+                        .playerId(1L).kyuRank(Player.KyuRank.A級).danRank(Player.DanRank.四段).build()))
+                .build();
+
+        // When & Then
+        mockMvc.perform(put("/api/players/bulk")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].kyuRank").value("A級"));
+
+        verify(playerService).bulkUpdate(any(PlayerBulkUpdateRequest.class));
+    }
+
+    @Test
+    @DisplayName("PUT /api/players/bulk - updates が空ならバリデーションエラー(400)")
+    void testBulkUpdatePlayersValidationError() throws Exception {
+        // Given - updates が空（@NotEmpty 違反）
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of()).build();
+
+        // When & Then
+        mockMvc.perform(put("/api/players/bulk")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verify(playerService, never()).bulkUpdate(any(PlayerBulkUpdateRequest.class));
+    }
+
+    @Test
+    @DisplayName("PUT /api/players/bulk - updates に null 要素があればバリデーションエラー(400)")
+    void testBulkUpdatePlayersNullElement() throws Exception {
+        // updates 配列に null 要素 → List<@NotNull Item> 違反で 400（NPEによる500ではない）
+        mockMvc.perform(put("/api/players/bulk")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"updates\":[null]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(playerService, never()).bulkUpdate(any(PlayerBulkUpdateRequest.class));
+    }
+
+    @Test
+    @DisplayName("PUT /api/players/bulk - PLAYER ロールは権限エラー(403)")
+    void testBulkUpdatePlayersForbidden() throws Exception {
+        // Given
+        PlayerBulkUpdateRequest request = PlayerBulkUpdateRequest.builder()
+                .updates(List.of(PlayerBulkUpdateRequest.Item.builder().playerId(1L).build()))
+                .build();
+
+        // When & Then - PLAYER は @RequireRole(SUPER_ADMIN, ADMIN) に該当せず 403
+        mockMvc.perform(put("/api/players/bulk")
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+
+        verify(playerService, never()).bulkUpdate(any(PlayerBulkUpdateRequest.class));
     }
 }

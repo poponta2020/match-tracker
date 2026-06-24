@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: バックエンド一括更新API
-- [ ] 完了
+- [x] 完了
 - **概要:** 複数選手の `players` 列（性別・級・段位・かるた会）更新と、所属練習会の追加（追加のみ）をトランザクションで行う一括更新エンドポイントを実装する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/PlayerBulkUpdateRequest.java` — 新規。`List<Item> updates`、`Item{ Long playerId, Player.Gender gender, Player.KyuRank kyuRank, Player.DanRank danRank, String karutaClub, List<Long> addOrganizationIds }`
@@ -17,7 +17,7 @@ status: completed
 - **対応Issue:** #884
 
 ### タスク2: バックエンドのテスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 一括更新サービス/エンドポイントの単体・結合テストを追加（Jacoco 最低カバレッジ60%維持）。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/PlayerServiceTest.java`（または新規テストクラス）— bulkUpdate の正常系（複数選手の属性更新＋org追加マージ）、org重複追加が二重登録されないこと、級↔段位連動、空 updates 等の境界
@@ -26,7 +26,7 @@ status: completed
 - **対応Issue:** #885
 
 ### タスク3: フロント APIクライアント
-- [ ] 完了
+- [x] 完了
 - **概要:** 一括更新APIを呼ぶクライアントメソッドを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/players.js` — `bulkUpdate: (updates) => apiClient.put('/players/bulk', { updates })` を追加
@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:** #886
 
 ### タスク4: 選手一覧（PlayerList）の選択UI・団体フィルタ・導線
-- [ ] 完了
+- [x] 完了
 - **概要:** 選手一覧にチェックボックス選択・団体フィルタ（すべて/団体別/無所属）・「一括編集」導線を追加し、既存の招待用団体セレクトを表示フィルタと統合する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerList.jsx`
@@ -46,7 +46,7 @@ status: completed
 - **対応Issue:** #887
 
 ### タスク5: 一括編集画面（PlayerBulkEdit）の新規作成・ルーティング
-- [ ] 完了
+- [x] 完了
 - **概要:** 選択選手を行で並べた編集テーブルと一括設定エリアを持つ新規ページを作成し、保存で一括更新APIを呼ぶ。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerBulkEdit.jsx` — 新規
@@ -61,7 +61,7 @@ status: completed
 - **対応Issue:** #888
 
 ### タスク6: フロントエンドのテスト
-- [ ] 完了
+- [x] 完了
 - **概要:** 選択UI・団体フィルタ・一括編集画面の主要挙動のテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/players/PlayerList.*.test.jsx` — 団体フィルタ（無所属/自会）、選択と一括編集導線、招待ボタンの有効/無効
@@ -70,7 +70,7 @@ status: completed
 - **対応Issue:** #889
 
 ### タスク7: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** 実装内容を仕様・画面一覧・設計書へ反映（CLAUDE.md のドキュメント更新ルール）。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` — 一括編集機能の仕様

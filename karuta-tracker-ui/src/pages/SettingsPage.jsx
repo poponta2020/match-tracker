@@ -39,7 +39,7 @@ const SettingsPage = () => {
     { label: 'LINE通知スケジュール', icon: MessageSquare, path: '/admin/line/schedule', visible: isAdmin() },
     { label: '伝助管理', icon: ClipboardList, path: '/admin/densuke', visible: isAdmin() },
     { label: '抽選管理', icon: Dices, path: '/admin/lottery', visible: isAdmin() },
-    { label: '選手管理', icon: Users, path: '/players', visible: isSuperAdmin() },
+    { label: '選手管理', icon: Users, path: '/players', visible: isAdmin() },
     { label: '会場管理', icon: MapPin, path: '/venues', visible: isSuperAdmin() },
     { label: 'LINEチャネル管理', icon: MessageSquare, path: '/admin/line/channels', visible: isSuperAdmin() },
   ].filter(item => item.visible);

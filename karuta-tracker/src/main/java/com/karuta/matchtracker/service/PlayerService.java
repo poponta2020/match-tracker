@@ -2,6 +2,7 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.LoginRequest;
 import com.karuta.matchtracker.dto.LoginResponse;
+import com.karuta.matchtracker.dto.PlayerBulkUpdateRequest;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -21,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +39,7 @@ public class PlayerService {
 
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
+    private final OrganizationService organizationService;
 
     /**
      * 全てのアクティブな選手を取得（名前順）
@@ -180,6 +184,103 @@ public class PlayerService {
 
         log.info("Successfully updated player with id: {}", id);
         return PlayerDto.fromEntity(updated);
+    }
+
+    /**
+     * 複数選手の情報を一括更新（トランザクション・all-or-nothing）。
+     *
+     * <ul>
+     *   <li>各選手の players 列（性別・級・段位・かるた会）を、指定された項目のみ上書きする。</li>
+     *   <li>addOrganizationIds の所属団体を追加する（追加のみ・冪等）。既に所属していれば二重登録しない。
+     *       追加は {@link OrganizationService#ensurePlayerBelongsToOrganization} 経由で行い、
+     *       単体更新・招待登録と同じく団体別の通知設定（push/LINE）も初期化する。</li>
+     * </ul>
+     *
+     * 級↔段位の整合はフロントエンドで算出するため、単体更新と同様にここでは検証しない。
+     * 団体スコープ検証は行わない（@RequireRole(ADMIN以上) のみで制御）。
+     *
+     * @param request 一括更新リクエスト
+     * @return 更新後の選手DTOリスト（organizationIds 付き）
+     */
+    @Transactional
+    @CacheEvict(value = "players", allEntries = true)
+    public List<PlayerDto> bulkUpdate(PlayerBulkUpdateRequest request) {
+        List<PlayerBulkUpdateRequest.Item> updates = request.getUpdates();
+        log.info("Bulk updating {} players", updates == null ? 0 : updates.size());
+
+        if (updates == null || updates.isEmpty()) {
+            return List.of();
+        }
+
+        // 追加対象の団体IDを事前に存在確認（不正IDは更新前に弾き、all-or-nothing を維持。
+        // player_organizations にFKが無いため、孤児データの作成をサービス層で防ぐ）
+        List<Long> addOrgIdsToValidate = updates.stream()
+                .map(PlayerBulkUpdateRequest.Item::getAddOrganizationIds)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (!addOrgIdsToValidate.isEmpty()) {
+            organizationService.validateOrganizationsExist(addOrgIdsToValidate);
+        }
+
+        // 既存の所属団体をバッチ取得（N+1回避）。playerId -> 所属団体IDの可変リスト
+        List<Long> playerIds = updates.stream()
+                .map(PlayerBulkUpdateRequest.Item::getPlayerId)
+                .collect(Collectors.toList());
+        Map<Long, List<Long>> existingOrgIdsByPlayerId = playerOrganizationRepository.findByPlayerIdIn(playerIds).stream()
+                .collect(Collectors.groupingBy(
+                        PlayerOrganization::getPlayerId,
+                        Collectors.mapping(PlayerOrganization::getOrganizationId,
+                                Collectors.toCollection(ArrayList::new))
+                ));
+
+        List<PlayerDto> result = new ArrayList<>();
+
+        for (PlayerBulkUpdateRequest.Item item : updates) {
+            Player player = playerRepository.findById(item.getPlayerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Player", item.getPlayerId()));
+
+            // 削除済みの選手は更新不可（単体更新と同一挙動。1件でも該当すれば全体ロールバック）
+            if (player.isDeleted()) {
+                throw new IllegalStateException("Cannot update deleted player: " + item.getPlayerId());
+            }
+
+            // players 列の更新（指定された項目のみ反映）
+            if (item.getGender() != null) {
+                player.setGender(item.getGender());
+            }
+            if (item.getKyuRank() != null) {
+                player.setKyuRank(item.getKyuRank());
+            }
+            if (item.getDanRank() != null) {
+                player.setDanRank(item.getDanRank());
+            }
+            if (item.getKarutaClub() != null) {
+                player.setKarutaClub(item.getKarutaClub());
+            }
+            playerRepository.save(player);
+
+            // 所属団体の追加（追加のみ・冪等）
+            List<Long> existingOrgIds = existingOrgIdsByPlayerId
+                    .computeIfAbsent(player.getId(), k -> new ArrayList<>());
+            List<Long> addIds = item.getAddOrganizationIds();
+            if (addIds != null) {
+                for (Long orgId : addIds) {
+                    if (orgId != null && !existingOrgIds.contains(orgId)) {
+                        // 単体更新・招待登録と同じ正規経路を通し、団体別の通知設定（push/LINE）も初期化する
+                        organizationService.ensurePlayerBelongsToOrganization(player.getId(), orgId);
+                        existingOrgIds.add(orgId);
+                    }
+                }
+            }
+
+            result.add(PlayerDto.fromEntity(player, new ArrayList<>(existingOrgIds)));
+        }
+
+        log.info("Bulk update completed for {} players", result.size());
+        return result;
     }
 
     /**

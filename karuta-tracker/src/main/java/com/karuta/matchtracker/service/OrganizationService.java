@@ -14,6 +14,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -199,5 +201,26 @@ public class OrganizationService {
     public Organization getOrganizationById(Long id) {
         return organizationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("団体が見つかりません: " + id));
+    }
+
+    /**
+     * 指定された団体IDがすべて存在することを検証する。
+     * 1件でも存在しなければ {@link ResourceNotFoundException} を投げる。
+     *
+     * <p>一括更新など、外部入力由来の団体IDを {@code player_organizations} へ保存する前の
+     * バリデーションに使う（DBに外部キー制約がないため、孤児データの作成を防ぐ）。</p>
+     *
+     * @param organizationIds 検証する団体IDの集合（null/空なら検証しない）
+     */
+    @Transactional(readOnly = true)
+    public void validateOrganizationsExist(Collection<Long> organizationIds) {
+        if (organizationIds == null || organizationIds.isEmpty()) {
+            return;
+        }
+        Set<Long> distinctIds = new HashSet<>(organizationIds);
+        long foundCount = organizationRepository.findAllById(distinctIds).size();
+        if (foundCount != distinctIds.size()) {
+            throw new ResourceNotFoundException("指定された団体が見つかりません");
+        }
     }
 }

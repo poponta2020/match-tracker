@@ -3,6 +3,7 @@ package com.karuta.matchtracker.controller;
 import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.LoginRequest;
 import com.karuta.matchtracker.dto.LoginResponse;
+import com.karuta.matchtracker.dto.PlayerBulkUpdateRequest;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -117,6 +118,25 @@ public class PlayerController {
         log.info("POST /api/players - Creating new player: {}", request.getName());
         PlayerDto createdPlayer = playerService.createPlayer(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdPlayer);
+    }
+
+    /**
+     * 複数選手の情報を一括更新（性別・級・段位・かるた会の上書き、所属練習会の追加）
+     *
+     * ADMIN / SUPER_ADMIN のみ利用可。対象選手の団体スコープ検証は行わない（トラストベース）。
+     * "/bulk" は "/{id}" より優先してマッチするため、単体更新エンドポイントと競合しない。
+     *
+     * @param request 一括更新リクエスト
+     * @return 更新された選手情報のリスト
+     */
+    @PutMapping("/bulk")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<List<PlayerDto>> bulkUpdatePlayers(
+            @Valid @RequestBody PlayerBulkUpdateRequest request) {
+        int count = request.getUpdates() == null ? 0 : request.getUpdates().size();
+        log.info("PUT /api/players/bulk - Bulk updating {} players", count);
+        List<PlayerDto> updatedPlayers = playerService.bulkUpdate(request);
+        return ResponseEntity.ok(updatedPlayers);
     }
 
     /**
