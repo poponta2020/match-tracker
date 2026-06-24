@@ -55,7 +55,7 @@ status: completed
 - **対応Issue:** #787
 
 ### タスク5: 動作確認
-- [ ] 完了
+- [x] 完了
 - **概要:** PR マージ後、GitHub Actions が想定通り動作することを確認
 - **確認内容:**
   - Actions タブで `Sync Kaderu Reservations to Practice Sessions` を `workflow_dispatch` で手動実行

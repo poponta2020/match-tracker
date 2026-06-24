@@ -172,7 +172,7 @@ status: completed
 - **対応 Issue:** [#465](https://github.com/poponta2020/match-tracker/issues/465)
 
 ### タスク14: E2E 動作確認
-- [ ] 完了
+- [x] 完了
 - **概要:** 開発環境で実動作確認
 - **確認項目:**
   - 伝助ページが正しく作成される（タスク1 で特定したエンドポイントが機能する）
