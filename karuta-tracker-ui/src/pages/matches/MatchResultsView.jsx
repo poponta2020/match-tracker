@@ -583,7 +583,7 @@ const MatchResultsView = () => {
                         {pairing.player1Name}
                       </Link>
                       {isLessonMatch ? (
-                        <div className="font-bold text-gray-700 w-12 text-center flex-shrink-0">
+                        <div className="font-bold text-gray-700 w-[6.5rem] text-center flex-shrink-0">
                           指導
                         </div>
                       ) : (
