@@ -148,7 +148,9 @@ export function loadNonce(date) {
   try {
     const raw = localStorage.getItem(NONCE_PREFIX + date);
     if (raw == null) return 0;
-    const n = parseInt(raw, 10);
+    // 文字列全体が非負整数のときのみ採用。parseInt は '1abc'/'1.5'/'1e2' の先頭を拾うため正規表現で全体検証する
+    if (!/^\d+$/.test(raw)) return 0;
+    const n = Number(raw);
     return Number.isInteger(n) && n >= 0 ? n : 0;
   } catch {
     return 0;

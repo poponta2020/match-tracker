@@ -215,6 +215,13 @@ describe('loadNonce / saveNonce', () => {
     localStorage.setItem(NONCE_PREFIX + '2026-06-09', '-1');
     expect(loadNonce('2026-06-09')).toBe(0);
   });
+
+  it('部分的に数値で始まる文字列（1abc / 1.5 / 1e2）も 0 にフォールバック', () => {
+    for (const bad of ['1abc', '1.5', '1e2']) {
+      localStorage.setItem(NONCE_PREFIX + '2026-06-09', bad);
+      expect(loadNonce('2026-06-09')).toBe(0);
+    }
+  });
 });
 
 describe('getCardRules', () => {
