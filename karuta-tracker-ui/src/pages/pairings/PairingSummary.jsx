@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
+import { byeActivityAPI } from '../../api/byeActivities';
 import { Copy, Check, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
@@ -24,9 +25,25 @@ function padName(name, width = 6) {
 }
 
 /**
- * テキスト生成
+ * 抜け番活動の配列から「試合番号 → 読手名の配列」マップを構築する。
+ * 活動種別が READING（読み）のものだけを読手として対象にする。
  */
-function generateText(date, matchData, cardRules) {
+function buildReadersByMatch(activities) {
+  const map = {};
+  for (const a of activities) {
+    if (a.activityType !== 'READING') continue;
+    if (a.matchNumber == null || !a.playerName) continue;
+    if (!map[a.matchNumber]) map[a.matchNumber] = [];
+    map[a.matchNumber].push(a.playerName);
+  }
+  return map;
+}
+
+/**
+ * テキスト生成
+ * @param {Object} readersByMatch { [試合番号]: [読手名, ...] }（読みに設定された抜け番選手）
+ */
+function generateText(date, matchData, cardRules, readersByMatch = {}) {
   const d = new Date(date + 'T00:00:00');
   const month = d.getMonth() + 1;
   const day = d.getDate();
@@ -37,6 +54,11 @@ function generateText(date, matchData, cardRules) {
     const rule = cardRules[i];
     if (i > 0) text += '\n';
     text += `${i + 1}試合目　${rule ? rule.description : ''}\n`;
+
+    const readers = readersByMatch[i + 1];
+    if (readers && readers.length > 0) {
+      text += `【読手：${readers.join('、')}】\n`;
+    }
 
     for (const pairing of match.pairings) {
       text += `${padName(pairing.player1Name)}　${padName(pairing.player2Name)}\n`;
@@ -53,6 +75,7 @@ const PairingSummary = () => {
   const [loading, setLoading] = useState(true);
   const [matchData, setMatchData] = useState([]);
   const [cardRules, setCardRules] = useState([]);
+  const [readersByMatch, setReadersByMatch] = useState({});
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef(null);
@@ -75,8 +98,13 @@ const PairingSummary = () => {
             .then(res => ({ matchNumber: i + 1, pairings: res.data || [] }))
             .catch(() => ({ matchNumber: i + 1, pairings: [] }))
         );
-        const data = await Promise.all(promises);
+        // 抜け番活動（読み）を取得し「試合番号→読手名」マップを構築（失敗時は読手なしで継続）
+        const byePromise = byeActivityAPI.getByDate(date)
+          .then(res => buildReadersByMatch(res.data || []))
+          .catch(() => ({}));
+        const [data, readers] = await Promise.all([Promise.all(promises), byePromise]);
         setMatchData(data);
+        setReadersByMatch(readers);
 
         // 札ルール: localStorage 復元優先
         // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
@@ -94,7 +122,7 @@ const PairingSummary = () => {
         setCardRules(rules);
 
         // テキスト生成
-        const generatedText = generateText(date, data, rules);
+        const generatedText = generateText(date, data, rules, readers);
         setText(generatedText);
       } catch (err) {
         console.error('Failed to fetch pairing data:', err);
@@ -128,7 +156,7 @@ const PairingSummary = () => {
     // 過去日（date !== 今日）の場合は保存しない（cleanupOldCardRules の方針と整合）
     if (date === getTodayLocalDateStr()) saveCardRules(date, rules);
     setCardRules(rules);
-    setText(generateText(date, matchData, rules));
+    setText(generateText(date, matchData, rules, readersByMatch));
   };
 
   if (loading) {

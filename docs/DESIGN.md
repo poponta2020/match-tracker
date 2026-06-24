@@ -350,6 +350,14 @@ Entity Layer (JPA Entity)
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
+**ユニークインデックス**: `uq_match_pairings_date_number_players (session_date, match_number, LEAST(player1_id, player2_id), GREATEST(player1_id, player2_id))`（順不同ペアの関数ユニークインデックス。同日・同試合番号・同ペアの重複登録を防止。`match_pairings` は `matches` と異なり `player1_id < player2_id` を正規化しないため LEAST/GREATEST で順不同に正規化する。Hibernate では関数インデックスを管理できないため Render PostgreSQL へ手動適用。Issue #900）
+
+**重複・ゾンビ組み合わせ対策**（`MatchPairingService`、Issue #900）:
+- `create`: 同一（日・試合番号・順不同ペア）が既存なら重複作成せず既存を返す（冪等）。
+- `createBatch`: リクエスト内の同一ペア（順不同）を初出のみ採用して重複排除し、ロック済みペアと同一の新規も除外する。フロントの組み合わせ state に同一ペアが多重蓄積したペイロードでも1行に正規化される。
+- `createBatch` / `deleteByDateAndMatchNumber`: 「当日のどのセッションでも両選手が同時に参加していない」かつ結果なしのペア（ゾンビ）も削除する。組織スコープのフィルタ（`filterPairingsBySession`、両選手が同一団体セッション参加者のみ対象）から漏れるペア（両者非参加／片方だけ参加／両者が別セッション・別団体に分かれて参加）は従来は削除されず、再生成のたびに重複が累積し、フロントの一括削除でも消せなかった。ただし**組織スコープ操作では他団体データを破壊しないよう**、両選手とも「自団体セッション参加者」または「当日どのセッションの参加者でもない（誰のものでもない）」ペアに限定する（他団体参加者を含むペアは保護）。SUPER_ADMIN（organizationId=null）は団体横断で掃除する。
+- `updatePlayer`: 差し替え後のペアが同日・同試合番号で既存と重複する場合は検証エラー（ユニークインデックス由来の500を回避）。
+
 ---
 
 #### bye_activities（抜け番活動記録）
@@ -2319,11 +2327,11 @@ Entity Layer (JPA Entity)
 
 **画面ロード時の処理順**（`useEffect` 内）:
 1. `cleanupOldCardRules()` で「クライアント端末ローカルタイムの今日」と一致しない日付の保存値をまとめて削除（過去日にアクセスしても保存しない）
-2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得
+2. 対戦データを `pairingAPI.getByDateAndMatchNumber` で全試合分取得。あわせて `byeActivityAPI.getByDate(date)` で抜け番活動を取得し、`activityType = READING`（読み）のものを「試合番号→読手名」マップ（`readersByMatch`）に集約（取得失敗時は読手なしで継続）
 3. `loadCardRules(date)` で復元を試行
 4. 復元成功時: `reconcileCardRules(stored, totalMatches)` で試合数差分を吸収（`changed: true` のときのみ `saveCardRules` で上書き）
 5. 復元失敗時: `generateCardRules(totalMatches)` で新規生成し `saveCardRules` で保存
-6. テキストは最新の対戦データ＋札ルールから `generateText` で再生成（対戦変更は自動反映）
+6. テキストは最新の対戦データ＋札ルール＋`readersByMatch` から `generateText` で再生成（対戦変更は自動反映）。各試合の `{N}試合目` 行直後に読手がいれば `【読手：○○】`（複数は「、」区切り）を出力
 
 **試合数不一致のフォールバック**（`reconcileCardRules`）:
 - 一致: そのまま
