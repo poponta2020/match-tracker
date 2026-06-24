@@ -6,7 +6,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: バックエンド一括更新API
-- [ ] 完了
+- [x] 完了
 - **概要:** 複数選手の `players` 列（性別・級・段位・かるた会）更新と、所属練習会の追加（追加のみ）をトランザクションで行う一括更新エンドポイントを実装する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/PlayerBulkUpdateRequest.java` — 新規。`List<Item> updates`、`Item{ Long playerId, Player.Gender gender, Player.KyuRank kyuRank, Player.DanRank danRank, String karutaClub, List<Long> addOrganizationIds }`
