@@ -602,9 +602,15 @@ public class MatchService {
         }
 
         boolean lesson = Boolean.TRUE.equals(isLesson);
-        // 通常試合では枚数差必須（指導試合のみ null 許容）。フロント任せにせず API でも担保する
-        if (!lesson && scoreDifference == null) {
-            throw new IllegalArgumentException("通常試合では枚数差は必須です");
+        // 通常試合では枚数差必須かつ範囲内（指導試合のみ null 許容）。フロント任せにせず API でも担保する
+        // 範囲は登録時の MatchCreateRequest の @Min(-25)/@Max(25) と一致させる
+        if (!lesson) {
+            if (scoreDifference == null) {
+                throw new IllegalArgumentException("通常試合では枚数差は必須です");
+            }
+            if (scoreDifference < -25 || scoreDifference > 25) {
+                throw new IllegalArgumentException("枚数差は-25〜25の範囲で入力してください");
+            }
         }
         match.setWinnerId(winnerId);
         // 指導試合では枚数差を保持しない（null）

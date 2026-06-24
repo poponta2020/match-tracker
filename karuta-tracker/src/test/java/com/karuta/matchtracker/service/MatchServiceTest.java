@@ -402,6 +402,20 @@ class MatchServiceTest {
     }
 
     @Test
+    @DisplayName("通常試合の更新で枚数差が範囲外の場合はIllegalArgumentException")
+    void testUpdateMatchRejectsOutOfRangeScoreForNonLesson() {
+        // Given
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+
+        // When & Then: 通常試合で範囲外(>25)の枚数差は拒否
+        assertThatThrownBy(() ->
+                matchService.updateMatch(1L, 1L, 999, 1L, null, null, false, 1L, Player.Role.PLAYER))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("範囲");
+        verify(matchRepository, never()).save(any(Match.class));
+    }
+
+    @Test
     @DisplayName("簡易更新は指導試合フラグを解除する（通常試合化）")
     void testUpdateMatchSimpleClearsLessonFlag() {
         // Given: 既存は指導試合
