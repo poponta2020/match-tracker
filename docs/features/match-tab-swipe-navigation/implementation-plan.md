@@ -50,7 +50,7 @@ status: completed
 - **対応Issue:** #925
 
 ### タスク5: 個人入力 MatchForm スライドイン＋警告＋dirty追跡
-- [ ] 完了
+- [x] 完了
 - **概要:** MatchForm にスライドイン（方式B）と未保存警告を実装。
   - `isDirty` 状態を追加。ユーザー操作（結果ボタン・枚数差・お手付き・メモ・対戦相手選択・抜け番活動・手動抜け番切替）で true、保存成功時・確認後の試合切替時に false。`applyMatchData` では立てない。
   - 共通ガード `requestMatchNumberChange(num, { fromSwipe })` を追加。`isDirty` なら確認ダイアログ→OKで切替／キャンセルで据え置き。dirtyでなければ即切替。**既存タブonClickとスワイプ確定の両方をこのガード経由**にする。
