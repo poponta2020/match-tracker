@@ -336,6 +336,15 @@ public class MatchService {
         com.karuta.matchtracker.dto.RankStatisticsDto totalStats =
                 com.karuta.matchtracker.dto.RankStatisticsDto.create("総計", totalMatches, totalWins);
 
+        // 指導回数・被指導回数（総計と同じフィルタ後の集合から算出）
+        // 指導試合は winner_id ベースで勝敗が決まる: 勝ち=指導した側、負け=指導された側。
+        long lessonGivenCount = filteredMatches.stream()
+                .filter(m -> Boolean.TRUE.equals(m.getIsLesson()) && RESULT_WIN.equals(m.getResult()))
+                .count();
+        long lessonReceivedCount = filteredMatches.stream()
+                .filter(m -> Boolean.TRUE.equals(m.getIsLesson()) && RESULT_LOSE.equals(m.getResult()))
+                .count();
+
         // 級別統計を計算
         Map<String, com.karuta.matchtracker.dto.RankStatisticsDto> byRankMap = new java.util.LinkedHashMap<>();
 
@@ -366,6 +375,8 @@ public class MatchService {
         return com.karuta.matchtracker.dto.StatisticsByRankDto.builder()
                 .total(totalStats)
                 .byRank(byRankMap)
+                .lessonGivenCount(lessonGivenCount)
+                .lessonReceivedCount(lessonReceivedCount)
                 .build();
     }
 
@@ -496,8 +507,11 @@ public class MatchService {
         Match saved;
         if (existing.isPresent()) {
             Match match = existing.get();
+            boolean lesson = Boolean.TRUE.equals(request.getIsLesson());
             match.setWinnerId(request.getWinnerId());
-            match.setScoreDifference(request.getScoreDifference());
+            // 指導試合では枚数差を保持しない（null）
+            match.setScoreDifference(lesson ? null : request.getScoreDifference());
+            match.setIsLesson(lesson);
             match.setUpdatedBy(currentUserId != null ? currentUserId : request.getCreatedBy());
             setPlayerKyuRanks(match);
             saved = matchRepository.save(match);
@@ -557,7 +571,7 @@ public class MatchService {
      * 試合結果を更新
      */
     @Transactional
-    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount, Long currentUserId, Role currentUserRole) {
+    public MatchDto updateMatch(Long id, Long winnerId, Integer scoreDifference, Long updatedBy, String personalNotes, Integer otetsukiCount, Boolean isLesson, Long currentUserId, Role currentUserRole) {
         log.info("Updating match with id: {}", id);
 
         Match match = matchRepository.findById(id)
@@ -587,8 +601,25 @@ public class MatchService {
             throw new IllegalArgumentException("Winner must be one of the players");
         }
 
+        boolean lesson = Boolean.TRUE.equals(isLesson);
+        // 通常試合では枚数差必須かつ範囲内（指導試合のみ null 許容）。フロント任せにせず API でも担保する
+        // 範囲は登録時の MatchCreateRequest の @Min(-25)/@Max(25) と一致させる
+        if (!lesson) {
+            if (scoreDifference == null) {
+                throw new IllegalArgumentException("通常試合では枚数差は必須です");
+            }
+            if (scoreDifference < -25 || scoreDifference > 25) {
+                throw new IllegalArgumentException("枚数差は-25〜25の範囲で入力してください");
+            }
+        } else if (match.getPlayer1Id() == null || match.getPlayer1Id() == 0L
+                || match.getPlayer2Id() == null || match.getPlayer2Id() == 0L) {
+            // 指導試合は登録済みプレイヤー同士のみ対象（未登録相手=player2Id 0 の簡易試合は不可）
+            throw new IllegalArgumentException("指導試合は登録済みプレイヤー同士の試合のみ対象です");
+        }
         match.setWinnerId(winnerId);
-        match.setScoreDifference(scoreDifference);
+        // 指導試合では枚数差を保持しない（null）
+        match.setScoreDifference(lesson ? null : scoreDifference);
+        match.setIsLesson(lesson);
         match.setUpdatedBy(effectiveUserId);
 
         Match updated = matchRepository.save(match);
@@ -640,6 +671,7 @@ public class MatchService {
         match.setMatchNumber(request.getMatchNumber());
         match.setWinnerId(winnerId);
         match.setScoreDifference(Math.abs(request.getScoreDifference()));
+        match.setIsLesson(false); // 簡易更新は通常試合として扱う（指導試合フラグを解除し is_lesson=true と非null枚数差の矛盾を防ぐ）
         match.setOpponentName(request.getOpponentName());
         match.setUpdatedBy(currentUserId != null ? currentUserId : request.getPlayerId());
 

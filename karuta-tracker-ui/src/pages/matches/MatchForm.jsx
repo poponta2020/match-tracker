@@ -21,6 +21,7 @@ const MatchForm = () => {
     opponentId: initialData.opponentId || null,
     result: '勝ち',
     scoreDifference: 0,
+    isLesson: false,
     matchNumber: initialData.matchNumber || 1,
     personalNotes: '',
     otetsukiCount: null,
@@ -39,6 +40,8 @@ const MatchForm = () => {
   const [isExistingMatch, setIsExistingMatch] = useState(false);
   const [showParticipationDialog, setShowParticipationDialog] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  // 編集対象の試合が元々指導試合だったか（指導↔通常の変換時に詳細版APIへ振り分けるため）
+  const [originalIsLesson, setOriginalIsLesson] = useState(false);
 
   // 抜け番活動関連
   const [isByeMatch, setIsByeMatch] = useState(false);
@@ -125,10 +128,12 @@ const MatchForm = () => {
             opponentId: opponentId || null,
             result: match.result,
             scoreDifference: match.scoreDifference,
+            isLesson: match.isLesson === true,
             matchNumber: match.matchNumber,
             personalNotes: match.myPersonalNotes || '',
             otetsukiCount: match.myOtetsukiCount ?? null,
           });
+          setOriginalIsLesson(match.isLesson === true);
           setInitialLoading(false);
         }
 
@@ -249,7 +254,8 @@ const MatchForm = () => {
         opponentName: match.opponentName,
         opponentId: opponentId || null,
         result: match.result,
-        scoreDifference: Number(match.scoreDifference),
+        scoreDifference: match.scoreDifference != null ? Number(match.scoreDifference) : 0,
+        isLesson: match.isLesson === true,
         personalNotes: match.myPersonalNotes || '',
         otetsukiCount: match.myOtetsukiCount ?? null,
       }));
@@ -298,6 +304,7 @@ const MatchForm = () => {
           opponentName: opponentName,
           result: '勝ち',
           scoreDifference: 0,
+          isLesson: false,
           personalNotes: '',
           otetsukiCount: null,
         }));
@@ -314,6 +321,7 @@ const MatchForm = () => {
           opponentName: '',
           result: '勝ち',
           scoreDifference: 0,
+          isLesson: false,
           personalNotes: '',
           otetsukiCount: null,
         }));
@@ -396,6 +404,16 @@ const MatchForm = () => {
     }));
   };
 
+  // 枚数差ピッカー（末尾の「指導」選択時は指導試合フラグを立てる）
+  const handleScoreChange = (e) => {
+    const value = e.target.value;
+    if (value === 'lesson') {
+      setFormData((prev) => ({ ...prev, isLesson: true }));
+    } else {
+      setFormData((prev) => ({ ...prev, isLesson: false, scoreDifference: value }));
+    }
+  };
+
   const handleByeActivitySubmit = async () => {
     if (!byeActivityType) {
       setError('活動内容を選択してください');
@@ -448,14 +466,30 @@ const MatchForm = () => {
 
     try {
       if (isEdit) {
-        const submitData = {
-          ...formData,
-          playerId: currentPlayer.id,
-          scoreDifference: parseInt(formData.scoreDifference),
-          matchNumber: parseInt(formData.matchNumber),
-          personalNotes: formData.personalNotes || null,
-        };
-        await matchAPI.update(id, submitData);
+        const isLesson = formData.isLesson === true;
+        // 指導試合（または指導↔通常の変換）は詳細版APIで保存する。
+        // 簡易版(update)は is_lesson を扱えず scoreDifference 必須のため。
+        if ((isLesson || originalIsLesson) && formData.opponentId) {
+          const winnerId = formData.result === '勝ち' ? currentPlayer.id : formData.opponentId;
+          await matchAPI.updateDetailed(
+            id,
+            winnerId,
+            isLesson ? null : parseInt(formData.scoreDifference),
+            currentPlayer.id,
+            formData.personalNotes || null,
+            formData.otetsukiCount,
+            isLesson
+          );
+        } else {
+          const submitData = {
+            ...formData,
+            playerId: currentPlayer.id,
+            scoreDifference: parseInt(formData.scoreDifference),
+            matchNumber: parseInt(formData.matchNumber),
+            personalNotes: formData.personalNotes || null,
+          };
+          await matchAPI.update(id, submitData);
+        }
         navigate('/matches');
       } else {
         if (formData.opponentId) {
@@ -463,13 +497,16 @@ const MatchForm = () => {
           const player2Id = formData.opponentId;
           const winnerId = formData.result === '勝ち' ? currentPlayer.id : formData.opponentId;
 
+          const isLesson = formData.isLesson === true;
           const detailedData = {
             matchDate: formData.matchDate,
             matchNumber: parseInt(formData.matchNumber),
             player1Id: player1Id,
             player2Id: player2Id,
             winnerId: winnerId,
-            scoreDifference: parseInt(formData.scoreDifference),
+            // 指導試合は枚数差を持たない
+            scoreDifference: isLesson ? null : parseInt(formData.scoreDifference),
+            isLesson: isLesson,
             personalNotes: formData.personalNotes || null,
             otetsukiCount: formData.otetsukiCount,
             createdBy: currentPlayer.id,
@@ -798,8 +835,8 @@ const MatchForm = () => {
           <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">枚数差</div>
           <select
             name="scoreDifference"
-            value={formData.scoreDifference}
-            onChange={handleChange}
+            value={formData.isLesson ? 'lesson' : formData.scoreDifference}
+            onChange={handleScoreChange}
             className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
             required
           >
@@ -808,6 +845,8 @@ const MatchForm = () => {
                 {num} 枚
               </option>
             ))}
+            {/* 登録済み相手との試合のみ「指導」を選択可能（簡易入力フローは対象外） */}
+            {formData.opponentId && <option value="lesson">指導</option>}
           </select>
         </div>
 

@@ -79,6 +79,7 @@ const BulkResultInput = () => {
           initialResults[key] = {
             winnerId: match.winnerId,
             scoreDifference: match.scoreDifference,
+            isLesson: match.isLesson === true,
             matchId: match.id,
           };
         });
@@ -141,15 +142,14 @@ const BulkResultInput = () => {
     setChangedMatches(prev => new Set([...prev, key]));
   };
 
-  // 枚数差を設定
-  const setScoreDifference = (matchNumber, player1Id, player2Id, scoreDifference) => {
+  // 枚数差を設定（"lesson" 選択時は指導試合フラグを立て枚数差を null にする）
+  const setScoreDifference = (matchNumber, player1Id, player2Id, value) => {
     const key = getResultKey(matchNumber, player1Id, player2Id);
     setResults(prev => ({
       ...prev,
-      [key]: {
-        ...prev[key],
-        scoreDifference: parseInt(scoreDifference),
-      }
+      [key]: value === 'lesson'
+        ? { ...prev[key], isLesson: true, scoreDifference: null }
+        : { ...prev[key], isLesson: false, scoreDifference: value === '' ? null : parseInt(value) }
     }));
     setChangedMatches(prev => new Set([...prev, key]));
   };
@@ -157,7 +157,7 @@ const BulkResultInput = () => {
   // 結果を取得
   const getResult = (matchNumber, player1Id, player2Id) => {
     const key = getResultKey(matchNumber, player1Id, player2Id);
-    return results[key] || { winnerId: null, scoreDifference: null };
+    return results[key] || { winnerId: null, scoreDifference: null, isLesson: false };
   };
 
   // 試合が入力済みかチェック
@@ -165,7 +165,8 @@ const BulkResultInput = () => {
     const matchPairings = getPairingsForMatch(matchNumber);
     return matchPairings.every(pairing => {
       const result = getResult(matchNumber, pairing.player1Id, pairing.player2Id);
-      return result.winnerId !== null && result.scoreDifference !== null;
+      // 指導試合は枚数差を持たないため、勝者が決まっていれば完了扱い
+      return result.winnerId !== null && (result.scoreDifference !== null || result.isLesson === true);
     });
   };
 
@@ -175,7 +176,7 @@ const BulkResultInput = () => {
     changedMatches.forEach(key => {
       if (key.startsWith('bye-')) return; // 抜け番キーはスキップ
       const result = results[key];
-      if (result.winnerId !== null && result.scoreDifference === null) {
+      if (result.winnerId !== null && result.scoreDifference === null && result.isLesson !== true) {
         const [matchNumber, player1Id, player2Id] = key.split('-').map(Number);
         const pairing = pairings.find(
           p => p.matchNumber === matchNumber &&
@@ -298,7 +299,8 @@ const BulkResultInput = () => {
         if (!result.winnerId) continue; // 勝者未選択はスキップ
 
         const [matchNumber, player1Id, player2Id] = key.split('-').map(Number);
-        const scoreDiff = result.scoreDifference ?? 0; // 未選択は0枚
+        const isLesson = result.isLesson === true;
+        const scoreDiff = isLesson ? null : (result.scoreDifference ?? 0); // 指導試合は枚数差なし、通常の未選択は0枚
 
         // ペアリング情報から対戦相手名を取得
         // 注: キーは player1Id < player2Id の順序だが、ペアリングは元の順序のため、
@@ -322,6 +324,7 @@ const BulkResultInput = () => {
           player2Id,
           winnerId: result.winnerId,
           scoreDifference: scoreDiff,
+          isLesson,
           createdBy: currentPlayer.id,
         };
 
@@ -332,7 +335,10 @@ const BulkResultInput = () => {
               result.matchId,
               result.winnerId,
               scoreDiff,
-              currentPlayer.id
+              currentPlayer.id,
+              undefined,
+              undefined,
+              isLesson
             )
           );
         } else {
@@ -510,6 +516,7 @@ const BulkResultInput = () => {
             const isPlayer1Winner = result.winnerId === pairing.player1Id;
             const isPlayer2Winner = result.winnerId === pairing.player2Id;
             const hasWinner = result.winnerId !== null;
+            const isLesson = result.isLesson === true;
             const isSelectingPlayer1 = selectingPairing?.pairingId === pairing.id && selectingPairing?.side === 'player1';
             const isSelectingPlayer2 = selectingPairing?.pairingId === pairing.id && selectingPairing?.side === 'player2';
 
@@ -533,7 +540,7 @@ const BulkResultInput = () => {
                         ? isSelectingPlayer1
                           ? 'text-[#5f3a2d] underline decoration-2'
                           : 'text-[#5f3a2d]'
-                        : isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
+                        : isLesson ? 'text-gray-700' : isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
                   >
                     {pairing.player1Name}
@@ -542,27 +549,36 @@ const BulkResultInput = () => {
                   {/* 中央: 勝敗マーク + 枚数差 or vs */}
                   {!editMode && hasWinner ? (
                     <>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer1Winner ? '〇' : '×'}
-                      </div>
+                      {isLesson ? (
+                        <div className="w-8 flex-shrink-0" aria-hidden="true" />
+                      ) : (
+                        <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                          {isPlayer1Winner ? '〇' : '×'}
+                        </div>
+                      )}
                       <select
-                        value={result.scoreDifference ?? ''}
+                        value={isLesson ? 'lesson' : (result.scoreDifference ?? '')}
                         onChange={(e) => setScoreDifference(
                           currentMatchNumber,
                           pairing.player1Id,
                           pairing.player2Id,
                           e.target.value
                         )}
-                        className="w-14 text-center font-bold text-gray-900 bg-transparent border-0 border-b border-[#d0c5b8] focus:ring-0 focus:border-[#82655a] flex-shrink-0 px-0 py-0 text-base"
+                        className={`text-center font-bold text-gray-900 bg-transparent border-0 border-b border-[#d0c5b8] focus:ring-0 focus:border-[#82655a] flex-shrink-0 px-0 py-0 text-base ${isLesson ? 'w-16' : 'w-14'}`}
                       >
                         <option value="">-</option>
                         {Array.from({ length: 26 }, (_, i) => i).map(num => (
                           <option key={num} value={num}>{num}</option>
                         ))}
+                        <option value="lesson">指導</option>
                       </select>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer2Winner ? '〇' : '×'}
-                      </div>
+                      {isLesson ? (
+                        <div className="w-8 flex-shrink-0" aria-hidden="true" />
+                      ) : (
+                        <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                          {isPlayer2Winner ? '〇' : '×'}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-sm font-medium text-[#b0a396] w-8 text-center flex-shrink-0">
@@ -587,7 +603,7 @@ const BulkResultInput = () => {
                         ? isSelectingPlayer2
                           ? 'text-[#5f3a2d] underline decoration-2'
                           : 'text-[#5f3a2d]'
-                        : isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
+                        : isLesson ? 'text-gray-700' : isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
                   >
                     {pairing.player2Name}

@@ -1,6 +1,8 @@
 package com.karuta.matchtracker.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.karuta.matchtracker.entity.Match;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -36,10 +38,16 @@ public class MatchCreateRequest {
     @NotNull(message = "勝者のIDは必須です")
     private Long winnerId;
 
-    @NotNull(message = "点差は必須です")
+    // 指導試合（isLesson=true）では枚数差を持たないため null 許容。
+    // 通常試合の枚数差未入力チェックはフロントエンドで実施する（既存仕様どおり）。
     @Min(value = -25, message = "点差は-25以上で入力してください")
     @Max(value = 25, message = "点差は25以下で入力してください")
     private Integer scoreDifference;
+
+    /**
+     * 指導試合フラグ（true=指導試合。winnerId=指導した側。scoreDifference は null 保存）
+     */
+    private Boolean isLesson;
 
     @NotNull(message = "登録者のIDは必須です")
     private Long createdBy;
@@ -52,6 +60,16 @@ public class MatchCreateRequest {
     private Integer otetsukiCount;
 
     /**
+     * 通常試合では枚数差を必須とする（指導試合 isLesson=true のみ null 許容）。
+     * フロントの未入力チェックに加え、API レイヤーでもデータ整合性を担保する。
+     */
+    @JsonIgnore
+    @AssertTrue(message = "通常試合では枚数差は必須です")
+    public boolean isScoreDifferenceConsistent() {
+        return Boolean.TRUE.equals(isLesson) || scoreDifference != null;
+    }
+
+    /**
      * リクエストからエンティティへ変換
      * player1Idとplayer2Idは自動的にソートされます
      */
@@ -60,13 +78,16 @@ public class MatchCreateRequest {
         Long smallerId = Math.min(player1Id, player2Id);
         Long largerId = Math.max(player1Id, player2Id);
 
+        boolean lesson = Boolean.TRUE.equals(isLesson);
         return Match.builder()
                 .matchDate(matchDate)
                 .matchNumber(matchNumber)
                 .player1Id(smallerId)
                 .player2Id(largerId)
                 .winnerId(winnerId)
-                .scoreDifference(scoreDifference)
+                // 指導試合では枚数差を保持しない（null）
+                .scoreDifference(lesson ? null : scoreDifference)
+                .isLesson(lesson)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
                 .build();

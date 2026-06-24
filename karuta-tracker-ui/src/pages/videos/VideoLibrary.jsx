@@ -36,6 +36,8 @@ const formatMatchDate = (dateStr) => {
 // 結果テキスト（結果入力済みの場合のみ）: 「勝者名〇N」（N=枚数差。対戦一覧の表記に揃える）
 const buildResultText = (video) => {
   if (video?.winnerId == null) return null;
+  // 指導試合は勝敗ではなく「指導」と表示する
+  if (video.isLesson === true) return '指導';
   const winnerName =
     video.winnerId === video.player1Id
       ? video.player1Name

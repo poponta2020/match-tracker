@@ -567,32 +567,41 @@ const MatchResultsView = () => {
             const match = getMatchResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = match && match.winnerId === pairing.player1Id;
             const isPlayer2Winner = match && match.winnerId === pairing.player2Id;
+            const isLessonMatch = match && match.isLesson === true;
             const video = getVideoForPairing(currentMatchNumber, pairing.player1Id, pairing.player2Id);
 
             return (
               <div key={index} className="py-4">
                 {match ? (
                   <>
-                    {/* 結果入力済み: A 〇 枚数差 × B */}
+                    {/* 結果入力済み: A 〇 枚数差 × B（指導試合は両者黒・中央「指導」） */}
                     <div className="flex items-center text-lg">
                       <Link
                         to={`/matches?playerId=${pairing.player1Id}`}
-                        className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
+                        className={`flex-1 text-right pr-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer1Winner ? 'text-green-600' : 'text-gray-700'}`}
                       >
                         {pairing.player1Name}
                       </Link>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer1Winner ? '〇' : '×'}
-                      </div>
-                      <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
-                        {match.scoreDifference}
-                      </div>
-                      <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
-                        {isPlayer2Winner ? '〇' : '×'}
-                      </div>
+                      {isLessonMatch ? (
+                        <div className="font-bold text-gray-700 w-12 text-center flex-shrink-0">
+                          指導
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer1Winner ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPlayer1Winner ? '〇' : '×'}
+                          </div>
+                          <div className="font-bold text-gray-900 w-10 text-center flex-shrink-0">
+                            {match.scoreDifference}
+                          </div>
+                          <div className={`text-2xl font-bold w-8 text-center flex-shrink-0 ${isPlayer2Winner ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPlayer2Winner ? '〇' : '×'}
+                          </div>
+                        </>
+                      )}
                       <Link
                         to={`/matches?playerId=${pairing.player2Id}`}
-                        className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
+                        className={`flex-1 text-left pl-2 font-semibold truncate hover:underline ${!isLessonMatch && isPlayer2Winner ? 'text-green-600' : 'text-gray-700'}`}
                       >
                         {pairing.player2Name}
                       </Link>

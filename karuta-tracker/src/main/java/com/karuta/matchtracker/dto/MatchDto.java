@@ -29,6 +29,7 @@ public class MatchDto {
     private Long winnerId;
     private String winnerName;
     private Integer scoreDifference;
+    private Boolean isLesson;       // 指導試合フラグ（true=指導試合。両者黒・「指導」表示）
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long createdBy;
@@ -112,6 +113,7 @@ public class MatchDto {
                 .player2Id(match.getPlayer2Id())
                 .winnerId(match.getWinnerId())
                 .scoreDifference(match.getScoreDifference())
+                .isLesson(match.getIsLesson())
                 .player1KyuRank(match.getPlayer1KyuRank())
                 .player2KyuRank(match.getPlayer2KyuRank())
                 .opponentName(match.getOpponentName())

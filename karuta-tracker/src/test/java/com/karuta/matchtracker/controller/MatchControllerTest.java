@@ -474,6 +474,31 @@ class MatchControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/matches/detailed - 通常試合で枚数差nullは400")
+    void testCreateMatchDetailedRejectsNullScoreForNonLesson() throws Exception {
+        // Given: 通常試合（isLesson 未指定）なのに scoreDifference が null
+        MatchCreateRequest req = MatchCreateRequest.builder()
+                .matchDate(today)
+                .matchNumber(1)
+                .player1Id(1L)
+                .player2Id(2L)
+                .winnerId(1L)
+                .scoreDifference(null)
+                .createdBy(1L)
+                .build();
+
+        // When & Then: バリデーションで弾かれ、Service は呼ばれない
+        mockMvc.perform(post("/api/matches/detailed")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Role", "PLAYER")
+                        .header("X-User-Id", "1")
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().is4xxClientError());
+
+        verify(matchService, never()).createMatch(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("PUT /api/matches/{id}/detailed - 詳細版で試合結果を更新できる")
     void testUpdateMatchDetailed() throws Exception {
         // Given
@@ -482,7 +507,7 @@ class MatchControllerTest {
                 .winnerId(2L)
                 .scoreDifference(3)
                 .build();
-        when(matchService.updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any(), any())).thenReturn(updatedMatch);
+        when(matchService.updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), isNull(), any(), any())).thenReturn(updatedMatch);
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
@@ -496,7 +521,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$.winnerId").value(2))
                 .andExpect(jsonPath("$.scoreDifference").value(3));
 
-        verify(matchService).updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), any(), any());
+        verify(matchService).updateMatch(eq(1L), eq(2L), eq(3), eq(1L), isNull(), isNull(), isNull(), any(), any());
     }
 
     @Test

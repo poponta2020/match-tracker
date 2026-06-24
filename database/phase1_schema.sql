@@ -83,7 +83,8 @@ CREATE TABLE matches (
   player1_id BIGINT NOT NULL COMMENT '選手1（player1_id < player2_id を保証）',
   player2_id BIGINT NOT NULL COMMENT '選手2',
   winner_id BIGINT NOT NULL COMMENT '勝者',
-  score_difference INT NOT NULL COMMENT '枚数差（1～50）',
+  score_difference INT NULL COMMENT '枚数差（1～50）。指導試合ではNULL',
+  is_lesson BOOLEAN NOT NULL DEFAULT FALSE COMMENT '指導試合フラグ（TRUE=指導試合。勝者=指導した側、敗者=指導された側）',
   notes TEXT NULL COMMENT 'コメント',
   created_by BIGINT NOT NULL COMMENT '作成者',
   updated_by BIGINT NOT NULL COMMENT '最終更新者',
@@ -102,7 +103,7 @@ CREATE TABLE matches (
   INDEX idx_matches_winner (winner_id) COMMENT '勝者での検索最適化',
   INDEX idx_matches_date_match_number (match_date, match_number) COMMENT '日付と試合番号での検索最適化',
 
-  CONSTRAINT chk_score_difference CHECK (score_difference >= 1 AND score_difference <= 50)
+  CONSTRAINT chk_score_difference CHECK (score_difference IS NULL OR (score_difference >= 1 AND score_difference <= 50))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='対戦結果';
 
 -- ============================================
