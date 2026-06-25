@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { practiceAPI, lotteryAPI, venueReservationProxyAPI } from '../../api';
 import { organizationAPI } from '../../api/organizations';
 import { isSuperAdmin, isAdmin } from '../../utils/auth';
-import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, CalendarCheck, RotateCcw, Info } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import MatchParticipantsEditModal from '../../components/MatchParticipantsEditModal';
 import AttendanceRegisterModal from '../../components/AttendanceRegisterModal';
@@ -60,12 +60,24 @@ const PracticeList = () => {
   const [reservationReady, setReservationReady] = useState({}); // 隣室予約済みフラグ {sessionId: true}
   const [reservationLoading, setReservationLoading] = useState(false); // 予約処理中フラグ
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false); // 出欠登録モーダル
+  // カレンダー凡例（ⓘ 記号の見方）の開閉。初回訪問時のみ端末単位で自動表示する（localStorage で既読管理）
+  const [showLegend, setShowLegend] = useState(() => {
+    try {
+      return !localStorage.getItem('practiceCalendarLegendSeen');
+    } catch {
+      // localStorage が使えない環境（プライベートモード等）では既読管理ができないため、
+      // 要件どおり「最悪毎回開く」フォールバック（true）にして初回ユーザーに必ず凡例を見せる
+      return true;
+    }
+  });
 
   // StrictMode重複呼び出し防止用
   const fetchingRef = useRef(false);
   // openTodayパラメータの処理済みフラグ
   const openTodayProcessedRef = useRef(false);
   const selectedSessionRef = useRef(null);
+  // 凡例ドロップダウンの外側タップ判定用
+  const legendRef = useRef(null);
   // 発行済みプロキシトークンと、postMessage の origin 検証に使う API オリジン。
   // 形: { [practiceSessionId]: { token, expectedOrigin } }
   // 完了通知 1 件で消費 (delete) し、再利用や偽装通知を弾く。
@@ -138,6 +150,30 @@ const PracticeList = () => {
   useEffect(() => {
     selectedSessionRef.current = selectedSession;
   }, [selectedSession]);
+
+  // 凡例が実際に表示された後（ローディング完了後）に既読フラグを保存する（端末単位）。
+  // ローディング中（LoadingScreen 表示中）に保存すると、凡例を視認する前に離脱しても既読扱いに
+  // なってしまうため、loading 完了を待ってから保存する。
+  useEffect(() => {
+    if (loading || !showLegend) return;
+    try {
+      localStorage.setItem('practiceCalendarLegendSeen', '1');
+    } catch {
+      // プライベートモード等で localStorage が使えない場合は既読管理を諦める（毎回自動表示されるが機能は阻害しない）
+    }
+  }, [loading, showLegend]);
+
+  // 凡例パネルを開いている間だけ、画面外タップで閉じる（既存 YearMonthPicker と同方式）
+  useEffect(() => {
+    if (!showLegend) return;
+    const handleClickOutside = (e) => {
+      if (legendRef.current && !legendRef.current.contains(e.target)) {
+        setShowLegend(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLegend]);
 
   // openToday パラメータで今日のポップアップを自動表示（LINEリッチメニューからの遷移用）
   useEffect(() => {
@@ -641,6 +677,75 @@ const PracticeList = () => {
         </div>
       )}
 
+      {/* 記号の凡例（ⓘ 記号の見方）。セッション有無に関わらず常時表示し、初回訪問時のみ自動で開く */}
+      <div className="mb-2 flex justify-end">
+        <div ref={legendRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setShowLegend((prev) => !prev)}
+            aria-label="記号の見方を開く"
+            aria-expanded={showLegend}
+            className="inline-flex items-center gap-1 text-xs text-[#4a6b5a] px-2 py-1 rounded-md hover:bg-[#eef2ef] transition-colors"
+          >
+            <Info className="w-4 h-4" />
+            記号の見方
+          </button>
+          {showLegend && (
+            <div className="absolute top-full right-0 mt-2 w-[240px] bg-white border border-gray-200 rounded-lg shadow-lg z-[60] p-3 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-[#374151]">記号の見方</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLegend(false)}
+                  aria-label="記号の見方を閉じる"
+                  className="p-0.5 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* B-1: 試合の空き状況（○△×）。記号色はカレンダー本体の symbolFor と一致 */}
+              <div className="mb-3">
+                <div className="text-xs font-semibold text-[#4a6b5a] border-l-2 border-[#4a6b5a] pl-1.5 mb-1.5">
+                  試合の空き状況<span className="font-normal text-[#6b7280]">（試合ごと）</span>
+                </div>
+                <ul className="space-y-1 text-xs text-[#374151]">
+                  <li className="flex items-center gap-2">
+                    <span className="w-4 text-center font-bold text-green-400">○</span>
+                    <span>空きあり</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-4 text-center font-bold text-orange-300">△</span>
+                    <span>残りわずか</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-4 text-center font-bold text-red-400">×</span>
+                    <span>満員</span>
+                  </li>
+                </ul>
+                <p className="mt-1 text-[10px] text-[#9ca3af]">※試合ごとの空き状況です</p>
+              </div>
+
+              {/* B-2: あなたの参加状況。スウォッチはカレンダーのセル背景色と同色 */}
+              <div>
+                <div className="text-xs font-semibold text-[#4a6b5a] border-l-2 border-[#4a6b5a] pl-1.5 mb-1.5">
+                  あなたの参加状況
+                </div>
+                <ul className="space-y-1 text-xs text-[#374151]">
+                  <li className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 rounded-sm border-2 border-[#a3c4ad] bg-[#e8efea]" />
+                    <span>参加確定</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 rounded-sm border-2 border-[#e8d48b] bg-[#fefcf5]" />
+                    <span>キャンセル待ち</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* カレンダー */}
       <div className="bg-[#f9f6f2] shadow-md rounded-lg overflow-hidden">
