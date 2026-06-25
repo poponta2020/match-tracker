@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI } from '../../api';
 import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import { isHorizontalSwipe, resolveSwipe } from './swipeGesture';
+import { scrollActiveTabIntoView } from './tabScroll';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -49,6 +51,16 @@ const MatchForm = () => {
   const [byeActivityType, setByeActivityType] = useState('');
   const [byeFreeText, setByeFreeText] = useState('');
   const [existingByeActivity, setExistingByeActivity] = useState(null); // 既存の抜け番記録
+
+  // 試合番号スワイプ移動関連
+  const [isDirty, setIsDirty] = useState(false); // 未保存の入力変更があるか（新規入力フローのみ）
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(false); // 試合切替の確認ダイアログ
+  const [pendingChange, setPendingChange] = useState(null); // 確認待ちの切替 { num, fromSwipe }
+  const [slide, setSlide] = useState({ dir: null, key: 0 }); // スライドイン方向と再実行用キー
+  const [slideStyle, setSlideStyle] = useState({});
+  const tabBarRef = useRef(null);   // 試合番号タブバー（自動スクロール用）
+  const contentRef = useRef(null);  // スワイプ検出対象のコンテンツ領域
+  const swipeStart = useRef(null);  // タッチ開始座標
 
   // 初期ロード完了フラグ（タブ切り替え時の重複API呼び出し防止用）
   const initialLoadDone = useRef(false);
@@ -348,6 +360,103 @@ const MatchForm = () => {
     return players.filter(p => playerIds.has(p.id));
   };
 
+  // 試合番号スワイプ移動 ---------------------------------------------------------
+
+  // タブに表示する試合番号の配列（参加試合番号 or 全試合番号）
+  const getTabMatchNumbers = () =>
+    participatingMatchNumbers.length > 0
+      ? participatingMatchNumbers
+      : (practiceSession ? Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1) : []);
+
+  // ユーザー操作による入力変更を dirty として記録（新規入力フローのみ。applyMatchData では立てない）
+  const markDirty = () => {
+    if (!isEdit) setIsDirty(true);
+  };
+
+  // 試合番号を実際に切り替える（確認後 or dirtyでないとき）
+  const performMatchNumberChange = (num, fromSwipe) => {
+    if (fromSwipe) {
+      setSlide(prev => ({ dir: num > formData.matchNumber ? 'next' : 'prev', key: prev.key + 1 }));
+    }
+    setFormData(prev => ({ ...prev, matchNumber: num }));
+    setIsDirty(false); // 切替後は対象試合のデータを読み込むため未変更状態に戻す
+  };
+
+  // 試合番号変更の共通ガード（タブタップ・スワイプ確定の両経路が通る）
+  const requestMatchNumberChange = (num, { fromSwipe = false } = {}) => {
+    if (num === formData.matchNumber) return;
+    const total = getTabMatchNumbers().length;
+    if (num < 1 || num > total) return; // 端を越える移動は無効（端で止まる）
+    // 編集モードはタブ切替自体が現状機能しないため対象外（従来動作を維持）
+    if (isEdit) {
+      setFormData(prev => ({ ...prev, matchNumber: num }));
+      return;
+    }
+    if (isDirty) {
+      setPendingChange({ num, fromSwipe });
+      setShowSwitchConfirm(true);
+    } else {
+      performMatchNumberChange(num, fromSwipe);
+    }
+  };
+
+  const confirmSwitch = () => {
+    if (pendingChange) performMatchNumberChange(pendingChange.num, pendingChange.fromSwipe);
+    setPendingChange(null);
+    setShowSwitchConfirm(false);
+  };
+
+  const cancelSwitch = () => {
+    setPendingChange(null);
+    setShowSwitchConfirm(false);
+  };
+
+  // スワイプ検出（指追従なし。離した時点の移動量で前後の試合へ切替）
+  const handleContentTouchStart = (e) => {
+    if (isEdit || getTabMatchNumbers().length <= 1) return;
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleContentTouchEnd = (e) => {
+    const s = swipeStart.current;
+    swipeStart.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (!isHorizontalSwipe(dx, dy)) return; // 縦スクロール・タップは無視
+    const width = contentRef.current?.offsetWidth || window.innerWidth || 0;
+    const dir = resolveSwipe({ dx, containerWidth: width });
+    if (!dir) return;
+    const target = dir === 'next' ? formData.matchNumber + 1 : formData.matchNumber - 1;
+    requestMatchNumberChange(target, { fromSwipe: true });
+  };
+
+  // スワイプ確定時のスライドインアニメーション（約0.2秒）
+  useEffect(() => {
+    if (!slide.dir) return;
+    const from = slide.dir === 'next' ? '100%' : '-100%';
+    setSlideStyle({ transform: `translateX(${from})` });
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setSlideStyle({ transform: 'translateX(0)', transition: 'transform 0.2s ease-out' });
+      });
+    });
+    const timer = window.setTimeout(() => setSlideStyle({}), 260);
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      clearTimeout(timer);
+    };
+  }, [slide]);
+
+  // 試合番号が変わったら、アクティブタブを画面内へ自動スクロール
+  useEffect(() => {
+    scrollActiveTabIntoView(tabBarRef.current);
+  }, [formData.matchNumber]);
+
   // 参加登録を自動実行
   const handleAutoRegister = async () => {
     if (!practiceSession) return;
@@ -398,6 +507,7 @@ const MatchForm = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    markDirty();
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -407,6 +517,7 @@ const MatchForm = () => {
   // 枚数差ピッカー（末尾の「指導」選択時は指導試合フラグを立てる）
   const handleScoreChange = (e) => {
     const value = e.target.value;
+    markDirty();
     if (value === 'lesson') {
       setFormData((prev) => ({ ...prev, isLesson: true }));
     } else {
@@ -587,15 +698,13 @@ const MatchForm = () => {
 
           {/* 試合番号タブ */}
           {practiceSession && (
-            <div className="flex overflow-x-auto -mb-px">
-              {(participatingMatchNumbers.length > 0
-                ? participatingMatchNumbers
-                : Array.from({ length: practiceSession.totalMatches }, (_, i) => i + 1)
-              ).map((num) => (
+            <div ref={tabBarRef} className="flex overflow-x-auto -mb-px">
+              {getTabMatchNumbers().map((num) => (
                 <button
                   key={num}
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, matchNumber: num }))}
+                  data-active={formData.matchNumber === num}
+                  onClick={() => requestMatchNumberChange(num)}
                   className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
                     formData.matchNumber === num
                       ? 'border-white text-white'
@@ -610,6 +719,14 @@ const MatchForm = () => {
         </div>
       </div>
 
+      {/* スワイプで前後の試合へ移動できるコンテンツ領域（確定時はスライドイン。編集モードは無効） */}
+      <div
+        ref={contentRef}
+        data-testid="matchform-swipe-area"
+        onTouchStart={handleContentTouchStart}
+        onTouchEnd={handleContentTouchEnd}
+        style={slideStyle}
+      >
       {/* 今日が練習日でない場合はフォームを表示せずブロック */}
       {!isEdit && practiceSessions.length === 0 ? (
         <div className="h-full px-6 overflow-hidden pt-28 flex items-start justify-center">
@@ -647,6 +764,7 @@ const MatchForm = () => {
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 setManualByeMode(false);
                 setByeActivityType('');
                 setByeFreeText('');
@@ -672,7 +790,7 @@ const MatchForm = () => {
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setByeActivityType(value)}
+                  onClick={() => { markDirty(); setByeActivityType(value); }}
                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all text-left ${
                     byeActivityType === value
                       ? 'bg-[#4a6b5a] text-white shadow-md'
@@ -692,7 +810,7 @@ const MatchForm = () => {
               <input
                 type="text"
                 value={byeFreeText}
-                onChange={(e) => setByeFreeText(e.target.value)}
+                onChange={(e) => { markDirty(); setByeFreeText(e.target.value); }}
                 placeholder="活動内容を入力..."
                 className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151] placeholder-[#9ca3af]"
               />
@@ -748,6 +866,7 @@ const MatchForm = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      markDirty();
                       setPairing(null);
                       setAvailablePlayers(getMatchPlayers(formData.matchNumber));
                       setFormData(prev => ({ ...prev, opponentId: null, opponentName: '' }));
@@ -764,6 +883,7 @@ const MatchForm = () => {
                 onChange={(e) => {
                   const selectedPlayer = availablePlayers.find(p => p.id === parseInt(e.target.value));
                   if (selectedPlayer) {
+                    markDirty();
                     setFormData(prev => ({
                       ...prev,
                       opponentName: selectedPlayer.name,
@@ -790,6 +910,7 @@ const MatchForm = () => {
           <button
             type="button"
             onClick={() => {
+              markDirty();
               setManualByeMode(true);
               // 既存の抜け番活動を読み込む
               const existingBye = byeActivityCache.current[formData.matchNumber];
@@ -813,9 +934,10 @@ const MatchForm = () => {
               <button
                 key={result}
                 type="button"
-                onClick={() =>
-                  setFormData((prev) => ({ ...prev, result }))
-                }
+                onClick={() => {
+                  markDirty();
+                  setFormData((prev) => ({ ...prev, result }));
+                }}
                 className={`py-5 rounded-2xl font-bold text-xl transition-all ${
                   formData.result === result
                     ? result === '勝ち'
@@ -856,10 +978,13 @@ const MatchForm = () => {
           <select
             name="otetsukiCount"
             value={formData.otetsukiCount ?? ''}
-            onChange={(e) => setFormData(prev => ({
-              ...prev,
-              otetsukiCount: e.target.value === '' ? null : parseInt(e.target.value)
-            }))}
+            onChange={(e) => {
+              markDirty();
+              setFormData(prev => ({
+                ...prev,
+                otetsukiCount: e.target.value === '' ? null : parseInt(e.target.value)
+              }));
+            }}
             className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
           >
             <option value="">未入力</option>
@@ -927,6 +1052,40 @@ const MatchForm = () => {
         )}
       </form>
       )
+      )}
+      </div>
+
+      {/* 試合切替の確認ダイアログ（入力途中の警告） */}
+      {showSwitchConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#374151]">確認</h3>
+            </div>
+            <p className="text-sm text-[#6b7280] mb-6">
+              入力中の内容は破棄されます。移動しますか？
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={cancelSwitch}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-[#6b7280] hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={confirmSwitch}
+                className="flex-1 px-4 py-2.5 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] transition-colors text-sm font-medium"
+              >
+                移動する
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 参加未登録ダイアログ */}

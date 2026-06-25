@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { Save, AlertCircle, Pencil } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
+import MatchCarousel from '../../components/MatchCarousel';
 import { computeByePlayersByMatch } from './byePlayersLogic';
+import { scrollActiveTabIntoView } from './tabScroll';
 
 const BulkResultInput = () => {
   const { sessionId } = useParams();
@@ -15,6 +17,7 @@ const BulkResultInput = () => {
   const [pairings, setPairings] = useState([]);
   const [matches, setMatches] = useState([]);
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
+  const tabBarRef = useRef(null);
   const [results, setResults] = useState({});
   const [changedMatches, setChangedMatches] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -105,6 +108,11 @@ const BulkResultInput = () => {
       fetchData();
     }
   }, [sessionId]);
+
+  // 試合番号が変わったら、アクティブタブを画面内へ自動スクロール
+  useEffect(() => {
+    scrollActiveTabIntoView(tabBarRef.current);
+  }, [currentMatchNumber]);
 
   // 試合番号ごとのペアリングを取得
   const getPairingsForMatch = (matchNumber) => {
@@ -374,65 +382,23 @@ const BulkResultInput = () => {
     );
   }
 
-  const currentPairings = getPairingsForMatch(currentMatchNumber);
   const totalMatches = session?.totalMatches || 0;
 
-  return (
-    <div className="min-h-screen bg-[#f2ede6] pb-20">
-      {/* 固定ナビゲーションバー */}
-      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
-        <div className="max-w-7xl mx-auto">
-          {/* 日付表示 + 対戦変更ボタン */}
-          <div className="flex items-center justify-between py-3">
-            <div className="w-10" />
-            <span className="text-lg font-semibold text-white">
-              {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short'
-              })}
-            </span>
-            <button
-              onClick={handleChangePairing}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-white/20 text-white hover:bg-white/30"
-            >
-              <Pencil className="w-3 h-3" />
-              対戦変更
-            </button>
-          </div>
+  // 1試合分の入力パネル（カルーセルの各ページ）。currentMatchNumber に依存せず
+  // matchNumber 引数だけで描画できるようにし、隣の試合のチラ見えにも対応する。
+  const renderMatchPanel = (matchNumber) => {
+    const matchPairings = getPairingsForMatch(matchNumber);
 
-          {/* タブバー */}
-          {totalMatches > 0 && (
-            <div className="flex overflow-x-auto -mb-px">
-              {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
-                <button
-                  key={num}
-                  onClick={() => setCurrentMatchNumber(num)}
-                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                    currentMatchNumber === num
-                      ? 'border-white text-white'
-                      : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
-                  }`}
-                >
-                  {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* メインコンテンツ */}
-      <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
-        {currentPairings.length === 0 ? (
+    return (
+      <>
+        {matchPairings.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-[#9b8a7e] text-sm mb-4">
               この試合の対戦組み合わせが作成されていません
             </p>
             {session && (
               <button
-                onClick={() => navigate(`/pairings?date=${session.sessionDate}&matchNumber=${currentMatchNumber}`)}
+                onClick={() => navigate(`/pairings?date=${session.sessionDate}&matchNumber=${matchNumber}`)}
                 className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] text-sm"
               >
                 対戦組み合わせを作成する
@@ -445,8 +411,8 @@ const BulkResultInput = () => {
           勝者の名前をタップ → 枚数差を選択
         </p>
         <div className="divide-y divide-[#e2d9d0]">
-          {currentPairings.map((pairing, index) => {
-            const result = getResult(currentMatchNumber, pairing.player1Id, pairing.player2Id);
+          {matchPairings.map((pairing, index) => {
+            const result = getResult(matchNumber, pairing.player1Id, pairing.player2Id);
             const isPlayer1Winner = result.winnerId === pairing.player1Id;
             const isPlayer2Winner = result.winnerId === pairing.player2Id;
             const hasWinner = result.winnerId !== null;
@@ -458,7 +424,7 @@ const BulkResultInput = () => {
                   {/* 選手1 */}
                   <button
                     type="button"
-                    onClick={() => setWinner(currentMatchNumber, pairing.player1Id, pairing.player2Id, pairing.player1Id)}
+                    onClick={() => setWinner(matchNumber, pairing.player1Id, pairing.player2Id, pairing.player1Id)}
                     className={`flex-1 text-right pr-2 font-semibold truncate transition-colors ${
                       isLesson ? 'text-gray-700' : isPlayer1Winner ? 'text-green-600' : isPlayer2Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
@@ -479,7 +445,7 @@ const BulkResultInput = () => {
                       <select
                         value={isLesson ? 'lesson' : (result.scoreDifference ?? '')}
                         onChange={(e) => setScoreDifference(
-                          currentMatchNumber,
+                          matchNumber,
                           pairing.player1Id,
                           pairing.player2Id,
                           e.target.value
@@ -509,7 +475,7 @@ const BulkResultInput = () => {
                   {/* 選手2 */}
                   <button
                     type="button"
-                    onClick={() => setWinner(currentMatchNumber, pairing.player1Id, pairing.player2Id, pairing.player2Id)}
+                    onClick={() => setWinner(matchNumber, pairing.player1Id, pairing.player2Id, pairing.player2Id)}
                     className={`flex-1 text-left pl-2 font-semibold truncate transition-colors ${
                       isLesson ? 'text-gray-700' : isPlayer2Winner ? 'text-green-600' : isPlayer1Winner ? 'text-gray-400' : 'text-gray-700'
                     }`}
@@ -523,12 +489,12 @@ const BulkResultInput = () => {
         </div>
 
         {/* 抜け番セクション */}
-        {(byePlayers[currentMatchNumber] || []).length > 0 && (
+        {(byePlayers[matchNumber] || []).length > 0 && (
           <div className="mt-6 pt-4 border-t border-[#e2d9d0]">
             <p className="text-xs font-medium text-[#9b8a7e] mb-3">抜け番</p>
             <div className="space-y-3">
-              {byePlayers[currentMatchNumber].map(player => {
-                const byeKey = `${currentMatchNumber}-${player.id}`;
+              {byePlayers[matchNumber].map(player => {
+                const byeKey = `${matchNumber}-${player.id}`;
                 const activity = byeActivities[byeKey] || {};
                 return (
                   <div key={player.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
@@ -536,7 +502,7 @@ const BulkResultInput = () => {
                       <span className="font-semibold text-[#374151] min-w-[4rem]">{player.name}</span>
                       <select
                         value={activity.activityType || ''}
-                        onChange={(e) => setByeActivityType(currentMatchNumber, player.id, e.target.value)}
+                        onChange={(e) => setByeActivityType(matchNumber, player.id, e.target.value)}
                         className="flex-1 text-sm bg-white border border-[#d0c5b8] rounded px-2 py-1.5 focus:ring-0 focus:border-[#82655a]"
                       >
                         <option value="">活動を選択</option>
@@ -549,7 +515,7 @@ const BulkResultInput = () => {
                       <input
                         type="text"
                         value={activity.freeText || ''}
-                        onChange={(e) => setByeFreeText(currentMatchNumber, player.id, e.target.value)}
+                        onChange={(e) => setByeFreeText(matchNumber, player.id, e.target.value)}
                         placeholder="内容を入力..."
                         className="mt-2 w-full text-sm bg-white border border-[#d0c5b8] rounded px-2 py-1.5 focus:ring-0 focus:border-[#82655a]"
                       />
@@ -562,6 +528,65 @@ const BulkResultInput = () => {
         )}
         </>
         )}
+      </>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f2ede6] pb-20">
+      {/* 固定ナビゲーションバー */}
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* 日付表示 + 対戦変更ボタン */}
+          <div className="flex items-center justify-between py-3">
+            <div className="w-10" />
+            <span className="text-lg font-semibold text-white">
+              {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'short'
+              })}
+            </span>
+            <button
+              onClick={handleChangePairing}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-white/20 text-white hover:bg-white/30"
+            >
+              <Pencil className="w-3 h-3" />
+              対戦変更
+            </button>
+          </div>
+
+          {/* タブバー */}
+          {totalMatches > 0 && (
+            <div ref={tabBarRef} className="flex overflow-x-auto -mb-px">
+              {Array.from({ length: totalMatches }, (_, i) => i + 1).map(num => (
+                <button
+                  key={num}
+                  data-active={currentMatchNumber === num}
+                  onClick={() => setCurrentMatchNumber(num)}
+                  className={`flex-shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                    currentMatchNumber === num
+                      ? 'border-white text-white'
+                      : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
+                  }`}
+                >
+                  {num}試合目{isMatchCompleted(num) ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* メインコンテンツ（試合番号スワイプ対応カルーセル） */}
+      <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        <MatchCarousel
+          totalMatches={totalMatches}
+          currentMatchNumber={currentMatchNumber}
+          onChange={setCurrentMatchNumber}
+          renderPanel={renderMatchPanel}
+        />
       </div>
 
       {/* 固定保存ボタン（変更がある場合のみ表示） */}

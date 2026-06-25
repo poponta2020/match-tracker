@@ -3454,6 +3454,24 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - 両方 `null` なら全日イベント（`VALUE=DATE`）。startTime のみ存在で endTime が `null` の場合は `startTime.plusHours(4)` を補う（フォールバック時のみ発生）
   - UID は時刻を含まないため、Google カレンダー側では同じイベントが「更新」され、重複や消失は発生しない
 
+#### 試合番号のスワイプ移動（フロント設計）
+
+結果一覧（`MatchResultsView`）・一括入力（`BulkResultInput`）・個人入力（`MatchForm`）の3画面で、画面上部の試合番号タブを左右スワイプでも切り替えられる。タブUIは存続し、スワイプは追加の操作手段。
+
+- **ジェスチャ判定ロジック `swipeGesture.js`（純粋関数）:** UIから切り離して単体テスト可能にする方針（`byePlayersLogic.js` / `pairingDragLogic.js` と同様）。
+  - `isHorizontalSwipe(dx, dy, activationPx=10)`: 横移動が活性化閾値を超え、かつ横移動 > 縦移動なら true（縦スクロール・タップと区別）
+  - `resolveSwipe({ dx, containerWidth, commitRatio=0.25, velocity, flickVelocity=0.5 })`: 移動量がコンテナ幅×25%以上、またはフリック速度以上で確定し方向（`'prev'|'next'`）を返す。閾値未満は `null`。座標系は `dx<0`（左スワイプ）=次へ、`dx>0`（右スワイプ）=前へ
+  - `clampOffset(dx, { atFirst, atLast })`: 端方向の動きを 0 に抑制した表示用オフセット（端で止まる）
+- **指追従カルーセル `MatchCarousel.jsx`（共通コンポーネント）:** 結果一覧・一括入力で共用。props は `totalMatches` / `currentMatchNumber` / `onChange(matchNumber)` / `renderPanel(matchNumber)`。
+  - 現在±1のパネルを描画（端ではその方向のパネルを描画しない）。現在パネルは通常フローで高さの基準とし、前後パネルは絶対配置で高さに影響させない（パネルごとの高さ差による余白を防ぐ）
+  - `touchmove` で `preventDefault` するため `passive:false` のネイティブリスナーを使用し、`touchAction: 'pan-y'` で縦スクロールと両立。横スワイプと判定したときのみ追従（translateX）
+  - 離したときに `resolveSwipe` で確定方向を判定。確定なら約0.2秒スライドさせてから `onChange(現在±1)` を呼びオフセットを0に戻す（新パネルが同じ画面位置に来るため見た目は連続）。端ではその方向へは確定しない
+- **MatchForm（スライドイン＋警告）:** 1試合分のフォームしか保持しない構造のため指追従カルーセルは使わず、スワイプ検出（`swipeGesture.js`）→確定判定→スライドイン（約0.2秒）。
+  - `isDirty` 状態を追加。ユーザー操作（結果・枚数差・お手付き・メモ・対戦相手選択・抜け番活動・手動抜け番切替）で `true`、確認後の試合切替で `false`。`applyMatchData` では立てない
+  - 共通ガード `requestMatchNumberChange(num, { fromSwipe })`: `isDirty` なら確認ダイアログ→OKで切替／キャンセルで据え置き。dirtyでなければ即切替。**既存タブ onClick とスワイプ確定の両方をこのガードに通す**。`fromSwipe` のときのみスライドインアニメ。編集モードは対象外
+- **タブ自動スクロール `tabScroll.js`:** `scrollActiveTabIntoView(tabBarEl)` がアクティブタブ（`data-active="true"`）を横スクロールするタブバー内に収まるよう **タブバー自身の `scrollLeft` だけ** を調整する（ページの縦スクロールには影響しない）。3画面とも `currentMatchNumber`/`formData.matchNumber` 変化時に呼ぶ
+- バックエンド・DB・APIの変更はなし（フロントエンドの表示状態のみ変更）
+
 ---
 
 ### 9.2 開発環境セットアップ
