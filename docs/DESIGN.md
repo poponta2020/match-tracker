@@ -3472,6 +3472,22 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 - **タブ自動スクロール `tabScroll.js`:** `scrollActiveTabIntoView(tabBarEl)` がアクティブタブ（`data-active="true"`）を横スクロールするタブバー内に収まるよう **タブバー自身の `scrollLeft` だけ** を調整する（ページの縦スクロールには影響しない）。3画面とも `currentMatchNumber`/`formData.matchNumber` 変化時に呼ぶ
 - バックエンド・DB・APIの変更はなし（フロントエンドの表示状態のみ変更）
 
+#### 初期表示試合番号のデフォルト（フロント設計）
+
+結果一覧（`MatchResultsView`）・一括入力（`BulkResultInput`）の初期表示試合番号を、現在時刻（端末ローカル）と入力状況から決定する。従来の1固定（`useState(1)`）を、初回データ取得完了後に1回だけ上書きする方式。**フロント完結でバックエンド・DB・APIの変更なし**（試合番号ごとの時刻 = 取得済み `PracticeSessionDto.venueSchedules`、ペアリング・結果 = `pairingAPI.getByDate` / `matchAPI.getByDate` で取得済み）。
+
+- **決定ロジック `defaultMatchNumber.js`（純粋関数）:** UIから切り離して単体テスト可能にする方針（`swipeGesture.js` / `byePlayersLogic.js` と同様）。猶予 `GRACE_MINUTES = 15`（固定）。
+  - `toMinutes(timeStr)`: `"HH:mm[:ss]"` を0時からの分数に変換（型不正・パース不能は `null`）
+  - `isToday(sessionDate, now)`: `sessionDate`（`"YYYY-MM-DD"`）が `now` の端末ローカル日付と一致するか
+  - `timeBasedDefaultMatchNumber(venueSchedules, now)`: `endTime` を持つ番号を昇順走査し、`now < endTime + 15分` を満たす最小の `matchNumber` を返す。該当なしは `1`（最終試合の終了+15分を超過 → 1に戻す）
+  - `getCompletedMatchNumbers({ pairings, matches, totalMatches })`: 全入力済み（その番号の全ペアリングに対応する `Match` が存在）の試合番号配列。選手IDは `min`/`max` 正規化で突合（保存時に `player1Id < player2Id` へ正規化されるため）。ペアリング0件の番号は対象外（既存 `isMatchCompleted` と同一判定）
+  - `defaultForResultsView({ urlMatchNumber, venueSchedules, sessionDate, now })`: `urlMatchNumber` 指定を最優先 → 当日かつスケジュールありで時刻ベース → `1`
+  - `defaultForBulkInput({ completedMatchNumbers, totalMatches, venueSchedules, sessionDate, now })`: 入力済みありなら `min(max(completed)+1, totalMatches)` を最優先 → なければ時刻ベース → `1`
+- **`MatchResultsView.jsx`:** `useSearchParams` で `matchNumber` クエリを読み取り、初回データ取得（`fetchInitial`）内でセッション確定後に `defaultForResultsView` の結果で `currentMatchNumber` を設定。URL値は `parseInt` 後 `1〜totalMatches` の範囲内のみ採用（範囲外・非数値は `null` 扱いで無視）。`useEffect` 依存配列に `matchNumberParam`・`location.key` を含めることで、保存後遷移など新しい `?matchNumber=` での再ナビゲート時にも再適用される。初回ガードは `initialFetchDone` ref。
+- **`BulkResultInput.jsx`:** 初回データ取得（`fetchData`、依存配列 `[sessionId]` のため `sessionId` ごとに1回のみ実行）でセッション・ペアリング・既存結果が揃った時点に `getCompletedMatchNumbers` → `defaultForBulkInput` で `currentMatchNumber` を設定。以降のユーザーのタブ／スワイプ切替は上書きしない。保存成功後の遷移を `navigate('/matches/results/:sessionId?matchNumber=<currentMatchNumber>')` とし、入力中の試合番号を一覧画面へ引き継ぐ。
+- **テスト:** `defaultMatchNumber.test.js`（純粋関数の境界）、`MatchResultsView.defaultTab.test.jsx` / `BulkResultInput.defaultTab.test.jsx`（URL指定優先・時刻ベース・過去日1固定・一括入力の入力済み制約・保存後遷移の `?matchNumber=` 付与）。
+- バックエンド・DB・APIの変更はなし
+
 ---
 
 ### 9.2 開発環境セットアップ
