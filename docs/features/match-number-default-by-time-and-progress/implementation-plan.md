@@ -34,7 +34,7 @@ status: completed
 - **対応Issue:** #938
 
 ### タスク2: 試合結果一覧画面へのデフォルト適用
-- [ ] 完了
+- [x] 完了
 - **概要:** `MatchResultsView` で URLクエリ `matchNumber` を読み取り、初期データ取得完了後に `defaultForResultsView` の結果で `currentMatchNumber` を1回だけ設定する。既存のタブ✓表示（`isMatchCompleted`）はタスク1の `getCompletedMatchNumbers` と整合するよう必要に応じて共通化する。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/MatchResultsView.jsx` — `useSearchParams` で `matchNumber` を取得。`venueSchedules`・日付確定後に `defaultForResultsView` を呼び初期 `currentMatchNumber` を設定（初回のみ。既存の `initialFetchDone`/`lastFetchedDate` パターンに合わせ、ユーザー切替を上書きしない）。
