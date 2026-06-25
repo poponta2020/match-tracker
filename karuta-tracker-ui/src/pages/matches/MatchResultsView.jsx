@@ -7,7 +7,9 @@ import LoadingScreen from '../../components/LoadingScreen';
 import VideoPlayerModal from '../../components/VideoPlayerModal';
 import MatchCarousel from '../../components/MatchCarousel';
 import { getByePlayerNamesForMatch } from './byePlayersLogic';
+import { defaultForResultsView } from './defaultMatchNumber';
 import { scrollActiveTabIntoView } from './tabScroll';
+import { todayLocalISODate } from '../../utils/date';
 
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
@@ -113,6 +115,7 @@ const MatchResultsView = () => {
   const { currentPlayer } = useAuth();
   const [searchParams] = useSearchParams();
   const dateParam = searchParams.get('date');
+  const matchNumberParam = searchParams.get('matchNumber');
 
   const [session, setSession] = useState(null);
   const [pairings, setPairings] = useState([]);
@@ -200,7 +203,9 @@ const MatchResultsView = () => {
 
     const fetchInitial = async () => {
       try {
-        const today = new Date().toISOString().split('T')[0];
+        // ローカル日付で当日を判定（UTC基準だとJSTの00:00〜08:59で前日になり、
+        // isToday と不整合になって当日の時刻ベース初期表示が発動しないため）
+        const today = todayLocalISODate();
         const targetDate = dateParam || today;
         const now = new Date();
         const thisYear = now.getFullYear();
@@ -224,11 +229,33 @@ const MatchResultsView = () => {
         const initialDate = dateParam || dates.find(d => d === today) || dates.find(d => d <= today) || dates[0] || null;
         setSelectedDate(initialDate);
 
+        let appliedSession = null;
         if (initialDate === targetDate) {
           applyData(targetData);
+          appliedSession = targetData.sessionResponse?.data || null;
         } else if (initialDate) {
           const data = await fetchDataForDate(initialDate);
           applyData(data);
+          appliedSession = data.sessionResponse?.data || null;
+        }
+
+        // 初期表示する試合番号を決定（URL指定 > 当日かつ会場スケジュールありで時刻ベース > 1試合目）。
+        // 初回データ取得時のみ適用し、以降のユーザーによるタブ切替・スワイプは上書きしない。
+        if (appliedSession) {
+          const totalM = appliedSession.totalMatches || 0;
+          // 純粋な正の整数文字列のみ受け付ける（"2abc" / "2.5" / 先頭ゼロ・空白等は無視）
+          const isPureInt = matchNumberParam != null && /^[1-9]\d*$/.test(matchNumberParam);
+          const parsedUrl = isPureInt ? parseInt(matchNumberParam, 10) : NaN;
+          const urlMatchNumber =
+            !Number.isNaN(parsedUrl) && parsedUrl >= 1 && parsedUrl <= totalM ? parsedUrl : null;
+          setCurrentMatchNumber(
+            defaultForResultsView({
+              urlMatchNumber,
+              venueSchedules: appliedSession.venueSchedules,
+              sessionDate: appliedSession.sessionDate,
+              now: new Date(),
+            })
+          );
         }
 
         lastFetchedDate.current = initialDate;
@@ -245,7 +272,7 @@ const MatchResultsView = () => {
     };
 
     fetchInitial();
-  }, [sessionId, dateParam, location.key]);
+  }, [sessionId, dateParam, matchNumberParam, location.key]);
 
   // 日付変更時のデータ取得（ユーザー操作による変更のみ）
   useEffect(() => {
