@@ -9,6 +9,7 @@ import MatchCarousel from '../../components/MatchCarousel';
 import { getByePlayerNamesForMatch } from './byePlayersLogic';
 import { defaultForResultsView } from './defaultMatchNumber';
 import { scrollActiveTabIntoView } from './tabScroll';
+import { todayLocalISODate } from '../../utils/date';
 
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
@@ -202,7 +203,9 @@ const MatchResultsView = () => {
 
     const fetchInitial = async () => {
       try {
-        const today = new Date().toISOString().split('T')[0];
+        // ローカル日付で当日を判定（UTC基準だとJSTの00:00〜08:59で前日になり、
+        // isToday と不整合になって当日の時刻ベース初期表示が発動しないため）
+        const today = todayLocalISODate();
         const targetDate = dateParam || today;
         const now = new Date();
         const thisYear = now.getFullYear();
@@ -240,7 +243,9 @@ const MatchResultsView = () => {
         // 初回データ取得時のみ適用し、以降のユーザーによるタブ切替・スワイプは上書きしない。
         if (appliedSession) {
           const totalM = appliedSession.totalMatches || 0;
-          const parsedUrl = matchNumberParam != null ? parseInt(matchNumberParam, 10) : NaN;
+          // 純粋な正の整数文字列のみ受け付ける（"2abc" / "2.5" / 先頭ゼロ・空白等は無視）
+          const isPureInt = matchNumberParam != null && /^[1-9]\d*$/.test(matchNumberParam);
+          const parsedUrl = isPureInt ? parseInt(matchNumberParam, 10) : NaN;
           const urlMatchNumber =
             !Number.isNaN(parsedUrl) && parsedUrl >= 1 && parsedUrl <= totalM ? parsedUrl : null;
           setCurrentMatchNumber(

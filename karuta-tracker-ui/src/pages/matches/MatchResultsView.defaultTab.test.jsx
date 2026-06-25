@@ -102,6 +102,17 @@ describe('MatchResultsView - 初期表示試合番号のデフォルト', () => 
     await waitFor(() => expect(tab(3)).toHaveAttribute('data-active', 'true'));
   });
 
+  it('matchNumber が非数値混じり（例: 3abc）の場合は無視して時刻ベースにフォールバックする', async () => {
+    practiceAPI.getDates.mockResolvedValue({ data: [TODAY] });
+    practiceAPI.getByDate.mockResolvedValue({ data: sessionWith(TODAY, SCHEDULES) });
+
+    // "3abc" は parseInt では 3 になり得るが、純粋な整数文字列でないため無視され、
+    // 18:30 の時刻ベース（2試合目）にフォールバックする（バグがあれば3試合目になる）
+    renderView(`?date=${TODAY}&matchNumber=3abc`);
+    await waitFor(() => expect(tab(2)).toHaveAttribute('data-active', 'true'));
+    expect(tab(3)).toHaveAttribute('data-active', 'false');
+  });
+
   it('過去日は時刻ベースを発動せず1試合目を初期表示', async () => {
     practiceAPI.getDates.mockResolvedValue({ data: [PAST_DAY] });
     practiceAPI.getByDate.mockResolvedValue({ data: sessionWith(PAST_DAY, SCHEDULES) });
