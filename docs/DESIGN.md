@@ -3484,7 +3484,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - `defaultForResultsView({ urlMatchNumber, venueSchedules, sessionDate, now })`: `urlMatchNumber` 指定を最優先 → 当日かつスケジュールありで時刻ベース → `1`
   - `defaultForBulkInput({ completedMatchNumbers, totalMatches, venueSchedules, sessionDate, now })`: 入力済みありなら `min(max(completed)+1, totalMatches)` を最優先 → なければ時刻ベース → `1`
 - **`MatchResultsView.jsx`:** `useSearchParams` で `matchNumber` クエリを読み取り、初回データ取得（`fetchInitial`）内でセッション確定後に `defaultForResultsView` の結果で `currentMatchNumber` を設定。URL値は `parseInt` 後 `1〜totalMatches` の範囲内のみ採用（範囲外・非数値は `null` 扱いで無視）。`useEffect` 依存配列に `matchNumberParam`・`location.key` を含めることで、保存後遷移など新しい `?matchNumber=` での再ナビゲート時にも再適用される。初回ガードは `initialFetchDone` ref。
-- **`BulkResultInput.jsx`:** 初回データ取得（`fetchData`、依存配列 `[sessionId]` のため `sessionId` ごとに1回のみ実行）でセッション・ペアリング・既存結果が揃った時点に `getCompletedMatchNumbers` → `defaultForBulkInput` で `currentMatchNumber` を設定。以降のユーザーのタブ／スワイプ切替は上書きしない。保存成功後の遷移を `navigate('/matches/results/:sessionId?matchNumber=<currentMatchNumber>')` とし、入力中の試合番号を一覧画面へ引き継ぐ。
+- **`BulkResultInput.jsx`:** 初回データ取得（`fetchData`、依存配列 `[sessionId]` のため `sessionId` ごとに1回のみ実行）でセッション・ペアリング・既存結果が揃った時点に `getCompletedMatchNumbers` → `defaultForBulkInput` で `currentMatchNumber` を設定。以降のユーザーのタブ／スワイプ切替は上書きしない。保存成功後の遷移を `navigate('/matches/results/:sessionId?date=<session.sessionDate>&matchNumber=<currentMatchNumber>')` とし、保存元セッションの日付と入力中の試合番号を一覧画面へ引き継ぐ（一覧は `sessionId` でなく日付でセッションを解決するため、`date` を付けないと過去日・未来日の保存で当日が開く）。
 - **テスト:** `defaultMatchNumber.test.js`（純粋関数の境界）、`MatchResultsView.defaultTab.test.jsx` / `BulkResultInput.defaultTab.test.jsx`（URL指定優先・時刻ベース・過去日1固定・一括入力の入力済み制約・保存後遷移の `?matchNumber=` 付与）。
 - バックエンド・DB・APIの変更はなし
 

@@ -39,6 +39,13 @@ describe('toMinutes', () => {
     expect(toMinutes('')).toBeNull();
     expect(toMinutes('abc')).toBeNull();
   });
+  it('形式不正・範囲外は null（末尾不正・時分範囲外・桁不正）', () => {
+    expect(toMinutes('18:15abc')).toBeNull();
+    expect(toMinutes('99:99')).toBeNull();
+    expect(toMinutes('18x:15')).toBeNull();
+    expect(toMinutes('24:00')).toBeNull();
+    expect(toMinutes('12:60')).toBeNull();
+  });
 });
 
 describe('isToday', () => {

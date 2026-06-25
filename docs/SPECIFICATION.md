@@ -751,7 +751,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 入力状況による上位制約は一覧画面には設けない。
 
 **保存後遷移の番号引き継ぎ**
-- 一括入力画面で保存すると `/matches/results/:sessionId?matchNumber=<currentMatchNumber>` へ遷移し、入力していた試合番号を URL クエリで引き継ぐ。遷移先の一覧画面はそれを最優先で表示するため、「たった今入力していた試合番号」がそのまま開く。
+- 一括入力画面で保存すると `/matches/results/:sessionId?date=<sessionDate>&matchNumber=<currentMatchNumber>` へ遷移し、**保存元セッションの日付**と入力していた試合番号を URL クエリで引き継ぐ。一覧画面は `sessionId` ではなく日付（`dateParam || 当日`）でセッションを解決するため、`date` を付与しないと過去日・未来日のセッションを保存しても当日の一覧が開いてしまう。`date` 引き継ぎにより保存元の日付の一覧がその試合番号（最優先表示）で開き、「たった今入力していた試合番号」がそのまま見える。
 
 **実装:** 決定ロジックは純粋関数 `defaultMatchNumber.js`（`timeBasedDefaultMatchNumber` / `getCompletedMatchNumbers` / `defaultForResultsView` / `defaultForBulkInput`）に切り出し、2画面から呼ぶ。現在時刻は端末ローカル時刻。**バックエンド・DB・APIの変更はなし**（必要データ＝`venueSchedules`・ペアリング・試合結果はいずれも取得済み）。
 

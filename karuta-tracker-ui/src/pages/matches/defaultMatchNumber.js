@@ -25,12 +25,11 @@ export const GRACE_MINUTES = 15;
  */
 export function toMinutes(timeStr) {
   if (typeof timeStr !== 'string') return null;
-  const parts = timeStr.split(':');
-  if (parts.length < 2) return null;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
+  // "HH:mm" / "HH:mm:ss" 形式かつ時刻範囲（00:00〜23:59）のみ受け付ける。
+  // "18:15abc"（末尾不正）・"99:99"（範囲外）・"18x:15"（桁不正）などは null を返す。
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(timeStr);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
 }
 
 /**
