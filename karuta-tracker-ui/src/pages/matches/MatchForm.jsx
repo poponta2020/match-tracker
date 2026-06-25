@@ -414,6 +414,8 @@ const MatchForm = () => {
   // スワイプ検出（指追従なし。離した時点の移動量で前後の試合へ切替）
   const handleContentTouchStart = (e) => {
     if (isEdit || getTabMatchNumbers().length <= 1) return;
+    // 共通ヘッダー等（data-swipe-ignore 付き要素）から始まったタッチはスワイプ対象外
+    if (e.target instanceof Element && e.target.closest('[data-swipe-ignore]')) return;
     const t = e.touches[0];
     swipeStart.current = { x: t.clientX, y: t.clientY };
   };
@@ -680,9 +682,13 @@ const MatchForm = () => {
 
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden">
+    <div
+      className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden"
+      onTouchStart={handleContentTouchStart}
+      onTouchEnd={handleContentTouchEnd}
+    >
       {/* ナビゲーションバー */}
-      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div data-swipe-ignore className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 */}
           <div className="flex items-center justify-center py-3">
@@ -723,8 +729,6 @@ const MatchForm = () => {
       <div
         ref={contentRef}
         data-testid="matchform-swipe-area"
-        onTouchStart={handleContentTouchStart}
-        onTouchEnd={handleContentTouchEnd}
         style={slideStyle}
       >
       {/* 今日が練習日でない場合はフォームを表示せずブロック */}

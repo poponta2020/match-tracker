@@ -19,6 +19,7 @@ const BulkResultInput = () => {
   const [matches, setMatches] = useState([]);
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
   const tabBarRef = useRef(null);
+  const swipeAreaRef = useRef(null); // スワイプ検出面（共通ヘッダー/フッターを除くコンテンツ全域）
   const [results, setResults] = useState({});
   const [changedMatches, setChangedMatches] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -552,9 +553,9 @@ const BulkResultInput = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-20">
+    <div ref={swipeAreaRef} className="min-h-screen bg-[#f2ede6] pb-20">
       {/* 固定ナビゲーションバー */}
-      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
+      <div data-swipe-ignore className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
           {/* 日付表示 + 対戦変更ボタン */}
           <div className="flex items-center justify-between py-3">
@@ -605,6 +606,7 @@ const BulkResultInput = () => {
           currentMatchNumber={currentMatchNumber}
           onChange={setCurrentMatchNumber}
           renderPanel={renderMatchPanel}
+          swipeAreaRef={swipeAreaRef}
         />
       </div>
 

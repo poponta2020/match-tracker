@@ -19,7 +19,7 @@ import { isHorizontalSwipe, resolveSwipe, clampOffset } from '../pages/matches/s
  */
 const SLIDE_MS = 200;
 
-export default function MatchCarousel({ totalMatches, currentMatchNumber, onChange, renderPanel }) {
+export default function MatchCarousel({ totalMatches, currentMatchNumber, onChange, renderPanel, swipeAreaRef }) {
   const viewportRef = useRef(null);
   const [offset, setOffset] = useState(0);          // 指追従の表示オフセット(px)
   const [animating, setAnimating] = useState(false); // CSSトランジションを効かせるか
@@ -53,11 +53,15 @@ export default function MatchCarousel({ totalMatches, currentMatchNumber, onChan
 
   // touchmove で preventDefault するため、passive:false のネイティブリスナーで登録する
   useEffect(() => {
-    const el = viewportRef.current;
+    // スワイプ検出面は呼び出し側が指定する領域（共通ヘッダー/フッターを除くコンテンツ全域）。
+    // 未指定時はカルーセル本体(viewport)にフォールバックする。
+    const el = swipeAreaRef?.current ?? viewportRef.current;
     if (!el) return;
 
     const onTouchStart = (e) => {
       if (lockRef.current || totalMatches <= 1) return;
+      // 共通ヘッダー等（data-swipe-ignore 付き要素）から始まったタッチはスワイプ対象外
+      if (e.target instanceof Element && e.target.closest('[data-swipe-ignore]')) return;
       const t = e.touches[0];
       gesture.current = {
         startX: t.clientX, startY: t.clientY, startTime: e.timeStamp,
@@ -93,7 +97,8 @@ export default function MatchCarousel({ totalMatches, currentMatchNumber, onChan
       if (!g.active) return;
       g.active = false;
       if (g.axis !== 'h') return;
-      const width = el.offsetWidth || 0;
+      // 閾値幅はスワイプ面(el)ではなくパネル(viewport)基準に固定する
+      const width = viewportRef.current?.offsetWidth || 0;
       const dt = e.timeStamp - g.startTime;
       const velocity = dt > 0 ? g.dx / dt : 0;
       const clamped = clampOffset(g.dx, { atFirst, atLast });
@@ -122,7 +127,7 @@ export default function MatchCarousel({ totalMatches, currentMatchNumber, onChan
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchCancel);
     };
-  }, [atFirst, atLast, totalMatches, commit, snapBack]);
+  }, [atFirst, atLast, totalMatches, commit, snapBack, swipeAreaRef]);
 
   return (
     <div
