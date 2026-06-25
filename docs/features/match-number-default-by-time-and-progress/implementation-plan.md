@@ -44,7 +44,7 @@ status: completed
 - **対応Issue:** #939
 
 ### タスク3: 試合結果一括入力画面へのデフォルト適用＋保存後遷移
-- [ ] 完了
+- [x] 完了
 - **概要:** `BulkResultInput` で初期データ取得完了後に入力済み試合番号を算出し、`defaultForBulkInput` の結果で `currentMatchNumber` を1回だけ設定する。保存後に一覧画面へ遷移する際、現在の `currentMatchNumber` を URLクエリ `matchNumber` として渡す。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/pages/matches/BulkResultInput.jsx` — セッション・ペアリング・既存結果が揃った後に `getCompletedMatchNumbers` → `defaultForBulkInput` で初期 `currentMatchNumber` を設定（初回のみ）。保存後の `navigate('/matches/results/:sessionId', ...)` に `?matchNumber=<currentMatchNumber>` を付与（既存クエリがあれば維持）。

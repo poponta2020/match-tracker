@@ -6,6 +6,7 @@ import { Save, AlertCircle, Pencil } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import MatchCarousel from '../../components/MatchCarousel';
 import { computeByePlayersByMatch } from './byePlayersLogic';
+import { getCompletedMatchNumbers, defaultForBulkInput } from './defaultMatchNumber';
 import { scrollActiveTabIntoView } from './tabScroll';
 
 const BulkResultInput = () => {
@@ -67,6 +68,23 @@ const BulkResultInput = () => {
         const allParticipants = participantsResponse.data || [];
         const sessionMatches = matchesResponse.data;
         setMatches(sessionMatches);
+
+        // 初期表示する試合番号を決定（入力済み最大+1 > 当日かつ会場スケジュールありで時刻ベース > 1試合目）。
+        // fetchData は sessionId ごとに1回のみ実行されるため、以降のユーザーのタブ切替・スワイプは上書きしない。
+        const completedMatchNumbers = getCompletedMatchNumbers({
+          pairings: allPairings,
+          matches: sessionMatches || [],
+          totalMatches: sessionData.totalMatches,
+        });
+        setCurrentMatchNumber(
+          defaultForBulkInput({
+            completedMatchNumbers,
+            totalMatches: sessionData.totalMatches,
+            venueSchedules: sessionData.venueSchedules,
+            sessionDate: sessionData.sessionDate,
+            now: new Date(),
+          })
+        );
 
         // 既存結果を初期値として設定
         const initialResults = {};
@@ -347,8 +365,8 @@ const BulkResultInput = () => {
       });
       setChangedMatches(new Set());
 
-      // 保存成功後、試合結果詳細画面に遷移
-      navigate(`/matches/results/${sessionId}`);
+      // 保存成功後、試合結果詳細画面に遷移（入力していた試合番号を引き継ぐ）
+      navigate(`/matches/results/${sessionId}?matchNumber=${currentMatchNumber}`);
 
     } catch (err) {
       console.error('保存エラー:', err);
