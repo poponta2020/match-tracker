@@ -122,6 +122,17 @@ describe('MatchCarousel', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('touchcancel ではスワイプを確定しない（onChange を呼ばない）', async () => {
+    const { onChange } = renderCarousel({ currentMatchNumber: 2 });
+    const el = screen.getByTestId('match-carousel');
+    // 確定閾値を超える横ドラッグでも、touchcancel なら確定しない
+    fireEvent.touchStart(el, { touches: [{ clientX: 200, clientY: 200 }] });
+    fireEvent.touchMove(el, { touches: [{ clientX: 80, clientY: 200 }] }); // dx=-120
+    fireEvent.touchCancel(el, { changedTouches: [{ clientX: 80, clientY: 200 }] });
+    await new Promise((r) => setTimeout(r, 250));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('縦移動が優勢なときは横スワイプを発動しない（縦スクロール）', async () => {
     const { onChange } = renderCarousel({ currentMatchNumber: 2 });
     swipe(screen.getByTestId('match-carousel'), -120, { dy: 200 }); // 縦優勢

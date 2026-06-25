@@ -103,15 +103,24 @@ export default function MatchCarousel({ totalMatches, currentMatchNumber, onChan
       else snapBack();
     };
 
+    // touchcancel は「ユーザーが確定した操作」ではない（通知・ブラウザジェスチャ等での中断）。
+    // 確定判定はせず、ドラッグ中なら元の位置へ戻すだけ（誤って試合移動しない）。
+    const onTouchCancel = () => {
+      const g = gesture.current;
+      if (!g.active) return;
+      g.active = false;
+      if (g.axis === 'h') snapBack();
+    };
+
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchCancel, { passive: true });
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchCancel);
     };
   }, [atFirst, atLast, totalMatches, commit, snapBack]);
 
