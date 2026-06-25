@@ -365,8 +365,9 @@ const BulkResultInput = () => {
       });
       setChangedMatches(new Set());
 
-      // 保存成功後、試合結果詳細画面に遷移（入力していた試合番号を引き継ぐ）
-      navigate(`/matches/results/${sessionId}?matchNumber=${currentMatchNumber}`);
+      // 保存成功後、試合結果一覧画面に遷移（保存元セッションの日付と入力していた試合番号を引き継ぐ）。
+      // date を付けないと一覧側が dateParam||today で当日を解決し、過去日・未来日の保存で別日が開いてしまう。
+      navigate(`/matches/results/${sessionId}?date=${session.sessionDate}&matchNumber=${currentMatchNumber}`);
 
     } catch (err) {
       console.error('保存エラー:', err);

@@ -128,7 +128,7 @@ describe('BulkResultInput - 初期表示試合番号のデフォルト', () => {
 });
 
 describe('BulkResultInput - 保存後遷移の試合番号引き継ぎ', () => {
-  it('保存後に /matches/results へ ?matchNumber= 付きで遷移する', async () => {
+  it('保存後に /matches/results へ ?date=&matchNumber= 付きで遷移する（保存元セッションの日付も引き継ぐ）', async () => {
     matchAPI.createDetailed.mockResolvedValue({ data: { id: 100 } });
     setupMocks({
       session: sessionWith(PAST_DAY, 1, undefined),
@@ -150,5 +150,7 @@ describe('BulkResultInput - 保存後遷移の試合番号引き継ぎ', () => {
     expect(matchAPI.createDetailed).toHaveBeenCalled();
     expect(locationRef.pathname).toBe('/matches/results/42');
     expect(locationRef.search).toContain('matchNumber=1');
+    // 保存元セッションの日付（過去日）も引き継ぐ → 一覧側が当日に解決して別日を開く事故を防ぐ
+    expect(locationRef.search).toContain(`date=${PAST_DAY}`);
   });
 });
