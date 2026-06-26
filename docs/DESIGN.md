@@ -3472,6 +3472,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - 共通ガード `requestMatchNumberChange(num, { fromSwipe })`: `isDirty` なら確認ダイアログ→OKで切替／キャンセルで据え置き。dirtyでなければ即切替。**既存タブ onClick とスワイプ確定の両方をこのガードに通す**。`fromSwipe` のときのみスライドインアニメ。編集モードは対象外
   - **スワイプ検出面:** `onTouchStart`/`onTouchEnd` をルート div（`min-h-screen` 全域）に張り、共通ヘッダー/フッターを除くコンテンツ全域でスワイプを受け付ける。`handleContentTouchStart` で `data-swipe-ignore`（固定ヘッダー）由来のタッチは無視。スライドイン用の `contentRef`（幅計測・アニメ対象）は据え置き
 - **タブ自動スクロール `tabScroll.js`:** `scrollActiveTabIntoView(tabBarEl)` がアクティブタブ（`data-active="true"`）を横スクロールするタブバー内に収まるよう **タブバー自身の `scrollLeft` だけ** を調整する（ページの縦スクロールには影響しない）。3画面とも `currentMatchNumber`/`formData.matchNumber` 変化時に呼ぶ
+- **操作ヒント表示:** スワイプ可能な画面では、スワイプで試合を切り替えられることをコンテンツ上部に控えめな案内テキスト『‹ スワイプで試合を切替 ›』で常時表示する（`text-xs`・淡色・中央寄せ）。表示条件は結果一覧/一括入力が `totalMatches > 1`、個人入力が `!isEdit && getTabMatchNumbers().length > 1`（1試合のみ・編集モードは非表示にして誤誘導を防ぐ）。色は各画面の既存トーンに合わせる（結果一覧/個人入力 `#9ca3af`、一括入力は既存ヒントと揃え `#9b8a7e`）。テスト: 各 `*.swipe.test.jsx` に表示/非表示の軽量テストを追加
 - バックエンド・DB・APIの変更はなし（フロントエンドの表示状態のみ変更）
 
 #### 初期表示試合番号のデフォルト（フロント設計）

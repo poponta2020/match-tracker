@@ -601,6 +601,12 @@ const BulkResultInput = () => {
 
       {/* メインコンテンツ（試合番号スワイプ対応カルーセル） */}
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-6">
+        {/* 横スワイプで試合移動できることの控えめな案内（2試合以上のときのみ） */}
+        {totalMatches > 1 && (
+          <p className="text-center text-xs text-[#9b8a7e] mb-3 select-none">
+            ‹ スワイプで試合を切替 ›
+          </p>
+        )}
         <MatchCarousel
           totalMatches={totalMatches}
           currentMatchNumber={currentMatchNumber}
