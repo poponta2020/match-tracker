@@ -119,3 +119,19 @@ describe('BulkResultInput - スワイプによる試合切替', () => {
     expect(screen.getByText(/保存する（1件）/)).toBeInTheDocument();
   });
 });
+
+describe('BulkResultInput - スワイプ操作ヒント', () => {
+  it('2試合以上のときは案内テキストを表示する', async () => {
+    renderView();
+    await waitFor(() => expect(tab(1)).toHaveAttribute('data-active', 'true'));
+    expect(screen.getByText(/スワイプで試合を切替/)).toBeInTheDocument();
+  });
+
+  it('1試合のみのときは案内テキストを表示しない', async () => {
+    practiceAPI.getById.mockResolvedValue({ data: { ...SESSION, totalMatches: 1 } });
+    pairingAPI.getByDate.mockResolvedValue({ data: [PAIRINGS[0]] });
+    renderView();
+    await waitFor(() => expect(tab(1)).toHaveAttribute('data-active', 'true'));
+    expect(screen.queryByText(/スワイプで試合を切替/)).toBeNull();
+  });
+});

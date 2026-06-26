@@ -148,3 +148,38 @@ describe('MatchForm - 試合番号スワイプ移動と未保存警告', () => {
     expect(screen.queryByText(/入力中の内容は破棄されます/)).not.toBeInTheDocument();
   });
 });
+
+describe('MatchForm - スワイプ操作ヒント', () => {
+  it('新規入力でタブ2件以上なら案内テキストを表示する', async () => {
+    renderForm();
+    await waitFor(() => expect(tab(1)).toHaveAttribute('data-active', 'true'));
+    expect(screen.getByText(/スワイプで試合を切替/)).toBeInTheDocument();
+  });
+
+  it('新規入力でも1試合のみなら案内テキストを表示しない', async () => {
+    practiceAPI.getByDate.mockResolvedValue({ data: { ...SESSION, totalMatches: 1 } });
+    renderForm();
+    await waitFor(() => expect(tab(1)).toHaveAttribute('data-active', 'true'));
+    expect(screen.queryByText(/スワイプで試合を切替/)).toBeNull();
+  });
+
+  it('編集モードでは案内テキストを表示しない', async () => {
+    matchAPI.getById.mockResolvedValue({
+      data: {
+        id: 555, matchDate: PAST_DATE, matchNumber: 1,
+        player1Id: 1, player2Id: 2, opponentName: '対戦相手A',
+        result: '勝ち', scoreDifference: 3, isLesson: false,
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/matches/555/edit', state: { matchDate: PAST_DATE } }]}>
+        <Routes>
+          <Route path="/matches/:id/edit" element={<MatchForm />} />
+          <Route path="/matches" element={<div>matches</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByRole('button', { name: '更新する' });
+    expect(screen.queryByText(/スワイプで試合を切替/)).toBeNull();
+  });
+});
