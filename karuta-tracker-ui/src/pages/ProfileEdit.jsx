@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
@@ -19,6 +19,7 @@ const ProfileEdit = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [showPasswordSection, setShowPasswordSection] = useState(isChangePassword);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -37,6 +38,15 @@ const ProfileEdit = () => {
   });
 
   const [validationErrors, setValidationErrors] = useState({});
+
+  // 保存成功後の遅延遷移タイマー。アンマウント時に解除し、遷移後の setState や二重遷移を防ぐ
+  const navTimersRef = useRef([]);
+  useEffect(() => {
+    return () => {
+      navTimersRef.current.forEach(clearTimeout);
+      navTimersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -173,14 +183,18 @@ const ProfileEdit = () => {
       }
 
       setSuccess(true);
-      setTimeout(() => {
+      const goNext = () => {
         const from = location.state?.from;
         if (from) {
           navigate(from.pathname + (from.search || ''));
         } else {
           navigate((isSetup || isChangePassword) ? '/' : '/profile');
         }
-      }, 1000);
+      };
+      // 成功表示 → 静かにフェードアウトしてから遷移（ハードカット回避）
+      // タイマーIDを保持し、アンマウント時に確実に解除する
+      navTimersRef.current.push(setTimeout(() => setLeaving(true), 700));
+      navTimersRef.current.push(setTimeout(goNext, 1000));
     } catch (err) {
       console.error('保存に失敗:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
@@ -199,11 +213,11 @@ const ProfileEdit = () => {
     }`;
 
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="読み込み中" />;
   }
 
   return (
-    <div className="min-h-screen bg-[#f2ede6] pb-6">
+    <div className={`min-h-screen bg-[#f2ede6] pb-6 motion-safe:transition-opacity motion-safe:duration-300 ${leaving ? 'motion-safe:opacity-0' : 'opacity-100'}`}>
       {/* 固定ヘッダー */}
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
@@ -225,7 +239,7 @@ const ProfileEdit = () => {
       </div>
 
       {/* コンテンツ */}
-      <div className="max-w-lg mx-auto px-4 pt-16">
+      <div className="max-w-lg mx-auto px-4 pt-16 pe-fade-in">
         {/* パスワード変更強制メッセージ */}
         {isChangePassword && (
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
@@ -248,13 +262,13 @@ const ProfileEdit = () => {
 
         {/* 成功・エラーメッセージ */}
         {success && (
-          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2 pe-fade-in">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <p className="text-sm text-green-800">保存しました</p>
           </div>
         )}
         {error && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2 pe-fade-in">
             <AlertCircle className="h-4 w-4 text-red-600" />
             <p className="text-sm text-red-800">{error}</p>
           </div>
@@ -374,8 +388,9 @@ const ProfileEdit = () => {
               <ChevronDown className={`w-4 h-4 text-[#6b7280] transition-transform ${showPasswordSection ? 'rotate-180' : ''}`} />
             </button>
 
-            {showPasswordSection && (
-              <div className="px-5 pb-5 space-y-3">
+            <div className={`pe-collapse ${showPasswordSection ? 'is-open' : ''}`}>
+              <div>
+              <div className="px-5 pb-5 space-y-3" inert={showPasswordSection ? undefined : true}>
                 <p className="text-xs text-[#9ca3af]">変更しない場合は空欄のままにしてください</p>
                 <div>
                   <label className="block text-xs font-medium text-[#6b7280] mb-1.5">現在のパスワード</label>
@@ -431,7 +446,8 @@ const ProfileEdit = () => {
                   {validationErrors.confirmPassword && <p className="mt-1 text-xs text-red-500">{validationErrors.confirmPassword}</p>}
                 </div>
               </div>
-            )}
+              </div>
+            </div>
           </div>
 
           {/* ボタン */}
@@ -466,6 +482,27 @@ const ProfileEdit = () => {
           </div>
         </form>
       </div>
+
+      <style>{`
+        @keyframes pe-fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .pe-fade-in { animation: pe-fade-in 0.25s ease-out; }
+
+        .pe-collapse {
+          display: grid;
+          grid-template-rows: 0fr;
+          transition: grid-template-rows 0.28s ease-out;
+        }
+        .pe-collapse.is-open { grid-template-rows: 1fr; }
+        .pe-collapse > div { overflow: hidden; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .pe-fade-in { animation: none; }
+          .pe-collapse { transition: none; }
+        }
+      `}</style>
     </div>
   );
 };
