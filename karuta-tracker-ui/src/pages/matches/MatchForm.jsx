@@ -680,6 +680,13 @@ const MatchForm = () => {
     return <LoadingScreen />;
   }
 
+  // 横スワイプで前後の試合へ移動できることの控えめな案内。
+  // スワイプが効く条件（新規入力かつタブ2件以上）のときだけ表示し、誤誘導を避ける。
+  const swipeHint = !isEdit && getTabMatchNumbers().length > 1 ? (
+    <p className="text-center text-xs text-[#9ca3af] mb-2 select-none">
+      ‹ スワイプで試合を切替 ›
+    </p>
+  ) : null;
 
   return (
     <div
@@ -760,6 +767,7 @@ const MatchForm = () => {
       ) : (
       (isByeMatch || manualByeMode) && !isEdit ? (
         <div className="h-full px-6 overflow-hidden pt-28 space-y-6">
+          {swipeHint}
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm font-medium text-yellow-800">この試合は抜け番です</p>
           </div>
@@ -848,6 +856,7 @@ const MatchForm = () => {
         </div>
       ) : (
       <form onSubmit={handleSubmit} className="h-full px-6 overflow-hidden pt-28 space-y-6">
+        {swipeHint}
 
         {/* 既存試合の警告メッセージ */}
         {!isEdit && isExistingMatch && (
