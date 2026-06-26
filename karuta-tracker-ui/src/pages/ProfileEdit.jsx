@@ -217,7 +217,7 @@ const ProfileEdit = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-[#f2ede6] pb-6 motion-safe:transition-opacity motion-safe:duration-300 ${leaving ? 'opacity-0' : 'opacity-100'}`}>
+    <div className={`min-h-screen bg-[#f2ede6] pb-6 motion-safe:transition-opacity motion-safe:duration-300 ${leaving ? 'motion-safe:opacity-0' : 'opacity-100'}`}>
       {/* 固定ヘッダー */}
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
