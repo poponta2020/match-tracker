@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { playerAPI } from '../api';
@@ -38,6 +38,15 @@ const ProfileEdit = () => {
   });
 
   const [validationErrors, setValidationErrors] = useState({});
+
+  // 保存成功後の遅延遷移タイマー。アンマウント時に解除し、遷移後の setState や二重遷移を防ぐ
+  const navTimersRef = useRef([]);
+  useEffect(() => {
+    return () => {
+      navTimersRef.current.forEach(clearTimeout);
+      navTimersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -183,8 +192,9 @@ const ProfileEdit = () => {
         }
       };
       // 成功表示 → 静かにフェードアウトしてから遷移（ハードカット回避）
-      setTimeout(() => setLeaving(true), 700);
-      setTimeout(goNext, 1000);
+      // タイマーIDを保持し、アンマウント時に確実に解除する
+      navTimersRef.current.push(setTimeout(() => setLeaving(true), 700));
+      navTimersRef.current.push(setTimeout(goNext, 1000));
     } catch (err) {
       console.error('保存に失敗:', err);
       setError(err.response?.data?.message || '保存に失敗しました');
@@ -207,7 +217,7 @@ const ProfileEdit = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-[#f2ede6] pb-6 transition-opacity duration-300 ${leaving ? 'opacity-0' : 'opacity-100'}`}>
+    <div className={`min-h-screen bg-[#f2ede6] pb-6 motion-safe:transition-opacity motion-safe:duration-300 ${leaving ? 'opacity-0' : 'opacity-100'}`}>
       {/* 固定ヘッダー */}
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between">
