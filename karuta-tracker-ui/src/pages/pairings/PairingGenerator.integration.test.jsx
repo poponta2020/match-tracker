@@ -9,6 +9,7 @@ import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
 
 afterEach(cleanup);
 
@@ -869,6 +870,56 @@ describe('手動ロック（pairing-manual-lock）', () => {
     it('対象組自体が片側空欄ならロック不可', () => {
       const pairings = [{ player1Id: 1, player2Id: null, hasResult: false, locked: false }];
       expect(canLock(pairings[0], pairings)).toBe(false);
+    });
+  });
+});
+
+describe('作成UI（参加者一覧・自動マッチング）の表示条件', () => {
+  // 本番 PairingGenerator.jsx が import している判定関数（pairingDisplayLogic）を
+  // テストでも import して直接検証する。条件式をテスト側にコピーせず実関数を呼ぶことで、
+  // 本番側が過去の `!hasUnlockedPairings`（全組ロック時に作成UIが復活）へ退行した場合に
+  // 確実に失敗させる。自動マッチングボタンはデフォルト引数を埋めて実関数を呼ぶ薄いラッパで検証する。
+  const autoMatchVisible = (
+    pairings,
+    { isReadOnly = false, sessionDate = '2026-06-28', participants = [{ id: 1 }] } = {},
+  ) => shouldShowAutoMatchButton({ isReadOnly, sessionDate, participants, pairings });
+
+  describe('参加者一覧セクション', () => {
+    it('組み合わせが1つも無ければ表示（新規作成）', () => {
+      expect(shouldShowParticipantSection([])).toBe(true);
+    });
+    it('結果入力済みの組だけでも非表示', () => {
+      expect(shouldShowParticipantSection([{ hasResult: true, locked: false }])).toBe(false);
+    });
+    it('手動ロック済みの組だけでも非表示', () => {
+      expect(shouldShowParticipantSection([{ hasResult: false, locked: true }])).toBe(false);
+    });
+    it('未ロックの既存組でも非表示（結果未入力の試合と表示を一貫）', () => {
+      expect(shouldShowParticipantSection([{ hasResult: false, locked: false }])).toBe(false);
+    });
+  });
+
+  describe('自動マッチングボタン', () => {
+    it('組み合わせが無く・参加者が居て・閲覧不可なら表示', () => {
+      expect(autoMatchVisible([])).toBe(true);
+    });
+    it('結果入力済みの組があれば非表示', () => {
+      expect(autoMatchVisible([{ hasResult: true, locked: false }])).toBe(false);
+    });
+    it('手動ロック済みの組があれば非表示', () => {
+      expect(autoMatchVisible([{ hasResult: false, locked: true }])).toBe(false);
+    });
+    it('未ロックの既存組があれば非表示', () => {
+      expect(autoMatchVisible([{ hasResult: false, locked: false }])).toBe(false);
+    });
+    it('isReadOnly（他試合に未保存変更）なら非表示', () => {
+      expect(autoMatchVisible([], { isReadOnly: true })).toBe(false);
+    });
+    it('参加者が0名なら非表示', () => {
+      expect(autoMatchVisible([], { participants: [] })).toBe(false);
+    });
+    it('日付未選択なら非表示', () => {
+      expect(autoMatchVisible([], { sessionDate: '' })).toBe(false);
     });
   });
 });
