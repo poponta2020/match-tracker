@@ -49,16 +49,22 @@ USER spring:spring
 ENV MALLOC_ARENA_MAX=2
 
 # アプリケーションを起動
-# メモリ関連フラグ（コンテナ上限 512Mi。ヒープ外の上限と NMT で OOM(Issue #953) を切り分ける）:
-#   -Xmx200m                          ヒープ上限（既存）
-#   -XX:MaxMetaspaceSize=256m         メタスペース上限（無制限増加のガードレール。通常使用では誤発火しない余裕値）
-#   -XX:MaxDirectMemorySize=128m      NIO ダイレクトバッファ上限（未指定時の既定 ≒ -Xmx の暴走を防ぐ）
+# メモリ関連フラグ（コンテナ上限 512Mi）。ヒープ外で増加しうる主要領域に上限を設け、
+# 明示上限の合計をコンテナ上限の内側（200+192+64=456Mi）に収める。これによりメタスペース/
+# ダイレクトの暴走を cgroup SIGKILL より手前で Java OOME として顕在化させ MEM-DIAG ログで追える。
+# 注: 512Mi は本アプリには元来きつく、コードキャッシュ/スレッドスタック/その他ネイティブ込みでは
+# 上限到達前にコンテナ OOM が起きうる（明示上限は万能のガードレールではない）。ネイティブ RSS そのものの
+# 縮小は glibc + MALLOC_ARENA_MAX が担い、増加領域の特定は MemoryDiagnosticsLogger（5分ごとの実RSS含む）
+# が担う。各上限値はデプロイ後の MEM-DIAG 観測で精緻化する（Issue #953）:
+#   -Xmx200m                          ヒープ上限（既存・実績値のため据え置き）
+#   -XX:MaxMetaspaceSize=192m         メタスペース上限（暴走ガード。実使用見込みに余裕を持たせた値。ロガーで接近を事前検知）
+#   -XX:MaxDirectMemorySize=64m       NIO ダイレクトバッファ上限（未指定時の既定 ≒ -Xmx を抑制）
 #   -XX:NativeMemoryTracking=summary  ネイティブメモリ計測を有効化（MemoryDiagnosticsLogger と併用）
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-Xmx200m", \
-  "-XX:MaxMetaspaceSize=256m", \
-  "-XX:MaxDirectMemorySize=128m", \
+  "-XX:MaxMetaspaceSize=192m", \
+  "-XX:MaxDirectMemorySize=64m", \
   "-XX:NativeMemoryTracking=summary", \
   "-Djava.security.egd=file:/dev/./urandom", \
   "-jar", \
