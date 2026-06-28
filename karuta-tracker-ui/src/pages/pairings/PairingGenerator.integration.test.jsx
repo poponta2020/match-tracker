@@ -920,6 +920,17 @@ describe('手動ロック（pairing-manual-lock）', () => {
       expect(requests[0].player1Id).toBe(3);
     });
 
+    it('未完成（片側空欄）の組は送信対象から除外する（UIの無効化に依存しない不変条件）', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
+        { player1Id: 3, player2Id: null, hasResult: false, locked: false },
+        { player1Id: null, player2Id: 6, hasResult: false, locked: false },
+      ];
+      const requests = buildSaveRequests(pairings);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toEqual({ player1Id: 1, player2Id: 2, locked: false });
+    });
+
     it('完成した組（ロック含む）が0かつ待機者0なら保存対象なし', () => {
       expect(hasNothingToSave([{ player1Id: 1, player2Id: 2, hasResult: true }], [])).toBe(true);
       // ロック組は完成した組として保存対象になる

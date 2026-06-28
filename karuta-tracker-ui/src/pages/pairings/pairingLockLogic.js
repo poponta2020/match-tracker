@@ -29,11 +29,12 @@ export const canShowUnlock = ({ isReadOnly, isViewMode, pairing }) =>
 /**
  * 一括保存（createBatch）リクエストの各要素を生成する。
  * 結果入力済み（hasResult）はバックエンドで保護されるため送信対象から除外し、
- * 手動ロック状態 locked を boolean で同梱して永続化する。
+ * 両選手が揃った完成済みの組のみを対象とする（未完成行はUIの保存ボタン無効化でも防ぐが、
+ * ヘルパー自身でも不変条件として担保する）。手動ロック状態 locked を boolean で同梱して永続化する。
  */
 export const buildSaveRequests = (pairings) =>
   pairings
-    .filter((p) => !p.hasResult)
+    .filter((p) => !p.hasResult && p.player1Id && p.player2Id)
     .map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id, locked: !!p.locked }));
 
 /**
