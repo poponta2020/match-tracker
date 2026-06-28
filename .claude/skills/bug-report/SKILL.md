@@ -3,7 +3,7 @@ name: bug-report
 description: バグ発見時にGitHub Issueを作成し、原因調査・修正・記録までを一括で行うスキル。バグを見つけたとき、バグ対応を記録したいときに使用する。
 disable-model-invocation: true
 user-invocable: true
-allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Agent, Skill
+allowed-tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, Agent, Skill
 argument-hint: [バグの概要（任意）]
 ---
 
@@ -79,6 +79,28 @@ EOF
 - 入力バリデーション不足・SQLインジェクションリスク
 - APIエンドポイントの不正アクセス
 - 機密データの露出
+
+### 本番ログの確認（Render）
+
+バックエンド/API に起因しうるバグ、再現困難なバグ、500系エラーの場合は、**自動で本番（Render）のログを取得して原因調査に使う**。
+
+1. 認証情報は `CLAUDE.local.md` の「Render API」セクション（`RENDER_API_KEY` / `RENDER_OWNER_ID` / `RENDER_SERVICE_ID`）にある。未設定（`<...>` のまま）なら取得をスキップし、その旨をユーザーに伝える。
+2. バグの内容から絞り込み条件を決めてスクリプトを実行する（`Get-RenderLogs.ps1` が `CLAUDE.local.md` から鍵を読む）：
+
+```powershell
+# 直近6時間の error ログ
+powershell -ExecutionPolicy Bypass -File scripts/render-logs/Get-RenderLogs.ps1 -Hours 6 -Level error
+
+# 例外クラス名・キーワードで本文検索（時間範囲を広げて遡る）
+powershell -ExecutionPolicy Bypass -File scripts/render-logs/Get-RenderLogs.ps1 -Text "NullPointerException" -Hours 24 -MaxPages 5
+
+# 特定エンドポイントの 500 リクエストログ
+powershell -ExecutionPolicy Bypass -File scripts/render-logs/Get-RenderLogs.ps1 -StatusCode 500 -Type request -Hours 24
+```
+
+3. 取得したスタックトレース/エラーを原因特定に使い、関連箇所を Issue の調査結果に**要約**して記録する。
+4. **APIキー等の秘密情報や個人情報をログ・Issue・PR・チャットにそのまま貼らない**。
+5. free プランはスピンダウン中だとログが薄い。該当ログが無ければ `-Hours` を広げる、または「本番ログでは確認できなかった」旨を記録する。
 
 ## Step 4: 修正規模の判断
 
