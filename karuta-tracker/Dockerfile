@@ -29,22 +29,37 @@ RUN cp build/libs/*.jar /app/app.jar
 # 除去自体の失敗はビルドを止めない（|| true）。
 RUN rm -rf /home/gradle/.gradle/caches "$HOME/.gradle/caches" /root/.gradle/caches 2>/dev/null || true
 
-# 実行ステージ: 軽量なJREイメージを使用
-FROM eclipse-temurin:21-jre-alpine
+# 実行ステージ: JRE イメージを使用
+# glibc ベース(jammy)を採用。Alpine(musl libc)は JVM のスレッド多数・ネイティブ確保の多い
+# ワークロードで RSS が膨らみ・OS へ解放されにくく、コンテナOOM(512Mi)を誘発していた(Issue #953)。
+# glibc + MALLOC_ARENA_MAX=2 でアリーナ断片化を抑え、ネイティブメモリ常駐を縮小する。
+FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
 # ビルドステージからJARファイルをコピー（退避済みの単一ファイル）
 COPY --from=builder /app/app.jar app.jar
 
-# アプリケーション用のユーザーを作成
-RUN addgroup -S spring && adduser -S spring -G spring
+# アプリケーション用のユーザーを作成（Debian/Ubuntu ベースのため groupadd/useradd を使用）
+RUN groupadd --system spring && useradd --system --gid spring spring
 USER spring:spring
 
+# glibc の malloc アリーナ数を制限し、スレッドごとのアリーナ確保による
+# ネイティブメモリ断片化/肥大を抑制する（Issue #953）
+ENV MALLOC_ARENA_MAX=2
+
 # アプリケーションを起動
+# メモリ関連フラグ（コンテナ上限 512Mi。ヒープ外の上限と NMT で OOM(Issue #953) を切り分ける）:
+#   -Xmx200m                          ヒープ上限（既存）
+#   -XX:MaxMetaspaceSize=256m         メタスペース上限（無制限増加のガードレール。通常使用では誤発火しない余裕値）
+#   -XX:MaxDirectMemorySize=128m      NIO ダイレクトバッファ上限（未指定時の既定 ≒ -Xmx の暴走を防ぐ）
+#   -XX:NativeMemoryTracking=summary  ネイティブメモリ計測を有効化（MemoryDiagnosticsLogger と併用）
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-Xmx200m", \
+  "-XX:MaxMetaspaceSize=256m", \
+  "-XX:MaxDirectMemorySize=128m", \
+  "-XX:NativeMemoryTracking=summary", \
   "-Djava.security.egd=file:/dev/./urandom", \
   "-jar", \
   "app.jar"]

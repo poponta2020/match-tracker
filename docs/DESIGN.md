@@ -3439,6 +3439,18 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **DB マイグレーション**: 新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED`（25 文字、VARCHAR(30) 内に収まる短縮命名）を `line_message_log_notification_type_check` の CHECK 制約に追加するマイグレーション SQL（`database/add_admin_densuke_push_failed_message_log_check.sql`）を本番 DB に適用する必要あり。テーブル定義の変更（カラム長拡張）は不要
   - **設計判断（DB ロックと外部 HTTP のスコープ）**: `@Transactional` 内で `densuke_urls` 行ロック → 伝助 scrape → POST /update まで実行する設計。ロック粒度は (year, month, organizationId) 単位で限定的、保持時間は HTTP タイムアウト（各 10 秒、合計最大 30 秒）に律速され、`pushAllForCurrentAndNextMonth` は各 URL を順次処理するため DB コネクションプール圧迫リスクは抑えられる。将来パフォーマンスが課題化した場合は advisory lock や keyed lock で HTTP 前にトランザクションを閉じる設計に変更を検討（本 PR は現行方式維持、Codex Round 3 WARNING の現行維持判断）
 
+#### コンテナメモリ運用とOOM対策（Issue #953）
+
+- **症状**: 本番（Render free, コンテナ上限 512Mi）が**約5時間ごとに規則的にコンテナレベルの OOM kill**（`server_failed` / `oomKilled` / `memoryLimit=512Mi`）を起こし、約216秒のコールドスタートを挟んで毎回数分ダウンしていた。Render Events API で確認（例: 2026-06-27 16:12 JST）。
+- **切り分け**: ヒープは `Dockerfile` で `-Xmx200m` に制限済み。にもかかわらず 512Mi 超過 ⇒ 増加しているのは**ヒープ外（メタスペース / コードキャッシュ / NIO ダイレクトバッファ / スレッドスタック / その他ネイティブ）**。Java の `OutOfMemoryError` ではなく cgroup OOM killer による SIGKILL のため、ログに例外も graceful shutdown も残らない。規則的な間隔は緩やかなネイティブメモリ増加（リーク）のシグネチャ。
+- **緩和（`karuta-tracker/Dockerfile`）**:
+  - ベースイメージを Alpine（musl libc）→ **glibc（`eclipse-temurin:21-jre-jammy`）** に変更。musl は JVM の多スレッド・ネイティブ確保ワークロードで RSS が膨らみ OS へ解放されにくい既知傾向があるため。
+  - **`MALLOC_ARENA_MAX=2`** で glibc の per-thread malloc アリーナ断片化を抑制。
+  - JVM フラグで**ヒープ外の上限**を明示: `-XX:MaxMetaspaceSize=256m`（無制限増加のガードレール）、`-XX:MaxDirectMemorySize=128m`（未指定時の既定 ≒ `-Xmx` の暴走防止）。
+- **可観測化（`monitoring/MemoryDiagnosticsLogger`）**: Render free はシェル（`jcmd`）が無く NMT サマリを取り出せないため、`-XX:NativeMemoryTracking=summary` を有効化しつつ、MXBean（`MemoryMXBean` / `MemoryPoolMXBean` / `BufferPoolMXBean` / `ThreadMXBean`）と Linux `/proc/self/status` の VmRSS から **5分間隔**（`DensukeSyncScheduler` と同周期で相関を取る）で `MEM-DIAG` 行を出力する。
+  - 形式: `MEM-DIAG rss=<MB> heap=<used>/<max>MB nonHeap=<MB> metaspace=<MB> codeCache=<MB> directBuf=<used>/<cap>MB mapped=<MB> threads=<n>`
+  - 読み出し: `scripts/render-logs/Get-RenderLogs.ps1 -Text "MEM-DIAG" -Hours <n>` で本番ログから取得し、どの領域が増加しているかを特定 → 真因に的を絞った修正につなげる。観測専用のため例外は握りつぶし本番動作に影響しない。
+
 #### カレンダー購読（iCalフィード）
 - プレイヤーごとに発行された `ical_feed_token` を親トークンとし、**所属団体ごと + ゲスト参加** で別々のURLを発行
   - 所属団体: `/ical/calendar/{token}/org/{orgId}.ics`（VCALENDAR.X-WR-CALNAME = 表示名）
