@@ -1036,7 +1036,7 @@ const PairingGenerator = () => {
                         リセット
                       </button>
                     )}
-                    {!isReadOnly && !isViewMode && pairing.locked && (
+                    {!isReadOnly && !isViewMode && pairing.locked && !pairing.hasResult && (
                       <button
                         onClick={() => handleUnlockPairing(index)}
                         disabled={loading}

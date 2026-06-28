@@ -884,10 +884,10 @@ describe('手動ロック（pairing-manual-lock）', () => {
     });
   });
 
-  describe('解除ボタンの表示条件（pairing.id 不要）', () => {
-    // 本番レンダリング条件: !isReadOnly && !isViewMode && pairing.locked
+  describe('解除ボタンの表示条件（pairing.id 不要・手動ロック専用）', () => {
+    // 本番レンダリング条件: !isReadOnly && !isViewMode && pairing.locked && !pairing.hasResult
     const showUnlock = ({ isReadOnly, isViewMode, pairing }) =>
-      !isReadOnly && !isViewMode && !!pairing.locked;
+      !isReadOnly && !isViewMode && !!pairing.locked && !pairing.hasResult;
 
     it('id の無いロック組でも解除ボタンを表示する', () => {
       expect(showUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true } })).toBe(true);
@@ -897,6 +897,9 @@ describe('手動ロック（pairing-manual-lock）', () => {
     });
     it('閲覧モードでは非表示', () => {
       expect(showUnlock({ isReadOnly: false, isViewMode: true, pairing: { locked: true } })).toBe(false);
+    });
+    it('結果入力済み＋手動ロックの組では非表示（解除は保存で永続化できないため。リセットで対応）', () => {
+      expect(showUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true, hasResult: true } })).toBe(false);
     });
   });
 
