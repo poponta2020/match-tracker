@@ -220,31 +220,33 @@ public class MatchPairingService {
             }
         }
 
-        // ロック済みペアリング（結果入力済み or 手動ロック）を特定して保持
+        // 保護対象ペアリング（結果入力済み）を特定して保持する。
+        // 手動ロック組はリクエストに locked 付きで送られてくるため、ここでは保護せず
+        // 削除→再作成の対象とする（これにより「ロック」「解除」の両方が保存で永続化される）。
         boolean orgScoped = organizationId != null;
         List<MatchPairing> existingPairings = filterPairingsBySession(
                 matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
         List<Match> existingMatches = filterMatchesBySession(
                 matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
-        Set<String> lockedPairKeys = new HashSet<>();
-        Set<Long> lockedPlayerIds = new HashSet<>();
-        List<MatchPairing> lockedPairings = new ArrayList<>();
+        Set<String> protectedPairKeys = new HashSet<>();
+        Set<Long> protectedPlayerIds = new HashSet<>();
+        List<MatchPairing> protectedPairings = new ArrayList<>();
 
         for (MatchPairing pairing : existingPairings) {
-            // 保護対象 = 結果入力済み OR 手動ロック
-            if (isLockedPairing(pairing, existingMatches)) {
+            // 保護対象 = 結果入力済みのみ（手動ロックはリクエストから再作成するため保護しない）
+            if (hasResultForPair(pairing, existingMatches)) {
                 Long p1 = Math.min(pairing.getPlayer1Id(), pairing.getPlayer2Id());
                 Long p2 = Math.max(pairing.getPlayer1Id(), pairing.getPlayer2Id());
-                lockedPairKeys.add(getPairKey(p1, p2));
-                lockedPlayerIds.add(pairing.getPlayer1Id());
-                lockedPlayerIds.add(pairing.getPlayer2Id());
-                lockedPairings.add(pairing);
+                protectedPairKeys.add(getPairKey(p1, p2));
+                protectedPlayerIds.add(pairing.getPlayer1Id());
+                protectedPlayerIds.add(pairing.getPlayer2Id());
+                protectedPairings.add(pairing);
             }
         }
 
-        // ロック済み以外の既存ペアリングを削除
+        // 保護対象以外の既存ペアリングを削除（手動ロック組もここで削除され、リクエストから再作成される）
         List<MatchPairing> toDelete = existingPairings.stream()
-                .filter(p -> !lockedPairKeys.contains(getPairKey(p.getPlayer1Id(), p.getPlayer2Id())))
+                .filter(p -> !protectedPairKeys.contains(getPairKey(p.getPlayer1Id(), p.getPlayer2Id())))
                 .collect(Collectors.toList());
         matchPairingRepository.deleteAll(toDelete);
 
@@ -255,18 +257,19 @@ public class MatchPairingService {
 
         // 新規ペアリングを構築する。重複大量登録(Issue #900)を防ぐため以下を同時に行う:
         //  - 無効ペア（null / 同一選手）を除外
-        //  - ロック済みプレイヤーを含む新規、ロック済みペアと同一の新規を除外（既存ロックを維持）
+        //  - 保護対象（結果入力済み）プレイヤーを含む新規、保護対象ペアと同一の新規を除外（既存結果を維持）
         //  - リクエスト内の同一ペア（順不同）の重複は初出のみ通して排除する。
         //    フロントの pairings state に同一ペアが多重蓄積したペイロードでも1行に正規化される。
+        //  - request.getLocked() を新規ペアに反映し、手動ロックの保存・解除を永続化する。
         Set<String> seenPairKeys = new HashSet<>();
         List<MatchPairing> pairings = requests.stream()
                 .filter(request -> request.getPlayer1Id() != null && request.getPlayer2Id() != null)
                 .filter(request -> !request.getPlayer1Id().equals(request.getPlayer2Id()))
-                .filter(request -> !lockedPlayerIds.contains(request.getPlayer1Id())
-                        && !lockedPlayerIds.contains(request.getPlayer2Id()))
+                .filter(request -> !protectedPlayerIds.contains(request.getPlayer1Id())
+                        && !protectedPlayerIds.contains(request.getPlayer2Id()))
                 .filter(request -> {
                     String pairKey = getPairKey(request.getPlayer1Id(), request.getPlayer2Id());
-                    if (lockedPairKeys.contains(pairKey)) {
+                    if (protectedPairKeys.contains(pairKey)) {
                         return false;
                     }
                     return seenPairKeys.add(pairKey);
@@ -276,17 +279,18 @@ public class MatchPairingService {
                         .matchNumber(matchNumber)
                         .player1Id(request.getPlayer1Id())
                         .player2Id(request.getPlayer2Id())
+                        .locked(Boolean.TRUE.equals(request.getLocked()))
                         .createdBy(createdBy)
                         .build())
                 .collect(Collectors.toList());
 
         List<MatchPairing> saved = matchPairingRepository.saveAll(pairings);
-        // ロック済みペアリングも結果に含める
-        saved.addAll(lockedPairings);
+        // 保護対象（結果入力済み）ペアリングも結果に含める
+        saved.addAll(protectedPairings);
 
-        // 待機者リストからロック済みプレイヤーを除外
+        // 待機者リストから保護対象（結果入力済み）プレイヤーを除外
         List<Long> filteredWaitingPlayerIds = waitingPlayerIds != null
-                ? waitingPlayerIds.stream().filter(id -> !lockedPlayerIds.contains(id)).collect(Collectors.toList())
+                ? waitingPlayerIds.stream().filter(id -> !protectedPlayerIds.contains(id)).collect(Collectors.toList())
                 : Collections.emptyList();
 
         // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
