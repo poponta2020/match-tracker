@@ -346,7 +346,7 @@ Entity Layer (JPA Entity)
 | match_number | INT | NOT NULL | 試合番号 |
 | player1_id | BIGINT | NOT NULL, FK | 選手1ID |
 | player2_id | BIGINT | NOT NULL, FK | 選手2ID |
-| locked | BOOLEAN | NOT NULL, DEFAULT FALSE | 手動ロックフラグ（結果未入力でも自動組み合わせ・一括保存・回戦削除から保護。`add_locked_to_match_pairings.sql`） |
+| locked | BOOLEAN | NOT NULL, DEFAULT FALSE | 手動ロックフラグ（結果未入力でも自動組み合わせ・回戦削除から保護。一括保存ではリクエストの `locked` を反映して削除→再作成し永続化する。`add_locked_to_match_pairings.sql`） |
 | created_by | BIGINT | NOT NULL | 登録者ID |
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
@@ -355,7 +355,7 @@ Entity Layer (JPA Entity)
 
 **重複・ゾンビ組み合わせ対策**（`MatchPairingService`、Issue #900）:
 - `create`: 同一（日・試合番号・順不同ペア）が既存なら重複作成せず既存を返す（冪等）。
-- `createBatch`: リクエスト内の同一ペア（順不同）を初出のみ採用して重複排除し、ロック済みペアと同一の新規も除外する。フロントの組み合わせ state に同一ペアが多重蓄積したペイロードでも1行に正規化される。
+- `createBatch`: リクエスト内の同一ペア（順不同）を初出のみ採用して重複排除し、保護対象（結果入力済み）ペアと同一の新規も除外する。フロントの組み合わせ state に同一ペアが多重蓄積したペイロードでも1行に正規化される。保存時の保護対象は**結果入力済み（`hasResult`）のみ**で、手動ロック組はリクエストの `locked` を反映して削除→再作成する（`MatchPairingCreateRequest.locked`（null=false）を `MatchPairing.locked` に設定。これによりロック＝`locked=true`・解除＝`locked=false` の両方が保存で永続化される）。`auto-match` / `deleteByDateAndMatchNumber` の保護判定は `hasResult OR locked`（`isLockedPairing`）のまま不変。
 - `createBatch` / `deleteByDateAndMatchNumber`: 「当日のどのセッションでも両選手が同時に参加していない」かつ結果なしのペア（ゾンビ）も削除する。組織スコープのフィルタ（`filterPairingsBySession`、両選手が同一団体セッション参加者のみ対象）から漏れるペア（両者非参加／片方だけ参加／両者が別セッション・別団体に分かれて参加）は従来は削除されず、再生成のたびに重複が累積し、フロントの一括削除でも消せなかった。ただし**組織スコープ操作では他団体データを破壊しないよう**、両選手とも「自団体セッション参加者」または「当日どのセッションの参加者でもない（誰のものでもない）」ペアに限定する（他団体参加者を含むペアは保護）。SUPER_ADMIN（organizationId=null）は団体横断で掃除する。
 - `updatePlayer`: 差し替え後のペアが同日・同試合番号で既存と重複する場合は検証エラー（ユニークインデックス由来の500を回避）。
 
@@ -1389,14 +1389,14 @@ Entity Layer (JPA Entity)
 **補足**: `lockedPairings` は結果入力済みロック（`hasResult=true`）と手動ロック（`locked=true`）の両方を含む。フロントは各要素の `hasResult` / `locked` でバッジ（「結果入力済」/「🔒 ロック」）を出し分ける（`hasResult:true` 固定にしない）。
 
 #### POST /api/match-pairings/batch?date={date}&matchNumber={matchNumber}
-**説明**: 一括組み合わせ作成（結果入力済み・手動ロックのペアリングは保持し、両選手を新規ペアから除外）
-**権限**: SUPER_ADMIN, ADMIN
-**リクエスト**: `MatchPairingBatchRequest`
+**説明**: 一括組み合わせ作成。保存時の保護対象は結果入力済み（`hasResult`）のみ（両選手を新規ペアから除外し保持）。手動ロック組はリクエスト要素の `locked` を反映して削除→再作成し、ロック/解除を永続化する。
+**権限**: SUPER_ADMIN, ADMIN, PLAYER
+**リクエスト**: `MatchPairingBatchRequest`（各 `pairings` 要素は `MatchPairingCreateRequest`。`locked` は手動ロック状態、null は false 扱い）
 ```json
 {
   "pairings": [
-    {"player1Id": 1, "player2Id": 2},
-    {"player1Id": 3, "player2Id": 4}
+    {"player1Id": 1, "player2Id": 2, "locked": true},
+    {"player1Id": 3, "player2Id": 4, "locked": false}
   ],
   "waitingPlayerIds": [5]
 }
@@ -1419,11 +1419,13 @@ Entity Layer (JPA Entity)
 **説明**: 指定組を手動ロック（二重ブッキング検証付き）。同一 `(session_date, match_number)`・同一組織スコープ内で対象2選手のいずれかが別の組に含まれる場合は 409 Conflict（`DuplicateResourceException`）
 **権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`）
 **レスポンス**: 更新後の `MatchPairingDto`（`locked=true`）
+**注**: ロックの明示保存化（pairing-lock-explicit-save-and-help）以降、PairingGenerator はロックをローカル状態で扱い `POST /batch` の `locked` で永続化するため、本エンドポイントは**未使用（残置・将来クリーンアップ候補）**。
 
 #### PATCH /api/match-pairings/{id}/unlock
 **説明**: 指定組の手動ロックを解除（`locked=false`。組は残り通常の未ロック組に戻る）
 **権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`）
 **レスポンス**: 更新後の `MatchPairingDto`（`locked=false`）
+**注**: `/lock` と同様、明示保存化以降は**未使用（残置・将来クリーンアップ候補）**。
 
 ---
 
@@ -2321,12 +2323,14 @@ Entity Layer (JPA Entity)
   - 最近の対戦履歴（日付、何日前）
 - 手動調整: 選手カード同士のスワップ、待機リストとの入れ替え
 - 新規ペアリング作成ドロップゾーン（待機選手をドロップ/タップして新規行作成、待機選手選択時のみ表示）
-- 「組み合わせ確定」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化。手動ロック組は空欄チェック対象外）
+- 「確定して保存」ボタン → `POST /api/match-pairings/batch`（片方空欄時は無効化。手動ロック組は空欄チェック対象外）。各組は `{ player1Id, player2Id, locked }` を送信し、`handleSave` のフィルタは `!hasResult`（手動ロック組も送信）。空判定は「完成した組（ロック含む）が0かつ待機者0」。
 - 待機者リスト（DroppableSlot、選手はDraggablePlayerChip）
-- 手動ロック（pairing-manual-lock）:
-  - 編集可能で両選手が揃った各組に「ロック」ボタン（鍵アイコン）。未保存の組は `createBatch` 保存で `id` を確定してから `PATCH /api/match-pairings/{id}/lock` を呼ぶ
-  - 手動ロック済み組は「🔒 ロック」バッジ＋全ロール向け「解除」ボタン（`PATCH /{id}/unlock` → 再取得）。結果入力済みロックは「結果入力済」バッジ＋ADMIN以上の「リセット」と区別
-  - ロック組と両選手は自動マッチング・一括保存・回戦削除から保護（保護判定 = `hasResult || locked`）。ロック時はサーバーで「1選手1組」を担保（二重ブッキングは 409）
+- 手動ロック（pairing-manual-lock → ロックの明示保存化 pairing-lock-explicit-save-and-help）:
+  - 編集可能で両選手が揃った各組に鍵アイコンのみのロックボタン（テキストなし、`aria-label="ロック"` ＋ `title`）。`handleLockPairing(index)` は**ローカル状態の `locked=true` トグルのみ**（サーバ通信なし）。`setHasUnsavedChanges(true)` ＋ `saveDraft` で未保存ドラフトに反映する。ロック直後はその場でグレーアウト＋編集不可になる。
+  - 手動ロック済み組は「🔒 ロック」バッジ＋全ロール向け「解除」ボタン。`handleUnlockPairing(index)` も**ローカル状態の `locked=false` トグルのみ**。表示条件から `pairing.id` を撤廃し、保存済み（id あり）・未保存（id なし）いずれの組も解除できる。結果入力済みロックは「結果入力済」バッジ＋ADMIN以上の「リセット」と区別。
+  - ロック/解除は「確定して保存」を押すまでDBに反映しない（下書き）。永続化は `createBatch` の `locked` 同梱で行う。自動マッチング・回戦削除からの保護は保存済みロック状態に対して有効（保護判定 = `hasResult || locked`）。一括保存（createBatch）の保護は `hasResult` のみで、手動ロック組は削除→再作成で `locked` を再現する。
+  - 二重ブッキング（同一選手が同回戦の複数組）は選手移動で元から除去されるためUI上構造的に発生せず、ロック時のサーバー検証（旧 `PATCH /lock`）は未使用。
+- 使い方ヘルプ（ⓘ）: `PairingHelp` コンポーネントを `PageHeader` 直下・右寄せに `<PairingHelp ready={!matchLoading} />` で配置。`Info` ボタン＋ドロップダウンパネル（4セクション）。`showHelp` state は `localStorage('pairingHelpSeen')` 未設定なら初期 true（例外時も true フォールバック）。`ready`（=ローディング完了）後に既読フラグ保存、外側タップ（`mousedown`）・✕ で閉じる `useEffect`/`ref`。カレンダー（PracticeList）の「記号の見方」と同方式。
 
 **タップ選択モードの state 設計**:
 - `selectedPlayer`: `{ playerId, playerName, source }` 形式（`source` は `DraggablePlayerChip.data.source` と同形）
