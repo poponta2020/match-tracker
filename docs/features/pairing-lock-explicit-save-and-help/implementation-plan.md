@@ -31,14 +31,12 @@ status: completed
 - **対応Issue:** #949
 
 ### タスク3: フロントエンド — 使い方ヘルプ（ⓘ）追加
-- [ ] 完了
-- **概要:** 画面上部に `Info` ボタン＋ドロップダウンの使い方パネルを追加。初回訪問時のみ自動表示（`localStorage`）。カレンダーの「記号の見方」を踏襲。
+- [x] 完了
+- **概要:** 画面上部に `Info` ボタン＋ドロップダウンの使い方パネルを追加。初回訪問時のみ自動表示（`localStorage`）。カレンダーの「記号の見方」を踏襲。テスト容易性のため独立コンポーネント `PairingHelp` に切り出した（pages/pairings の既存コンポーネント分割方針に倣う）。
 - **変更対象ファイル:**
-  - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx`:
-    - `showHelp` state（初期値は `localStorage('pairingHelpSeen')` 未設定なら true、例外時 true フォールバック）
-    - ローディング完了後に既読フラグ保存、外側タップ/✕で閉じる `useEffect`・`ref`
-    - `PageHeader` 直下・右寄せに `Info` ボタン＋ドロップダウンパネル（4セクション: 選手の入れ替え方／ロックの意味と使い方／保存の流れ／日付列の見方）
-  - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.help.test.jsx`（新規） — パネルの開閉・初回自動表示・各セクション見出しの表示を検証
+  - `karuta-tracker-ui/src/pages/pairings/PairingHelp.jsx`（新規） — `Info` ボタン＋ドロップダウンパネル（4セクション: 選手の入れ替え方／ロックの意味と使い方／保存の流れ／日付列の見方）。`showHelp` state（初期値は `localStorage('pairingHelpSeen')` 未設定なら true、例外時 true フォールバック）、`ready`（ローディング完了）後に既読フラグ保存、外側タップ/✕で閉じる `useEffect`・`ref`
+  - `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx` — `PageHeader` 直下・右寄せに `<PairingHelp ready={!matchLoading} />` を配置
+  - `karuta-tracker-ui/src/pages/pairings/PairingHelp.test.jsx`（新規） — パネルの開閉（ボタン/✕/外側タップ）・初回自動表示・既読フラグ保存・各セクション見出しの表示を検証
 - **依存タスク:** タスク2（#949 / 同一ファイルのため、コンフリクト回避で後続）
 - **対応Issue:** #950
 

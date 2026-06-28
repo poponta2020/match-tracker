@@ -18,6 +18,7 @@ import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraf
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
+import PairingHelp from './PairingHelp';
 
 
 const PairingGenerator = () => {
@@ -774,6 +775,8 @@ const PairingGenerator = () => {
     <>
       <PageHeader title="組み合わせ作成" backTo={backTo} />
       <div className="space-y-6">
+      {/* 使い方ヘルプ（ⓘ）。PageHeader 直下・右寄せ。初回訪問時のみ端末単位で自動表示 */}
+      <PairingHelp ready={!matchLoading} />
       {/* 日付選択 */}
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
         <div>
