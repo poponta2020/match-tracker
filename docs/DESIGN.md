@@ -3447,7 +3447,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - ベースイメージを Alpine（musl libc）→ **glibc（`eclipse-temurin:21-jre-jammy`）** に変更。musl は JVM の多スレッド・ネイティブ確保ワークロードで RSS が膨らみ OS へ解放されにくい既知傾向があるため。
   - **`MALLOC_ARENA_MAX=2`** で glibc の per-thread malloc アリーナ断片化を抑制。
   - JVM フラグで**ヒープ外の上限**を明示: `-XX:MaxMetaspaceSize=192m`、`-XX:MaxDirectMemorySize=64m`。明示上限の合計をコンテナ上限の内側（200+192+64=456Mi）に収め、メタスペース/ダイレクトの暴走を cgroup SIGKILL より手前で Java `OutOfMemoryError` として顕在化させ MEM-DIAG ログで追えるようにする。ただし 512Mi は本アプリには元来きつく、コードキャッシュ/スレッドスタック/その他ネイティブ込みでは上限到達前にコンテナ OOM が起きうる（明示上限は万能のガードレールではない）。ネイティブ RSS そのものの縮小は glibc + `MALLOC_ARENA_MAX` が担い、各上限値はデプロイ後の MEM-DIAG 観測で精緻化する。
-- **可観測化（`monitoring/MemoryDiagnosticsLogger`）**: Render free はシェル（`jcmd`）が無く NMT サマリを取り出せないため、`-XX:NativeMemoryTracking=summary` を有効化しつつ、MXBean（`MemoryMXBean` / `MemoryPoolMXBean` / `BufferPoolMXBean` / `ThreadMXBean`）と Linux `/proc/self/status` の VmRSS から **5分間隔**（`DensukeSyncScheduler` と同周期で相関を取る）で `MEM-DIAG` 行を出力する。
+- **可観測化（`monitoring/MemoryDiagnosticsLogger`）**: Render free はシェル（`jcmd`）が無く NMT サマリを取り出せない（`-XX:NativeMemoryTracking` は読み出せず純オーバーヘッドになるため不採用）。代わりに MXBean（`MemoryMXBean` / `MemoryPoolMXBean` / `BufferPoolMXBean` / `ThreadMXBean`）と Linux `/proc/self/status` の VmRSS から **5分間隔**（`DensukeSyncScheduler` と同周期で相関を取る）で `MEM-DIAG` 行を出力する。
   - 形式: `MEM-DIAG rss=<MB> heap=<used>/<max>MB nonHeap=<MB> metaspace=<MB> codeCache=<MB> directBuf=<used>/<cap>MB mapped=<MB> threads=<n>`
   - 読み出し: `scripts/render-logs/Get-RenderLogs.ps1 -Text "MEM-DIAG" -Hours <n>` で本番ログから取得し、どの領域が増加しているかを特定 → 真因に的を絞った修正につなげる。観測専用のため例外は握りつぶし本番動作に影響しない。
 

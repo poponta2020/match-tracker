@@ -59,13 +59,14 @@ ENV MALLOC_ARENA_MAX=2
 #   -Xmx200m                          ヒープ上限（既存・実績値のため据え置き）
 #   -XX:MaxMetaspaceSize=192m         メタスペース上限（暴走ガード。実使用見込みに余裕を持たせた値。ロガーで接近を事前検知）
 #   -XX:MaxDirectMemorySize=64m       NIO ダイレクトバッファ上限（未指定時の既定 ≒ -Xmx を抑制）
-#   -XX:NativeMemoryTracking=summary  ネイティブメモリ計測を有効化（MemoryDiagnosticsLogger と併用）
+# 注: NMT(-XX:NativeMemoryTracking=summary) は Render free では jcmd で読み出せず純オーバーヘッド
+#     （512Mi 環境では RSS を押し上げる）になるため不採用。ネイティブメモリの増加領域は
+#     MemoryDiagnosticsLogger の実RSS/各 MXBean 値から推定する。
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-Xmx200m", \
   "-XX:MaxMetaspaceSize=192m", \
   "-XX:MaxDirectMemorySize=64m", \
-  "-XX:NativeMemoryTracking=summary", \
   "-Djava.security.egd=file:/dev/./urandom", \
   "-jar", \
   "app.jar"]
