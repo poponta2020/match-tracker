@@ -16,7 +16,7 @@ status: completed
 - **対応Issue:** #948
 
 ### タスク2: フロントエンド — ロック/解除のローカル化・保存への `locked` 同梱・ロックボタンのアイコン化
-- [ ] 完了
+- [x] 完了
 - **概要:** 鍵アイコン/「解除」を即時サーバ反映からローカル状態トグルに変更し、「確定して保存」時に `locked` 込みで保存する。ロックボタンの「ロック」テキストを削除しアイコンのみにする。
 - **変更対象ファイル:**
   - `karuta-tracker-ui/src/api/pairings.js` — `createBatch` の各 pairing 要素に `locked` を同梱（`{ player1Id, player2Id, locked }`）
