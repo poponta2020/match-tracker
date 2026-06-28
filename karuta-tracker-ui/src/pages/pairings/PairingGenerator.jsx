@@ -1101,7 +1101,7 @@ const PairingGenerator = () => {
                         disabled={loading}
                         aria-label="ロック"
                         className="flex items-center p-1 text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 flex-shrink-0"
-                        title="この組をロック（自動組み合わせ・一括保存・回戦削除から保護）"
+                        title="この組をロック（自動組み合わせ・回戦削除から保護。保存時にロック状態を反映）"
                       >
                         <Lock className="w-4 h-4" />
                       </button>
