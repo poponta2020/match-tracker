@@ -10,6 +10,7 @@ import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
 vi.mock('../../api/client', () => ({
@@ -847,17 +848,14 @@ describe('手動ロック（pairing-manual-lock）', () => {
   });
 
   describe('ロック/解除のローカルトグル（DB反映は保存時・即時APIを呼ばない）', () => {
-    // 本番 handleLockPairing/handleUnlockPairing のローカル更新ロジックを再現。
-    // サーバ通信せず対象 index の locked のみを切り替え、未保存ドラフトに反映する。
-    const toggleLock = (pairings, index, locked) =>
-      pairings.map((p, i) => (i === index ? { ...p, locked } : p));
+    // 本番 PairingGenerator が使う pairingLockLogic の実関数を検証する（テスト内にロジックを複製しない）。
 
     it('ロック: 対象組の locked のみ true になり、他組は不変（id 不要）', () => {
       const pairings = [
         { player1Id: 1, player2Id: 2, locked: false },           // id なし（未保存）
         { id: 11, player1Id: 3, player2Id: 4, locked: false },
       ];
-      const updated = toggleLock(pairings, 0, true);
+      const updated = togglePairingLock(pairings, 0, true);
       expect(updated[0].locked).toBe(true);
       expect(updated[1].locked).toBe(false);
       // 元配列は破壊しない（イミュータブル更新）
@@ -866,49 +864,40 @@ describe('手動ロック（pairing-manual-lock）', () => {
 
     it('解除: id の無いロック組でも locked=false にできる（pairing.id 必須条件を撤廃）', () => {
       const pairings = [{ player1Id: 1, player2Id: 2, locked: true }]; // id なし
-      const updated = toggleLock(pairings, 0, false);
+      const updated = togglePairingLock(pairings, 0, false);
       expect(updated[0].locked).toBe(false);
     });
 
-    // ロック可否は対象組が揃っているかのみで判定（未完成の他組混在ガードは廃止）
-    const canLock = (pairing) => !!(pairing.player1Id && pairing.player2Id);
-
     it('両選手が揃った組のみロック可能', () => {
-      expect(canLock({ player1Id: 1, player2Id: 2 })).toBe(true);
-      expect(canLock({ player1Id: 1, player2Id: null })).toBe(false);
+      expect(canLockPairing({ player1Id: 1, player2Id: 2 })).toBe(true);
+      expect(canLockPairing({ player1Id: 1, player2Id: null })).toBe(false);
     });
 
     it('未完成の他組が混在しても対象組が揃っていればロック可能（旧 createBatch 迂回ガードは廃止）', () => {
       // 旧仕様では他組に片側空欄があるとロック不可だったが、ローカル化により対象組のみで判定する
-      expect(canLock({ player1Id: 1, player2Id: 2 })).toBe(true);
+      expect(canLockPairing({ player1Id: 1, player2Id: 2 })).toBe(true);
     });
   });
 
   describe('解除ボタンの表示条件（pairing.id 不要・手動ロック専用）', () => {
-    // 本番レンダリング条件: !isReadOnly && !isViewMode && pairing.locked && !pairing.hasResult
-    const showUnlock = ({ isReadOnly, isViewMode, pairing }) =>
-      !isReadOnly && !isViewMode && !!pairing.locked && !pairing.hasResult;
+    // 本番 PairingGenerator が使う pairingLockLogic.canShowUnlock の実関数を検証する。
 
     it('id の無いロック組でも解除ボタンを表示する', () => {
-      expect(showUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true } })).toBe(true);
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true } })).toBe(true);
     });
     it('未ロックなら非表示', () => {
-      expect(showUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: false } })).toBe(false);
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: false } })).toBe(false);
     });
     it('閲覧モードでは非表示', () => {
-      expect(showUnlock({ isReadOnly: false, isViewMode: true, pairing: { locked: true } })).toBe(false);
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: true, pairing: { locked: true } })).toBe(false);
     });
     it('結果入力済み＋手動ロックの組では非表示（解除は保存で永続化できないため。リセットで対応）', () => {
-      expect(showUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true, hasResult: true } })).toBe(false);
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true, hasResult: true } })).toBe(false);
     });
   });
 
   describe('保存リクエスト生成（結果入力済みのみ除外し locked を同梱）', () => {
-    // 本番 handleSave の requests 生成: filter(!hasResult).map({player1Id, player2Id, locked: !!locked})
-    const buildSaveRequests = (pairings) =>
-      pairings
-        .filter((p) => !p.hasResult)
-        .map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id, locked: !!p.locked }));
+    // 本番 handleSave が使う pairingLockLogic.buildSaveRequests / hasNothingToSave の実関数を検証する。
 
     it('手動ロック組も送信対象に含め locked=true を付与する', () => {
       const pairings = [
@@ -931,16 +920,12 @@ describe('手動ロック（pairing-manual-lock）', () => {
       expect(requests[0].player1Id).toBe(3);
     });
 
-    // 空判定: 完成した組（両選手あり・結果未入力。ロック含む）が0かつ待機者0
-    const isNothingToSave = (pairings, waiting) =>
-      pairings.filter((p) => !p.hasResult && p.player1Id && p.player2Id).length === 0 && waiting.length === 0;
-
     it('完成した組（ロック含む）が0かつ待機者0なら保存対象なし', () => {
-      expect(isNothingToSave([{ player1Id: 1, player2Id: 2, hasResult: true }], [])).toBe(true);
+      expect(hasNothingToSave([{ player1Id: 1, player2Id: 2, hasResult: true }], [])).toBe(true);
       // ロック組は完成した組として保存対象になる
-      expect(isNothingToSave([{ player1Id: 1, player2Id: 2, locked: true }], [])).toBe(false);
+      expect(hasNothingToSave([{ player1Id: 1, player2Id: 2, locked: true }], [])).toBe(false);
       // 待機者がいれば保存対象あり
-      expect(isNothingToSave([], [{ id: 9 }])).toBe(false);
+      expect(hasNothingToSave([], [{ id: 9 }])).toBe(false);
     });
   });
 });

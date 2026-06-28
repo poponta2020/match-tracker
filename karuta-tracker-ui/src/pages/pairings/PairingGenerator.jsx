@@ -19,6 +19,7 @@ import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } f
 import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
 
 
 const PairingGenerator = () => {
@@ -375,8 +376,7 @@ const PairingGenerator = () => {
 
   const handleSave = async () => {
     // 完成した組（両選手あり・結果未入力。手動ロック組も含む）が1つも無く、待機者もいなければ保存対象なし
-    const completedPairings = pairings.filter(p => !p.hasResult && p.player1Id && p.player2Id);
-    if (completedPairings.length === 0 && waitingPlayers.length === 0) {
+    if (hasNothingToSave(pairings, waitingPlayers)) {
       setError('保存する組み合わせがありません');
       return;
     }
@@ -387,13 +387,7 @@ const PairingGenerator = () => {
     try {
       // 結果入力済み組のみ送信対象から除外（バックエンドで保護される）。
       // 手動ロック組は locked=true で送信し、保存時に永続化する（解除は locked=false で反映）。
-      const requests = pairings
-        .filter((p) => !p.hasResult)
-        .map((p) => ({
-          player1Id: p.player1Id,
-          player2Id: p.player2Id,
-          locked: !!p.locked,
-        }));
+      const requests = buildSaveRequests(pairings);
 
       const waitingIds = waitingPlayers.map((p) => p.id);
       await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
@@ -507,13 +501,12 @@ const PairingGenerator = () => {
   // 組を手動ロック（ローカル状態のトグルのみ。DB反映は「確定して保存」時）。
   // サーバ通信せず locked=true にして未保存ドラフトへ反映する。
   const handleLockPairing = (index) => {
-    const pairing = pairings[index];
-    if (!pairing || !pairing.player1Id || !pairing.player2Id) {
+    if (!canLockPairing(pairings[index])) {
       setError('両方の選手が揃っている組のみロックできます');
       return;
     }
     setError('');
-    const updated = pairings.map((p, i) => (i === index ? { ...p, locked: true } : p));
+    const updated = togglePairingLock(pairings, index, true);
     setPairings(updated);
     setHasUnsavedChanges(true);
     saveDraft(updated, waitingPlayers, isEditingExisting);
@@ -522,10 +515,9 @@ const PairingGenerator = () => {
   // 組の手動ロックを解除（ローカル状態のトグルのみ。DB反映は「確定して保存」時）。
   // 保存済み（id あり）・未保存（id なし）いずれの組もローカルで locked=false にできる。
   const handleUnlockPairing = (index) => {
-    const pairing = pairings[index];
-    if (!pairing) return;
+    if (!pairings[index]) return;
     setError('');
-    const updated = pairings.map((p, i) => (i === index ? { ...p, locked: false } : p));
+    const updated = togglePairingLock(pairings, index, false);
     setPairings(updated);
     setHasUnsavedChanges(true);
     saveDraft(updated, waitingPlayers, isEditingExisting);
@@ -1036,7 +1028,7 @@ const PairingGenerator = () => {
                         リセット
                       </button>
                     )}
-                    {!isReadOnly && !isViewMode && pairing.locked && !pairing.hasResult && (
+                    {canShowUnlock({ isReadOnly, isViewMode, pairing }) && (
                       <button
                         onClick={() => handleUnlockPairing(index)}
                         disabled={loading}

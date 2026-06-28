@@ -37,7 +37,9 @@ public class MatchPairing {
 
     /**
      * 手動ロックフラグ。true の場合、結果未入力でもこの組と両選手が
-     * 自動組み合わせ・一括保存・回戦削除から保護される（結果ロックと同等の扱い）。
+     * 自動組み合わせ・回戦削除から保護される（結果ロックと同等の扱い）。
+     * 一括保存（createBatch）では保護せず、リクエストの locked を反映して
+     * 削除→再作成することで永続化する（ロック・解除の両方が保存で反映される）。
      * 既存行・builder 生成時は false（@Builder.Default で NULL を回避）。
      */
     @Column(name = "locked", nullable = false)
