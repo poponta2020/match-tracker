@@ -10,6 +10,20 @@ import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
+
+// pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
+vi.mock('../../api/client', () => ({
+  default: {
+    get: vi.fn(() => Promise.resolve({ data: [] })),
+    post: vi.fn(() => Promise.resolve({ data: [] })),
+    put: vi.fn(() => Promise.resolve({ data: {} })),
+    delete: vi.fn(() => Promise.resolve({ data: {} })),
+    patch: vi.fn(() => Promise.resolve({ data: {} })),
+  },
+}));
+import { pairingAPI } from '../../api/pairings';
+import apiClient from '../../api/client';
 
 afterEach(cleanup);
 
@@ -833,44 +847,121 @@ describe('手動ロック（pairing-manual-lock）', () => {
     });
   });
 
-  describe('ロック実行の前提条件（未完成行が混在する場合はロックしない）', () => {
-    // 本番 handleLockPairing の早期 return 条件を再現:
-    // 対象組が揃っていても、未完成（片側空欄）の未ロック組が混在すると createBatch が
-    // バックエンドで弾かれるためロックを実行しない（保存ボタンと同じ制約・迂回防止）
-    const canLock = (pairing, pairings) => {
-      if (!pairing.player1Id || !pairing.player2Id) return false;
-      if (pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))) return false;
-      return true;
-    };
+  describe('ロック/解除のローカルトグル（DB反映は保存時・即時APIを呼ばない）', () => {
+    // 本番 PairingGenerator が使う pairingLockLogic の実関数を検証する（テスト内にロジックを複製しない）。
 
-    it('全組が揃っていれば完成済みの組はロック可能', () => {
+    it('ロック: 対象組の locked のみ true になり、他組は不変（id 不要）', () => {
       const pairings = [
-        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
-        { player1Id: 3, player2Id: 4, hasResult: false, locked: false },
+        { player1Id: 1, player2Id: 2, locked: false },           // id なし（未保存）
+        { id: 11, player1Id: 3, player2Id: 4, locked: false },
       ];
-      expect(canLock(pairings[0], pairings)).toBe(true);
+      const updated = togglePairingLock(pairings, 0, true);
+      expect(updated[0].locked).toBe(true);
+      expect(updated[1].locked).toBe(false);
+      // 元配列は破壊しない（イミュータブル更新）
+      expect(pairings[0].locked).toBe(false);
     });
 
-    it('未完成（片側空欄）の未ロック組が混在するとロック不可（createBatch 迂回防止）', () => {
+    it('解除: id の無いロック組でも locked=false にできる（pairing.id 必須条件を撤廃）', () => {
+      const pairings = [{ player1Id: 1, player2Id: 2, locked: true }]; // id なし
+      const updated = togglePairingLock(pairings, 0, false);
+      expect(updated[0].locked).toBe(false);
+    });
+
+    it('両選手が揃った組のみロック可能', () => {
+      expect(canLockPairing({ player1Id: 1, player2Id: 2 })).toBe(true);
+      expect(canLockPairing({ player1Id: 1, player2Id: null })).toBe(false);
+    });
+
+    it('未完成の他組が混在しても対象組が揃っていればロック可能（旧 createBatch 迂回ガードは廃止）', () => {
+      // 旧仕様では他組に片側空欄があるとロック不可だったが、ローカル化により対象組のみで判定する
+      expect(canLockPairing({ player1Id: 1, player2Id: 2 })).toBe(true);
+    });
+  });
+
+  describe('解除ボタンの表示条件（pairing.id 不要・手動ロック専用）', () => {
+    // 本番 PairingGenerator が使う pairingLockLogic.canShowUnlock の実関数を検証する。
+
+    it('id の無いロック組でも解除ボタンを表示する', () => {
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true } })).toBe(true);
+    });
+    it('未ロックなら非表示', () => {
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: false } })).toBe(false);
+    });
+    it('閲覧モードでは非表示', () => {
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: true, pairing: { locked: true } })).toBe(false);
+    });
+    it('結果入力済み＋手動ロックの組では非表示（解除は保存で永続化できないため。リセットで対応）', () => {
+      expect(canShowUnlock({ isReadOnly: false, isViewMode: false, pairing: { locked: true, hasResult: true } })).toBe(false);
+    });
+  });
+
+  describe('保存リクエスト生成（結果入力済みのみ除外し locked を同梱）', () => {
+    // 本番 handleSave が使う pairingLockLogic.buildSaveRequests / hasNothingToSave の実関数を検証する。
+
+    it('手動ロック組も送信対象に含め locked=true を付与する', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: false, locked: true },
+        { player1Id: 3, player2Id: 4, hasResult: false, locked: false },
+      ];
+      const requests = buildSaveRequests(pairings);
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toEqual({ player1Id: 1, player2Id: 2, locked: true });
+      expect(requests[1]).toEqual({ player1Id: 3, player2Id: 4, locked: false });
+    });
+
+    it('結果入力済み組は送信対象から除外する', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, hasResult: true, locked: false },
+        { player1Id: 3, player2Id: 4, hasResult: false, locked: false },
+      ];
+      const requests = buildSaveRequests(pairings);
+      expect(requests).toHaveLength(1);
+      expect(requests[0].player1Id).toBe(3);
+    });
+
+    it('未完成（片側空欄）の組は送信対象から除外する（UIの無効化に依存しない不変条件）', () => {
       const pairings = [
         { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
         { player1Id: 3, player2Id: null, hasResult: false, locked: false },
+        { player1Id: null, player2Id: 6, hasResult: false, locked: false },
       ];
-      expect(canLock(pairings[0], pairings)).toBe(false);
+      const requests = buildSaveRequests(pairings);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toEqual({ player1Id: 1, player2Id: 2, locked: false });
     });
 
-    it('未完成行があっても結果入力済み/手動ロック済みは未完成チェックの対象外', () => {
-      const pairings = [
-        { player1Id: 1, player2Id: 2, hasResult: false, locked: false },
-        { player1Id: 5, player2Id: null, hasResult: true, locked: false },
-      ];
-      expect(canLock(pairings[0], pairings)).toBe(true);
+    it('完成した組（ロック含む）が0かつ待機者0なら保存対象なし', () => {
+      expect(hasNothingToSave([{ player1Id: 1, player2Id: 2, hasResult: true }], [])).toBe(true);
+      // ロック組は完成した組として保存対象になる
+      expect(hasNothingToSave([{ player1Id: 1, player2Id: 2, locked: true }], [])).toBe(false);
+      // 待機者がいれば保存対象あり
+      expect(hasNothingToSave([], [{ id: 9 }])).toBe(false);
     });
+  });
+});
 
-    it('対象組自体が片側空欄ならロック不可', () => {
-      const pairings = [{ player1Id: 1, player2Id: null, hasResult: false, locked: false }];
-      expect(canLock(pairings[0], pairings)).toBe(false);
-    });
+describe('pairingAPI.createBatch（保存時に各組の locked を同梱して送る）', () => {
+  it('locked を boolean に正規化し player1Id/player2Id/locked のみ送る', async () => {
+    apiClient.post.mockClear();
+    apiClient.post.mockResolvedValueOnce({ data: [] });
+
+    await pairingAPI.createBatch('2026-06-28', 1, [
+      { id: 5, player1Id: 1, player2Id: 2, locked: true, player1Name: '余分' }, // 余分なキーは送らない
+      { player1Id: 3, player2Id: 4 },                                            // locked 未指定 → false
+    ], [9]);
+
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/match-pairings/batch',
+      {
+        pairings: [
+          { player1Id: 1, player2Id: 2, locked: true },
+          { player1Id: 3, player2Id: 4, locked: false },
+        ],
+        waitingPlayerIds: [9],
+      },
+      { params: { date: '2026-06-28', matchNumber: 1 } },
+    );
   });
 });
 

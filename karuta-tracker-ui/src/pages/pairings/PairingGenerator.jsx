@@ -18,6 +18,8 @@ import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraf
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
+import PairingHelp from './PairingHelp';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
 
 
 const PairingGenerator = () => {
@@ -373,8 +375,8 @@ const PairingGenerator = () => {
   };
 
   const handleSave = async () => {
-    const unlockedPairings = pairings.filter(p => !(p.hasResult || p.locked));
-    if (unlockedPairings.length === 0 && waitingPlayers.length === 0) {
+    // 完成した組（両選手あり・結果未入力。手動ロック組も含む）が1つも無く、待機者もいなければ保存対象なし
+    if (hasNothingToSave(pairings, waitingPlayers)) {
       setError('保存する組み合わせがありません');
       return;
     }
@@ -383,13 +385,9 @@ const PairingGenerator = () => {
     setError('');
 
     try {
-      // ロック済みペアリング（結果入力済み or 手動ロック）は送信対象から除外（バックエンド側でも保護されるが、明示的に除外）
-      const requests = pairings
-        .filter((p) => !(p.hasResult || p.locked))
-        .map((p) => ({
-          player1Id: p.player1Id,
-          player2Id: p.player2Id,
-        }));
+      // 結果入力済み組のみ送信対象から除外（バックエンドで保護される）。
+      // 手動ロック組は locked=true で送信し、保存時に永続化する（解除は locked=false で反映）。
+      const requests = buildSaveRequests(pairings);
 
       const waitingIds = waitingPlayers.map((p) => p.id);
       await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
@@ -500,76 +498,29 @@ const PairingGenerator = () => {
     }
   };
 
-  // 組を手動ロック（未保存の組は先に createBatch で保存して id を確定させてから lock を呼ぶ）
-  const handleLockPairing = async (pairing) => {
-    if (!pairing.player1Id || !pairing.player2Id) {
+  // 組を手動ロック（ローカル状態のトグルのみ。DB反映は「確定して保存」時）。
+  // サーバ通信せず locked=true にして未保存ドラフトへ反映する。
+  const handleLockPairing = (index) => {
+    if (!canLockPairing(pairings[index])) {
       setError('両方の選手が揃っている組のみロックできます');
       return;
     }
-    // 未完成（片側空欄）の未ロック組が混在する場合、createBatch がバックエンドで弾かれる。
-    // 保存ボタンと同じ制約を課し、未完成行を揃えるか削除してからロックさせる（迂回防止）。
-    if (pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))) {
-      setError('選手が片側だけの未完成の組があります。すべての組を揃えるか削除してからロックしてください');
-      return;
-    }
-    setLoading(true);
     setError('');
-    try {
-      let pairingId = pairing.id;
-      // 未保存（id 未付与）または未保存の変更がある場合は、現在の編集状態を保存して id を確定させる
-      if (!pairingId || hasUnsavedChanges) {
-        const requests = pairings
-          .filter((p) => !(p.hasResult || p.locked))
-          .map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id }));
-        const waitingIds = waitingPlayers.map((p) => p.id);
-        await pairingAPI.createBatch(sessionDate, matchNumber, requests, waitingIds);
-        const savedRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
-        const saved = (savedRes.data || []).find(p =>
-          (p.player1Id === pairing.player1Id && p.player2Id === pairing.player2Id) ||
-          (p.player1Id === pairing.player2Id && p.player2Id === pairing.player1Id));
-        if (!saved) {
-          setError('組み合わせの保存に失敗したためロックできませんでした');
-          return;
-        }
-        pairingId = saved.id;
-      }
-      await pairingAPI.lock(pairingId);
-      // 再取得して表示を更新
-      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
-      pairingsCache.current[matchNumber] = pairingsRes.data;
-      const hasData = pairingsRes.data && pairingsRes.data.length > 0;
-      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
-      setCacheVersion(v => v + 1);
-      setHasUnsavedChanges(false);
-      unsavedDraft.current = null;
-    } catch (err) {
-      console.error('Lock failed:', err);
-      setError(err?.response?.data?.message || 'ロックに失敗しました');
-    } finally {
-      setLoading(false);
-    }
+    const updated = togglePairingLock(pairings, index, true);
+    setPairings(updated);
+    setHasUnsavedChanges(true);
+    saveDraft(updated, waitingPlayers, isEditingExisting);
   };
 
-  // 組の手動ロックを解除し、ペアリングを再取得して表示を更新
-  const handleUnlockPairing = async (pairing) => {
-    if (!pairing.id) return;
-    setLoading(true);
+  // 組の手動ロックを解除（ローカル状態のトグルのみ。DB反映は「確定して保存」時）。
+  // 保存済み（id あり）・未保存（id なし）いずれの組もローカルで locked=false にできる。
+  const handleUnlockPairing = (index) => {
+    if (!pairings[index]) return;
     setError('');
-    try {
-      await pairingAPI.unlock(pairing.id);
-      const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
-      pairingsCache.current[matchNumber] = pairingsRes.data;
-      const hasData = pairingsRes.data && pairingsRes.data.length > 0;
-      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
-      setCacheVersion(v => v + 1);
-      setHasUnsavedChanges(false);
-      unsavedDraft.current = null;
-    } catch (err) {
-      console.error('Unlock failed:', err);
-      setError(err?.response?.data?.message || 'ロック解除に失敗しました');
-    } finally {
-      setLoading(false);
-    }
+    const updated = togglePairingLock(pairings, index, false);
+    setPairings(updated);
+    setHasUnsavedChanges(true);
+    saveDraft(updated, waitingPlayers, isEditingExisting);
   };
 
   // 配置実行（ドラッグ＆ドロップとタップ選択モードで共通）
@@ -800,11 +751,6 @@ const PairingGenerator = () => {
     return !isParticipant && !isWaiting && !isInPairings;
   });
 
-  // 未完成（片側空欄）の未ロック組が存在するか（手動ロックボタンの無効化に使用）
-  const hasIncompleteUnlockedPairings = pairings.some(
-    p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id)
-  );
-
   if (matchLoading) {
     return (
       <>
@@ -821,6 +767,8 @@ const PairingGenerator = () => {
     <>
       <PageHeader title="組み合わせ作成" backTo={backTo} />
       <div className="space-y-6">
+      {/* 使い方ヘルプ（ⓘ）。PageHeader 直下・右寄せ。初回訪問時のみ端末単位で自動表示 */}
+      <PairingHelp ready={!matchLoading} />
       {/* 日付選択 */}
       <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
         <div>
@@ -1080,9 +1028,9 @@ const PairingGenerator = () => {
                         リセット
                       </button>
                     )}
-                    {!isReadOnly && !isViewMode && pairing.id && pairing.locked && (
+                    {canShowUnlock({ isReadOnly, isViewMode, pairing }) && (
                       <button
-                        onClick={() => handleUnlockPairing(pairing)}
+                        onClick={() => handleUnlockPairing(index)}
                         disabled={loading}
                         className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-800 disabled:opacity-50 whitespace-nowrap"
                         title="手動ロックを解除"
@@ -1149,15 +1097,13 @@ const PairingGenerator = () => {
                     </span>
                     {pairing.player1Id && pairing.player2Id && (
                       <button
-                        onClick={() => handleLockPairing(pairing)}
-                        disabled={loading || hasIncompleteUnlockedPairings}
-                        className="flex items-center gap-1 text-xs text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 whitespace-nowrap flex-shrink-0"
-                        title={hasIncompleteUnlockedPairings
-                          ? '未完成の組（選手が片側空欄）があるためロックできません'
-                          : 'この組をロック（自動組み合わせ・一括保存・回戦削除から保護）'}
+                        onClick={() => handleLockPairing(index)}
+                        disabled={loading}
+                        aria-label="ロック"
+                        className="flex items-center p-1 text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 flex-shrink-0"
+                        title="この組をロック（自動組み合わせ・回戦削除から保護。保存時にロック状態を反映）"
                       >
-                        <Lock className="w-3.5 h-3.5" />
-                        ロック
+                        <Lock className="w-4 h-4" />
                       </button>
                     )}
                   </div>

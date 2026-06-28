@@ -26,9 +26,16 @@ export const pairingAPI = {
   // 対戦組み合わせを作成
   create: (data) => apiClient.post('/match-pairings', data),
 
-  // 対戦組み合わせを一括作成
+  // 対戦組み合わせを一括作成（各組の手動ロック状態 locked も同梱して永続化する）
   createBatch: (date, matchNumber, pairings, waitingPlayerIds = []) =>
-    apiClient.post('/match-pairings/batch', { pairings, waitingPlayerIds }, {
+    apiClient.post('/match-pairings/batch', {
+      pairings: pairings.map((p) => ({
+        player1Id: p.player1Id,
+        player2Id: p.player2Id,
+        locked: !!p.locked,
+      })),
+      waitingPlayerIds,
+    }, {
       params: { date, matchNumber },
     }),
 

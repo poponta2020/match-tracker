@@ -1543,12 +1543,13 @@ class MatchPairingServiceTest {
         }
 
         @Test
-        @DisplayName("createBatch: 手動ロック組（結果なし）が保持され、両選手が新規ペアから除外される")
-        void shouldPreserveManuallyLockedPairingInCreateBatch() {
+        @DisplayName("createBatch: 手動ロック組（結果なし）は削除→再作成され、locked が保存される（保護は hasResult のみ）")
+        void shouldRecreateManuallyLockedPairingWithLockedFlagInCreateBatch() {
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
             Long createdBy = 1L;
 
+            // 既存: 手動ロック組(10L: 1L,2L)＋未ロック組(11L: 3L,4L)。いずれも結果なし。
             MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
             manualLocked.setLocked(true);
             MatchPairing unlocked = createMatchPairing(11L, sessionDate, matchNumber, 3L, 4L);
@@ -1557,30 +1558,77 @@ class MatchPairingServiceTest {
             // 結果は存在しない（手動ロックのみ）
             when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
                     .thenReturn(Collections.emptyList());
-            // 新規リクエスト: ロック済み選手(1L)を含むペアは除外され、(3L,4L)のみ保存される
+            // 新モデル: ロック組も locked=true でリクエストに含めて送られる
             List<MatchPairingCreateRequest> requests = Arrays.asList(
-                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 5L),
-                    new MatchPairingCreateRequest(sessionDate, matchNumber, 3L, 4L)
+                    MatchPairingCreateRequest.builder().sessionDate(sessionDate).matchNumber(matchNumber)
+                            .player1Id(1L).player2Id(2L).locked(true).build(),
+                    MatchPairingCreateRequest.builder().sessionDate(sessionDate).matchNumber(matchNumber)
+                            .player1Id(3L).player2Id(4L).locked(false).build()
             );
-            // saveAll はコピーを返す（本番の saved.addAll(lockedPairings) が引数リストを破壊的に
+            // saveAll はコピーを返す（本番の saved.addAll(protectedPairings) が引数リストを破壊的に
             // 変更し、検証時にサイズが変わるのを防ぐ）
             when(matchPairingRepository.saveAll(anyList())).thenAnswer(inv -> new ArrayList<>(inv.getArgument(0)));
             when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2, player3, player4));
 
             matchPairingService.createBatch(sessionDate, matchNumber, requests, List.of(), createdBy, null);
 
-            // 未ロックの既存ペア(11L)のみ削除
+            // 結果なしのため手動ロック組(10L)も含め両方削除される（保護は hasResult のみ）
             verify(matchPairingRepository).deleteAll(argThat(list -> {
                 List<MatchPairing> deleted = (List<MatchPairing>) list;
-                return deleted.size() == 1 && deleted.get(0).getId().equals(11L);
+                return deleted.size() == 2
+                        && deleted.stream().anyMatch(p -> p.getId().equals(10L))
+                        && deleted.stream().anyMatch(p -> p.getId().equals(11L));
             }));
-            // ロック済み選手(1L)を含む新規ペアは除外され、(3L,4L)のみ保存
-            verify(matchPairingRepository).saveAll(argThat(list -> {
-                List<MatchPairing> saved = (List<MatchPairing>) list;
-                return saved.size() == 1
-                        && saved.get(0).getPlayer1Id().equals(3L)
-                        && saved.get(0).getPlayer2Id().equals(4L);
+            // 再作成: (1L,2L) は locked=true、(3L,4L) は locked=false で保存される
+            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
+            List<MatchPairing> savedNew = matchPairingListCaptor.getValue();
+            assertThat(savedNew).hasSize(2);
+            MatchPairing recreatedLocked = savedNew.stream()
+                    .filter(p -> p.getPlayer1Id().equals(1L) && p.getPlayer2Id().equals(2L))
+                    .findFirst().orElseThrow();
+            assertThat(recreatedLocked.getLocked()).isTrue();
+            MatchPairing recreatedUnlocked = savedNew.stream()
+                    .filter(p -> p.getPlayer1Id().equals(3L) && p.getPlayer2Id().equals(4L))
+                    .findFirst().orElseThrow();
+            assertThat(recreatedUnlocked.getLocked()).isFalse();
+        }
+
+        @Test
+        @DisplayName("createBatch: locked=false での再保存で手動ロックが解除される（再作成時 locked=false）")
+        void shouldReflectUnlockOnCreateBatch() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            // 既存: 手動ロック組(10L: 1L,2L) locked=true、結果なし
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(manualLocked));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            // 解除して保存: 同じペアを locked=false で送る
+            List<MatchPairingCreateRequest> requests = List.of(
+                    MatchPairingCreateRequest.builder().sessionDate(sessionDate).matchNumber(matchNumber)
+                            .player1Id(1L).player2Id(2L).locked(false).build()
+            );
+            when(matchPairingRepository.saveAll(anyList())).thenAnswer(inv -> new ArrayList<>(inv.getArgument(0)));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, List.of(), createdBy, null);
+
+            // 旧ロック組(10L)は削除される（結果なし＝保護対象外）
+            verify(matchPairingRepository).deleteAll(argThat(list -> {
+                List<MatchPairing> deleted = (List<MatchPairing>) list;
+                return deleted.size() == 1 && deleted.get(0).getId().equals(10L);
             }));
+            // 再作成された (1L,2L) は locked=false（解除が永続化される）
+            verify(matchPairingRepository).saveAll(matchPairingListCaptor.capture());
+            List<MatchPairing> savedNew = matchPairingListCaptor.getValue();
+            assertThat(savedNew).hasSize(1);
+            assertThat(savedNew.get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(savedNew.get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(savedNew.get(0).getLocked()).isFalse();
         }
 
         @Test
