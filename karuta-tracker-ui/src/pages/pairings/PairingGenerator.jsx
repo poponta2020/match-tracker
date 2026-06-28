@@ -16,6 +16,7 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 
 
@@ -933,8 +934,8 @@ const PairingGenerator = () => {
 
       </div>
 
-      {/* 参加者セクション（組み合わせが1つも無い＝新規作成時のみ表示。既存の組み合わせがあれば結果の有無に関わらず非表示にして閲覧表示と一貫させる） */}
-      {pairings.length === 0 && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      {/* 参加者セクション（組み合わせが1つも無い＝新規作成時のみ表示。既存の組み合わせがあれば結果の有無に関わらず非表示にして閲覧表示と一貫させる。判定は pairingDisplayLogic に集約） */}
+      {shouldShowParticipantSection(pairings) && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="bg-[#e5ebe7] px-6 py-3 flex items-center justify-between">
           <button
             onClick={() => setShowParticipantList(!showParticipantList)}
@@ -985,8 +986,8 @@ const PairingGenerator = () => {
         )}
       </div>}
 
-      {/* 自動組み合わせボタン（組み合わせが1つも無い＝新規作成時のみ表示、閲覧モードでは非表示） */}
-      {!isReadOnly && sessionDate && participants.length > 0 && pairings.length === 0 && (
+      {/* 自動組み合わせボタン（組み合わせが1つも無い＝新規作成時のみ表示、閲覧モードでは非表示。判定は pairingDisplayLogic に集約） */}
+      {shouldShowAutoMatchButton({ isReadOnly, sessionDate, participants, pairings }) && (
         <div className="flex justify-center">
           <button
             onClick={handleAutoMatch}
