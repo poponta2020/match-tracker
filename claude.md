@@ -49,6 +49,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 競技かるたの対戦記録管理アプリ（Match Tracker）。Java Spring Boot バックエンド + React フロントエンドのモノレポ構成。
 
+## 機能開発フロー（要件 ⇄ 設計の2レンズ）
+
+新機能・画面リデザインは **要件（ロジック）と設計（視覚）の2レンズを行き来して**進める。詳細＝[`docs/dev/feature-flow.md`](docs/dev/feature-flow.md)。
+
+- ロジック起点 → `/define-feature <slug>`（要件定義書・実装手順書・Issue）
+- 見た目起点 → `/design-screen <画面>`（Claude Design でモック→ `design-spec.md` 確定）
+- 成果物は `docs/features/<slug>/` に requirements.md と design-spec.md を同居させ、互いに「宿題」を投げ合って収束させる（重複記述しない）
+- 両方が `completed`/`locked` ＋ 互いの宿題ゼロ → `/implement <slug>`
+
 ## 開発コマンド
 
 ### バックエンド（`karuta-tracker/`）
