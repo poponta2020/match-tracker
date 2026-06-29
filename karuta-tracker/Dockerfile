@@ -49,27 +49,21 @@ USER spring:spring
 ENV MALLOC_ARENA_MAX=2
 
 # アプリケーションを起動
-# メモリ関連フラグ（コンテナ上限 512Mi）。ヒープ外で増加しうる主要領域に上限を設け、
-# 明示上限の合計をコンテナ上限の内側（200+192+64=456Mi）に収める。これによりメタスペース/
-# ダイレクトの暴走を cgroup SIGKILL より手前で Java OOME として顕在化させ MEM-DIAG ログで追える。
-# 注: 512Mi は本アプリには元来きつく、コードキャッシュ/スレッドスタック/その他ネイティブ込みでは
-# 上限到達前にコンテナ OOM が起きうる（明示上限は万能のガードレールではない）。ネイティブ RSS そのものの
-# 縮小は glibc + MALLOC_ARENA_MAX が担い、増加領域の特定は MemoryDiagnosticsLogger（5分ごとの実RSS含む）
-# が担う。各上限値はデプロイ後の MEM-DIAG 観測で精緻化する（Issue #953）:
-#   -Xmx200m                          ヒープ上限（既存・実績値のため据え置き）
-#   -XX:MaxMetaspaceSize=192m         メタスペース上限（暴走ガード。実使用見込みに余裕を持たせた値。ロガーで接近を事前検知）
-#   -XX:MaxDirectMemorySize=64m       NIO ダイレクトバッファ上限（未指定時の既定 ≒ -Xmx を抑制）
-#   -XX:NativeMemoryTracking=summary  ネイティブメモリ計測を有効化（根本原因の内訳特定用・一時的, Issue #953）。
-#     Render free は jcmd 不可だが、MemoryDiagnosticsLogger が DiagnosticCommandMBean 経由で
-#     NMT サマリ(VM.native_memory summary 相当)をプログラム的に取得しログ出力するため読み出せる。
-#     これで「JVM が本当に必要な分」と「OS へ返らず glibc が保持する分(RSS - committed)」を定量化し、
-#     根本対策(jemalloc / コードキャッシュ上限 / RAM増 等)を確定する。計測オーバーヘッドは数MB。
+# メモリ関連フラグ（コンテナ上限 512Mi）。NMT 計測(Issue #953)で常駐の内訳を確定した結果に基づく:
+#   起動直後で既に RSS ~449MB（Heap commit 189MB だが実使用~113・クラス 21,689個=メタ~103MB・
+#   Code 43→70・Symbol 35 等）。リークではなく「肥大した正規 footprint が 512 の天井に達している」のが
+#   OOM の根本原因。→ ヒープを実測(使用~113MB)に右サイズ化し、過剰コミット分(~40MB)を回収する。
+#   -Xmx150m                          ヒープ上限（実使用~113MBに右サイズ化。旧200mは189MBコミット/未使用~75MB）
+#   -XX:ReservedCodeCacheSize=64m     コードキャッシュ上限（5hで~70MBへ伸びる尾を抑制。JIT flush で吸収）
+#   -XX:MaxMetaspaceSize=192m         メタスペース上限（実~103MBに対する暴走ガード）
+#   -XX:MaxDirectMemorySize=64m       NIO ダイレクトバッファ上限（実~0）
+# 計測用の -XX:NativeMemoryTracking=summary と NMT ログ出力は、内訳確定につき撤去（オーバーヘッド削減）。
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
-  "-Xmx200m", \
+  "-Xmx150m", \
+  "-XX:ReservedCodeCacheSize=64m", \
   "-XX:MaxMetaspaceSize=192m", \
   "-XX:MaxDirectMemorySize=64m", \
-  "-XX:NativeMemoryTracking=summary", \
   "-Djava.security.egd=file:/dev/./urandom", \
   "-jar", \
   "app.jar"]

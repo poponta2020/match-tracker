@@ -3442,15 +3442,17 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 #### コンテナメモリ運用とOOM対策（Issue #953）
 
 - **症状**: 本番（Render free, コンテナ上限 512Mi）が**約5時間ごとに規則的にコンテナレベルの OOM kill**（`server_failed` / `oomKilled` / `memoryLimit=512Mi`）を起こし、約216秒のコールドスタートを挟んで毎回数分ダウンしていた。Render Events API で確認（例: 2026-06-27 16:12 JST）。
-- **切り分け**: ヒープは `Dockerfile` で `-Xmx200m` に制限済み。にもかかわらず 512Mi 超過 ⇒ 増加しているのは**ヒープ外（メタスペース / コードキャッシュ / NIO ダイレクトバッファ / スレッドスタック / その他ネイティブ）**。Java の `OutOfMemoryError` ではなく cgroup OOM killer による SIGKILL のため、ログに例外も graceful shutdown も残らない。規則的な間隔は緩やかなネイティブメモリ増加（リーク）のシグネチャ。
+- **切り分け**: ヒープは `Dockerfile` で `-Xmx200m` に制限済み。にもかかわらず 512Mi 超過 ⇒ 増加しているのは**ヒープ外（メタスペース / コードキャッシュ / NIO ダイレクトバッファ / スレッドスタック / その他ネイティブ）**。Java の `OutOfMemoryError` ではなく cgroup OOM killer による SIGKILL のため、ログに例外も graceful shutdown も残らない。規則的な間隔は、再起動直後の RSS から徐々に増えて 512 に達する挙動による（後述の NMT 計測で**リークではなく footprint 過大**と確定）。
 - **緩和（`karuta-tracker/Dockerfile`）**:
   - ベースイメージを Alpine（musl libc）→ **glibc（`eclipse-temurin:21-jre-jammy`）** に変更。musl は JVM の多スレッド・ネイティブ確保ワークロードで RSS が膨らみ OS へ解放されにくい既知傾向があるため。
   - **`MALLOC_ARENA_MAX=2`** で glibc の per-thread malloc アリーナ断片化を抑制。
   - JVM フラグで**ヒープ外の上限**を明示: `-XX:MaxMetaspaceSize=192m`、`-XX:MaxDirectMemorySize=64m`。明示上限の合計をコンテナ上限の内側（200+192+64=456Mi）に収め、メタスペース/ダイレクトの暴走を cgroup SIGKILL より手前で Java `OutOfMemoryError` として顕在化させ MEM-DIAG ログで追えるようにする。ただし 512Mi は本アプリには元来きつく、コードキャッシュ/スレッドスタック/その他ネイティブ込みでは上限到達前にコンテナ OOM が起きうる（明示上限は万能のガードレールではない）。ネイティブ RSS そのものの縮小は glibc + `MALLOC_ARENA_MAX` が担い、各上限値はデプロイ後の MEM-DIAG 観測で精緻化する。
 - **可観測化（`monitoring/MemoryDiagnosticsLogger`）**: MXBean（`MemoryMXBean` / `MemoryPoolMXBean` / `BufferPoolMXBean` / `ThreadMXBean`）と Linux `/proc/self/status` の VmRSS から **5分間隔**（`DensukeSyncScheduler` と同周期で相関を取る）で `MEM-DIAG` 行を出力する。
   - 形式: `MEM-DIAG rss=<MB> heap=<used>/<max>MB nonHeap=<MB> metaspace=<MB> codeCache=<MB> directBuf=<used>/<cap>MB mapped=<MB> threads=<n>`
-  - **NMT サマリ（根本原因の内訳特定・一時的）**: 緩和（glibc・上限）後も約5時間周期の OOM が継続したため、`-XX:NativeMemoryTracking=summary` を有効化し、`DiagnosticCommandMBean`（`jcmd VM.native_memory summary` 相当）経由で NMT サマリを **30分間隔** で `NMT-DUMP` 行（改行は ` | ` に畳む）として出力する（Render free は jcmd 不可のためプログラム的に取得）。各カテゴリ committed と Total committed を `MEM-DIAG` の実 RSS と突き合わせ、`RSS − NMT committed` で「OS へ返らず glibc が保持している分」を定量化し、根本対策（jemalloc / コードキャッシュ上限 / RAM 増 等）を確定する。内訳確定後にオーバーヘッド（数MB）の要否を見直す。
+  - **NMT サマリによる内訳特定（実施済み→撤去）**: 緩和後も約5時間周期の OOM が継続したため、一時的に `-XX:NativeMemoryTracking=summary` ＋ `DiagnosticCommandMBean`（`jcmd VM.native_memory summary` 相当）で NMT サマリを `NMT-DUMP` 行として出力し、ネイティブの内訳を取得した。**内訳確定後、計測オーバーヘッド（約6MB）削減のため撤去済み**（下記「根本原因」参照）。
   - 読み出し: `scripts/render-logs/Get-RenderLogs.ps1 -Text "MEM-DIAG" -Hours <n>` で本番ログから取得し、どの領域が増加しているかを特定 → 真因に的を絞った修正につなげる。観測専用のため例外は握りつぶし本番動作に影響しない。
+- **根本原因（NMT 計測で確定）**: 起動直後で既に **RSS ~449MB / 512Mi**。NMT Total committed ~396MB の内訳は **Java Heap 189MB（`-Xmx200m` をほぼ全コミット。だが実使用は ~113MB＝約75MBが未使用コミット）**、**クラスメタデータ ~103MB（クラス 21,689 個＝Spring/Hibernate/Jackson/httpclient/bouncycastle/web-push/biweekly/jsoup 等の蓄積）**、Code 43→70MB、Symbol 35MB、その他＋`RSS − committed` の glibc 諸経費 ~53MB。**OOM はリークではなく、肥大した正規 footprint（~449MB）が JIT/glibc 保持で ~505MB まで上がり 512 を越えるため**。機能・依存の蓄積で常駐が 512 に到達した時点から発生している。
+- **根本対策（`karuta-tracker/Dockerfile`）**: NMT が「ヒープは 189MB コミットだが実使用 ~113MB」と実証したことに基づき、**ヒープを実測に右サイズ化**: `-Xmx 200m → 150m`（過剰コミット ~40MB を回収）＋ **`-XX:ReservedCodeCacheSize=64m`**（~70MB へ伸びる尾を抑制、JIT flush で吸収）。これで定常 RSS が ~505→~450MB に下がり、マージンが 7MB→約60MB になる。計測用 NMT は撤去。構造的な重さの主因（クラス 21,689 個＝メタ ~103MB）の削減は依存削減の大規模対応のため、回避するなら Render 有料プラン（RAM 増）が確実。
 
 #### カレンダー購読（iCalフィード）
 - プレイヤーごとに発行された `ical_feed_token` を親トークンとし、**所属団体ごと + ゲスト参加** で別々のURLを発行
