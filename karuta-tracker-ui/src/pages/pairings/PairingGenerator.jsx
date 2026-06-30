@@ -16,7 +16,7 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton, isBothCancelled, hasAnyCancelled, materializeCancelledSlots } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
@@ -1011,12 +1011,13 @@ const PairingGenerator = () => {
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
             {pairings.map((pairing, index) => (
-              // 両方キャンセルの組は閲覧モードで非表示（試合として成立しないため）。
+              // 両方キャンセルの組は閲覧モードで非表示（試合として成立しないため。結果入力済みは結果を残す）。
               // インデックスを保持するため filter ではなく map 内で null を返す。
-              isBothCancelled(pairing) ? null : (
-              <div key={index} className={`px-3 py-2.5 ${(pairing.hasResult || pairing.locked) ? 'bg-gray-50' : ''}`}>
-                {(pairing.hasResult || pairing.locked) ? (
-                  /* ロック済み（結果入力済み or 手動ロック）表示 */
+              shouldHideRow(pairing) ? null : (
+              <div key={index} className={`px-3 py-2.5 ${showsResultLockedRow(pairing) ? 'bg-gray-50' : ''}`}>
+                {showsResultLockedRow(pairing) ? (
+                  /* ロック/結果表示（結果入力済み、またはキャンセルなしの手動ロック）。
+                     片方キャンセルのある手動ロック組はここに来ず、下のキャンセル表示/空き化に回る。 */
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center justify-center gap-3">
                       <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>

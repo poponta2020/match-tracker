@@ -9,7 +9,7 @@ import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton, isBothCancelled, hasAnyCancelled, materializeCancelledSlots } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
 import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
 
@@ -1094,11 +1094,29 @@ describe('LINE送信用テキスト生成導線（lineTextTarget）', () => {
 describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', () => {
   afterEach(cleanup);
 
-  // 本番 PairingGenerator.jsx の閲覧モード行と同一構造・同一 className を、
-  // 本番が import する純粋関数（isBothCancelled / hasAnyCancelled）で分岐させて再現する。
-  // 条件式をテスト側にコピーせず実関数を呼ぶことで、本番側の判定が変われば確実に失敗する。
+  // 本番 PairingGenerator.jsx の閲覧モード行と同一構造・同一 className・同一優先順位を、
+  // 本番が import する純粋関数（showsResultLockedRow / hasAnyCancelled / shouldHideRow）で
+  // 分岐させて再現する。条件式をテスト側にコピーせず実関数を呼ぶことで、本番の分岐順が変われば
+  // 確実に失敗する（結果/ロックとキャンセルの優先順位もここで検証される）。
   const ViewRow = ({ pairing }) => {
-    if (isBothCancelled(pairing)) return null;
+    if (showsResultLockedRow(pairing)) {
+      // 結果入力済み、またはキャンセルなしの手動ロック → ロック/結果表示
+      return (
+        <div className="flex items-center gap-2" data-testid="locked-row">
+          <div className="flex-1 flex items-center justify-center gap-3">
+            <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>
+            <span className="text-gray-300 text-xs">vs</span>
+            <span className="font-medium text-gray-400 text-sm">{pairing.player2Name}</span>
+          </div>
+          {pairing.hasResult && (
+            <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">結果入力済</span>
+          )}
+          {pairing.locked && !pairing.hasResult && (
+            <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">ロック</span>
+          )}
+        </div>
+      );
+    }
     if (hasAnyCancelled(pairing)) {
       return (
         <div className="flex items-center gap-2">
@@ -1126,7 +1144,7 @@ describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', ()
   const ViewList = ({ pairings }) => (
     <div data-testid="view-list">
       {pairings.map((pairing, index) => (
-        isBothCancelled(pairing) ? null : (
+        shouldHideRow(pairing) ? null : (
           <div key={index} data-testid={`row-${index}`}>
             <ViewRow pairing={pairing} />
           </div>
@@ -1222,6 +1240,48 @@ describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', ()
     const requests = buildSaveRequests(editPairings);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toEqual({ player1Id: 5, player2Id: 6, locked: false });
+  });
+
+  it('手動ロック組で片方キャンセル: ロック表示よりキャンセル表示を優先（取消線＋タグ、ロックバッジは出さない）', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: true, locked: true, hasResult: false },
+    ];
+    render(<ViewList pairings={pairings} />);
+    expect(screen.getByText('キャンセル')).toBeInTheDocument();
+    expect(screen.queryByText('ロック')).not.toBeInTheDocument();
+    expect(screen.getByText('山田').className).toContain('line-through');
+  });
+
+  it('結果入力済み組で片方キャンセル: 結果が正なので結果入力済表示のまま（キャンセルは反映しない）', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: true, locked: false, hasResult: true },
+    ];
+    render(<ViewList pairings={pairings} />);
+    expect(screen.getByText('結果入力済')).toBeInTheDocument();
+    expect(screen.queryByText('キャンセル')).not.toBeInTheDocument();
+    expect(screen.getByText('山田').className).not.toContain('line-through');
+  });
+
+  it('materializeCancelledSlots: 結果入力済みはそのまま保持・手動ロック組はキャンセルで空き化しロック解除', () => {
+    const viewPairings = [
+      // 結果入力済み＋片方キャンセル → 結果が正なので不変（slot も locked も触らない）
+      { player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: true, hasResult: true },
+      // 手動ロック＋片方キャンセル → 空き化＋locked解除
+      { player1Id: 3, player1Name: 'C', player1Cancelled: false, player2Id: 4, player2Name: 'D', player2Cancelled: true, locked: true },
+      // 両方キャンセル＋結果入力済み → 結果が正なので残す
+      { player1Id: 5, player1Name: 'E', player1Cancelled: true, player2Id: 6, player2Name: 'F', player2Cancelled: true, hasResult: true },
+    ];
+    const edit = materializeCancelledSlots(viewPairings);
+    expect(edit).toHaveLength(3); // 結果入力済みの両キャンセルも残るため除去は0件
+    // 結果入力済み組はそのまま（キャンセルフラグも保持）
+    expect(edit[0].player2Id).toBe(2);
+    expect(edit[0].player2Cancelled).toBe(true);
+    // 手動ロック組はキャンセル側が空き化＋locked解除
+    expect(edit[1].player2Id).toBeNull();
+    expect(edit[1].player2Cancelled).toBe(false);
+    expect(edit[1].locked).toBe(false);
+    // 結果入力済みの両キャンセルは残る
+    expect(edit[2].player1Id).toBe(5);
   });
 });
 

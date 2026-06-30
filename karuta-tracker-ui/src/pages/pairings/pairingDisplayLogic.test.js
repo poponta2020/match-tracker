@@ -5,6 +5,8 @@ import {
   isBothCancelled,
   hasAnyCancelled,
   materializeCancelledSlots,
+  showsResultLockedRow,
+  shouldHideRow,
 } from './pairingDisplayLogic';
 
 describe('shouldShowParticipantSection', () => {
@@ -143,6 +145,52 @@ describe('対戦相手キャンセル判定（pairing-cancelled-opponent）', ()
       expect(materializeCancelledSlots([])).toEqual([]);
       expect(materializeCancelledSlots(null)).toEqual([]);
       expect(materializeCancelledSlots(undefined)).toEqual([]);
+    });
+
+    it('結果入力済みはそのまま保持・手動ロック組はキャンセルで空き化しロック解除する', () => {
+      const pairings = [
+        { player1Id: 1, player2Id: 2, player2Cancelled: true, hasResult: true },                              // 結果入力済み → 不変
+        { player1Id: 3, player2Id: 4, player2Cancelled: true, locked: true },                                 // 手動ロック → 空き化＋解除
+        { player1Id: 5, player2Id: 6, player1Cancelled: true, player2Cancelled: true, hasResult: true },      // 両キャンセルでも結果入力済みは残す
+      ];
+      const result = materializeCancelledSlots(pairings);
+      expect(result).toHaveLength(3);
+      expect(result[0].player2Id).toBe(2);
+      expect(result[0].player2Cancelled).toBe(true);
+      expect(result[1].player2Id).toBeNull();
+      expect(result[1].player2Cancelled).toBe(false);
+      expect(result[1].locked).toBe(false);
+      expect(result[2].player1Id).toBe(5);
+    });
+  });
+
+  describe('showsResultLockedRow（行描画の優先順位）', () => {
+    it('結果入力済みは常に true（キャンセルがあっても結果が正）', () => {
+      expect(showsResultLockedRow({ hasResult: true })).toBe(true);
+      expect(showsResultLockedRow({ hasResult: true, player2Cancelled: true })).toBe(true);
+    });
+    it('手動ロックはキャンセルが無いときのみ true（片方キャンセルがあれば false）', () => {
+      expect(showsResultLockedRow({ locked: true })).toBe(true);
+      expect(showsResultLockedRow({ locked: true, player1Cancelled: true })).toBe(false);
+    });
+    it('結果なし・ロックなしは false', () => {
+      expect(showsResultLockedRow({})).toBe(false);
+      expect(showsResultLockedRow({ player2Cancelled: true })).toBe(false);
+      expect(showsResultLockedRow(null)).toBe(false);
+    });
+  });
+
+  describe('shouldHideRow（閲覧モードの行非表示）', () => {
+    it('両方キャンセルは非表示（true）', () => {
+      expect(shouldHideRow({ player1Cancelled: true, player2Cancelled: true })).toBe(true);
+    });
+    it('両方キャンセルでも結果入力済みは残す（false）', () => {
+      expect(shouldHideRow({ player1Cancelled: true, player2Cancelled: true, hasResult: true })).toBe(false);
+    });
+    it('片方キャンセル・通常は非表示にしない（false）', () => {
+      expect(shouldHideRow({ player2Cancelled: true })).toBe(false);
+      expect(shouldHideRow({})).toBe(false);
+      expect(shouldHideRow(null)).toBe(false);
     });
   });
 });
