@@ -1351,7 +1351,10 @@ public class MatchPairingService {
      * <p>セッション解決:
      * organizationId != null は当該団体のセッションのみ（getSessionAllPlayerIds と同じスコープ）。
      * organizationId == null（SUPER_ADMIN / PLAYER 経路で同日複数団体があり得る）はその日の全セッションを
-     * 対象にする。CANCELLED 参加者は解決したセッションID群から1クエリで取得し N+1 を避ける。</p>
+     * 対象にする。さらに各組について「両選手が共に属するセッション（＝その組が行われたセッション）」を
+     * 解決し、そのセッション内のキャンセルだけを反映する。これにより同一選手が同日同試合番号で別団体
+     * セッションにも居る場合のクロス団体誤反映を防ぐ。参加者は解決したセッションID群から1クエリで
+     * 取得し N+1 を避ける。</p>
      */
     private void enrichWithCancellation(List<MatchPairingDto> dtos, LocalDate sessionDate, Long organizationId) {
         if (dtos.isEmpty()) return;
@@ -1371,25 +1374,50 @@ public class MatchPairingService {
         }
         if (sessionIds.isEmpty()) return;
 
-        // 解決したセッションの CANCELLED 参加者を1クエリで取得し、試合単位のキー集合を作る
-        // （matchNumber=null の抜け番マーカー行は除外する）
-        Set<String> cancelledKeys = practiceParticipantRepository
-                .findBySessionIdInAndStatus(sessionIds, ParticipantStatus.CANCELLED).stream()
-                .filter(pp -> pp.getMatchNumber() != null)
-                .map(pp -> cancellationKey(pp.getPlayerId(), pp.getMatchNumber()))
-                .collect(Collectors.toSet());
+        // 対象セッションの全参加者を1クエリで取得し（N+1回避）、以下を導出する:
+        //  - メンバーシップ: (playerId:matchNumber) -> その選手がその試合で属するセッションID集合
+        //  - cancelledKeys: status=CANCELLED の (sessionId:playerId:matchNumber)
+        // matchNumber=null の抜け番マーカー行は試合単位判定の対象外。
+        Map<String, Set<Long>> sessionsByPlayerMatch = new HashMap<>();
+        Set<String> cancelledKeys = new HashSet<>();
+        for (PracticeParticipant pp : practiceParticipantRepository.findBySessionIdIn(sessionIds)) {
+            if (pp.getMatchNumber() == null) continue;
+            String pmKey = cancellationKey(pp.getPlayerId(), pp.getMatchNumber());
+            sessionsByPlayerMatch.computeIfAbsent(pmKey, k -> new HashSet<>()).add(pp.getSessionId());
+            if (pp.getStatus() == ParticipantStatus.CANCELLED) {
+                cancelledKeys.add(pp.getSessionId() + ":" + pmKey);
+            }
+        }
         if (cancelledKeys.isEmpty()) return;
 
-        // 各組について、自身の matchNumber を使って per-match で判定する
+        // 各組について、両選手が共に属するセッション（＝その組が行われたセッション）を解決し、
+        // そのセッション内のキャンセルだけを反映する。これにより organizationId==null で同一選手が
+        // 同日同試合番号で別団体セッションにも居る場合の誤反映を防ぐ。
         for (MatchPairingDto dto : dtos) {
-            Integer matchNumber = dto.getMatchNumber();
-            if (cancelledKeys.contains(cancellationKey(dto.getPlayer1Id(), matchNumber))) {
+            Integer m = dto.getMatchNumber();
+            Long pairingSessionId = resolvePairingSessionId(
+                    sessionsByPlayerMatch.get(cancellationKey(dto.getPlayer1Id(), m)),
+                    sessionsByPlayerMatch.get(cancellationKey(dto.getPlayer2Id(), m)));
+            if (pairingSessionId == null) continue; // 両選手が同一セッションに居ない（解決不能）→ 反映しない
+            if (cancelledKeys.contains(pairingSessionId + ":" + cancellationKey(dto.getPlayer1Id(), m))) {
                 dto.setPlayer1Cancelled(true);
             }
-            if (cancelledKeys.contains(cancellationKey(dto.getPlayer2Id(), matchNumber))) {
+            if (cancelledKeys.contains(pairingSessionId + ":" + cancellationKey(dto.getPlayer2Id(), m))) {
                 dto.setPlayer2Cancelled(true);
             }
         }
+    }
+
+    /**
+     * 両選手の所属セッション集合の積から、その組が行われたセッションを1つ解決する。
+     * 解決できない場合は null（その組にはキャンセルを反映しない）。
+     */
+    private Long resolvePairingSessionId(Set<Long> p1Sessions, Set<Long> p2Sessions) {
+        if (p1Sessions == null || p2Sessions == null) return null;
+        for (Long sid : p1Sessions) {
+            if (p2Sessions.contains(sid)) return sid;
+        }
+        return null;
     }
 
     /**

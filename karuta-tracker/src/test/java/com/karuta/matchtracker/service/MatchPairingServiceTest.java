@@ -417,8 +417,9 @@ class MatchPairingServiceTest {
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
                     .thenReturn(List.of(session));
-            when(practiceParticipantRepository.findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED))
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
                     .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.CANCELLED)
                     ));
 
@@ -448,7 +449,7 @@ class MatchPairingServiceTest {
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
                     .thenReturn(List.of(session));
-            when(practiceParticipantRepository.findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED))
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
                     .thenReturn(List.of(
                             createPracticeParticipant(100L, matchNumber, 1L, ParticipantStatus.CANCELLED),
                             createPracticeParticipant(100L, matchNumber, 2L, ParticipantStatus.CANCELLED)
@@ -481,8 +482,10 @@ class MatchPairingServiceTest {
             when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
                     .thenReturn(List.of(session));
             // player1 のキャンセルは matchNumber=2（対象組は matchNumber=1）
-            when(practiceParticipantRepository.findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED))
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
                     .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 2, 1L, ParticipantStatus.CANCELLED)
                     ));
 
@@ -513,8 +516,10 @@ class MatchPairingServiceTest {
             PracticeSession session = createSession(100L, sessionDate);
             when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
                     .thenReturn(List.of(session));
-            when(practiceParticipantRepository.findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED))
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
                     .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, null, 1L, ParticipantStatus.CANCELLED)
                     ));
 
@@ -532,7 +537,7 @@ class MatchPairingServiceTest {
         void shouldScopeCancellationByOrganization() {
             // Given: organizationId=7L のセッション (sessionId=100L) の組 (1L, 2L)。
             // player2 (2L) は当該団体セッションで試合1をキャンセル済み。
-            // 別団体セッション (sessionId=200L) のキャンセルは findBySessionIdInAndStatus(List.of(100L), ...) の
+            // 別団体セッション (sessionId=200L) のキャンセルは findBySessionIdIn(List.of(100L)) の
             // 対象外なので反映されない（解決されるのは自団体セッションのみ）。
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Long organizationId = 7L;
@@ -554,8 +559,9 @@ class MatchPairingServiceTest {
             when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
                     .thenReturn(Collections.emptyList());
             // キャンセル判定: 自団体セッション (100L) のみ解決され、その CANCELLED が反映される
-            when(practiceParticipantRepository.findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED))
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L)))
                     .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
                             createPracticeParticipant(100L, 1, 2L, ParticipantStatus.CANCELLED)
                     ));
 
@@ -568,8 +574,40 @@ class MatchPairingServiceTest {
             assertThat(result.get(0).isPlayer2Cancelled()).isTrue();
             // 組織スコープでセッション解決し、別団体セッションは参照しないことを担保
             verify(practiceParticipantRepository)
-                    .findBySessionIdInAndStatus(List.of(100L), ParticipantStatus.CANCELLED);
+                    .findBySessionIdIn(List.of(100L));
             verify(practiceSessionRepository, never()).findByDateRange(sessionDate, sessionDate);
+        }
+
+        @Test
+        @DisplayName("organizationId=null で同一選手が別団体セッションにも居る場合、別団体のキャンセルは当該組に反映されない")
+        void shouldNotLeakCancellationAcrossOrganizations() {
+            // 団体A(session=100)で選手1がmatch1をキャンセル。団体B(session=200)では選手1がmatch1で選手3と組んでいる。
+            // org=null 取得でも、団体Bの組(1,3)には団体Aのキャンセルを反映しない（ペアの所属セッション=200で判定）。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            List<MatchPairing> pairings = List.of(
+                    createMatchPairing(1L, sessionDate, 1, 1L, 3L) // 団体Bの組
+            );
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(pairings);
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1)); // 名前は判定に無関係
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(practiceSessionRepository.findByDateRange(sessionDate, sessionDate))
+                    .thenReturn(List.of(createSession(100L, sessionDate), createSession(200L, sessionDate)));
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L, 200L)))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.CANCELLED), // 団体Aで選手1キャンセル
+                            createPracticeParticipant(100L, 1, 9L, ParticipantStatus.WON),       // 団体Aでの相手
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),       // 団体Bで選手1は参加
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)        // 団体Bの相手
+                    ));
+
+            List<MatchPairingDto> result = matchPairingService.getByDate(sessionDate);
+
+            assertThat(result).hasSize(1);
+            // 団体Bの組(1,3)。団体Aのキャンセルは反映されない
+            assertThat(result.get(0).isPlayer1Cancelled()).isFalse();
+            assertThat(result.get(0).isPlayer2Cancelled()).isFalse();
         }
     }
 
