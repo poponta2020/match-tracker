@@ -35,4 +35,18 @@ public class MatchPairingDto {
 
     /** 手動ロックフラグ（hasResult とは独立。結果未入力でもユーザーが明示的にロックした組は true） */
     private boolean locked;
+
+    /**
+     * player1 がその試合をキャンセル済みか（read-time 判定・非破壊）。
+     * 該当日のセッションで (player1Id, この組の matchNumber) の参加者行が
+     * status=CANCELLED の場合に true。デフォルト false。
+     */
+    private boolean player1Cancelled;
+
+    /**
+     * player2 がその試合をキャンセル済みか（read-time 判定・非破壊）。
+     * 該当日のセッションで (player2Id, この組の matchNumber) の参加者行が
+     * status=CANCELLED の場合に true。デフォルト false。
+     */
+    private boolean player2Cancelled;
 }

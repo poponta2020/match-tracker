@@ -85,6 +85,7 @@ public class MatchPairingService {
             enrichWithRecentMatches(dtos, sessionDate, null);
         }
         enrichWithMatchResults(dtos, sessionDate);
+        enrichWithCancellation(dtos, sessionDate, organizationId);
         return dtos;
     }
 
@@ -112,6 +113,7 @@ public class MatchPairingService {
                 .collect(Collectors.toList());
         enrichWithRecentMatches(dtos, sessionDate, matchNumber);
         enrichWithMatchResults(dtos, sessionDate);
+        enrichWithCancellation(dtos, sessionDate, organizationId);
         return dtos;
     }
 
@@ -1333,6 +1335,68 @@ public class MatchPairingService {
                 dto.setWinnerName(winnerNames.getOrDefault(match.getWinnerId(), null));
             }
         }
+    }
+
+    /**
+     * DTOリストに各選手のキャンセル状態フラグ（player1Cancelled / player2Cancelled）を付与する。
+     *
+     * <p>read-time（表示時の動的判定・非破壊）方式。match_pairings は一切変更せず、その日の
+     * practice_participants から「その選手がその試合をキャンセルしたか」を判定してフラグだけを立てる。</p>
+     *
+     * <p>判定: ある組 (sessionDate D, matchNumber M) の選手 X が「キャンセル済み」=
+     * (D のセッション, X, M) の practice_participants 行が status=CANCELLED。match_number=null の
+     * 抜け番マーカー行は試合単位の判定対象外。粒度は試合単位なので、必ず各 dto 自身の matchNumber を
+     * キーに使う（getByDate は複数 matchNumber を含むため）。</p>
+     *
+     * <p>セッション解決:
+     * organizationId != null は当該団体のセッションのみ（getSessionAllPlayerIds と同じスコープ）。
+     * organizationId == null（SUPER_ADMIN / PLAYER 経路で同日複数団体があり得る）はその日の全セッションを
+     * 対象にする。CANCELLED 参加者は解決したセッションID群から1クエリで取得し N+1 を避ける。</p>
+     */
+    private void enrichWithCancellation(List<MatchPairingDto> dtos, LocalDate sessionDate, Long organizationId) {
+        if (dtos.isEmpty()) return;
+
+        // その日の対象セッションIDを解決する
+        List<Long> sessionIds;
+        if (organizationId != null) {
+            sessionIds = practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getId)
+                    .map(List::of)
+                    .orElse(Collections.emptyList());
+        } else {
+            // 同日に複数団体のセッションがあり得るため、その日の全セッションを対象にする
+            sessionIds = practiceSessionRepository.findByDateRange(sessionDate, sessionDate).stream()
+                    .map(com.karuta.matchtracker.entity.PracticeSession::getId)
+                    .collect(Collectors.toList());
+        }
+        if (sessionIds.isEmpty()) return;
+
+        // 解決したセッションの CANCELLED 参加者を1クエリで取得し、試合単位のキー集合を作る
+        // （matchNumber=null の抜け番マーカー行は除外する）
+        Set<String> cancelledKeys = practiceParticipantRepository
+                .findBySessionIdInAndStatus(sessionIds, ParticipantStatus.CANCELLED).stream()
+                .filter(pp -> pp.getMatchNumber() != null)
+                .map(pp -> cancellationKey(pp.getPlayerId(), pp.getMatchNumber()))
+                .collect(Collectors.toSet());
+        if (cancelledKeys.isEmpty()) return;
+
+        // 各組について、自身の matchNumber を使って per-match で判定する
+        for (MatchPairingDto dto : dtos) {
+            Integer matchNumber = dto.getMatchNumber();
+            if (cancelledKeys.contains(cancellationKey(dto.getPlayer1Id(), matchNumber))) {
+                dto.setPlayer1Cancelled(true);
+            }
+            if (cancelledKeys.contains(cancellationKey(dto.getPlayer2Id(), matchNumber))) {
+                dto.setPlayer2Cancelled(true);
+            }
+        }
+    }
+
+    /**
+     * キャンセル判定用キー（"playerId:matchNumber"）を生成する。
+     */
+    private String cancellationKey(Long playerId, Integer matchNumber) {
+        return playerId + ":" + matchNumber;
     }
 
     /**

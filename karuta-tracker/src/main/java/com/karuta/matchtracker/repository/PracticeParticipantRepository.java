@@ -276,6 +276,15 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Long playerId, ParticipantStatus status);
 
     /**
+     * 複数セッション・指定ステータスの参加者をまとめて取得（N+1回避）。
+     *
+     * 対戦組み合わせ取得API（read-time）で、その日のセッション群の CANCELLED 参加者を
+     * 1クエリで集めてキャンセル状態フラグを付与するために使用する。
+     */
+    List<PracticeParticipant> findBySessionIdInAndStatus(
+            Collection<Long> sessionIds, ParticipantStatus status);
+
+    /**
      * 指定セッション群のdirty=trueの参加者を取得（伝助書き込み対象）
      */
     @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId IN :sessionIds AND p.dirty = true")
