@@ -414,7 +414,9 @@ const PairingGenerator = () => {
       // キャッシュとマップを更新
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
       pairingsCache.current[matchNumber] = pairingsRes.data;
-      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: true }));
+      // キャンセル空き組のみで空保存した場合は再取得結果が空になり得るため、実データ件数で判定する
+      // （固定 true だとタブの完了チェックや LINE 送信導線が「完成済み」と誤判定する）。
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: (pairingsRes.data?.length || 0) > 0 }));
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
 
