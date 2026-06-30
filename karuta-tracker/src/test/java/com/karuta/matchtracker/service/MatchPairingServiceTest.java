@@ -1919,6 +1919,48 @@ class MatchPairingServiceTest {
             assertThat(savedByes.get(0).getPlayerId()).isEqualTo(3L);
             assertThat(savedByes.get(0).getMatchNumber()).isNull();
         }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("同一リクエスト内で待機者IDが重複していても抜け番は1件だけ保存する（冪等・PR #959 review）")
+        void shouldDeduplicateDuplicateWaitingPlayerIds() {
+            // Given: waitingPlayerIds に同じ player3 が重複して含まれる
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            List<MatchPairingCreateRequest> requests = List.of(
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 2L)
+            );
+            List<Long> waitingPlayerIds = List.of(3L, 3L);
+
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(sessionDate).totalMatches(7).build();
+
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.saveAll(anyList()))
+                    .thenReturn(new ArrayList<>(List.of(createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L))));
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(Collections.emptyList());
+
+            ArgumentCaptor<List<PracticeParticipant>> byeCaptor = ArgumentCaptor.forClass(List.class);
+
+            // When
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy, null);
+
+            // Then: player3 の抜け番は重複せず1件だけ保存される
+            verify(practiceParticipantRepository).saveAll(byeCaptor.capture());
+            List<PracticeParticipant> savedByes = byeCaptor.getValue();
+            assertThat(savedByes).hasSize(1);
+            assertThat(savedByes.get(0).getPlayerId()).isEqualTo(3L);
+            assertThat(savedByes.get(0).getMatchNumber()).isNull();
+        }
     }
 
     @Nested

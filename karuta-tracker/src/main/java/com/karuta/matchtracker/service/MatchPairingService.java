@@ -318,6 +318,9 @@ public class MatchPairingService {
                         .collect(Collectors.toSet());
                 List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
                         .filter(playerId -> !existingByePlayerIds.contains(playerId))
+                        // 同一リクエスト内に重複した playerId があっても抜け番を二重生成しない
+                        // （matchNumber=null にはユニーク制約が効かないため冪等性を実装で担保する。PR #959 review）
+                        .distinct()
                         .map(playerId -> PracticeParticipant.builder()
                                 .sessionId(session.getId())
                                 .playerId(playerId)
