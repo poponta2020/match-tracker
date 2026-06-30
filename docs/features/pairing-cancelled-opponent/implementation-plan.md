@@ -38,7 +38,7 @@ status: draft
 - **依存タスク:** タスク1
 
 ### タスク4: ドキュメント更新
-- [ ] 完了
+- [x] 完了
 - **概要:** CLAUDE.md ルールに従い仕様・画面・設計ドキュメントへ反映。
 - **変更対象ファイル:**
   - `docs/SPECIFICATION.md` / `docs/SCREEN_LIST.md` / `docs/DESIGN.md` — 対戦組み合わせのキャンセル反映（閲覧＝表示・編集＝空き）を追記
