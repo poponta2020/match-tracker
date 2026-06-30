@@ -26,3 +26,68 @@ export const shouldShowParticipantSection = (pairings) => pairings.length === 0;
  */
 export const shouldShowAutoMatchButton = ({ isReadOnly, sessionDate, participants, pairings }) =>
   !isReadOnly && !!sessionDate && participants.length > 0 && pairings.length === 0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 対戦相手キャンセル（pairing-cancelled-opponent）表示判定
+//
+// 取得API（getByDateAndMatchNumber 等）の各組DTOに付与される
+// player1Cancelled / player2Cancelled（read-time・非破壊で算出されるboolean）を
+// 閲覧/編集モードでどう扱うかの純粋関数。本番JSXとテストで同じ関数を import し、
+// 条件式をテスト側にコピーしないことで退行を確実に検知する。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * その組の両選手がともにキャンセル済みか。
+ * 両方キャンセルの組は試合として成立しないため、閲覧モードでは行ごと非表示・
+ * 編集モードでは行ごと除去する。
+ *
+ * @param {object} pairing 組（player1Cancelled / player2Cancelled を含みうる）
+ * @returns {boolean}
+ */
+export const isBothCancelled = (pairing) =>
+  !!(pairing && pairing.player1Cancelled && pairing.player2Cancelled);
+
+/**
+ * その組のいずれか一方でもキャンセル済みか。
+ * 閲覧モードでキャンセルタグ付きの行として描画するかの判定に使う。
+ *
+ * @param {object} pairing 組（player1Cancelled / player2Cancelled を含みうる）
+ * @returns {boolean}
+ */
+export const hasAnyCancelled = (pairing) =>
+  !!(pairing && (pairing.player1Cancelled || pairing.player2Cancelled));
+
+/**
+ * 閲覧→編集モードへ切り替える際に、キャンセルスロットを「空き」として実体化した
+ * 新しい pairings 配列を返す（イミュータブル：新配列・新オブジェクト）。
+ *
+ * - 両方キャンセルの組は除去（filter で落とす）。「空き vs 空き」の無意味な行を残さない。
+ * - 片方キャンセルの組は、その選手の playerXId / playerXName を null にし、
+ *   playerXCancelled を false に戻す（＝編集モードの既存ロジックで「空き」スロットになる）。
+ * - それ以外（キャンセルなし）の組はそのまま（同一参照ではなく内容は不変）。
+ *
+ * これにより編集モードの描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は
+ * 既存ロジックのまま動き、キャンセル者は空きになって保存時に未完成組として送信されず、
+ * 生存側の選手はアクティブ参加者として残る（データ消失なし）。
+ *
+ * @param {Array} pairings 閲覧モードの組配列
+ * @returns {Array} 編集モード用に実体化した新しい組配列
+ */
+export const materializeCancelledSlots = (pairings) =>
+  (pairings || [])
+    .filter((p) => !isBothCancelled(p))
+    .map((p) => {
+      if (!hasAnyCancelled(p)) return { ...p };
+      const next = { ...p };
+      if (next.player1Cancelled) {
+        next.player1Id = null;
+        next.player1Name = null;
+        next.player1Cancelled = false;
+      }
+      if (next.player2Cancelled) {
+        next.player2Id = null;
+        next.player2Name = null;
+        next.player2Cancelled = false;
+      }
+      return next;
+    });

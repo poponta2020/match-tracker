@@ -9,7 +9,8 @@ import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, isBothCancelled, hasAnyCancelled, materializeCancelledSlots } from './pairingDisplayLogic';
+import { Ban } from 'lucide-react';
 import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
@@ -1087,6 +1088,140 @@ describe('LINE送信用テキスト生成導線（lineTextTarget）', () => {
     it('単一試合は matchNumber を付ける', () => {
       expect(buildSummaryUrl('2026-06-09', 2, 'single')).toBe('/pairings/summary?date=2026-06-09&matchNumber=2');
     });
+  });
+});
+
+describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', () => {
+  afterEach(cleanup);
+
+  // 本番 PairingGenerator.jsx の閲覧モード行と同一構造・同一 className を、
+  // 本番が import する純粋関数（isBothCancelled / hasAnyCancelled）で分岐させて再現する。
+  // 条件式をテスト側にコピーせず実関数を呼ぶことで、本番側の判定が変われば確実に失敗する。
+  const ViewRow = ({ pairing }) => {
+    if (isBothCancelled(pairing)) return null;
+    if (hasAnyCancelled(pairing)) {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center justify-center gap-3">
+            <span className={`font-medium text-sm ${pairing.player1Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player1Name}</span>
+            <span className="text-[#a5b4aa] text-xs">vs</span>
+            <span className={`font-medium text-sm ${pairing.player2Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player2Name}</span>
+          </div>
+          <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+            <Ban className="w-3 h-3" />
+            キャンセル
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center justify-center gap-3">
+        <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
+        <span className="text-[#a5b4aa] text-xs">vs</span>
+        <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
+      </div>
+    );
+  };
+
+  const ViewList = ({ pairings }) => (
+    <div data-testid="view-list">
+      {pairings.map((pairing, index) => (
+        isBothCancelled(pairing) ? null : (
+          <div key={index} data-testid={`row-${index}`}>
+            <ViewRow pairing={pairing} />
+          </div>
+        )
+      ))}
+    </div>
+  );
+
+  it('片方キャンセル: キャンセルした選手名に line-through が付きキャンセルタグが出る', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: true },
+    ];
+    const { container } = render(<ViewList pairings={pairings} />);
+    expect(screen.getByText('キャンセル')).toBeInTheDocument();
+    // キャンセル側（山田）に取消線、生存側（鈴木）には付かない
+    const yamada = screen.getByText('山田');
+    expect(yamada.className).toContain('line-through');
+    expect(yamada.className).toContain('text-gray-400');
+    const suzuki = screen.getByText('鈴木');
+    expect(suzuki.className).not.toContain('line-through');
+    expect(suzuki.className).toContain('text-[#374151]');
+    // 行は描画されている
+    expect(container.querySelector('[data-testid="row-0"]')).toBeTruthy();
+  });
+
+  it('player1 側キャンセルでも左の選手名に line-through が付く', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: true, player2Id: 20, player2Name: '山田', player2Cancelled: false },
+    ];
+    render(<ViewList pairings={pairings} />);
+    expect(screen.getByText('鈴木').className).toContain('line-through');
+    expect(screen.getByText('山田').className).not.toContain('line-through');
+    expect(screen.getByText('キャンセル')).toBeInTheDocument();
+  });
+
+  it('両方キャンセル: その行は描画されない（タグも名前も出ない）', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: true, player2Id: 20, player2Name: '山田', player2Cancelled: true },
+    ];
+    const { container } = render(<ViewList pairings={pairings} />);
+    expect(container.querySelector('[data-testid="row-0"]')).toBeNull();
+    expect(screen.queryByText('鈴木')).not.toBeInTheDocument();
+    expect(screen.queryByText('山田')).not.toBeInTheDocument();
+    expect(screen.queryByText('キャンセル')).not.toBeInTheDocument();
+  });
+
+  it('キャンセルなし: 通常表示（取消線・タグなし、中央寄せ）', () => {
+    const pairings = [
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: false },
+    ];
+    render(<ViewList pairings={pairings} />);
+    expect(screen.queryByText('キャンセル')).not.toBeInTheDocument();
+    expect(screen.getByText('鈴木').className).not.toContain('line-through');
+    expect(screen.getByText('山田').className).not.toContain('line-through');
+  });
+
+  it('混在: 両方キャンセル行のみ消え、片方キャンセル・通常行は残る（インデックス保持）', () => {
+    const pairings = [
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: true },   // 消える
+      { player1Id: 3, player1Name: 'C', player1Cancelled: false, player2Id: 4, player2Name: 'D', player2Cancelled: true },  // 片方
+      { player1Id: 5, player1Name: 'E', player1Cancelled: false, player2Id: 6, player2Name: 'F', player2Cancelled: false }, // 通常
+    ];
+    const { container } = render(<ViewList pairings={pairings} />);
+    // index 0 は両キャンセルで非表示、index 1/2 は残る（map index 保持）
+    expect(container.querySelector('[data-testid="row-0"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-1"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="row-2"]')).toBeTruthy();
+    expect(screen.queryByText('A')).not.toBeInTheDocument();
+    expect(screen.getByText('D').className).toContain('line-through');
+    expect(screen.getByText('E')).toBeInTheDocument();
+    // キャンセルタグは片方キャンセルの1行のみ
+    expect(screen.getAllByText('キャンセル')).toHaveLength(1);
+  });
+
+  it('編集モードへ入ると（materializeCancelledSlots）キャンセル者が空きスロット化し保存対象から外れる', () => {
+    // 「編集」ボタン onClick の materializeCancelledSlots → 編集モード描画/保存ロジックの回帰。
+    const viewPairings = [
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: true },   // 両 → 除去
+      { player1Id: 3, player1Name: 'C', player1Cancelled: false, player2Id: 4, player2Name: 'D', player2Cancelled: true },  // 片 → D 空き
+      { player1Id: 5, player1Name: 'E', player1Cancelled: false, player2Id: 6, player2Name: 'F', player2Cancelled: false }, // 通常
+    ];
+    const editPairings = materializeCancelledSlots(viewPairings);
+    // 両キャンセル行は除去
+    expect(editPairings).toHaveLength(2);
+    // 片キャンセルの生存側 C は残り、D は空き（null）でフラグ解除
+    expect(editPairings[0].player1Id).toBe(3);
+    expect(editPairings[0].player2Id).toBeNull();
+    expect(editPairings[0].player2Cancelled).toBe(false);
+
+    // 保存リクエストには「両選手揃った組」のみ含まれる（buildSaveRequests）。
+    // → 空きスロットになった C-D 組は送信されず（C は生存者としてプールに戻る）、
+    //   E-F の通常組のみ送信される。データ消失なし。
+    const requests = buildSaveRequests(editPairings);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toEqual({ player1Id: 5, player2Id: 6, locked: false });
   });
 });
 
