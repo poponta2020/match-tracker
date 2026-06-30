@@ -941,6 +941,15 @@ describe('手動ロック（pairing-manual-lock）', () => {
       // 待機者がいれば保存対象あり
       expect(hasNothingToSave([], [{ id: 9 }])).toBe(false);
     });
+
+    it('キャンセル由来の空き組のみでも保存対象あり（既存組を削除するため handleSave を進める）', () => {
+      // 「生存側 vs 空き」のキャンセル由来組だけが残り、完成ペアも待機者も無いケース。
+      // handleSave 冒頭の hasNothingToSave で早期 return させず、空 requests で createBatch を呼ばせる。
+      const pairings = [{ player1Id: 3, player2Id: null, cancelledEmptied: true }];
+      expect(hasNothingToSave(pairings, [])).toBe(false);
+      // 送信 requests は空（未完成組は含めない）→ createBatch(date, n, [], []) で既存組が削除される
+      expect(buildSaveRequests(pairings)).toEqual([]);
+    });
   });
 });
 

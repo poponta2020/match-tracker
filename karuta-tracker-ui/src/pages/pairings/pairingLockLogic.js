@@ -43,6 +43,10 @@ export const buildSaveRequests = (pairings) =>
  */
 export const hasNothingToSave = (pairings, waitingPlayers) =>
   pairings.filter((p) => !p.hasResult && p.player1Id && p.player2Id).length === 0
+  // キャンセル由来の空き組（cancelledEmptied）は「削除して保存する対象」なので保存対象なしにしない。
+  // これがあると handleSave が空 requests で createBatch を呼び、孤立した既存組を削除できる
+  // （「生存側 vs 空き」だけが残る試合でも空きのまま保存して組レコードを消せる。pairing-cancelled-opponent）。
+  && !pairings.some((p) => p.cancelledEmptied)
   && waitingPlayers.length === 0;
 
 /**
