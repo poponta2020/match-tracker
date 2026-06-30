@@ -351,6 +351,8 @@ Entity Layer (JPA Entity)
 | created_at | DATETIME | NOT NULL | 登録日時 |
 | updated_at | DATETIME | NOT NULL | 更新日時 |
 
+**対戦相手キャンセルの反映（read-time・スキーマ変更なし、pairing-cancelled-opponent）**: 参加者キャンセル（`practice_participants.status=CANCELLED`）の組み合わせ表示への反映は `match_pairings` を一切変更せず、取得API（`MatchPairingService.getByDate` / `getByDateAndMatchNumber` → `enrichWithCancellation`）が `(その日のセッション, 選手, 試合番号)` の CANCELLED を引き当てて DTO に `player1Cancelled` / `player2Cancelled` を付与する read-time 方式。`PracticeParticipantRepository.findBySessionIdIn` で当日セッション群の全参加者を1クエリ取得し、メンバーシップ（誰がどの試合でどのセッションに居るか）と CANCELLED 集合 `(sessionId:playerId:matchNumber)` を導出。各組は**両選手が共に属するセッション（＝その組が行われたセッション）を解決し、そのセッション内のキャンセルだけを反映する**（org非指定で同一選手が同日同試合番号で別団体セッションにも居る場合のクロス団体誤反映を防ぐ）。試合単位判定・`match_number=null` の抜け番マーカーは除外。org指定=当該団体セッション / org非指定=その日の全セッションを対象にする。閲覧モードは取消線＋グレー名＋「キャンセル」タグ、編集モードは当該スロットを空きに（フロント純粋関数 `materializeCancelledSlots`）。両方キャンセルの組は閲覧で非表示・編集で除去。
+
 **ユニークインデックス**: `uq_match_pairings_date_number_players (session_date, match_number, LEAST(player1_id, player2_id), GREATEST(player1_id, player2_id))`（順不同ペアの関数ユニークインデックス。同日・同試合番号・同ペアの重複登録を防止。`match_pairings` は `matches` と異なり `player1_id < player2_id` を正規化しないため LEAST/GREATEST で順不同に正規化する。Hibernate では関数インデックスを管理できないため Render PostgreSQL へ手動適用。Issue #900）
 
 **重複・ゾンビ組み合わせ対策**（`MatchPairingService`、Issue #900）:

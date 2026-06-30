@@ -202,4 +202,34 @@ describe('computeDragResult', () => {
       expect(original).toEqual(originalCopy);
     });
   });
+
+  describe('cancelledEmptied マーカーの解除（pairing-cancelled-opponent）', () => {
+    it('待機者をキャンセル空きスロットへ配置すると cancelledEmptied が解除される', () => {
+      const pairings = [{ player1Id: 1, player1Name: 'A', player2Id: null, player2Name: null, cancelledEmptied: true }];
+      const result = computeDragResult({
+        source: { type: 'waiting' },
+        dest: { slotType: 'pairing-player2', pairingIndex: 0 },
+        draggedPlayerId: 9, draggedPlayerName: 'C',
+        pairings, waitingPlayers: [{ id: 9, name: 'C' }],
+      });
+      expect(result.pairings[0].player2Id).toBe(9);
+      expect(result.pairings[0].cancelledEmptied).toBe(false);
+    });
+
+    it('組内スロット間で編集された組は cancelledEmptied が解除される', () => {
+      const pairings = [
+        { player1Id: 1, player1Name: 'A', player2Id: null, player2Name: null, cancelledEmptied: true }, // A vs 空き
+        { player1Id: 3, player1Name: 'C', player2Id: 4, player2Name: 'D' },
+      ];
+      const result = computeDragResult({
+        source: { type: 'pairing', pairingIndex: 1, position: 2 },
+        dest: { slotType: 'pairing-player2', pairingIndex: 0 },
+        draggedPlayerId: 4, draggedPlayerName: 'D',
+        pairings, waitingPlayers: [],
+      });
+      const aPair = result.pairings.find(p => p.player1Id === 1);
+      expect(aPair.player2Id).toBe(4);
+      expect(aPair.cancelledEmptied).toBe(false);
+    });
+  });
 });

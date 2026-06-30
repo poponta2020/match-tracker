@@ -5,7 +5,7 @@ import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, Unlock, RotateCcw } from 'lucide-react';
+import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, Unlock, RotateCcw, Ban } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import PlayerChip from '../../components/PlayerChip';
@@ -16,10 +16,10 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
-import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair } from './pairingLockLogic';
 
 
 const PairingGenerator = () => {
@@ -127,6 +127,10 @@ const PairingGenerator = () => {
       winnerName: p.winnerName || null,
       scoreDifference: p.scoreDifference ?? null,
       matchId: p.matchId || null,
+      // 対戦相手キャンセル（read-time・非破壊でAPIが付与）。閲覧モードでの取消線/タグ表示・
+      // 編集モード切替時の「空き」実体化に使う。
+      player1Cancelled: p.player1Cancelled || false,
+      player2Cancelled: p.player2Cancelled || false,
     }));
     setPairings(converted);
 
@@ -410,7 +414,9 @@ const PairingGenerator = () => {
       // キャッシュとマップを更新
       const pairingsRes = await pairingAPI.getByDateAndMatchNumber(sessionDate, matchNumber);
       pairingsCache.current[matchNumber] = pairingsRes.data;
-      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: true }));
+      // キャンセル空き組のみで空保存した場合は再取得結果が空になり得るため、実データ件数で判定する
+      // （固定 true だとタブの完了チェックや LINE 送信導線が「完成済み」と誤判定する）。
+      setMatchExistsMap(prev => ({ ...prev, [matchNumber]: (pairingsRes.data?.length || 0) > 0 }));
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
 
@@ -987,7 +993,16 @@ const PairingGenerator = () => {
             )}
             {!isReadOnly && isViewMode && (
               <button
-                onClick={() => { setIsViewMode(false); setHasUnsavedChanges(true); saveDraft(pairings, waitingPlayers, isEditingExisting); }}
+                onClick={() => {
+                  // 編集モードへ入る際、キャンセルスロットを実体化（両キャンセル組は除去・
+                  // 片キャンセル選手は「空き」に）してから切り替える。これにより編集モードの
+                  // 描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は既存ロジックのまま動く。
+                  const materialized = materializeCancelledSlots(pairings);
+                  setPairings(materialized);
+                  setIsViewMode(false);
+                  setHasUnsavedChanges(true);
+                  saveDraft(materialized, waitingPlayers, isEditingExisting);
+                }}
                 className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -998,9 +1013,13 @@ const PairingGenerator = () => {
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
             {pairings.map((pairing, index) => (
-              <div key={index} className={`px-3 py-2.5 ${(pairing.hasResult || pairing.locked) ? 'bg-gray-50' : ''}`}>
-                {(pairing.hasResult || pairing.locked) ? (
-                  /* ロック済み（結果入力済み or 手動ロック）表示 */
+              // 両方キャンセルの組は閲覧モードで非表示（試合として成立しないため。結果入力済みは結果を残す）。
+              // インデックスを保持するため filter ではなく map 内で null を返す。
+              shouldHideRow(pairing) ? null : (
+              <div key={index} className={`px-3 py-2.5 ${showsResultLockedRow(pairing) ? 'bg-gray-50' : ''}`}>
+                {showsResultLockedRow(pairing) ? (
+                  /* ロック/結果表示（結果入力済み、またはキャンセルなしの手動ロック）。
+                     片方キャンセルのある手動ロック組はここに来ず、下のキャンセル表示/空き化に回る。 */
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center justify-center gap-3">
                       <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>
@@ -1043,12 +1062,28 @@ const PairingGenerator = () => {
                     )}
                   </div>
                 ) : (isReadOnly || isViewMode) ? (
-                  /* 閲覧モード */
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
-                    <span className="text-[#a5b4aa] text-xs">vs</span>
-                    <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
-                  </div>
+                  hasAnyCancelled(pairing) ? (
+                    /* 閲覧モード（片方キャンセル）: 結果入力済の行と同一構造。
+                       取消線が付いた方がキャンセルした選手。タグは常に右端。 */
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center justify-center gap-3">
+                        <span className={`font-medium text-sm ${pairing.player1Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player1Name}</span>
+                        <span className="text-[#a5b4aa] text-xs">vs</span>
+                        <span className={`font-medium text-sm ${pairing.player2Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player2Name}</span>
+                      </div>
+                      <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        <Ban className="w-3 h-3" />
+                        キャンセル
+                      </span>
+                    </div>
+                  ) : (
+                    /* 閲覧モード（通常） */
+                    <div className="flex items-center justify-center gap-3">
+                      <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
+                      <span className="text-[#a5b4aa] text-xs">vs</span>
+                      <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
+                    </div>
+                  )
                 ) : (
                   /* 編集モード: ドラッグ＆ドロップ */
                   <div className="flex items-center gap-2">
@@ -1111,6 +1146,7 @@ const PairingGenerator = () => {
                   </div>
                 )}
               </div>
+              )
             ))}
           </div>
 
@@ -1241,7 +1277,7 @@ const PairingGenerator = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={loading || pairings.some(p => !(p.hasResult || p.locked) && (!p.player1Id || !p.player2Id))}
+                  disabled={loading || hasBlockingIncompletePair(pairings)}
                   className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
                 >
                   <Check className="w-5 h-5" />

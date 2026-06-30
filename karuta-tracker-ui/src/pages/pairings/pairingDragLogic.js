@@ -37,6 +37,10 @@ export function computeDragResult({ source, dest, draggedPlayerId, draggedPlayer
 
     const srcPairing = newPairings[srcIdx];
     const dstPairing = newPairings[dstIdx];
+    // ユーザーが手で編集した組はキャンセル由来の空き組ではなくなるためマーカーを解除する
+    // （でないと再度空きにした際に「確定して保存」ボタンの未完成ガードをすり抜ける）。
+    srcPairing.cancelledEmptied = false;
+    dstPairing.cancelledEmptied = false;
 
     const dstPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
     const dstPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
@@ -90,6 +94,7 @@ export function computeDragResult({ source, dest, draggedPlayerId, draggedPlayer
     const dstIdx = dest.pairingIndex;
     const dstPos = destType === 'pairing-player1' ? 1 : 2;
     const dstPairing = newPairings[dstIdx];
+    dstPairing.cancelledEmptied = false; // ユーザー編集でキャンセル由来マーカーを解除
 
     const oldPlayerId = dstPos === 1 ? dstPairing.player1Id : dstPairing.player2Id;
     const oldPlayerName = dstPos === 1 ? dstPairing.player1Name : dstPairing.player2Name;
@@ -113,6 +118,7 @@ export function computeDragResult({ source, dest, draggedPlayerId, draggedPlayer
     const srcIdx = source.pairingIndex;
     const srcPos = source.position;
     const srcPairing = newPairings[srcIdx];
+    srcPairing.cancelledEmptied = false; // ユーザー編集でキャンセル由来マーカーを解除
 
     newWaiting.push({ id: draggedPlayerId, name: draggedPlayerName });
 

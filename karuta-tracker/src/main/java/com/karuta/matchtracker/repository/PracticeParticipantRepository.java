@@ -276,6 +276,13 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Long playerId, ParticipantStatus status);
 
     /**
+     * 複数セッションの参加者をまとめて取得（N+1回避）。
+     * read-time のキャンセル反映で「どのセッションに誰が居るか（メンバーシップ）」と
+     * 「CANCELLED の (session, player, match)」をセッション単位で導出するために使う。
+     */
+    List<PracticeParticipant> findBySessionIdIn(Collection<Long> sessionIds);
+
+    /**
      * 指定セッション群のdirty=trueの参加者を取得（伝助書き込み対象）
      */
     @Query("SELECT p FROM PracticeParticipant p WHERE p.sessionId IN :sessionIds AND p.dirty = true")
