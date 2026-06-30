@@ -426,7 +426,9 @@ const PairingGenerator = () => {
       }
     } catch (err) {
       console.error('Save failed:', err);
-      setError('保存に失敗しました');
+      // サーバーが返す具体的な理由（例: 対象セッションの参加者でない選手は…）を優先表示する。
+      // 固定文言だけだと「どの選手が・なぜ」弾かれたか分からず、原因不明のリトライを招く（Issue #958）。
+      setError(err.response?.data?.message || '保存に失敗しました');
     } finally {
       setLoading(false);
     }
