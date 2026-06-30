@@ -73,6 +73,9 @@ class MatchServiceTest {
     @Mock
     private MentorRelationshipRepository mentorRelationshipRepository;
 
+    @Mock
+    private PracticeParticipantService practiceParticipantService;
+
     @InjectMocks
     private MatchService matchService;
 
@@ -1452,6 +1455,92 @@ class MatchServiceTest {
 
             // Then: ペアリングは保存されない
             verify(matchPairingRepository, never()).save(any(MatchPairing.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("未参加相手の自動参加登録（試合保存の副作用）")
+    class AutoRegisterMatchParticipantTests {
+
+        private MatchCreateRequest detailedRequest() {
+            MatchCreateRequest request = new MatchCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayer1Id(1L);
+            request.setPlayer2Id(2L);
+            request.setWinnerId(1L);
+            request.setScoreDifference(5);
+            request.setCreatedBy(1L);
+            return request;
+        }
+
+        private void stubCreateMatchCommon() {
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.existsById(1L)).thenReturn(true);
+            when(playerRepository.existsById(2L)).thenReturn(true);
+            when(matchRepository.findByMatchDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
+            when(matchPairingRepository.findBySessionDateAndMatchNumberAndPlayers(today, 1, 1L, 2L))
+                    .thenReturn(Optional.empty());
+            when(playerRepository.findAllById(any())).thenReturn(List.of(player1, player2));
+        }
+
+        @Test
+        @DisplayName("当日セッションが1件なら両選手の自動参加登録を委譲する（未参加相手が参加登録される）")
+        void shouldDelegateAutoRegistrationForBothPlayers() {
+            // Given
+            stubCreateMatchCommon();
+            com.karuta.matchtracker.entity.PracticeSession session =
+                    com.karuta.matchtracker.entity.PracticeSession.builder()
+                            .id(100L).sessionDate(today).totalMatches(3).organizationId(1L).build();
+            when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(session));
+
+            // When
+            matchService.createMatch(detailedRequest(), 1L, Player.Role.PLAYER);
+
+            // Then: 試合番号に対して両選手の自動参加登録が委譲される（冪等性は PracticeParticipantService 側で担保）
+            verify(practiceParticipantService).autoRegisterMatchParticipant(100L, 1L, 1);
+            verify(practiceParticipantService).autoRegisterMatchParticipant(100L, 2L, 1);
+        }
+
+        @Test
+        @DisplayName("当日セッションが特定できない場合は自動参加登録しない（安全側スキップ）")
+        void shouldSkipWhenSessionNotResolvable() {
+            // Given: findByDateRange は未スタブ → 空リスト（同日セッション特定不能）
+            stubCreateMatchCommon();
+
+            // When
+            matchService.createMatch(detailedRequest(), 1L, Player.Role.PLAYER);
+
+            // Then
+            verify(practiceParticipantService, never())
+                    .autoRegisterMatchParticipant(anyLong(), anyLong(), anyInt());
+        }
+
+        @Test
+        @DisplayName("簡易版（未登録相手）の試合では自動参加登録しない")
+        void shouldNotAutoRegisterForSimpleMatch() {
+            // Given
+            MatchSimpleCreateRequest request = new MatchSimpleCreateRequest();
+            request.setMatchDate(today);
+            request.setMatchNumber(1);
+            request.setPlayerId(1L);
+            request.setOpponentName("未登録選手");
+            request.setResult("勝ち");
+            request.setScoreDifference(5);
+
+            when(practiceSessionRepository.existsBySessionDate(today)).thenReturn(true);
+            when(playerRepository.findById(1L)).thenReturn(Optional.of(player1));
+            when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(playerRepository.findAllById(anyList())).thenReturn(List.of(player1));
+
+            // When
+            matchService.createMatchSimple(request, 1L, Player.Role.PLAYER);
+
+            // Then: 簡易版は自動参加登録経路を通らない
+            verify(practiceParticipantService, never())
+                    .autoRegisterMatchParticipant(anyLong(), anyLong(), anyInt());
         }
     }
 

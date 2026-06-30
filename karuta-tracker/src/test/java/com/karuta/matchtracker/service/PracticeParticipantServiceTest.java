@@ -1062,4 +1062,49 @@ class PracticeParticipantServiceTest {
             assertThat(top3.get(0).getRate()).isEqualTo(4.0 / 7.0);
         }
     }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("autoRegisterMatchParticipant（試合記録に伴う自動参加登録）")
+    class AutoRegisterMatchParticipantTests {
+
+        @Test
+        @DisplayName("未参加なら WON で参加登録される")
+        void registersWonWhenNotParticipating() {
+            when(practiceParticipantRepository
+                    .existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(false);
+
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isTrue();
+            verify(practiceParticipantRepository).save(participantCaptor.capture());
+            PracticeParticipant saved = participantCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(saved.getSessionId()).isEqualTo(100L);
+            assertThat(saved.getPlayerId()).isEqualTo(10L);
+            assertThat(saved.getMatchNumber()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("既にアクティブ参加なら二重登録しない（冪等）")
+        void idempotentWhenAlreadyParticipating() {
+            when(practiceParticipantRepository
+                    .existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(true);
+
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isFalse();
+            verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        }
+
+        @Test
+        @DisplayName("未登録相手（playerId=0）・null引数では登録しない")
+        void skipsForInvalidArguments() {
+            assertThat(service.autoRegisterMatchParticipant(100L, 0L, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(null, 10L, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(100L, null, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(100L, 10L, null)).isFalse();
+
+            verifyNoInteractions(practiceParticipantRepository);
+        }
+    }
 }
