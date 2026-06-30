@@ -34,3 +34,18 @@ export const defaultDanForKyu = (kyuRank) => {
       return '';
   }
 };
+
+/**
+ * 級位を頭文字1字の短縮ラベルに整形する（例: "A級" → "(A)"）。表示専用。
+ *
+ * 対戦相手名の脇に控えめに級を出すため、"A級〜E級" の頭文字だけを括弧付きで返す。
+ * 未設定（null/undefined/空文字/文字列以外）の場合は空文字を返し、呼び出し側で非表示にできる。
+ *
+ * @param {string} kyuRank 級位（"A級"〜"E級" 等）
+ * @returns {string} "(A)" 形式の短縮ラベル。未設定時は ""
+ */
+export const kyuRankShortLabel = (kyuRank) => {
+  if (typeof kyuRank !== 'string') return '';
+  const initial = kyuRank.trim().charAt(0);
+  return initial ? `(${initial})` : '';
+};
