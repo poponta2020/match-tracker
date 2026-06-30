@@ -1082,6 +1082,9 @@ class PracticeParticipantServiceTest {
             assertThat(saved.getSessionId()).isEqualTo(100L);
             assertThat(saved.getPlayerId()).isEqualTo(10L);
             assertThat(saved.getMatchNumber()).isEqualTo(1);
+            // dirty=true で保存され、次回の伝助同期で反映される（waitlistNumber は持たない）
+            assertThat(saved.isDirty()).isTrue();
+            assertThat(saved.getWaitlistNumber()).isNull();
         }
 
         @Test

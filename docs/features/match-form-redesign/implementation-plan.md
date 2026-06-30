@@ -63,7 +63,7 @@ status: completed
 - **依存タスク:** タスク1（BulkResultInput は getById 経由で venueName が来ること）
 
 ### タスク6: 自動参加登録の影響範囲・回帰確認【backend】
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #967
 - **概要:** 自動参加登録が 参加者数・容量（matchCapacityStatuses）・ペアリング・抽選・通知 に与える影響を確認し、想定外の副作用がないことを検証（必要なら回帰テスト追加）。
 - **変更対象ファイル:**
