@@ -1,0 +1,152 @@
+/* 試合フォーム（MatchForm）本文スタイル — Anti-Slop 階層デザイン本適用
+   design-spec（locked 2026-06-30）の _match-form-final.css ＋ _match-form-ext.css を
+   本番へ移植。ヘッダー（緑ナビ・タブ）とモーダルは Tailwind 側で維持し、本文の
+   主題（対戦相手）・結果/枚数差/お手付き・メモ・アクション・抜け番リストを定義する。
+   トークン: ベース #f2ede6 / 面 #fffdf9 / ink紺 #1A2744 / 主アクション紺 #1A3654 /
+   warm-taupe 系の文字・hairline / セマンティック green-700 #15803d・red-700 #b91c1c。 */
+
+/* ゾーンの小見出しラベル */
+.mf-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: #8a8275;
+}
+
+/* ── ゾーン A：対戦相手（主題：最大の文字） ── */
+.mf-subject { display: flex; align-items: baseline; gap: 10px; }
+.mf-subject--pick { align-items: center; gap: 7px; }
+.mf-vs { font-size: 17px; font-weight: 600; color: #b3ac9e; flex: 0 0 auto; }
+.mf-opp-name {
+  font-size: 28px; font-weight: 700; color: #1A2744; letter-spacing: .01em;
+  line-height: 1.1; min-width: 0; text-align: left;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.mf-grade { font-size: 16px; font-weight: 600; color: #9a9183; margin-left: 5px; letter-spacing: 0; flex: 0 0 auto; align-self: center; }
+/* ▽（相手名のプルダウン affordance）＋検索ボタンを常に行の右端へまとめる */
+.mf-opp-chev { flex: 0 0 auto; align-self: center; color: #9a9183; margin-left: auto; }
+
+/* 相手未選択（簡易入力フロー）：主題位置のセレクト */
+.mf-oppselect { position: relative; flex: 1 1 auto; min-width: 0; }
+.mf-oppselect select {
+  width: 100%; appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent; border-radius: 0;
+  padding: 0 26px 0 0; font: inherit; font-size: 26px; font-weight: 700; color: #1A2744;
+}
+.mf-oppselect select:focus { outline: none; }
+.mf-oppselect select.placeholder { color: #ada697; font-weight: 600; }
+.mf-oppselect .chev { position: absolute; right: 0; top: 50%; transform: translateY(-50%); color: #9a9183; pointer-events: none; }
+
+/* 未参加の選手をシステム全体から検索（控えめな hairline ボタン） */
+.mf-search-other {
+  flex: 0 0 auto; align-self: center;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  border: 1px solid #d8cfbf; border-radius: 10px; background: transparent;
+  color: #5b5446;
+}
+.mf-search-other svg { color: #8a8275; flex: 0 0 auto; }
+.mf-search-other:active { background: rgba(26,39,68,.05); }
+
+/* ── ゾーン B：結果・枚数差・お手付きを1行に横並び ── */
+.mf-controls {
+  margin-top: 24px; display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr; gap: 12px; align-items: end;
+}
+.mf-field { min-width: 0; }
+.mf-field .mf-label { display: block; margin-bottom: 8px; }
+
+/* 結果：箱トグル（勝ち緑／負け赤・選択時のみ文字着色。面で塗らない） */
+.mf-toggle {
+  display: grid; grid-template-columns: 1fr 1fr;
+  height: 46px; border: 1px solid #d8cfbf; border-radius: 10px; overflow: hidden;
+}
+.mf-toggle .opt {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; width: 100%; background: transparent; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 700; color: #b3ac9e; user-select: none;
+}
+.mf-toggle .opt + .opt { border-left: 1px solid #e3dccf; }
+.mf-toggle .opt.win.active  { color: #15803d; }
+.mf-toggle .opt.lose.active { color: #b91c1c; }
+
+/* 枚数差・お手付き：下線・中央・太字の数値ピッカー。
+   数値＋単位（枚/回）を中央で密着、下線はフィールド全幅、chev は右端へ絶対配置。 */
+.mf-picker {
+  position: relative; height: 46px;
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  border-bottom: 1px solid #d0c5b8;
+}
+.mf-picker:focus-within { border-color: #82655a; }
+.mf-picker select {
+  width: auto; appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent; border-radius: 0; padding: 0;
+  text-align: center; text-align-last: center;
+  font: inherit; font-size: 19px; font-weight: 700; color: #1A2744;
+}
+.mf-picker select:focus { outline: none; }
+.mf-picker select.lesson { color: #1A3654; }
+.mf-unit { font-size: 13px; font-weight: 600; color: #9a9183; }
+.mf-picker .chev {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  color: #b3ac9e; pointer-events: none;
+}
+.mf-lesson-hint { margin-top: 6px; font-size: 11px; color: #8a8275; }
+
+/* ── メモ ── */
+.mf-memo { margin-top: 22px; }
+.mf-memo .mf-label { display: block; margin-bottom: 8px; }
+.mf-memo-line {
+  width: 100%; background: transparent; resize: none;
+  border: 0; border-bottom: 1px solid #d8cfbf; border-radius: 0;
+  padding: 4px 0 8px; min-height: 26px; font: inherit; font-size: 15px; color: #1A2744;
+}
+.mf-memo-line::placeholder { color: #ada697; }
+.mf-memo-line:focus { outline: none; border-color: #82655a; }
+
+/* ── アクション行（キャンセル左・テキスト｜登録右・主アクセント） ── */
+.mf-actions { display: flex; align-items: center; gap: 12px; margin-top: 26px; }
+.mf-submit {
+  flex: 1; order: 2; display: flex; align-items: center; justify-content: center;
+  background: #1A3654; color: #fff; padding: 14px 0; border: 0; border-radius: 10px;
+  font-size: 15px; font-weight: 700; letter-spacing: .03em; cursor: pointer;
+}
+.mf-submit:disabled { background: #9ca3af; cursor: not-allowed; }
+.mf-cancel {
+  order: 1; white-space: nowrap; padding: 4px 8px;
+  background: transparent; border: 0; font-size: 13px; color: #8a8275; cursor: pointer;
+}
+
+/* ── 落ち着いた通知（面で塗らず hairline＋小ドット） ── */
+.mf-notice {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 0; margin-bottom: 16px;
+  border-top: 1px solid #e3dccf; border-bottom: 1px solid #e3dccf;
+  font-size: 13px; color: #5b5446;
+}
+.mf-notice .dot { width: 7px; height: 7px; border-radius: 10px; flex: 0 0 auto; }
+.mf-notice.info .dot { background: #1A3654; }
+.mf-notice.warn .dot { background: #b8860b; }
+
+/* ── 抜け番：活動種別の選択（hairline 区切り・選択時のみ ink＋チェック） ── */
+.mf-acts { margin-top: 6px; border-top: 1px solid #e3dccf; }
+.mf-act {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 2px; text-align: left; cursor: pointer;
+  background: transparent; border: 0; border-bottom: 1px solid #e3dccf;
+  font-family: inherit; font-size: 16px; color: #6b6453; user-select: none;
+}
+.mf-act .ic { color: #b3ac9e; flex: 0 0 auto; display: flex; }
+.mf-act .lab { flex: 1; }
+.mf-act .check { color: #1A3654; opacity: 0; flex: 0 0 auto; display: flex; }
+.mf-act.active { color: #1A2744; font-weight: 700; }
+.mf-act.active .ic { color: #1A3654; }
+.mf-act.active .check { opacity: 1; }
+
+/* 未参加検索モーダルのリスト */
+.mf-search-list { max-height: 50vh; overflow-y: auto; }
+.mf-search-row {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 12px 4px; background: transparent; border: 0; border-bottom: 1px solid #efe9df;
+  font-family: inherit; font-size: 16px; color: #1A2744; cursor: pointer;
+}
+.mf-search-row:active { background: rgba(26,39,68,.04); }
+.mf-search-row .grade { font-size: 13px; color: #9a9183; }
