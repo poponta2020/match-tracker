@@ -54,7 +54,7 @@ status: completed
 - **依存タスク:** タスク3
 
 ### タスク5: 会場名ヘッダーの横展開【frontend】
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #966
 - **概要:** MatchResultsView / BulkResultInput のヘッダーに会場名（`venueName`）を表示（design-spec：日付＋会場ヘッダーの横展開）。既存の日付ナビ・操作は維持。`venueName` 無しは日付のみ。
 - **変更対象ファイル:**

@@ -9,6 +9,13 @@ import { computeByePlayersByMatch } from './byePlayersLogic';
 import { getCompletedMatchNumbers, defaultForBulkInput } from './defaultMatchNumber';
 import { scrollActiveTabIntoView } from './tabScroll';
 
+// 緑ヘッダー用の短縮日付（M/D(曜)）。design-spec: 日付＋会場ヘッダー（3画面共通）
+const formatHeaderDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getMonth() + 1}/${d.getDate()}(${d.toLocaleDateString('ja-JP', { weekday: 'short' })})`;
+};
+
 const BulkResultInput = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -560,13 +567,13 @@ const BulkResultInput = () => {
           {/* 日付表示 + 対戦変更ボタン */}
           <div className="flex items-center justify-between py-3">
             <div className="w-10" />
-            <span className="text-lg font-semibold text-white">
-              {session && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short'
-              })}
+            <span className="inline-flex items-baseline gap-2 text-white min-w-0">
+              <span className="text-base font-semibold whitespace-nowrap">
+                {session && formatHeaderDate(session.sessionDate)}
+              </span>
+              {session?.venueName && (
+                <span className="text-sm font-medium text-white/80 truncate">{session.venueName}</span>
+              )}
             </span>
             <button
               onClick={handleChangePairing}

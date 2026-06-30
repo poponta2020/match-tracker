@@ -11,6 +11,13 @@ import { defaultForResultsView } from './defaultMatchNumber';
 import { scrollActiveTabIntoView } from './tabScroll';
 import { todayLocalISODate } from '../../utils/date';
 
+// 緑ヘッダー用の短縮日付（M/D(曜)）。design-spec: 日付＋会場ヘッダー（3画面共通）
+const formatHeaderDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getMonth() + 1}/${d.getDate()}(${d.toLocaleDateString('ja-JP', { weekday: 'short' })})`;
+};
+
 // カレンダーピッカーコンポーネント
 const CalendarPicker = ({ selectedDate, availableDates, onSelectDate, onClose, onMonthChange, calendarLoading }) => {
   const calendarRef = useRef(null);
@@ -622,14 +629,9 @@ const MatchResultsView = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="text-lg font-semibold text-white"
+                  className="inline-flex items-baseline gap-2 text-white"
                 >
-                  {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    weekday: 'short'
-                  })}
+                  <span className="text-base font-semibold">{formatHeaderDate(selectedDate)}</span>
                 </button>
 
                 {showDatePicker && (
@@ -701,14 +703,12 @@ const MatchResultsView = () => {
             <div className="relative">
               <button
                 onClick={() => setShowDatePicker(!showDatePicker)}
-                className="text-lg font-semibold text-white"
+                className="inline-flex items-baseline gap-2 text-white"
               >
-                {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  weekday: 'short'
-                })}
+                <span className="text-base font-semibold">{formatHeaderDate(selectedDate)}</span>
+                {session?.venueName && (
+                  <span className="text-sm font-medium text-white/80">{session.venueName}</span>
+                )}
               </button>
 
               {showDatePicker && (
