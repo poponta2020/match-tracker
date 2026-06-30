@@ -119,5 +119,8 @@ export const materializeCancelledSlots = (pairings) =>
       }
       // 手動ロック組でもキャンセルで組が崩れたら、空きにして編集可能にする（ロック解除）。
       next.locked = false;
+      // キャンセル由来の空き組であることを記録（「確定して保存」ボタンの未完成ガードから除外し、
+      // 空きのまま保存できるようにする。buildSaveRequests では未完成として送信されない）。
+      next.cancelledEmptied = true;
       return next;
     });

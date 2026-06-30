@@ -11,7 +11,7 @@ import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraf
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
-import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
 vi.mock('../../api/client', () => ({
@@ -40,41 +40,43 @@ afterEach(cleanup);
  * 3. DragOverlay のリセット → 下記テストで検証
  */
 
-describe('保存ボタン無効化ロジック', () => {
-  // PairingGenerator の保存ボタンの disabled 条件を再現
-  const isSaveDisabled = (pairings, loading = false) =>
-    loading || pairings.some(p => !p.player1Id || !p.player2Id);
+describe('保存ボタン無効化ロジック（hasBlockingIncompletePair）', () => {
+  // 本番の保存ボタン disabled = loading || hasBlockingIncompletePair(pairings)。
+  // ここでは実関数 hasBlockingIncompletePair を直接検証する（loading は JSX 側で OR）。
+  // 条件式をテスト側にコピーせず実関数を呼ぶことで、本番の判定が変われば確実に失敗する。
 
-  it('全ペアリングが揃っている場合は保存可能', () => {
-    const pairings = [
+  it('全ペアリングが揃っていれば保存可能（false）', () => {
+    expect(hasBlockingIncompletePair([
       { player1Id: 1, player2Id: 2 },
       { player1Id: 3, player2Id: 4 },
-    ];
-    expect(isSaveDisabled(pairings)).toBe(false);
+    ])).toBe(false);
   });
 
-  it('片方が空欄のペアリングがある場合は保存不可', () => {
-    const pairings = [
+  it('片方が空欄の作りかけ組があれば保存不可（true）', () => {
+    expect(hasBlockingIncompletePair([
       { player1Id: 1, player2Id: 2 },
       { player1Id: 3, player2Id: null },
-    ];
-    expect(isSaveDisabled(pairings)).toBe(true);
+    ])).toBe(true);
   });
 
-  it('player1が空欄のペアリングがある場合も保存不可', () => {
-    const pairings = [
-      { player1Id: null, player2Id: 2 },
-    ];
-    expect(isSaveDisabled(pairings)).toBe(true);
+  it('player1 が空欄でも保存不可（true）', () => {
+    expect(hasBlockingIncompletePair([{ player1Id: null, player2Id: 2 }])).toBe(true);
   });
 
-  it('ペアリングが空配列の場合は保存可能（別途チェックあり）', () => {
-    expect(isSaveDisabled([])).toBe(false);
+  it('空配列は保存可能（false。別途 hasNothingToSave でチェック）', () => {
+    expect(hasBlockingIncompletePair([])).toBe(false);
   });
 
-  it('loading中は保存不可', () => {
-    const pairings = [{ player1Id: 1, player2Id: 2 }];
-    expect(isSaveDisabled(pairings, true)).toBe(true);
+  it('結果入力済み・手動ロックの片側空欄はブロックしない（false）', () => {
+    expect(hasBlockingIncompletePair([{ player1Id: 1, player2Id: null, hasResult: true }])).toBe(false);
+    expect(hasBlockingIncompletePair([{ player1Id: 1, player2Id: null, locked: true }])).toBe(false);
+  });
+
+  it('キャンセル由来で空き化した組（cancelledEmptied）はブロックしない＝空きのまま保存できる（false）', () => {
+    expect(hasBlockingIncompletePair([
+      { player1Id: 3, player2Id: null, cancelledEmptied: true },   // C vs 空き（D がキャンセル）
+      { player1Id: 5, player2Id: 6 },
+    ])).toBe(false);
   });
 });
 

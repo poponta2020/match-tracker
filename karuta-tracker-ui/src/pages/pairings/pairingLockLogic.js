@@ -44,3 +44,15 @@ export const buildSaveRequests = (pairings) =>
 export const hasNothingToSave = (pairings, waitingPlayers) =>
   pairings.filter((p) => !p.hasResult && p.player1Id && p.player2Id).length === 0
   && waitingPlayers.length === 0;
+
+/**
+ * 「確定して保存」ボタンを未完成組ゆえに無効化すべきか。
+ * 片方だけ埋まった作りかけの組があれば保存させない既存ガード（結果入力済み・手動ロック組は対象外）。
+ * ただし対戦相手キャンセル由来で空き化された組（cancelledEmptied）は対象外とする。
+ * キャンセルで空いた組は仕様上そのまま保存でき、buildSaveRequests で未完成として送信されず、
+ * 生存側の選手はアクティブ参加者として残る（pairing-cancelled-opponent）。
+ */
+export const hasBlockingIncompletePair = (pairings) =>
+  pairings.some(
+    (p) => !p.hasResult && !p.locked && !p.cancelledEmptied && (!p.player1Id || !p.player2Id)
+  );

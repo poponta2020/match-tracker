@@ -160,6 +160,8 @@ describe('対戦相手キャンセル判定（pairing-cancelled-opponent）', ()
       expect(result[1].player2Id).toBeNull();
       expect(result[1].player2Cancelled).toBe(false);
       expect(result[1].locked).toBe(false);
+      expect(result[1].cancelledEmptied).toBe(true); // 保存ボタンの未完成ガードから除外するマーカー
+      expect(result[0].cancelledEmptied).toBeFalsy(); // 結果入力済み組には付けない
       expect(result[2].player1Id).toBe(5);
     });
   });
