@@ -293,30 +293,39 @@ public class MatchPairingService {
                 ? waitingPlayerIds.stream().filter(id -> !protectedPlayerIds.contains(id)).collect(Collectors.toList())
                 : Collections.emptyList();
 
-        // 抜け番（待機者）をPracticeParticipantにmatchNumber=nullで登録する
-        // waitingPlayerIds が渡された場合は、まず既存抜け番を必ず削除し、フィルタ後の待機者を再登録
-        if (waitingPlayerIds != null) {
+        // 抜け番（待機者）を PracticeParticipant に matchNumber=null で登録する。
+        //
+        // 抜け番（待機）は本来「試合ごと」の概念だが、レコードは matchNumber=null の
+        // 「セッション共有」マーカーとして保持される。そのため旧実装のように保存のたびに
+        // セッション全体の抜け番レコードを全削除して当該試合分だけ再生成すると、別試合の
+        // 当日参加者（ロスター未登録で抜け番レコードだけを持つ選手）の参加者レコードまで
+        // 巻き込んで消えてしまう。一度消えた選手はセッション参加者検証（上の L207-221）で
+        // 弾かれ、以後その選手を含む保存が 403 で失敗し続ける（失敗時は検証で例外となり
+        // 抜け番の再生成にも到達しないため自然回復しない）。
+        // → これを防ぐため非破壊（不足分のみ追加）にする。既存の抜け番レコードは削除しない。
+        //   不要になった抜け番の整理は抜け番活動（ByeActivity）側のライフサイクルに委ねる。
+        //   Issue #958
+        if (waitingPlayerIds != null && !filteredWaitingPlayerIds.isEmpty()) {
             Optional<com.karuta.matchtracker.entity.PracticeSession> byeSessionOpt = organizationId != null
                     ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
                     : practiceSessionRepository.findBySessionDate(sessionDate);
             byeSessionOpt.ifPresent(session -> {
-                // 既存の抜け番登録（matchNumber=null）を一旦削除
-                List<PracticeParticipant> existingBye = practiceParticipantRepository
+                // 既に matchNumber=null の抜け番レコードを持つ選手は二重登録しない（冪等）
+                Set<Long> existingByePlayerIds = practiceParticipantRepository
                         .findBySessionId(session.getId()).stream()
                         .filter(pp -> pp.getMatchNumber() == null)
+                        .map(PracticeParticipant::getPlayerId)
+                        .collect(Collectors.toSet());
+                List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
+                        .filter(playerId -> !existingByePlayerIds.contains(playerId))
+                        .map(playerId -> PracticeParticipant.builder()
+                                .sessionId(session.getId())
+                                .playerId(playerId)
+                                .matchNumber(null)
+                                .dirty(false)
+                                .build())
                         .collect(Collectors.toList());
-                practiceParticipantRepository.deleteAll(existingBye);
-
-                // フィルタ後の待機者を再登録（0件なら登録なし）
-                if (!filteredWaitingPlayerIds.isEmpty()) {
-                    List<PracticeParticipant> byeParticipants = filteredWaitingPlayerIds.stream()
-                            .map(playerId -> PracticeParticipant.builder()
-                                    .sessionId(session.getId())
-                                    .playerId(playerId)
-                                    .matchNumber(null)
-                                    .dirty(false)
-                                    .build())
-                            .collect(Collectors.toList());
+                if (!byeParticipants.isEmpty()) {
                     practiceParticipantRepository.saveAll(byeParticipants);
                 }
             });

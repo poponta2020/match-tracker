@@ -1822,12 +1822,12 @@ class MatchPairingServiceTest {
     }
 
     @Nested
-    @DisplayName("待機者ロック除外で空になるケース")
-    class WaitingPlayerLockFilterTests {
+    @DisplayName("待機者（抜け番）レコードの非破壊更新（Issue #958）")
+    class WaitingByeNonDestructiveTests {
 
         @Test
-        @DisplayName("waitingPlayerIdsが全員ロック除外で空になっても既存抜け番は削除される")
-        void shouldDeleteExistingByeWhenFilteredWaitingIsEmpty() {
+        @DisplayName("waitingPlayerIdsが全員ロック除外で空になっても他の当日参加者の抜け番は削除しない")
+        void shouldNotDeleteExistingByeWhenFilteredWaitingIsEmpty() {
             // Given
             LocalDate sessionDate = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 1;
@@ -1863,14 +1863,61 @@ class MatchPairingServiceTest {
             // When
             matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy, null);
 
-            // Then: 既存抜け番が削除される
-            verify(practiceParticipantRepository).deleteAll(argThat(list -> {
-                List<PracticeParticipant> deleted = (List<PracticeParticipant>) list;
-                return deleted.size() == 1 && deleted.get(0).getPlayerId().equals(3L);
-            }));
-            // フィルタ後空なので抜け番の新規保存は呼ばれない（deleteAllの後にsaveAllは呼ばれない）
-            verify(practiceParticipantRepository, times(1)).deleteAll(anyCollection());
+            // Then: 旧実装ではセッションの抜け番(player3)を全削除していたが、非破壊化により削除しない（Issue #958）
+            verify(practiceParticipantRepository, never()).deleteAll(anyCollection());
+            // フィルタ後空なので抜け番の新規保存も呼ばれない
             verify(practiceParticipantRepository, never()).saveAll(anyList());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("別の試合を保存しても既存の抜け番（他の当日参加者）を消さず、新規待機者のみ追加する")
+        void shouldPreserveExistingByeAndAddOnlyNewWaiting() {
+            // Given: 試合1を保存。待機者は player3。同セッションには別試合由来の抜け番 player99 が既存。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Long createdBy = 1L;
+
+            List<MatchPairingCreateRequest> requests = List.of(
+                    new MatchPairingCreateRequest(sessionDate, matchNumber, 1L, 2L)
+            );
+            List<Long> waitingPlayerIds = List.of(3L);
+
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).sessionDate(sessionDate).totalMatches(7).build();
+
+            List<MatchPairing> savedPairings = new ArrayList<>(List.of(
+                    createMatchPairing(1L, sessionDate, matchNumber, 1L, 2L)
+            ));
+
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.saveAll(anyList())).thenReturn(savedPairings);
+            when(playerRepository.findAllById(anyList())).thenReturn(Arrays.asList(player1, player2));
+            when(practiceSessionRepository.findBySessionDate(sessionDate))
+                    .thenReturn(Optional.of(session));
+
+            // 既存: player99 は別試合の待機者として matchNumber=null で登録済み
+            PracticeParticipant existingByeOther = PracticeParticipant.builder()
+                    .playerId(99L).sessionId(100L).matchNumber(null).build();
+            when(practiceParticipantRepository.findBySessionId(100L))
+                    .thenReturn(List.of(existingByeOther));
+
+            ArgumentCaptor<List<PracticeParticipant>> byeCaptor = ArgumentCaptor.forClass(List.class);
+
+            // When
+            matchPairingService.createBatch(sessionDate, matchNumber, requests, waitingPlayerIds, createdBy, null);
+
+            // Then: 既存抜け番(player99)は削除されない（旧実装ではセッション全消しで消えていた → 以後403）
+            verify(practiceParticipantRepository, never()).deleteAll(anyCollection());
+            // 新規待機者(player3)の抜け番だけが追加される（player99は二重登録しない）
+            verify(practiceParticipantRepository).saveAll(byeCaptor.capture());
+            List<PracticeParticipant> savedByes = byeCaptor.getValue();
+            assertThat(savedByes).hasSize(1);
+            assertThat(savedByes.get(0).getPlayerId()).isEqualTo(3L);
+            assertThat(savedByes.get(0).getMatchNumber()).isNull();
         }
     }
 
