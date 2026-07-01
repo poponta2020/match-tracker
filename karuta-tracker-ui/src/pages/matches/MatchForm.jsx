@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI } from '../../api';
-import { Trophy, Save, X, AlertCircle, Users, Lock, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX } from 'lucide-react';
+import { AlertCircle, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Search, ChevronDown, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { isHorizontalSwipe, resolveSwipe } from './swipeGesture';
 import { scrollActiveTabIntoView } from './tabScroll';
+import { kyuRankShortLabel } from '../../utils/rank';
+import './MatchForm.css';
 
 const MatchForm = () => {
   const { id } = useParams();
@@ -30,10 +32,8 @@ const MatchForm = () => {
   });
 
   const [players, setPlayers] = useState([]);
-  const [availablePlayers, setAvailablePlayers] = useState([]);
   const [practiceSession, setPracticeSession] = useState(null);
   const [practiceSessions, setPracticeSessions] = useState([]);
-  const [pairing, setPairing] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -42,6 +42,8 @@ const MatchForm = () => {
   const [isExistingMatch, setIsExistingMatch] = useState(false);
   const [showParticipationDialog, setShowParticipationDialog] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  // 「未参加から検索」モーダル（当日未参加の全選手を簡易インクリメンタル検索）
+  const [showSearchModal, setShowSearchModal] = useState(false);
   // 編集対象の試合が元々指導試合だったか（指導↔通常の変換時に詳細版APIへ振り分けるため）
   const [originalIsLesson, setOriginalIsLesson] = useState(false);
 
@@ -229,8 +231,7 @@ const MatchForm = () => {
         applyMatchData(defaultMatchNumber, newMatchDataCache, newPairingCache);
 
         initialLoadDone.current = true;
-      } catch (err) {
-        setAvailablePlayers([]);
+      } catch {
         setParticipatingMatchNumbers([]);
       } finally {
         setInitialLoading(false);
@@ -252,12 +253,17 @@ const MatchForm = () => {
 
   // 試合番号のデータをstateに適用する共通関数
   const applyMatchData = (matchNumber, matchCache, pairCache) => {
+    // 手動抜け番モードは「その試合でプルダウンから抜け番を選んだ」瞬間のみ有効な UI 状態。
+    // 別試合のデータを適用するときは必ず解除し、抜け番モードが別試合に持ち越されないようにする
+    // （抜け番判定は下の分岐で isByeMatch として再計算される）。applyMatchData は
+    // 初期ロード・タブ/スワイプ切替時のみ呼ばれ、抜け番選択時には呼ばれない。
+    setManualByeMode(false);
+
     const existingResult = matchCache[matchNumber];
     if (existingResult && existingResult.exists) {
       const match = existingResult.data;
       setIsExistingMatch(true);
       setIsByeMatch(false);
-      setPairing(null);
       setExistingByeActivity(null);
       const opponentId = match.player1Id === currentPlayer.id ? match.player2Id : match.player1Id;
       setFormData(prev => ({
@@ -281,7 +287,6 @@ const MatchForm = () => {
 
       if (isBye) {
         setIsByeMatch(true);
-        setPairing(null);
         // 既存の抜け番活動を読み込む
         const existingBye = byeActivityCache.current[matchNumber];
         if (existingBye) {
@@ -302,7 +307,6 @@ const MatchForm = () => {
       } else if (myPairing) {
         setIsByeMatch(false);
         setExistingByeActivity(null);
-        setPairing(myPairing);
         const opponentId = myPairing.player1Id === currentPlayer.id
           ? myPairing.player2Id
           : myPairing.player1Id;
@@ -322,10 +326,7 @@ const MatchForm = () => {
         }));
       } else {
         setIsByeMatch(false);
-        setManualByeMode(false);
         setExistingByeActivity(null);
-        setPairing(null);
-        setAvailablePlayers(getMatchPlayers(matchNumber));
         setFormData(prev => ({
           ...prev,
           matchNumber: matchNumber,
@@ -346,19 +347,6 @@ const MatchForm = () => {
     if (!initialLoadDone.current) return;
     applyMatchData(formData.matchNumber, matchDataCache.current, pairingCache.current);
   }, [formData.matchNumber]);
-
-  // 試合番号に対応する参加選手リストを構築（全ペアリングキャッシュから取得）
-  const getMatchPlayers = (matchNumber) => {
-    const matchPairings = allPairingsCache.current.filter(p => p.matchNumber === matchNumber);
-    if (matchPairings.length === 0) return players;
-    const playerIds = new Set();
-    matchPairings.forEach(p => {
-      playerIds.add(p.player1Id);
-      playerIds.add(p.player2Id);
-    });
-    playerIds.delete(currentPlayer.id);
-    return players.filter(p => playerIds.has(p.id));
-  };
 
   // 試合番号スワイプ移動 ---------------------------------------------------------
 
@@ -527,6 +515,48 @@ const MatchForm = () => {
     }
   };
 
+  // 対戦相手プルダウン: 当日参加者＋「抜け番」。__bye__ 選択で抜け番モードへ遷移
+  const handleOpponentSelect = (e) => {
+    const val = e.target.value;
+    markDirty();
+    if (val === '__bye__') {
+      setManualByeMode(true);
+      // 既存の抜け番活動を読み込む
+      const existingBye = byeActivityCache.current[formData.matchNumber];
+      if (existingBye) {
+        setExistingByeActivity(existingBye);
+        setByeActivityType(existingBye.activityType);
+        setByeFreeText(existingBye.freeText || '');
+      } else {
+        setExistingByeActivity(null);
+        setByeActivityType('');
+        setByeFreeText('');
+      }
+      return;
+    }
+    if (!val) return;
+    const id = parseInt(val);
+    const sel = (practiceSession?.participants || []).find((p) => p.id === id)
+      || players.find((p) => p.id === id);
+    if (sel) {
+      setFormData((prev) => ({ ...prev, opponentId: sel.id, opponentName: sel.name }));
+    }
+  };
+
+  // 確定済みの相手をタップ → プルダウンに戻して変更可能にする
+  const handleChangeOpponent = () => {
+    markDirty();
+    setFormData((prev) => ({ ...prev, opponentId: null, opponentName: '' }));
+  };
+
+  // 未参加の選手を検索モーダルから選択（保存時にサーバ側で自動参加登録される）
+  const handlePickNonParticipant = (player) => {
+    markDirty();
+    setFormData((prev) => ({ ...prev, opponentId: player.id, opponentName: player.name }));
+    setShowSearchModal(false);
+    setSearchTerm('');
+  };
+
   const handleByeActivitySubmit = async () => {
     if (!byeActivityType) {
       setError('活動内容を選択してください');
@@ -688,6 +718,56 @@ const MatchForm = () => {
     </p>
   ) : null;
 
+  // ヘッダー: 日付（短縮）＋ 会場名（venueName 無しは日付のみ）
+  const headerDate = new Date(formData.matchDate + 'T00:00:00');
+  const dateShort = `${headerDate.getMonth() + 1}/${headerDate.getDate()}`;
+  const weekdayShort = headerDate.toLocaleDateString('ja-JP', { weekday: 'short' });
+  const venueName = practiceSession?.venueName || '';
+
+  // 対戦相手プルダウンの母集団 = その練習セッションの「アクティブ参加者」（自分を除く）。
+  // participants(PlayerDto) はステータスを持たない全参加者（CANCELLED/DECLINED 等も含む）ため、
+  // matchParticipants(ステータス付き) から WON/PENDING の参加者名を集約して絞り込む。
+  // 選手名は players.name の UNIQUE 制約により一意なので名前で突合できる。
+  // matchParticipants が無い場合（旧データ・取得失敗）は絞り込めないため全参加者にフォールバック。
+  const allParticipants = practiceSession?.participants || [];
+  const activeParticipantNames = new Set();
+  let hasMatchParticipantData = false;
+  Object.values(practiceSession?.matchParticipants || {}).forEach((list) => {
+    (list || []).forEach((mp) => {
+      hasMatchParticipantData = true;
+      if (mp.status === 'WON' || mp.status === 'PENDING') {
+        activeParticipantNames.add(mp.name);
+      }
+    });
+  });
+  const isActiveParticipant = (p) => !hasMatchParticipantData || activeParticipantNames.has(p.name);
+
+  const sessionParticipants = allParticipants.filter(
+    (p) => p.id !== currentPlayer.id && isActiveParticipant(p)
+  );
+  // 検索除外用のアクティブ参加者ID集合（キャンセル等の非アクティブ選手は「未参加」扱いで検索に出す）
+  const activeParticipantIdSet = new Set(
+    allParticipants.filter(isActiveParticipant).map((p) => p.id)
+  );
+
+  // 確定済みの相手の級（opponentId × 全選手で突合 → "(A)"）
+  const opponentPlayer = formData.opponentId
+    ? players.find((p) => p.id === formData.opponentId)
+    : null;
+  const opponentGrade = opponentPlayer ? kyuRankShortLabel(opponentPlayer.kyuRank) : '';
+
+  // 対戦相手を変更させない条件:
+  //  - 編集モード（更新APIは対戦者IDを変えない）
+  //  - 入力済み試合（相手を変えると別ペアの新規試合が作られ、旧試合が残って二重登録になる）
+  // どちらも「保存で同じ試合を上書き」する前提のため、相手変更UIは出さず読み取り専用にする。
+  const opponentReadOnly = isEdit || isExistingMatch;
+
+  // 「未参加から検索」母集団 = 全選手 − 当日のアクティブ参加者 − 自分（players は既に自分を除外済み）
+  const searchLower = searchTerm.trim().toLowerCase();
+  const nonParticipants = players
+    .filter((p) => !activeParticipantIdSet.has(p.id))
+    .filter((p) => !searchLower || (p.name || '').toLowerCase().includes(searchLower));
+
   return (
     <div
       className="min-h-screen bg-[#f2ede6] pb-16 overflow-hidden"
@@ -697,15 +777,11 @@ const MatchForm = () => {
       {/* ナビゲーションバー */}
       <div data-swipe-ignore className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4">
         <div className="max-w-7xl mx-auto">
-          {/* 日付表示 */}
-          <div className="flex items-center justify-center py-3">
-            <span className="text-lg font-semibold text-white">
-              {new Date(formData.matchDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                weekday: 'short'
-              })}
+          {/* 日付＋会場表示 */}
+          <div className="flex items-center justify-center py-2.5">
+            <span className="text-sm font-semibold text-white">
+              <span className="font-bold tracking-wide">{dateShort}</span>({weekdayShort})
+              {venueName && <span className="ml-3">{venueName}</span>}
             </span>
           </div>
 
@@ -724,7 +800,7 @@ const MatchForm = () => {
                       : 'border-transparent text-white/60 hover:text-white hover:border-white/50'
                   }`}
                 >
-                  第{num}試合
+                  {num}試合目
                 </button>
               ))}
             </div>
@@ -766,10 +842,10 @@ const MatchForm = () => {
         </div>
       ) : (
       (isByeMatch || manualByeMode) && !isEdit ? (
-        <div className="h-full px-6 overflow-hidden pt-28 space-y-6">
+        <div className="px-[22px] pt-28 pb-8">
           {swipeHint}
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-sm font-medium text-yellow-800">この試合は抜け番です</p>
+          <div className="mf-notice warn">
+            <span className="dot" />この試合（{formData.matchNumber}試合目）は抜け番です
           </div>
 
           {manualByeMode && !isByeMatch && (
@@ -782,236 +858,215 @@ const MatchForm = () => {
                 setByeFreeText('');
                 setExistingByeActivity(null);
               }}
-              className="text-sm text-[#6b7280] underline underline-offset-2 hover:text-[#374151]"
+              className="text-xs text-[#8a8275] underline underline-offset-2 hover:text-[#5b5446] mb-4"
             >
               通常入力に戻る
             </button>
           )}
 
           {existingByeActivity && (
-            <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-2 text-blue-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">入力済みです。保存で上書きされます。</span>
+            <div className="mf-notice info">
+              <span className="dot" />入力済みです。保存で上書きされます。
             </div>
           )}
 
-          <div>
-            <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-3">活動内容を選択してください</div>
-            <div className="space-y-2">
-              {ACTIVITY_TYPES.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => { markDirty(); setByeActivityType(value); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all text-left ${
-                    byeActivityType === value
-                      ? 'bg-[#4a6b5a] text-white shadow-md'
-                      : 'bg-[#e5ebe7] text-[#374151] hover:bg-[#d5ddd8]'
-                  }`}
+          <span className="mf-label">活動内容</span>
+          <div className="mf-acts">
+            {ACTIVITY_TYPES.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { markDirty(); setByeActivityType(value); }}
+                className={`mf-act${byeActivityType === value ? ' active' : ''}`}
+              >
+                <span className="ic"><Icon size={20} /></span>
+                <span className="lab">{label}</span>
+                <span className="check"><Check size={18} /></span>
+              </button>
+            ))}
+          </div>
+
+          {byeActivityType === 'OTHER' && (
+            <input
+              type="text"
+              value={byeFreeText}
+              onChange={(e) => { markDirty(); setByeFreeText(e.target.value); }}
+              placeholder="活動内容を入力…"
+              className="mf-memo-line mt-3"
+            />
+          )}
+
+          {error && (
+            <div className="mf-notice warn">
+              <span className="dot" />{error}
+            </div>
+          )}
+
+          <div className="mf-actions">
+            <button type="button" onClick={() => navigate('/matches')} className="mf-cancel">
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onClick={handleByeActivitySubmit}
+              disabled={loading}
+              className="mf-submit"
+            >
+              {loading ? '保存中...' : existingByeActivity ? '更新する' : '登録'}
+            </button>
+          </div>
+        </div>
+      ) : (
+      <form onSubmit={handleSubmit} className="px-[22px] pt-28 pb-8">
+        {swipeHint}
+
+        {/* 既存試合の警告メッセージ */}
+        {!isEdit && isExistingMatch && (
+          <div className="mf-notice info">
+            <span className="dot" />入力済みの試合です。保存で上書きされます。
+          </div>
+        )}
+
+        {/* 対戦相手（主題） */}
+        {practiceSession && (
+          opponentReadOnly ? (
+            /* 編集モード・入力済み試合は対戦相手の変更を出さず読み取り専用表示（相手変更は二重登録/不整合になるため） */
+            <div className="mf-subject">
+              <span className="mf-vs">vs</span>
+              <span className="mf-opp-name" style={{ cursor: 'default' }}>
+                {formData.opponentName || '—'}
+              </span>
+              {opponentGrade && <span className="mf-grade">{opponentGrade}</span>}
+            </div>
+          ) : formData.opponentId ? (
+            <div className="mf-subject">
+              <span className="mf-vs">vs</span>
+              <button type="button" className="mf-opp-name" onClick={handleChangeOpponent}>
+                {formData.opponentName}
+              </button>
+              {opponentGrade && <span className="mf-grade">{opponentGrade}</span>}
+              <button
+                type="button"
+                className="mf-opp-chev"
+                aria-label="対戦相手を変更"
+                onClick={handleChangeOpponent}
+              >
+                <ChevronDown size={22} />
+              </button>
+              <button
+                type="button"
+                className="mf-search-other"
+                aria-label="未参加の選手から検索"
+                onClick={() => setShowSearchModal(true)}
+              >
+                <Search size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="mf-subject mf-subject--pick">
+              <span className="mf-vs">vs</span>
+              <span className="mf-oppselect">
+                <select
+                  aria-label="対戦相手"
+                  value=""
+                  onChange={handleOpponentSelect}
+                  className="placeholder"
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  <span className="font-medium">{label}</span>
+                  <option value="">対戦相手を選択</option>
+                  {sessionParticipants.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.kyuRank ? `（${p.kyuRank.charAt(0)}）` : ''}
+                    </option>
+                  ))}
+                  <option value="__bye__">抜け番</option>
+                </select>
+                <ChevronDown className="chev" size={18} />
+              </span>
+              <button
+                type="button"
+                className="mf-search-other"
+                aria-label="未参加の選手から検索"
+                onClick={() => setShowSearchModal(true)}
+              >
+                <Search size={16} />
+              </button>
+            </div>
+          )
+        )}
+
+        {/* 結果・枚数差・お手付き（横並び） */}
+        <div className="mf-controls">
+          <div className="mf-field">
+            <span className="mf-label">結果</span>
+            <div className="mf-toggle">
+              {['勝ち', '負け'].map((result) => (
+                <button
+                  key={result}
+                  type="button"
+                  onClick={() => {
+                    markDirty();
+                    setFormData((prev) => ({ ...prev, result }));
+                  }}
+                  className={`opt ${result === '勝ち' ? 'win' : 'lose'}${formData.result === result ? ' active' : ''}`}
+                >
+                  {result}
                 </button>
               ))}
             </div>
           </div>
 
-          {byeActivityType === 'OTHER' && (
-            <div>
-              <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">内容</div>
-              <input
-                type="text"
-                value={byeFreeText}
-                onChange={(e) => { markDirty(); setByeFreeText(e.target.value); }}
-                placeholder="活動内容を入力..."
-                className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151] placeholder-[#9ca3af]"
-              />
-            </div>
-          )}
-
-          {error && (
-            <div className="p-3 bg-red-50 rounded-lg flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">{error}</span>
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleByeActivitySubmit}
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#1A3654] text-white py-4 rounded-2xl hover:bg-[#122740] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
-            >
-              {loading ? '保存中...' : existingByeActivity ? '更新する' : '登録する'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/matches')}
-              className="flex items-center justify-center px-5 py-4 rounded-2xl text-[#6b7280] hover:bg-[#e5ebe7] transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      ) : (
-      <form onSubmit={handleSubmit} className="h-full px-6 overflow-hidden pt-28 space-y-6">
-        {swipeHint}
-
-        {/* 既存試合の警告メッセージ */}
-        {!isEdit && isExistingMatch && (
-          <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-2 text-blue-700">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span className="text-sm">入力済みの試合です。保存で上書きされます。</span>
-          </div>
-        )}
-
-        {/* 対戦相手 */}
-        {practiceSession && (
-          <div>
-            <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">対戦相手</div>
-            {formData.opponentId ? (
-              <div className="text-center py-2">
-                <div className="text-3xl font-bold text-[#374151] tracking-wide">
-                  {formData.opponentName}
-                </div>
-                {pairing && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      markDirty();
-                      setPairing(null);
-                      setAvailablePlayers(getMatchPlayers(formData.matchNumber));
-                      setFormData(prev => ({ ...prev, opponentId: null, opponentName: '' }));
-                    }}
-                    className="mt-2 text-xs text-[#6b7280] underline underline-offset-2"
-                  >
-                    変更する
-                  </button>
-                )}
-              </div>
-            ) : (
+          <div className="mf-field">
+            <span className="mf-label">枚数差</span>
+            <div className="mf-picker">
               <select
-                value={formData.opponentId || ''}
-                onChange={(e) => {
-                  const selectedPlayer = availablePlayers.find(p => p.id === parseInt(e.target.value));
-                  if (selectedPlayer) {
-                    markDirty();
-                    setFormData(prev => ({
-                      ...prev,
-                      opponentName: selectedPlayer.name,
-                      opponentId: selectedPlayer.id
-                    }));
-                  }
-                }}
-                className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
+                name="scoreDifference"
+                aria-label="枚数差"
+                value={formData.isLesson ? 'lesson' : formData.scoreDifference}
+                onChange={handleScoreChange}
+                className={formData.isLesson ? 'lesson' : ''}
                 required
               >
-                <option value="">選択してください</option>
-                {availablePlayers.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.name}
-                  </option>
+                {Array.from({ length: 26 }, (_, i) => i).map((num) => (
+                  <option key={num} value={num}>{num}</option>
+                ))}
+                {/* 登録済み相手との試合のみ「指導」を選択可能（簡易入力フローは対象外） */}
+                {formData.opponentId && <option value="lesson">指導</option>}
+              </select>
+              {!formData.isLesson && <span className="mf-unit">枚</span>}
+              <ChevronDown className="chev" size={16} />
+            </div>
+          </div>
+
+          <div className="mf-field">
+            <span className="mf-label">お手付き</span>
+            <div className="mf-picker">
+              <select
+                name="otetsukiCount"
+                aria-label="お手付き回数"
+                value={formData.otetsukiCount ?? ''}
+                onChange={(e) => {
+                  markDirty();
+                  setFormData(prev => ({
+                    ...prev,
+                    otetsukiCount: e.target.value === '' ? null : parseInt(e.target.value)
+                  }));
+                }}
+              >
+                <option value="">不明</option>
+                {Array.from({ length: 21 }, (_, i) => i).map((num) => (
+                  <option key={num} value={num}>{num}</option>
                 ))}
               </select>
-            )}
-          </div>
-        )}
-
-        {/* 抜け番として記録ボタン（ペアリング未作成 & 対戦相手未選択時） */}
-        {!isEdit && !isExistingMatch && !pairing && !formData.opponentId && practiceSession && (
-          <button
-            type="button"
-            onClick={() => {
-              markDirty();
-              setManualByeMode(true);
-              // 既存の抜け番活動を読み込む
-              const existingBye = byeActivityCache.current[formData.matchNumber];
-              if (existingBye) {
-                setExistingByeActivity(existingBye);
-                setByeActivityType(existingBye.activityType);
-                setByeFreeText(existingBye.freeText || '');
-              }
-            }}
-            className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-yellow-300 bg-yellow-50 text-yellow-700 text-sm font-medium hover:bg-yellow-100 transition-colors"
-          >
-            抜け番として記録する
-          </button>
-        )}
-
-        {/* 結果 */}
-        <div>
-          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-3">結果</div>
-          <div className="grid grid-cols-2 gap-4">
-            {['勝ち', '負け'].map((result) => (
-              <button
-                key={result}
-                type="button"
-                onClick={() => {
-                  markDirty();
-                  setFormData((prev) => ({ ...prev, result }));
-                }}
-                className={`py-5 rounded-2xl font-bold text-xl transition-all ${
-                  formData.result === result
-                    ? result === '勝ち'
-                      ? 'bg-green-500 text-white shadow-lg shadow-green-200'
-                      : 'bg-red-500 text-white shadow-lg shadow-red-200'
-                    : 'bg-[#e5ebe7] text-[#9ca3af]'
-                }`}
-              >
-                {result === '勝ち' ? '〇' : '×'} {result}
-              </button>
-            ))}
+              {formData.otetsukiCount != null && <span className="mf-unit">回</span>}
+              <ChevronDown className="chev" size={16} />
+            </div>
           </div>
         </div>
-
-        {/* 枚数差 */}
-        <div>
-          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">枚数差</div>
-          <select
-            name="scoreDifference"
-            value={formData.isLesson ? 'lesson' : formData.scoreDifference}
-            onChange={handleScoreChange}
-            className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
-            required
-          >
-            {Array.from({ length: 26 }, (_, i) => i).map((num) => (
-              <option key={num} value={num}>
-                {num} 枚
-              </option>
-            ))}
-            {/* 登録済み相手との試合のみ「指導」を選択可能（簡易入力フローは対象外） */}
-            {formData.opponentId && <option value="lesson">指導</option>}
-          </select>
-        </div>
-
-        {/* お手付き回数 */}
-        <div>
-          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">お手付き回数</div>
-          <select
-            name="otetsukiCount"
-            value={formData.otetsukiCount ?? ''}
-            onChange={(e) => {
-              markDirty();
-              setFormData(prev => ({
-                ...prev,
-                otetsukiCount: e.target.value === '' ? null : parseInt(e.target.value)
-              }));
-            }}
-            className="w-full px-0 py-3 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] text-lg text-[#374151]"
-          >
-            <option value="">未入力</option>
-            {Array.from({ length: 21 }, (_, i) => i).map((num) => (
-              <option key={num} value={num}>
-                {num} 回
-              </option>
-            ))}
-          </select>
-        </div>
+        {formData.isLesson && <div className="mf-lesson-hint">指導試合＝枚数差なし</div>}
 
         {/* メモ */}
-        <div>
-          <div className="text-xs font-medium text-[#6b7280] tracking-wide mb-2">メモ</div>
+        <div className="mf-memo">
+          <span className="mf-label">メモ</span>
           <textarea
             name="personalNotes"
             value={formData.personalNotes}
@@ -1027,39 +1082,26 @@ const MatchForm = () => {
               }
             }}
             rows="2"
-            placeholder="試合の感想、反省点など..."
-            className="w-full px-0 py-2 border-0 border-b border-[#c5cec8] bg-transparent focus:ring-0 focus:border-[#4a6b5a] resize-none text-[#374151] placeholder-[#9ca3af]"
+            placeholder="試合の感想、反省点など…"
+            className="mf-memo-line"
           ></textarea>
         </div>
 
         {/* エラー表示 */}
         {error && !isEdit && (
-          <div className="p-3 bg-red-50 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span className="text-sm">{error}</span>
+          <div className="mf-notice warn">
+            <span className="dot" />{error}
           </div>
         )}
 
-        {/* ボタン */}
+        {/* アクション */}
         {practiceSessions.length > 0 && (
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#1A3654] text-white py-4 rounded-2xl hover:bg-[#122740] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-bold text-lg shadow-md"
-            >
-              {loading
-                ? '保存中...'
-                : isEdit
-                ? '更新する'
-                : '登録する'}
+          <div className="mf-actions">
+            <button type="button" onClick={() => navigate('/matches')} className="mf-cancel">
+              キャンセル
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/matches')}
-              className="flex items-center justify-center px-5 py-4 rounded-2xl text-[#6b7280] hover:bg-[#e5ebe7] transition-colors"
-            >
-              <X className="w-5 h-5" />
+            <button type="submit" disabled={loading} className="mf-submit">
+              {loading ? '保存中...' : isEdit ? '更新する' : '登録'}
             </button>
           </div>
         )}
@@ -1129,6 +1171,57 @@ const MatchForm = () => {
                 {isRegistering ? '登録中...' : '登録して入力する'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 未参加の選手から検索（簡易インクリメンタル検索） */}
+      {showSearchModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+          onClick={() => { setShowSearchModal(false); setSearchTerm(''); }}
+        >
+          <div
+            className="bg-[#fffdf9] rounded-xl max-w-sm w-full p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-[#1A2744] mb-3">未参加の選手から検索</h3>
+            <input
+              autoFocus
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="名前で検索…"
+              className="w-full px-0 py-2 mb-2 border-0 border-b border-[#d0c5b8] bg-transparent focus:ring-0 focus:border-[#82655a] text-[#1A2744] placeholder-[#ada697]"
+            />
+            <div className="mf-search-list">
+              {nonParticipants.length === 0 ? (
+                <p className="text-sm text-[#9a9183] py-4 text-center">
+                  {searchTerm ? '該当する選手がいません' : '未参加の選手がいません'}
+                </p>
+              ) : (
+                nonParticipants.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="mf-search-row"
+                    onClick={() => handlePickNonParticipant(p)}
+                  >
+                    <span>{p.name}</span>
+                    {kyuRankShortLabel(p.kyuRank) && (
+                      <span className="grade">{kyuRankShortLabel(p.kyuRank)}</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setShowSearchModal(false); setSearchTerm(''); }}
+              className="mt-3 w-full text-center text-sm text-[#8a8275]"
+            >
+              閉じる
+            </button>
           </div>
         </div>
       )}

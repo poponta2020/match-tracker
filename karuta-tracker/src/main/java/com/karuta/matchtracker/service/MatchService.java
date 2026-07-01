@@ -62,6 +62,7 @@ public class MatchService {
     private final MentorRelationshipRepository mentorRelationshipRepository;
     private final LineNotificationService lineNotificationService;
     private final OrganizationService organizationService;
+    private final PracticeParticipantService practiceParticipantService;
 
     /**
      * IDで試合結果を取得
@@ -537,9 +538,79 @@ public class MatchService {
         // 両プレイヤーが登録済みの場合、対応するmatch_pairingを自動生成
         autoCreateMatchPairingIfAbsent(saved);
 
+        // 「未参加から検索」で選んだ相手など、当日セッション未参加の対戦選手をサーバ側で自動参加登録（冪等）
+        autoRegisterMatchParticipants(saved);
+
         MatchDto dto = enrichMatchWithPlayerNames(saved, effectiveUserId);
         List<MatchDto> enriched = enrichDtosWithPersonalNotes(List.of(dto), effectiveUserId);
         return enriched.get(0);
+    }
+
+    /**
+     * 試合記録の副作用として、対戦に関与した登録済み選手のうち当日セッション未参加の者を
+     * その試合番号で自動参加登録する（冪等）。「未参加から検索」で選んだ相手を参加者に
+     * 反映し、データ整合（対戦したなら参加者）を保つ。
+     *
+     * <p>対戦相手だけでなく両選手をループ対象にするのは、ADMIN 代理登録など登録者＝対戦者でない
+     * 経路でも整合を保つため。既に参加済みの選手は {@link PracticeParticipantService#autoRegisterMatchParticipant}
+     * 内の冪等チェックで no-op になるため、通常の本人入力フロー（本人はモーダルで登録済み）では
+     * 実質「相手のみ」が登録される。
+     */
+    private void autoRegisterMatchParticipants(Match match) {
+        if (match.getPlayer1Id() == null || match.getPlayer2Id() == null
+                || match.getMatchNumber() == null) {
+            return;
+        }
+        Long sessionId = resolveSessionIdForMatch(match);
+        if (sessionId == null) {
+            return; // セッションが一意に決まらない場合は安全側でスキップ（no-op）
+        }
+        practiceParticipantService.autoRegisterMatchParticipant(sessionId, match.getPlayer1Id(), match.getMatchNumber());
+        practiceParticipantService.autoRegisterMatchParticipant(sessionId, match.getPlayer2Id(), match.getMatchNumber());
+    }
+
+    /**
+     * 試合に紐付く練習セッションIDを一意に決定する（自動参加登録のため）。
+     *
+     * 決定順:
+     *   1. 同日のセッションが1件 → そのセッション
+     *   2. 複数（同日複数団体）かつ match.venueId が一致するセッションが一意 → それ
+     *   3. それでも複数 → 対戦選手のいずれかが参加しているセッションが一意 → それ
+     *   4. いずれにも当てはまらない → null（呼び出し側でスキップ）
+     */
+    private Long resolveSessionIdForMatch(Match match) {
+        List<com.karuta.matchtracker.entity.PracticeSession> sessions =
+                practiceSessionRepository.findByDateRange(match.getMatchDate(), match.getMatchDate());
+        if (sessions.isEmpty()) {
+            return null;
+        }
+        if (sessions.size() == 1) {
+            return sessions.get(0).getId();
+        }
+
+        // 同日複数団体: 会場一致で一意特定を試みる
+        if (match.getVenueId() != null) {
+            List<com.karuta.matchtracker.entity.PracticeSession> byVenue = sessions.stream()
+                    .filter(s -> match.getVenueId().equals(s.getVenueId()))
+                    .collect(Collectors.toList());
+            if (byVenue.size() == 1) {
+                return byVenue.get(0).getId();
+            }
+        }
+
+        // 会場で決まらなければ、対戦選手の「アクティブ参加」でセッションを特定（一意なら採用）。
+        // キャンセル済み等の非アクティブ参加は誤ったセッション選択を招くため除外する。
+        java.util.Set<Long> linked = new java.util.HashSet<>();
+        for (com.karuta.matchtracker.entity.PracticeSession s : sessions) {
+            boolean p1In = match.getPlayer1Id() != null && match.getPlayer1Id() != 0L
+                    && practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(s.getId(), match.getPlayer1Id());
+            boolean p2In = match.getPlayer2Id() != null && match.getPlayer2Id() != 0L
+                    && practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(s.getId(), match.getPlayer2Id());
+            if (p1In || p2In) {
+                linked.add(s.getId());
+            }
+        }
+        return linked.size() == 1 ? linked.iterator().next() : null;
     }
 
     /**

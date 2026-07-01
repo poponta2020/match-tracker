@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 vi.mock('../../api', () => ({
@@ -65,7 +65,7 @@ const renderForm = () =>
     </MemoryRouter>
   );
 
-const tab = (n) => screen.getByRole('button', { name: new RegExp(`第${n}試合`) });
+const tab = (n) => screen.getByRole('button', { name: new RegExp(`${n}試合目`) });
 
 const swipeArea = () => screen.getByTestId('matchform-swipe-area');
 const swipe = (dx) => {
@@ -121,7 +121,9 @@ describe('MatchForm - 試合番号スワイプ移動と未保存警告', () => {
     fireEvent.click(tab(2));
     await waitFor(() => expect(screen.getByText(/入力中の内容は破棄されます/)).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }));
+    // フォーム本体にも「キャンセル」があるため、確認モーダル内のキャンセルに限定する
+    const dialog = screen.getByText(/入力中の内容は破棄されます/).closest('div.bg-white');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
     await waitFor(() => expect(screen.queryByText(/入力中の内容は破棄されます/)).not.toBeInTheDocument());
     expect(tab(1)).toHaveAttribute('data-active', 'true');
   });

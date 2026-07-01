@@ -167,6 +167,30 @@ class PracticeSessionServiceTest {
     }
 
     @Test
+    @DisplayName("findById: 会場ありのセッションでは venueName が埋まる（BulkResultInput のヘッダー会場表示用）")
+    void testFindById_setsVenueName() {
+        // Given: 会場IDを持つセッション
+        PracticeSession sessionWithVenue = PracticeSession.builder()
+                .id(3L)
+                .sessionDate(today)
+                .totalMatches(7)
+                .venueId(100L)
+                .build();
+        Venue venue = Venue.builder().id(100L).name("近江勧学館").capacity(40).build();
+        when(practiceSessionRepository.findById(3L)).thenReturn(Optional.of(sessionWithVenue));
+        when(venueRepository.findById(100L)).thenReturn(Optional.of(venue));
+        when(venueMatchScheduleRepository.findByVenueIdOrderByMatchNumberAsc(100L)).thenReturn(List.of());
+        when(practiceParticipantRepository.findBySessionId(3L)).thenReturn(List.of());
+        when(matchRepository.countByMatchDate(today)).thenReturn(0L);
+
+        // When: getById 経路（findById → enrichSessionWithParticipants）
+        PracticeSessionDto result = practiceSessionService.findById(3L);
+
+        // Then: 会場名が DTO に載る
+        assertThat(result.getVenueName()).isEqualTo("近江勧学館");
+    }
+
+    @Test
     @DisplayName("存在しないIDで練習日を取得するとResourceNotFoundExceptionが発生")
     void testFindByIdNotFound() {
         // Given

@@ -83,8 +83,8 @@ describe('MatchResultsView → MatchForm 遷移時の state 引き継ぎ', () =>
     renderWithRouter({ matchDate: '2025-12-15', matchNumber: 3 });
 
     await waitFor(() => {
-      // 第3試合タブが選択状態（border-white text-white）であることを確認
-      const tab3 = screen.getByText('第3試合');
+      // 第3試合タブ（「3試合目」）が選択状態（border-white text-white）であることを確認
+      const tab3 = screen.getByText('3試合目');
       expect(tab3.className).toContain('border-white text-white');
     });
   });

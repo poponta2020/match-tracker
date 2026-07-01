@@ -594,6 +594,48 @@ public class PracticeParticipantService {
         densukeSyncService.triggerWriteAsync();
     }
 
+    /**
+     * 試合記録に伴う対戦選手の自動参加登録（サーバ内部用・ガードなし・冪等）。
+     *
+     * 試合保存（{@link MatchService#createMatch}）の副作用として、対戦に関与した登録済み選手が
+     * 当日セッションの当該試合に未参加なら WON で参加登録する。
+     * 「対戦したなら参加者」というデータ整合を保ち、結果閲覧・一括入力・参加者一覧に相手が現れるようにする。
+     *
+     * 直接の参加登録API（{@code POST /participations}）の「PLAYER は自分のみ」ガードはあくまで温存し、
+     * ここではサーバ主導の副作用としてガードなしで登録する。
+     *
+     * 設計上の判断:
+     * <ul>
+     *   <li>status は {@link ParticipantStatus#WON}（試合が成立した＝確定参加。
+     *       管理者の {@link #addParticipantToMatch} と同じ扱い）</li>
+     *   <li>冪等: 既に参加確定（WON/PENDING = {@link ParticipantStatus#isActive()}）なら何もしない。
+     *       WAITLISTED/OFFERED/CANCELLED 等の非確定ステータスは、実際に対戦した事実に合わせて WON に昇格する</li>
+     *   <li>densuke 同期はここではトリガーしない。試合保存のホットパスで毎回外部書き込みを
+     *       誘発しないため。参加者の伝助反映は別経路（参加登録・編集）に委ねる</li>
+     * </ul>
+     *
+     * @return 新規にアクティブ参加として登録した場合 true、no-op の場合 false
+     */
+    @Transactional
+    public boolean autoRegisterMatchParticipant(Long sessionId, Long playerId, Integer matchNumber) {
+        if (sessionId == null || playerId == null || playerId == 0L || matchNumber == null) {
+            return false;
+        }
+        // 既に WON/PENDING（＝当日参加確定 = ParticipantStatus.isActive()）なら何もしない。
+        // WAITLISTED/OFFERED/CANCELLED 等の非確定ステータスは、実際に対戦した以上 WON に昇格させる
+        // （フロントの母集団判定 WON/PENDING と揃え、検索経由で選んだ待機/キャンセル相手も参加確定にする）。
+        boolean alreadyConfirmed = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber).stream()
+                .anyMatch(p -> p.getStatus() != null && p.getStatus().isActive());
+        if (alreadyConfirmed) {
+            return false; // 既に参加確定（冪等）
+        }
+        saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
+        log.info("試合記録に伴う自動参加登録: sessionId={}, playerId={}, matchNumber={}",
+                sessionId, playerId, matchNumber);
+        return true;
+    }
+
     @Transactional
     public void removeParticipantFromMatch(Long sessionId, Integer matchNumber, Long playerId) {
         List<PracticeParticipant> participants = practiceParticipantRepository

@@ -1062,4 +1062,70 @@ class PracticeParticipantServiceTest {
             assertThat(top3.get(0).getRate()).isEqualTo(4.0 / 7.0);
         }
     }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("autoRegisterMatchParticipant（試合記録に伴う自動参加登録）")
+    class AutoRegisterMatchParticipantTests {
+
+        @Test
+        @DisplayName("未参加なら WON で参加登録される")
+        void registersWonWhenNotParticipating() {
+            // findBy 未スタブ → 空リスト（参加記録なし）
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isTrue();
+            verify(practiceParticipantRepository).save(participantCaptor.capture());
+            PracticeParticipant saved = participantCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(saved.getSessionId()).isEqualTo(100L);
+            assertThat(saved.getPlayerId()).isEqualTo(10L);
+            assertThat(saved.getMatchNumber()).isEqualTo(1);
+            // dirty=true で保存され、次回の伝助同期で反映される（waitlistNumber は持たない）
+            assertThat(saved.isDirty()).isTrue();
+            assertThat(saved.getWaitlistNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("既に WON/PENDING（参加確定）なら二重登録しない（冪等）")
+        void idempotentWhenAlreadyConfirmed() {
+            PracticeParticipant won = PracticeParticipant.builder()
+                    .sessionId(100L).playerId(10L).matchNumber(1).status(ParticipantStatus.WON).build();
+            when(practiceParticipantRepository
+                    .findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(List.of(won));
+
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isFalse();
+            verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        }
+
+        @Test
+        @DisplayName("WAITLISTED の相手は WON に昇格する（実際に対戦したため）")
+        void promotesWaitlistedToWon() {
+            PracticeParticipant waitlisted = PracticeParticipant.builder()
+                    .sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
+            when(practiceParticipantRepository
+                    .findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(List.of(waitlisted));
+
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isTrue();
+            verify(practiceParticipantRepository).save(participantCaptor.capture());
+            PracticeParticipant saved = participantCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(saved.getWaitlistNumber()).isNull(); // 昇格時に待機番号はクリア
+        }
+
+        @Test
+        @DisplayName("未登録相手（playerId=0）・null引数では登録しない")
+        void skipsForInvalidArguments() {
+            assertThat(service.autoRegisterMatchParticipant(100L, 0L, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(null, 10L, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(100L, null, 1)).isFalse();
+            assertThat(service.autoRegisterMatchParticipant(100L, 10L, null)).isFalse();
+
+            verifyNoInteractions(practiceParticipantRepository);
+        }
+    }
 }

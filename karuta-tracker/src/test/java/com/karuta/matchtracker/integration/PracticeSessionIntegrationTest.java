@@ -156,10 +156,13 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
         LocalDate today = LocalDate.now();
         int currentYear = today.getYear();
         int currentMonth = today.getMonthValue();
+        // 月初(1日)基準にすることで、月初 7 日以内でも「今月2件」が確実に同月に収まるようにする
+        // （today.minusDays(7) だと月初では前月に落ちて件数がずれるため）
+        LocalDate firstOfMonth = today.withDayOfMonth(1);
 
-        // 今月の練習日を2つ登録
+        // 今月の練習日を2つ登録（1日・2日 = 全ての月に存在し必ず同月）
         PracticeSessionCreateRequest request1 = PracticeSessionCreateRequest.builder()
-                .sessionDate(today)
+                .sessionDate(firstOfMonth)
                 .totalMatches(10)
                 .organizationId(1L)
                 .build();
@@ -170,7 +173,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isCreated());
 
         PracticeSessionCreateRequest request2 = PracticeSessionCreateRequest.builder()
-                .sessionDate(today.minusDays(7))
+                .sessionDate(firstOfMonth.plusDays(1))
                 .totalMatches(8)
                 .organizationId(1L)
                 .build();
