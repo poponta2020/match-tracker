@@ -573,7 +573,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **本人入力（個人向け / `MatchForm`）:**
 - ヘッダーは「日付(曜)＋会場名」を表示（会場名は `PracticeSession.venueId → Venue`。会場未設定時は日付のみ）。試合番号タブは `N試合目` 表記。
 - **対戦相手の選択モデル:**
-  - 既定のプルダウン母集団 = **その練習セッションの参加者（自分を除く）＋「抜け番」**（`PracticeSessionDto.participants`）。
+  - 既定のプルダウン母集団 = **その練習セッションのアクティブ参加者（WON/PENDING・自分を除く）＋「抜け番」**。`PracticeSessionDto.participants` はステータス未保持の全参加者（CANCELLED/DECLINED 等も含む）ため、`matchParticipants` のステータスで WON/PENDING に絞る（選手名は UNIQUE のため名前で突合。`matchParticipants` 欠落時は全参加者にフォールバック）。
   - 当日未参加の選手は「未参加から検索」ボタン（🔍）で**全選手 − 当日参加者 − 自分**を名前で簡易インクリメンタル検索して選択。
   - ペアリングがある試合は従来どおり相手を自動セット。確定後は名前（▽）タップでプルダウンに戻して変更可能。
   - 確定相手の級を名前脇に `(A)` 形式で控えめ表示（`Player.kyuRank` の頭文字を `utils/rank.kyuRankShortLabel` で整形。未設定は非表示）。

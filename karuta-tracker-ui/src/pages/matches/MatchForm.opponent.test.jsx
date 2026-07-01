@@ -157,3 +157,49 @@ describe('MatchForm 相手の級表示', () => {
     expect(screen.getByText('(A)')).toBeInTheDocument();
   });
 });
+
+describe('MatchForm 非アクティブ参加者の除外', () => {
+  // matchParticipants でステータスが分かるセッション（キャンセル太郎=CANCELLED）
+  const SESSION_WITH_STATUS = {
+    id: 100,
+    sessionDate: PAST_DATE,
+    totalMatches: 3,
+    venueName: '近江勧学館',
+    participants: [
+      { id: 1, name: '自分', kyuRank: 'B級' },
+      { id: 2, name: '佐藤 美咲', kyuRank: 'A級' },
+      { id: 3, name: '田中 一郎', kyuRank: 'B級' },
+      { id: 5, name: 'キャンセル 太郎', kyuRank: 'C級' },
+    ],
+    matchParticipants: {
+      1: [
+        { name: '自分', status: 'WON' },
+        { name: '佐藤 美咲', status: 'WON' },
+        { name: '田中 一郎', status: 'PENDING' },
+        { name: 'キャンセル 太郎', status: 'CANCELLED' },
+      ],
+    },
+  };
+  const PLAYERS_WITH_CANCELLED = [
+    ...ALL_PLAYERS,
+    { id: 5, name: 'キャンセル 太郎', kyuRank: 'C級' },
+  ];
+
+  it('CANCELLED 参加者はプルダウンに出さず、未参加検索に出す', async () => {
+    playerAPI.getAll.mockResolvedValue({ data: PLAYERS_WITH_CANCELLED });
+    practiceAPI.getByDate.mockResolvedValue({ data: SESSION_WITH_STATUS });
+
+    renderForm();
+    const select = await waitFor(() => opponentSelect());
+
+    // アクティブ（WON/PENDING）のみプルダウンに出る
+    expect(within(select).getByRole('option', { name: '佐藤 美咲（A）' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: '田中 一郎（B）' })).toBeInTheDocument();
+    // CANCELLED はプルダウンに出ない
+    expect(within(select).queryByRole('option', { name: /キャンセル/ })).toBeNull();
+
+    // 未参加検索には出る（登録済みだが当日非アクティブ）
+    fireEvent.click(screen.getByRole('button', { name: '未参加の選手から検索' }));
+    expect(await screen.findByRole('button', { name: /キャンセル 太郎/ })).toBeInTheDocument();
+  });
+});

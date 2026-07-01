@@ -719,11 +719,31 @@ const MatchForm = () => {
   const weekdayShort = headerDate.toLocaleDateString('ja-JP', { weekday: 'short' });
   const venueName = practiceSession?.venueName || '';
 
-  // 対戦相手プルダウンの母集団 = その練習セッションの参加者（自分を除く）
-  const sessionParticipants = (practiceSession?.participants || []).filter(
-    (p) => p.id !== currentPlayer.id
+  // 対戦相手プルダウンの母集団 = その練習セッションの「アクティブ参加者」（自分を除く）。
+  // participants(PlayerDto) はステータスを持たない全参加者（CANCELLED/DECLINED 等も含む）ため、
+  // matchParticipants(ステータス付き) から WON/PENDING の参加者名を集約して絞り込む。
+  // 選手名は players.name の UNIQUE 制約により一意なので名前で突合できる。
+  // matchParticipants が無い場合（旧データ・取得失敗）は絞り込めないため全参加者にフォールバック。
+  const allParticipants = practiceSession?.participants || [];
+  const activeParticipantNames = new Set();
+  let hasMatchParticipantData = false;
+  Object.values(practiceSession?.matchParticipants || {}).forEach((list) => {
+    (list || []).forEach((mp) => {
+      hasMatchParticipantData = true;
+      if (mp.status === 'WON' || mp.status === 'PENDING') {
+        activeParticipantNames.add(mp.name);
+      }
+    });
+  });
+  const isActiveParticipant = (p) => !hasMatchParticipantData || activeParticipantNames.has(p.name);
+
+  const sessionParticipants = allParticipants.filter(
+    (p) => p.id !== currentPlayer.id && isActiveParticipant(p)
   );
-  const participantIdSet = new Set((practiceSession?.participants || []).map((p) => p.id));
+  // 検索除外用のアクティブ参加者ID集合（キャンセル等の非アクティブ選手は「未参加」扱いで検索に出す）
+  const activeParticipantIdSet = new Set(
+    allParticipants.filter(isActiveParticipant).map((p) => p.id)
+  );
 
   // 確定済みの相手の級（opponentId × 全選手で突合 → "(A)"）
   const opponentPlayer = formData.opponentId
@@ -731,10 +751,10 @@ const MatchForm = () => {
     : null;
   const opponentGrade = opponentPlayer ? kyuRankShortLabel(opponentPlayer.kyuRank) : '';
 
-  // 「未参加から検索」母集団 = 全選手 − 当日参加者 − 自分（players は既に自分を除外済み）
+  // 「未参加から検索」母集団 = 全選手 − 当日のアクティブ参加者 − 自分（players は既に自分を除外済み）
   const searchLower = searchTerm.trim().toLowerCase();
   const nonParticipants = players
-    .filter((p) => !participantIdSet.has(p.id))
+    .filter((p) => !activeParticipantIdSet.has(p.id))
     .filter((p) => !searchLower || (p.name || '').toLowerCase().includes(searchLower));
 
   return (
