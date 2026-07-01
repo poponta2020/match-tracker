@@ -162,6 +162,16 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                               @Param("matchNumber") Integer matchNumber);
 
     /**
+     * 特定の選手が特定セッションにアクティブな参加記録を持つか確認（試合番号を問わない・CANCELLED等を除外）。
+     * 同日複数セッション時に、試合の自動参加登録先セッションをアクティブ参加実績で一意特定するために使う。
+     */
+    @Query("SELECT COUNT(p) > 0 FROM PracticeParticipant p " +
+           "WHERE p.sessionId = :sessionId AND p.playerId = :playerId " +
+           "AND p.status NOT IN ('CANCELLED', 'DECLINED', 'WAITLIST_DECLINED')")
+    boolean existsActiveBySessionIdAndPlayerId(@Param("sessionId") Long sessionId,
+                                               @Param("playerId") Long playerId);
+
+    /**
      * 指定日以降で特定の選手が参加登録しているセッションの試合番号を、日付昇順で取得
      */
     @Query("SELECT pp FROM PracticeParticipant pp " +

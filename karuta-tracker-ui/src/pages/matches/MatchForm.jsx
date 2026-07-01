@@ -918,7 +918,16 @@ const MatchForm = () => {
 
         {/* 対戦相手（主題） */}
         {practiceSession && (
-          formData.opponentId ? (
+          isEdit ? (
+            /* 編集モードは対戦相手の変更をサポートしない（更新APIが対戦者IDを変えず表示名と不整合になるため）→ 読み取り専用表示 */
+            <div className="mf-subject">
+              <span className="mf-vs">vs</span>
+              <span className="mf-opp-name" style={{ cursor: 'default' }}>
+                {formData.opponentName || '—'}
+              </span>
+              {opponentGrade && <span className="mf-grade">{opponentGrade}</span>}
+            </div>
+          ) : formData.opponentId ? (
             <div className="mf-subject">
               <span className="mf-vs">vs</span>
               <button type="button" className="mf-opp-name" onClick={handleChangeOpponent}>

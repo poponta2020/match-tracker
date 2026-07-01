@@ -598,13 +598,14 @@ public class MatchService {
             }
         }
 
-        // 会場で決まらなければ、対戦選手の既存参加でセッションを特定（一意なら採用）
+        // 会場で決まらなければ、対戦選手の「アクティブ参加」でセッションを特定（一意なら採用）。
+        // キャンセル済み等の非アクティブ参加は誤ったセッション選択を招くため除外する。
         java.util.Set<Long> linked = new java.util.HashSet<>();
         for (com.karuta.matchtracker.entity.PracticeSession s : sessions) {
             boolean p1In = match.getPlayer1Id() != null && match.getPlayer1Id() != 0L
-                    && practiceParticipantRepository.existsBySessionIdAndPlayerId(s.getId(), match.getPlayer1Id());
+                    && practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(s.getId(), match.getPlayer1Id());
             boolean p2In = match.getPlayer2Id() != null && match.getPlayer2Id() != 0L
-                    && practiceParticipantRepository.existsBySessionIdAndPlayerId(s.getId(), match.getPlayer2Id());
+                    && practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(s.getId(), match.getPlayer2Id());
             if (p1In || p2In) {
                 linked.add(s.getId());
             }

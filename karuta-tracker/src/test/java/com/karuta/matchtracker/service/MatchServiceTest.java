@@ -1519,6 +1519,34 @@ class MatchServiceTest {
         }
 
         @Test
+        @DisplayName("同日複数セッション時はアクティブ参加のセッションへ登録し、CANCELLEDのみのセッションは選ばない")
+        void shouldResolveSessionByActiveParticipation() {
+            // Given: 同日に2セッション（会場ID未設定でフォールバックは参加実績ベース）
+            stubCreateMatchCommon();
+            com.karuta.matchtracker.entity.PracticeSession sA =
+                    com.karuta.matchtracker.entity.PracticeSession.builder()
+                            .id(200L).sessionDate(today).totalMatches(3).organizationId(1L).build();
+            com.karuta.matchtracker.entity.PracticeSession sB =
+                    com.karuta.matchtracker.entity.PracticeSession.builder()
+                            .id(201L).sessionDate(today).totalMatches(3).organizationId(2L).build();
+            when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(sA, sB));
+            // player1 は sB にアクティブ参加。sA には（CANCELLED等で）アクティブ参加なし
+            when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(200L, 1L)).thenReturn(false);
+            when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(200L, 2L)).thenReturn(false);
+            when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(201L, 1L)).thenReturn(true);
+            when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerId(201L, 2L)).thenReturn(false);
+
+            // When
+            matchService.createMatch(detailedRequest(), 1L, Player.Role.PLAYER);
+
+            // Then: アクティブ参加のある sB(201) へ登録し、sA(200) には登録しない
+            verify(practiceParticipantService).autoRegisterMatchParticipant(201L, 1L, 1);
+            verify(practiceParticipantService).autoRegisterMatchParticipant(201L, 2L, 1);
+            verify(practiceParticipantService, never())
+                    .autoRegisterMatchParticipant(eq(200L), anyLong(), anyInt());
+        }
+
+        @Test
         @DisplayName("簡易版（未登録相手）の試合では自動参加登録しない")
         void shouldNotAutoRegisterForSimpleMatch() {
             // Given
