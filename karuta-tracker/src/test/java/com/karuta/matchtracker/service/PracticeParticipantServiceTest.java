@@ -1070,9 +1070,7 @@ class PracticeParticipantServiceTest {
         @Test
         @DisplayName("未参加なら WON で参加登録される")
         void registersWonWhenNotParticipating() {
-            when(practiceParticipantRepository
-                    .existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(false);
-
+            // findBy 未スタブ → 空リスト（参加記録なし）
             boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
 
             assertThat(result).isTrue();
@@ -1088,15 +1086,35 @@ class PracticeParticipantServiceTest {
         }
 
         @Test
-        @DisplayName("既にアクティブ参加なら二重登録しない（冪等）")
-        void idempotentWhenAlreadyParticipating() {
+        @DisplayName("既に WON/PENDING（参加確定）なら二重登録しない（冪等）")
+        void idempotentWhenAlreadyConfirmed() {
+            PracticeParticipant won = PracticeParticipant.builder()
+                    .sessionId(100L).playerId(10L).matchNumber(1).status(ParticipantStatus.WON).build();
             when(practiceParticipantRepository
-                    .existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(true);
+                    .findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(List.of(won));
 
             boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
 
             assertThat(result).isFalse();
             verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        }
+
+        @Test
+        @DisplayName("WAITLISTED の相手は WON に昇格する（実際に対戦したため）")
+        void promotesWaitlistedToWon() {
+            PracticeParticipant waitlisted = PracticeParticipant.builder()
+                    .sessionId(100L).playerId(10L).matchNumber(1)
+                    .status(ParticipantStatus.WAITLISTED).waitlistNumber(3).build();
+            when(practiceParticipantRepository
+                    .findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1)).thenReturn(List.of(waitlisted));
+
+            boolean result = service.autoRegisterMatchParticipant(100L, 10L, 1);
+
+            assertThat(result).isTrue();
+            verify(practiceParticipantRepository).save(participantCaptor.capture());
+            PracticeParticipant saved = participantCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
+            assertThat(saved.getWaitlistNumber()).isNull(); // 昇格時に待機番号はクリア
         }
 
         @Test

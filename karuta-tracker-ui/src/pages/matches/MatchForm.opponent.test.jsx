@@ -229,3 +229,26 @@ describe('MatchForm 抜け番モードのタブ移動リセット', () => {
     expect(screen.queryByText('活動内容')).toBeNull();
   });
 });
+
+describe('MatchForm 入力済み試合の相手読み取り専用', () => {
+  it('入力済み試合では対戦相手の変更・検索UIを出さない', async () => {
+    practiceAPI.getByDate.mockResolvedValue({ data: { ...SESSION, totalMatches: 1 } });
+    const existing = {
+      matchNumber: 1, player1Id: 1, player2Id: 2, opponentName: '佐藤 美咲',
+      result: '勝ち', scoreDifference: 5, isLesson: false, myOtetsukiCount: null, myPersonalNotes: '',
+    };
+    matchAPI.getByPlayerDateAndMatchNumber.mockImplementation((pid, date, num) =>
+      num === 1 ? Promise.resolve({ data: existing }) : Promise.reject(new Error('nf'))
+    );
+
+    renderForm();
+
+    // 入力済み通知が出る
+    expect(await screen.findByText(/入力済みの試合です/)).toBeInTheDocument();
+    // 相手名は表示されるが、変更（ボタン化された名前・▽）・検索UIは出さない
+    expect(screen.getByText('佐藤 美咲')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '佐藤 美咲' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '対戦相手を変更' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '未参加の選手から検索' })).toBeNull();
+  });
+});

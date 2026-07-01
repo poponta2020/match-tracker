@@ -620,9 +620,14 @@ public class PracticeParticipantService {
         if (sessionId == null || playerId == null || playerId == 0L || matchNumber == null) {
             return false;
         }
-        if (practiceParticipantRepository
-                .existsActiveBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber)) {
-            return false; // 既に参加済み（冪等）
+        // 既に WON/PENDING（＝当日参加確定 = ParticipantStatus.isActive()）なら何もしない。
+        // WAITLISTED/OFFERED/CANCELLED 等の非確定ステータスは、実際に対戦した以上 WON に昇格させる
+        // （フロントの母集団判定 WON/PENDING と揃え、検索経由で選んだ待機/キャンセル相手も参加確定にする）。
+        boolean alreadyConfirmed = practiceParticipantRepository
+                .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber).stream()
+                .anyMatch(p -> p.getStatus() != null && p.getStatus().isActive());
+        if (alreadyConfirmed) {
+            return false; // 既に参加確定（冪等）
         }
         saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
         log.info("試合記録に伴う自動参加登録: sessionId={}, playerId={}, matchNumber={}",

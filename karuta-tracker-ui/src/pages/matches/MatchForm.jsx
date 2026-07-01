@@ -756,6 +756,12 @@ const MatchForm = () => {
     : null;
   const opponentGrade = opponentPlayer ? kyuRankShortLabel(opponentPlayer.kyuRank) : '';
 
+  // 対戦相手を変更させない条件:
+  //  - 編集モード（更新APIは対戦者IDを変えない）
+  //  - 入力済み試合（相手を変えると別ペアの新規試合が作られ、旧試合が残って二重登録になる）
+  // どちらも「保存で同じ試合を上書き」する前提のため、相手変更UIは出さず読み取り専用にする。
+  const opponentReadOnly = isEdit || isExistingMatch;
+
   // 「未参加から検索」母集団 = 全選手 − 当日のアクティブ参加者 − 自分（players は既に自分を除外済み）
   const searchLower = searchTerm.trim().toLowerCase();
   const nonParticipants = players
@@ -923,8 +929,8 @@ const MatchForm = () => {
 
         {/* 対戦相手（主題） */}
         {practiceSession && (
-          isEdit ? (
-            /* 編集モードは対戦相手の変更をサポートしない（更新APIが対戦者IDを変えず表示名と不整合になるため）→ 読み取り専用表示 */
+          opponentReadOnly ? (
+            /* 編集モード・入力済み試合は対戦相手の変更を出さず読み取り専用表示（相手変更は二重登録/不整合になるため） */
             <div className="mf-subject">
               <span className="mf-vs">vs</span>
               <span className="mf-opp-name" style={{ cursor: 'default' }}>
