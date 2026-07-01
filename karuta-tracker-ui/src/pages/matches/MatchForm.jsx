@@ -253,6 +253,12 @@ const MatchForm = () => {
 
   // 試合番号のデータをstateに適用する共通関数
   const applyMatchData = (matchNumber, matchCache, pairCache) => {
+    // 手動抜け番モードは「その試合でプルダウンから抜け番を選んだ」瞬間のみ有効な UI 状態。
+    // 別試合のデータを適用するときは必ず解除し、抜け番モードが別試合に持ち越されないようにする
+    // （抜け番判定は下の分岐で isByeMatch として再計算される）。applyMatchData は
+    // 初期ロード・タブ/スワイプ切替時のみ呼ばれ、抜け番選択時には呼ばれない。
+    setManualByeMode(false);
+
     const existingResult = matchCache[matchNumber];
     if (existingResult && existingResult.exists) {
       const match = existingResult.data;
@@ -320,7 +326,6 @@ const MatchForm = () => {
         }));
       } else {
         setIsByeMatch(false);
-        setManualByeMode(false);
         setExistingByeActivity(null);
         setFormData(prev => ({
           ...prev,

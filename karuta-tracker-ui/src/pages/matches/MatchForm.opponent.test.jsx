@@ -203,3 +203,29 @@ describe('MatchForm 非アクティブ参加者の除外', () => {
     expect(await screen.findByRole('button', { name: /キャンセル 太郎/ })).toBeInTheDocument();
   });
 });
+
+describe('MatchForm 抜け番モードのタブ移動リセット', () => {
+  it('抜け番選択後に別試合（ペアリングあり）へ移動すると抜け番モードが解除される', async () => {
+    // 2試合目に自分のペアリング（相手=佐藤）を持たせる
+    pairingAPI.getByDate.mockResolvedValue({
+      data: [
+        { id: 10, matchNumber: 2, player1Id: 1, player2Id: 2, player1Name: '自分', player2Name: '佐藤 美咲' },
+      ],
+    });
+
+    renderForm();
+    const select = await waitFor(() => opponentSelect()); // 1試合目 = ペアリングなし → プルダウン
+
+    // 抜け番を選択 → 抜け番モード
+    fireEvent.change(select, { target: { value: '__bye__' } });
+    expect(await screen.findByText('活動内容')).toBeInTheDocument();
+
+    // 2試合目へ移動（dirty のため確認 → 移動する）
+    fireEvent.click(screen.getByRole('button', { name: /2試合目/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '移動する' }));
+
+    // 抜け番モードは解除され、ペアリング相手（佐藤）の通常入力になる
+    await waitFor(() => expect(screen.getByRole('button', { name: '佐藤 美咲' })).toBeInTheDocument());
+    expect(screen.queryByText('活動内容')).toBeNull();
+  });
+});
