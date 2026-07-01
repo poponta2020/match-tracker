@@ -608,7 +608,8 @@ public class PracticeParticipantService {
      * <ul>
      *   <li>status は {@link ParticipantStatus#WON}（試合が成立した＝確定参加。
      *       管理者の {@link #addParticipantToMatch} と同じ扱い）</li>
-     *   <li>冪等: 既にアクティブ参加（CANCELLED/DECLINED/WAITLIST_DECLINED 以外）なら何もしない</li>
+     *   <li>冪等: 既に参加確定（WON/PENDING = {@link ParticipantStatus#isActive()}）なら何もしない。
+     *       WAITLISTED/OFFERED/CANCELLED 等の非確定ステータスは、実際に対戦した事実に合わせて WON に昇格する</li>
      *   <li>densuke 同期はここではトリガーしない。試合保存のホットパスで毎回外部書き込みを
      *       誘発しないため。参加者の伝助反映は別経路（参加登録・編集）に委ねる</li>
      * </ul>
