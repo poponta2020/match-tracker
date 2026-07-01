@@ -1,9 +1,9 @@
 ---
 name: define-feature
-description: 新機能の要件定義を徹底的なヒアリングで行い、要件定義書・実装手順書・GitHub Issueを作成するスキル。セッションをまたいだ途中保存・再開に対応。新機能を作りたいとき、機能の要件を整理したいときに使用する。
+description: 新機能の要件定義を徹底的なヒアリングで行い、design-screen（設計レンズ）と往復して収束させてから、要件定義書・実装手順書・GitHub Issueを作成するスキル。セッションをまたいだ途中保存・再開に対応。新機能を作りたいとき、機能の要件を整理したいときに使用する。
 disable-model-invocation: true
 user-invocable: true
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, Skill
 argument-hint: [機能名や概要（任意）]
 ---
 
@@ -25,7 +25,7 @@ argument-hint: [機能名や概要（任意）]
 - **画面インベントリ＋画面間遷移（ナビゲーション地図）は requirements が持つ。** 個々の画面の見た目は design-spec が持つ（`docs/SCREEN_LIST.md` / `docs/DESIGN.md` とも整合させる）。
 - **宿題で投げる:** 画面の視覚設計が要る論点は requirements に `## デザインへの宿題（→ /design-screen <slug>）` を書いて渡す（→ 視覚が固まったら戻ってくる）。design-spec 側の `## 要件への宿題` は本スキルで解決する。
 - **新規=greenfield／既存改修=delta**（既存挙動を参照し差分だけ。全部は書き直さない）。複数画面は design-spec を画面ごとに分割可。
-- **収束ゲート:** requirements と design-spec の両方が `status: completed`/`locked`＋互いの宿題ゼロ＋薄い implementation-plan → `/implement`。
+- **収束ゲート:** requirements と design-spec の両方が `status: completed`/`locked`＋互いの宿題ゼロ → 実装手順書 → `/implement`。**この行き来は Step 3.5 で手順化**（要件1ラウンド確定 → design-screen 自動起動 → 宿題ループ → 収束 → Step 4 実装手順書）。
 - **片レンズに縮む:** 純UI（新ロジック皆無）なら design-spec が要件成果物＝本スキル不要。ロジックだけ（UIなし）なら本スキルのみ。**「設計後の儀式」として丸ごと回さない**（emergent logic の差分に絞る）。
 
 ---
@@ -35,7 +35,8 @@ argument-hint: [機能名や概要（任意）]
 ### 引数ありの場合
 `$ARGUMENTS` で指定された機能名に対応する `docs/features/<機能名>/` ディレクトリを探す。
 
-- **ディレクトリが存在し、`requirements.md` の `status` が `completed` でない場合** → **途中再開モード**（Step 0a へ）
+- **ディレクトリが存在し、`requirements.md` の `status` が `ヒアリング中` / `ドラフトレビュー中` の場合** → **ヒアリング途中再開モード**（Step 0a へ）
+- **ディレクトリが存在し、`requirements.md` の `status` が `設計ループ中` の場合** → **設計ループ途中再開モード**（Step 0a-2 へ）
 - **ディレクトリが存在し、`requirements.md` の `status` が `completed`、かつ `implementation-plan.md` の `status` が `completed` でない場合** → **実装手順書の途中再開モード**（Step 0b へ）
 - **ディレクトリが存在しない場合** → **新規作成モード**（Step 1 へ）
 - **両方とも `completed` の場合** → 「この機能の要件定義は完了済みです。`/implement <機能名>` で実装に進んでください。」と伝える
@@ -65,6 +66,18 @@ argument-hint: [機能名や概要（任意）]
 ```
 
 該当する Step 2 のセクションから続行する。
+
+### Step 0a-2: 設計ループ途中からの再開
+
+`requirements.md` は1ラウンド確定済みで、design-screen との設計ループ中。`requirements.md` の `## デザインへの宿題` と `design-spec.md` の `## 要件への宿題` を確認し、未解決の宿題から再開する。
+
+```
+前回は「<機能名>」の要件1ラウンドが確定し、設計レンズ（design-screen）とのループ中です。
+未解決の宿題: <宿題の要約>
+Step 3.5 の続きから再開します。
+```
+
+Step 3.5 のループ手順に合流する。
 
 ### Step 0b: 実装手順書の途中再開
 
@@ -247,15 +260,55 @@ next_section: null
 - 主要な設計判断とその理由
 ```
 
-ユーザーの承認を得たら、`requirements.md` のステータスを `completed` に更新し、フロントマターを以下に変更する：
+ユーザーがこのラウンドの要件ドラフトを承認したら、**ただちに `completed` にはせず**、この機能に視覚（UI）のレンズがあるかで分岐する：
 
-```yaml
----
-status: completed
----
-```
+- **UI/視覚の論点がある**（画面の追加・変更を伴う、または requirements に `## デザインへの宿題` がある）→ ステータスを `設計ループ中` に更新し、**Step 3.5（設計レンズとのループ）へ**。`completed` にするのは収束ゲート通過後（Step 3.5）。
 
-**注意:** ドラフトレビュー中にユーザーが中断を申し出た場合も、Step 2f と同様に保存して中断する。
+  ```yaml
+  ---
+  status: 設計ループ中
+  ---
+  ```
+
+- **純ロジック（UIなし。バッチ・API・スケジューラ等で画面に影響しない）** → 設計ループは不要。ステータスを `completed` に更新し、**Step 4 へ**。
+
+  ```yaml
+  ---
+  status: completed
+  ---
+  ```
+
+**注意:** ドラフトレビュー中／設計ループ中にユーザーが中断を申し出た場合も、Step 2f と同様に保存して中断する。
+
+---
+
+## Step 3.5: 設計レンズとのループ（収束ゲート）★重要
+
+要件（ロジック）と設計（視覚）は螺旋で深める。要件1ラウンドが固まったら、**実装手順書に進む前に design-screen を回し、互いの宿題がゼロになるまでループする**。詳細＝[`docs/dev/feature-flow.md`](../../../docs/dev/feature-flow.md)。
+
+### ループ手順
+
+1. **design-screen を自動起動する。** Skill ツールで `/design-screen <機能名>`（design-screen スキル）を起動し、視覚仕様（`design-spec.md`）を作り込む。requirements の `## デザインへの宿題` がインプットになる。ユーザーへの確認は挟まず起動してよい（自動）。
+2. **design-screen から戻ったら、宿題の有無を確認する。**
+   - design-spec.md に `## 要件への宿題（→ /define-feature <機能名>）` がある／視覚化の結果ロジック・遷移・データ・API・DB の再定義が要る → **その差分だけ**を Step 2 のヒアリング要領で詰め直し、requirements.md を**追記更新**する（作り直さない）。ユーザーに確認し合意を得る。
+   - 解決した宿題は design-spec 側でも解決済みにする（消す or 解決マーク）。
+3. **再度 design-screen を回す。** 要件を更新したら手順1に戻り、視覚仕様を追従させる。
+4. **収束判定（ゲート）。** 以下がすべて満たされたらループを抜ける：
+   - requirements.md と design-spec.md が、互いの宿題ゼロ。
+   - design-spec.md が `status: locked`。
+   - requirements 側に未解決の `## デザインへの宿題` が残っていない。
+5. 収束したら requirements.md のステータスを `completed` に更新し、**Step 4 へ**。
+
+   ```yaml
+   ---
+   status: completed
+   ---
+   ```
+
+### 留意点
+- **要件は画面レイアウトを言葉で再記述しない**（design-spec を参照）。重複させない。
+- ループの各ラウンドはユーザー合意を取りながら進める。勝手に何周も回さない。
+- 中断の合図が出たら requirements は `設計ループ中` のまま保存し、再開方法（`/define-feature <機能名>`）を伝えて止める（再開は Step 0a-2 → Step 3.5）。
 
 ---
 
@@ -263,7 +316,7 @@ status: completed
 
 ### 4a. 要件定義書の確定
 
-Step 3 で承認済みの `requirements.md` がそのまま確定版となる（すでにファイルに保存済み）。
+Step 3.5 の収束ゲートを通過した `requirements.md`（純ロジック機能は Step 3 で承認済み）がそのまま確定版となる（すでにファイルに保存済み）。
 
 ### 4b. 実装手順書の作成
 
