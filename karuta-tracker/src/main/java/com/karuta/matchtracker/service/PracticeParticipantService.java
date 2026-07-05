@@ -415,7 +415,7 @@ public class PracticeParticipantService {
                         request.getYear(), request.getMonth(),
                         LotteryExecution.ExecutionStatus.SUCCESS);
 
-        int registered = 0, waitlisted = 0, skipped = 0;
+        int registered = 0, pending = 0, waitlisted = 0, skipped = 0;
         Set<String> processedKeys = new HashSet<>();
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
@@ -429,23 +429,27 @@ public class PracticeParticipantService {
                 skipped++; continue;
             }
 
-            if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
-                // 空きあり → WON
+            if (!lotteryExecuted) {
+                // A-2: MONTHLY団体で抽選未実行の窓（締切後〜抽選実行前）の新規登録は PENDING（抽選対象）。
+                // 抽選前は WON が 0 のため isFreeRegistrationOpen が常に true となり即WON＋定員超過に
+                // なる問題を防ぐ。伝助経由の ○ が PENDING 取り込みされるのと挙動を揃え公平に抽選へ載せる。
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.PENDING, null);
+                pending++;
+            } else if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
+                // 抽選実行済み＋空きあり → WON
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
                 notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
-            } else if (lotteryExecuted) {
+            } else {
                 // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
                 int maxNumber = practiceParticipantRepository
                         .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WAITLISTED, maxNumber + 1);
                 waitlisted++;
-            } else {
-                skipped++;
             }
         }
-        log.info("Post-deadline: registered {} won, {} waitlisted (skipped {}) for player {}",
-                registered, waitlisted, skipped, playerId);
+        log.info("Post-deadline: registered {} won, {} pending, {} waitlisted (skipped {}) for player {}",
+                registered, pending, waitlisted, skipped, playerId);
     }
 
     /**

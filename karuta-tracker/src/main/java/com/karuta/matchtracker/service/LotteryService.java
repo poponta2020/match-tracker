@@ -291,6 +291,19 @@ public class LotteryService {
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
 
+        // A-2 防御的措置: 抽選前に既に埋まっている枠（WON/OFFERED）を定員から差し引く。
+        // 管理者手動追加・試合記録に伴う自動参加登録・締切後即WON等で抽選前に WON/OFFERED が
+        // 存在しても、合計当選が定員を超えないようにする。差し引き後の残枠で従来の3層抽選を実施。
+        // （再抽選経路も本差し引きに一本化。繰り上がり承諾者=WON が残枠から控除される）
+        if (capacity != null) {
+            long alreadyFilled =
+                    practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.WON)
+                    + practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.OFFERED);
+            capacity = (int) Math.max(0, capacity - alreadyFilled);
+        }
+
         // 定員未設定 or 定員以下 → 全員当選
         if (capacity == null || totalApplicants <= capacity) {
             for (PracticeParticipant p : applicants) {
@@ -879,19 +892,15 @@ public class LotteryService {
             long seed = new Random().nextLong();
             Random random = new Random(seed);
 
-            // 繰り上がり者の試合番号ごとのカウントを考慮して定員調整
-            Map<Integer, Long> promotedCountByMatch = promoted.stream()
-                    .filter(p -> p.getMatchNumber() != null)
-                    .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber, Collectors.counting()));
-
             // 試合番号でグループ化し再抽選
             Map<Integer, List<PracticeParticipant>> byMatch = reLotteryTargets.stream()
                     .filter(p -> p.getMatchNumber() != null && p.getStatus() == ParticipantStatus.PENDING)
                     .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber,
                             TreeMap::new, Collectors.toList()));
 
-            // 一時的にcapacityを調整して再抽選
-            Integer originalCapacity = session.getCapacity();
+            // 繰り上がり承諾者（WON のまま維持）分の枠差し引きは processMatch 内の
+            // WON/OFFERED 控除（A-2）に一本化する。ここでの手動 capacity 調整は不要
+            // （手動調整と併用すると二重に差し引かれるため撤廃）。
 
             // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
             Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
@@ -899,12 +908,6 @@ public class LotteryService {
 
             for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
                 int matchNumber = entry.getKey();
-                long promotedInMatch = promotedCountByMatch.getOrDefault(matchNumber, 0L);
-
-                if (originalCapacity != null && promotedInMatch > 0) {
-                    // 繰り上がり者分の枠を差し引いた仮想的な定員で抽選
-                    session.setCapacity(originalCapacity - (int) promotedInMatch);
-                }
 
                 Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
                         ? prevWaitlistOrder : Collections.emptyMap();
@@ -916,9 +919,6 @@ public class LotteryService {
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;
-
-                // 定員を戻す
-                session.setCapacity(originalCapacity);
             }
 
             execution.setPriorityPlayerIds(resolvedPriorityPlayerIds);

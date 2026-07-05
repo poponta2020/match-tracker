@@ -21,7 +21,7 @@ status: completed
 - **対応Issue:** #972
 
 ### タスク2（A-2）: 締切後〜抽選前登録のPENDING化＋抽選の定員差引
-- [ ] 完了
+- [x] 完了
 - **概要:** MONTHLYで抽選未実行の窓の新規登録をPENDING（抽選対象）にし、`processMatch` が既存WON/OFFEREDを定員から差し引いてから抽選することで即WON＋定員超過を防ぐ。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeParticipantService.java` — `registerAfterDeadline` に「抽選未実行→PENDING」の分岐
