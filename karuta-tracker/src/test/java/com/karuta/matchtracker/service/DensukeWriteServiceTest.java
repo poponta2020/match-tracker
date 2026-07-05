@@ -39,6 +39,8 @@ class DensukeWriteServiceTest {
     @Mock private DensukeMemberMappingRepository densukeMemberMappingRepository;
     @Mock private DensukeRowIdRepository densukeRowIdRepository;
     @Mock private PlayerRepository playerRepository;
+    @Mock private DensukeScraper densukeScraper;
+    @Mock private LineNotificationService lineNotificationService;
 
     @InjectMocks
     private DensukeWriteService densukeWriteService;
@@ -502,5 +504,23 @@ class DensukeWriteServiceTest {
         java.util.Set<String> collisions = densukeWriteService.findDbNameCollisions();
 
         assertThat(collisions).containsExactly("田中");
+    }
+
+    @Test
+    @DisplayName("B-3: parseAndSaveRowIds は row_id 問題を rowIdIssues にも記録する（管理者通知用）")
+    void parseAndSaveRowIds_recordsRowIdIssue() {
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-1", ""); // 1件 vs schedule 2件 → 不一致
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        java.util.List<String> rowIdIssues = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors, rowIdIssues);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        assertThat(rowIdIssues).isNotEmpty();
     }
 }

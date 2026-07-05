@@ -1,6 +1,6 @@
--- A-3/A-4: 管理者向け伝助通知 ADMIN_DENSUKE_CONFIRM_DIFF（確定前差分）および
--- ADMIN_DENSUKE_NAME_COLLISION（名寄せ衝突）を line_message_log.notification_type の
--- CHECK 制約に追加する。
+-- A-3/A-4/B-3: 管理者向け伝助通知 ADMIN_DENSUKE_CONFIRM_DIFF（確定前差分）・
+-- ADMIN_DENSUKE_NAME_COLLISION（名寄せ衝突）・ADMIN_DENSUKE_ROWID_ISSUE（伝助行不一致/row_id問題）を
+-- line_message_log.notification_type の CHECK 制約に追加する。
 -- Hibernate ddl-auto=update は既存 CHECK 制約を自動更新しないため手動で対応する。
 -- 適用しないと該当 LINE メッセージログ挿入が CHECK 違反で失敗する。
 -- 関連: docs/features/lottery-densuke-integrity/（タスク7 / A-3・タスク5 / A-4）
@@ -27,6 +27,7 @@ ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_c
         'ADMIN_DENSUKE_PUSH_FAILED',
         'ADMIN_DENSUKE_CONFIRM_DIFF',
         'ADMIN_DENSUKE_NAME_COLLISION',
+        'ADMIN_DENSUKE_ROWID_ISSUE',
         'ADMIN_KADERU_SYNC_COMPLETED',
         'ADMIN_KADERU_SYNC_FAILED',
         'MATCH_VIDEO_REGISTERED'

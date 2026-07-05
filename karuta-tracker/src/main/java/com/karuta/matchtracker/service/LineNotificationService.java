@@ -2410,7 +2410,8 @@ public class LineNotificationService {
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
-            case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION -> true;
+            case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION,
+                    ADMIN_DENSUKE_ROWID_ISSUE -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
             // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
@@ -2971,9 +2972,10 @@ public class LineNotificationService {
      *
      * @param organizationId 対象団体 ID
      * @param diffs          差分対象の説明一覧（選手名・日付・試合番号）
+     * @param writeSucceeded 伝助書き戻しが成功したか（失敗時は「書き戻せなかった可能性」と文言を切り替える）
      */
     @Async
-    public void sendPreConfirmDensukeDiffNotification(Long organizationId, List<String> diffs) {
+    public void sendPreConfirmDensukeDiffNotification(Long organizationId, List<String> diffs, boolean writeSucceeded) {
         if (diffs == null || diffs.isEmpty()) return;
         try {
             List<Player> targetAdmins = new ArrayList<>(
@@ -2990,10 +2992,13 @@ public class LineNotificationService {
                 return;
             }
 
-            String message = "[抽選確定：伝助差分の警告]\n"
-                    + "以下は確定直前に伝助側が×（不参加）でしたが、アプリは○で書き戻しました。\n"
-                    + "内容をご確認のうえ、必要なら手動で調整してください。\n"
-                    + String.join("\n", diffs);
+            String body = writeSucceeded
+                    ? "以下は確定直前に伝助側が×（不参加）でしたが、アプリは○で書き戻しました。\n"
+                            + "内容をご確認のうえ、必要なら手動で調整してください。\n"
+                    : "以下は確定直前に伝助側が×（不参加）で、アプリは○で書き戻す予定でしたが、"
+                            + "伝助への書き戻しに失敗（または一部失敗）した可能性があります。\n"
+                            + "伝助の実際の状態を手動で確認してください。\n";
+            String message = "[抽選確定：伝助差分の警告]\n" + body + String.join("\n", diffs);
 
             int sent = 0, failed = 0;
             for (Player admin : targetAdmins) {
@@ -3065,6 +3070,59 @@ public class LineNotificationService {
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
             log.warn("Async ADMIN_DENSUKE_NAME_COLLISION dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * B-3: 伝助書き込み時の row_id 問題（join-ID件数不一致・編集フォーム解析失敗・フォーム構造変化での
+     * row_id 再構築）を、指定団体の管理者（ADMIN / SUPER_ADMIN）へ LINE 送信する。
+     * スケジューラー同期では管理者が画面を見に行くまで気づけないため、能動的に通知する。preference 制御なし・常時送信。
+     * 書き込みステータス errors[] への記録に加えての可視化。
+     *
+     * @param organizationId 対象団体 ID
+     * @param issues         row_id 問題の説明一覧（URL単位に集約済み）
+     */
+    @Async
+    public void sendDensukeRowIdIssueNotification(Long organizationId, List<String> issues) {
+        if (issues == null || issues.isEmpty()) return;
+        try {
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            targetAdmins = targetAdmins.stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .distinct()
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_DENSUKE_ROWID_ISSUE: no admins for organization {}", organizationId);
+                return;
+            }
+
+            String message = "[伝助書き込み：行対応の問題]\n"
+                    + "伝助フォームの行構造に問題が検出され、一部の書き込みをスキップ/中止しました。\n"
+                    + "伝助側の行削除・並べ替え・HTML変更の可能性があります。内容をご確認ください。\n"
+                    + String.join("\n", issues);
+
+            int sent = 0, failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_DENSUKE_ROWID_ISSUE, message);
+                    if (result == SendResult.SUCCESS) sent++;
+                    else if (result == SendResult.FAILED) failed++;
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_DENSUKE_ROWID_ISSUE to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+            log.info("ADMIN_DENSUKE_ROWID_ISSUE: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            log.warn("Async ADMIN_DENSUKE_ROWID_ISSUE dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

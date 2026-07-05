@@ -7,7 +7,7 @@
 | SQL | 対象 | 追加値 | 未適用時の影響 |
 |---|---|---|---|
 | `database/add_densuke_name_collision_notification_type_check.sql` | `notifications.type` | `DENSUKE_NAME_COLLISION`（A-4/タスク5） | 名寄せ衝突のアプリ内通知挿入が CHECK 違反で失敗し、**伝助インポートのTXを巻き込む恐れ** |
-| `database/add_admin_densuke_confirm_diff_message_log_check.sql` | `line_message_log.notification_type` | `ADMIN_DENSUKE_CONFIRM_DIFF`（A-3/タスク7）、`ADMIN_DENSUKE_NAME_COLLISION`（A-4/タスク5・LINE通知） | 確定前差分・名寄せ衝突の LINE ログ挿入が失敗（`@Async` 内で捕捉されるため確定/インポートはブロックしないが通知が失われる） |
+| `database/add_admin_densuke_confirm_diff_message_log_check.sql` | `line_message_log.notification_type` | `ADMIN_DENSUKE_CONFIRM_DIFF`（A-3）、`ADMIN_DENSUKE_NAME_COLLISION`（A-4・LINE通知）、`ADMIN_DENSUKE_ROWID_ISSUE`（B-3・行不一致通知） | 確定前差分・名寄せ衝突・row_id問題の LINE ログ挿入が失敗（`@Async` 内で捕捉されるため確定/同期はブロックしないが通知が失われる） |
 
 いずれも DROP → 現行 enum 全値 ＋ 新値で ADD し直す冪等スクリプト。**現行 enum の全値を列挙済み**
 （`Notification.NotificationType` / `LineMessageLog.LineNotificationType` と一致）。

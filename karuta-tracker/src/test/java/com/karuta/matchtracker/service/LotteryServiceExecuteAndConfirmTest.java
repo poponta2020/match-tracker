@@ -183,6 +183,23 @@ class LotteryServiceExecuteAndConfirmTest {
                 .save(any(LotteryExecution.class));
     }
 
+    @Test
+    @DisplayName("A-3: 書き戻し失敗＋差分ありのとき、差分LINE通知に writeSucceeded=false を渡す")
+    void executeAndConfirm_writeFailedWithDiffs_notifiesFailure() {
+        stubLotteryExecutionSucceeds(); // 空セッション → SUCCESS
+        List<String> diffs = List.of("田中: 2026-04-05 第1試合（アプリWON→○書き戻し予定・伝助×）");
+        when(densukeWriteService.writeAllForLotteryConfirmation(eq(ORG_ID), eq(2026), eq(4)))
+                .thenReturn(DensukeWriteResult.failure(List.of("伝助書き戻し失敗")).withDensukeDiffs(diffs));
+
+        ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
+
+        assertThat(resp.isDensukeWriteSucceeded()).isFalse();
+        // 失敗時は writeSucceeded=false を渡し、通知本文で「書き戻せなかった可能性」に切り替えられる
+        org.mockito.Mockito.verify(lineNotificationService)
+                .sendPreConfirmDensukeDiffNotification(ORG_ID, diffs, false);
+    }
+
     private PracticeParticipant participant(Long id, Long playerId, Long sessionId) {
         return PracticeParticipant.builder()
                 .id(id)

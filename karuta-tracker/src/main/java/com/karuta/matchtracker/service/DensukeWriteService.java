@@ -50,6 +50,7 @@ public class DensukeWriteService {
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final PlayerRepository playerRepository;
     private final DensukeScraper densukeScraper;
+    private final LineNotificationService lineNotificationService;
 
     private static final Pattern MEMBERDATA_PATTERN = Pattern.compile("memberdata\\((\\d+)\\)");
 
@@ -130,6 +131,8 @@ public class DensukeWriteService {
 
         // 団体別エラー
         Map<Long, List<String>> errorsByOrg = new HashMap<>();
+        // B-3: 団体別の row_id 問題（管理者への集約 LINE 通知用）
+        Map<Long, List<String>> rowIdIssuesByOrg = new HashMap<>();
         // URL ごとに、その団体のセッションを取得
         Map<Long, DensukeUrl> urlById = urls.stream()
                 .collect(Collectors.toMap(DensukeUrl::getId, u -> u));
@@ -249,6 +252,7 @@ public class DensukeWriteService {
 
             // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約・usable を共有）
             Map<Long, Boolean> urlRowIdStatus = new HashMap<>();
+            List<String> orgRowIdIssues = rowIdIssuesByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -264,7 +268,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             participants, urlSessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false, urlRowIdStatus);
+                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false, urlRowIdStatus, orgRowIdIssues);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
@@ -291,6 +295,11 @@ public class DensukeWriteService {
             lastPendingCountByOrg.put(orgId, pendingByOrg.getOrDefault(orgId, 0));
             if (orgErrors.isEmpty()) {
                 lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
+            }
+            // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知
+            List<String> rowIdIssues = rowIdIssuesByOrg.getOrDefault(orgId, List.of());
+            if (!rowIdIssues.isEmpty()) {
+                lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
             }
         }
     }
@@ -327,6 +336,8 @@ public class DensukeWriteService {
         List<String> errors = new ArrayList<>();
         // A-3: ○書き戻し予定なのに伝助側×の反転リスク差分（確定はブロックしない・通知/可視化用）
         List<String> densukeDiffs = new ArrayList<>();
+        // B-3: row_id 問題（管理者への集約 LINE 通知用）
+        List<String> rowIdIssues = new ArrayList<>();
 
         for (DensukeUrl densukeUrl : urls) {
             Long urlId = densukeUrl.getId();
@@ -446,7 +457,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             allParticipants, sessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors, true, urlRowIdStatus);
+                            base, cd, cookies, pageId, memberNameToMi, errors, true, urlRowIdStatus, rowIdIssues);
                 } catch (Exception e) {
                     log.warn("Bulk write-back failed for player {}: {}", playerName, e.getMessage());
                     errors.add("一括書き戻し[" + playerName + "]: " + e.getMessage());
@@ -458,6 +469,11 @@ public class DensukeWriteService {
         if (!densukeDiffs.isEmpty()) {
             log.warn("A-3: pre-confirm densuke reversal-risk diffs detected ({}): {}",
                     densukeDiffs.size(), densukeDiffs);
+        }
+
+        // B-3: row_id 問題があれば管理者へ集約 LINE 通知（errors[] 可視化に加えて能動通知）
+        if (!rowIdIssues.isEmpty()) {
+            lineNotificationService.sendDensukeRowIdIssueNotification(organizationId, rowIdIssues);
         }
 
         if (!errors.isEmpty()) {
@@ -482,7 +498,8 @@ public class DensukeWriteService {
             Map<String, String> memberNameToMi,
             List<String> errors,
             boolean lotteryConfirmation,
-            Map<Long, Boolean> urlRowIdStatus) throws IOException {
+            Map<Long, Boolean> urlRowIdStatus,
+            List<String> rowIdIssues) throws IOException {
 
         String strippedName = DensukeScraper.normalizeMemberName(playerName);
 
@@ -514,7 +531,8 @@ public class DensukeWriteService {
         }
 
         // b. densuke_row_ids を取得（編集フォームをフェッチして保存＋B-3構造整合検証、1URL1回）
-        boolean rowIdsUsable = ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors, urlRowIdStatus);
+        boolean rowIdsUsable = ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId,
+                errors, urlRowIdStatus, rowIdIssues);
         if (!rowIdsUsable) {
             // B-3: フォーム行数不一致で row_id の位置合わせが保証できない → 当該書き込みを中止。
             // stale な row_id で別日/別試合へ書き込むデータ破壊を防ぐ（URL単位のエラーは errors[] に記録済み）。
@@ -781,7 +799,8 @@ public class DensukeWriteService {
                                Map<Long, PracticeSession> sessionMap,
                                String base, String cd, String mi,
                                Map<String, String> cookies, String pageId,
-                               List<String> errors, Map<Long, Boolean> urlRowIdStatus) throws IOException {
+                               List<String> errors, Map<Long, Boolean> urlRowIdStatus,
+                               List<String> rowIdIssues) throws IOException {
         // B-3: 当該URLはこのバッチで既に判定済みなら再フェッチせずキャッシュした usable を返す（1URL1回）。
         if (urlRowIdStatus != null) {
             Boolean cached = urlRowIdStatus.get(urlId);
@@ -806,12 +825,18 @@ public class DensukeWriteService {
                 .parse();
 
         Map<String, String> joinInputs = extractJoinInputs(formDoc);
-        boolean usable = parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors);
+        boolean usable = parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors, rowIdIssues);
 
         if (urlRowIdStatus != null) {
             urlRowIdStatus.put(urlId, usable);
         }
         return usable;
+    }
+
+    /** row_id 問題メッセージを errors[]（可視化）と rowIdIssues（管理者通知集約）の両方へ記録する。 */
+    private void recordRowIdIssue(List<String> errors, List<String> rowIdIssues, String message) {
+        if (errors != null) errors.add(message);
+        if (rowIdIssues != null) rowIdIssues.add(message);
     }
 
     /**
@@ -850,16 +875,25 @@ public class DensukeWriteService {
      */
     boolean parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
                                      Document formDoc, Map<String, String> joinInputs, List<String> errors) {
+        return parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors, null);
+    }
+
+    /**
+     * @param rowIdIssues 非null時、row_id 問題（件数不一致・解析失敗・構造再構築）のメッセージを追加する
+     *                    （呼び出し元が管理者へ集約通知するため。errors[] への記録に加えて使う）。
+     */
+    boolean parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
+                                     Document formDoc, Map<String, String> joinInputs,
+                                     List<String> errors, List<String> rowIdIssues) {
         Element table = formDoc.selectFirst("table.listtbl");
         if (table == null || joinInputs.isEmpty()) {
             // B-3: 編集フォームの取得・解析に失敗（listtbl 不在 / join入力なし＝HTML変更・エラーページ等）。
             // この状態で既存キャッシュの row_id を使うと stale なIDで別日/別試合へ書き込む危険が高いため、
             // false を返して当該URLの書き込みを中止し errors[] に記録する（安全側）。
             log.warn("Could not find listtbl or join inputs in densuke edit form, aborting write (urlId={})", urlId);
-            if (errors != null) {
-                errors.add("伝助編集フォームを解析できなかったため当該URLの書き込みを中止しました"
-                        + "（listtbl不在/join入力なし・伝助側の変更や一時エラーの可能性・urlId=" + urlId + "）");
-            }
+            recordRowIdIssue(errors, rowIdIssues,
+                    "伝助編集フォームを解析できなかったため当該URLの書き込みを中止しました"
+                            + "（listtbl不在/join入力なし・伝助側の変更や一時エラーの可能性・urlId=" + urlId + "）");
             return false;
         }
 
@@ -872,10 +906,9 @@ public class DensukeWriteService {
             // （stale な row_id で別日/別試合に書き込むデータ破壊を防ぐ）。
             log.warn("Join ID count ({}) differs from schedule count ({}), aborting write to avoid misalignment. urlId={}",
                     joinIds.size(), schedule.size(), urlId);
-            if (errors != null) {
-                errors.add("伝助フォームの行数(" + joinIds.size() + ")とアプリの予定数(" + schedule.size()
-                        + ")が不一致のため当該URLの書き込みを中止しました（伝助フォーム構造変更の可能性・urlId=" + urlId + "）");
-            }
+            recordRowIdIssue(errors, rowIdIssues,
+                    "伝助フォームの行数(" + joinIds.size() + ")とアプリの予定数(" + schedule.size()
+                            + ")が不一致のため当該URLの書き込みを中止しました（伝助フォーム構造変更の可能性・urlId=" + urlId + "）");
             return false;
         }
 
@@ -898,9 +931,8 @@ public class DensukeWriteService {
             // 監査ログ: 伝助フォーム構造変化を検知・row_id 再構築
             log.warn("B-3: densuke form structure change detected for urlId={}. Discarding {} cached row_ids and rebuilding.",
                     urlId, cached.size());
-            if (errors != null) {
-                errors.add("伝助フォーム構造の変化を検知したため row_id を再構築しました（urlId=" + urlId + "）");
-            }
+            recordRowIdIssue(errors, rowIdIssues,
+                    "伝助フォーム構造の変化を検知したため row_id を再構築しました（urlId=" + urlId + "）");
             densukeRowIdRepository.deleteAll(cached);
             densukeRowIdRepository.flush();
             cached = List.of();

@@ -221,7 +221,8 @@ public class LotteryService {
                 if (!densukeDiffs.isEmpty()) {
                     log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {}: {}",
                             densukeDiffs.size(), organizationId, densukeDiffs);
-                    lineNotificationService.sendPreConfirmDensukeDiffNotification(organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(
+                            organizationId, densukeDiffs, densukeWriteSucceeded);
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
@@ -1213,7 +1214,8 @@ public class LotteryService {
                 if (!densukeDiffs.isEmpty()) {
                     log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {} (confirmLottery path): {}",
                             densukeDiffs.size(), organizationId, densukeDiffs);
-                    lineNotificationService.sendPreConfirmDensukeDiffNotification(organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(
+                            organizationId, densukeDiffs, result.isSuccess());
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
