@@ -38,7 +38,7 @@ status: completed
 - **対応Issue:** #974
 
 ### タスク4（B-1）: 容量拡張OFFEREDを要承諾に統一
-- [ ] 完了
+- [x] 完了
 - **概要:** 容量拡張による昇格OFFEREDに応答期限を付与しオファー通知を送る（auto-confirm廃止、既存OFFERED期限一律クリアも廃止）。全OFFEREDを「期限付き・要承諾」に統一する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/WaitlistPromotionService.java` — `promoteWaitlistedAfterCapacityIncrease` で `calculateOfferDeadline` を設定、オファー通知送信、期限一律クリア廃止

@@ -1342,12 +1342,18 @@ public class WaitlistPromotionService {
     }
 
     /**
-     * 容量拡張に伴い、キャンセル待ちを応答期限なしの OFFERED に昇格する。
+     * 容量拡張に伴い、キャンセル待ちを「期限付き・要承諾」の OFFERED に昇格する。
      *
      * 各試合について WON + 既存OFFERED が capacity に達するまで、waitlist_number 昇順で
-     * WAITLISTED を OFFERED（offer_deadline=null）に変更する。空き枠を超えた分の WAITLISTED は
-     * そのまま残す（waitlist_number も維持）。
-     * 既存OFFERED の応答期限は一律 null にクリアする（容量拡張で参加が確定したため）。
+     * WAITLISTED を OFFERED に変更する。空き枠を超えた分の WAITLISTED はそのまま残す
+     * （waitlist_number も維持）。
+     *
+     * B-1: 昇格 OFFERED には通常オファーと同じ応答期限（{@link LotteryDeadlineHelper#calculateOfferDeadline}）
+     * を付与し、承諾操作を促すオファー通知（アプリ内＋LINE）を送信する。auto-confirm
+     * （offer_deadline=null）および既存OFFEREDの応答期限一律クリアは廃止した。これにより
+     * 全OFFEREDが「期限付き・要承諾」に統一され、正午一括DECLINE・OfferExpiryScheduler と整合する。
+     * 応答期限が既に過ぎている場合（当日12:00以降など）は通常オファー経路と同様に昇格を行わない
+     * （即失効するオファーを作らない）。
      *
      * @param sessionId 対象セッションID
      */
@@ -1358,17 +1364,13 @@ public class WaitlistPromotionService {
 
         LocalDateTime now = JstDateTimeUtil.now();
 
-        // 既存OFFERED は応答期限を一律クリア（拡張で参加確定）
-        List<PracticeParticipant> existingOffered = practiceParticipantRepository
-                .findBySessionIdAndStatus(sessionId, ParticipantStatus.OFFERED);
-        for (PracticeParticipant p : existingOffered) {
-            if (p.getOfferDeadline() != null) {
-                p.setOfferDeadline(null);
-                p.setDirty(true);
-            }
-        }
-        if (!existingOffered.isEmpty()) {
-            practiceParticipantRepository.saveAll(existingOffered);
+        // B-1: 昇格 OFFERED に付与する応答期限。既に過ぎている場合は昇格しない
+        // （promoteNextWaitlisted と整合。即失効するオファーを作らない）。
+        LocalDateTime deadline = lotteryDeadlineHelper.calculateOfferDeadline(session.getSessionDate());
+        if (!deadline.isAfter(now)) {
+            log.info("promoteWaitlistedAfterCapacityIncrease: session {} offer deadline {} already past, skip promotion",
+                    sessionId, deadline);
+            return;
         }
 
         Integer capacity = session.getCapacity();
@@ -1388,6 +1390,7 @@ public class WaitlistPromotionService {
         int totalPromoted = 0;
         int totalRemained = 0;
         List<PracticeParticipant> toSave = new ArrayList<>();
+        List<PracticeParticipant> promotedForNotify = new ArrayList<>();
 
         for (Map.Entry<Integer, List<PracticeParticipant>> entry : waitlistedByMatch.entrySet()) {
             Integer matchNumber = entry.getKey();
@@ -1420,9 +1423,11 @@ public class WaitlistPromotionService {
                 PracticeParticipant p = matchWaitlisted.get(i);
                 p.setStatus(ParticipantStatus.OFFERED);
                 p.setOfferedAt(now);
-                p.setOfferDeadline(null);
+                // B-1: auto-confirm（offer_deadline=null）をやめ、通常オファーと同じ応答期限を付与
+                p.setOfferDeadline(deadline);
                 p.setDirty(true);
                 toSave.add(p);
+                promotedForNotify.add(p);
             }
             totalPromoted += promoteCount;
             totalRemained += matchWaitlisted.size() - promoteCount;
@@ -1438,6 +1443,21 @@ public class WaitlistPromotionService {
         // 影響試合ごとに waitlist_number を 1..N で再採番
         for (Integer matchNumber : waitlistedByMatch.keySet()) {
             renumberRemainingWaitlist(sessionId, matchNumber);
+        }
+
+        // B-1: 昇格した選手へオファー通知（アプリ内＋LINE、セッション×プレイヤーで統合）を送信し承諾を促す
+        if (!promotedForNotify.isEmpty()) {
+            for (PracticeParticipant p : promotedForNotify) {
+                notificationService.createOfferNotification(p);
+            }
+            Map<Long, List<PracticeParticipant>> byPlayer = new LinkedHashMap<>();
+            for (PracticeParticipant p : promotedForNotify) {
+                byPlayer.computeIfAbsent(p.getPlayerId(), k -> new ArrayList<>()).add(p);
+            }
+            for (List<PracticeParticipant> playerOffered : byPlayer.values()) {
+                lineNotificationService.sendConsolidatedWaitlistOfferNotification(
+                        playerOffered, session, "定員拡張", (Long) null);
+            }
         }
 
         log.info("promoteWaitlistedAfterCapacityIncrease completed for session {}: promoted={}, remainedAsWaitlisted={}",

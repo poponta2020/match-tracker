@@ -606,7 +606,7 @@ public class PracticeSessionService {
             practiceParticipantRepository.saveAll(newParticipants);
         }
 
-        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（応答期限なし、定員までに制限）
+        // 容量が拡張された場合は WAITLISTED を OFFERED に昇格（期限付き・要承諾、定員まで／B-1）
         // 参加者の差分更新（キャンセル・削除・追加）の後に実行することで、
         // 最終状態の WON / OFFERED 数を基準に昇格数が決まる。
         if (isCapacityExpanded(oldCapacity, newCapacity)) {
