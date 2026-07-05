@@ -330,6 +330,85 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
+    @DisplayName("A-1: setMatchParticipants は WAITLISTED/OFFERED を温存し、外れた WON のみ CANCELLED にする")
+    void setMatchParticipants_preservesWaitlistedAndOffered() {
+        PracticeSession session = createSession(100L, 4);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(playerRepository.findAllById(List.of(10L)))
+                .thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class)));
+
+        PracticeParticipant wonRemoved = buildParticipant(100L, 99L, 2, ParticipantStatus.WON);
+        wonRemoved.setId(1L);
+        PracticeParticipant waitlisted = buildParticipant(100L, 50L, 2, ParticipantStatus.WAITLISTED);
+        waitlisted.setId(2L);
+        PracticeParticipant offered = buildParticipant(100L, 60L, 2, ParticipantStatus.OFFERED);
+        offered.setId(3L);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
+                .thenReturn(List.of(wonRemoved, waitlisted, offered));
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+                .thenReturn(List.of());
+
+        service.setMatchParticipants(100L, 2, List.of(10L));
+
+        // 外れた WON は CANCELLED、WAITLISTED/OFFERED は温存（伝助の×/△を巻き込まない）
+        assertThat(wonRemoved.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        // WAITLISTED/OFFERED は保存されない（温存）
+        verify(practiceParticipantRepository, never()).save(waitlisted);
+        verify(practiceParticipantRepository, never()).save(offered);
+    }
+
+    @Test
+    @DisplayName("A-2: 締切後+抽選未実行の新規登録は PENDING で登録される")
+    void afterDeadline_lotteryNotExecuted_pending() {
+        PracticeSession session = createSession(100L, 4);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of());
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        assertThat(participantCaptor.getValue().getStatus()).isEqualTo(ParticipantStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("B-4: expectedVersion 不一致なら ConflictStateException(409) で保存を中止する")
+    void registerParticipations_versionMismatch_conflict() {
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(LocalDate.of(2025, 4, 5));
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        PracticeParticipant existing = buildParticipant(100L, 10L, 1, ParticipantStatus.WON);
+        existing.setId(1L);
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), anyList()))
+                .thenReturn(List.of(existing));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+        request.setExpectedVersion("stale-version");
+
+        assertThrows(com.karuta.matchtracker.exception.ConflictStateException.class,
+                () -> service.registerParticipations(request));
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("Add participant to match reuses cancelled record")
     void addParticipantToMatch_reuseCancelledRecord() {
         LocalDate date = LocalDate.of(2025, 4, 5);

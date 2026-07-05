@@ -111,7 +111,7 @@ status: completed
 - **対応Issue:** #981
 
 ### タスク11（D）: 回帰テスト追加
-- [ ] 完了
+- [x] 完了
 - **概要:** 本改修の各項目（A-1〜A-4, B-1〜B-5）の反転経路回帰テストと、既存未カバーのアルゴリズム特性（連鎖落選・月内救済・一般枠30%保証・キャンセル待ち番号引き継ぎ・シード再現性）・正午12:00境界のテストを追加する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/test/java/com/karuta/matchtracker/service/LotteryServiceTest.java` ほか（processMatch特性・A-2定員差引・B-2シグネチャ）
