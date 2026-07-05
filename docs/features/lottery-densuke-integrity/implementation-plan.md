@@ -58,7 +58,7 @@ status: completed
 - **対応Issue:** #976
 
 ### タスク6（A-4-b）: 重複4名の統合スクリプト作成＋本番適用
-- [ ] 完了
+- [ ] 完了（スクリプト・手順は整備済。本番適用は接続復旧＋ユーザー承認待ちで保留）
 - **概要:** 正規化キー衝突源である未統合重複4名（川瀬/高橋/山野/むらやま）を、過去 #932 と同方式（マスター選択・参照付け替え・重複側 `deleted_at` 論理削除、`players.name` UNIQUE制約に配慮）で統合し本番PostgreSQLへ適用する。
 - **変更対象ファイル:**
   - `docs/features/lottery-densuke-integrity/merge-duplicates/` — 統合SQL・手順書・適用ログ（`database/` には置かない＝スキーマ変更でないため）
