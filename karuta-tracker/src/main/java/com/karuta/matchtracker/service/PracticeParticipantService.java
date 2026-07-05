@@ -105,6 +105,9 @@ public class PracticeParticipantService {
         LocalDateTime now = JstDateTimeUtil.now();
         List<PracticeParticipant> existing = practiceParticipantRepository
                 .findBySessionIdAndMatchNumber(sessionId, matchNumber);
+        // (session, player, match) は一意（uk_session_player_match）のため playerId でマップ化できる。
+        Map<Long, PracticeParticipant> existingByPlayer = existing.stream()
+                .collect(Collectors.toMap(PracticeParticipant::getPlayerId, p -> p, (a, b) -> a));
         for (PracticeParticipant p : existing) {
             if (p.getStatus() != null && p.getStatus().isActive() && !targetIds.contains(p.getPlayerId())) {
                 p.setStatus(ParticipantStatus.CANCELLED);
@@ -115,14 +118,23 @@ public class PracticeParticipantService {
         }
         practiceParticipantRepository.flush();
 
-        // 新リストの選手を WON で登録（既存行があれば再利用）。
-        // 明示的に選択された待機/キャンセル系の選手はここで WON へ昇格する（管理者の意図的操作）。
+        // 新リストの選手を WON で登録（既存アクティブ行の再利用 or 新規のみ）。
+        // A-1: WAITLISTED/OFFERED/CANCELLED/DECLINED/WAITLIST_DECLINED（非アクティブ）の既存行は
+        // 「編集対象外」のためスキップし、このエンドポイントで WON へ昇格しない
+        // （キャンセル済み(×)の復活・待機者の抽選なしWON昇格を API 側でも防ぐ。モーダルの初期選択限定と整合）。
+        int promoted = 0, skippedInactive = 0;
         for (Long playerId : uniquePlayerIds) {
+            PracticeParticipant ex = existingByPlayer.get(playerId);
+            if (ex != null && ex.getStatus() != null && !ex.getStatus().isActive()) {
+                skippedInactive++;
+                continue;
+            }
             saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
+            promoted++;
         }
 
-        log.info("Successfully set {} participants for session: {}, match: {}",
-                uniquePlayerIds.size(), sessionId, matchNumber);
+        log.info("Successfully set match participants for session: {}, match: {} (won={}, skippedInactive={})",
+                sessionId, matchNumber, promoted, skippedInactive);
         densukeSyncService.triggerWriteAsync();
     }
 

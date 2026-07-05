@@ -244,7 +244,8 @@ public class DensukeWriteService {
                 continue;
             }
 
-            // ② 各プレイヤーの書き込み
+            // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約）
+            Set<Long> verifiedRowIdUrls = new HashSet<>();
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -253,7 +254,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             participants, urlSessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false);
+                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false, verifiedRowIdUrls);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
@@ -383,7 +384,10 @@ public class DensukeWriteService {
                 DensukeScraper.DensukeData scraped = densukeScraper.scrape(urlStr, year);
                 for (DensukeScraper.ScheduleEntry se : scraped.getEntries()) {
                     for (String n : se.getDeclinedParticipants()) {
-                        densukeDeclinedKeys.add(se.getDate() + "|" + se.getMatchNumber() + "|" + n);
+                        // 照合側（normalizeMemberName(playerName)）と揃えるため正規化してキー化する。
+                        // 伝助側 "田中 "（末尾空白）×とアプリ側 "田中" WON の空白差分でも検知できるようにする。
+                        densukeDeclinedKeys.add(se.getDate() + "|" + se.getMatchNumber() + "|"
+                                + DensukeScraper.normalizeMemberName(n));
                     }
                 }
             } catch (Exception e) {
@@ -392,6 +396,8 @@ public class DensukeWriteService {
             }
 
             // 各プレイヤーを書き込み（WON/WAITLISTED/OFFERED/PENDING のみ、dirty フィルタなし）
+            // B-3: row_id 整合検証は1URL1回に集約
+            Set<Long> verifiedRowIdUrls = new HashSet<>();
             for (DensukeMemberMapping mapping : mappings) {
                 Long playerId = mapping.getPlayerId();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
@@ -419,7 +425,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             allParticipants, sessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors, true);
+                            base, cd, cookies, pageId, memberNameToMi, errors, true, verifiedRowIdUrls);
                 } catch (Exception e) {
                     log.warn("Bulk write-back failed for player {}: {}", playerName, e.getMessage());
                     errors.add("一括書き戻し[" + playerName + "]: " + e.getMessage());
@@ -454,7 +460,8 @@ public class DensukeWriteService {
             Map<String, String> cookies, String pageId,
             Map<String, String> memberNameToMi,
             List<String> errors,
-            boolean lotteryConfirmation) throws IOException {
+            boolean lotteryConfirmation,
+            Set<Long> verifiedUrlIds) throws IOException {
 
         String strippedName = DensukeScraper.normalizeMemberName(playerName);
 
@@ -485,8 +492,8 @@ public class DensukeWriteService {
             return;
         }
 
-        // b. densuke_row_ids を取得（なければ編集フォームをフェッチして保存）
-        ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors);
+        // b. densuke_row_ids を取得（編集フォームをフェッチして保存＋B-3構造整合検証、1URL1回）
+        ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors, verifiedUrlIds);
 
         // c. 当該URLの全セッション×このプレイヤーのステータスを取得
         List<Long> urlSessionIds = urlSessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
@@ -725,27 +732,16 @@ public class DensukeWriteService {
                                Map<Long, PracticeSession> sessionMap,
                                String base, String cd, String mi,
                                Map<String, String> cookies, String pageId,
-                               List<String> errors) throws IOException {
-        // 既にDBにある row_ids
-        Set<String> existingKeys = densukeRowIdRepository.findByDensukeUrlId(urlId).stream()
-                .map(r -> r.getSessionDate() + "_" + r.getMatchNumber())
-                .collect(Collectors.toSet());
-
-        // 未保存のセッション×試合があるか確認
-        boolean hasNew = false;
-        for (PracticeSession s : sessions) {
-            for (int m = 1; m <= s.getTotalMatches(); m++) {
-                if (!existingKeys.contains(s.getSessionDate() + "_" + m)) {
-                    hasNew = true;
-                    break;
-                }
-            }
-            if (hasNew) break;
+                               List<String> errors, Set<Long> verifiedUrlIds) throws IOException {
+        // B-3: 当該URLはこのバッチで既に検証済みなら再フェッチしない（1URL1回に集約）。
+        if (verifiedUrlIds != null && verifiedUrlIds.contains(urlId)) {
+            return;
         }
 
-        if (!hasNew) return;
-
-        // 編集フォームを取得して join-{id} を抽出（Cookie・id 付き）
+        // 編集フォームを取得して現在の join-{id} 構造を得る（Cookie・id 付き）。
+        // B-3: 未保存行の補完だけでなく、キャッシュ済み row_id と現フォーム構造の整合検証・矛盾時の
+        // 再構築を必ず1回行う。全行キャッシュ済み（未保存行なし）でも構造変化を検知できるよう、
+        // 未保存行の有無に関わらずフェッチ・検証する（従来の hasNew スキップだと構造変化を見逃す）。
         Document formDoc = Jsoup.connect(base + "list?cd=" + cd)
                 .data("id", pageId)
                 .data("mi", mi)
@@ -759,6 +755,10 @@ public class DensukeWriteService {
 
         Map<String, String> joinInputs = extractJoinInputs(formDoc);
         parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors);
+
+        if (verifiedUrlIds != null) {
+            verifiedUrlIds.add(urlId);
+        }
     }
 
     /**

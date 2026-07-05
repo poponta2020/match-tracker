@@ -302,8 +302,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("Set match participants reuses cancelled record")
-    void setMatchParticipants_reuseCancelledRecord() {
+    @DisplayName("A-1: setMatchParticipants は既存 CANCELLED を WON へ復活させない（編集対象外）")
+    void setMatchParticipants_doesNotReviveCancelled() {
         PracticeSession session = createSession(100L, 4);
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(playerRepository.findAllById(any())).thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class)));
@@ -316,17 +316,40 @@ class PracticeParticipantServiceTest {
                 .status(ParticipantStatus.CANCELLED)
                 .dirty(false)
                 .build();
-        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+        // 実DBと同様、(session, match) 走査と (session, player, match) 走査で同じ CANCELLED 行が見える
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
                 .thenReturn(List.of(cancelled));
 
-        service.setMatchParticipants(100L, 2, List.of(10L, 10L));
+        service.setMatchParticipants(100L, 2, List.of(10L));
 
         verify(playerRepository).findAllById(List.of(10L));
-        verify(practiceParticipantRepository).save(participantCaptor.capture());
-        PracticeParticipant saved = participantCaptor.getValue();
-        assertThat(saved.getId()).isEqualTo(777L);
-        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
-        assertThat(saved.isDirty()).isTrue();
+        // 非アクティブ(CANCELLED)は編集対象外 → WON へ昇格せず、保存もされない（× の復活を防ぐ）
+        assertThat(cancelled.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("A-1: setMatchParticipants は既存 WAITLISTED/OFFERED を WON へ昇格させない（編集対象外）")
+    void setMatchParticipants_doesNotPromoteWaitlistedOrOffered() {
+        PracticeSession session = createSession(100L, 4);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(playerRepository.findAllById(any()))
+                .thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class),
+                        mock(com.karuta.matchtracker.entity.Player.class)));
+
+        PracticeParticipant waitlisted = buildParticipant(100L, 50L, 2, ParticipantStatus.WAITLISTED);
+        waitlisted.setId(1L);
+        PracticeParticipant offered = buildParticipant(100L, 60L, 2, ParticipantStatus.OFFERED);
+        offered.setId(2L);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
+                .thenReturn(List.of(waitlisted, offered));
+
+        service.setMatchParticipants(100L, 2, List.of(50L, 60L));
+
+        // 待機/応答待ちは編集対象外 → WON へ昇格せず据え置き（抽選なしWON昇格を防ぐ）
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        verify(practiceParticipantRepository, never()).save(any());
     }
 
     @Test
