@@ -1008,11 +1008,52 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("PLAYER権限では403エラー")
-        void shouldReturn403ForPlayerRole() throws Exception {
+        @DisplayName("PLAYER権限で自分の所属団体のセッションなら削除できる")
+        void shouldDeletePairingAsPlayerForOwnOrg() throws Exception {
+            // Given: PLAYER が所属する団体 7L のセッションが当日存在する
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 3;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            mockPlayerScopeForDate(date, playerUserId, orgId);
+            doNothing().when(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), eq(orgId));
+
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "PLAYER")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("matchNumber", "3"))
+                    .andExpect(status().isNoContent());
+
+            verify(matchPairingService).deleteByDateAndMatchNumber(eq(date), eq(matchNumber), eq(orgId));
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のセッションは403")
+        void shouldReturn403ForPlayerDeleteOutsideOwnOrg() throws Exception {
+            // Given: PLAYER の所属団体に当日のセッションがない
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long playerUserId = 10L;
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(99L, date, 99L)));
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/date-and-match")
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .param("date", "2024-01-15")
+                            .param("matchNumber", "3"))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).deleteByDateAndMatchNumber(any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしは403エラー")
+        void shouldReturn403WithoutAuthHeader() throws Exception {
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/date-and-match")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isForbidden());
@@ -1074,11 +1115,55 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("PLAYER権限では403エラー")
-        void shouldReturn403ForPlayerRole() throws Exception {
+        @DisplayName("PLAYER権限で自分の所属団体のペアリングならリセットできる")
+        void shouldResetWithResultAsPlayerForOwnOrg() throws Exception {
+            // Given
+            Long id = 1L;
+            Long playerUserId = 10L;
+            Long orgId = 7L;
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(orgId));
+            when(matchPairingService.getOrganizationIdByPairingId(id)).thenReturn(orgId);
+            MatchPairingDto dto = MatchPairingDto.builder()
+                    .id(id).sessionDate(date).matchNumber(1)
+                    .player1Id(10L).player1Name("選手A").player2Id(20L).player2Name("選手B")
+                    .hasResult(true).winnerName("選手A").scoreDifference(5).matchId(100L)
+                    .createdBy(playerUserId).build();
+            when(matchPairingService.resetWithResult(id)).thenReturn(dto);
+
             // When & Then
-            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", 1L)
-                            .header("X-User-Role", "PLAYER"))
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1));
+
+            verify(matchPairingService).resetWithResult(id);
+        }
+
+        @Test
+        @DisplayName("PLAYER権限で所属外団体のペアリングは403")
+        void shouldReturn403ForPlayerResetOutsideOwnOrg() throws Exception {
+            // Given: ペアリングの所属団体が PLAYER の所属外
+            Long id = 1L;
+            Long playerUserId = 10L;
+            when(organizationService.getPlayerOrganizationIds(playerUserId))
+                    .thenReturn(List.of(7L));
+            when(matchPairingService.getOrganizationIdByPairingId(id)).thenReturn(99L);
+
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
+                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).resetWithResult(anyLong());
+        }
+
+        @Test
+        @DisplayName("認可ヘッダーなしは403エラー")
+        void shouldReturn403WithoutAuthHeader() throws Exception {
+            // When & Then
+            mockMvc.perform(delete("/api/match-pairings/{id}/with-result", 1L))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).resetWithResult(anyLong());
