@@ -2410,7 +2410,7 @@ public class LineNotificationService {
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
-            case ADMIN_DENSUKE_PUSH_FAILED -> true;
+            case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
             // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
@@ -2960,6 +2960,58 @@ public class LineNotificationService {
         } catch (Exception e) {
             // @Async のスレッドで失敗しても呼び出し元には伝播しないため、ここで必ずログに落とす
             log.warn("Async ADMIN_DENSUKE_PUSH_FAILED dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * A-3: 抽選確定の書き戻し直前に検知した伝助差分（アプリ側○書き戻し予定なのに伝助側×＝不参加の
+     * 反転リスク）を、指定団体の管理者（ADMIN / SUPER_ADMIN）へ LINE 送信する。
+     * 差分自体は確定をブロックしないため、管理者が手動対応できるよう通知する。preference 制御は持たず常時送信。
+     *
+     * @param organizationId 対象団体 ID
+     * @param diffs          差分対象の説明一覧（選手名・日付・試合番号）
+     */
+    @Async
+    public void sendPreConfirmDensukeDiffNotification(Long organizationId, List<String> diffs) {
+        if (diffs == null || diffs.isEmpty()) return;
+        try {
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            targetAdmins = targetAdmins.stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .distinct()
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_DENSUKE_CONFIRM_DIFF: no admins for organization {}", organizationId);
+                return;
+            }
+
+            String message = "[抽選確定：伝助差分の警告]\n"
+                    + "以下は確定直前に伝助側が×（不参加）でしたが、アプリは○で書き戻しました。\n"
+                    + "内容をご確認のうえ、必要なら手動で調整してください。\n"
+                    + String.join("\n", diffs);
+
+            int sent = 0, failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_DENSUKE_CONFIRM_DIFF, message);
+                    if (result == SendResult.SUCCESS) sent++;
+                    else if (result == SendResult.FAILED) failed++;
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_DENSUKE_CONFIRM_DIFF to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+            log.info("ADMIN_DENSUKE_CONFIRM_DIFF: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            log.warn("Async ADMIN_DENSUKE_CONFIRM_DIFF dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

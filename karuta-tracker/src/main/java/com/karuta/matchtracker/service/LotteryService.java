@@ -195,6 +195,7 @@ public class LotteryService {
         // writeAllForLotteryConfirmation 側 (REQUIRES_NEW) は最新の WON/WAITLISTED を読み取れる。
         boolean densukeWriteSucceeded = true;
         String densukeWriteError = null;
+        List<String> densukeDiffs = List.of();
         if (organizationId != null) {
             try {
                 DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
@@ -202,6 +203,14 @@ public class LotteryService {
                     log.warn("Densuke write-back returned failures after lottery confirmation: {}", result.getErrors());
                     densukeWriteSucceeded = false;
                     densukeWriteError = String.join("; ", result.getErrors());
+                }
+                // A-3: 確定書き戻し直前の伝助差分（○書き戻し予定 vs 伝助×）を管理者へ通知しレスポンスに含める。
+                // 差分自体は確定をブロックしない（確定DBは維持）。
+                densukeDiffs = result.getDensukeDiffs() != null ? result.getDensukeDiffs() : List.of();
+                if (!densukeDiffs.isEmpty()) {
+                    log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {}: {}",
+                            densukeDiffs.size(), organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(organizationId, densukeDiffs);
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
@@ -214,6 +223,7 @@ public class LotteryService {
                 .execution(execution)
                 .densukeWriteSucceeded(densukeWriteSucceeded)
                 .densukeWriteError(densukeWriteError)
+                .densukeDiffs(densukeDiffs)
                 .build();
     }
 
@@ -1150,6 +1160,13 @@ public class LotteryService {
                 DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
                 if (!result.isSuccess()) {
                     log.warn("Densuke write-back returned failures after lottery confirmation (confirmLottery path): {}", result.getErrors());
+                }
+                // A-3: 確定書き戻し直前の伝助差分を管理者へ通知（この経路の戻り値には差分を載せないが通知は行う）
+                List<String> densukeDiffs = result.getDensukeDiffs() != null ? result.getDensukeDiffs() : List.of();
+                if (!densukeDiffs.isEmpty()) {
+                    log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {} (confirmLottery path): {}",
+                            densukeDiffs.size(), organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(organizationId, densukeDiffs);
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);

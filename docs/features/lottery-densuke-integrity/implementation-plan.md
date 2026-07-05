@@ -67,7 +67,7 @@ status: completed
 - **対応Issue:** #977
 
 ### タスク7（A-3）: 確定書き戻し直前の伝助差分検知＋管理者通知
-- [ ] 完了
+- [x] 完了
 - **概要:** 抽選確定の一括書き戻し直前に伝助を読み、○書き戻し予定なのに伝助側×の選手を差分検知し、確定はブロックせず管理者へ通知＋WARN、レスポンスに差分情報を含める。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeWriteService.java` — `writeAllForLotteryConfirmation` 直前の scrape 差分検知

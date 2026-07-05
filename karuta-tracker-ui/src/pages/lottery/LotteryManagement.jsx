@@ -55,6 +55,8 @@ export default function LotteryManagement() {
   const [applicants, setApplicants] = useState([]);
   const [priorityPlayerIds, setPriorityPlayerIds] = useState([]);
   const [confirmedLotteryExists, setConfirmedLotteryExists] = useState(false);
+  // A-3: 確定直前の伝助差分（アプリ○書き戻し予定 vs 伝助×）。確定はブロックされないが管理者に警告表示する。
+  const [densukeDiffs, setDensukeDiffs] = useState([]);
   const [copyText, setCopyText] = useState('');
   const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -156,6 +158,7 @@ export default function LotteryManagement() {
     setError(null);
     setNotifyResult(null);
     setConfirmedLotteryExists(false);
+    setDensukeDiffs([]);
   };
 
   // 抽選プレビュー実行
@@ -194,6 +197,9 @@ export default function LotteryManagement() {
       if (sessionStorageKey) sessionStorage.removeItem(sessionStorageKey);
       setPhase('confirmed');
       setConfirmedLotteryExists(true);
+
+      // A-3: 確定直前の伝助差分（○書き戻し予定なのに伝助×）を警告バナーで表示（確定はブロックされない）
+      setDensukeDiffs(Array.isArray(res?.data?.densukeDiffs) ? res.data.densukeDiffs : []);
 
       // 伝助書き戻しの失敗をユーザーに知らせる（確定 DB は維持される）
       if (res?.data && res.data.densukeWriteSucceeded === false) {
@@ -466,6 +472,22 @@ export default function LotteryManagement() {
           {phase === 'confirmed' && (
             <div className="p-3 bg-green-50 text-green-800 border border-green-200 rounded-lg text-sm text-center">
               抽選結果を確定しました。伝助への書き戻しが実行されました。
+            </div>
+          )}
+          {/* A-3: 確定直前の伝助差分（○書き戻し予定なのに伝助×）の警告バナー */}
+          {densukeDiffs.length > 0 && (
+            <div className="p-3 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-sm">
+              <p className="font-semibold mb-1">
+                ⚠ 確定直前に伝助側が×（不参加）だった参加者が {densukeDiffs.length} 件あります
+              </p>
+              <p className="mb-2 text-amber-700">
+                アプリの当選/参加確定に合わせて○で書き戻しました。意図した変更か確認し、必要なら伝助側で手動調整してください。
+              </p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {densukeDiffs.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
             </div>
           )}
           <div className="flex justify-center gap-3">

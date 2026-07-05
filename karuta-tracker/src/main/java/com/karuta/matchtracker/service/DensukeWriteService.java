@@ -49,6 +49,7 @@ public class DensukeWriteService {
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final PlayerRepository playerRepository;
+    private final DensukeScraper densukeScraper;
 
     private static final Pattern MEMBERDATA_PATTERN = Pattern.compile("memberdata\\((\\d+)\\)");
 
@@ -313,6 +314,8 @@ public class DensukeWriteService {
         }
 
         List<String> errors = new ArrayList<>();
+        // A-3: ○書き戻し予定なのに伝助側×の反転リスク差分（確定はブロックしない・通知/可視化用）
+        List<String> densukeDiffs = new ArrayList<>();
 
         for (DensukeUrl densukeUrl : urls) {
             Long urlId = densukeUrl.getId();
@@ -373,12 +376,45 @@ public class DensukeWriteService {
             Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
                     .collect(Collectors.toMap(Player::getId, Player::getName));
 
+            // A-3: 書き戻し直前に伝助を1回読み、伝助側×（明示的不参加）の (日付, 試合番号, 正規化名) を収集。
+            // scrape 失敗は WARN のみで確定/書き戻しをブロックしない（差分検知はベストエフォート）。
+            Set<String> densukeDeclinedKeys = new HashSet<>();
+            try {
+                DensukeScraper.DensukeData scraped = densukeScraper.scrape(urlStr, year);
+                for (DensukeScraper.ScheduleEntry se : scraped.getEntries()) {
+                    for (String n : se.getDeclinedParticipants()) {
+                        densukeDeclinedKeys.add(se.getDate() + "|" + se.getMatchNumber() + "|" + n);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("A-3 pre-confirm diff scrape failed for cd={}: {} (diff detection skipped, write continues)",
+                        cd, e.getMessage());
+            }
+
             // 各プレイヤーを書き込み（WON/WAITLISTED/OFFERED/PENDING のみ、dirty フィルタなし）
             for (DensukeMemberMapping mapping : mappings) {
                 Long playerId = mapping.getPlayerId();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
                 List<PracticeParticipant> allParticipants =
                         practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds);
+
+                // A-3: アプリ側○書き戻し予定（WON/OFFERED/PENDING）なのに伝助側×の反転リスクを検知
+                if (!densukeDeclinedKeys.isEmpty()) {
+                    String normName = DensukeScraper.normalizeMemberName(playerName);
+                    for (PracticeParticipant pp : allParticipants) {
+                        if (pp.getMatchNumber() == null || pp.getStatus() == null) continue;
+                        ParticipantStatus s = pp.getStatus();
+                        if (s != ParticipantStatus.WON && s != ParticipantStatus.OFFERED
+                                && s != ParticipantStatus.PENDING) continue;
+                        PracticeSession sess = sessionMap.get(pp.getSessionId());
+                        if (sess == null) continue;
+                        String key = sess.getSessionDate() + "|" + pp.getMatchNumber() + "|" + normName;
+                        if (densukeDeclinedKeys.contains(key)) {
+                            densukeDiffs.add(playerName + ": " + sess.getSessionDate()
+                                    + " 第" + pp.getMatchNumber() + "試合（アプリ" + s + "→○書き戻し予定・伝助×）");
+                        }
+                    }
+                }
 
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
@@ -392,16 +428,21 @@ public class DensukeWriteService {
             // dirty=false 更新は writePlayerToDensuke 内で書き戻したレコードのみに適用される
         }
 
+        if (!densukeDiffs.isEmpty()) {
+            log.warn("A-3: pre-confirm densuke reversal-risk diffs detected ({}): {}",
+                    densukeDiffs.size(), densukeDiffs);
+        }
+
         if (!errors.isEmpty()) {
             log.warn("Bulk write-back completed with {} errors", errors.size());
             lastErrorsByOrg.put(organizationId, new ArrayList<>(errors));
-            return DensukeWriteResult.failure(errors);
+            return DensukeWriteResult.failure(errors).withDensukeDiffs(densukeDiffs);
         }
 
         log.info("Bulk write-back completed successfully for orgId={}, {}-{}", organizationId, year, month);
         lastErrorsByOrg.put(organizationId, List.of());
         lastSuccessAtByOrg.put(organizationId, JstDateTimeUtil.now());
-        return DensukeWriteResult.success();
+        return DensukeWriteResult.success().withDensukeDiffs(densukeDiffs);
     }
 
     private void writePlayerToDensuke(
