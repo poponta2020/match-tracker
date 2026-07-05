@@ -182,7 +182,9 @@ public class DensukeImportService {
         if (!nameCollisionDetails.isEmpty()) {
             log.warn("Densuke import: name collisions detected (skipped {} normalized names): {}",
                     nameCollisionKeys.size(), nameCollisionDetails);
+            // A-4: アプリ内通知（DENSUKE_NAME_COLLISION）＋ LINE 通知（ADMIN_DENSUKE_NAME_COLLISION）
             notifyAdminsOfNameCollisions(nameCollisionDetails, organizationId);
+            lineNotificationService.sendNameCollisionNotification(organizationId, nameCollisionDetails);
         }
 
         log.info("Densuke import completed: {} entries, {} sessions created, {} registered, {} skipped, {} removed",

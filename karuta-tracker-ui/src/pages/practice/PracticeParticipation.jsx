@@ -213,6 +213,9 @@ const PracticeParticipation = () => {
       });
 
       setOverlayState('success');
+      // B-4: 保存で参加行の updatedAt が変わり版も変化する。最新状態を再取得して
+      // participationVersion を更新し、同画面で続けて保存したとき自分の直前保存で409になるのを防ぐ。
+      setReloadKey((k) => k + 1);
     } catch (err) {
       console.error('保存エラー:', err);
       // B-4: 並行編集で参加状況が変わっていた（409）→ 最新を読み込み直す

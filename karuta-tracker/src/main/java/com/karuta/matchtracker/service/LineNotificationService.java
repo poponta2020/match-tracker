@@ -2410,7 +2410,7 @@ public class LineNotificationService {
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
-            case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF -> true;
+            case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
             // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
@@ -3012,6 +3012,59 @@ public class LineNotificationService {
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
             log.warn("Async ADMIN_DENSUKE_CONFIRM_DIFF dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * A-4: 名寄せ衝突（正規化後に同名となる複数選手あり）を、指定団体の管理者（ADMIN / SUPER_ADMIN）へ
+     * LINE 送信する。当該正規化名は伝助同期の取り込み・書き込みからスキップされているため、
+     * 管理者が重複選手を統合して解消する必要がある。preference 制御は持たず常時送信。
+     * アプリ内通知は {@code DensukeImportService.notifyAdminsOfNameCollisions} が別途保存する。
+     *
+     * @param organizationId  対象団体 ID
+     * @param collisionDetails 衝突内容の説明一覧（正規化名 ← 該当選手名(id)）
+     */
+    @Async
+    public void sendNameCollisionNotification(Long organizationId, List<String> collisionDetails) {
+        if (collisionDetails == null || collisionDetails.isEmpty()) return;
+        try {
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            targetAdmins = targetAdmins.stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .distinct()
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_DENSUKE_NAME_COLLISION: no admins for organization {}", organizationId);
+                return;
+            }
+
+            String message = "[伝助同期：名寄せ衝突]\n"
+                    + "正規化後に同名となる選手が複数登録されています。該当名は取り込み・書き込みからスキップしました。\n"
+                    + String.join("\n", collisionDetails)
+                    + "\n重複選手を統合してください（伝助管理ページ）。";
+
+            int sent = 0, failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_DENSUKE_NAME_COLLISION, message);
+                    if (result == SendResult.SUCCESS) sent++;
+                    else if (result == SendResult.FAILED) failed++;
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_DENSUKE_NAME_COLLISION to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+            log.info("ADMIN_DENSUKE_NAME_COLLISION: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            log.warn("Async ADMIN_DENSUKE_NAME_COLLISION dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

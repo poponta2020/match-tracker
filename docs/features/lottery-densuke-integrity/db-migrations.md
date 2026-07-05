@@ -1,13 +1,13 @@
 # DB マイグレーション（本改修で追加した CHECK 制約更新）
 
-本改修で **2つの enum 値**を追加した。Hibernate `ddl-auto=update` は既存の CHECK 制約を
+本改修で通知 enum 値を追加した。Hibernate `ddl-auto=update` は既存の CHECK 制約を
 自動更新しないため、対応する CHECK 制約更新 SQL を `database/` に追加した。
 **未適用のまま該当通知が発火すると CHECK 違反で挿入が失敗する**（CLAUDE.md「DBマイグレーション適用ルール」）。
 
 | SQL | 対象 | 追加値 | 未適用時の影響 |
 |---|---|---|---|
 | `database/add_densuke_name_collision_notification_type_check.sql` | `notifications.type` | `DENSUKE_NAME_COLLISION`（A-4/タスク5） | 名寄せ衝突のアプリ内通知挿入が CHECK 違反で失敗し、**伝助インポートのTXを巻き込む恐れ** |
-| `database/add_admin_densuke_confirm_diff_message_log_check.sql` | `line_message_log.notification_type` | `ADMIN_DENSUKE_CONFIRM_DIFF`（A-3/タスク7） | 確定前差分の LINE ログ挿入が失敗（`@Async` 内で捕捉されるため確定はブロックしないが通知が失われる） |
+| `database/add_admin_densuke_confirm_diff_message_log_check.sql` | `line_message_log.notification_type` | `ADMIN_DENSUKE_CONFIRM_DIFF`（A-3/タスク7）、`ADMIN_DENSUKE_NAME_COLLISION`（A-4/タスク5・LINE通知） | 確定前差分・名寄せ衝突の LINE ログ挿入が失敗（`@Async` 内で捕捉されるため確定/インポートはブロックしないが通知が失われる） |
 
 いずれも DROP → 現行 enum 全値 ＋ 新値で ADD し直す冪等スクリプト。**現行 enum の全値を列挙済み**
 （`Notification.NotificationType` / `LineMessageLog.LineNotificationType` と一致）。

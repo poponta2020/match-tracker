@@ -566,6 +566,8 @@ class DensukeImportServiceTest {
         assertThat(result.getUnmatchedNames()).doesNotContain("田中");
         // 衝突名は取込スキップ（参加者の保存が発生しない）
         verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        // A-4: 管理者へ LINE 通知（アプリ内通知に加えて）を送る
+        verify(lineNotificationService).sendNameCollisionNotification(eq(1L), anyList());
     }
 
     @Test
