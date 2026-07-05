@@ -145,6 +145,23 @@ public class PracticeParticipantService {
             throw new ResourceNotFoundException("Player", request.getPlayerId());
         }
 
+        // B-4: 楽観ロック。参加状況取得時の版と現在の版を照合し、不一致なら 409（他端末/伝助で更新済み・再読込要）。
+        // 全置換方式（月内の自分の登録を全ソフトデリート→再作成）を維持したまま、古いタブ/別端末での
+        // 保存で「後から付けた○が黙って巻き戻る」事故を防ぐ。後方互換: 未送信なら検証スキップ（WARN）。
+        if (request.getExpectedVersion() == null) {
+            log.warn("registerParticipations without expectedVersion (player {}, {}-{}): B-4 optimistic lock skipped",
+                    request.getPlayerId(), request.getYear(), request.getMonth());
+        } else {
+            List<Long> monthSessionIds = practiceSessionRepository
+                    .findByYearAndMonth(request.getYear(), request.getMonth()).stream()
+                    .map(PracticeSession::getId).collect(Collectors.toList());
+            String currentVersion = computeParticipationVersion(request.getPlayerId(), monthSessionIds);
+            if (!request.getExpectedVersion().equals(currentVersion)) {
+                throw new com.karuta.matchtracker.exception.ConflictStateException(
+                        "他の端末または伝助で参加状況が更新されました。最新を読み込んでからやり直してください。");
+            }
+        }
+
         // 当月扱いの月では既存アクティブ登録の解除を参加登録APIで受け付けない（理由付きキャンセル経由に誘導）。
         // フロントエンド側でも resolveAttendanceMode により同じ判定を行いチェック外しを禁止しているが、
         // API 直叩きでの理由なしキャンセル回避を防ぐためサーバー側にも同等の検証を入れる。
@@ -543,6 +560,7 @@ public class PracticeParticipantService {
                     .lotteryExecuted(Map.of())
                     .hasAnyExecutedLotteryInMonth(monthlyExecutedNoSessions)
                     .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month, null))
+                    .version(computeParticipationVersion(playerId, sessionIds))
                     .build();
         }
 
@@ -593,7 +611,33 @@ public class PracticeParticipantService {
                 .lotteryExecuted(lotteryMap)
                 .hasAnyExecutedLotteryInMonth(hasAnyExecutedLotteryInMonth)
                 .beforeDeadline(beforeDeadline)
+                .version(computeParticipationVersion(playerId, sessionIds))
                 .build();
+    }
+
+    /**
+     * B-4: 楽観ロック用の版（対象月×プレイヤーの参加行の状態ハッシュ）を算出する。
+     * 行の追加・削除・ステータス変更・更新時刻の変化を検知できるよう、
+     * (id:status:waitlistNumber:updatedAt) を id 昇順で連結して SHA-256 する。
+     * 対象セッションが無ければ "empty"、行が無ければ空文字列のハッシュ（いずれも安定・非null）。
+     */
+    private String computeParticipationVersion(Long playerId, List<Long> monthSessionIds) {
+        if (monthSessionIds.isEmpty()) return "empty";
+        String raw = practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, monthSessionIds).stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .sorted(java.util.Comparator.comparingLong(PracticeParticipant::getId))
+                .map(p -> p.getId() + ":" + p.getStatus() + ":" + p.getWaitlistNumber()
+                        + ":" + (p.getUpdatedAt() != null ? p.getUpdatedAt() : ""))
+                .collect(Collectors.joining("|"));
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return "h" + Integer.toHexString(raw.hashCode());
+        }
     }
 
     @Transactional

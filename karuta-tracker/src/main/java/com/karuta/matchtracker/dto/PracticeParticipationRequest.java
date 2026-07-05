@@ -34,6 +34,13 @@ public class PracticeParticipationRequest {
     private List<SessionMatchParticipation> participations;
 
     /**
+     * B-4: 楽観ロック用の版情報。参加状況取得時に受け取った {@code version} をそのまま送る。
+     * サーバは登録前に現在の版と照合し、不一致なら 409（他端末/伝助で更新済み・再読込要）を返す。
+     * 後方互換: null なら検証をスキップ（WARN）。
+     */
+    private String expectedVersion;
+
+    /**
      * セッション・試合参加情報
      */
     @Data

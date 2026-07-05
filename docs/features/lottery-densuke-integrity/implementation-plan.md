@@ -90,7 +90,7 @@ status: completed
 - **対応Issue:** #979
 
 ### タスク9（B-4）: 参加登録の楽観ロック
-- [ ] 完了
+- [x] 完了
 - **概要:** 参加状況取得に版情報（対象行の `max(updated_at)` 等）を付与し、参加登録リクエストで版照合、不一致なら409で再読込を促す。全置換方式は維持。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/dto/PlayerParticipationStatusDto.java` — 版フィールド追加
