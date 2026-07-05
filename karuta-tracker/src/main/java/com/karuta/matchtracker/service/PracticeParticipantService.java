@@ -96,18 +96,45 @@ public class PracticeParticipantService {
                 throw new ResourceNotFoundException("Some players not found");
             }
         }
+        Set<Long> targetIds = new HashSet<>(uniquePlayerIds);
 
-        practiceParticipantRepository.softDeleteBySessionIdAndMatchNumber(sessionId, matchNumber, JstDateTimeUtil.now());
-        practiceParticipantRepository.flush();
-
-        if (!uniquePlayerIds.isEmpty()) {
-            for (Long playerId : uniquePlayerIds) {
-                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
+        // A-1: WON/PENDING（＝isActive()）のアクティブ行のみを全置換する。
+        // WAITLISTED/OFFERED/CANCELLED/DECLINED/WAITLIST_DECLINED は温存し、
+        // 伝助の ×/△ を巻き込まない（キャンセル済み(×)の復活・待機者の抽選なしWON昇格を防ぐ）。
+        // 新リストから外れたアクティブ行のみ CANCELLED（＝×書き戻し）にする。
+        LocalDateTime now = JstDateTimeUtil.now();
+        List<PracticeParticipant> existing = practiceParticipantRepository
+                .findBySessionIdAndMatchNumber(sessionId, matchNumber);
+        // (session, player, match) は一意（uk_session_player_match）のため playerId でマップ化できる。
+        Map<Long, PracticeParticipant> existingByPlayer = existing.stream()
+                .collect(Collectors.toMap(PracticeParticipant::getPlayerId, p -> p, (a, b) -> a));
+        for (PracticeParticipant p : existing) {
+            if (p.getStatus() != null && p.getStatus().isActive() && !targetIds.contains(p.getPlayerId())) {
+                p.setStatus(ParticipantStatus.CANCELLED);
+                p.setDirty(true);
+                p.setCancelledAt(now);
+                practiceParticipantRepository.save(p);
             }
         }
+        practiceParticipantRepository.flush();
 
-        log.info("Successfully set {} participants for session: {}, match: {}",
-                uniquePlayerIds.size(), sessionId, matchNumber);
+        // 新リストの選手を WON で登録（既存アクティブ行の再利用 or 新規のみ）。
+        // A-1: WAITLISTED/OFFERED/CANCELLED/DECLINED/WAITLIST_DECLINED（非アクティブ）の既存行は
+        // 「編集対象外」のためスキップし、このエンドポイントで WON へ昇格しない
+        // （キャンセル済み(×)の復活・待機者の抽選なしWON昇格を API 側でも防ぐ。モーダルの初期選択限定と整合）。
+        int promoted = 0, skippedInactive = 0;
+        for (Long playerId : uniquePlayerIds) {
+            PracticeParticipant ex = existingByPlayer.get(playerId);
+            if (ex != null && ex.getStatus() != null && !ex.getStatus().isActive()) {
+                skippedInactive++;
+                continue;
+            }
+            saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
+            promoted++;
+        }
+
+        log.info("Successfully set match participants for session: {}, match: {} (won={}, skippedInactive={})",
+                sessionId, matchNumber, promoted, skippedInactive);
         densukeSyncService.triggerWriteAsync();
     }
 
@@ -128,6 +155,23 @@ public class PracticeParticipantService {
 
         if (!playerRepository.existsById(request.getPlayerId())) {
             throw new ResourceNotFoundException("Player", request.getPlayerId());
+        }
+
+        // B-4: 楽観ロック。参加状況取得時の版と現在の版を照合し、不一致なら 409（他端末/伝助で更新済み・再読込要）。
+        // 全置換方式（月内の自分の登録を全ソフトデリート→再作成）を維持したまま、古いタブ/別端末での
+        // 保存で「後から付けた○が黙って巻き戻る」事故を防ぐ。後方互換: 未送信なら検証スキップ（WARN）。
+        if (request.getExpectedVersion() == null) {
+            log.warn("registerParticipations without expectedVersion (player {}, {}-{}): B-4 optimistic lock skipped",
+                    request.getPlayerId(), request.getYear(), request.getMonth());
+        } else {
+            List<Long> monthSessionIds = practiceSessionRepository
+                    .findByYearAndMonth(request.getYear(), request.getMonth()).stream()
+                    .map(PracticeSession::getId).collect(Collectors.toList());
+            String currentVersion = computeParticipationVersion(request.getPlayerId(), monthSessionIds);
+            if (!request.getExpectedVersion().equals(currentVersion)) {
+                throw new com.karuta.matchtracker.exception.ConflictStateException(
+                        "他の端末または伝助で参加状況が更新されました。最新を読み込んでからやり直してください。");
+            }
         }
 
         // 当月扱いの月では既存アクティブ登録の解除を参加登録APIで受け付けない（理由付きキャンセル経由に誘導）。
@@ -189,7 +233,7 @@ public class PracticeParticipantService {
                 registerBeforeDeadline(orgRequest, orgId);
             } else if (!orgParticipations.isEmpty()) {
                 // 締切後は追加登録のみ（既存クリアなし）。新規参加がなければスキップ
-                registerAfterDeadline(orgRequest);
+                registerAfterDeadline(orgRequest, orgId);
             }
         }
         densukeSyncService.triggerWriteAsync();
@@ -386,7 +430,7 @@ public class PracticeParticipantService {
         log.info("Pre-deadline: registered {} participations (PENDING) for player {}", registered, request.getPlayerId());
     }
 
-    private void registerAfterDeadline(PracticeParticipationRequest request) {
+    private void registerAfterDeadline(PracticeParticipationRequest request, Long organizationId) {
         Long playerId = request.getPlayerId();
         Map<Long, PracticeSession> sessionsMap = practiceSessionRepository.findAllById(
                 request.getParticipations().stream()
@@ -394,13 +438,19 @@ public class PracticeParticipantService {
                         .distinct().collect(Collectors.toList())
         ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
-        // 抽選実行済みかチェック
+        // 抽選実行済みかチェック（団体スコープ）。別団体の抽選SUCCESSで当該団体が未抽選なのに
+        // 実行済みと誤判定しないよう、当該団体の抽選 OR 全団体一括抽選(org=null) のみを対象にする。
+        // getPlayerParticipationStatusByMonth の lotteryExecuted 構築（org=null は全団体に適用）と整合。
         boolean lotteryExecuted = lotteryExecutionRepository
-                .existsByTargetYearAndTargetMonthAndStatus(
+                .existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                        request.getYear(), request.getMonth(), organizationId,
+                        LotteryExecution.ExecutionStatus.SUCCESS)
+                || lotteryExecutionRepository
+                .existsByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatus(
                         request.getYear(), request.getMonth(),
                         LotteryExecution.ExecutionStatus.SUCCESS);
 
-        int registered = 0, waitlisted = 0, skipped = 0;
+        int registered = 0, pending = 0, waitlisted = 0, skipped = 0;
         Set<String> processedKeys = new HashSet<>();
         for (var participation : request.getParticipations()) {
             Long sessionId = participation.getSessionId();
@@ -414,23 +464,27 @@ public class PracticeParticipantService {
                 skipped++; continue;
             }
 
-            if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
-                // 空きあり → WON
+            if (!lotteryExecuted) {
+                // A-2: MONTHLY団体で抽選未実行の窓（締切後〜抽選実行前）の新規登録は PENDING（抽選対象）。
+                // 抽選前は WON が 0 のため isFreeRegistrationOpen が常に true となり即WON＋定員超過に
+                // なる問題を防ぐ。伝助経由の ○ が PENDING 取り込みされるのと挙動を揃え公平に抽選へ載せる。
+                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.PENDING, null);
+                pending++;
+            } else if (isFreeRegistrationOpen(sessionsMap.get(sessionId), matchNumber)) {
+                // 抽選実行済み＋空きあり → WON
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
                 notifySameDayJoinIfApplicable(sessionsMap.get(sessionId), matchNumber, playerId);
                 registered++;
-            } else if (lotteryExecuted) {
+            } else {
                 // 抽選実行済み＋定員超過 → WAITLISTED（最後尾）
                 int maxNumber = practiceParticipantRepository
                         .findMaxWaitlistNumber(sessionId, matchNumber).orElse(0);
                 saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WAITLISTED, maxNumber + 1);
                 waitlisted++;
-            } else {
-                skipped++;
             }
         }
-        log.info("Post-deadline: registered {} won, {} waitlisted (skipped {}) for player {}",
-                registered, waitlisted, skipped, playerId);
+        log.info("Post-deadline: registered {} won, {} pending, {} waitlisted (skipped {}) for player {}",
+                registered, pending, waitlisted, skipped, playerId);
     }
 
     /**
@@ -524,6 +578,7 @@ public class PracticeParticipantService {
                     .lotteryExecuted(Map.of())
                     .hasAnyExecutedLotteryInMonth(monthlyExecutedNoSessions)
                     .beforeDeadline(lotteryDeadlineHelper.isBeforeDeadline(year, month, null))
+                    .version(computeParticipationVersion(playerId, sessionIds))
                     .build();
         }
 
@@ -574,7 +629,33 @@ public class PracticeParticipantService {
                 .lotteryExecuted(lotteryMap)
                 .hasAnyExecutedLotteryInMonth(hasAnyExecutedLotteryInMonth)
                 .beforeDeadline(beforeDeadline)
+                .version(computeParticipationVersion(playerId, sessionIds))
                 .build();
+    }
+
+    /**
+     * B-4: 楽観ロック用の版（対象月×プレイヤーの参加行の状態ハッシュ）を算出する。
+     * 行の追加・削除・ステータス変更・更新時刻の変化を検知できるよう、
+     * (id:status:waitlistNumber:updatedAt) を id 昇順で連結して SHA-256 する。
+     * 対象セッションが無ければ "empty"、行が無ければ空文字列のハッシュ（いずれも安定・非null）。
+     */
+    private String computeParticipationVersion(Long playerId, List<Long> monthSessionIds) {
+        if (monthSessionIds.isEmpty()) return "empty";
+        String raw = practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, monthSessionIds).stream()
+                .filter(p -> p.getMatchNumber() != null)
+                .sorted(java.util.Comparator.comparingLong(PracticeParticipant::getId))
+                .map(p -> p.getId() + ":" + p.getStatus() + ":" + p.getWaitlistNumber()
+                        + ":" + (p.getUpdatedAt() != null ? p.getUpdatedAt() : ""))
+                .collect(Collectors.joining("|"));
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return "h" + Integer.toHexString(raw.hashCode());
+        }
     }
 
     /**

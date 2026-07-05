@@ -161,9 +161,43 @@ class LotteryServiceExecuteAndConfirmTest {
                 });
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("B-2: 母集団シグネチャ不一致なら確定トランザクション内で ConflictStateException を投げ確定しない")
+    void executeAndConfirm_signatureMismatch_throwsConflictAtomically() {
+        // 現在の母集団（空）のシグネチャは "stale-signature" と一致しない
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, ORG_ID))
+                .thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        lotteryService.executeAndConfirmLottery(
+                                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), "stale-signature"))
+                .isInstanceOf(com.karuta.matchtracker.exception.ConflictStateException.class);
+
+        // 照合は PENDING 読取と原子的（トランザクション内）で、確定（execution保存）は行われない
+        org.mockito.Mockito.verify(lotteryExecutionRepository, org.mockito.Mockito.never())
+                .save(any(LotteryExecution.class));
+    }
+
+    @Test
+    @DisplayName("A-3: 書き戻し失敗＋差分ありのとき、差分LINE通知に writeSucceeded=false を渡す")
+    void executeAndConfirm_writeFailedWithDiffs_notifiesFailure() {
+        stubLotteryExecutionSucceeds(); // 空セッション → SUCCESS
+        List<String> diffs = List.of("田中: 2026-04-05 第1試合（アプリWON→○書き戻し予定・伝助×）");
+        when(densukeWriteService.writeAllForLotteryConfirmation(eq(ORG_ID), eq(2026), eq(4)))
+                .thenReturn(DensukeWriteResult.failure(List.of("伝助書き戻し失敗")).withDensukeDiffs(diffs));
+
+        ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
+
+        assertThat(resp.isDensukeWriteSucceeded()).isFalse();
+        // 失敗時は writeSucceeded=false を渡し、通知本文で「書き戻せなかった可能性」に切り替えられる
+        org.mockito.Mockito.verify(lineNotificationService)
+                .sendPreConfirmDensukeDiffNotification(ORG_ID, diffs, false);
     }
 
     private PracticeParticipant participant(Long id, Long playerId, Long sessionId) {
@@ -184,7 +218,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenReturn(DensukeWriteResult.failure(List.of("選手[山田太郎]: regist HTTP 500")));
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.getExecution().getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(resp.isDensukeWriteSucceeded()).isFalse();
@@ -199,7 +233,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenReturn(DensukeWriteResult.failure(List.of("選手[佐藤花子]: メンバーIDの取得に失敗")));
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isFalse();
         assertThat(resp.getDensukeWriteError()).contains("メンバーIDの取得に失敗");
@@ -213,7 +247,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenReturn(DensukeWriteResult.failure(List.of("伝助リストページ取得失敗(cd=abc): connect timed out")));
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isFalse();
         assertThat(resp.getDensukeWriteError()).contains("伝助リストページ取得失敗");
@@ -229,7 +263,7 @@ class LotteryServiceExecuteAndConfirmTest {
                         "選手[佐藤]: メンバーIDの取得に失敗")));
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isFalse();
         assertThat(resp.getDensukeWriteError())
@@ -246,7 +280,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenReturn(DensukeWriteResult.success());
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isTrue();
         assertThat(resp.getDensukeWriteError()).isNull();
@@ -260,7 +294,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenThrow(new RuntimeException(new IOException("network down")));
 
         ConfirmLotteryResponse resp = lotteryService.executeAndConfirmLottery(
-                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of());
+                2026, 4, EXECUTOR_ID, ORG_ID, 1L, List.of(), null);
 
         assertThat(resp.isDensukeWriteSucceeded()).isFalse();
         assertThat(resp.getDensukeWriteError()).contains("network down");

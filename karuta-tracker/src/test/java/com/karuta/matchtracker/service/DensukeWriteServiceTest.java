@@ -39,6 +39,8 @@ class DensukeWriteServiceTest {
     @Mock private DensukeMemberMappingRepository densukeMemberMappingRepository;
     @Mock private DensukeRowIdRepository densukeRowIdRepository;
     @Mock private PlayerRepository playerRepository;
+    @Mock private DensukeScraper densukeScraper;
+    @Mock private LineNotificationService lineNotificationService;
 
     @InjectMocks
     private DensukeWriteService densukeWriteService;
@@ -426,5 +428,99 @@ class DensukeWriteServiceTest {
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 
         assertThat(result).isTrue();
+    }
+
+    // ----------------------------------------------------------------
+    // B-3: parseAndSaveRowIds の整合判定テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("B-3: join-ID件数がスケジュール件数と不一致なら false（書き込み中止）＋errors記録・保存なし")
+    void parseAndSaveRowIds_countMismatch_returnsFalseAndAborts() {
+        // schedule: 1セッション×2試合 = 2件
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        // join-id は1件だけ → 件数不一致
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-999", "");
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        // stale row_id 継続を防ぐため、保存も既存キャッシュ取得もしない
+        verify(densukeRowIdRepository, never()).saveAll(anyList());
+        verify(densukeRowIdRepository, never()).findByDensukeUrlId(anyLong());
+    }
+
+    @Test
+    @DisplayName("B-3: join-ID件数が一致すれば true（書き込み継続）＋未保存分を保存")
+    void parseAndSaveRowIds_countMatch_returnsTrue() {
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-11", "");
+        joinInputs.put("join-22", "");
+        when(densukeRowIdRepository.findByDensukeUrlId(100L)).thenReturn(List.of());
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isTrue();
+        verify(densukeRowIdRepository).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("B-3: 編集フォームを解析できない（listtbl不在）なら false（書き込み中止）＋errors記録")
+    void parseAndSaveRowIds_parseFailure_returnsFalse() {
+        // listtbl の無いページ（エラーページ / HTML変更を模擬）
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<html><body>error</body></html>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-1", "");
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(1L, List.of(), formDoc, joinInputs, errors);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        verify(densukeRowIdRepository, never()).saveAll(anyList());
+    }
+
+    // ----------------------------------------------------------------
+    // A-4: findDbNameCollisions テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("A-4: DB上に正規化後同名の複数選手がいれば衝突名を返す（dirtyが片方だけでも検知）")
+    void findDbNameCollisions_detectsDbDuplicates() {
+        Player p1 = Player.builder().id(1L).name("田中").build();
+        Player p2 = Player.builder().id(2L).name("田中 ").build(); // 末尾空白 → 正規化後同名
+        Player p3 = Player.builder().id(3L).name("佐藤").build();
+        when(playerRepository.findAllActive()).thenReturn(List.of(p1, p2, p3));
+
+        java.util.Set<String> collisions = densukeWriteService.findDbNameCollisions();
+
+        assertThat(collisions).containsExactly("田中");
+    }
+
+    @Test
+    @DisplayName("B-3: parseAndSaveRowIds は row_id 問題を rowIdIssues にも記録する（管理者通知用）")
+    void parseAndSaveRowIds_recordsRowIdIssue() {
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-1", ""); // 1件 vs schedule 2件 → 不一致
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        java.util.List<String> rowIdIssues = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors, rowIdIssues);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        assertThat(rowIdIssues).isNotEmpty();
     }
 }

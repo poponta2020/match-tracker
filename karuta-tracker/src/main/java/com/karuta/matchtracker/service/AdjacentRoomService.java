@@ -137,7 +137,7 @@ public class AdjacentRoomService {
         log.info("Expanded venue for session {}: venueId {} -> {}, capacity -> {}",
                 sessionId, currentVenueId, expandedVenueId, expandedVenue.getCapacity());
 
-        // キャンセル待ち→OFFERED（応答期限なし、定員までに制限）／既存OFFERED→応答期限クリア
+        // キャンセル待ち→OFFERED（期限付き・要承諾、定員まで）。オファー通知を送信し承諾を促す（B-1）
         waitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId);
     }
 }

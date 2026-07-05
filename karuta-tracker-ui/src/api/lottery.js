@@ -83,8 +83,9 @@ export const lotteryAPI = {
     apiClient.post('/lottery/rejoin-waitlist', { sessionId, playerId }),
 
   // 抽選結果確定（伝助一括書き戻しトリガー）
-  confirm: (year, month, organizationId, seed, priorityPlayerIds = []) =>
-    apiClient.post('/lottery/confirm', { year, month, organizationId, seed, priorityPlayerIds }),
+  // B-2: populationSignature を添付すると、母集団変化時にサーバが 409 を返す。
+  confirm: (year, month, organizationId, seed, priorityPlayerIds = [], populationSignature = null) =>
+    apiClient.post('/lottery/confirm', { year, month, organizationId, seed, priorityPlayerIds, populationSignature }),
 
   // 抽選プレビュー（DB保存なし）
   preview: (year, month, organizationId, priorityPlayerIds = []) =>

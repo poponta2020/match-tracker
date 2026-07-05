@@ -2981,9 +2981,11 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 [バックエンド: AdjacentRoomService.expandVenue()]
 13. 会場を拡張後会場に変更、定員を更新
    ↓
-14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し
-   - 既存 OFFERED の offerDeadline を null にクリア（拡張で参加確定）
-   - match_number ごとに `(capacity - WON - 既存OFFERED)` 名分だけ、WAITLISTED を waitlist_number 昇順に OFFERED 化（offeredAt=現在時刻、offerDeadline=null）
+14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し（B-1で要承諾に統一）
+   - 昇格 OFFERED に通常オファーと同じ応答期限 `calculateOfferDeadline` を付与（auto-confirm=offerDeadline null は廃止）。既存 OFFERED の応答期限一律クリアも廃止（既存OFFEREDは変更しない）
+   - match_number ごとに `(capacity - WON - 既存OFFERED)` 名分だけ、WAITLISTED を waitlist_number 昇順に OFFERED 化（offeredAt=現在時刻、offerDeadline=応答期限）
+   - 昇格者へオファー通知（アプリ内 `createOfferNotification` ＋ LINE 統合オファー通知）を送信し承諾を促す
+   - 応答期限が既に過ぎている場合（当日12:00以降等）は即失効オファーを作らないため昇格しない
    - 余り枠を超える WAITLISTED は据え置き（status・waitlist_number そのまま）
    - 全件 dirty=true、最後に renumberRemainingWaitlist で 1..N に再採番
    - 練習編集 (PracticeSessionService.updateSession) で capacity を増加させた場合も同じメソッドが呼ばれる
@@ -3389,7 +3391,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **アプリ→伝助（イベント駆動）**: 参加者の状態変更時に `DensukeSyncService.triggerWriteAsync()` を `@Async` で即時実行。`DensukeWriteService` が `dirty=true` かつ `matchNumber IS NOT NULL` の参加者のみを対象に、dirty行に対応するスロットだけを伝助へHTTP POSTで書き込み（未入力保護: アプリに未登録のマスは送信しない）
   - **伝助→アプリ（5分スケジューラー）**: `DensukeSyncScheduler` が5分間隔で `DensukeSyncService.syncAll()` を呼び出し、JsoupによるHTMLスクレイピングで出欠情報を取得
 - **新規セッション作成時の capacity 初期化**: `DensukeImportService.findOrCreateSession` で伝助同期から練習日を新規作成する際、解決済み venue がある場合は `venue.capacity` を `practice_sessions.capacity` の初期値として設定する。venue が解決できなかった場合 (`venueId == null`) は capacity を `null` のまま保存し、表示側のフォールバック（`PracticeSessionService.computeMatchCapacityStatuses` の venue 既定値フォールバック）に委ねる
-  - **Phase3 3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ空き枠あり（WON数 < 定員）の場合、`DensukeImportService.processPhase3Maru` がWAITLISTED→WONに昇格し後続のキャンセル待ち番号を繰り上げ（dirty=false）。12:00前または空き枠なしの場合はdirty=trueにして△で書き戻す（抽選バイパス防止）
+  - **Phase3 3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ**空き枠あり（`WON + OFFERED < 定員`、OFFERED算入）** かつ**対象者が待ち行列先頭（最小 `waitlist_number`）**の場合のみ、`DensukeImportService.processPhase3Maru` がWAITLISTED→WONに昇格し後続のキャンセル待ち番号を繰り上げ（dirty=false）。12:00前・空き枠なし・先頭でない場合はdirty=trueにして△で書き戻す（抽選バイパス／キュー飛ばし防止・B-5で空き判定を他経路と統一）
   - **練習セッション自動作成時の Venue デフォルト値適用** (`DensukeImportService.findOrCreateSession`): 伝助の会場名と `venues.name` が一致した場合、新規セッションの `totalMatches` は `venue.defaultMatchCount`、`capacity` は `venue.capacity` を採用する。未マッチ時は `totalMatches` を伝助スケジュールの最大試合番号（なければ既定 3）にフォールバックし、`capacity` は null とする。既存セッションでは `venueId` 補完と同時に `capacity` も補完するほか、`venueId` 既設定でも `capacity` のみ null の場合は Venue から逆引きして補完する（管理者が設定済みの `capacity` / `totalMatches` / `venueId` は触らない）。これにより、当日12:00以降の WAITLISTED→WON 自動昇格や空き枠通知が、伝助由来セッションでも正常動作する
 - **同期フロー集約**: `DensukeSyncService` がスケジューラー・手動同期・イベント駆動書き込みの全フローを統括
   - `syncAll()`: 当月+翌月の全団体を処理（スケジューラー用）

@@ -40,4 +40,11 @@ public class LotteryExecutionRequest {
      */
     @Builder.Default
     private List<Long> priorityPlayerIds = new ArrayList<>();
+
+    /**
+     * B-2: プレビュー時の母集団シグネチャ（対象PENDING参加者ID集合のハッシュ）。
+     * 確定時に送信し、サーバが現在の母集団と照合する。不一致なら 409（再プレビュー要）。
+     * 後方互換: null/空なら検証をスキップ（WARN）。
+     */
+    private String populationSignature;
 }

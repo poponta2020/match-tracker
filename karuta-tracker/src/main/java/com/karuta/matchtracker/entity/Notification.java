@@ -81,6 +81,8 @@ public class Notification {
         CHANNEL_RECLAIM_WARNING,
         /** 伝助同期：未登録者あり（管理者向け） */
         DENSUKE_UNMATCHED_NAMES,
+        /** 伝助同期：名寄せ衝突（正規化後に同名となる複数選手あり／管理者向け） */
+        DENSUKE_NAME_COLLISION,
         /** 隣室空き通知（管理者向け） */
         ADJACENT_ROOM_AVAILABLE
     }
