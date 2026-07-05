@@ -136,6 +136,8 @@ public class LotteryController {
         Map<String, Object> response = new HashMap<>();
         response.put("results", preview.results());
         response.put("seed", preview.seed());
+        // B-2: 母集団シグネチャを返す。確定時にクライアントが添付し、母集団変化を検知する。
+        response.put("populationSignature", preview.populationSignature());
         return ResponseEntity.ok(response);
     }
 
@@ -857,6 +859,20 @@ public class LotteryController {
         // 優先選手バリデーション（他団体・参加希望なしを拒否）
         List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
         lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
+
+        // B-2: プレビュー時の母集団と確定時の母集団を照合。不一致なら 409（再プレビュー要）。
+        // 後方互換: シグネチャ未送信なら検証をスキップ（WARN）。
+        String clientSignature = request.getPopulationSignature();
+        if (clientSignature == null || clientSignature.isBlank()) {
+            log.warn("Confirm without population signature (year={}, month={}, org={}): B-2 signature check skipped",
+                    year, month, orgId);
+        } else {
+            String currentSignature = lotteryService.computePopulationSignature(year, month, orgId);
+            if (!clientSignature.equals(currentSignature)) {
+                throw new com.karuta.matchtracker.exception.ConflictStateException(
+                        "参加状況が変わったため再プレビューが必要です。最新の参加状況で抽選をやり直してください。");
+            }
+        }
 
         ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
         return ResponseEntity.ok(result);

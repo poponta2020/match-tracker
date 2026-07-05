@@ -554,7 +554,41 @@ public class LotteryService {
     /**
      * プレビュー結果とシードを保持するレコード
      */
-    public record LotteryPreviewResult(List<LotteryResultDto> results, long seed) {}
+    public record LotteryPreviewResult(List<LotteryResultDto> results, long seed, String populationSignature) {}
+
+    /**
+     * B-2: 母集団シグネチャを算出する。対象月・団体のセッション群に属する PENDING 参加者の
+     * (participant id) 集合を昇順に並べて SHA-256 でハッシュ化する。プレビュー時と確定時で
+     * 同一なら「プレビューで見た母集団と確定時の母集団が一致」とみなせる。
+     * 5分同期での新規○取り込み・キャンセル等で母集団が変わるとシグネチャが変化する。
+     */
+    @Transactional(readOnly = true)
+    public String computePopulationSignature(int year, int month, Long organizationId) {
+        List<PracticeSession> sessions = (organizationId != null)
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).sorted().collect(Collectors.toList());
+
+        List<Long> pendingIds = new ArrayList<>();
+        for (Long sid : sessionIds) {
+            practiceParticipantRepository.findBySessionIdAndStatus(sid, ParticipantStatus.PENDING)
+                    .forEach(p -> pendingIds.add(p.getId()));
+        }
+        pendingIds.sort(Comparator.naturalOrder());
+
+        String raw = "s=" + sessionIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                + "|p=" + pendingIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 は必ず存在する。万一なければ raw の hashCode にフォールバック。
+            return "h" + Integer.toHexString(raw.hashCode());
+        }
+    }
 
     @Transactional(readOnly = true)
     public LotteryPreviewResult previewLottery(int year, int month, Long organizationId, List<Long> priorityPlayerIds) {
@@ -573,8 +607,10 @@ public class LotteryService {
                 .sorted(Comparator.comparing(PracticeSession::getSessionDate))
                 .collect(Collectors.toList());
 
+        String populationSignature = computePopulationSignature(year, month, organizationId);
+
         if (sessions.isEmpty()) {
-            return new LotteryPreviewResult(List.of(), seed);
+            return new LotteryPreviewResult(List.of(), seed, populationSignature);
         }
 
         // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
@@ -608,7 +644,7 @@ public class LotteryService {
         }
 
         log.info("Lottery preview completed for {}-{}: {} sessions", year, month, results.size());
-        return new LotteryPreviewResult(results, seed);
+        return new LotteryPreviewResult(results, seed, populationSignature);
     }
 
     /**

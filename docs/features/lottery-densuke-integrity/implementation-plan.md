@@ -79,7 +79,7 @@ status: completed
 - **対応Issue:** #978
 
 ### タスク8（B-2）: プレビュー↔確定の母集団突合
-- [ ] 完了
+- [x] 完了
 - **概要:** プレビュー応答に母集団シグネチャ（対象PENDING参加者ID集合のハッシュ）を含め、確定時に再計算・照合して不一致なら409を返し再プレビューを促す。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/LotteryService.java` — シグネチャ算出、confirm時の照合

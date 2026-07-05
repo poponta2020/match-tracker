@@ -50,6 +50,8 @@ export default function LotteryManagement() {
   const [error, setError] = useState(null);
   const [notifyResult, setNotifyResult] = useState(null);
   const [lotterySeed, setLotterySeed] = useState(null);
+  // B-2: プレビュー時の母集団シグネチャ。確定時に送信し、母集団変化(409)を検知する。
+  const [populationSignature, setPopulationSignature] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [selectedOrgId, setSelectedOrgId] = useState(adminOrgId);
   const [applicants, setApplicants] = useState([]);
@@ -159,6 +161,7 @@ export default function LotteryManagement() {
     setNotifyResult(null);
     setConfirmedLotteryExists(false);
     setDensukeDiffs([]);
+    setPopulationSignature(null);
   };
 
   // 抽選プレビュー実行
@@ -168,9 +171,10 @@ export default function LotteryManagement() {
     setNotifyResult(null);
     try {
       const res = await lotteryAPI.preview(currentDate.year, currentDate.month, organizationId, priorityPlayerIds);
-      const { results, seed } = res.data;
+      const { results, seed, populationSignature: sig } = res.data;
       setPreviewResults(results);
       setLotterySeed(seed);
+      setPopulationSignature(sig ?? null);
       if (results.length === 0) {
         setError('対象のセッションがありません');
         setPhase('idle');
@@ -193,7 +197,7 @@ export default function LotteryManagement() {
     setProcessing('confirm');
     setError(null);
     try {
-      const res = await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds);
+      const res = await lotteryAPI.confirm(currentDate.year, currentDate.month, organizationId, lotterySeed, priorityPlayerIds, populationSignature);
       if (sessionStorageKey) sessionStorage.removeItem(sessionStorageKey);
       setPhase('confirmed');
       setConfirmedLotteryExists(true);
@@ -207,6 +211,16 @@ export default function LotteryManagement() {
         alert('抽選結果は確定されましたが、伝助への書き戻しに失敗しました。手動で伝助の状態を確認してください。' + detail);
       }
     } catch (err) {
+      // B-2: 母集団変化（409）→ プレビューをやり直す必要がある
+      if (err.response?.status === 409) {
+        setPhase('idle');
+        setPreviewResults([]);
+        setPopulationSignature(null);
+        const msg = err.response?.data?.message
+          || '参加状況が変わったため再プレビューが必要です。もう一度プレビューを実行してください。';
+        setError(typeof msg === 'string' ? msg : '参加状況が変わったため再プレビューが必要です。');
+        return;
+      }
       const msg = err.response?.data?.message || err.response?.data || '確定処理に失敗しました';
       setError(typeof msg === 'string' ? msg : '確定処理に失敗しました');
     } finally {
