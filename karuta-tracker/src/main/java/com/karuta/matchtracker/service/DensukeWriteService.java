@@ -197,7 +197,7 @@ public class DensukeWriteService {
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
         // A-4: DB側の正規化名衝突（複数 playerId が同じ正規化名）を書き込み側でもスキップする（読取側と整合）。
-        Set<String> dbCollisionNames = findDbNameCollisions(playerNames);
+        Set<String> dbCollisionNames = findDbNameCollisions();
 
         // 各 URL の書き込み
         for (var urlEntry : grouped.entrySet()) {
@@ -388,7 +388,7 @@ public class DensukeWriteService {
                     .collect(Collectors.toMap(Player::getId, Player::getName));
 
             // A-4: DB側の正規化名衝突（複数 playerId が同じ正規化名）を書き込み側でもスキップする（読取側と整合）。
-            Set<String> dbCollisionNames = findDbNameCollisions(playerNames);
+            Set<String> dbCollisionNames = findDbNameCollisions();
 
             // A-3: 書き戻し直前に伝助を1回読み、伝助側×（明示的不参加）の (日付, 試合番号, 正規化名) を収集。
             // scrape 失敗は WARN のみで確定/書き戻しをブロックしない（差分検知はベストエフォート）。
@@ -690,14 +690,15 @@ public class DensukeWriteService {
     }
 
     /**
-     * A-4: 書き込み対象プレイヤーのうち、正規化後に同名となる複数 playerId（DB側の名寄せ衝突）の
-     * 正規化名を返す。読取側（DensukeImportService.playerNameMap の衝突検知）と同じ定義で、
+     * A-4: DB上の**全アクティブ選手**のうち、正規化後に同名となる複数 playerId（名寄せ衝突）の
+     * 正規化名を返す。読取側（DensukeImportService.playerNameMap の衝突検知）と**同一の母集団・定義**で、
      * 書き込み側でも当該名の選手をスキップして別人の伝助列へ○×が付く事故を防ぐ。
+     * 書き込み対象（dirty）に片方しか含まれないケースでも、DBに重複があれば衝突として検知する。
      */
-    private Set<String> findDbNameCollisions(Map<Long, String> playerIdToName) {
+    Set<String> findDbNameCollisions() {
         Map<String, Long> countByNormalized = new java.util.HashMap<>();
-        for (String name : playerIdToName.values()) {
-            countByNormalized.merge(DensukeScraper.normalizeMemberName(name), 1L, Long::sum);
+        for (Player p : playerRepository.findAllActive()) {
+            countByNormalized.merge(DensukeScraper.normalizeMemberName(p.getName()), 1L, Long::sum);
         }
         return countByNormalized.entrySet().stream()
                 .filter(e -> e.getValue() > 1)
@@ -851,9 +852,15 @@ public class DensukeWriteService {
                                      Document formDoc, Map<String, String> joinInputs, List<String> errors) {
         Element table = formDoc.selectFirst("table.listtbl");
         if (table == null || joinInputs.isEmpty()) {
-            // フォーム解析に失敗（一時的な取得不良の可能性）。既存キャッシュを使う従来挙動を維持（非ブロック）。
-            log.warn("Could not find listtbl or join inputs in densuke edit form (urlId={})", urlId);
-            return true;
+            // B-3: 編集フォームの取得・解析に失敗（listtbl 不在 / join入力なし＝HTML変更・エラーページ等）。
+            // この状態で既存キャッシュの row_id を使うと stale なIDで別日/別試合へ書き込む危険が高いため、
+            // false を返して当該URLの書き込みを中止し errors[] に記録する（安全側）。
+            log.warn("Could not find listtbl or join inputs in densuke edit form, aborting write (urlId={})", urlId);
+            if (errors != null) {
+                errors.add("伝助編集フォームを解析できなかったため当該URLの書き込みを中止しました"
+                        + "（listtbl不在/join入力なし・伝助側の変更や一時エラーの可能性・urlId=" + urlId + "）");
+            }
+            return false;
         }
 
         List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions);

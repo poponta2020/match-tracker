@@ -470,4 +470,37 @@ class DensukeWriteServiceTest {
         assertThat(usable).isTrue();
         verify(densukeRowIdRepository).saveAll(anyList());
     }
+
+    @Test
+    @DisplayName("B-3: 編集フォームを解析できない（listtbl不在）なら false（書き込み中止）＋errors記録")
+    void parseAndSaveRowIds_parseFailure_returnsFalse() {
+        // listtbl の無いページ（エラーページ / HTML変更を模擬）
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<html><body>error</body></html>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-1", "");
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(1L, List.of(), formDoc, joinInputs, errors);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        verify(densukeRowIdRepository, never()).saveAll(anyList());
+    }
+
+    // ----------------------------------------------------------------
+    // A-4: findDbNameCollisions テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("A-4: DB上に正規化後同名の複数選手がいれば衝突名を返す（dirtyが片方だけでも検知）")
+    void findDbNameCollisions_detectsDbDuplicates() {
+        Player p1 = Player.builder().id(1L).name("田中").build();
+        Player p2 = Player.builder().id(2L).name("田中 ").build(); // 末尾空白 → 正規化後同名
+        Player p3 = Player.builder().id(3L).name("佐藤").build();
+        when(playerRepository.findAllActive()).thenReturn(List.of(p1, p2, p3));
+
+        java.util.Set<String> collisions = densukeWriteService.findDbNameCollisions();
+
+        assertThat(collisions).containsExactly("田中");
+    }
 }
