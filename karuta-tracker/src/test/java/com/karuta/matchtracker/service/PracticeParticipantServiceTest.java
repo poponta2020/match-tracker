@@ -462,13 +462,41 @@ class PracticeParticipantServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
                 .thenReturn(List.of(cancelled));
 
-        service.addParticipantToMatch(date, 2, 10L);
+        // organizationId=null（SUPER_ADMIN 相当・スコープ非限定）は従来どおり日付のみでセッション特定
+        service.addParticipantToMatch(date, 2, 10L, null);
 
         verify(practiceParticipantRepository).save(participantCaptor.capture());
         PracticeParticipant saved = participantCaptor.getValue();
         assertThat(saved.getId()).isEqualTo(888L);
         assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
         verify(densukeSyncService).triggerWriteAsync();
+    }
+
+    @Test
+    @DisplayName("Add participant to match with organizationId scopes session lookup by org")
+    void addParticipantToMatch_organizationScopedLookup() {
+        // Given: 同日に複数団体のセッションがあっても、organizationId で対象団体のセッションだけを特定する
+        LocalDate date = LocalDate.of(2025, 4, 5);
+        Long orgId = 7L;
+        PracticeSession session = createSession(200L, 4);
+        session.setSessionDate(date);
+        session.setOrganizationId(orgId);
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, orgId))
+                .thenReturn(Optional.of(session));
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(200L, 10L, 2))
+                .thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(200L, 10L, 2))
+                .thenReturn(List.of());
+
+        // When
+        service.addParticipantToMatch(date, 2, 10L, orgId);
+
+        // Then: 団体スコープ取得のみが使われ、日付のみ取得(findBySessionDate)は使われない
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(date, orgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(any());
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        assertThat(participantCaptor.getValue().getSessionId()).isEqualTo(200L);
     }
 
     @Test

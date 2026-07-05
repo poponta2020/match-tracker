@@ -658,9 +658,21 @@ public class PracticeParticipantService {
         }
     }
 
+    /**
+     * 特定の試合に参加者を1名追加する。
+     *
+     * <p>{@code organizationId} は呼び出し元（Controller）が
+     * {@code PracticeSessionService.checkScopeByDate} で確定した書き込み対象団体ID。
+     * 非nullなら {@code findBySessionDateAndOrganizationId} で団体スコープ付きにセッションを特定し、
+     * 同日に複数団体のセッションがあっても検証で許可された団体のセッションだけを更新対象にする
+     * （検証と更新の対象ずれ防止）。SUPER_ADMIN 等でスコープ非限定の場合は {@code null} が渡り、
+     * 従来どおり日付のみで特定する。</p>
+     */
     @Transactional
-    public void addParticipantToMatch(LocalDate sessionDate, Integer matchNumber, Long playerId) {
-        PracticeSession session = practiceSessionRepository.findBySessionDate(sessionDate)
+    public void addParticipantToMatch(LocalDate sessionDate, Integer matchNumber, Long playerId, Long organizationId) {
+        PracticeSession session = (organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId)
+                : practiceSessionRepository.findBySessionDate(sessionDate))
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", sessionDate));
         if (matchNumber < 1 || matchNumber > session.getTotalMatches()) {
             throw new IllegalArgumentException("Invalid match number: " + matchNumber);
