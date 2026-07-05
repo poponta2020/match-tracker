@@ -758,7 +758,7 @@ public class DensukeWriteService {
                 .parse();
 
         Map<String, String> joinInputs = extractJoinInputs(formDoc);
-        parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs);
+        parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors);
     }
 
     /**
@@ -791,7 +791,7 @@ public class DensukeWriteService {
      * 直接確認すること。
      */
     private void parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
-                                     Document formDoc, Map<String, String> joinInputs) {
+                                     Document formDoc, Map<String, String> joinInputs, List<String> errors) {
         Element table = formDoc.selectFirst("table.listtbl");
         if (table == null || joinInputs.isEmpty()) {
             log.warn("Could not find listtbl or join inputs in densuke edit form");
@@ -802,21 +802,54 @@ public class DensukeWriteService {
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
         if (joinIds.size() != schedule.size()) {
-            log.warn("Join ID count ({}) differs from schedule count ({}), skipping row ID save to avoid misalignment",
-                    joinIds.size(), schedule.size());
+            // B-3: 件数不一致の無言スキップを可視化。書き込みステータス errors[] に記録し
+            // 伝助管理画面（pendingCount と併せて）で管理者が気づけるようにする。
+            log.warn("Join ID count ({}) differs from schedule count ({}), skipping row ID save to avoid misalignment. urlId={}",
+                    joinIds.size(), schedule.size(), urlId);
+            if (errors != null) {
+                errors.add("伝助フォームの行数(" + joinIds.size() + ")とアプリの予定数(" + schedule.size()
+                        + ")が不一致のため row_id 保存をスキップしました（伝助フォーム構造変更の可能性・urlId=" + urlId + "）");
+            }
             return;
         }
+
+        // B-3: row_id 整合の防御。現フォームの (日付×試合番号 → row_id) を組み立て、
+        // キャッシュ済み densuke_row_ids と矛盾（同じ日付×試合番号で row_id が異なる）があれば、
+        // 伝助フォーム構造が変化したとみなして当該URLの row_id を破棄し、現フォームから再構築する。
+        Map<String, String> currentByKey = new LinkedHashMap<>();
+        for (int i = 0; i < schedule.size(); i++) {
+            Map.Entry<LocalDate, Integer> entry = schedule.get(i);
+            currentByKey.put(entry.getKey() + "_" + entry.getValue(),
+                    joinIds.get(i).substring("join-".length()));
+        }
+
+        List<DensukeRowId> cached = densukeRowIdRepository.findByDensukeUrlId(urlId);
+        boolean structureChanged = cached.stream().anyMatch(r -> {
+            String current = currentByKey.get(r.getSessionDate() + "_" + r.getMatchNumber());
+            return current != null && !current.equals(r.getDensukeRowId());
+        });
+        if (structureChanged) {
+            // 監査ログ: 伝助フォーム構造変化を検知・row_id 再構築
+            log.warn("B-3: densuke form structure change detected for urlId={}. Discarding {} cached row_ids and rebuilding.",
+                    urlId, cached.size());
+            if (errors != null) {
+                errors.add("伝助フォーム構造の変化を検知したため row_id を再構築しました（urlId=" + urlId + "）");
+            }
+            densukeRowIdRepository.deleteAll(cached);
+            densukeRowIdRepository.flush();
+            cached = List.of();
+        }
+
+        Set<String> cachedKeys = cached.stream()
+                .map(r -> r.getSessionDate() + "_" + r.getMatchNumber())
+                .collect(Collectors.toSet());
 
         List<DensukeRowId> toSave = new ArrayList<>();
         for (int i = 0; i < schedule.size(); i++) {
             Map.Entry<LocalDate, Integer> entry = schedule.get(i);
-            String rawJoinKey = joinIds.get(i);
-            String rowId = rawJoinKey.substring("join-".length());
+            String rowId = joinIds.get(i).substring("join-".length());
 
-            Optional<DensukeRowId> existing = densukeRowIdRepository
-                    .findByDensukeUrlIdAndSessionDateAndMatchNumber(
-                            urlId, entry.getKey(), entry.getValue());
-            if (existing.isPresent()) continue;
+            if (cachedKeys.contains(entry.getKey() + "_" + entry.getValue())) continue;
 
             toSave.add(DensukeRowId.builder()
                     .densukeUrlId(urlId)

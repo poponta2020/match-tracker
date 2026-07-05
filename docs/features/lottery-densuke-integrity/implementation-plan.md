@@ -102,7 +102,7 @@ status: completed
 - **対応Issue:** #980
 
 ### タスク10（B-3）: 伝助行不一致の可視化＋row_id整合防御
-- [ ] 完了
+- [x] 完了
 - **概要:** join-ID件数とスケジュール件数の不一致を書き込みステータス/管理者通知で可視化し、キャッシュ済み `densuke_row_ids` が現フォーム構造と矛盾する場合は破棄して再取得する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeWriteService.java` — `parseAndSaveRowIds`/`ensureRowIds` の不一致可視化・row_id整合検証・再構築
