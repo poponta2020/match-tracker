@@ -52,7 +52,13 @@ public class MergeDuplicates {
         {"match_pairings", "player2_id"},
         {"practice_participants", "player_id"},
     };
-    // 重複行削除対象（TO 側が同等行を保持。player_id で1行想定）
+    // 重複行削除対象（player_id で FROM の行を削除）。
+    // ⚠️ 前提: TO 側が同等の org/pref 行を既に保持していること（#932 星野はこの前提を満たした）。
+    //   TO が該当行を持たないデータでは DELETE すると所属/設定が失われる。
+    //   実例 A-4-b（2026-07-05, 🔰双子4名）では TO の org 行が 0 だったため、DELETE ではなく
+    //   REPOINT する専用ランナー `c:\tmp\dbtool\MergeEmojiDups.java` を用いた（apply-log.md 参照）。
+    //   使用前に discover.sql [3] で from_orgs/to_orgs/org_overlap を確認し、TO に無い場合は
+    //   本 DELETES から外して REPOINTS 側へ移す（org_overlap=0 が前提）こと。
     static final String[] DELETES = {
         "player_organizations",
         "line_notification_preferences",
