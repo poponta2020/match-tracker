@@ -58,6 +58,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 成果物は `docs/features/<slug>/` に requirements.md と design-spec.md を同居させ、互いに「宿題」を投げ合って収束させる（重複記述しない）
 - 両方が `completed`/`locked` ＋ 互いの宿題ゼロ → `/implement <slug>`
 
+## モデル階層委譲
+
+`/implement` は実装タスクをオーケストレーター（main）とワーカー（Sonnet: `task-implementer`）に分担する。委譲可否の判定（4条件）・委譲の作法・各スキルの配線状況の正典＝[`docs/dev/model-delegation.md`](docs/dev/model-delegation.md)。
+
 ## 開発コマンド
 
 ### バックエンド（`karuta-tracker/`）
