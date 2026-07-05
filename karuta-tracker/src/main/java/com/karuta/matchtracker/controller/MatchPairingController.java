@@ -185,7 +185,7 @@ public class MatchPairingController {
      * 指定日・試合番号の対戦組み合わせを削除
      */
     @DeleteMapping("/date-and-match")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<Void> deleteByDateAndMatchNumber(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam Integer matchNumber,
@@ -230,7 +230,7 @@ public class MatchPairingController {
      * ペアリングと対応する試合結果を同時に削除（リセット）
      */
     @DeleteMapping("/{id}/with-result")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<MatchPairingDto> resetWithResult(
             @PathVariable Long id,
             HttpServletRequest httpRequest) {
