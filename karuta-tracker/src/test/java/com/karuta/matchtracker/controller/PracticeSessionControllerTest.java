@@ -738,8 +738,11 @@ class PracticeSessionControllerTest {
     @Test
     @DisplayName("POST 参加者追加: PLAYER は自分の所属団体のセッションなら追加できる（200）")
     void addParticipantToMatch_playerOwnOrg_returns200() throws Exception {
-        // Given: checkScopeByDate は通過（例外を投げない = 所属団体内）
+        // Given: checkScopeByDate が所属団体ID(7L)を返す（= 所属団体内で一意に解決）
         Long playerUserId = 10L;
+        Long orgId = 7L;
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId)))
+                .thenReturn(orgId);
         when(practiceSessionService.findByDate(today)).thenReturn(testSessionDto);
 
         // When & Then
@@ -749,9 +752,9 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
-        // Controller が currentUserId を渡してスコープ検証を呼ぶ
+        // 検証で確定した organizationId が実更新にも渡る（検証と更新の対象一致）
         verify(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
-        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L);
+        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, orgId);
     }
 
     @Test
@@ -769,13 +772,15 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isForbidden());
 
         // スコープ検証で弾かれるため実際の追加処理は呼ばれない
-        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any());
+        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("POST 参加者追加: ADMIN は自団体のセッションに追加できる（200・従来通り）")
     void addParticipantToMatch_admin_returns200() throws Exception {
-        // Given
+        // Given: checkScopeByDate が自団体ID(1L)を返す
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("ADMIN"), any(), any()))
+                .thenReturn(1L);
         when(practiceSessionService.findByDate(today)).thenReturn(testSessionDto);
 
         // When & Then
@@ -785,7 +790,7 @@ class PracticeSessionControllerTest {
                         .header("X-Admin-Organization-Id", "1"))
                 .andExpect(status().isOk());
 
-        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L);
+        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, 1L);
     }
 
     @Test
@@ -796,6 +801,6 @@ class PracticeSessionControllerTest {
                         today.toString(), 3, 20L))
                 .andExpect(status().isForbidden());
 
-        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any());
+        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any(), any());
     }
 }

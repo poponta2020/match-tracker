@@ -268,26 +268,28 @@ class PracticeSessionServiceTest {
     // ADMIN=自団体 / PLAYER=所属団体いずれか / その他=拒否）で拡張したもの。
 
     @Test
-    @DisplayName("checkScopeByDate: SUPER_ADMIN はスコープ強制なし（リポジトリ照会せず通過）")
+    @DisplayName("checkScopeByDate: SUPER_ADMIN はスコープ強制なし（null を返しリポジトリ照会しない）")
     void checkScopeByDate_superAdminSkips() {
-        // When: 例外なく通過する
-        practiceSessionService.checkScopeByDate(today, "SUPER_ADMIN", null, 1L);
+        // When: 例外なく通過し、スコープ非限定を表す null を返す
+        Long result = practiceSessionService.checkScopeByDate(today, "SUPER_ADMIN", null, 1L);
 
-        // Then: いずれのスコープ照会も行われない
+        // Then: null（更新側は日付のみで特定）。いずれのスコープ照会も行われない
+        assertThat(result).isNull();
         verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
         verify(practiceSessionRepository, never()).findByDateRange(any(), any());
     }
 
     @Test
-    @DisplayName("checkScopeByDate: ADMIN は自団体のセッションが当日あれば通過")
+    @DisplayName("checkScopeByDate: ADMIN は自団体のセッションが当日あれば adminOrganizationId を返す")
     void checkScopeByDate_adminOwnOrgPasses() {
         // Given
         Long adminOrgId = 7L;
         when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, adminOrgId))
                 .thenReturn(Optional.of(testSession));
 
-        // When & Then: 例外なく通過する
-        practiceSessionService.checkScopeByDate(today, "ADMIN", adminOrgId, null);
+        // When & Then: 例外なく通過し、書き込み対象として adminOrganizationId を返す
+        Long result = practiceSessionService.checkScopeByDate(today, "ADMIN", adminOrgId, null);
+        assertThat(result).isEqualTo(adminOrgId);
         verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, adminOrgId);
     }
 
@@ -316,7 +318,7 @@ class PracticeSessionServiceTest {
     }
 
     @Test
-    @DisplayName("checkScopeByDate: PLAYER は所属団体のセッションが当日あれば通過")
+    @DisplayName("checkScopeByDate: PLAYER は所属団体のセッションが当日あればその団体IDを返す")
     void checkScopeByDate_playerOwnOrgPasses() {
         // Given: PLAYER が所属する団体 7L のセッションが当日存在する
         Long playerUserId = 10L;
@@ -326,9 +328,28 @@ class PracticeSessionServiceTest {
         when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(orgId));
         when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(orgSession));
 
-        // When & Then: 例外なく通過する
-        practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId);
+        // When & Then: 例外なく通過し、書き込み対象として所属団体IDを返す
+        Long result = practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId);
+        assertThat(result).isEqualTo(orgId);
         verify(organizationService).getPlayerOrganizationIds(playerUserId);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: PLAYER で同日に複数所属団体のセッションがあると ForbiddenException（曖昧性のため）")
+    void checkScopeByDate_playerAmbiguousMultiOrgForbidden() {
+        // Given: PLAYER が所属する団体 7L / 8L 両方のセッションが同日に存在
+        Long playerUserId = 10L;
+        PracticeSession a = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(10).organizationId(7L).build();
+        PracticeSession b = PracticeSession.builder()
+                .id(101L).sessionDate(today).totalMatches(10).organizationId(8L).build();
+        when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(7L, 8L));
+        when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(a, b));
+
+        // When & Then: 操作対象を一意に特定できないため拒否（別団体データ誤汚染防止）
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

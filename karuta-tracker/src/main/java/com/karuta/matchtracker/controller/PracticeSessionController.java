@@ -390,8 +390,9 @@ public class PracticeSessionController {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
-        practiceSessionService.checkScopeByDate(date, role, adminOrgId, currentUserId);
-        practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId);
+        // スコープ検証で確定した organizationId を実更新にも渡し、検証と更新の対象セッションを一致させる
+        Long organizationId = practiceSessionService.checkScopeByDate(date, role, adminOrgId, currentUserId);
+        practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId);
         // 更新後の練習セッション情報を返す
         PracticeSessionDto session = practiceSessionService.findByDate(date);
         return ResponseEntity.ok(session);
