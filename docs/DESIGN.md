@@ -93,7 +93,8 @@ Entity Layer (JPA Entity)
 - パスワード平文比較
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
-- 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する
+- 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する。PLAYER に開放している書き込み操作は、作成・一括作成・自動マッチング・選手差し替え・ロック/解除に加え、**全削除（`deleteByDateAndMatchNumber`）・結果込みリセット（`resetWithResult`）**も含む（いずれも上記スコープ検証を通過する）
+- 練習日への参加者追加 API（`PracticeSessionController.addParticipantToMatch`、`POST /api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}`）も PLAYER に開放。スコープ検証は `PracticeSessionService.checkScopeByDate(date, role, adminOrganizationId, currentUserId)` で実施し、`MatchPairingController.validateScopeByDate` ＋ `resolveOrganizationIdForScopedWrite` と同一の考え方（SUPER_ADMIN はスコープなし、ADMIN は自団体セッションの存在で照合、PLAYER は所属団体のセッションが対象日付に存在するかで照合、不一致は 403）。**同メソッドは検証だけでなく書き込み対象の `organizationId` を一意に確定して返し、`PracticeParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId)` がその団体スコープ（`findBySessionDateAndOrganizationId`）でセッションを特定する**（検証と実更新の対象セッションを一致させ、同日に複数団体のセッションがある場合に別団体セッションへ書き込む対象ずれを防ぐ）。PLAYER で同日に複数の所属団体のセッションがあり一意に定まらない場合は 403。SUPER_ADMIN（`organizationId=null`）は従来どおり日付のみで特定する。同メソッドはセッションIDベースの `checkAdminScope`（ADMIN専用の他エンドポイント用）とは別物
 - 選手起点の最近ペアリング取得 `GET /api/match-pairings/player/{playerId}`（`MatchPairingService.getRecentByPlayerId` / `MatchPairingRepository.findRecentByPlayerId`）は、`@RequireRole` 全ロールの参照系で団体スコープを適用しない（閲覧は全選手可。選手別履歴の参照という用途が getByDate 等の組織限定取得と異なるため）。`(player1Id = :playerId OR player2Id = :playerId)` で `sessionDate DESC, matchNumber DESC` 順・`Pageable` で直近30件に制限し、選手名は `collectPlayerNames` で一括解決（N+1回避）。動画倉庫の登録モーダル「選手起点」で結果未入力（`match_pairings` のみ）の試合も選択肢に含めるための軽量レスポンス（`recentMatches`・試合結果は付与しない）
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
@@ -1411,12 +1412,12 @@ Entity Layer (JPA Entity)
 
 #### DELETE /api/match-pairings/{id}/with-result
 **説明**: ペアリングと対応する試合結果を同時削除（リセット）
-**権限**: SUPER_ADMIN, ADMIN
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`。ADMIN/PLAYER は自/所属団体のペアリングのみ、他団体は 403）
 **レスポンス**: 削除されたペアリング情報（`MatchPairingDto`、`hasResult=true`、`matchId`付き）
 
 #### DELETE /api/match-pairings/date-and-match?date={date}&matchNumber={matchNumber}
 **説明**: 組み合わせ削除（結果入力済み・手動ロックの組は保持）
-**権限**: SUPER_ADMIN, ADMIN
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByDate`。ADMIN/PLAYER は自/所属団体のセッションのみ、他団体は 403）
 
 #### PATCH /api/match-pairings/{id}/lock
 **説明**: 指定組を手動ロック（二重ブッキング検証付き）。同一 `(session_date, match_number)`・同一組織スコープ内で対象2選手のいずれかが別の組に含まれる場合は 409 Conflict（`DuplicateResourceException`）

@@ -10,6 +10,7 @@ import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
 import com.karuta.matchtracker.repository.DensukeRowIdRepository;
@@ -260,6 +261,166 @@ class PracticeSessionServiceTest {
         assertThat(result.getSessionDate()).isEqualTo(today);
         verify(practiceSessionRepository).findBySessionDate(today);
         verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+    }
+
+    @Test
+    @DisplayName("findByDate(date, organizationId): 組織スコープでセッションを取得する（日付のみ取得は使わない）")
+    void testFindByDate_orgScoped() {
+        // Given: 同日に複数団体のセッションがある場面で、団体スコープ付きに取得する
+        Long orgId = 7L;
+        PracticeSession orgSession = PracticeSession.builder()
+                .id(200L).sessionDate(today).totalMatches(10).organizationId(orgId).build();
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, orgId))
+                .thenReturn(Optional.of(orgSession));
+        when(lotteryDeadlineHelper.isLotteryDisabled(orgId)).thenReturn(false);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDate(today, orgId);
+
+        // Then: 組織スコープ取得のみが使われ、日付のみ取得は呼ばれない
+        assertThat(result.getId()).isEqualTo(200L);
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, orgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(today);
+    }
+
+    @Test
+    @DisplayName("findByDate(date, null): organizationId=null は日付のみで取得する（SUPER_ADMIN 経路）")
+    void testFindByDate_nullOrgUsesDateOnly() {
+        // Given
+        when(practiceSessionRepository.findBySessionDate(today)).thenReturn(Optional.of(testSession));
+        when(lotteryDeadlineHelper.isLotteryDisabled(any())).thenReturn(false);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDate(today, null);
+
+        // Then: 日付のみで取得され、組織スコープ取得は呼ばれない
+        assertThat(result.getSessionDate()).isEqualTo(today);
+        verify(practiceSessionRepository).findBySessionDate(today);
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+    }
+
+    // ===== checkScopeByDate: 参加者追加(日付ベース)の団体スコープ検証 =====
+    // MatchPairingController.validateScopeByDate と同じ考え方（SUPER_ADMIN=強制なし /
+    // ADMIN=自団体 / PLAYER=所属団体いずれか / その他=拒否）で拡張したもの。
+
+    @Test
+    @DisplayName("checkScopeByDate: SUPER_ADMIN はスコープ強制なし（null を返しリポジトリ照会しない）")
+    void checkScopeByDate_superAdminSkips() {
+        // When: 例外なく通過し、スコープ非限定を表す null を返す
+        Long result = practiceSessionService.checkScopeByDate(today, "SUPER_ADMIN", null, 1L);
+
+        // Then: null（更新側は日付のみで特定）。いずれのスコープ照会も行われない
+        assertThat(result).isNull();
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+        verify(practiceSessionRepository, never()).findByDateRange(any(), any());
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: ADMIN は自団体のセッションが当日あれば adminOrganizationId を返す")
+    void checkScopeByDate_adminOwnOrgPasses() {
+        // Given
+        Long adminOrgId = 7L;
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, adminOrgId))
+                .thenReturn(Optional.of(testSession));
+
+        // When & Then: 例外なく通過し、書き込み対象として adminOrganizationId を返す
+        Long result = practiceSessionService.checkScopeByDate(today, "ADMIN", adminOrgId, null);
+        assertThat(result).isEqualTo(adminOrgId);
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, adminOrgId);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: ADMIN は自団体のセッションが無ければ ForbiddenException")
+    void checkScopeByDate_adminOtherOrgForbidden() {
+        // Given
+        Long adminOrgId = 7L;
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, adminOrgId))
+                .thenReturn(Optional.empty());
+
+        // When & Then
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "ADMIN", adminOrgId, null))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: ADMIN で adminOrganizationId=null は ForbiddenException")
+    void checkScopeByDate_adminNullOrgForbidden() {
+        // When & Then: 組織不明の ADMIN はリポジトリ照会せず拒否
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "ADMIN", null, null))
+                .isInstanceOf(ForbiddenException.class);
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: PLAYER は所属団体のセッションが当日あればその団体IDを返す")
+    void checkScopeByDate_playerOwnOrgPasses() {
+        // Given: PLAYER が所属する団体 7L のセッションが当日存在する
+        Long playerUserId = 10L;
+        Long orgId = 7L;
+        PracticeSession orgSession = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(10).organizationId(orgId).build();
+        when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(orgId));
+        when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(orgSession));
+
+        // When & Then: 例外なく通過し、書き込み対象として所属団体IDを返す
+        Long result = practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId);
+        assertThat(result).isEqualTo(orgId);
+        verify(organizationService).getPlayerOrganizationIds(playerUserId);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: PLAYER で同日に複数所属団体のセッションがあると ForbiddenException（曖昧性のため）")
+    void checkScopeByDate_playerAmbiguousMultiOrgForbidden() {
+        // Given: PLAYER が所属する団体 7L / 8L 両方のセッションが同日に存在
+        Long playerUserId = 10L;
+        PracticeSession a = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(10).organizationId(7L).build();
+        PracticeSession b = PracticeSession.builder()
+                .id(101L).sessionDate(today).totalMatches(10).organizationId(8L).build();
+        when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(7L, 8L));
+        when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(a, b));
+
+        // When & Then: 操作対象を一意に特定できないため拒否（別団体データ誤汚染防止）
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: PLAYER は所属外団体のセッションしか無ければ ForbiddenException")
+    void checkScopeByDate_playerOtherOrgForbidden() {
+        // Given: 当日のセッションは PLAYER の所属外団体 99L のみ
+        Long playerUserId = 10L;
+        PracticeSession otherOrgSession = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(10).organizationId(99L).build();
+        when(organizationService.getPlayerOrganizationIds(playerUserId)).thenReturn(List.of(7L));
+        when(practiceSessionRepository.findByDateRange(today, today)).thenReturn(List.of(otherOrgSession));
+
+        // When & Then
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "PLAYER", null, playerUserId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: PLAYER で currentUserId=null は ForbiddenException")
+    void checkScopeByDate_playerNullUserForbidden() {
+        // When & Then: ユーザー不明の PLAYER は所属団体照会せず拒否
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "PLAYER", null, null))
+                .isInstanceOf(ForbiddenException.class);
+        verify(organizationService, never()).getPlayerOrganizationIds(any());
+    }
+
+    @Test
+    @DisplayName("checkScopeByDate: 未知ロールは ForbiddenException")
+    void checkScopeByDate_unknownRoleForbidden() {
+        // When & Then
+        assertThatThrownBy(() ->
+                practiceSessionService.checkScopeByDate(today, "GUEST", null, 1L))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

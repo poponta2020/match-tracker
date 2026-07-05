@@ -75,11 +75,25 @@ public class PracticeSessionService {
     }
 
     /**
-     * 日付で練習日を取得
+     * 日付で練習日を取得（スコープ非限定・日付のみ）
      */
     public PracticeSessionDto findByDate(LocalDate date) {
-        log.debug("Finding practice session by date: {}", date);
-        PracticeSession session = practiceSessionRepository.findBySessionDate(date)
+        return findByDate(date, null);
+    }
+
+    /**
+     * 日付＋団体スコープで練習日を取得（{@link #findByDate(LocalDate)} の組織スコープ対応版）。
+     *
+     * <p>organizationId が非nullなら {@code findBySessionDateAndOrganizationId} で当該団体の
+     * セッションのみを取得し、同日に複数団体のセッションがあっても取得対象がずれない。
+     * null（SUPER_ADMIN 等・スコープ非限定）の場合は日付のみで取得する。参加者追加後の
+     * レスポンス取得を、書き込み時と同じ団体スコープに揃えるために使う。</p>
+     */
+    public PracticeSessionDto findByDate(LocalDate date, Long organizationId) {
+        log.debug("Finding practice session by date: {}, organizationId: {}", date, organizationId);
+        PracticeSession session = (organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(date, organizationId)
+                : practiceSessionRepository.findBySessionDate(date))
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
         PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
         dto.setPairingIncludesPending(lotteryDeadlineHelper.isLotteryDisabled(session.getOrganizationId()));
@@ -668,14 +682,58 @@ public class PracticeSessionService {
     }
 
     /**
-     * ADMINが自団体の練習日のみ操作可能かチェック（日付ベース）
-     * SUPER_ADMINの場合はスキップ
+     * 練習日の書き込みスコープをロールに応じて検証し、書き込み対象の organizationId を確定して返す（日付ベース）。
+     *
+     * <p>{@code MatchPairingController.validateScopeByDate} ＋ {@code resolveOrganizationIdForScopedWrite}
+     * と同じ考え方。検証だけでなく「どの団体のセッションを書き込むか」まで一意に確定して返すことで、
+     * 後続の実更新（{@code PracticeParticipantService.addParticipantToMatch}）が検証と同じセッションを
+     * 団体スコープ付きで特定でき、検証と更新の対象ずれ（別団体セッションへの書き込み）を防ぐ:</p>
+     * <ul>
+     *   <li>SUPER_ADMIN: スコープ強制なし。{@code null} を返す（更新側は日付のみで特定）。</li>
+     *   <li>ADMIN: 自団体のセッションが対象日付に存在しなければ {@link ForbiddenException}。存在すれば adminOrganizationId を返す。</li>
+     *   <li>PLAYER: 所属団体のセッションが対象日付に存在しなければ {@link ForbiddenException}。
+     *       同日に複数の所属団体のセッションがあり操作対象が一意に定まらない場合も {@link ForbiddenException}
+     *       （別団体データ誤汚染防止の安全側フォールバック）。1件のみ一致すればその団体IDを返す。</li>
+     *   <li>その他のロール: {@link ForbiddenException}。</li>
+     * </ul>
+     *
+     * <p>呼び出し元は {@code PracticeSessionController.addParticipantToMatch} の1箇所のみ。
+     * セッションIDベースの {@link #checkAdminScope} とは別物のため、他のADMIN専用
+     * エンドポイントには影響しない。</p>
      */
-    public void checkAdminScopeByDate(LocalDate date, String role, Long adminOrganizationId) {
-        if (!"ADMIN".equals(role)) return;
+    public Long checkScopeByDate(LocalDate date, String role, Long adminOrganizationId, Long currentUserId) {
+        if ("SUPER_ADMIN".equals(role)) return null;
 
-        practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrganizationId)
-                .orElseThrow(() -> new ForbiddenException("他団体の練習日は編集できません"));
+        if ("ADMIN".equals(role)) {
+            if (adminOrganizationId == null) {
+                throw new ForbiddenException("他団体の練習日は編集できません");
+            }
+            practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrganizationId)
+                    .orElseThrow(() -> new ForbiddenException("他団体の練習日は編集できません"));
+            return adminOrganizationId;
+        }
+
+        if ("PLAYER".equals(role)) {
+            if (currentUserId == null) {
+                throw new ForbiddenException("他団体の練習日は編集できません");
+            }
+            List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+            List<Long> matchedOrgIds = practiceSessionRepository.findByDateRange(date, date).stream()
+                    .map(PracticeSession::getOrganizationId)
+                    .filter(playerOrgIds::contains)
+                    .distinct()
+                    .toList();
+            if (matchedOrgIds.isEmpty()) {
+                throw new ForbiddenException("他団体の練習日は編集できません");
+            }
+            if (matchedOrgIds.size() > 1) {
+                throw new ForbiddenException(
+                        "同日に複数の所属団体で練習があるため、操作対象の団体を特定できません");
+            }
+            return matchedOrgIds.get(0);
+        }
+
+        throw new ForbiddenException("操作権限がありません");
     }
 
     /**
