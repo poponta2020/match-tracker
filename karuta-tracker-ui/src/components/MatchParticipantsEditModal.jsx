@@ -7,6 +7,8 @@ import PlayerChip from './PlayerChip';
 const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) => {
   const [allPlayers, setAllPlayers] = useState([]);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
+  // A-1: 保存前の追加/削除サマリー算出用に、編集開始時点のWON/PENDING集合を保持する。
+  const [initialPlayerIds, setInitialPlayerIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -25,14 +27,16 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
       if (session?.matchParticipants) {
         const participants = session.matchParticipants[matchNumber];
         if (participants && Array.isArray(participants)) {
-          const nameToIdMap = {};
-          playersResponse.data.forEach(player => {
-            nameToIdMap[player.name] = player.id;
-          });
+          // A-1: この編集は当選/参加確定者（WON/PENDING）のみを対象とする。
+          // WAITLISTED/OFFERED/CANCELLED/DECLINED/WAITLIST_DECLINED は初期選択に含めない
+          // （待機者の抽選なしWON昇格・キャンセル済みの復活を防ぐ）。
+          // playerId 基準で特定し、同姓同名・改名でも取りこぼさない。
           const ids = participants
-            .map(p => nameToIdMap[typeof p === 'string' ? p : p.name])
-            .filter(id => id !== undefined);
+            .filter(p => typeof p !== 'string' && p.playerId != null
+              && (p.status === 'WON' || p.status === 'PENDING'))
+            .map(p => p.playerId);
           setSelectedPlayerIds(ids);
+          setInitialPlayerIds(ids);
         }
       }
     } catch (err) {
@@ -64,6 +68,21 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
   };
 
   const handleSave = async () => {
+    // A-1: 保存前に追加/削除人数の要約を確認ダイアログで提示する。
+    const initialSet = new Set(initialPlayerIds);
+    const selectedSet = new Set(selectedPlayerIds);
+    const added = selectedPlayerIds.filter(id => !initialSet.has(id)).length;
+    const removed = initialPlayerIds.filter(id => !selectedSet.has(id)).length;
+
+    const summary =
+      `第${matchNumber}試合の当選/参加確定者を更新します。\n` +
+      `追加: ${added}名 / 削除: ${removed}名（削除した方はキャンセル扱いになります）\n\n` +
+      `※この編集は当選/参加確定者（WON/PENDING）のみを対象とします。` +
+      `キャンセル待ち・辞退・キャンセル済みの方には影響しません。`;
+    if (!window.confirm(summary)) {
+      return;
+    }
+
     try {
       setSaving(true);
       setError('');
@@ -104,6 +123,9 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
             <h2 className="text-lg font-bold text-[#5f3a2d]">
               第{matchNumber}試合の参加者
             </h2>
+            <p className="text-xs text-[#8a7568] mt-1">
+              この編集は当選/参加確定者のみを対象とします
+            </p>
           </div>
           <button
             onClick={onClose}

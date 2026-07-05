@@ -888,6 +888,7 @@ public class PracticeSessionService {
             matchParticipants.put(entry.getKey(),
                     entry.getValue().stream()
                             .map(pp -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                    .playerId(pp.player().getId())
                                     .name(pp.player().getName())
                                     .kyuRank(pp.player().getKyuRank())
                                     .role(pp.player().getRole())

@@ -96,14 +96,29 @@ public class PracticeParticipantService {
                 throw new ResourceNotFoundException("Some players not found");
             }
         }
+        Set<Long> targetIds = new HashSet<>(uniquePlayerIds);
 
-        practiceParticipantRepository.softDeleteBySessionIdAndMatchNumber(sessionId, matchNumber, JstDateTimeUtil.now());
+        // A-1: WON/PENDING（＝isActive()）のアクティブ行のみを全置換する。
+        // WAITLISTED/OFFERED/CANCELLED/DECLINED/WAITLIST_DECLINED は温存し、
+        // 伝助の ×/△ を巻き込まない（キャンセル済み(×)の復活・待機者の抽選なしWON昇格を防ぐ）。
+        // 新リストから外れたアクティブ行のみ CANCELLED（＝×書き戻し）にする。
+        LocalDateTime now = JstDateTimeUtil.now();
+        List<PracticeParticipant> existing = practiceParticipantRepository
+                .findBySessionIdAndMatchNumber(sessionId, matchNumber);
+        for (PracticeParticipant p : existing) {
+            if (p.getStatus() != null && p.getStatus().isActive() && !targetIds.contains(p.getPlayerId())) {
+                p.setStatus(ParticipantStatus.CANCELLED);
+                p.setDirty(true);
+                p.setCancelledAt(now);
+                practiceParticipantRepository.save(p);
+            }
+        }
         practiceParticipantRepository.flush();
 
-        if (!uniquePlayerIds.isEmpty()) {
-            for (Long playerId : uniquePlayerIds) {
-                saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
-            }
+        // 新リストの選手を WON で登録（既存行があれば再利用）。
+        // 明示的に選択された待機/キャンセル系の選手はここで WON へ昇格する（管理者の意図的操作）。
+        for (Long playerId : uniquePlayerIds) {
+            saveOrReuseParticipant(sessionId, playerId, matchNumber, ParticipantStatus.WON, null);
         }
 
         log.info("Successfully set {} participants for session: {}, match: {}",
