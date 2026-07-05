@@ -7,7 +7,6 @@ import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, Unlock, RotateCcw, Ban } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
-import { isAdmin, isSuperAdmin } from '../../utils/auth';
 import PlayerChip from '../../components/PlayerChip';
 import PageHeader from '../../components/PageHeader';
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -977,7 +976,7 @@ const PairingGenerator = () => {
             <h2 className="text-xl font-bold text-[#374151]">
               {isEditingExisting ? `第${matchNumber}試合の組み合わせ` : '生成された組み合わせ'}
             </h2>
-            {!isReadOnly && !isViewMode && (isAdmin() || isSuperAdmin()) && (
+            {!isReadOnly && !isViewMode && (
               <div className="flex items-center gap-3">
                 {isEditingExisting && (
                   <button
@@ -1038,7 +1037,7 @@ const PairingGenerator = () => {
                         ロック
                       </span>
                     )}
-                    {!isReadOnly && !isViewMode && pairing.id && pairing.hasResult && (isAdmin() || isSuperAdmin()) && (
+                    {!isReadOnly && !isViewMode && pairing.id && pairing.hasResult && (
                       <button
                         onClick={() => handleResetPairing(pairing)}
                         disabled={loading}
