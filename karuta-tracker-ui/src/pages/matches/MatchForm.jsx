@@ -18,6 +18,8 @@ const MatchForm = () => {
 
   // location.stateから初期値を取得
   const initialData = location.state || {};
+  // 遷移元（対戦組み合わせ画面のFAB等）で試合番号が明示指定されたか
+  const hasExplicitMatchNumber = initialData.matchNumber != null;
 
   const [formData, setFormData] = useState({
     matchDate: initialData.matchDate || new Date().toISOString().split('T')[0],
@@ -223,9 +225,12 @@ const MatchForm = () => {
         byeActivityCache.current = newByeCache;
 
         // デフォルト試合番号を決定
-        // 未記録の試合を優先表示
-        const unrecordedMatch = matchResults.find(result => !result.exists);
-        defaultMatchNumber = unrecordedMatch ? unrecordedMatch.matchNumber : allMatchNumbers[0];
+        // 遷移元で試合番号が明示指定されている場合はそれを優先し、
+        // 未指定の場合のみ未記録の試合を優先表示する
+        if (!hasExplicitMatchNumber) {
+          const unrecordedMatch = matchResults.find(result => !result.exists);
+          defaultMatchNumber = unrecordedMatch ? unrecordedMatch.matchNumber : allMatchNumbers[0];
+        }
 
         // デフォルト試合番号のデータを適用
         applyMatchData(defaultMatchNumber, newMatchDataCache, newPairingCache);
