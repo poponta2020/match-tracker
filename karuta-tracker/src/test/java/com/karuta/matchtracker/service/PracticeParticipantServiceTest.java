@@ -80,8 +80,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(4L);
         when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
@@ -111,8 +111,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
@@ -143,8 +143,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
@@ -280,8 +280,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
@@ -367,7 +367,10 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
+        // 当該団体・全団体一括ともに抽選未実行 → PENDING
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatus(
                 2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(List.of());
@@ -382,6 +385,12 @@ class PracticeParticipantServiceTest {
 
         verify(practiceParticipantRepository).save(participantCaptor.capture());
         assertThat(participantCaptor.getValue().getStatus()).isEqualTo(ParticipantStatus.PENDING);
+        // A-2 団体スコープ: 月全体ではなく当該団体（＋全団体一括）の抽選のみを実行済み判定に使う。
+        // 別団体の抽選SUCCESSで当該団体が未抽選なのに即WON化しないことを担保する。
+        verify(lotteryExecutionRepository).existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS);
+        verify(lotteryExecutionRepository, never()).existsByTargetYearAndTargetMonthAndStatus(
+                eq(2025), eq(4), any());
     }
 
     @Test

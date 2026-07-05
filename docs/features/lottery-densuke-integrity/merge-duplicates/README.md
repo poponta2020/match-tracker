@@ -22,13 +22,17 @@ Windows から Render PostgreSQL へは NAT64/IPv6 で SSL が切断されるた
 
 ```bash
 JAR=$(cygpath -w "$(ls ~/.gradle/caches/modules-2/files-2.1/org.postgresql/postgresql/*/*/postgresql-*.jar | head -1)")
-# 調査（1文=1ファイルで実行。discover.sql の各ブロックを切り出す）
-java -Djava.net.preferIPv4Stack=true -cp "$JAR;." Q <query>.sql   # Q.java は c:\tmp\dbtool
+# 接続情報は環境変数で渡す（リポジトリに秘密情報を置かない）。値は CLAUDE.local.md（gitignore対象）から。
+export DB_URL='jdbc:postgresql://<host>/<db>'
+export DB_USERNAME='<user>'
+export DB_PASSWORD='<pass>'
+# 調査（1文=1ファイルで実行。discover.sql の各ブロックを切り出す。Q.java は c:\tmp\dbtool でリポジトリ外）
+java -Djava.net.preferIPv4Stack=true -cp "$JAR;." Q <query>.sql
 ```
 
-> 接続情報（host/user/password）は Render のローテーションで変わる。`MergeDuplicates.java` /
-> `dbtool/Q.java` の定数と `CLAUDE.local.md` を最新に保つこと。**認証が EOF で失敗する場合は
-> 接続情報が古い**（Render ダッシュボード → Connect タブが一次情報源）。
+> **秘密情報はコミットしない**。`MergeDuplicates.java` は接続情報を環境変数（`DB_URL`/`DB_USERNAME`/`DB_PASSWORD`）から読む。
+> 値は `CLAUDE.local.md`（gitignore対象）/ Render ダッシュボード → Connect タブが一次情報源。
+> 接続情報は Render のローテーションで変わる。**認証が EOF で失敗する場合は接続情報が古い**。
 
 ## 手順
 1. **調査**: `discover.sql [1]` で 川瀬/高橋/山野/むらやま の active 重複ペアと id を確定。
@@ -40,7 +44,8 @@ java -Djava.net.preferIPv4Stack=true -cp "$JAR;." Q <query>.sql   # Q.java は c
 3. **衝突確認**: 各ペアで `discover.sql [3]`（`<FROM>/<TO>` 差し替え）を実行し、`CONFLICT.*` が**全て 0** を確認。
    0でない場合は自動統合せず、先に手動で解消（同一試合の重複参加/対戦など）。
 4. **pairs.txt** に 4 ペアを記入。
-5. **DRY-RUN**: `java -Djava.net.preferIPv4Stack=true -cp "$JAR;." MergeDuplicates pairs.txt backup.sql`
+5. **DRY-RUN**（`DB_URL`/`DB_USERNAME`/`DB_PASSWORD` を export 済みで）:
+   `java -Djava.net.preferIPv4Stack=true -cp "$JAR;." MergeDuplicates pairs.txt backup.sql`
    → 全件 `OK` かつ `DRY-RUN OK` を確認（この時点ではDBは変更されない）。
 6. **本番適用（要ユーザー承認）**: `... MergeDuplicates pairs.txt backup.sql --apply`
    → `COMMITTED`。生成された `backup.sql` は revert 用に保管。

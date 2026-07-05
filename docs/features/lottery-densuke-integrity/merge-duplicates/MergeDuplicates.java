@@ -26,10 +26,22 @@ import java.util.*;
  * ※ discover.sql [2] で既知以外の FK 参照列が出た場合は REPOINTS / DELETES に追記すること。
  */
 public class MergeDuplicates {
-    static final String URL =
-        "jdbc:postgresql://dpg-d8iplpu7r5hc73d66rag-a.oregon-postgres.render.com/karuta_tracker_witk?sslmode=require";
-    static final String USER = "karuta";
-    static final String PASS = "8h3jWc5cPcNfEkDOlYYXL4xW38nHR8RT";
+    // 接続情報は環境変数から読む（リポジトリに秘密情報をコミットしない）。
+    // 実行例:
+    //   DB_URL='jdbc:postgresql://<host>/<db>' DB_USERNAME=<user> DB_PASSWORD=<pass> \
+    //     java -Djava.net.preferIPv4Stack=true -cp "<pgjdbc.jar>;." MergeDuplicates pairs.txt backup.sql
+    // 値は CLAUDE.local.md（gitignore対象）/ Render Connect タブが一次情報源。
+    static final String URL = requireEnv("DB_URL");
+    static final String USER = requireEnv("DB_USERNAME");
+    static final String PASS = requireEnv("DB_PASSWORD");
+
+    static String requireEnv(String name) {
+        String v = System.getenv(name);
+        if (v == null || v.isBlank()) {
+            throw new IllegalStateException("環境変数 " + name + " が未設定です（DB_URL/DB_USERNAME/DB_PASSWORD を設定して実行してください）");
+        }
+        return v;
+    }
 
     // 再ポイント対象 {table, column}（players を参照する FK 列）
     static final String[][] REPOINTS = {

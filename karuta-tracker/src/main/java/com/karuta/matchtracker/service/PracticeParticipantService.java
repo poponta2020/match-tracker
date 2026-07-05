@@ -221,7 +221,7 @@ public class PracticeParticipantService {
                 registerBeforeDeadline(orgRequest, orgId);
             } else if (!orgParticipations.isEmpty()) {
                 // 締切後は追加登録のみ（既存クリアなし）。新規参加がなければスキップ
-                registerAfterDeadline(orgRequest);
+                registerAfterDeadline(orgRequest, orgId);
             }
         }
         densukeSyncService.triggerWriteAsync();
@@ -418,7 +418,7 @@ public class PracticeParticipantService {
         log.info("Pre-deadline: registered {} participations (PENDING) for player {}", registered, request.getPlayerId());
     }
 
-    private void registerAfterDeadline(PracticeParticipationRequest request) {
+    private void registerAfterDeadline(PracticeParticipationRequest request, Long organizationId) {
         Long playerId = request.getPlayerId();
         Map<Long, PracticeSession> sessionsMap = practiceSessionRepository.findAllById(
                 request.getParticipations().stream()
@@ -426,9 +426,15 @@ public class PracticeParticipantService {
                         .distinct().collect(Collectors.toList())
         ).stream().collect(Collectors.toMap(PracticeSession::getId, s -> s));
 
-        // 抽選実行済みかチェック
+        // 抽選実行済みかチェック（団体スコープ）。別団体の抽選SUCCESSで当該団体が未抽選なのに
+        // 実行済みと誤判定しないよう、当該団体の抽選 OR 全団体一括抽選(org=null) のみを対象にする。
+        // getPlayerParticipationStatusByMonth の lotteryExecuted 構築（org=null は全団体に適用）と整合。
         boolean lotteryExecuted = lotteryExecutionRepository
-                .existsByTargetYearAndTargetMonthAndStatus(
+                .existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                        request.getYear(), request.getMonth(), organizationId,
+                        LotteryExecution.ExecutionStatus.SUCCESS)
+                || lotteryExecutionRepository
+                .existsByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatus(
                         request.getYear(), request.getMonth(),
                         LotteryExecution.ExecutionStatus.SUCCESS);
 
