@@ -55,6 +55,8 @@ public class DensukeImportService {
         private int removedCount;
         private List<String> unmatchedNames = new ArrayList<>();
         private List<String> unmatchedVenues = new ArrayList<>();
+        // A-4: 正規化後に同名となる複数選手（名寄せ衝突）。当該名は取り込みスキップし別枠で通知する。
+        private List<String> nameCollisions = new ArrayList<>();
         private List<String> details = new ArrayList<>();
     }
 
@@ -76,11 +78,29 @@ public class DensukeImportService {
         LocalDateTime detectedAt = JstDateTimeUtil.now();
         Map<String, LocalDateTime> memberLastChangeTimes = scraped.getMemberLastChangeTimes();
 
-        Map<String, Long> playerNameMap = playerService.findAllPlayersRaw().stream()
+        // A-4: 正規化名 → 選手 のグルーピングで名寄せ衝突（同一正規化キーに複数選手）を検知する。
+        // 衝突した正規化名は playerNameMap から除外し、取り込みをスキップ（黙って先勝ちにしない）。
+        // 別人に丸/×が付く事故を防ぎ、衝突は unmatched とは別枠で管理者へ通知する。
+        Map<String, List<Player>> playersByNormalizedName = playerService.findAllPlayersRaw().stream()
                 .filter(p -> p.getDeletedAt() == null)
-                .collect(Collectors.toMap(
+                .collect(Collectors.groupingBy(
                         p -> DensukeScraper.normalizeMemberName(p.getName()),
-                        Player::getId, (a, b) -> a));
+                        LinkedHashMap::new, Collectors.toList()));
+
+        Map<String, Long> playerNameMap = new HashMap<>();
+        Set<String> nameCollisionKeys = new LinkedHashSet<>();
+        List<String> nameCollisionDetails = new ArrayList<>();
+        for (Map.Entry<String, List<Player>> e : playersByNormalizedName.entrySet()) {
+            if (e.getValue().size() > 1) {
+                nameCollisionKeys.add(e.getKey());
+                String members = e.getValue().stream()
+                        .map(p -> p.getName() + "(id=" + p.getId() + ")")
+                        .collect(Collectors.joining("、"));
+                nameCollisionDetails.add("「" + e.getKey() + "」← " + members);
+            } else {
+                playerNameMap.put(e.getKey(), e.getValue().get(0).getId());
+            }
+        }
         Map<Long, String> playerIdMap = playerNameMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey, (a, b) -> a));
 
@@ -149,11 +169,20 @@ public class DensukeImportService {
         // 伝助同期で空き枠変動があったセッションの統合通知を送信
         sendConsolidatedVacancyNotifications(vacancyChangedSessions);
 
+        // A-4: 名寄せ衝突名は unmatched とは別枠で扱う。衝突名（正規化キー）は playerNameMap に
+        // 無いため取り込み時に unmatchedNameSet へ入りうるが、ここで除外し衝突として別途通知する。
+        unmatchedNameSet.removeAll(nameCollisionKeys);
         result.setUnmatchedNames(new ArrayList<>(unmatchedNameSet));
         result.setUnmatchedVenues(new ArrayList<>(unmatchedVenueSet));
+        result.setNameCollisions(new ArrayList<>(nameCollisionDetails));
 
         if (!unmatchedNameSet.isEmpty()) {
             notifyAdminsOfUnmatchedNames(new ArrayList<>(unmatchedNameSet), organizationId);
+        }
+        if (!nameCollisionDetails.isEmpty()) {
+            log.warn("Densuke import: name collisions detected (skipped {} normalized names): {}",
+                    nameCollisionKeys.size(), nameCollisionDetails);
+            notifyAdminsOfNameCollisions(nameCollisionDetails, organizationId);
         }
 
         log.info("Densuke import completed: {} entries, {} sessions created, {} registered, {} skipped, {} removed",
@@ -990,6 +1019,73 @@ public class DensukeImportService {
             }
         }
         log.info("Densuke unmatched names notification: {} new/updated", toSave.size());
+    }
+
+    /**
+     * A-4: 名寄せ衝突（正規化後に同名となる複数選手あり）を管理者へ通知する。
+     * 当該正規化名は取り込み・書き込みともスキップされているため、管理者が統合等で解消する必要がある。
+     * 未登録者通知（{@link #notifyAdminsOfUnmatchedNames}）とは別枠・別タイプの通知として扱う。
+     */
+    private void notifyAdminsOfNameCollisions(List<String> collisionDetails, Long organizationId) {
+        List<Player> admins = new ArrayList<>(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+        playerRepository.findByRoleAndActive(Player.Role.ADMIN).stream()
+                .filter(a -> organizationId.equals(a.getAdminOrganizationId()))
+                .forEach(admins::add);
+
+        if (admins.isEmpty()) return;
+
+        String detailList = String.join("\n", collisionDetails);
+        String message = String.format(
+                "正規化後に同名となる選手が複数登録されています。該当名は伝助同期の取り込み・書き込みからスキップしました。\n%s\n\n重複選手を統合してください（伝助管理ページ）。",
+                detailList);
+        String title = "伝助同期: 名寄せ衝突（" + collisionDetails.size() + "件）";
+
+        List<Notification> toSave = new ArrayList<>();
+
+        for (Player admin : admins) {
+            List<Notification> existing = notificationRepository.findByPlayerIdAndTypeOrderByCreatedAtDesc(
+                    admin.getId(), NotificationType.DENSUKE_NAME_COLLISION);
+
+            if (!existing.isEmpty()) {
+                Notification latest = existing.get(0);
+                if (message.equals(latest.getMessage())) {
+                    continue;
+                }
+                Notification active = existing.stream()
+                        .filter(n -> n.getDeletedAt() == null)
+                        .findFirst().orElse(null);
+                if (active != null) {
+                    active.setTitle(title);
+                    active.setMessage(message);
+                    active.setIsRead(false);
+                    toSave.add(active);
+                } else {
+                    toSave.add(Notification.builder()
+                            .playerId(admin.getId())
+                            .type(NotificationType.DENSUKE_NAME_COLLISION)
+                            .title(title).message(message).build());
+                }
+            } else {
+                toSave.add(Notification.builder()
+                        .playerId(admin.getId())
+                        .type(NotificationType.DENSUKE_NAME_COLLISION)
+                        .title(title).message(message).build());
+            }
+        }
+
+        if (!toSave.isEmpty()) {
+            notificationRepository.saveAll(toSave);
+            for (Notification n : toSave) {
+                Long orgId = admins.stream()
+                        .filter(a -> a.getId().equals(n.getPlayerId()))
+                        .map(Player::getAdminOrganizationId)
+                        .filter(Objects::nonNull)
+                        .findFirst().orElse(organizationId);
+                notificationService.sendPushIfEnabled(
+                        n.getPlayerId(), n.getType(), n.getTitle(), n.getMessage(), "/admin/densuke", orgId);
+            }
+        }
+        log.info("Densuke name collision notification: {} new/updated", toSave.size());
     }
 
     /**

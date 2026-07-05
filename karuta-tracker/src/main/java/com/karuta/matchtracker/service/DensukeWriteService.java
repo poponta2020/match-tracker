@@ -225,7 +225,12 @@ public class DensukeWriteService {
                 cookies = listResponse.cookies();
                 Document listDoc = listResponse.parse();
                 pageId = extractPageId(listDoc);
-                memberNameToMi = extractAllMemberMappings(listDoc);
+                Set<String> nameCollisions = new LinkedHashSet<>();
+                memberNameToMi = extractAllMemberMappings(listDoc, nameCollisions);
+                if (!nameCollisions.isEmpty()) {
+                    orgErrors.add("名寄せ衝突（伝助列で正規化後同名）: " + String.join("、", nameCollisions)
+                            + "（該当名は書き込みスキップ。重複選手を統合してください）");
+                }
                 log.info("Densuke list fetched: cd={}, pageId={}, {} members found", cd, pageId, memberNameToMi.size());
             } catch (IOException e) {
                 log.warn("Failed to fetch densuke list page for cd={}: {}", cd, e.getMessage());
@@ -345,7 +350,12 @@ public class DensukeWriteService {
                 cookies = listResponse.cookies();
                 Document listDoc = listResponse.parse();
                 pageId = extractPageId(listDoc);
-                memberNameToMi = extractAllMemberMappings(listDoc);
+                Set<String> nameCollisions = new LinkedHashSet<>();
+                memberNameToMi = extractAllMemberMappings(listDoc, nameCollisions);
+                if (!nameCollisions.isEmpty()) {
+                    errors.add("名寄せ衝突（伝助列で正規化後同名）: " + String.join("、", nameCollisions)
+                            + "（該当名は書き込みスキップ。重複選手を統合してください）");
+                }
             } catch (IOException e) {
                 log.warn("Failed to fetch densuke list page for bulk write-back: {}", e.getMessage());
                 errors.add("伝助リストページ取得失敗(cd=" + cd + "): " + e.getMessage());
@@ -603,12 +613,21 @@ public class DensukeWriteService {
         }
     }
 
+    private Map<String, String> extractAllMemberMappings(Document doc) {
+        return extractAllMemberMappings(doc, null);
+    }
+
     /**
      * リスト画面のヘッダー行から全メンバーの名前→mi マッピングを構築する。
      * 名前は {@link DensukeScraper#normalizeMemberName(String)} で正規化（絵文字・不可視文字・全空白除去）した状態で格納する。
+     *
+     * <p>A-4: 正規化後に同名となる複数の伝助メンバー列（名寄せ衝突）を検知したら、当該名を
+     * マッピングから除外する（後勝ちで別列に出欠を書き込む事故＝別人に丸/×が付くのを防ぐ）。
+     * 衝突した名前は {@code collisionsOut}（非null時）に格納し、呼び出し元が管理者へ通知できるようにする。
      */
-    private Map<String, String> extractAllMemberMappings(Document doc) {
+    private Map<String, String> extractAllMemberMappings(Document doc, Set<String> collisionsOut) {
         Map<String, String> result = new LinkedHashMap<>();
+        Set<String> collisions = new LinkedHashSet<>();
         Element table = doc.selectFirst("table.listtbl");
         if (table == null) return result;
         Element headerRow = table.selectFirst("tr");
@@ -623,7 +642,22 @@ public class DensukeWriteService {
             String href = link.attr("href");
             Matcher m = MEMBERDATA_PATTERN.matcher(href);
             if (m.find()) {
-                result.put(name, m.group(1));
+                if (result.containsKey(name) || collisions.contains(name)) {
+                    collisions.add(name);
+                } else {
+                    result.put(name, m.group(1));
+                }
+            }
+        }
+        // A-4: 衝突名は書き込み対象から除外（黙って後勝ち/先勝ちにしない）
+        for (String c : collisions) {
+            result.remove(c);
+        }
+        if (!collisions.isEmpty()) {
+            log.warn("Densuke write: member name collisions detected, skipped {} name(s): {}",
+                    collisions.size(), collisions);
+            if (collisionsOut != null) {
+                collisionsOut.addAll(collisions);
             }
         }
         return result;

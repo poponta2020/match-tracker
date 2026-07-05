@@ -47,7 +47,7 @@ status: completed
 - **対応Issue:** #975
 
 ### タスク5（A-4-a）: 正規化名キー衝突の検知＋管理者通知
-- [ ] 完了
+- [x] 完了
 - **概要:** 読み取り/書き込みのメンバー名マップ構築時に、同一正規化キーへ複数のplayerId/選手名が対応する衝突を検知し、当該名の取込・書込をスキップして「名寄せ衝突」を管理者へ通知する。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` — `playerNameMap` 構築時の衝突検知＋当該名スキップ
