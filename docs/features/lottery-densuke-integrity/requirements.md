@@ -144,7 +144,8 @@ spec_decisions:
 破壊的変更の扱い: 追加フィールドは後方互換（未送信時は従来挙動へフォールバック可能な設計とし、旧クライアントが即座に壊れないようにする）。B-2/B-4の版・シグネチャは「未送信なら検証スキップ＋WARN」の緩和を初期リリースで許容し、フロント更新後に必須化を検討。
 
 ### 3.2 DB変更
-- **原則スキーマ変更なし**（既存カラムで対応）。B-4の版情報は既存 `updated_at` を利用する想定。もし専用リビジョン列が必要と判断した場合のみ `database/*.sql` を追加し、CLAUDE.md の本番適用ルールに従う（要件確定時に判断、現時点ではスキーマ追加なしを第一候補）。
+- **カラム追加なし**（B-4の版情報はハッシュを都度算出し、既存 `updated_at` 等を利用）。
+- **CHECK制約更新（要本番適用）**: A-4/A-3 で通知 enum を2値追加したため、Hibernate が自動更新しない CHECK 制約を手動更新する（`database/add_densuke_name_collision_notification_type_check.sql`＝`notifications.type`、`database/add_admin_densuke_confirm_diff_message_log_check.sql`＝`line_message_log.notification_type`）。未適用だと該当通知挿入が CHECK 違反で失敗する。CLAUDE.md の本番適用ルールに従う。詳細＝`db-migrations.md`。
 - **データ移行（スキーマ非変更）**: A-4の重複4名統合スクリプト（参照付け替え＋論理削除）。`database/` には置かず `docs/features/lottery-densuke-integrity/merge-duplicates/` にSQL・手順・適用ログを保存。本番適用は `c:\tmp\dbtool` の JDBC ツール（IPv4強制でNAT64回避）を使用。
 
 ### 3.3 フロントエンド変更
