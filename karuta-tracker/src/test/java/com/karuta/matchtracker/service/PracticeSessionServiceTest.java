@@ -263,6 +263,42 @@ class PracticeSessionServiceTest {
         verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
     }
 
+    @Test
+    @DisplayName("findByDate(date, organizationId): 組織スコープでセッションを取得する（日付のみ取得は使わない）")
+    void testFindByDate_orgScoped() {
+        // Given: 同日に複数団体のセッションがある場面で、団体スコープ付きに取得する
+        Long orgId = 7L;
+        PracticeSession orgSession = PracticeSession.builder()
+                .id(200L).sessionDate(today).totalMatches(10).organizationId(orgId).build();
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, orgId))
+                .thenReturn(Optional.of(orgSession));
+        when(lotteryDeadlineHelper.isLotteryDisabled(orgId)).thenReturn(false);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDate(today, orgId);
+
+        // Then: 組織スコープ取得のみが使われ、日付のみ取得は呼ばれない
+        assertThat(result.getId()).isEqualTo(200L);
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(today, orgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(today);
+    }
+
+    @Test
+    @DisplayName("findByDate(date, null): organizationId=null は日付のみで取得する（SUPER_ADMIN 経路）")
+    void testFindByDate_nullOrgUsesDateOnly() {
+        // Given
+        when(practiceSessionRepository.findBySessionDate(today)).thenReturn(Optional.of(testSession));
+        when(lotteryDeadlineHelper.isLotteryDisabled(any())).thenReturn(false);
+
+        // When
+        PracticeSessionDto result = practiceSessionService.findByDate(today, null);
+
+        // Then: 日付のみで取得され、組織スコープ取得は呼ばれない
+        assertThat(result.getSessionDate()).isEqualTo(today);
+        verify(practiceSessionRepository).findBySessionDate(today);
+        verify(practiceSessionRepository, never()).findBySessionDateAndOrganizationId(any(), any());
+    }
+
     // ===== checkScopeByDate: 参加者追加(日付ベース)の団体スコープ検証 =====
     // MatchPairingController.validateScopeByDate と同じ考え方（SUPER_ADMIN=強制なし /
     // ADMIN=自団体 / PLAYER=所属団体いずれか / その他=拒否）で拡張したもの。

@@ -75,11 +75,25 @@ public class PracticeSessionService {
     }
 
     /**
-     * 日付で練習日を取得
+     * 日付で練習日を取得（スコープ非限定・日付のみ）
      */
     public PracticeSessionDto findByDate(LocalDate date) {
-        log.debug("Finding practice session by date: {}", date);
-        PracticeSession session = practiceSessionRepository.findBySessionDate(date)
+        return findByDate(date, null);
+    }
+
+    /**
+     * 日付＋団体スコープで練習日を取得（{@link #findByDate(LocalDate)} の組織スコープ対応版）。
+     *
+     * <p>organizationId が非nullなら {@code findBySessionDateAndOrganizationId} で当該団体の
+     * セッションのみを取得し、同日に複数団体のセッションがあっても取得対象がずれない。
+     * null（SUPER_ADMIN 等・スコープ非限定）の場合は日付のみで取得する。参加者追加後の
+     * レスポンス取得を、書き込み時と同じ団体スコープに揃えるために使う。</p>
+     */
+    public PracticeSessionDto findByDate(LocalDate date, Long organizationId) {
+        log.debug("Finding practice session by date: {}, organizationId: {}", date, organizationId);
+        PracticeSession session = (organizationId != null
+                ? practiceSessionRepository.findBySessionDateAndOrganizationId(date, organizationId)
+                : practiceSessionRepository.findBySessionDate(date))
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", date));
         PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
         dto.setPairingIncludesPending(lotteryDeadlineHelper.isLotteryDisabled(session.getOrganizationId()));

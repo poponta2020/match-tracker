@@ -743,7 +743,7 @@ class PracticeSessionControllerTest {
         Long orgId = 7L;
         when(practiceSessionService.checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId)))
                 .thenReturn(orgId);
-        when(practiceSessionService.findByDate(today)).thenReturn(testSessionDto);
+        when(practiceSessionService.findByDate(eq(today), eq(orgId))).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
@@ -752,9 +752,10 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
-        // 検証で確定した organizationId が実更新にも渡る（検証と更新の対象一致）
+        // 検証で確定した organizationId が実更新にもレスポンス取得にも渡る（検証・更新・応答の対象一致）
         verify(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
         verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, orgId);
+        verify(practiceSessionService).findByDate(today, orgId);
     }
 
     @Test
@@ -781,7 +782,7 @@ class PracticeSessionControllerTest {
         // Given: checkScopeByDate が自団体ID(1L)を返す
         when(practiceSessionService.checkScopeByDate(eq(today), eq("ADMIN"), any(), any()))
                 .thenReturn(1L);
-        when(practiceSessionService.findByDate(today)).thenReturn(testSessionDto);
+        when(practiceSessionService.findByDate(eq(today), eq(1L))).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
@@ -791,6 +792,7 @@ class PracticeSessionControllerTest {
                 .andExpect(status().isOk());
 
         verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, 1L);
+        verify(practiceSessionService).findByDate(today, 1L);
     }
 
     @Test
