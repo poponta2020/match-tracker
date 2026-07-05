@@ -163,11 +163,22 @@ public class LotteryService {
      * これにより {@code REQUIRES_NEW} で開始される伝助書き戻し側の別トランザクションが、
      * 確定済みの {@code WON} / {@code WAITLISTED} レコードを参照できることを保証する。
      */
-    public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
+    public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds, String expectedPopulationSignature) {
         // 抽選実行 + 確定情報保存を1つのトランザクション内でコミットさせる。
         // 同一クラス内の self-invocation では @Transactional が効かないため、
         // TransactionTemplate を用いて明示的に外側トランザクションを構築する。
         LotteryExecution execution = transactionTemplate.execute(status -> {
+            // B-2: 母集団シグネチャ照合を確定トランザクション内（PENDING 読取と原子的）で行う。
+            // Controller 側の事前照合だけだと照合〜実際の PENDING 読取の間に母集団が変わりうるため、
+            // executeLottery が PENDING を読む直前に再照合し、不一致なら 409（再プレビュー要）で確定を中止する。
+            // 後方互換: シグネチャ未送信なら検証スキップ。
+            if (expectedPopulationSignature != null && !expectedPopulationSignature.isBlank()) {
+                String currentSignature = computePopulationSignature(year, month, organizationId);
+                if (!currentSignature.equals(expectedPopulationSignature)) {
+                    throw new com.karuta.matchtracker.exception.ConflictStateException(
+                            "参加状況が変わったため再プレビューが必要です。最新の参加状況で抽選をやり直してください。");
+                }
+            }
             LotteryExecution exec = executeLottery(
                     year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
             if (exec.getStatus() != ExecutionStatus.SUCCESS) {

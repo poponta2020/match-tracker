@@ -860,21 +860,17 @@ public class LotteryController {
         List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
         lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
 
-        // B-2: プレビュー時の母集団と確定時の母集団を照合。不一致なら 409（再プレビュー要）。
+        // B-2: プレビュー時の母集団と確定時の母集団を照合。照合は確定トランザクション内（PENDING 読取と
+        // 原子的）で行うため、シグネチャを executeAndConfirmLottery に渡す。不一致なら 409（再プレビュー要）。
         // 後方互換: シグネチャ未送信なら検証をスキップ（WARN）。
         String clientSignature = request.getPopulationSignature();
         if (clientSignature == null || clientSignature.isBlank()) {
             log.warn("Confirm without population signature (year={}, month={}, org={}): B-2 signature check skipped",
                     year, month, orgId);
-        } else {
-            String currentSignature = lotteryService.computePopulationSignature(year, month, orgId);
-            if (!clientSignature.equals(currentSignature)) {
-                throw new com.karuta.matchtracker.exception.ConflictStateException(
-                        "参加状況が変わったため再プレビューが必要です。最新の参加状況で抽選をやり直してください。");
-            }
         }
 
-        ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
+        ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(
+                year, month, currentUserId, orgId, seed, priorityPlayerIds, clientSignature);
         return ResponseEntity.ok(result);
     }
 

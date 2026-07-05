@@ -196,6 +196,9 @@ public class DensukeWriteService {
         Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
                 .collect(Collectors.toMap(Player::getId, Player::getName));
 
+        // A-4: DB側の正規化名衝突（複数 playerId が同じ正規化名）を書き込み側でもスキップする（読取側と整合）。
+        Set<String> dbCollisionNames = findDbNameCollisions(playerNames);
+
         // 各 URL の書き込み
         for (var urlEntry : grouped.entrySet()) {
             Long urlId = urlEntry.getKey();
@@ -250,6 +253,13 @@ public class DensukeWriteService {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
+
+                if (dbCollisionNames.contains(DensukeScraper.normalizeMemberName(playerName))) {
+                    log.warn("A-4: skip densuke write for DB name-collision player {} (urlId={})", playerName, urlId);
+                    orgErrors.add("名寄せ衝突（DB上で正規化後同名の複数選手）: " + playerName
+                            + "（書き込みスキップ。重複選手を統合してください）");
+                    continue;
+                }
 
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
@@ -377,6 +387,9 @@ public class DensukeWriteService {
             Map<Long, String> playerNames = playerRepository.findAllById(playerIds).stream()
                     .collect(Collectors.toMap(Player::getId, Player::getName));
 
+            // A-4: DB側の正規化名衝突（複数 playerId が同じ正規化名）を書き込み側でもスキップする（読取側と整合）。
+            Set<String> dbCollisionNames = findDbNameCollisions(playerNames);
+
             // A-3: 書き戻し直前に伝助を1回読み、伝助側×（明示的不参加）の (日付, 試合番号, 正規化名) を収集。
             // scrape 失敗は WARN のみで確定/書き戻しをブロックしない（差分検知はベストエフォート）。
             Set<String> densukeDeclinedKeys = new HashSet<>();
@@ -401,6 +414,14 @@ public class DensukeWriteService {
             for (DensukeMemberMapping mapping : mappings) {
                 Long playerId = mapping.getPlayerId();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
+
+                if (dbCollisionNames.contains(DensukeScraper.normalizeMemberName(playerName))) {
+                    log.warn("A-4: skip densuke write-back for DB name-collision player {} (urlId={})", playerName, urlId);
+                    errors.add("名寄せ衝突（DB上で正規化後同名の複数選手）: " + playerName
+                            + "（書き込みスキップ。重複選手を統合してください）");
+                    continue;
+                }
+
                 List<PracticeParticipant> allParticipants =
                         practiceParticipantRepository.findByPlayerIdAndSessionIds(playerId, sessionIds);
 
@@ -666,6 +687,22 @@ public class DensukeWriteService {
                     mi, playerName, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * A-4: 書き込み対象プレイヤーのうち、正規化後に同名となる複数 playerId（DB側の名寄せ衝突）の
+     * 正規化名を返す。読取側（DensukeImportService.playerNameMap の衝突検知）と同じ定義で、
+     * 書き込み側でも当該名の選手をスキップして別人の伝助列へ○×が付く事故を防ぐ。
+     */
+    private Set<String> findDbNameCollisions(Map<Long, String> playerIdToName) {
+        Map<String, Long> countByNormalized = new java.util.HashMap<>();
+        for (String name : playerIdToName.values()) {
+            countByNormalized.merge(DensukeScraper.normalizeMemberName(name), 1L, Long::sum);
+        }
+        return countByNormalized.entrySet().stream()
+                .filter(e -> e.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
 
     private Map<String, String> extractAllMemberMappings(Document doc) {

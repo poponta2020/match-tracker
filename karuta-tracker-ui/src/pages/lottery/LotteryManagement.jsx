@@ -59,6 +59,8 @@ export default function LotteryManagement() {
   const [confirmedLotteryExists, setConfirmedLotteryExists] = useState(false);
   // A-3: 確定直前の伝助差分（アプリ○書き戻し予定 vs 伝助×）。確定はブロックされないが管理者に警告表示する。
   const [densukeDiffs, setDensukeDiffs] = useState([]);
+  // 伝助書き戻しが失敗したか（差分バナーの文言切り替え用）
+  const [densukeWriteFailed, setDensukeWriteFailed] = useState(false);
   const [copyText, setCopyText] = useState('');
   const [copyFeedback, setCopyFeedback] = useState('');
 
@@ -161,6 +163,7 @@ export default function LotteryManagement() {
     setNotifyResult(null);
     setConfirmedLotteryExists(false);
     setDensukeDiffs([]);
+    setDensukeWriteFailed(false);
     setPopulationSignature(null);
   };
 
@@ -204,6 +207,8 @@ export default function LotteryManagement() {
 
       // A-3: 確定直前の伝助差分（○書き戻し予定なのに伝助×）を警告バナーで表示（確定はブロックされない）
       setDensukeDiffs(Array.isArray(res?.data?.densukeDiffs) ? res.data.densukeDiffs : []);
+      // 書き戻し成否でバナー文言を切り替える（失敗時に「書き戻しました」と誤認させない）
+      setDensukeWriteFailed(res?.data?.densukeWriteSucceeded === false);
 
       // 伝助書き戻しの失敗をユーザーに知らせる（確定 DB は維持される）
       if (res?.data && res.data.densukeWriteSucceeded === false) {
@@ -495,7 +500,9 @@ export default function LotteryManagement() {
                 ⚠ 確定直前に伝助側が×（不参加）だった参加者が {densukeDiffs.length} 件あります
               </p>
               <p className="mb-2 text-amber-700">
-                アプリの当選/参加確定に合わせて○で書き戻しました。意図した変更か確認し、必要なら伝助側で手動調整してください。
+                {densukeWriteFailed
+                  ? 'アプリの当選/参加確定に合わせて○で書き戻す予定でしたが、伝助への書き戻しに失敗した可能性があります。伝助の実際の状態を手動で確認してください。'
+                  : 'アプリの当選/参加確定に合わせて○で書き戻しました。意図した変更か確認し、必要なら伝助側で手動調整してください。'}
               </p>
               <ul className="list-disc list-inside space-y-0.5">
                 {densukeDiffs.map((d, i) => (
