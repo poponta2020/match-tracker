@@ -30,7 +30,7 @@ status: completed
 - **対応Issue:** #973
 
 ### タスク3（B-5）: Phase3-A6当日昇格の空き判定を統一
-- [ ] 完了
+- [x] 完了
 - **概要:** 伝助○によるWAITLISTED→WON昇格の空き判定を `isFreeRegistrationOpen` に統一し、OFFERED枠算入・WAITLISTED残存の扱いを全経路で揃える。
 - **変更対象ファイル:**
   - `karuta-tracker/src/main/java/com/karuta/matchtracker/service/DensukeImportService.java` — `processPhase3Maru` の WAITLISTED 分岐の空き判定を差し替え

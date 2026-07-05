@@ -386,10 +386,22 @@ public class DensukeImportService {
             case WAITLISTED -> {
                 // 当日12:00以降かつ空き枠がある場合: WONに昇格（先着参加の仕様）
                 if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
+                    // B-5: 空き判定を他経路と揃える。OFFERED も定員に算入し（瞬間的定員超過を防ぐ）、
+                    // かつ対象者が待ち行列の先頭（最小 waitlistNumber の WAITLISTED）のときのみ昇格して
+                    // 待ち行列を飛ばした昇格を防ぐ。isFreeRegistrationOpen はこの分岐では対象者自身が
+                    // WAITLISTED のため常に false になり昇格が無効化されるので、同等の判定をここで組む。
                     long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                             session.getId(), matchNumber, ParticipantStatus.WON);
-                    int capacity = session.getCapacity() != null ? session.getCapacity() : 0;
-                    if (wonCount < capacity) {
+                    long offeredCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.OFFERED);
+                    Integer capacity = session.getCapacity();
+                    boolean hasVacancy = capacity != null && (wonCount + offeredCount) < capacity;
+                    boolean atFrontOfQueue = practiceParticipantRepository
+                            .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                                    session.getId(), matchNumber, ParticipantStatus.WAITLISTED)
+                            .map(front -> front.getId().equals(existing.getId()))
+                            .orElse(true);
+                    if (hasVacancy && atFrontOfQueue) {
                         Integer oldWaitlistNumber = existing.getWaitlistNumber();
                         existing.setStatus(ParticipantStatus.WON);
                         existing.setWaitlistNumber(null);

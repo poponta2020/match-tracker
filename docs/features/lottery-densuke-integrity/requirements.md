@@ -114,8 +114,8 @@ spec_decisions:
 
 ### B-5【低中】Phase3-A6当日昇格の空き判定不一致
 - **現状の問題**: 伝助○によるWAITLISTED→WON昇格の空き判定が `WON < capacity` のみで、他所で使う `isFreeRegistrationOpen`（OFFEREDも定員算入・WAITLISTED残存で不可）と基準が不一致。瞬間的定員超過や待ち行列を飛ばした昇格が起こりうる。
-- **修正方針**: Phase3-A6（`processPhase3Maru` の WAITLISTED 分岐）の空き判定を **`practiceParticipantService.isFreeRegistrationOpen(session, matchNumber)` に統一**する。判定基準を全経路で揃える。
-- **あるべき姿**: 当日昇格の空き判定が他経路と一貫し、OFFEREDを含めた定員管理が守られる。
+- **修正方針**: Phase3-A6（`processPhase3Maru` の WAITLISTED 分岐）の空き判定を、他経路の `isFreeRegistrationOpen` と**同等の基準に揃える**。ただし対象者自身が WAITLISTED のため `isFreeRegistrationOpen` をそのまま呼ぶと「WAITLISTED残存で不可」が常に真になり当日昇格が全無効化される。そこで**昇格は維持しつつ判定のみ厳格化**する（ユーザー確認済み）：`WON + OFFERED < capacity`（OFFERED算入）**かつ**対象者が待ち行列の先頭（最小 `waitlistNumber` の WAITLISTED）のときのみ WON へ昇格する（キュー飛ばし防止）。
+- **あるべき姿**: 当日昇格の空き判定が他経路と一貫し、OFFEREDを含めた定員管理が守られ、待ち行列を飛ばした昇格・瞬間的定員超過が起きない。
 
 ### D【低】回帰テスト追加
 - **現状の問題**: 抽選アルゴリズムの連鎖落選・月内救済・一般枠30%保証・キャンセル待ち番号引き継ぎ・シード再現性が単体テスト未整備。A-1〜A-3の反転経路、キー衝突、正午12:00境界のテストも無い。
