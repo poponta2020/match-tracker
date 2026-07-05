@@ -379,7 +379,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PostMapping("/date/{date}/matches/{matchNumber}/participants/{playerId}")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<PracticeSessionDto> addParticipantToMatch(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @PathVariable Integer matchNumber,
@@ -389,7 +389,8 @@ public class PracticeSessionController {
                 date, matchNumber, playerId);
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        practiceSessionService.checkAdminScopeByDate(date, role, adminOrgId);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        practiceSessionService.checkScopeByDate(date, role, adminOrgId, currentUserId);
         practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId);
         // 更新後の練習セッション情報を返す
         PracticeSessionDto session = practiceSessionService.findByDate(date);
