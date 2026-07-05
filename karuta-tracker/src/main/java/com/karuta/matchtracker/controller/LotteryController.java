@@ -136,6 +136,8 @@ public class LotteryController {
         Map<String, Object> response = new HashMap<>();
         response.put("results", preview.results());
         response.put("seed", preview.seed());
+        // B-2: 母集団シグネチャを返す。確定時にクライアントが添付し、母集団変化を検知する。
+        response.put("populationSignature", preview.populationSignature());
         return ResponseEntity.ok(response);
     }
 
@@ -858,7 +860,17 @@ public class LotteryController {
         List<Long> priorityPlayerIds = request.getPriorityPlayerIds();
         lotteryService.validatePriorityPlayerIds(priorityPlayerIds, year, month, orgId);
 
-        ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(year, month, currentUserId, orgId, seed, priorityPlayerIds);
+        // B-2: プレビュー時の母集団と確定時の母集団を照合。照合は確定トランザクション内（PENDING 読取と
+        // 原子的）で行うため、シグネチャを executeAndConfirmLottery に渡す。不一致なら 409（再プレビュー要）。
+        // 後方互換: シグネチャ未送信なら検証をスキップ（WARN）。
+        String clientSignature = request.getPopulationSignature();
+        if (clientSignature == null || clientSignature.isBlank()) {
+            log.warn("Confirm without population signature (year={}, month={}, org={}): B-2 signature check skipped",
+                    year, month, orgId);
+        }
+
+        ConfirmLotteryResponse result = lotteryService.executeAndConfirmLottery(
+                year, month, currentUserId, orgId, seed, priorityPlayerIds, clientSignature);
         return ResponseEntity.ok(result);
     }
 

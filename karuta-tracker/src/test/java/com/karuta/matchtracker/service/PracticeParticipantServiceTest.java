@@ -80,8 +80,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(4L);
         when(practiceParticipantRepository.findMaxWaitlistNumber(100L, 1))
@@ -111,8 +111,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(2L);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
@@ -143,8 +143,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
@@ -280,8 +280,8 @@ class PracticeParticipantServiceTest {
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
         when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
         when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
-        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndStatus(
-                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(true);
         when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
                 .thenReturn(false);
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
@@ -302,8 +302,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("Set match participants reuses cancelled record")
-    void setMatchParticipants_reuseCancelledRecord() {
+    @DisplayName("A-1: setMatchParticipants は既存 CANCELLED を WON へ復活させない（編集対象外）")
+    void setMatchParticipants_doesNotReviveCancelled() {
         PracticeSession session = createSession(100L, 4);
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
         when(playerRepository.findAllById(any())).thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class)));
@@ -316,17 +316,128 @@ class PracticeParticipantServiceTest {
                 .status(ParticipantStatus.CANCELLED)
                 .dirty(false)
                 .build();
-        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+        // 実DBと同様、(session, match) 走査と (session, player, match) 走査で同じ CANCELLED 行が見える
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
                 .thenReturn(List.of(cancelled));
 
-        service.setMatchParticipants(100L, 2, List.of(10L, 10L));
+        service.setMatchParticipants(100L, 2, List.of(10L));
 
         verify(playerRepository).findAllById(List.of(10L));
+        // 非アクティブ(CANCELLED)は編集対象外 → WON へ昇格せず、保存もされない（× の復活を防ぐ）
+        assertThat(cancelled.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("A-1: setMatchParticipants は既存 WAITLISTED/OFFERED を WON へ昇格させない（編集対象外）")
+    void setMatchParticipants_doesNotPromoteWaitlistedOrOffered() {
+        PracticeSession session = createSession(100L, 4);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(playerRepository.findAllById(any()))
+                .thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class),
+                        mock(com.karuta.matchtracker.entity.Player.class)));
+
+        PracticeParticipant waitlisted = buildParticipant(100L, 50L, 2, ParticipantStatus.WAITLISTED);
+        waitlisted.setId(1L);
+        PracticeParticipant offered = buildParticipant(100L, 60L, 2, ParticipantStatus.OFFERED);
+        offered.setId(2L);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
+                .thenReturn(List.of(waitlisted, offered));
+
+        service.setMatchParticipants(100L, 2, List.of(50L, 60L));
+
+        // 待機/応答待ちは編集対象外 → WON へ昇格せず据え置き（抽選なしWON昇格を防ぐ）
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("A-1: setMatchParticipants は WAITLISTED/OFFERED を温存し、外れた WON のみ CANCELLED にする")
+    void setMatchParticipants_preservesWaitlistedAndOffered() {
+        PracticeSession session = createSession(100L, 4);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(playerRepository.findAllById(List.of(10L)))
+                .thenReturn(List.of(mock(com.karuta.matchtracker.entity.Player.class)));
+
+        PracticeParticipant wonRemoved = buildParticipant(100L, 99L, 2, ParticipantStatus.WON);
+        wonRemoved.setId(1L);
+        PracticeParticipant waitlisted = buildParticipant(100L, 50L, 2, ParticipantStatus.WAITLISTED);
+        waitlisted.setId(2L);
+        PracticeParticipant offered = buildParticipant(100L, 60L, 2, ParticipantStatus.OFFERED);
+        offered.setId(3L);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 2))
+                .thenReturn(List.of(wonRemoved, waitlisted, offered));
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
+                .thenReturn(List.of());
+
+        service.setMatchParticipants(100L, 2, List.of(10L));
+
+        // 外れた WON は CANCELLED、WAITLISTED/OFFERED は温存（伝助の×/△を巻き込まない）
+        assertThat(wonRemoved.getStatus()).isEqualTo(ParticipantStatus.CANCELLED);
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(offered.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
+        // WAITLISTED/OFFERED は保存されない（温存）
+        verify(practiceParticipantRepository, never()).save(waitlisted);
+        verify(practiceParticipantRepository, never()).save(offered);
+    }
+
+    @Test
+    @DisplayName("A-2: 締切後+抽選未実行の新規登録は PENDING で登録される")
+    void afterDeadline_lotteryNotExecuted_pending() {
+        PracticeSession session = createSession(100L, 4);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(ORG_ID)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryDeadlineHelper.isBeforeDeadline(eq(2025), eq(4), eq(ORG_ID))).thenReturn(false);
+        // 当該団体・全団体一括ともに抽選未実行 → PENDING
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(lotteryExecutionRepository.existsByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatus(
+                2025, 4, LotteryExecution.ExecutionStatus.SUCCESS)).thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 1))
+                .thenReturn(List.of());
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+
+        service.registerParticipations(request);
+
         verify(practiceParticipantRepository).save(participantCaptor.capture());
-        PracticeParticipant saved = participantCaptor.getValue();
-        assertThat(saved.getId()).isEqualTo(777L);
-        assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
-        assertThat(saved.isDirty()).isTrue();
+        assertThat(participantCaptor.getValue().getStatus()).isEqualTo(ParticipantStatus.PENDING);
+        // A-2 団体スコープ: 月全体ではなく当該団体（＋全団体一括）の抽選のみを実行済み判定に使う。
+        // 別団体の抽選SUCCESSで当該団体が未抽選なのに即WON化しないことを担保する。
+        verify(lotteryExecutionRepository).existsByTargetYearAndTargetMonthAndOrganizationIdAndStatus(
+                2025, 4, ORG_ID, LotteryExecution.ExecutionStatus.SUCCESS);
+        verify(lotteryExecutionRepository, never()).existsByTargetYearAndTargetMonthAndStatus(
+                eq(2025), eq(4), any());
+    }
+
+    @Test
+    @DisplayName("B-4: expectedVersion 不一致なら ConflictStateException(409) で保存を中止する")
+    void registerParticipations_versionMismatch_conflict() {
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(LocalDate.of(2025, 4, 5));
+        when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of(session));
+        PracticeParticipant existing = buildParticipant(100L, 10L, 1, ParticipantStatus.WON);
+        existing.setId(1L);
+        when(practiceParticipantRepository.findByPlayerIdAndSessionIds(eq(10L), anyList()))
+                .thenReturn(List.of(existing));
+
+        PracticeParticipationRequest request = new PracticeParticipationRequest();
+        request.setPlayerId(10L);
+        request.setYear(2025);
+        request.setMonth(4);
+        request.setParticipations(List.of(createParticipation(100L, 1)));
+        request.setExpectedVersion("stale-version");
+
+        assertThrows(com.karuta.matchtracker.exception.ConflictStateException.class,
+                () -> service.registerParticipations(request));
+        verify(practiceParticipantRepository, never()).save(any());
     }
 
     @Test
@@ -351,13 +462,41 @@ class PracticeParticipantServiceTest {
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 10L, 2))
                 .thenReturn(List.of(cancelled));
 
-        service.addParticipantToMatch(date, 2, 10L);
+        // organizationId=null（SUPER_ADMIN 相当・スコープ非限定）は従来どおり日付のみでセッション特定
+        service.addParticipantToMatch(date, 2, 10L, null);
 
         verify(practiceParticipantRepository).save(participantCaptor.capture());
         PracticeParticipant saved = participantCaptor.getValue();
         assertThat(saved.getId()).isEqualTo(888L);
         assertThat(saved.getStatus()).isEqualTo(ParticipantStatus.WON);
         verify(densukeSyncService).triggerWriteAsync();
+    }
+
+    @Test
+    @DisplayName("Add participant to match with organizationId scopes session lookup by org")
+    void addParticipantToMatch_organizationScopedLookup() {
+        // Given: 同日に複数団体のセッションがあっても、organizationId で対象団体のセッションだけを特定する
+        LocalDate date = LocalDate.of(2025, 4, 5);
+        Long orgId = 7L;
+        PracticeSession session = createSession(200L, 4);
+        session.setSessionDate(date);
+        session.setOrganizationId(orgId);
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, orgId))
+                .thenReturn(Optional.of(session));
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceParticipantRepository.existsActiveBySessionIdAndPlayerIdAndMatchNumber(200L, 10L, 2))
+                .thenReturn(false);
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(200L, 10L, 2))
+                .thenReturn(List.of());
+
+        // When
+        service.addParticipantToMatch(date, 2, 10L, orgId);
+
+        // Then: 団体スコープ取得のみが使われ、日付のみ取得(findBySessionDate)は使われない
+        verify(practiceSessionRepository).findBySessionDateAndOrganizationId(date, orgId);
+        verify(practiceSessionRepository, never()).findBySessionDate(any());
+        verify(practiceParticipantRepository).save(participantCaptor.capture());
+        assertThat(participantCaptor.getValue().getSessionId()).isEqualTo(200L);
     }
 
     @Test

@@ -47,6 +47,7 @@ public class DensukeScraper {
         private String rawLabel; // 元のラベル（デバッグ用）
         private List<String> participants = new ArrayList<>();  // ○の参加者名
         private List<String> maybeParticipants = new ArrayList<>(); // △の参加者名
+        private List<String> declinedParticipants = new ArrayList<>(); // ×の参加者名（明示的な不参加）
     }
 
     // 日付パターン: "3/3(火)" or "3/14(金)"
@@ -167,18 +168,23 @@ public class DensukeScraper {
                 if (div == null) continue;
 
                 String className = div.className();
+                String cellText = div.text().trim();
                 if ("col3".equals(className)) {
                     // ○ = 参加
                     entry.getParticipants().add(memberNames.get(memberIdx));
-                } else if ("col2".equals(className) && "△".equals(div.text().trim())) {
+                } else if ("col2".equals(className) && "△".equals(cellText)) {
                     // △ = 未定
                     entry.getMaybeParticipants().add(memberNames.get(memberIdx));
+                } else if ("×".equals(cellText) || "✕".equals(cellText) || "✗".equals(cellText)) {
+                    // × = 明示的な不参加（凡例の列位置がページ設定で変わるため記号テキストで判定）
+                    entry.getDeclinedParticipants().add(memberNames.get(memberIdx));
                 }
             }
 
             data.getEntries().add(entry);
-            log.debug("Parsed: {} match{} - {} participants, {} maybe",
-                    currentDate, matchNumber, entry.getParticipants().size(), entry.getMaybeParticipants().size());
+            log.debug("Parsed: {} match{} - {} participants, {} maybe, {} declined",
+                    currentDate, matchNumber, entry.getParticipants().size(),
+                    entry.getMaybeParticipants().size(), entry.getDeclinedParticipants().size());
         }
 
         log.info("Scraped {} schedule entries from densuke", data.getEntries().size());

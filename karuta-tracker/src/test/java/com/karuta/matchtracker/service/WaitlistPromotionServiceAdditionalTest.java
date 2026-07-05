@@ -15,10 +15,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -186,8 +188,9 @@ class WaitlistPromotionServiceAdditionalTest {
     }
 
     @Test
-    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 定員内なら全WAITLISTED→OFFERED（応答期限なし）")
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 定員内なら全WAITLISTED→OFFERED（期限付き・要承諾／B-1）")
     void promoteOnExpand_allWithinCapacity() {
+        LocalDateTime futureDeadline = com.karuta.matchtracker.util.JstDateTimeUtil.now().plusDays(1);
         PracticeSession session = PracticeSession.builder()
                 .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
         PracticeParticipant w1 = PracticeParticipant.builder()
@@ -198,8 +201,7 @@ class WaitlistPromotionServiceAdditionalTest {
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).build();
 
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.calculateOfferDeadline(any())).thenReturn(futureDeadline);
         when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(w1, w2));
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
@@ -213,14 +215,18 @@ class WaitlistPromotionServiceAdditionalTest {
 
         service.promoteWaitlistedAfterCapacityIncrease(100L);
 
+        // B-1: auto-confirm 廃止 → 通常オファーと同じ応答期限を付与し要承諾に統一
         assertThat(w1.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-        assertThat(w1.getOfferDeadline()).isNull();
+        assertThat(w1.getOfferDeadline()).isEqualTo(futureDeadline);
         assertThat(w1.getOfferedAt()).isNotNull();
         assertThat(w1.isDirty()).isTrue();
         assertThat(w2.getStatus()).isEqualTo(ParticipantStatus.OFFERED);
-        assertThat(w2.getOfferDeadline()).isNull();
+        assertThat(w2.getOfferDeadline()).isEqualTo(futureDeadline);
         assertThat(w2.getOfferedAt()).isNotNull();
         assertThat(w2.isDirty()).isTrue();
+        // 昇格者へオファー通知（アプリ内＋LINE）を送信
+        verify(notificationService).createOfferNotification(w1);
+        verify(notificationService).createOfferNotification(w2);
     }
 
     @Test
@@ -243,8 +249,8 @@ class WaitlistPromotionServiceAdditionalTest {
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).build();
 
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                .thenReturn(com.karuta.matchtracker.util.JstDateTimeUtil.now().plusDays(1));
         // 入力順をシャッフルしても waitlist_number 順で処理されることを確認
         when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of(w3, w1, w4, w2));
@@ -272,26 +278,30 @@ class WaitlistPromotionServiceAdditionalTest {
     }
 
     @Test
-    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 既存OFFEREDの offer_deadline をクリア")
-    void promoteOnExpand_clearsExistingOfferDeadline() {
+    @DisplayName("promoteWaitlistedAfterCapacityIncrease: 既存OFFEREDの offer_deadline は維持（クリアしない／B-1）")
+    void promoteOnExpand_preservesExistingOfferDeadline() {
         PracticeSession session = PracticeSession.builder()
                 .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
+        LocalDateTime existingDeadline = LocalDateTime.of(2026, 4, 30, 23, 59);
         PracticeParticipant existingOffered = PracticeParticipant.builder()
                 .id(20L).sessionId(100L).playerId(301L).matchNumber(1)
                 .status(ParticipantStatus.OFFERED).waitlistNumber(1)
-                .offerDeadline(java.time.LocalDateTime.of(2026, 5, 1, 12, 0))
+                .offerDeadline(existingDeadline).dirty(false)
                 .build();
 
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of(existingOffered));
+        when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                .thenReturn(com.karuta.matchtracker.util.JstDateTimeUtil.now().plusDays(1));
         when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of());
 
         service.promoteWaitlistedAfterCapacityIncrease(100L);
 
-        assertThat(existingOffered.getOfferDeadline()).isNull();
-        assertThat(existingOffered.isDirty()).isTrue();
+        // B-1: 既存OFFEREDの期限一律クリアは廃止。既存OFFEREDは読み取りも変更もされない。
+        assertThat(existingOffered.getOfferDeadline()).isEqualTo(existingDeadline);
+        assertThat(existingOffered.isDirty()).isFalse();
+        verify(practiceParticipantRepository, never())
+                .findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED);
     }
 
     @Test
@@ -301,8 +311,8 @@ class WaitlistPromotionServiceAdditionalTest {
                 .id(100L).sessionDate(LocalDate.of(2026, 5, 1)).capacity(24).build();
 
         when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
-        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.OFFERED))
-                .thenReturn(List.of());
+        when(lotteryDeadlineHelper.calculateOfferDeadline(any()))
+                .thenReturn(com.karuta.matchtracker.util.JstDateTimeUtil.now().plusDays(1));
         when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.WAITLISTED))
                 .thenReturn(List.of());
 

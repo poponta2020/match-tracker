@@ -379,7 +379,7 @@ public class PracticeSessionController {
      * @return 更新された練習日情報
      */
     @PostMapping("/date/{date}/matches/{matchNumber}/participants/{playerId}")
-    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<PracticeSessionDto> addParticipantToMatch(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @PathVariable Integer matchNumber,
@@ -389,10 +389,13 @@ public class PracticeSessionController {
                 date, matchNumber, playerId);
         String role = (String) httpRequest.getAttribute("currentUserRole");
         Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-        practiceSessionService.checkAdminScopeByDate(date, role, adminOrgId);
-        practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId);
-        // 更新後の練習セッション情報を返す
-        PracticeSessionDto session = practiceSessionService.findByDate(date);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        // スコープ検証で確定した organizationId を実更新にも渡し、検証と更新の対象セッションを一致させる
+        Long organizationId = practiceSessionService.checkScopeByDate(date, role, adminOrgId, currentUserId);
+        practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId);
+        // 更新後の練習セッション情報を、書き込みと同じ団体スコープで取得して返す
+        // （同日に複数団体のセッションがある場合に別団体セッションを返す/非一意で例外になるのを防ぐ）
+        PracticeSessionDto session = practiceSessionService.findByDate(date, organizationId);
         return ResponseEntity.ok(session);
     }
 

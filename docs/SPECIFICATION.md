@@ -132,8 +132,8 @@
 
 - ADMINは1つの団体にのみ紐づく（SUPER_ADMINが設定）
 - ADMINは自団体のリソースのみ操作可能（練習日の作成・編集・削除、組み合わせ削除、抽選再実行・手動編集・結果通知、LINE送信、抜け番活動管理、伝助管理、システム設定）。他団体は一般ユーザーとしての閲覧のみ
-- 対戦組み合わせの作成・自動マッチング・選手差し替えは PLAYER にも開放しており、PLAYER は所属団体（複数可）のセッションに対してのみ操作可能。削除系のみ ADMIN+ 専用
-- スコープ検証は ADMIN は共通ユーティリティ `AdminScopeValidator`、PLAYER は `MatchPairingController` 内の `validateScopeByDate` / `validateScopeByPairingId` で実施
+- 対戦組み合わせの作成・自動マッチング・選手差し替え・参加者追加・全削除（日付＋試合番号）・結果込みリセットは PLAYER にも開放しており、PLAYER は所属団体（複数可）のセッションに対してのみ操作可能。個別削除（`DELETE /api/match-pairings/{id}`）と参加者1名削除（`removeParticipantFromMatch`・UI未配線）のみ ADMIN+ 専用
+- スコープ検証は ADMIN は共通ユーティリティ `AdminScopeValidator`、PLAYER は `MatchPairingController` 内の `validateScopeByDate` / `validateScopeByPairingId`（組み合わせ系）および `PracticeSessionService.checkScopeByDate`（参加者追加）で実施
 - **既知の制限**:
   - PLAYER が複数団体に所属し、同日に複数所属団体のセッションが存在する場合、書き込み API の対象団体が一意に決まらないため `ForbiddenException` で拒否される（安全側フォールバック）。`/pairings` / `/matches/bulk-input` から `organizationId` を渡す設計拡張は別 Issue で対応予定
   - 対戦組み合わせ書き込み（`create` / `createBatch` / `updatePlayer` / `auto-match`）および抜け番活動一括（`bye-activities/batch`）の選手スコープ検証は、対象セッションの **全参加者**（`PracticeParticipant.session_id` ベース）で行っており、`PracticeParticipant.matchNumber` や参加ステータス（WON / PENDING / CANCELLED / WAITLISTED）までは見ていない。そのため UI が試合番号・ステータスで除外している選手 ID を PLAYER が直接 API で渡せば、別試合番号にしか割り当たっていない選手や対象外ステータスの選手でも書き込みに含められる。試合番号＋ステータスを含む厳密スコープは後続課題として別 Issue で対応予定（UI 経路では従来通り絞り込み済み）
@@ -478,7 +478,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **結果入力済みロック:**
 - 試合結果が入力済みのペアリングは自動マッチング・手動変更・一括保存で上書き・削除されない
 - ロック判定: 対応する `matches` レコードの存在有無（`session_date` / `match_number` / `player1_id` / `player2_id` で照合）
-- ロック済みペアリングのリセット: ADMIN以上が個別ペアリング単位で確認ダイアログ付きリセット可能（`match_pairings` と `matches` の両方を削除）
+- ロック済みペアリングのリセット: 全ロール（PLAYER+）が個別ペアリング単位で確認ダイアログ付きリセット可能（`match_pairings` と `matches` の両方を削除。ADMIN/PLAYER は自/所属団体のみ）
 - 試合結果の編集・削除時はロックが自動解除される（`matches` レコードの変更・削除によりロック条件が消滅するため）
 
 **手動ロック（pairing-manual-lock）:**
@@ -488,7 +488,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 二重ブッキング（同一選手が同回戦の複数組）はUI上構造的に発生しない（選手移動で元の組から除去されるため）。ロック即時APIが行っていたサーバー側の二重ブッキング検証は、ロックのローカル化に伴い未使用となる。
 - `PATCH /api/match-pairings/{id}/lock`・`/unlock` エンドポイントは残置するが PairingGenerator からは呼ばれない（即時ロック廃止に伴い未使用。将来クリーンアップ候補）。
 - 解除は誰でも可能（ロックした本人に限定しない）。`locked` を false に戻すのみで組は残り、通常の未ロック組（編集・削除・自動再生成の対象）に戻る。保存済み（`id` あり）・未保存（`id` なし）いずれの手動ロック組も解除できる。
-- 表示の区別: 手動ロック=「🔒 ロック」バッジ＋全ロール向け「解除」ボタン / 結果入力済み=「結果入力済」バッジ＋ADMIN以上の「リセット」。未ロック組のロックボタンは鍵アイコンのみ（テキストなし、`aria-label="ロック"` ＋ `title` で補足）。ロック表示・操作は編集画面（PairingGenerator）のみ（PairingSummary は対象外）。
+- 表示の区別: 手動ロック=「🔒 ロック」バッジ＋全ロール向け「解除」ボタン / 結果入力済み=「結果入力済」バッジ＋全ロール向け「リセット」ボタン（PLAYER+。バックエンドの団体スコープで自/所属団体のみに制限）。未ロック組のロックボタンは鍵アイコンのみ（テキストなし、`aria-label="ロック"` ＋ `title` で補足）。ロック表示・操作は編集画面（PairingGenerator）のみ（PairingSummary は対象外）。
 - 結果ロックとの併存: 手動ロック組に後から結果が入れば `hasResult=true` となり結果ロックとしても保護される。結果入力済みの組では「解除」ボタンは表示しない（解除条件 = `locked && !hasResult`）。明示保存モデルでは結果入力済み組は保存リクエストに含めず手動ロック解除を永続化できないため、また結果ロックとして保護が継続するため。結果ごと取り消す場合は「リセット」を使う。
 
 **対戦相手キャンセルの反映（pairing-cancelled-opponent）:**
@@ -847,8 +847,8 @@ SUPER_ADMIN のみ操作可能。
 3. **結果確定**: 定員超過の試合では当選（`WON`）・キャンセル待ち（`WAITLISTED`、番号付き）に振り分け
 4. **キャンセル→繰り上げ**: 当選者がキャンセル専用ページから理由付きでキャンセルするとキャンセル待ち1番に通知。応答期限内に承諾/辞退。PLAYERロールは過去の練習日のキャンセル不可（ADMIN+はデータ修正目的で可能）。**定員未達（キャンセル待ちなし）の場合は繰り上げ・管理者通知ともに送信しない**
 5. **キャンセル待ち辞退**: キャンセル待ち中のプレイヤーはセッション単位でキャンセル待ちを辞退可能（`WAITLISTED`→`WAITLIST_DECLINED`）。辞退時に後続のキャンセル待ち番号は自動繰り上げ。辞退後の復帰も可能（最後尾番号が付与される）
-6. **締切後の新規登録**: 抽選締切後かつ抽選実行済みの試合に新規参加登録する場合、`(WON + OFFERED) < capacity` かつ既存の `WAITLISTED` がなければ即 `WON` で登録、定員超過または `WAITLISTED` 残存時は `WAITLISTED`（最後尾）。`OFFERED`（応答待ち）も定員カウントに含めることで、待機中の枠を新規申込が横取りしないようにする
-7. **容量拡張時の昇格**: 会場拡張 (`POST /{id}/expand-venue`) や練習編集での `capacity` 増加時、その時点の `WAITLISTED` を `waitlist_number` 昇順に `OFFERED`（応答期限なし）へ昇格。新定員 `capacity - (WON + 既存OFFERED)` に収まらない超過分は `WAITLISTED` のまま据え置き。既存 `OFFERED` は応答期限を一律クリア
+6. **締切後の新規登録**: MONTHLY型の締切後の新規参加登録は、**抽選未実行の窓では `PENDING`（抽選対象）** として取り込む（A-2）。抽選前は `WON` が 0 のため空き判定が常に真となり即 `WON`＋定員超過になる問題を防ぎ、伝助経由○の `PENDING` 取込と挙動を揃えて公平に抽選へ載せる。**抽選実行済み**の場合は従来どおり `(WON + OFFERED) < capacity` かつ既存の `WAITLISTED` がなければ即 `WON`、定員超過または `WAITLISTED` 残存時は `WAITLISTED`（最後尾）。`OFFERED`（応答待ち）も定員カウントに含め、待機中の枠を新規申込が横取りしないようにする。SAME_DAY型は従来どおり先着（即WON/WAITLISTED、抽選なし）
+7. **容量拡張時の昇格**: 会場拡張 (`POST /{id}/expand-venue`) や練習編集での `capacity` 増加時、その時点の `WAITLISTED` を `waitlist_number` 昇順に **`OFFERED`（期限付き・要承諾）** へ昇格し、昇格者へオファー通知（アプリ内＋LINE）を送信する（B-1）。新定員 `capacity - (WON + 既存OFFERED)` に収まらない超過分は `WAITLISTED` のまま据え置き。**auto-confirm（応答期限なし）および既存 `OFFERED` の応答期限一律クリアは廃止**し、全 `OFFERED` を「期限付き・要承諾」に統一（正午一括DECLINE・OfferExpiryScheduler と整合）。応答期限が既に過ぎている場合（当日12:00以降等）は即失効オファーを作らないため昇格しない
 8. **既存登録解除の可否（「当月扱い／来月扱い」で切り替え）**: 参加登録画面の既存登録（保存済み）チェックボックスは、表示月の状態に応じて挙動を切り替える（判定は `AttendanceRegisterModal` と同じ `resolveAttendanceMode` を共用）。
    - **当月扱いの月**（現在年月、または未来月で抽選確定済みセッションが1つ以上ある月）: 既存登録のチェック外しを一律禁止（disabled＋グレーアウト）。既存登録のキャンセルはキャンセル専用画面（`/practice/cancel`）で理由付きキャンセルとして実施する
    - **来月扱いの月**（未来月で抽選確定済みセッションが0個）: 既存登録のチェックを自由に外せる（API上は未登録に戻す＝理由なしキャンセル）。ただし、月内に抽選確定済みのセッションが個別に存在する場合（混在しうるが、この場合は月全体が当月扱いに昇格するため通常は発生しない）はそのセッションのみステータス表示固定でチェック不可
@@ -869,6 +869,14 @@ SUPER_ADMIN のみ操作可能。
   - 当日でない / 当日12:00前 → 通常繰り上げ + 管理者バッチ通知 + プレイヤー向けオファー統合通知
   - 当日12:00以降 → `SameDayCancelContext` 経由で当日補充フロー（キャンセル発生通知 + 空き募集通知 + 管理者通知）が `afterCommit` 登録される
 - **キャンセル待ち辞退/復帰の団体スコープ**: `POST /api/lottery/decline-waitlist` `POST /api/lottery/rejoin-waitlist` は ADMIN ロールに対し対象セッションの `organizationId` 一致を強制（`AdminScopeValidator`）。SUPER_ADMIN は全団体可、PLAYER は自己のみ可
+
+**出欠整合性・反転防止（抽選・伝助連携 整合性改修）:**
+- **A-1 試合別参加者編集の限定**: `PUT /{sessionId}/matches/{matchNumber}/participants`（`setMatchParticipants`）は **WON/PENDING のアクティブ行のみを全置換**し、`WAITLISTED`/`OFFERED`/`CANCELLED`/`DECLINED`/`WAITLIST_DECLINED` は温存する。編集モーダルは当選/参加確定者のみを対象とし（初期選択は `playerId` 基準）、保存前に追加/削除人数の確認ダイアログを表示。キャンセル済(×)の復活・待機者の抽選なしWON昇格・伝助の×/△巻き込みを防ぐ
+- **A-3 確定書き戻し直前の伝助差分検知**: 抽選確定の一括書き戻し直前に伝助を1回読み、アプリ側○書き戻し予定（WON/OFFERED/PENDING）なのに伝助側が×（不参加）になっている反転リスクを検知。確定/書き戻しはブロックせず（確定DBは維持）、WARNログ＋管理者へLINE通知（`ADMIN_DENSUKE_CONFIRM_DIFF`）＋ `ConfirmLotteryResponse.densukeDiffs` で可視化
+- **A-4 名寄せ衝突の検知**: 正規化後に同名となる複数選手（名寄せ衝突）を読取（`playerNameMap`）・書込（`extractAllMemberMappings`）の両側で検知し、当該名は取込・書込ともスキップ（黙って先勝ち/後勝ちで別人に○×を付けない）。読取側は `DENSUKE_NAME_COLLISION` 通知で管理者へ、書込側は書き込みステータス `errors[]` で可視化。根本原因の重複選手は統合で解消する（`docs/features/lottery-densuke-integrity/merge-duplicates/`）
+- **B-2 プレビュー↔確定の母集団突合**: プレビュー応答に母集団シグネチャ（対象PENDING参加者ID集合のハッシュ）を含め、確定時に再計算・照合。不一致なら **409** で確定を拒否し再プレビューを促す（5分同期での母集団変化で当落がプレビューと相違するのを防ぐ）。後方互換: シグネチャ未送信なら検証スキップ
+- **B-3 伝助行不一致の可視化・row_id防御**: 編集フォームの join-ID 件数とスケジュール件数の不一致を書き込みステータス `errors[]` に記録（無言スキップの解消）。キャッシュ済み `densuke_row_ids` が現フォーム構造と矛盾する場合は当該URLの row_id を破棄して再構築し、別日/別試合への誤書き込みを防ぐ
+- **B-4 参加登録の楽観ロック**: 参加状況取得に版情報（`version`＝対象月×プレイヤーの参加行のハッシュ）を付与し、参加登録リクエスト（`expectedVersion`）で版照合。不一致なら **409** を返し再読込を促す（全置換方式のまま、古いタブ/別端末での保存で後入れ○が黙って巻き戻る事故を防ぐ）。後方互換: 版未送信なら検証スキップ
 
 #### 3.7.3 抽選関連エンティティ
 
@@ -977,7 +985,7 @@ SUPER_ADMIN のみ操作可能。
 - **フェーズ1（抽選未実行）**: ○の人のみPENDINGとして取り込み。not-○の dirty=false レコードは削除（ただしCANCELLED/DECLINED/WAITLIST_DECLINEDなどキャンセル履歴は保持）。書き戻しなし。MONTHLY型では締切日時にかかわらず本フェーズで動作する
 - **LOCKED（抽選実行済み・未確定）**: 伝助インポートを停止する。確定時の一括書き戻し（`writeAllForLotteryConfirmation`）が PENDING を ○ として伝助に書き出すため、この窓で新規○を Phase1 として PENDING 登録すると、抽選を経ていないプレイヤーが当選者として混入してしまう。書き戻し（dirty=true → 伝助）は通常通り実行される
 - **フェーズ3（抽選確定後）**: ○/△/×の全パターンを処理。dirty=trueのレコードは一切触らない
-  - **3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ空き枠あり（WON数 < 定員）の場合、WAITLISTED→WONに昇格（dirty=false、伝助は既に○のため書き戻し不要）。後続のキャンセル待ち番号を自動繰り上げ。12:00前または空き枠なしの場合は従来通りdirty=trueにして△で書き戻す（抽選バイパス防止）
+  - **3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ**空き枠あり（`WON + OFFERED < 定員`、OFFERED算入）** かつ**対象者が待ち行列の先頭（最小 `waitlist_number` の WAITLISTED）**の場合のみ、WAITLISTED→WONに昇格（dirty=false、伝助は既に○のため書き戻し不要）。後続のキャンセル待ち番号を自動繰り上げ。12:00前・空き枠なし・先頭でない場合は従来通りdirty=trueにして△で書き戻す（抽選バイパス／キュー飛ばし防止・B-5で他経路と空き判定を統一）
 
 > 旧「フェーズ2（締切後・抽選確定前のスキップ）」は廃止された（Issue #616）。締切日時ではなく**抽選実行と確定**の状態のみでフェーズが切り替わるため、締切なしモード（`lottery_deadline_days_before = -1`）でも同じ判定になる。
 
@@ -2582,8 +2590,8 @@ UNIQUE制約: (player_id, organization_id)
 | POST | `/auto-match` | PLAYER+ | 自動マッチング（ADMIN/PLAYERは自/所属団体のみ） |
 | PUT | `/{id}/player?newPlayerId=&side=` | PLAYER+ | 選手差し替え（ADMIN/PLAYERは自/所属団体のみ） |
 | DELETE | `/{id}` | ADMIN+ | 単一削除 |
-| DELETE | `/{id}/with-result` | ADMIN+ | ペアリング+対応する試合結果を同時削除（リセット） |
-| DELETE | `/date-and-match?date=&matchNumber=` | ADMIN+ | 日付+試合番号の全削除 |
+| DELETE | `/{id}/with-result` | PLAYER+ | ペアリング+対応する試合結果を同時削除（リセット）（ADMIN/PLAYERは自/所属団体のみ） |
+| DELETE | `/date-and-match?date=&matchNumber=` | PLAYER+ | 日付+試合番号の全削除（ADMIN/PLAYERは自/所属団体のみ） |
 
 #### GET `/api/match-pairings/player/{playerId}`
 指定選手が `player1` または `player2` に含まれる**最近の**ペアリングを返す。動画倉庫の登録モーダル「選手起点」で、結果未入力（`match_pairings` にのみ存在し `matches` にはない）の試合も選択肢に含められるようにするための参照系API。
@@ -2630,10 +2638,10 @@ UNIQUE制約: (player_id, organization_id)
 | DELETE | `/{id}` | SUPER_ADMIN | セッション削除 |
 | POST | `/participations` | ALL | 出欠一括登録 |
 | PUT | `/{sid}/matches/{num}/participants` | SUPER_ADMIN | 試合別参加者設定 |
-| POST | `/date/{date}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者追加 |
+| POST | `/date/{date}/matches/{num}/participants/{pid}` | PLAYER+ | 参加者追加（ADMIN/PLAYERは自/所属団体のみ — `checkScopeByDate`） |
 | DELETE | `/{sid}/matches/{num}/participants/{pid}` | ADMIN+ | 参加者削除 |
 | POST | `/{id}/confirm-reservation` | ADMIN+ | 隣室予約完了を記録（`reservation_confirmed_at` をセット） |
-| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時に WAITLISTED を waitlist_number 昇順で OFFERED（応答期限なし）に昇格。新定員に収まらない超過分は WAITLISTED のまま据え置き。既存 OFFERED の応答期限をクリア。練習編集 (`PUT /api/practice-sessions/{id}`) で capacity を増やした場合も同じ昇格処理を実行 |
+| POST | `/{id}/expand-venue` | ADMIN+ | 会場を隣室と合わせた大部屋に拡張（予約確認済みが前提）。拡張時に WAITLISTED を waitlist_number 昇順で **OFFERED（期限付き・要承諾）** に昇格し昇格者へオファー通知（アプリ内＋LINE）を送信。新定員に収まらない超過分は WAITLISTED のまま据え置き。**auto-confirm・既存 OFFERED の応答期限一律クリアは廃止（B-1）**。応答期限が既に過ぎている場合は昇格しない。練習編集 (`PUT /api/practice-sessions/{id}`) で capacity を増やした場合も同じ昇格処理を実行 |
 
 ### 7.7 伝助連携 (`/api/practice-sessions`)
 

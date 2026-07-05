@@ -483,6 +483,94 @@ class DensukeImportServiceTest {
     }
 
     @Test
+    @DisplayName("B-5: 当日12:00以降・空きありでも待ち行列先頭でなければ昇格せず△書き戻し")
+    void testPhase3A6_afterNoon_notFrontOfQueue_noPromotion() throws IOException {
+        LocalDate today = LocalDate.of(2026, 4, 2);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(today);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // ○
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        PracticeSession session = PracticeSession.builder()
+                .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build();
+        PracticeParticipant waitlisted = PracticeParticipant.builder()
+                .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).dirty(false).build();
+        // 待ち行列の先頭は別人(id=49)
+        PracticeParticipant front = PracticeParticipant.builder()
+                .id(49L).sessionId(100L).playerId(2L).matchNumber(1)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, 1L))
+                .thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(true);
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
+                .thenReturn(List.of(waitlisted));
+        // 空き枠あり（13/14）
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
+                .thenReturn(13L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
+        // 待ち行列先頭は別人 → 対象(id 50)は先頭でない
+        when(practiceParticipantRepository
+                .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
+                        100L, 1, ParticipantStatus.WAITLISTED))
+                .thenReturn(Optional.of(front));
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        // 先頭でないので昇格せず、WAITLISTED のまま dirty=true（△書き戻し・キュー飛ばし防止）
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        assertThat(waitlisted.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("A-4: 正規化後に同名の複数選手（名寄せ衝突）は取込スキップされ nameCollisions に記録される")
+    void collision_detected_skippedAndRecorded() throws IOException {
+        LocalDate today = LocalDate.of(2026, 4, 2);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(today);
+        entry.setMatchNumber(1);
+        entry.getParticipants().add("田中"); // ○
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("田中"));
+
+        // 正規化後に同名（"田中"）となる2選手 → 名寄せ衝突
+        Player dup1 = Player.builder().id(1L).name("田中").role(Player.Role.PLAYER).build();
+        Player dup2 = Player.builder().id(2L).name("田中 ").role(Player.Role.PLAYER).build(); // 末尾空白
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(dup1, dup2));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, 1L))
+                .thenReturn(Optional.of(PracticeSession.builder()
+                        .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build()));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        // 名寄せ衝突通知の管理者宛先（存在しなければ通知は早期returnするが検知自体は行われる）
+        when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(List.of());
+        when(playerRepository.findByRoleAndActive(Player.Role.ADMIN)).thenReturn(List.of());
+
+        var result = densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        assertThat(result.getNameCollisions()).isNotEmpty();
+        // 衝突名は unmatched とは別枠（unmatched には出さない）
+        assertThat(result.getUnmatchedNames()).doesNotContain("田中");
+        // 衝突名は取込スキップ（参加者の保存が発生しない）
+        verify(practiceParticipantRepository, never()).save(any(PracticeParticipant.class));
+        // A-4: 管理者へ LINE 通知（アプリ内通知に加えて）を送る
+        verify(lineNotificationService).sendNameCollisionNotification(eq(1L), anyList());
+    }
+
+    @Test
     @DisplayName("12:00より前に伝助で○にされたWAITLISTEDは△に書き戻される")
     void testPhase3A6_beforeNoon_writesBackSankaku() throws IOException {
         LocalDate today = LocalDate.of(2026, 4, 2);

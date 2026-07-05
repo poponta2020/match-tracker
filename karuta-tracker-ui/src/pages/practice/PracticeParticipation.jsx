@@ -24,6 +24,9 @@ const PracticeParticipation = () => {
   const [overlayState, setOverlayState] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
   const [overlayErrorDetail, setOverlayErrorDetail] = useState('');
   const [participationStatuses, setParticipationStatuses] = useState({}); // sessionId -> [{matchNumber, status, waitlistNumber}]
+  // B-4: 楽観ロック用の版。取得時に保持し登録時に送信、409（並行編集）で再取得する。
+  const [participationVersion, setParticipationVersion] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean（個別セッションのロック判定）
   const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（月単位判定）
   const [beforeDeadline, setBeforeDeadline] = useState(true);
@@ -67,6 +70,7 @@ const PracticeParticipation = () => {
         setLotteryExecuted(statusData.lotteryExecuted || {});
         setHasMonthlyLottery(Boolean(statusData.hasAnyExecutedLotteryInMonth));
         setBeforeDeadline(statusData.beforeDeadline !== false);
+        setParticipationVersion(statusData.version ?? null);
 
         // 北大に所属している場合のみ、北大の締め切り情報を取得
         const hokudaiOrg = (playerOrgsRes.data || []).find(o => o.code === 'hokudai');
@@ -92,7 +96,7 @@ const PracticeParticipation = () => {
     };
 
     fetchData();
-  }, [currentPlayer?.id, year, month]);
+  }, [currentPlayer?.id, year, month, reloadKey]);
 
   // 前月へ
   const handlePrevMonth = () => {
@@ -205,13 +209,27 @@ const PracticeParticipation = () => {
         year: year,
         month: month,
         participations: participationsList,
+        expectedVersion: participationVersion,
       });
 
       setOverlayState('success');
+      // B-4: 保存で参加行の updatedAt が変わり版も変化する。最新状態を再取得して
+      // participationVersion を更新し、同画面で続けて保存したとき自分の直前保存で409になるのを防ぐ。
+      setReloadKey((k) => k + 1);
     } catch (err) {
       console.error('保存エラー:', err);
-      setOverlayErrorDetail(err.response?.data?.message || '');
-      setOverlayState('error');
+      // B-4: 並行編集で参加状況が変わっていた（409）→ 最新を読み込み直す
+      if (err.response?.status === 409) {
+        setOverlayErrorDetail(
+          err.response?.data?.message
+          || '他の端末または伝助で参加状況が更新されました。最新を読み込みます。'
+        );
+        setOverlayState('error');
+        setReloadKey((k) => k + 1);
+      } else {
+        setOverlayErrorDetail(err.response?.data?.message || '');
+        setOverlayState('error');
+      }
     } finally {
       setSaving(false);
     }

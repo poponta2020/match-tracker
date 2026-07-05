@@ -163,11 +163,22 @@ public class LotteryService {
      * これにより {@code REQUIRES_NEW} で開始される伝助書き戻し側の別トランザクションが、
      * 確定済みの {@code WON} / {@code WAITLISTED} レコードを参照できることを保証する。
      */
-    public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds) {
+    public ConfirmLotteryResponse executeAndConfirmLottery(int year, int month, Long executedBy, Long organizationId, long seed, List<Long> priorityPlayerIds, String expectedPopulationSignature) {
         // 抽選実行 + 確定情報保存を1つのトランザクション内でコミットさせる。
         // 同一クラス内の self-invocation では @Transactional が効かないため、
         // TransactionTemplate を用いて明示的に外側トランザクションを構築する。
         LotteryExecution execution = transactionTemplate.execute(status -> {
+            // B-2: 母集団シグネチャ照合を確定トランザクション内（PENDING 読取と原子的）で行う。
+            // Controller 側の事前照合だけだと照合〜実際の PENDING 読取の間に母集団が変わりうるため、
+            // executeLottery が PENDING を読む直前に再照合し、不一致なら 409（再プレビュー要）で確定を中止する。
+            // 後方互換: シグネチャ未送信なら検証スキップ。
+            if (expectedPopulationSignature != null && !expectedPopulationSignature.isBlank()) {
+                String currentSignature = computePopulationSignature(year, month, organizationId);
+                if (!currentSignature.equals(expectedPopulationSignature)) {
+                    throw new com.karuta.matchtracker.exception.ConflictStateException(
+                            "参加状況が変わったため再プレビューが必要です。最新の参加状況で抽選をやり直してください。");
+                }
+            }
             LotteryExecution exec = executeLottery(
                     year, month, executedBy, ExecutionType.MANUAL, organizationId, seed, priorityPlayerIds);
             if (exec.getStatus() != ExecutionStatus.SUCCESS) {
@@ -195,6 +206,7 @@ public class LotteryService {
         // writeAllForLotteryConfirmation 側 (REQUIRES_NEW) は最新の WON/WAITLISTED を読み取れる。
         boolean densukeWriteSucceeded = true;
         String densukeWriteError = null;
+        List<String> densukeDiffs = List.of();
         if (organizationId != null) {
             try {
                 DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
@@ -202,6 +214,15 @@ public class LotteryService {
                     log.warn("Densuke write-back returned failures after lottery confirmation: {}", result.getErrors());
                     densukeWriteSucceeded = false;
                     densukeWriteError = String.join("; ", result.getErrors());
+                }
+                // A-3: 確定書き戻し直前の伝助差分（○書き戻し予定 vs 伝助×）を管理者へ通知しレスポンスに含める。
+                // 差分自体は確定をブロックしない（確定DBは維持）。
+                densukeDiffs = result.getDensukeDiffs() != null ? result.getDensukeDiffs() : List.of();
+                if (!densukeDiffs.isEmpty()) {
+                    log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {}: {}",
+                            densukeDiffs.size(), organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(
+                            organizationId, densukeDiffs, densukeWriteSucceeded);
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);
@@ -214,6 +235,7 @@ public class LotteryService {
                 .execution(execution)
                 .densukeWriteSucceeded(densukeWriteSucceeded)
                 .densukeWriteError(densukeWriteError)
+                .densukeDiffs(densukeDiffs)
                 .build();
     }
 
@@ -290,6 +312,19 @@ public class LotteryService {
 
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
+
+        // A-2 防御的措置: 抽選前に既に埋まっている枠（WON/OFFERED）を定員から差し引く。
+        // 管理者手動追加・試合記録に伴う自動参加登録・締切後即WON等で抽選前に WON/OFFERED が
+        // 存在しても、合計当選が定員を超えないようにする。差し引き後の残枠で従来の3層抽選を実施。
+        // （再抽選経路も本差し引きに一本化。繰り上がり承諾者=WON が残枠から控除される）
+        if (capacity != null) {
+            long alreadyFilled =
+                    practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.WON)
+                    + practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                            session.getId(), matchNumber, ParticipantStatus.OFFERED);
+            capacity = (int) Math.max(0, capacity - alreadyFilled);
+        }
 
         // 定員未設定 or 定員以下 → 全員当選
         if (capacity == null || totalApplicants <= capacity) {
@@ -531,7 +566,41 @@ public class LotteryService {
     /**
      * プレビュー結果とシードを保持するレコード
      */
-    public record LotteryPreviewResult(List<LotteryResultDto> results, long seed) {}
+    public record LotteryPreviewResult(List<LotteryResultDto> results, long seed, String populationSignature) {}
+
+    /**
+     * B-2: 母集団シグネチャを算出する。対象月・団体のセッション群に属する PENDING 参加者の
+     * (participant id) 集合を昇順に並べて SHA-256 でハッシュ化する。プレビュー時と確定時で
+     * 同一なら「プレビューで見た母集団と確定時の母集団が一致」とみなせる。
+     * 5分同期での新規○取り込み・キャンセル等で母集団が変わるとシグネチャが変化する。
+     */
+    @Transactional(readOnly = true)
+    public String computePopulationSignature(int year, int month, Long organizationId) {
+        List<PracticeSession> sessions = (organizationId != null)
+                ? practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId)
+                : practiceSessionRepository.findByYearAndMonth(year, month);
+        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).sorted().collect(Collectors.toList());
+
+        List<Long> pendingIds = new ArrayList<>();
+        for (Long sid : sessionIds) {
+            practiceParticipantRepository.findBySessionIdAndStatus(sid, ParticipantStatus.PENDING)
+                    .forEach(p -> pendingIds.add(p.getId()));
+        }
+        pendingIds.sort(Comparator.naturalOrder());
+
+        String raw = "s=" + sessionIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                + "|p=" + pendingIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 は必ず存在する。万一なければ raw の hashCode にフォールバック。
+            return "h" + Integer.toHexString(raw.hashCode());
+        }
+    }
 
     @Transactional(readOnly = true)
     public LotteryPreviewResult previewLottery(int year, int month, Long organizationId, List<Long> priorityPlayerIds) {
@@ -550,8 +619,10 @@ public class LotteryService {
                 .sorted(Comparator.comparing(PracticeSession::getSessionDate))
                 .collect(Collectors.toList());
 
+        String populationSignature = computePopulationSignature(year, month, organizationId);
+
         if (sessions.isEmpty()) {
-            return new LotteryPreviewResult(List.of(), seed);
+            return new LotteryPreviewResult(List.of(), seed, populationSignature);
         }
 
         // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
@@ -585,7 +656,7 @@ public class LotteryService {
         }
 
         log.info("Lottery preview completed for {}-{}: {} sessions", year, month, results.size());
-        return new LotteryPreviewResult(results, seed);
+        return new LotteryPreviewResult(results, seed, populationSignature);
     }
 
     /**
@@ -879,19 +950,15 @@ public class LotteryService {
             long seed = new Random().nextLong();
             Random random = new Random(seed);
 
-            // 繰り上がり者の試合番号ごとのカウントを考慮して定員調整
-            Map<Integer, Long> promotedCountByMatch = promoted.stream()
-                    .filter(p -> p.getMatchNumber() != null)
-                    .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber, Collectors.counting()));
-
             // 試合番号でグループ化し再抽選
             Map<Integer, List<PracticeParticipant>> byMatch = reLotteryTargets.stream()
                     .filter(p -> p.getMatchNumber() != null && p.getStatus() == ParticipantStatus.PENDING)
                     .collect(Collectors.groupingBy(PracticeParticipant::getMatchNumber,
                             TreeMap::new, Collectors.toList()));
 
-            // 一時的にcapacityを調整して再抽選
-            Integer originalCapacity = session.getCapacity();
+            // 繰り上がり承諾者（WON のまま維持）分の枠差し引きは processMatch 内の
+            // WON/OFFERED 控除（A-2）に一本化する。ここでの手動 capacity 調整は不要
+            // （手動調整と併用すると二重に差し引かれるため撤廃）。
 
             // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
             Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
@@ -899,12 +966,6 @@ public class LotteryService {
 
             for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
                 int matchNumber = entry.getKey();
-                long promotedInMatch = promotedCountByMatch.getOrDefault(matchNumber, 0L);
-
-                if (originalCapacity != null && promotedInMatch > 0) {
-                    // 繰り上がり者分の枠を差し引いた仮想的な定員で抽選
-                    session.setCapacity(originalCapacity - (int) promotedInMatch);
-                }
 
                 Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
                         ? prevWaitlistOrder : Collections.emptyMap();
@@ -916,9 +977,6 @@ public class LotteryService {
 
                 prevWaitlistOrder = currentWaitlistOrder;
                 prevMatchNumber = matchNumber;
-
-                // 定員を戻す
-                session.setCapacity(originalCapacity);
             }
 
             execution.setPriorityPlayerIds(resolvedPriorityPlayerIds);
@@ -1150,6 +1208,14 @@ public class LotteryService {
                 DensukeWriteResult result = densukeWriteService.writeAllForLotteryConfirmation(organizationId, year, month);
                 if (!result.isSuccess()) {
                     log.warn("Densuke write-back returned failures after lottery confirmation (confirmLottery path): {}", result.getErrors());
+                }
+                // A-3: 確定書き戻し直前の伝助差分を管理者へ通知（この経路の戻り値には差分を載せないが通知は行う）
+                List<String> densukeDiffs = result.getDensukeDiffs() != null ? result.getDensukeDiffs() : List.of();
+                if (!densukeDiffs.isEmpty()) {
+                    log.warn("A-3: {} pre-confirm densuke reversal-risk diffs for org {} (confirmLottery path): {}",
+                            densukeDiffs.size(), organizationId, densukeDiffs);
+                    lineNotificationService.sendPreConfirmDensukeDiffNotification(
+                            organizationId, densukeDiffs, result.isSuccess());
                 }
             } catch (Exception e) {
                 log.error("Failed to write all to densuke after lottery confirmation: {}", e.getMessage(), e);

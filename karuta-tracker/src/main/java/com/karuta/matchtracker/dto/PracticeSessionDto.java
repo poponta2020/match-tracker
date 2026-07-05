@@ -77,6 +77,9 @@ public class PracticeSessionDto {
     @AllArgsConstructor
     @Builder
     public static class MatchParticipantInfo {
+        // A-1: モーダルの初期選択を名前一致ではなくplayerId基準にするため公開する。
+        // 同姓同名・改名でも取りこぼしなくWON/PENDINGを特定できる。
+        private Long playerId;
         private String name;
         private Player.KyuRank kyuRank;
         private Player.Role role;

@@ -5,6 +5,7 @@ import com.karuta.matchtracker.dto.PracticeParticipationRequest;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionDto;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.service.PracticeSessionService;
@@ -729,5 +730,79 @@ class PracticeSessionControllerTest {
                         .header("X-User-Id", "1"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("2026年5月の伝助URLは登録されていません"));
+    }
+
+    // ===== POST /api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId} テスト =====
+    // 対戦組み合わせ画面「参加者追加」の PLAYER 開放（団体スコープは checkScopeByDate で検証）
+
+    @Test
+    @DisplayName("POST 参加者追加: PLAYER は自分の所属団体のセッションなら追加できる（200）")
+    void addParticipantToMatch_playerOwnOrg_returns200() throws Exception {
+        // Given: checkScopeByDate が所属団体ID(7L)を返す（= 所属団体内で一意に解決）
+        Long playerUserId = 10L;
+        Long orgId = 7L;
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId)))
+                .thenReturn(orgId);
+        when(practiceSessionService.findByDate(eq(today), eq(orgId))).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
+                        today.toString(), 3, 20L)
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        // 検証で確定した organizationId が実更新にもレスポンス取得にも渡る（検証・更新・応答の対象一致）
+        verify(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
+        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, orgId);
+        verify(practiceSessionService).findByDate(today, orgId);
+    }
+
+    @Test
+    @DisplayName("POST 参加者追加: PLAYER が所属外団体のセッションに追加しようとすると403")
+    void addParticipantToMatch_playerOutsideOwnOrg_returns403() throws Exception {
+        // Given: checkScopeByDate が ForbiddenException を投げる（所属外）
+        Long playerUserId = 10L;
+        doThrow(new ForbiddenException("他団体の練習日は編集できません"))
+                .when(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
+                        today.toString(), 3, 20L)
+                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                .andExpect(status().isForbidden());
+
+        // スコープ検証で弾かれるため実際の追加処理は呼ばれない
+        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST 参加者追加: ADMIN は自団体のセッションに追加できる（200・従来通り）")
+    void addParticipantToMatch_admin_returns200() throws Exception {
+        // Given: checkScopeByDate が自団体ID(1L)を返す
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("ADMIN"), any(), any()))
+                .thenReturn(1L);
+        when(practiceSessionService.findByDate(eq(today), eq(1L))).thenReturn(testSessionDto);
+
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
+                        today.toString(), 3, 20L)
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("X-Admin-Organization-Id", "1"))
+                .andExpect(status().isOk());
+
+        verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, 1L);
+        verify(practiceSessionService).findByDate(today, 1L);
+    }
+
+    @Test
+    @DisplayName("POST 参加者追加: 認可ヘッダーなしは403")
+    void addParticipantToMatch_noAuth_returns403() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
+                        today.toString(), 3, 20L))
+                .andExpect(status().isForbidden());
+
+        verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any(), any());
     }
 }

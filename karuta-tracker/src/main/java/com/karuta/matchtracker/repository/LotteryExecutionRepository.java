@@ -43,6 +43,13 @@ public interface LotteryExecutionRepository extends JpaRepository<LotteryExecuti
             int targetYear, int targetMonth, Long organizationId, ExecutionStatus status);
 
     /**
+     * 指定年月で organizationId=null（全団体一括）の成功した抽選が存在するか確認。
+     * 団体スコープ判定で「全団体一括抽選」を当該団体にも適用するために使う（A-2）。
+     */
+    boolean existsByTargetYearAndTargetMonthAndOrganizationIdIsNullAndStatus(
+            int targetYear, int targetMonth, ExecutionStatus status);
+
+    /**
      * 指定セッションの最新抽選実行を取得
      */
     Optional<LotteryExecution> findTopBySessionIdOrderByExecutedAtDesc(Long sessionId);

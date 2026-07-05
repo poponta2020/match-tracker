@@ -96,6 +96,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * ConflictStateExceptionのハンドリング（母集団変化／楽観ロック競合）
+     * HTTPステータス: 409 Conflict
+     */
+    @ExceptionHandler(com.karuta.matchtracker.exception.ConflictStateException.class)
+    public ResponseEntity<ErrorResponse> handleConflictStateException(
+            com.karuta.matchtracker.exception.ConflictStateException ex,
+            HttpServletRequest request) {
+
+        log.warn("Conflict state: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                ex.getMessage(),
+                HttpStatus.CONFLICT.value(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    /**
      * ForbiddenExceptionのハンドリング
      * HTTPステータス: 403 Forbidden
      */

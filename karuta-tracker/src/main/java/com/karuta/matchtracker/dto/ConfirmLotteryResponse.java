@@ -27,4 +27,12 @@ public class ConfirmLotteryResponse {
 
     /** 伝助書き戻し失敗時のエラーメッセージ概要（成功時は null） */
     private String densukeWriteError;
+
+    /**
+     * A-3: 確定書き戻し直前に検知した伝助差分（アプリ側○書き戻し予定なのに伝助側×＝不参加の
+     * 反転リスク）の対象一覧。差分は確定をブロックしない（管理者が手動対応するための可視化用）。
+     * 空リスト（null にはしない）。
+     */
+    @lombok.Builder.Default
+    private java.util.List<String> densukeDiffs = java.util.List.of();
 }

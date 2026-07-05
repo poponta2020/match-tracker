@@ -113,6 +113,50 @@ class LotteryServiceTest {
     }
 
     @Test
+    @DisplayName("A-2: processMatch は既存WON/OFFEREDを定員から差し引いてから抽選する（定員超過防止）")
+    void processMatch_subtractsExistingWonOffered() {
+        PracticeSession session = session(3); // capacity 3
+        // 抽選前に既に WON 2 が存在 → 残枠は1
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                100L, MATCH, ParticipantStatus.WON)).thenReturn(2L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                100L, MATCH, ParticipantStatus.OFFERED)).thenReturn(0L);
+
+        PracticeParticipant p1 = participant(1L, 10L);
+        PracticeParticipant p2 = participant(2L, 20L);
+        PracticeParticipant p3 = participant(3L, 30L);
+        List<PracticeParticipant> applicants = List.of(p1, p2, p3);
+
+        lotteryService.processMatch(session, MATCH, applicants,
+                new HashSet<>(), new HashSet<>(), null,
+                Map.of(), new HashMap<>(), Set.of(), false, new Random(0));
+
+        // 残枠1 → PENDING 3人中1人だけ WON（既存WON2 + 新規1 = 定員3、超過しない）
+        long won = applicants.stream().filter(p -> p.getStatus() == ParticipantStatus.WON).count();
+        assertThat(won).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("B-2: computePopulationSignature は母集団(PENDING)が変わると変化する")
+    void computePopulationSignature_changesWithPopulation() {
+        PracticeSession s = session(4);
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 4, ORG_ID))
+                .thenReturn(List.of(s));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.PENDING))
+                .thenReturn(List.of(participant(1L, 10L), participant(2L, 20L)));
+
+        String sig1 = lotteryService.computePopulationSignature(2026, 4, ORG_ID);
+
+        // 母集団が変化（PENDING が1人増える）
+        when(practiceParticipantRepository.findBySessionIdAndStatus(100L, ParticipantStatus.PENDING))
+                .thenReturn(List.of(participant(1L, 10L), participant(2L, 20L), participant(3L, 30L)));
+        String sig2 = lotteryService.computePopulationSignature(2026, 4, ORG_ID);
+
+        assertThat(sig1).isNotBlank();
+        assertThat(sig1).isNotEqualTo(sig2);
+    }
+
+    @Test
     @DisplayName("管理者優先選手が定員内の場合、全員当選する")
     void processMatch_adminPriorityWithinCapacity_allWin() {
         PracticeSession session = session(3);

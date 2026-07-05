@@ -42,6 +42,13 @@ public class PlayerParticipationStatusDto {
      */
     private Boolean beforeDeadline;
 
+    /**
+     * B-4: その月×プレイヤーの参加状況の版情報（対象参加行のハッシュ）。
+     * 参加登録リクエストに添付して楽観ロックに使う。並行編集で版が変わっていれば 409（再読込要）。
+     * サーバは常に非null（行が無くても安定値）を返す。
+     */
+    private String version;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
