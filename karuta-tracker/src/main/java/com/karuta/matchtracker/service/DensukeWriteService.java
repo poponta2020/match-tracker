@@ -244,8 +244,8 @@ public class DensukeWriteService {
                 continue;
             }
 
-            // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約）
-            Set<Long> verifiedRowIdUrls = new HashSet<>();
+            // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約・usable を共有）
+            Map<Long, Boolean> urlRowIdStatus = new HashMap<>();
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -254,7 +254,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             participants, urlSessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false, verifiedRowIdUrls);
+                            base, cd, cookies, pageId, memberNameToMi, orgErrors, false, urlRowIdStatus);
                 } catch (Exception e) {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
@@ -396,8 +396,8 @@ public class DensukeWriteService {
             }
 
             // 各プレイヤーを書き込み（WON/WAITLISTED/OFFERED/PENDING のみ、dirty フィルタなし）
-            // B-3: row_id 整合検証は1URL1回に集約
-            Set<Long> verifiedRowIdUrls = new HashSet<>();
+            // B-3: row_id 整合検証は1URL1回に集約・usable を共有
+            Map<Long, Boolean> urlRowIdStatus = new HashMap<>();
             for (DensukeMemberMapping mapping : mappings) {
                 Long playerId = mapping.getPlayerId();
                 String playerName = playerNames.getOrDefault(playerId, "ID=" + playerId);
@@ -425,7 +425,7 @@ public class DensukeWriteService {
                 try {
                     writePlayerToDensuke(urlId, playerId, playerName,
                             allParticipants, sessions, sessionMap,
-                            base, cd, cookies, pageId, memberNameToMi, errors, true, verifiedRowIdUrls);
+                            base, cd, cookies, pageId, memberNameToMi, errors, true, urlRowIdStatus);
                 } catch (Exception e) {
                     log.warn("Bulk write-back failed for player {}: {}", playerName, e.getMessage());
                     errors.add("一括書き戻し[" + playerName + "]: " + e.getMessage());
@@ -461,7 +461,7 @@ public class DensukeWriteService {
             Map<String, String> memberNameToMi,
             List<String> errors,
             boolean lotteryConfirmation,
-            Set<Long> verifiedUrlIds) throws IOException {
+            Map<Long, Boolean> urlRowIdStatus) throws IOException {
 
         String strippedName = DensukeScraper.normalizeMemberName(playerName);
 
@@ -493,7 +493,14 @@ public class DensukeWriteService {
         }
 
         // b. densuke_row_ids を取得（編集フォームをフェッチして保存＋B-3構造整合検証、1URL1回）
-        ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors, verifiedUrlIds);
+        boolean rowIdsUsable = ensureRowIds(urlId, urlSessions, sessionMap, base, cd, mi, cookies, pageId, errors, urlRowIdStatus);
+        if (!rowIdsUsable) {
+            // B-3: フォーム行数不一致で row_id の位置合わせが保証できない → 当該書き込みを中止。
+            // stale な row_id で別日/別試合へ書き込むデータ破壊を防ぐ（URL単位のエラーは errors[] に記録済み）。
+            log.warn("Skip densuke write for player {} (urlId={}): row_id integrity not guaranteed (form row count mismatch)",
+                    playerName, urlId);
+            return;
+        }
 
         // c. 当該URLの全セッション×このプレイヤーのステータスを取得
         List<Long> urlSessionIds = urlSessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
@@ -728,14 +735,21 @@ public class DensukeWriteService {
     /**
      * 各セッション×試合の join-{id} を確認し、未保存のものを取得して保存する。
      */
-    private void ensureRowIds(Long urlId, List<PracticeSession> sessions,
+    /**
+     * @return row_id が書き込みに使える整合状態なら true（呼び出し元は regist 続行）、
+     *         フォーム行数不一致で位置合わせ不能なら false（呼び出し元は当該書き込みを中止）。
+     */
+    private boolean ensureRowIds(Long urlId, List<PracticeSession> sessions,
                                Map<Long, PracticeSession> sessionMap,
                                String base, String cd, String mi,
                                Map<String, String> cookies, String pageId,
-                               List<String> errors, Set<Long> verifiedUrlIds) throws IOException {
-        // B-3: 当該URLはこのバッチで既に検証済みなら再フェッチしない（1URL1回に集約）。
-        if (verifiedUrlIds != null && verifiedUrlIds.contains(urlId)) {
-            return;
+                               List<String> errors, Map<Long, Boolean> urlRowIdStatus) throws IOException {
+        // B-3: 当該URLはこのバッチで既に判定済みなら再フェッチせずキャッシュした usable を返す（1URL1回）。
+        if (urlRowIdStatus != null) {
+            Boolean cached = urlRowIdStatus.get(urlId);
+            if (cached != null) {
+                return cached;
+            }
         }
 
         // 編集フォームを取得して現在の join-{id} 構造を得る（Cookie・id 付き）。
@@ -754,11 +768,12 @@ public class DensukeWriteService {
                 .parse();
 
         Map<String, String> joinInputs = extractJoinInputs(formDoc);
-        parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors);
+        boolean usable = parseAndSaveRowIds(urlId, sessions, formDoc, joinInputs, errors);
 
-        if (verifiedUrlIds != null) {
-            verifiedUrlIds.add(urlId);
+        if (urlRowIdStatus != null) {
+            urlRowIdStatus.put(urlId, usable);
         }
+        return usable;
     }
 
     /**
@@ -790,27 +805,34 @@ public class DensukeWriteService {
      * 書き込む、あるいは全スキップになる。障害発生時はまず伝助の編集フォームのHTMLを
      * 直接確認すること。
      */
-    private void parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
+    /**
+     * @return row_id が書き込みに使える整合状態なら true。join-ID件数とスケジュール件数が
+     *         不一致（伝助フォーム構造変化で位置合わせ不能）なら false を返し、呼び出し元は
+     *         当該URLの書き込み（regist POST）を中止する（stale row_id での別日/別試合書き込みを防ぐ）。
+     */
+    boolean parseAndSaveRowIds(Long urlId, List<PracticeSession> sessions,
                                      Document formDoc, Map<String, String> joinInputs, List<String> errors) {
         Element table = formDoc.selectFirst("table.listtbl");
         if (table == null || joinInputs.isEmpty()) {
-            log.warn("Could not find listtbl or join inputs in densuke edit form");
-            return;
+            // フォーム解析に失敗（一時的な取得不良の可能性）。既存キャッシュを使う従来挙動を維持（非ブロック）。
+            log.warn("Could not find listtbl or join inputs in densuke edit form (urlId={})", urlId);
+            return true;
         }
 
         List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions);
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
         if (joinIds.size() != schedule.size()) {
-            // B-3: 件数不一致の無言スキップを可視化。書き込みステータス errors[] に記録し
-            // 伝助管理画面（pendingCount と併せて）で管理者が気づけるようにする。
-            log.warn("Join ID count ({}) differs from schedule count ({}), skipping row ID save to avoid misalignment. urlId={}",
+            // B-3: 件数不一致は伝助フォーム構造変化の可能性が高く、位置合わせが保証できない。
+            // errors[] に記録して可視化し、false を返して当該URLの書き込みを中止させる
+            // （stale な row_id で別日/別試合に書き込むデータ破壊を防ぐ）。
+            log.warn("Join ID count ({}) differs from schedule count ({}), aborting write to avoid misalignment. urlId={}",
                     joinIds.size(), schedule.size(), urlId);
             if (errors != null) {
                 errors.add("伝助フォームの行数(" + joinIds.size() + ")とアプリの予定数(" + schedule.size()
-                        + ")が不一致のため row_id 保存をスキップしました（伝助フォーム構造変更の可能性・urlId=" + urlId + "）");
+                        + ")が不一致のため当該URLの書き込みを中止しました（伝助フォーム構造変更の可能性・urlId=" + urlId + "）");
             }
-            return;
+            return false;
         }
 
         // B-3: row_id 整合の防御。現フォームの (日付×試合番号 → row_id) を組み立て、
@@ -863,6 +885,7 @@ public class DensukeWriteService {
             densukeRowIdRepository.saveAll(toSave);
             log.info("Saved {} densuke row IDs for urlId={}", toSave.size(), urlId);
         }
+        return true;
     }
 
     private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions) {

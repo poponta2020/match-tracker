@@ -427,4 +427,47 @@ class DensukeWriteServiceTest {
 
         assertThat(result).isTrue();
     }
+
+    // ----------------------------------------------------------------
+    // B-3: parseAndSaveRowIds の整合判定テスト
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("B-3: join-ID件数がスケジュール件数と不一致なら false（書き込み中止）＋errors記録・保存なし")
+    void parseAndSaveRowIds_countMismatch_returnsFalseAndAborts() {
+        // schedule: 1セッション×2試合 = 2件
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        // join-id は1件だけ → 件数不一致
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-999", "");
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isFalse();
+        assertThat(errors).isNotEmpty();
+        // stale row_id 継続を防ぐため、保存も既存キャッシュ取得もしない
+        verify(densukeRowIdRepository, never()).saveAll(anyList());
+        verify(densukeRowIdRepository, never()).findByDensukeUrlId(anyLong());
+    }
+
+    @Test
+    @DisplayName("B-3: join-ID件数が一致すれば true（書き込み継続）＋未保存分を保存")
+    void parseAndSaveRowIds_countMatch_returnsTrue() {
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(2).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-11", "");
+        joinInputs.put("join-22", "");
+        when(densukeRowIdRepository.findByDensukeUrlId(100L)).thenReturn(List.of());
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isTrue();
+        verify(densukeRowIdRepository).saveAll(anyList());
+    }
 }
