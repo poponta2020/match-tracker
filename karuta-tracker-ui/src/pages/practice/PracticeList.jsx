@@ -823,6 +823,7 @@ const PracticeList = () => {
                             if (!Array.isArray(statuses) || statuses.length === 0) return null;
                             const validValues = new Set(['AVAILABLE', 'NEARLY_FULL', 'FULL']);
                             if (!statuses.every((s) => validValues.has(s))) return null;
+                            const deletedMatchNumbers = new Set(daySessions[0].densukeDeletionCandidateMatchNumbers || []);
                             const symbolFor = (s) => {
                               if (s === 'FULL') return { ch: '×', cls: 'text-red-400' };
                               if (s === 'NEARLY_FULL') return { ch: '△', cls: 'text-orange-300' };
@@ -834,6 +835,18 @@ const PracticeList = () => {
                                 className="mt-1 grid grid-cols-3 gap-x-1 gap-y-0.5 text-[9px] leading-none justify-items-center w-fit mx-auto"
                               >
                                 {statuses.map((s, i) => {
+                                  const matchNumber = i + 1;
+                                  if (deletedMatchNumbers.has(matchNumber)) {
+                                    return (
+                                      <span
+                                        key={i}
+                                        className="text-gray-400 font-bold leading-none"
+                                        title={`第${matchNumber}試合: 伝助側で削除されました（管理者確認中）`}
+                                      >
+                                        ×
+                                      </span>
+                                    );
+                                  }
                                   const { ch, cls } = symbolFor(s);
                                   return (
                                     <span key={i} className={`${cls} font-bold leading-none`}>

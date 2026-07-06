@@ -38,6 +38,7 @@ class DensukeWriteServiceTest {
     @Mock private DensukeUrlRepository densukeUrlRepository;
     @Mock private DensukeMemberMappingRepository densukeMemberMappingRepository;
     @Mock private DensukeRowIdRepository densukeRowIdRepository;
+    @Mock private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     @Mock private PlayerRepository playerRepository;
     @Mock private DensukeScraper densukeScraper;
     @Mock private LineNotificationService lineNotificationService;

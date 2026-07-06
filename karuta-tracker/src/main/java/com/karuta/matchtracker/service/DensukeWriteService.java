@@ -48,6 +48,7 @@ public class DensukeWriteService {
     private final DensukeUrlRepository densukeUrlRepository;
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
     private final DensukeRowIdRepository densukeRowIdRepository;
+    private final DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     private final PlayerRepository playerRepository;
     private final DensukeScraper densukeScraper;
     private final LineNotificationService lineNotificationService;
@@ -296,10 +297,23 @@ public class DensukeWriteService {
             if (orgErrors.isEmpty()) {
                 lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
             }
-            // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知
+            // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知。
+            // ただし、当該団体のURLに未承認の削除候補が既に追跡されている場合は、原因判明済みとして
+            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED
+            // で通知済み）。
             List<String> rowIdIssues = rowIdIssuesByOrg.getOrDefault(orgId, List.of());
             if (!rowIdIssues.isEmpty()) {
-                lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
+                List<Long> orgUrlIds = urlsByOrg.getOrDefault(orgId, List.of()).stream()
+                        .map(DensukeUrl::getId).collect(Collectors.toList());
+                boolean alreadyTrackedAsDeletionCandidate = !orgUrlIds.isEmpty()
+                        && densukeDeletionCandidateRepository.existsByDensukeUrlIdInAndStatus(
+                                orgUrlIds, DensukeDeletionCandidate.Status.PENDING);
+                if (alreadyTrackedAsDeletionCandidate) {
+                    log.info("Suppressed duplicate ADMIN_DENSUKE_ROWID_ISSUE for orgId={} "
+                            + "(already tracked as pending densuke deletion candidate)", orgId);
+                } else {
+                    lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
+                }
             }
         }
     }
@@ -897,7 +911,7 @@ public class DensukeWriteService {
             return false;
         }
 
-        List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions);
+        List<Map.Entry<LocalDate, Integer>> schedule = buildScheduleOrder(sessions, urlId);
         List<String> joinIds = new ArrayList<>(joinInputs.keySet());
 
         if (joinIds.size() != schedule.size()) {
@@ -964,13 +978,24 @@ public class DensukeWriteService {
         return true;
     }
 
-    private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions) {
+    /**
+     * urlId 単位で承認済みの削除候補（欠番）を除外してスケジュールを生成する。
+     * totalMatches 自体は変更しないため、承認済みの (date, matchNumber) だけをここで飛ばし、
+     * 伝助フォームの実際の行数（削除済みで減った状態）と件数を合わせる。
+     */
+    private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions, Long urlId) {
+        Set<String> approvedExclusions = densukeDeletionCandidateRepository
+                .findByDensukeUrlIdAndStatus(urlId, DensukeDeletionCandidate.Status.APPROVED).stream()
+                .map(c -> c.getSessionDate() + "_" + c.getMatchNumber())
+                .collect(Collectors.toSet());
+
         List<Map.Entry<LocalDate, Integer>> list = new ArrayList<>();
         List<PracticeSession> sorted = sessions.stream()
                 .sorted(Comparator.comparing(PracticeSession::getSessionDate))
                 .collect(Collectors.toList());
         for (PracticeSession s : sorted) {
             for (int m = 1; m <= s.getTotalMatches(); m++) {
+                if (approvedExclusions.contains(s.getSessionDate() + "_" + m)) continue;
                 list.add(Map.entry(s.getSessionDate(), m));
             }
         }

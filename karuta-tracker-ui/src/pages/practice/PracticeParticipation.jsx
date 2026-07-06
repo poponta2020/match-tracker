@@ -412,6 +412,8 @@ const PracticeParticipation = () => {
                             const isChecked = sessionParticipations.includes(matchNumber);
                             const participantCount =
                               session.matchParticipantCounts?.[matchNumber] || 0;
+                            const isDensukeDeleted = (session.densukeDeletionCandidateMatchNumbers || [])
+                              .includes(matchNumber);
 
                             // 抽選済みセッションの場合はステータス表示
                             const isLotteryDone = lotteryExecuted[session.id] === true;
@@ -420,7 +422,14 @@ const PracticeParticipation = () => {
 
                             return (
                               <td key={matchNumber} className="px-0.5 py-2 text-center align-middle">
-                                {isAvailable ? (
+                                {isAvailable && isDensukeDeleted ? (
+                                  <span
+                                    className="text-gray-400 text-xs font-bold"
+                                    title={`第${matchNumber}試合: 伝助側で削除されました（管理者確認中）`}
+                                  >
+                                    ×
+                                  </span>
+                                ) : isAvailable ? (
                                   isLotteryDone && matchStatus ? (
                                     // 抽選済み: ステータス表示
                                     <div className="flex flex-col items-center gap-0.5">

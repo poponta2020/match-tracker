@@ -57,6 +57,7 @@ class DensukeImportServicePhaseCoverageTest {
     @Mock private WaitlistPromotionService waitlistPromotionService;
     @Mock private PracticeParticipantService practiceParticipantService;
     @Mock private LineNotificationService lineNotificationService;
+    @Mock private DensukeDeletionDetectionService densukeDeletionDetectionService;
 
     @InjectMocks
     private DensukeImportService densukeImportService;

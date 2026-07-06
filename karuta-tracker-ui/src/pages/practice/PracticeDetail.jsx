@@ -159,10 +159,19 @@ const PracticeDetail = () => {
               {session.venueSchedules.map((schedule) => {
                 const participantCount = session.matchParticipantCounts?.[schedule.matchNumber] || 0;
                 const participants = session.matchParticipants?.[schedule.matchNumber] || [];
+                const isDensukeDeleted = (session.densukeDeletionCandidateMatchNumbers || [])
+                  .includes(schedule.matchNumber);
                 return (
                   <div key={schedule.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                     <div className="flex justify-between items-center mb-2">
-                      <div className="font-medium text-gray-900">第{schedule.matchNumber}試合</div>
+                      <div className="font-medium text-gray-900 flex items-center gap-1.5">
+                        第{schedule.matchNumber}試合
+                        {isDensukeDeleted && (
+                          <span className="text-xs font-normal text-gray-500 bg-gray-200 rounded px-1.5 py-0.5">
+                            伝助で削除されました
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm text-gray-600">
                         {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
                       </div>

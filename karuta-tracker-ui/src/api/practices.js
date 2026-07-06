@@ -107,6 +107,18 @@ export const practiceAPI = {
   getDensukeWriteStatus: (organizationId) =>
     apiClient.get('/practice-sessions/densuke-write-status', { params: { organizationId } }),
 
+  // 伝助側で削除が検知された試合（削除候補）の一覧を取得（団体別・未承認のみ）
+  getDensukeDeletionCandidates: (organizationId) =>
+    apiClient.get('/densuke-deletion-candidates', { params: { organizationId } }),
+
+  // 削除候補を承認（該当試合の出欠エントリを削除）
+  approveDensukeDeletionCandidate: (id) =>
+    apiClient.post(`/densuke-deletion-candidates/${id}/approve`),
+
+  // 削除候補を却下（データは変更せず通常表示に戻す）
+  rejectDensukeDeletionCandidate: (id) =>
+    apiClient.post(`/densuke-deletion-candidates/${id}/reject`),
+
   // 伝助ページを自動作成
   createDensukePage: (year, month, organizationId, overrides = {}) =>
     apiClient.post('/practice-sessions/densuke/create-page', {

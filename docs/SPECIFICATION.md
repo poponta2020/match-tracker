@@ -1324,6 +1324,67 @@ SUPER_ADMIN のみ操作可能。
 - 既存テーブル `densuke_urls` / `practice_sessions` / `venues` / `venue_match_schedules` への変更は不要
 - ただし新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED` は `line_message_log_notification_type_check` の CHECK 制約に追加する必要がある（`database/add_admin_densuke_push_failed_message_log_check.sql` を本番 DB に適用）。enum 名は VARCHAR(30) 内に収まる短縮形で命名しているため、カラム長拡張は不要
 
+#### 4.1.8 伝助側削除検知・承認（DensukeDeletionCandidate）
+
+伝助側で試合の行（日付×試合番号）が削除された場合に自動検知し、管理者が明示的に承認するまでは
+アプリ側のデータを一切変更しない機能。伝助側の行削除により `DensukeWriteService` の行数不一致
+チェック（4.1.6 参照）が解消せず `ADMIN_DENSUKE_ROWID_ISSUE` 通知が繰り返し送信され続ける問題への対応。
+
+**ユースケース:**
+- 管理者が誤って（または意図的に）伝助側で試合行を削除した際、どの試合（日付・試合番号）が
+  削除されたのかをアプリ側で特定し、承認操作 1 つで対応する出欠エントリを削除できるようにする
+- 承認するまでは検知のみ行い、選手側にも「伝助側で削除されました」と可視化することで、
+  管理者が確認する前に選手が混乱しないようにする
+
+**検知処理（`DensukeDeletionDetectionService`）:**
+- `DensukeImportService.importFromDensuke` が当月・翌月の同期サイクルで既に取得済みのスクレイピング
+  結果を再利用し、既存の参加者同期ロジックとは独立した追加チェックとして実行する（既存ロジックへの影響を避ける）
+- 対象団体・対象月の `PracticeSession.totalMatches` から機械的に導かれる期待値（1〜totalMatches）と、
+  伝助スクレイピング結果に実在する (日付, 試合番号) を突き合わせ、期待値にあって実在しない組を
+  新規の削除候補（`densuke_deletion_candidates`, status=PENDING）として記録する
+- 承認済み（APPROVED）の組は「欠番」として再検知の対象から除外する（同じ組を再度 PENDING にしない）
+- 未承認（PENDING）の組が伝助側で復活した場合は、削除候補を自動的に解消する（再オープンはしない単純化方針）
+
+**承認・却下（`DensukeDeletionCandidateService`）:**
+- 承認（`approve`）: 該当 (session_date, matchNumber) の `PracticeParticipant`（出欠エントリ）のみを削除する。
+  `PracticeSession.totalMatches` と既存の対戦結果（`Match` エンティティ）には一切触れない（欠番方式）
+- 却下（`reject`）: データは変更せず、削除候補を解消するのみ（選手向け表示も通常表示に戻る）
+- ADMIN は自団体の削除候補のみ操作可能。クライアント指定の `organizationId` は信用せず、
+  削除候補自身が持つ所属団体を正としてスコープ検証する
+
+**書き込み側の欠番除外（`DensukeWriteService.buildScheduleOrder`）:**
+- APPROVED 状態の削除候補がある (date, matchNumber) を、伝助への書き込み時のスケジュール生成から除外する
+- これにより承認後は「伝助フォームの行数」と「アプリの予定数」が一致し、`ADMIN_DENSUKE_ROWID_ISSUE` の
+  行数不一致が解消する
+- 未承認（PENDING）の間は `totalMatches` を変更しないため行数不一致は継続するが、同一団体の URL に
+  未承認の削除候補が追跡されている場合は `ADMIN_DENSUKE_ROWID_ISSUE` の重複通知を抑制する
+  （初回検知時に別途 `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` で通知済みのため）
+
+**通知:**
+- 新規検知時のみ、団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED`）
+- 同一の削除候補について、承認/却下されるまで再通知はしない（初回検知時の1回のみ）
+- 通知設定 ON/OFF は持たない（管理者向け重要通知のため常時送信）
+
+**選手向け可視化:**
+- `PracticeSessionDto.densukeDeletionCandidateMatchNumbers`（未承認のみ）を、練習日サマリー
+  （カレンダー）・詳細取得の両方に付与する
+- カレンダー画面（`/practices`）: 試合状況グリッドの該当試合番号を灰色×で表示
+- 練習詳細（`/practices/:id`）・出欠登録（`/practices/participation`）: 該当試合番号に
+  「伝助で削除されました」バッジ/表示を出し、チェックボックス操作を無効化する
+- 承認完了後は該当出欠エントリごと消えるため表示も自然に消える。却下時は通常表示に戻る
+
+**API:**
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `/api/densuke-deletion-candidates?organizationId=` | ADMIN+ | 団体別の未承認削除候補一覧取得 |
+| POST | `/api/densuke-deletion-candidates/{id}/approve` | ADMIN+ | 削除候補を承認（出欠エントリ削除） |
+| POST | `/api/densuke-deletion-candidates/{id}/reject` | ADMIN+ | 削除候補を却下（データ変更なし） |
+
+**DB マイグレーション:**
+- 新規テーブル `densuke_deletion_candidates`（`database/create_densuke_deletion_candidates.sql`）
+- 新 enum 値 `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` を `line_message_log_notification_type_check`
+  の CHECK 制約に追加（`database/add_admin_densuke_deletion_candidate_detected_message_log_check.sql`）
+
 #### 4.1.4 スクレイピング詳細
 
 伝助のHTMLテーブル構造:
@@ -2117,6 +2178,23 @@ venues ──< venue_match_schedules (venueId)
 
 一意制約: `(densuke_url_id, session_date, match_number)`
 
+#### densuke_deletion_candidates
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| densuke_url_id | BIGINT | NOT NULL | 伝助URL ID（FK: densuke_urls.id） |
+| organization_id | BIGINT | NOT NULL | 所属団体ID |
+| session_date | DATE | NOT NULL | 対象日付 |
+| match_number | INT | NOT NULL | 対象試合番号 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | PENDING / APPROVED / REJECTED |
+| detected_at | TIMESTAMP | NOT NULL | 検知日時 |
+| notified_at | TIMESTAMP | — | LINE通知送信日時 |
+| resolved_at | TIMESTAMP | — | 承認/却下日時 |
+| resolved_by | BIGINT | — | 承認/却下した管理者ID（FK: players.id） |
+
+一意制約: `(densuke_url_id, session_date, match_number)`
+
 #### system_settings
 
 | カラム | 型 | 制約 | 説明 |
@@ -2652,6 +2730,14 @@ UNIQUE制約: (player_id, organization_id)
 | PUT | `/densuke-url` | ADMIN+ | 伝助URL登録・更新（`organizationId` 必須、ADMINは自団体のみ、`https://densuke.biz/` ドメインのみ受付） |
 | POST | `/sync-densuke` | ADMIN+ | 団体×年月指定で伝助同期（`organizationId` 必須、ADMINは自団体のみ、書き込み→読み取りの順に実行） |
 | GET | `/densuke-write-status?organizationId=` | ADMIN+ | 団体別の書き込み状況取得（最終実行日時・最終成功日時・エラー・書き込み待ち件数） |
+
+### 7.7.1 伝助削除候補 (`/api/densuke-deletion-candidates`)
+
+| メソッド | パス | 権限 | 説明 |
+|---|---|---|---|
+| GET | `?organizationId=` | ADMIN+ | 団体別の未承認削除候補一覧取得（ADMINは自団体のみ） |
+| POST | `/{id}/approve` | ADMIN+ | 削除候補を承認（該当出欠エントリを削除。候補自身の所属団体でスコープ検証） |
+| POST | `/{id}/reject` | ADMIN+ | 削除候補を却下（データ変更なし） |
 
 ### 7.8 選手プロフィール (`/api/player-profiles`)
 

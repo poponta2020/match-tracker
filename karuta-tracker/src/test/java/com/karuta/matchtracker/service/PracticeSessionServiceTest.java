@@ -12,6 +12,7 @@ import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
 import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
 import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.MatchRepository;
@@ -84,6 +85,9 @@ class PracticeSessionServiceTest {
 
     @Mock
     private DensukeMemberMappingRepository densukeMemberMappingRepository;
+
+    @Mock
+    private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
 
     @Mock
     private DensukeSyncService densukeSyncService;
