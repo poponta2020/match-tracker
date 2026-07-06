@@ -1358,10 +1358,10 @@ SUPER_ADMIN のみ操作可能。
   行数不一致が解消する
 - 未承認（PENDING）の間は `totalMatches` を変更しないため行数不一致は継続するが、同一団体の URL に
   未承認の削除候補が追跡されている場合は `ADMIN_DENSUKE_ROWID_ISSUE` の重複通知を抑制する
-  （初回検知時に別途 `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` で通知済みのため）
+  （初回検知時に別途 `ADMIN_DENSUKE_DELETE_DETECTED` で通知済みのため）
 
 **通知:**
-- 新規検知時のみ、団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED`）
+- 新規検知時のみ、団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_DELETE_DETECTED`）
 - 同一の削除候補について、承認/却下されるまで再通知はしない（初回検知時の1回のみ）
 - 通知設定 ON/OFF は持たない（管理者向け重要通知のため常時送信）
 
@@ -1382,8 +1382,8 @@ SUPER_ADMIN のみ操作可能。
 
 **DB マイグレーション:**
 - 新規テーブル `densuke_deletion_candidates`（`database/create_densuke_deletion_candidates.sql`）
-- 新 enum 値 `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` を `line_message_log_notification_type_check`
-  の CHECK 制約に追加（`database/add_admin_densuke_deletion_candidate_detected_message_log_check.sql`）
+- 新 enum 値 `ADMIN_DENSUKE_DELETE_DETECTED` を `line_message_log_notification_type_check`
+  の CHECK 制約に追加（`database/add_admin_densuke_delete_detected_message_log_check.sql`）
 
 #### 4.1.4 スクレイピング詳細
 

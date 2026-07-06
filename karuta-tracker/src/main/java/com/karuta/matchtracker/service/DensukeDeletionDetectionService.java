@@ -72,6 +72,13 @@ public class DensukeDeletionDetectionService {
                 .map(c -> key(c.getSessionDate(), c.getMatchNumber()))
                 .collect(Collectors.toSet());
 
+        // 却下済みの組も再検知の対象から除外する。除外しないと同じ (densuke_url_id, session_date,
+        // match_number) を新規PENDINGとして再度saveしようとし、既存のREJECTED行とUNIQUE制約違反になる。
+        Set<String> rejectedKeys = densukeDeletionCandidateRepository
+                .findByDensukeUrlIdAndStatus(urlId, DensukeDeletionCandidate.Status.REJECTED).stream()
+                .map(c -> key(c.getSessionDate(), c.getMatchNumber()))
+                .collect(Collectors.toSet());
+
         List<String> newlyDetected = new ArrayList<>();
 
         for (PracticeSession session : sessions) {
@@ -80,6 +87,9 @@ public class DensukeDeletionDetectionService {
                 String k = key(session.getSessionDate(), matchNumber);
                 if (approvedKeys.contains(k)) {
                     continue; // 承認済みの欠番は再検知しない
+                }
+                if (rejectedKeys.contains(k)) {
+                    continue; // 却下済みは自動再オープンしない単純化方針
                 }
 
                 boolean presentOnDensuke = actualKeys.contains(k);

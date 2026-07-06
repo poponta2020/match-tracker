@@ -3450,10 +3450,10 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **欠番方式**: 承認しても `PracticeSession.totalMatches` は変更しない。試合番号の詰め直しをすると既存の対戦結果（`Match` エンティティ・参加者データ）が別の試合番号を指してしまうデータ破壊リスクがあるため、totalMatches は維持したまま該当試合番号を「欠番」として扱う
   - **承認/却下（`DensukeDeletionCandidateService`）**: 承認は該当 (date, matchNumber) の `PracticeParticipant` のみ削除（`Match` には触れない・出欠エントリのみ削除の方針）。却下はデータ変更なし。ADMIN のスコープ検証はクライアント指定の organizationId を信用せず、削除候補自身が持つ organizationId を正として検証（`PracticeSessionService.checkAdminScope` と同じ考え方）
   - **書き込み側の欠番除外**: `DensukeWriteService.buildScheduleOrder` が urlId 単位で APPROVED な削除候補を除外してからスケジュール（期待行リスト）を生成。これにより承認後は伝助フォームの実行数とアプリの予定数が一致し `ADMIN_DENSUKE_ROWID_ISSUE` が解消する。未承認の間は行数不一致が継続するため、同一団体の URL に未承認の削除候補が追跡されている場合はこの通知の重複送信を抑制する
-  - **通知**: 新規検知時のみ `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` を団体の ADMIN/SUPER_ADMIN に LINE 通知（同一候補は承認/却下されるまで再送しない・preference カラムなしで常時送信）
+  - **通知**: 新規検知時のみ `ADMIN_DENSUKE_DELETE_DETECTED` を団体の ADMIN/SUPER_ADMIN に LINE 通知（同一候補は承認/却下されるまで再送しない・preference カラムなしで常時送信）
   - **再検知の抑止・自動解消**: APPROVED な (date, matchNumber) は再検知の対象から除外。PENDING な候補の行が伝助側で復活した場合は自動的に削除候補を解消する（REJECTED の自動再オープンはしない単純化方針）
   - **選手向け可視化**: `PracticeSessionDto.densukeDeletionCandidateMatchNumbers`（未承認のみ）をカレンダーサマリー・詳細取得の両方に付与し、`PracticeList`（カレンダーの試合状況グリッド）は灰色×、`PracticeDetail`/`PracticeParticipation` は「伝助で削除されました」バッジ/表示で検知時点（承認前）から可視化する
-  - **DB マイグレーション**: 新規テーブル `densuke_deletion_candidates`（`database/create_densuke_deletion_candidates.sql`）。新 enum 値 `ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED` を `line_message_log_notification_type_check` の CHECK 制約に追加（`database/add_admin_densuke_deletion_candidate_detected_message_log_check.sql`）
+  - **DB マイグレーション**: 新規テーブル `densuke_deletion_candidates`（`database/create_densuke_deletion_candidates.sql`）。新 enum 値 `ADMIN_DENSUKE_DELETE_DETECTED` を `line_message_log_notification_type_check` の CHECK 制約に追加（`database/add_admin_densuke_delete_detected_message_log_check.sql`）
 
 #### コンテナメモリ運用とOOM対策（Issue #953）
 

@@ -114,6 +114,37 @@ class DensukeDeletionDetectionServiceTest {
     }
 
     @Test
+    @DisplayName("却下済み(REJECTED)の候補は、行が引き続き欠落していても再登録・再通知しない")
+    void doesNotReinsertRejectedCandidate() {
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 7, 1L))
+                .thenReturn(Optional.of(url()));
+        PracticeSession session = PracticeSession.builder().id(99L).organizationId(1L)
+                .sessionDate(SESSION_DATE).totalMatches(3).build();
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 7, 1L))
+                .thenReturn(List.of(session));
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatus(10L, DensukeDeletionCandidate.Status.PENDING))
+                .thenReturn(List.of());
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatus(10L, DensukeDeletionCandidate.Status.APPROVED))
+                .thenReturn(List.of());
+
+        DensukeDeletionCandidate rejected = DensukeDeletionCandidate.builder()
+                .id(3L).densukeUrlId(10L).sessionDate(SESSION_DATE).matchNumber(3)
+                .status(DensukeDeletionCandidate.Status.REJECTED).build();
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatus(10L, DensukeDeletionCandidate.Status.REJECTED))
+                .thenReturn(List.of(rejected));
+
+        DensukeScraper.DensukeData scraped = new DensukeScraper.DensukeData();
+        scraped.getEntries().add(entry(SESSION_DATE, 1));
+        scraped.getEntries().add(entry(SESSION_DATE, 2));
+        // matchNumber 3 は却下済みだが引き続き伝助側に存在しない
+
+        service.detectDeletions(scraped, TARGET_MONTH, 1L);
+
+        verify(densukeDeletionCandidateRepository, never()).save(any());
+        verifyNoInteractions(lineNotificationService);
+    }
+
+    @Test
     @DisplayName("承認済み(APPROVED)の欠番は再検知しない")
     void skipsApprovedDeletions() {
         when(densukeUrlRepository.findByYearAndMonthAndOrganizationId(2026, 7, 1L))

@@ -2411,7 +2411,7 @@ public class LineNotificationService {
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION,
-                    ADMIN_DENSUKE_ROWID_ISSUE, ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED -> true;
+                    ADMIN_DENSUKE_ROWID_ISSUE, ADMIN_DENSUKE_DELETE_DETECTED -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
             // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
@@ -3150,7 +3150,7 @@ public class LineNotificationService {
                     .toList();
 
             if (targetAdmins.isEmpty()) {
-                log.info("ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED: no admins for organization {}", organizationId);
+                log.info("ADMIN_DENSUKE_DELETE_DETECTED: no admins for organization {}", organizationId);
                 return;
             }
 
@@ -3164,19 +3164,19 @@ public class LineNotificationService {
             for (Player admin : targetAdmins) {
                 try {
                     SendResult result = sendToPlayer(admin.getId(),
-                            LineNotificationType.ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED, message);
+                            LineNotificationType.ADMIN_DENSUKE_DELETE_DETECTED, message);
                     if (result == SendResult.SUCCESS) sent++;
                     else if (result == SendResult.FAILED) failed++;
                 } catch (Exception e) {
-                    log.warn("Failed to send ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED to admin {}: {}",
+                    log.warn("Failed to send ADMIN_DENSUKE_DELETE_DETECTED to admin {}: {}",
                             admin.getId(), e.getMessage());
                     failed++;
                 }
             }
-            log.info("ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED: organizationId={}, adminCount={}, sent={}, failed={}",
+            log.info("ADMIN_DENSUKE_DELETE_DETECTED: organizationId={}, adminCount={}, sent={}, failed={}",
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
-            log.warn("Async ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED dispatch failed: org={}, err={}",
+            log.warn("Async ADMIN_DENSUKE_DELETE_DETECTED dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

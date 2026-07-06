@@ -299,7 +299,7 @@ public class DensukeWriteService {
             }
             // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知。
             // ただし、当該団体のURLに未承認の削除候補が既に追跡されている場合は、原因判明済みとして
-            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED
+            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETE_DETECTED
             // で通知済み）。
             List<String> rowIdIssues = rowIdIssuesByOrg.getOrDefault(orgId, List.of());
             if (!rowIdIssues.isEmpty()) {

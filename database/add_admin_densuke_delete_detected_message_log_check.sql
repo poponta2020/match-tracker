@@ -1,4 +1,4 @@
--- 伝助側で削除された試合の検知通知 ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED を
+-- 伝助側で削除された試合の検知通知 ADMIN_DENSUKE_DELETE_DETECTED を
 -- line_message_log.notification_type の CHECK 制約に追加する。
 -- Hibernate ddl-auto=update は既存 CHECK 制約を自動更新しないため手動で対応する。
 -- 適用しないと該当 LINE メッセージログ挿入が CHECK 違反で失敗する。
@@ -27,7 +27,7 @@ ALTER TABLE line_message_log ADD CONSTRAINT line_message_log_notification_type_c
         'ADMIN_DENSUKE_CONFIRM_DIFF',
         'ADMIN_DENSUKE_NAME_COLLISION',
         'ADMIN_DENSUKE_ROWID_ISSUE',
-        'ADMIN_DENSUKE_DELETION_CANDIDATE_DETECTED',
+        'ADMIN_DENSUKE_DELETE_DETECTED',
         'ADMIN_KADERU_SYNC_COMPLETED',
         'ADMIN_KADERU_SYNC_FAILED',
         'MATCH_VIDEO_REGISTERED'
