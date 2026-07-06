@@ -4,7 +4,12 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // API モック
 vi.mock('../../api', () => ({
-  matchAPI: { getAll: vi.fn(), getById: vi.fn() },
+  matchAPI: {
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    getCardRecord: vi.fn(() => Promise.resolve({ data: { cardPlacements: [], otetsukiDetails: [] } })),
+    saveCardRecord: vi.fn(() => Promise.resolve({ data: {} })),
+  },
   playerAPI: { getAll: vi.fn() },
   practiceAPI: {
     getByDate: vi.fn(),
@@ -12,6 +17,10 @@ vi.mock('../../api', () => ({
   },
   pairingAPI: { getBySession: vi.fn() },
   byeActivityAPI: { getByPlayerAndDate: vi.fn() },
+  cardRuleNonceAPI: {
+    getByDate: vi.fn(() => Promise.resolve({ data: { nonce: 0 } })),
+    update: vi.fn(() => Promise.resolve({ data: {} })),
+  },
 }));
 
 vi.mock('../../context/AuthContext', () => ({

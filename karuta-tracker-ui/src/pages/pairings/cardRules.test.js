@@ -11,6 +11,9 @@ import {
   cleanupOldCardRules,
   STORAGE_PREFIX,
   NONCE_PREFIX,
+  cardToNumber,
+  expandRule,
+  getMatchCards,
 } from './cardRules';
 
 beforeEach(() => {
@@ -256,6 +259,84 @@ describe('getCardRules', () => {
     const viaHelper = getCardRules('2026-06-09', 4);
     const direct = generateCardRules(4, mulberry32(hashSeed('2026-06-09', 0)));
     expect(viaHelper).toEqual(direct);
+  });
+});
+
+describe('cardToNumber', () => {
+  it('"00" は 100 番', () => {
+    expect(cardToNumber('00')).toBe(100);
+  });
+  it('"05" は 5 番、"99" は 99 番', () => {
+    expect(cardToNumber('05')).toBe(5);
+    expect(cardToNumber('99')).toBe(99);
+  });
+});
+
+describe('expandRule（札ルール→出札50枚）', () => {
+  it('ones: 一の位が該当する札ちょうど50枚（すべて条件を満たす）', () => {
+    const rule = { type: 'ones', digits: [0, 1, 2, 3, 4], removedCard: null };
+    const cards = expandRule(rule);
+    expect(cards).toHaveLength(50);
+    for (const n of cards) {
+      // 100番→"00"→一の位0。それ以外は n%10。
+      const ones = n === 100 ? 0 : n % 10;
+      expect(rule.digits).toContain(ones);
+    }
+  });
+
+  it('tens: 十の位が該当する札ちょうど50枚', () => {
+    const rule = { type: 'tens', digits: [0, 1, 2, 3, 4], removedCard: null };
+    const cards = expandRule(rule);
+    expect(cards).toHaveLength(50);
+    for (const n of cards) {
+      const tens = n === 100 ? 0 : Math.floor(n / 10) % 10;
+      expect(rule.digits).toContain(tens);
+    }
+  });
+
+  it('nuki: 51枚から removedCard を除いてちょうど50枚', () => {
+    // removedCard は必ず対象集合内の札（生成側は matchingCards から選ぶ）。35は ones5・tens3 とも該当。
+    const rule = { type: 'nuki', digits: [3, 5, 7], removedCard: '35' };
+    const cards = expandRule(rule);
+    expect(cards).toHaveLength(50);
+    expect(cards).not.toContain(35); // 除外札
+  });
+
+  it('全札番号は 1〜100 の一意な整数・昇順', () => {
+    const cards = expandRule({ type: 'ones', digits: [0, 1, 2, 3, 4], removedCard: null });
+    expect(new Set(cards).size).toBe(cards.length);
+    const sorted = [...cards].sort((a, b) => a - b);
+    expect(cards).toEqual(sorted);
+    for (const n of cards) {
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('未知のルール/nullは空配列', () => {
+    expect(expandRule(null)).toEqual([]);
+    expect(expandRule({ type: 'unknown', digits: [] })).toEqual([]);
+  });
+});
+
+describe('getMatchCards', () => {
+  it('各試合の出札は50枚（決定論）', () => {
+    const c1 = getMatchCards('2026-06-09', 3, 1, 0);
+    expect(c1).toHaveLength(50);
+    // 同一 (date, total, matchNumber, nonce) なら同一
+    expect(getMatchCards('2026-06-09', 3, 1, 0)).toEqual(c1);
+  });
+
+  it('試合番号ごとに異なる出札（サイクル）', () => {
+    const c1 = getMatchCards('2026-06-09', 3, 1, 0);
+    const c2 = getMatchCards('2026-06-09', 3, 2, 0);
+    expect(c1).not.toEqual(c2);
+  });
+
+  it('nonce を上げると別の出札になる', () => {
+    const before = getMatchCards('2026-06-09', 3, 1, 0);
+    const after = getMatchCards('2026-06-09', 3, 1, 1);
+    expect(after).not.toEqual(before);
   });
 });
 

@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
 import { byeActivityAPI } from '../../api/byeActivities';
+import { cardRuleNonceAPI } from '../../api/cardRuleNonce';
 import { Copy, Check, RefreshCw, Home } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
@@ -88,6 +89,8 @@ const PairingSummary = () => {
   const [targetMatchNumber, setTargetMatchNumber] = useState(null);
   const [text, setText] = useState('');
   const [copied, setCopied] = useState(false);
+  // 札ルール再生成カウンタ nonce（DB共有。全端末で同じ出札50枚を参照させるため）
+  const [nonce, setNonce] = useState(0);
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -126,8 +129,19 @@ const PairingSummary = () => {
             : null;
         setTargetMatchNumber(validTarget);
 
-        // 札ルール: 日付（＋再生成カウンタ nonce）シードから決定論的に生成（端末・再訪・過去日でブレない）
-        const rules = getCardRules(date, totalMatches);
+        // 札ルール再生成カウンタ nonce を DB から取得（端末間で出札50枚を一致させる）。
+        // 取得失敗時は localStorage（従来のフォールバック）→ 既定 0 を用いる。
+        let currentNonce;
+        try {
+          const nonceRes = await cardRuleNonceAPI.getByDate(date);
+          currentNonce = nonceRes.data?.nonce ?? loadNonce(date);
+        } catch {
+          currentNonce = loadNonce(date);
+        }
+        setNonce(currentNonce);
+
+        // 札ルール: 日付（＋DB共有 nonce）シードから決定論的に生成（端末・再訪・過去日でブレない）
+        const rules = getCardRules(date, totalMatches, currentNonce);
         setCardRules(rules);
 
         // テキスト生成（単一試合モードでは対象試合のブロックのみ）
@@ -159,12 +173,18 @@ const PairingSummary = () => {
     }
   };
 
-  const handleRegenerate = () => {
+  const handleRegenerate = async () => {
     if (!window.confirm('現在の札ルールを上書きして再生成します。よろしいですか？')) return;
-    // nextNonce をローカルで確定してから保存・再計算する。saveNonce は localStorage 例外を握り潰すため、
-    // 保存に失敗しても nextNonce を明示で渡すことで画面の札ルールは確実に再生成される（単一試合モードでは非表示）
-    const nextNonce = loadNonce(date) + 1;
-    saveNonce(date, nextNonce);
+    // nextNonce をローカルで確定 → DB へ保存（全端末で一致）→ 再計算。
+    // DB保存に失敗しても nextNonce を明示で渡すことで画面の札ルールは確実に再生成される。
+    const nextNonce = nonce + 1;
+    try {
+      await cardRuleNonceAPI.update(date, nextNonce);
+    } catch (e) {
+      console.error('nonce のDB更新に失敗（画面上は再生成を反映）:', e);
+    }
+    saveNonce(date, nextNonce); // ローカルキャッシュも更新（フォールバック用）
+    setNonce(nextNonce);
     const rules = getCardRules(date, matchData.length, nextNonce);
     setCardRules(rules);
     setText(generateText(date, matchData, rules, readersByMatch, targetMatchNumber));
