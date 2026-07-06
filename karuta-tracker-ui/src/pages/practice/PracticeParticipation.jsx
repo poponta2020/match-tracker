@@ -425,7 +425,7 @@ const PracticeParticipation = () => {
                                 {isAvailable && isDensukeDeleted ? (
                                   <span
                                     className="text-gray-400 text-xs font-bold"
-                                    title={`第${matchNumber}試合: 伝助側で削除されました（管理者確認中）`}
+                                    title={`第${matchNumber}試合: 伝助側で削除されました`}
                                   >
                                     ×
                                   </span>

@@ -134,6 +134,8 @@ public class DensukeWriteService {
         Map<Long, List<String>> errorsByOrg = new HashMap<>();
         // B-3: 団体別の row_id 問題（管理者への集約 LINE 通知用）
         Map<Long, List<String>> rowIdIssuesByOrg = new HashMap<>();
+        // 団体内でrow_id問題を実際に発生させたURLの集合（重複通知抑制をURL単位で正確に判定するため）
+        Map<Long, Set<Long>> urlIdsWithRowIdIssuesByOrg = new HashMap<>();
         // URL ごとに、その団体のセッションを取得
         Map<Long, DensukeUrl> urlById = urls.stream()
                 .collect(Collectors.toMap(DensukeUrl::getId, u -> u));
@@ -254,6 +256,7 @@ public class DensukeWriteService {
             // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約・usable を共有）
             Map<Long, Boolean> urlRowIdStatus = new HashMap<>();
             List<String> orgRowIdIssues = rowIdIssuesByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
+            int rowIdIssuesSizeBeforeUrl = orgRowIdIssues.size();
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -274,6 +277,12 @@ public class DensukeWriteService {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
                 }
+            }
+            // B-3の重複通知抑制をURL単位で正確に判定するため、このURLが実際にrow_id問題を
+            // 発生させたかどうかを記録する（複数URLを持つ団体で、無関係なURLの問題まで
+            // まとめて抑制してしまうのを防ぐ）。
+            if (orgRowIdIssues.size() > rowIdIssuesSizeBeforeUrl) {
+                urlIdsWithRowIdIssuesByOrg.computeIfAbsent(orgId, k -> new LinkedHashSet<>()).add(urlId);
             }
         }
 
@@ -298,19 +307,19 @@ public class DensukeWriteService {
                 lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
             }
             // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知。
-            // ただし、当該団体のURLに未承認の削除候補が既に追跡されている場合は、原因判明済みとして
-            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETE_DETECTED
-            // で通知済み）。
+            // ただし、実際に問題を発生させた全URLが未承認の削除候補で説明できる場合のみ、原因判明済みとして
+            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETE_DETECTED で通知済み）。
+            // 団体内の無関係なURL（別月等）の問題まで巻き添えで抑制しないよう、URL単位で判定する。
             List<String> rowIdIssues = rowIdIssuesByOrg.getOrDefault(orgId, List.of());
             if (!rowIdIssues.isEmpty()) {
-                List<Long> orgUrlIds = urlsByOrg.getOrDefault(orgId, List.of()).stream()
-                        .map(DensukeUrl::getId).collect(Collectors.toList());
-                boolean alreadyTrackedAsDeletionCandidate = !orgUrlIds.isEmpty()
-                        && densukeDeletionCandidateRepository.existsByDensukeUrlIdInAndStatus(
-                                orgUrlIds, DensukeDeletionCandidate.Status.PENDING);
-                if (alreadyTrackedAsDeletionCandidate) {
+                Set<Long> issuingUrlIds = urlIdsWithRowIdIssuesByOrg.getOrDefault(orgId, Set.of());
+                boolean allExplainedByDeletionCandidates = !issuingUrlIds.isEmpty()
+                        && issuingUrlIds.stream().allMatch(urlId -> !densukeDeletionCandidateRepository
+                                .findByDensukeUrlIdAndStatus(urlId, DensukeDeletionCandidate.Status.PENDING)
+                                .isEmpty());
+                if (allExplainedByDeletionCandidates) {
                     log.info("Suppressed duplicate ADMIN_DENSUKE_ROWID_ISSUE for orgId={} "
-                            + "(already tracked as pending densuke deletion candidate)", orgId);
+                            + "(all issuing URLs already tracked as pending densuke deletion candidates)", orgId);
                 } else {
                     lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
                 }

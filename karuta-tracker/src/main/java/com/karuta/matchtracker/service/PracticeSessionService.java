@@ -50,6 +50,12 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class PracticeSessionService {
 
+    // 選手向け「伝助で削除されました」表示の対象ステータス。検知時点(PENDING)から承認後(APPROVED)まで
+    // 一貫して表示する。承認後も totalMatches は変更しない欠番方式のため、非表示にすると通常の空き枠に
+    // 見えてしまう。
+    private static final List<DensukeDeletionCandidate.Status> DENSUKE_DELETION_VISIBLE_STATUSES =
+            List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED);
+
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerRepository playerRepository;
@@ -215,16 +221,17 @@ public class PracticeSessionService {
             }
         }
 
-        // 伝助側で削除が検知され、管理者の承認待ちの試合番号（カレンダーの灰色×表示用）。
+        // 伝助側で削除が検知された試合番号（カレンダーの灰色×表示用）。承認済み(APPROVED)も対象に含める
+        // （totalMatches が変わらず欠番として通常枠に見えてしまうのを防ぐ）。
         // セッション横断で1クエリにまとめて取得し、(organizationId, sessionDate) をキーにグルーピングする。
         Map<String, List<Integer>> pendingDeletionsByOrgAndDate = Map.of();
         if (!sessions.isEmpty()) {
             List<Long> orgIdsInMonth = sessions.stream()
                     .map(PracticeSession::getOrganizationId).distinct().collect(Collectors.toList());
             pendingDeletionsByOrgAndDate = densukeDeletionCandidateRepository
-                    .findByOrganizationIdInAndSessionDateBetweenAndStatus(
+                    .findByOrganizationIdInAndSessionDateBetweenAndStatusIn(
                             orgIdsInMonth, yearMonth.atDay(1), yearMonth.atEndOfMonth(),
-                            DensukeDeletionCandidate.Status.PENDING)
+                            DENSUKE_DELETION_VISIBLE_STATUSES)
                     .stream()
                     .collect(Collectors.groupingBy(
                             c -> c.getOrganizationId() + "_" + c.getSessionDate(),
@@ -800,10 +807,11 @@ public class PracticeSessionService {
         long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
         dto.setCompletedMatches((int) completedMatches);
 
-        // 伝助側で削除が検知され、管理者の承認待ちの試合番号（選手向けバッジ表示用）
+        // 伝助側で削除が検知された試合番号（選手向けバッジ表示用）。承認済み(APPROVED)は totalMatches が
+        // 変わらず欠番として通常枠に見えてしまうため、承認前(PENDING)と同様に表示対象に含める。
         dto.setDensukeDeletionCandidateMatchNumbers(densukeDeletionCandidateRepository
-                .findByOrganizationIdAndSessionDateAndStatus(session.getOrganizationId(), session.getSessionDate(),
-                        DensukeDeletionCandidate.Status.PENDING)
+                .findByOrganizationIdAndSessionDateAndStatusIn(session.getOrganizationId(), session.getSessionDate(),
+                        DENSUKE_DELETION_VISIBLE_STATUSES)
                 .stream().map(DensukeDeletionCandidate::getMatchNumber).collect(Collectors.toList()));
 
         // 試合ごとの参加人数・参加者情報を集計

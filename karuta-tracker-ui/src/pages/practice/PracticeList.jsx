@@ -841,7 +841,7 @@ const PracticeList = () => {
                                       <span
                                         key={i}
                                         className="text-gray-400 font-bold leading-none"
-                                        title={`第${matchNumber}試合: 伝助側で削除されました（管理者確認中）`}
+                                        title={`第${matchNumber}試合: 伝助側で削除されました`}
                                       >
                                         ×
                                       </span>

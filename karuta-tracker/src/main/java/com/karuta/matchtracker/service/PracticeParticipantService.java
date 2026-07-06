@@ -6,7 +6,9 @@ import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.entity.DensukeDeletionCandidate;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -54,6 +56,7 @@ public class PracticeParticipantService {
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final LineNotificationService lineNotificationService;
     private final OrganizationService organizationService;
+    private final DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
 
     public PracticeParticipantService(
             PracticeParticipantRepository practiceParticipantRepository,
@@ -64,7 +67,8 @@ public class PracticeParticipantService {
             @Lazy DensukeSyncService densukeSyncService,
             PlayerOrganizationRepository playerOrganizationRepository,
             LineNotificationService lineNotificationService,
-            OrganizationService organizationService) {
+            OrganizationService organizationService,
+            DensukeDeletionCandidateRepository densukeDeletionCandidateRepository) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
         this.playerRepository = playerRepository;
@@ -74,6 +78,53 @@ public class PracticeParticipantService {
         this.playerOrganizationRepository = playerOrganizationRepository;
         this.lineNotificationService = lineNotificationService;
         this.organizationService = organizationService;
+        this.densukeDeletionCandidateRepository = densukeDeletionCandidateRepository;
+    }
+
+    /**
+     * 指定 (団体, 練習日, 試合番号) が伝助側の削除承認済み(欠番)かどうかを判定する。
+     * 承認済み欠番への新規参加登録を拒否するためのガード。
+     */
+    private boolean isApprovedDensukeDeletion(Long organizationId, LocalDate sessionDate, Integer matchNumber) {
+        return densukeDeletionCandidateRepository
+                .findByOrganizationIdAndSessionDateAndStatus(
+                        organizationId, sessionDate, DensukeDeletionCandidate.Status.APPROVED)
+                .stream().anyMatch(c -> c.getMatchNumber().equals(matchNumber));
+    }
+
+    /**
+     * バッチ登録リクエストの各 (sessionId, matchNumber) が、伝助側で削除承認済み(欠番)の
+     * 試合を対象にしていないか検証する。1件でも該当すればリクエスト全体を拒否する。
+     */
+    private void rejectIfTargetsApprovedDensukeDeletion(
+            List<PracticeParticipationRequest.SessionMatchParticipation> participations,
+            List<PracticeSession> sessions) {
+        if (sessions.isEmpty()) return;
+
+        List<Long> orgIds = sessions.stream().map(PracticeSession::getOrganizationId).distinct().toList();
+        LocalDate minDate = sessions.stream().map(PracticeSession::getSessionDate).min(LocalDate::compareTo).orElseThrow();
+        LocalDate maxDate = sessions.stream().map(PracticeSession::getSessionDate).max(LocalDate::compareTo).orElseThrow();
+
+        Set<String> approvedDeletedKeys = densukeDeletionCandidateRepository
+                .findByOrganizationIdInAndSessionDateBetweenAndStatus(
+                        orgIds, minDate, maxDate, DensukeDeletionCandidate.Status.APPROVED)
+                .stream()
+                .map(c -> c.getOrganizationId() + "_" + c.getSessionDate() + "_" + c.getMatchNumber())
+                .collect(Collectors.toSet());
+        if (approvedDeletedKeys.isEmpty()) return;
+
+        Map<Long, PracticeSession> sessionById = sessions.stream()
+                .collect(Collectors.toMap(PracticeSession::getId, s -> s));
+        for (var p : participations) {
+            PracticeSession s = sessionById.get(p.getSessionId());
+            if (s == null) continue;
+            String key = s.getOrganizationId() + "_" + s.getSessionDate() + "_" + p.getMatchNumber();
+            if (approvedDeletedKeys.contains(key)) {
+                throw new IllegalArgumentException(
+                        "伝助側で削除が承認された試合には登録できません: sessionId=" + p.getSessionId()
+                                + ", matchNumber=" + p.getMatchNumber());
+            }
+        }
     }
 
     @Transactional
@@ -87,6 +138,10 @@ public class PracticeParticipantService {
             throw new IllegalArgumentException(
                 "Invalid match number: " + matchNumber + ". Must be between 1 and " + session.getTotalMatches()
             );
+        }
+        if (isApprovedDensukeDeletion(session.getOrganizationId(), session.getSessionDate(), matchNumber)) {
+            throw new IllegalArgumentException(
+                "伝助側で削除が承認された試合には参加者を設定できません: matchNumber=" + matchNumber);
         }
 
         List<Long> uniquePlayerIds = playerIds == null ? List.of() : playerIds.stream().distinct().toList();
@@ -190,6 +245,10 @@ public class PracticeParticipantService {
                 throw new ResourceNotFoundException("Some practice sessions not found");
             }
         }
+
+        // 伝助側で削除が承認された試合(欠番)への新規登録を拒否する。
+        // 承認後は totalMatches を変更しないため matchNumber の範囲チェックだけでは検知できない。
+        rejectIfTargetsApprovedDensukeDeletion(request.getParticipations(), sessions);
 
         // リクエスト内セッションを団体ごとにグループ化
         Map<Long, List<PracticeSession>> sessionsByOrg = sessions.stream()
@@ -676,6 +735,10 @@ public class PracticeParticipantService {
                 .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", "sessionDate", sessionDate));
         if (matchNumber < 1 || matchNumber > session.getTotalMatches()) {
             throw new IllegalArgumentException("Invalid match number: " + matchNumber);
+        }
+        if (isApprovedDensukeDeletion(session.getOrganizationId(), session.getSessionDate(), matchNumber)) {
+            throw new IllegalArgumentException(
+                "伝助側で削除が承認された試合には参加者を追加できません: matchNumber=" + matchNumber);
         }
         if (!playerRepository.existsById(playerId)) {
             throw new ResourceNotFoundException("Player", playerId);

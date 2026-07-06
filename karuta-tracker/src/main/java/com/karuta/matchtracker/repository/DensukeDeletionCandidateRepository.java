@@ -7,17 +7,11 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface DensukeDeletionCandidateRepository extends JpaRepository<DensukeDeletionCandidate, Long> {
 
-    Optional<DensukeDeletionCandidate> findByDensukeUrlIdAndSessionDateAndMatchNumber(
-            Long densukeUrlId, LocalDate sessionDate, Integer matchNumber);
-
     List<DensukeDeletionCandidate> findByDensukeUrlIdAndStatus(Long densukeUrlId, Status status);
-
-    boolean existsByDensukeUrlIdInAndStatus(List<Long> densukeUrlIds, Status status);
 
     List<DensukeDeletionCandidate> findByOrganizationIdAndStatusOrderByDetectedAtDesc(Long organizationId, Status status);
 
@@ -26,4 +20,10 @@ public interface DensukeDeletionCandidateRepository extends JpaRepository<Densuk
 
     List<DensukeDeletionCandidate> findByOrganizationIdInAndSessionDateBetweenAndStatus(
             List<Long> organizationIds, LocalDate startDate, LocalDate endDate, Status status);
+
+    List<DensukeDeletionCandidate> findByOrganizationIdAndSessionDateAndStatusIn(
+            Long organizationId, LocalDate sessionDate, List<Status> statuses);
+
+    List<DensukeDeletionCandidate> findByOrganizationIdInAndSessionDateBetweenAndStatusIn(
+            List<Long> organizationIds, LocalDate startDate, LocalDate endDate, List<Status> statuses);
 }

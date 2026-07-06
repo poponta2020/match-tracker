@@ -1366,12 +1366,17 @@ SUPER_ADMIN のみ操作可能。
 - 通知設定 ON/OFF は持たない（管理者向け重要通知のため常時送信）
 
 **選手向け可視化:**
-- `PracticeSessionDto.densukeDeletionCandidateMatchNumbers`（未承認のみ）を、練習日サマリー
-  （カレンダー）・詳細取得の両方に付与する
+- `PracticeSessionDto.densukeDeletionCandidateMatchNumbers`（PENDING・APPROVED の両方）を、
+  練習日サマリー（カレンダー）・詳細取得の両方に付与する。承認後も `totalMatches` は変更しない
+  欠番方式のため、APPROVED も表示対象から外さない（外すと通常の空き枠に見えてしまう）
 - カレンダー画面（`/practices`）: 試合状況グリッドの該当試合番号を灰色×で表示
 - 練習詳細（`/practices/:id`）・出欠登録（`/practices/participation`）: 該当試合番号に
   「伝助で削除されました」バッジ/表示を出し、チェックボックス操作を無効化する
-- 承認完了後は該当出欠エントリごと消えるため表示も自然に消える。却下時は通常表示に戻る
+- 却下時は通常表示に戻る（データは変更されないため）
+- バックエンド側にも二重ガードを設ける（`PracticeParticipantService.setMatchParticipants` /
+  `addParticipantToMatch` / `registerParticipations`）: APPROVED な (団体, 練習日, 試合番号) への
+  新規参加登録はフロントの表示に関わらず `IllegalArgumentException`（400）で拒否する。承認済み欠番が
+  通常枠として再登録され、伝助書き込み時の行数不一致を再発させることを防ぐ
 
 **API:**
 | メソッド | パス | 権限 | 説明 |
