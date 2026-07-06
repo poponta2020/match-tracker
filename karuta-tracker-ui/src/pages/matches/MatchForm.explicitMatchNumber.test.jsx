@@ -7,6 +7,8 @@ vi.mock('../../api', () => ({
     getAll: vi.fn(),
     getById: vi.fn(),
     getByPlayerDateAndMatchNumber: vi.fn(),
+    getCardRecord: vi.fn(() => Promise.resolve({ data: { cardPlacements: [], otetsukiDetails: [] } })),
+    saveCardRecord: vi.fn(() => Promise.resolve({ data: {} })),
   },
   playerAPI: { getAll: vi.fn() },
   practiceAPI: {
@@ -15,6 +17,10 @@ vi.mock('../../api', () => ({
   },
   pairingAPI: { getByDate: vi.fn() },
   byeActivityAPI: { getByDate: vi.fn() },
+  cardRuleNonceAPI: {
+    getByDate: vi.fn(() => Promise.resolve({ data: { nonce: 0 } })),
+    update: vi.fn(() => Promise.resolve({ data: {} })),
+  },
 }));
 
 vi.mock('../../context/AuthContext', () => ({

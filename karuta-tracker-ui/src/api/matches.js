@@ -62,4 +62,12 @@ export const matchAPI = {
   // 日付で試合結果を取得
   getByDate: (date) =>
     apiClient.get('/matches', { params: { date } }),
+
+  // 取り札記録（自分自身）取得 → { cardPlacements, otetsukiDetails }
+  getCardRecord: (matchId) =>
+    apiClient.get(`/matches/${matchId}/card-record`),
+
+  // 取り札記録（自分自身）を全置換で保存
+  saveCardRecord: (matchId, data) =>
+    apiClient.put(`/matches/${matchId}/card-record`, data),
 };

@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   getByDate: vi.fn(),
   getByDateAndMatchNumber: vi.fn(),
   byeGetByDate: vi.fn(),
+  nonceGetByDate: vi.fn(),
+  nonceUpdate: vi.fn(),
 }));
 
 vi.mock('../../api/practices', () => ({
@@ -25,6 +27,13 @@ vi.mock('../../api/pairings', () => ({
 vi.mock('../../api/byeActivities', () => ({
   byeActivityAPI: {
     getByDate: mocks.byeGetByDate,
+  },
+}));
+
+vi.mock('../../api/cardRuleNonce', () => ({
+  cardRuleNonceAPI: {
+    getByDate: mocks.nonceGetByDate,
+    update: mocks.nonceUpdate,
   },
 }));
 
@@ -71,6 +80,9 @@ beforeEach(() => {
     Promise.resolve({ data: [{ player1Name: NAMES[num][0], player2Name: NAMES[num][1] }] })
   );
   mocks.byeGetByDate.mockResolvedValue({ data: [] });
+  // 札ルール nonce の DB 共有 API（未登録日は 0）。update は成功を返す。
+  mocks.nonceGetByDate.mockResolvedValue({ data: { nonce: 0 } });
+  mocks.nonceUpdate.mockResolvedValue({ data: {} });
 });
 
 afterEach(() => {
@@ -137,10 +149,12 @@ describe('PairingSummary 札ルールの日付シード決定論化（Part A）'
     await user.click(screen.getByRole('button', { name: /札を再生成/ }));
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
-    // nonce が +1 されて保存される
-    expect(localStorage.getItem(NONCE_PREFIX + TODAY)).toBe('1');
-    // 札ルールが再生成されてテキストが変わる
-    expect(getValue()).not.toBe(before);
+    // handleRegenerate は非同期（DB更新を await）。nonce が +1 で DB更新・localStorage保存され、テキストが変わる
+    await waitFor(() => {
+      expect(mocks.nonceUpdate).toHaveBeenCalledWith(TODAY, 1);
+      expect(localStorage.getItem(NONCE_PREFIX + TODAY)).toBe('1');
+      expect(getValue()).not.toBe(before);
+    });
   });
 
   it('札再生成（confirm キャンセル）では nonce を変更しない', async () => {
@@ -173,8 +187,8 @@ describe('PairingSummary 札ルールの日付シード決定論化（Part A）'
 
     await user.click(screen.getByRole('button', { name: /札を再生成/ }));
 
-    // 保存は失敗しても nextNonce で再計算されるため、画面の札ルールテキストは変わる
-    expect(getValue()).not.toBe(before);
+    // 保存は失敗しても nextNonce で再計算されるため、画面の札ルールテキストは変わる（非同期）
+    await waitFor(() => expect(getValue()).not.toBe(before));
     setItemSpy.mockRestore();
   });
 

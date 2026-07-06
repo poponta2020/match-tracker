@@ -1131,6 +1131,20 @@ SUPER_ADMIN のみ操作可能。
 
 ---
 
+### 3.20 取り札記録（試合結果入力の詳細記録・任意）
+
+競技かるたの取り札位置と、お手付きの内容を各プレイヤーが私的に記録する機能。`MatchForm`（`/matches/new`・`/matches/:id/edit`）に「取り札・お手付きを記録」の**折りたたみブロック（任意・初期は閉じ）**として追加する。既存の「お手付き回数」入力とは併存。詳細＝`docs/features/取り札記録/`（requirements.md / design-spec.md / kimariji-master.md）。
+
+- **出札50枚の導出**: 対戦組み合わせの「札ルール」（`(日付, nonce)` から決定論生成）を桁条件で展開して50枚を得る（`cardRules.js` の `expandRule`/`getMatchCards`）。`nonce`（再生成カウンタ）は端末間で出札を一致させるため **DB共有**（新テーブル `card_rule_nonce`）。従来 localStorage 保存だった nonce を DB 化し、`PairingSummary` の「札を再生成」も DB 更新に変更（同日内固定は維持）。
+- **盤面**: 敵陣（画面上・**180°回転**：上段が手前/下段が奥、敵陣右＝画面左）／自陣（画面下・自分視点）を畳表現で描画。各マス（敵自 × 左右 × 上中下段＝12エリア）を**「取った(左・緑)｜取られた(右・赤)」の2分割**にし、決まり字の**縦書きチップ**を配置。不明プールは陣の間に置き、残数の母数＝`50 − 枚数差`（指導試合・枚数差不明は50）。
+- **お手付き詳細**: お手付き回数分の枠を出し、種類（ひっかけ / 暗記間違え / 聞き間違い / その他）別に項目を出し分ける（ひっかけ＝上段位置4択、暗記＝方向2択、聞き間違い＝読札・触札を100枚から選択、その他＝自由記述）。
+- **決まり字マスター**: 100枚（最大4文字・共札は「共通字・区別字」記法。例 わた・や、あさぼあ）を `karuta-tracker-ui/src/data/kimariji.js` に定数化。
+- **私的データ**: 取り札配置・お手付き詳細は**記録者本人のみ**読み書き（他プレイヤー非公開）。保存は試合保存後に `PUT /api/matches/{matchId}/card-record`（全置換）、編集時は `GET` で復元。
+- **新テーブル**: `card_rule_nonce` / `match_card_placements` / `match_otetsuki_details`（`database/add_torifuda_record.sql`）。
+- **新API**: `GET|PUT /api/card-rule-nonce`（nonce）、`GET|PUT /api/matches/{matchId}/card-record`（本人の取り札記録）。
+
+---
+
 ## 4. 外部連携
 
 ### 4.1 伝助（Densuke）連携

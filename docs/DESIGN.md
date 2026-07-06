@@ -3250,6 +3250,16 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
 
 ---
 
+### 7.10 取り札記録フロー
+
+`MatchForm` で「取り札・お手付きを記録」（任意・折りたたみ）を展開すると、対象試合 `(日付, 試合番号)` の出札50枚を札ルールから導出し（`nonce` は `GET /api/card-rule-nonce` で DB 共有値を取得 → `cardRules.getMatchCards`）、決まり字の縦書きチップとして不明プールに並べる。プレイヤーは不明の札をタップ → 盤面のマス（敵自 × 左右 × 上中下段の「取った/取られた」）をタップで配置。お手付き回数分の詳細（ひっかけ/暗記間違え/聞き間違い/その他）も入力する。試合を作成/更新（`/matches` または `/matches/detailed`）した後、確定した matchId に対して `PUT /api/matches/{matchId}/card-record` で本人の配置＋お手付き詳細を**全置換**保存する。編集時は `GET .../card-record` で復元。
+
+- **権威ある札組**: `nonce` を `card_rule_nonce`（DB）で共有。`PairingSummary` の「札を再生成」も DB の nonce を更新し、記録画面と出札50枚を一致させる（従来の端末ローカル localStorage から移行）。
+- **私的データ**: `match_card_placements` / `match_otetsuki_details` は記録者本人（`X-User-Id`）のみ読み書き。既存の「お手付き回数」入力と併存。
+- 決まり字マスターは `karuta-tracker-ui/src/data/kimariji.js`（100枚・最大4文字）。詳細＝`docs/features/取り札記録/`。
+
+---
+
 ## 8. 未実装機能・TODO
 
 ### 8.1 優先度: 高

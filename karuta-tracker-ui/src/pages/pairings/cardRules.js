@@ -177,6 +177,42 @@ export function getCardRules(date, totalMatches, nonce = loadNonce(date)) {
   return generateCardRules(totalMatches, rng);
 }
 
+/** 札番号2桁文字列（"00"=100）→ 1〜100 の整数 */
+export function cardToNumber(card) {
+  const n = parseInt(card, 10);
+  return n === 0 ? 100 : n;
+}
+
+/**
+ * 札ルール1つ → 出札の札番号配列（1〜100の整数・50枚・番号昇順）。
+ * ones: 一の位が該当 / tens: 十の位が該当 / nuki: 一の位or十の位が該当から removedCard を除外。
+ */
+export function expandRule(rule) {
+  if (!rule) return [];
+  let cards;
+  if (rule.type === 'ones') {
+    cards = ALL_CARDS.filter((c) => rule.digits.includes(onesDigit(c)));
+  } else if (rule.type === 'tens') {
+    cards = ALL_CARDS.filter((c) => rule.digits.includes(tensDigit(c)));
+  } else if (rule.type === 'nuki') {
+    cards = ALL_CARDS
+      .filter((c) => rule.digits.includes(onesDigit(c)) || rule.digits.includes(tensDigit(c)))
+      .filter((c) => c !== rule.removedCard);
+  } else {
+    return [];
+  }
+  return cards.map(cardToNumber).sort((a, b) => a - b);
+}
+
+/**
+ * (date, totalMatches, matchNumber, nonce) → その試合の出札札番号配列（50枚）。
+ * matchNumber は 1 始まり。nonce は DB 共有値を明示で渡す（省略時は localStorage 既定）。
+ */
+export function getMatchCards(date, totalMatches, matchNumber, nonce = loadNonce(date)) {
+  const rules = getCardRules(date, totalMatches, nonce);
+  return expandRule(rules[matchNumber - 1]);
+}
+
 /** クライアント端末ローカルタイムの今日（YYYY-MM-DD） */
 export function getTodayLocalDateStr() {
   const d = new Date();

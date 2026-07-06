@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI } from '../../api';
+import { matchAPI, playerAPI, practiceAPI, pairingAPI, byeActivityAPI, cardRuleNonceAPI } from '../../api';
 import { AlertCircle, UserPlus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Search, ChevronDown, Check } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import { isHorizontalSwipe, resolveSwipe } from './swipeGesture';
 import { scrollActiveTabIntoView } from './tabScroll';
 import { kyuRankShortLabel } from '../../utils/rank';
+import { getMatchCards } from '../pairings/cardRules';
+import TorifudaBoard from './TorifudaBoard';
+import OtetsukiDetails from './OtetsukiDetails';
 import './MatchForm.css';
 
 const MatchForm = () => {
@@ -48,6 +51,14 @@ const MatchForm = () => {
   const [showSearchModal, setShowSearchModal] = useState(false);
   // 編集対象の試合が元々指導試合だったか（指導↔通常の変換時に詳細版APIへ振り分けるため）
   const [originalIsLesson, setOriginalIsLesson] = useState(false);
+
+  // 取り札記録（任意・折りたたみ）
+  const [showRecord, setShowRecord] = useState(false);
+  const [cardPlacements, setCardPlacements] = useState({}); // { [cardNo]: {takenBy,field,side,tier} }
+  const [otetsukiDetails, setOtetsukiDetails] = useState([]); // お手付き詳細（回数分）
+  const [cardNonce, setCardNonce] = useState(0);             // 札ルール nonce（DB共有）
+  const [matchCards, setMatchCards] = useState([]);          // その試合の出札50枚（札番号）
+  const [recordMatchId, setRecordMatchId] = useState(null);  // 取り札記録の対象matchId（保存済み時のみ）
 
   // 抜け番活動関連
   const [isByeMatch, setIsByeMatch] = useState(false);
@@ -150,6 +161,7 @@ const MatchForm = () => {
             otetsukiCount: match.myOtetsukiCount ?? null,
           });
           setOriginalIsLesson(match.isLesson === true);
+          setRecordMatchId(match.id);
           setInitialLoading(false);
         }
 
@@ -268,6 +280,7 @@ const MatchForm = () => {
     if (existingResult && existingResult.exists) {
       const match = existingResult.data;
       setIsExistingMatch(true);
+      setRecordMatchId(match.id);
       setIsByeMatch(false);
       setExistingByeActivity(null);
       const opponentId = match.player1Id === currentPlayer.id ? match.player2Id : match.player1Id;
@@ -284,6 +297,7 @@ const MatchForm = () => {
       }));
     } else {
       setIsExistingMatch(false);
+      setRecordMatchId(null);
       const myPairing = pairCache[matchNumber];
 
       // 抜け番判定: 自分のペアリングがない + その試合に他のペアリングが存在する
@@ -352,6 +366,54 @@ const MatchForm = () => {
     if (!initialLoadDone.current) return;
     applyMatchData(formData.matchNumber, matchDataCache.current, pairingCache.current);
   }, [formData.matchNumber]);
+
+  // 取り札記録: 対象日の札ルール nonce を DB から取得（端末間で出札50枚を一致させる）
+  useEffect(() => {
+    if (!formData.matchDate) return;
+    let cancelled = false;
+    cardRuleNonceAPI.getByDate(formData.matchDate)
+      .then((res) => { if (!cancelled) setCardNonce(res.data?.nonce ?? 0); })
+      .catch(() => { if (!cancelled) setCardNonce(0); });
+    return () => { cancelled = true; };
+  }, [formData.matchDate]);
+
+  // 取り札記録: その試合(日付×試合番号)の出札50枚を札ルールから導出
+  useEffect(() => {
+    const total = practiceSession?.totalMatches || 0;
+    const mn = Number(formData.matchNumber);
+    if (!formData.matchDate || !total || !mn) { setMatchCards([]); return; }
+    try {
+      setMatchCards(getMatchCards(formData.matchDate, total, mn, cardNonce));
+    } catch {
+      setMatchCards([]);
+    }
+  }, [formData.matchDate, formData.matchNumber, practiceSession, cardNonce]);
+
+  // 取り札記録: 保存済み試合なら記録を復元、未保存(new)ならクリア
+  useEffect(() => {
+    if (!recordMatchId) { setCardPlacements({}); setOtetsukiDetails([]); return; }
+    let cancelled = false;
+    matchAPI.getCardRecord(recordMatchId)
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data || {};
+        const obj = {};
+        (data.cardPlacements || []).forEach((p) => {
+          obj[p.cardNo] = { takenBy: p.takenBy, field: p.field, side: p.side, tier: p.tier };
+        });
+        setCardPlacements(obj);
+        setOtetsukiDetails((data.otetsukiDetails || []).map((o) => ({
+          type: o.type,
+          hikkakeTarget: o.hikkakeTarget,
+          ankiDirection: o.ankiDirection,
+          mishearingReadCardNo: o.mishearingReadCardNo,
+          mishearingTouchedCardNo: o.mishearingTouchedCardNo,
+          otherText: o.otherText,
+        })));
+      })
+      .catch(() => { if (!cancelled) { setCardPlacements({}); setOtetsukiDetails([]); } });
+    return () => { cancelled = true; };
+  }, [recordMatchId]);
 
   // 試合番号スワイプ移動 ---------------------------------------------------------
 
@@ -601,6 +663,29 @@ const MatchForm = () => {
     }
   };
 
+  // 取り札記録（配置＋お手付き詳細）を全置換で保存。試合保存後に matchId 確定で呼ぶ。best-effort。
+  const saveCardRecordFor = async (matchId) => {
+    if (!matchId) return;
+    const cardPlacementsPayload = Object.entries(cardPlacements).map(([cardNo, p]) => ({
+      cardNo: Number(cardNo),
+      takenBy: p.takenBy,
+      field: p.field,
+      side: p.side,
+      tier: p.tier,
+    }));
+    const otetsukiPayload = (otetsukiDetails || [])
+      .slice(0, formData.otetsukiCount || 0)
+      .filter((d) => d && d.type);
+    try {
+      await matchAPI.saveCardRecord(matchId, {
+        cardPlacements: cardPlacementsPayload,
+        otetsukiDetails: otetsukiPayload,
+      });
+    } catch (err) {
+      console.error('取り札記録の保存に失敗:', err);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -638,6 +723,7 @@ const MatchForm = () => {
           };
           await matchAPI.update(id, submitData);
         }
+        await saveCardRecordFor(id);
         navigate('/matches');
       } else {
         if (formData.opponentId) {
@@ -661,7 +747,8 @@ const MatchForm = () => {
             updatedBy: currentPlayer.id
           };
 
-          await matchAPI.createDetailed(detailedData);
+          const createdRes = await matchAPI.createDetailed(detailedData);
+          await saveCardRecordFor(createdRes.data?.id);
         } else {
           const submitData = {
             ...formData,
@@ -669,7 +756,8 @@ const MatchForm = () => {
             scoreDifference: parseInt(formData.scoreDifference),
             matchNumber: parseInt(formData.matchNumber),
           };
-          await matchAPI.create(submitData);
+          const createdRes = await matchAPI.create(submitData);
+          await saveCardRecordFor(createdRes.data?.id);
         }
 
         navigate('/');
@@ -692,6 +780,7 @@ const MatchForm = () => {
             };
 
             await matchAPI.update(existingMatchId, submitData);
+            await saveCardRecordFor(existingMatchId);
             navigate('/');
           } catch (updateErr) {
             console.error('更新エラー:', updateErr);
@@ -1091,6 +1180,37 @@ const MatchForm = () => {
             className="mf-memo-line"
           ></textarea>
         </div>
+
+        {/* 取り札・お手付きの記録（任意・折りたたみ） */}
+        {practiceSession && (
+          <div className="tr">
+            <button
+              type="button"
+              className="tr-bar"
+              onClick={() => setShowRecord((v) => !v)}
+            >
+              <span className="t">取り札・お手付きを記録</span>
+              <span className="opt">任意</span>
+              <span className="cv">{showRecord ? '▾' : '▸'}</span>
+            </button>
+            {showRecord && (
+              <>
+                <TorifudaBoard
+                  cards={matchCards}
+                  placements={cardPlacements}
+                  onChange={setCardPlacements}
+                  scoreDifference={formData.scoreDifference}
+                  isLesson={formData.isLesson}
+                />
+                <OtetsukiDetails
+                  count={Number(formData.otetsukiCount) || 0}
+                  details={otetsukiDetails}
+                  onChange={setOtetsukiDetails}
+                />
+              </>
+            )}
+          </div>
+        )}
 
         {/* エラー表示 */}
         {error && !isEdit && (
