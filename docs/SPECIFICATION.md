@@ -1353,12 +1353,13 @@ SUPER_ADMIN のみ操作可能。
   削除候補自身が持つ所属団体を正としてスコープ検証する
 
 **書き込み側の欠番除外（`DensukeWriteService.buildScheduleOrder`）:**
-- APPROVED 状態の削除候補がある (date, matchNumber) を、伝助への書き込み時のスケジュール生成から除外する
-- これにより承認後は「伝助フォームの行数」と「アプリの予定数」が一致し、`ADMIN_DENSUKE_ROWID_ISSUE` の
-  行数不一致が解消する
-- 未承認（PENDING）の間は `totalMatches` を変更しないため行数不一致は継続するが、同一団体の URL に
-  未承認の削除候補が追跡されている場合は `ADMIN_DENSUKE_ROWID_ISSUE` の重複通知を抑制する
-  （初回検知時に別途 `ADMIN_DENSUKE_DELETE_DETECTED` で通知済みのため）
+- PENDING・APPROVED いずれの状態の削除候補がある (date, matchNumber) も、伝助への書き込み時の
+  スケジュール生成から除外する（REJECTED は除外しない）
+- 検知時点（PENDING）から既に除外するため、「伝助フォームの行数」と「アプリの予定数」は検知直後から
+  一致し、`ADMIN_DENSUKE_ROWID_ISSUE` の行数不一致（本機能が解決したい元の5分ごとの繰り返し通知）
+  はそもそも発生しなくなる。個別の重複抑制ロジックは不要
+- 却下（REJECTED）した場合は除外対象から外れる。データも行数不一致も変わらないため、
+  `ADMIN_DENSUKE_ROWID_ISSUE` は通常どおり報告され続ける（未解決の問題として管理者に見える状態を維持）
 
 **通知:**
 - 新規検知時のみ、団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_DELETE_DETECTED`）

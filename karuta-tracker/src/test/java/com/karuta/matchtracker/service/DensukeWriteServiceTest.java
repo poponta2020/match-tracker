@@ -475,6 +475,29 @@ class DensukeWriteServiceTest {
     }
 
     @Test
+    @DisplayName("削除候補: PENDING(検知〜承認前)の欠番はスケジュール生成から除外され、行数不一致にならない")
+    void parseAndSaveRowIds_excludesPendingDeletionCandidate() {
+        // totalMatches=3 だが第2試合はPENDINGの削除候補 → 期待スケジュールは実質2件
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(3).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-11", "");
+        joinInputs.put("join-22", "");
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatusIn(eq(100L), anyList()))
+                .thenReturn(List.of(DensukeDeletionCandidate.builder()
+                        .densukeUrlId(100L).sessionDate(LocalDate.of(2026, 4, 2)).matchNumber(2)
+                        .status(DensukeDeletionCandidate.Status.PENDING).build()));
+        when(densukeRowIdRepository.findByDensukeUrlId(100L)).thenReturn(List.of());
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isTrue();
+        assertThat(errors).isEmpty();
+    }
+
+    @Test
     @DisplayName("B-3: 編集フォームを解析できない（listtbl不在）なら false（書き込み中止）＋errors記録")
     void parseAndSaveRowIds_parseFailure_returnsFalse() {
         // listtbl の無いページ（エラーページ / HTML変更を模擬）

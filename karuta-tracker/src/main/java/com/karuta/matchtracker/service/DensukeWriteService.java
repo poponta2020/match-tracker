@@ -134,8 +134,6 @@ public class DensukeWriteService {
         Map<Long, List<String>> errorsByOrg = new HashMap<>();
         // B-3: 団体別の row_id 問題（管理者への集約 LINE 通知用）
         Map<Long, List<String>> rowIdIssuesByOrg = new HashMap<>();
-        // 団体内でrow_id問題を実際に発生させたURLの集合（重複通知抑制をURL単位で正確に判定するため）
-        Map<Long, Set<Long>> urlIdsWithRowIdIssuesByOrg = new HashMap<>();
         // URL ごとに、その団体のセッションを取得
         Map<Long, DensukeUrl> urlById = urls.stream()
                 .collect(Collectors.toMap(DensukeUrl::getId, u -> u));
@@ -256,7 +254,6 @@ public class DensukeWriteService {
             // ② 各プレイヤーの書き込み（B-3: row_id 整合検証は1URL1回に集約・usable を共有）
             Map<Long, Boolean> urlRowIdStatus = new HashMap<>();
             List<String> orgRowIdIssues = rowIdIssuesByOrg.computeIfAbsent(orgId, k -> new ArrayList<>());
-            int rowIdIssuesSizeBeforeUrl = orgRowIdIssues.size();
             for (var playerEntry : urlEntry.getValue().entrySet()) {
                 Long playerId = playerEntry.getKey();
                 List<PracticeParticipant> participants = playerEntry.getValue();
@@ -277,12 +274,6 @@ public class DensukeWriteService {
                     log.warn("Failed to write player {} to densuke {}: {}", playerName, urlStr, e.getMessage());
                     orgErrors.add("選手[" + playerName + "]: " + e.getMessage());
                 }
-            }
-            // B-3の重複通知抑制をURL単位で正確に判定するため、このURLが実際にrow_id問題を
-            // 発生させたかどうかを記録する（複数URLを持つ団体で、無関係なURLの問題まで
-            // まとめて抑制してしまうのを防ぐ）。
-            if (orgRowIdIssues.size() > rowIdIssuesSizeBeforeUrl) {
-                urlIdsWithRowIdIssuesByOrg.computeIfAbsent(orgId, k -> new LinkedHashSet<>()).add(urlId);
             }
         }
 
@@ -307,22 +298,12 @@ public class DensukeWriteService {
                 lastSuccessAtByOrg.put(orgId, JstDateTimeUtil.now());
             }
             // B-3: row_id 問題（件数不一致・解析失敗・構造再構築）があれば管理者へ集約 LINE 通知。
-            // ただし、実際に問題を発生させた全URLが未承認の削除候補で説明できる場合のみ、原因判明済みとして
-            // 同一内容の重複通知を抑制する（削除候補検知時に別途 ADMIN_DENSUKE_DELETE_DETECTED で通知済み）。
-            // 団体内の無関係なURL（別月等）の問題まで巻き添えで抑制しないよう、URL単位で判定する。
+            // 伝助側で削除された試合は buildScheduleOrder が PENDING/APPROVED の削除候補を欠番として
+            // 除外するため、追跡中の削除に起因する行数不一致はそもそも発生しない（検知〜承認前を含む）。
+            // よって特別な抑制は不要で、実際に issues が残っていれば常に通知する。
             List<String> rowIdIssues = rowIdIssuesByOrg.getOrDefault(orgId, List.of());
             if (!rowIdIssues.isEmpty()) {
-                Set<Long> issuingUrlIds = urlIdsWithRowIdIssuesByOrg.getOrDefault(orgId, Set.of());
-                boolean allExplainedByDeletionCandidates = !issuingUrlIds.isEmpty()
-                        && issuingUrlIds.stream().allMatch(urlId -> !densukeDeletionCandidateRepository
-                                .findByDensukeUrlIdAndStatus(urlId, DensukeDeletionCandidate.Status.PENDING)
-                                .isEmpty());
-                if (allExplainedByDeletionCandidates) {
-                    log.info("Suppressed duplicate ADMIN_DENSUKE_ROWID_ISSUE for orgId={} "
-                            + "(all issuing URLs already tracked as pending densuke deletion candidates)", orgId);
-                } else {
-                    lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
-                }
+                lineNotificationService.sendDensukeRowIdIssueNotification(orgId, rowIdIssues);
             }
         }
     }
@@ -988,13 +969,20 @@ public class DensukeWriteService {
     }
 
     /**
-     * urlId 単位で承認済みの削除候補（欠番）を除外してスケジュールを生成する。
-     * totalMatches 自体は変更しないため、承認済みの (date, matchNumber) だけをここで飛ばし、
+     * urlId 単位で削除候補（欠番）を除外してスケジュールを生成する。
+     * totalMatches 自体は変更しないため、削除候補のある (date, matchNumber) だけをここで飛ばし、
      * 伝助フォームの実際の行数（削除済みで減った状態）と件数を合わせる。
+     *
+     * <p>PENDING（検知〜承認前）も APPROVED と同様に除外する。除外しないと、検知直後〜承認前の
+     * 間ずっと行数不一致が発生し {@link LineNotificationService#sendDensukeRowIdIssueNotification}
+     * が5分ごとに繰り返し送信されてしまう（本機能が解決したい元の問題）。REJECTED は除外しない
+     * （却下は「データはそのまま・行数不一致も解消しない」ため、通常どおり不一致が報告され続ける）。
      */
     private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions, Long urlId) {
-        Set<String> approvedExclusions = densukeDeletionCandidateRepository
-                .findByDensukeUrlIdAndStatus(urlId, DensukeDeletionCandidate.Status.APPROVED).stream()
+        Set<String> excludedKeys = densukeDeletionCandidateRepository
+                .findByDensukeUrlIdAndStatusIn(urlId,
+                        List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED))
+                .stream()
                 .map(c -> c.getSessionDate() + "_" + c.getMatchNumber())
                 .collect(Collectors.toSet());
 
@@ -1004,7 +992,7 @@ public class DensukeWriteService {
                 .collect(Collectors.toList());
         for (PracticeSession s : sorted) {
             for (int m = 1; m <= s.getTotalMatches(); m++) {
-                if (approvedExclusions.contains(s.getSessionDate() + "_" + m)) continue;
+                if (excludedKeys.contains(s.getSessionDate() + "_" + m)) continue;
                 list.add(Map.entry(s.getSessionDate(), m));
             }
         }

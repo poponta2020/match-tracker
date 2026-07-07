@@ -13,6 +13,8 @@ public interface DensukeDeletionCandidateRepository extends JpaRepository<Densuk
 
     List<DensukeDeletionCandidate> findByDensukeUrlIdAndStatus(Long densukeUrlId, Status status);
 
+    List<DensukeDeletionCandidate> findByDensukeUrlIdAndStatusIn(Long densukeUrlId, List<Status> statuses);
+
     List<DensukeDeletionCandidate> findByOrganizationIdAndStatusOrderByDetectedAtDesc(Long organizationId, Status status);
 
     List<DensukeDeletionCandidate> findByOrganizationIdAndSessionDateAndStatus(

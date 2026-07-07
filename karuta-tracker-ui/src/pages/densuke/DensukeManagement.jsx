@@ -200,6 +200,7 @@ const DensukeManagement = () => {
       const res = await practiceAPI.syncDensuke(year, month, orgId);
       updateOrgState(orgId, { syncing: false, syncResult: res.data });
       fetchWriteStatus(orgId);
+      fetchDeletionCandidates(orgId);
       if (res.data.registeredCount > 0 || res.data.createdSessionCount > 0) {
         updateOrgState(orgId, {
           success: `同期完了: ${res.data.createdSessionCount}日作成、${res.data.registeredCount}名登録`,
@@ -228,6 +229,7 @@ const DensukeManagement = () => {
         selectedNames: [],
         success: `${state.selectedNames.length}名を登録し、再同期しました`,
       });
+      fetchDeletionCandidates(orgId);
     } catch (err) {
       updateOrgState(orgId, {
         registering: false,
