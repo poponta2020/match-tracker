@@ -872,6 +872,9 @@ SUPER_ADMIN のみ操作可能。
 
 **出欠整合性・反転防止（抽選・伝助連携 整合性改修）:**
 - **A-1 試合別参加者編集の限定**: `PUT /{sessionId}/matches/{matchNumber}/participants`（`setMatchParticipants`）は **WON/PENDING のアクティブ行のみを全置換**し、`WAITLISTED`/`OFFERED`/`CANCELLED`/`DECLINED`/`WAITLIST_DECLINED` は温存する。編集モーダルは当選/参加確定者のみを対象とし（初期選択は `playerId` 基準）、保存前に追加/削除人数の確認ダイアログを表示。キャンセル済(×)の復活・待機者の抽選なしWON昇格・伝助の×/△巻き込みを防ぐ
+- **管理者による手動繰り上げ（キャンセル待ち→当選）**: `PUT /api/lottery/admin/edit-participants`（`editParticipants`、SUPER_ADMIN / ADMIN。ADMINは自団体のみ・`AdminScopeValidator`）の `statusChanges` で `WAITLISTED`/`OFFERED` → `WON` を指定した場合、当該者の `waitlist_number` をクリアし、残存キュー（`WAITLISTED` + `OFFERED`）を `waitlist_number` 昇順で 1..N に再採番（`WaitlistPromotionService.renumberRemainingWaitlist`。`OFFERED` を含めて再付番し欠番・重複を防ぐ）＋オファー関連フィールドをクリア＋`dirty=true`（○書き戻し）。フロントは試合別参加者編集モーダル（`MatchParticipantsEditModal`）内の「キャンセル待ち」一覧に **繰り上げ** ボタンを表示（**ADMIN / SUPER_ADMIN のみ**）。上記 A-1 の `setMatchParticipants` は待機者を昇格しない制約があるため、意図的な手動繰り上げはこの経路で行う
+  - **権限境界（IDOR防止）**: `editParticipants` は `statusChanges`/`waitlistReorders` の各 `participantId` が **リクエストの `sessionId`＋`matchNumber` に属すること**を検証し（`findScopedParticipant`）、属さない場合は 400 で拒否する（Controller のスコープ検証は `request.sessionId` のみのため、別セッション・別団体の participantId を混ぜた越境更新を防ぐ）
+  - **定員ガード**: `WAITLISTED`→`WON` の繰り上げは当選総数が増えるため、`WON + OFFERED >= capacity`（他経路と揃えた空き判定）なら 400 で拒否する（`OFFERED`→`WON` は定員に算入済みで総数不変のためチェック不要。capacity 未設定時は無制限）。定員を増やす場合は会場拡張フロー（隣室予約）で `capacity` を増やす。フロント側も満員時は「繰り上げ」ボタンを無効化し「定員満（会場拡張が必要）」を表示
 - **A-3 確定書き戻し直前の伝助差分検知**: 抽選確定の一括書き戻し直前に伝助を1回読み、アプリ側○書き戻し予定（WON/OFFERED/PENDING）なのに伝助側が×（不参加）になっている反転リスクを検知。確定/書き戻しはブロックせず（確定DBは維持）、WARNログ＋管理者へLINE通知（`ADMIN_DENSUKE_CONFIRM_DIFF`）＋ `ConfirmLotteryResponse.densukeDiffs` で可視化
 - **A-4 名寄せ衝突の検知**: 正規化後に同名となる複数選手（名寄せ衝突）を読取（`playerNameMap`）・書込（`extractAllMemberMappings`）の両側で検知し、当該名は取込・書込ともスキップ（黙って先勝ち/後勝ちで別人に○×を付けない）。読取側は `DENSUKE_NAME_COLLISION` 通知で管理者へ、書込側は書き込みステータス `errors[]` で可視化。根本原因の重複選手は統合で解消する（`docs/features/lottery-densuke-integrity/merge-duplicates/`）
 - **B-2 プレビュー↔確定の母集団突合**: プレビュー応答に母集団シグネチャ（対象PENDING参加者ID集合のハッシュ）を含め、確定時に再計算・照合。不一致なら **409** で確定を拒否し再プレビューを促す（5分同期での母集団変化で当落がプレビューと相違するのを防ぐ）。後方互換: シグネチャ未送信なら検証スキップ
@@ -982,7 +985,8 @@ SUPER_ADMIN のみ操作可能。
 #### 3.7.8 Densuke同期との整合性
 
 伝助インポートはフェーズ別に動作する:
-- **フェーズ1（抽選未実行）**: ○の人のみPENDINGとして取り込み。not-○の dirty=false レコードは削除（ただしCANCELLED/DECLINED/WAITLIST_DECLINEDなどキャンセル履歴は保持）。書き戻しなし。MONTHLY型では締切日時にかかわらず本フェーズで動作する
+- **フェーズ1（抽選未実行）**: ○の人を取り込み（SAME_DAY型は空き有無で WON/WAITLISTED、MONTHLY型は PENDING）。not-○の dirty=false レコードは削除（ただしCANCELLED/DECLINED/WAITLIST_DECLINEDなどキャンセル履歴は保持）。MONTHLY型では締切日時にかかわらず本フェーズで動作する
+  - **△（キャンセル待ち希望）の扱い**: **SAME_DAY型（例: わすらもち会）のみ**、締切前でもフェーズ3と同一の △ 処理を行う（`processPhase3Sankaku` を再利用）。未登録→末尾WAITLISTED / WON→キャンセル待ちへ降格 / WAITLISTED・OFFERED→変更なし / キャンセル済み→WAITLISTED復活。これにより当日12:00前でも伝助の △ が忠実に反映される。△に付け替えた人の既存レコードは not-○ 削除ループの対象から除外する。**MONTHLY型は抽選前で定員が未確定のため △ を従来どおり無視**（北大かるた会の抽選前挙動を維持）
 - **LOCKED（抽選実行済み・未確定）**: 伝助インポートを停止する。確定時の一括書き戻し（`writeAllForLotteryConfirmation`）が PENDING を ○ として伝助に書き出すため、この窓で新規○を Phase1 として PENDING 登録すると、抽選を経ていないプレイヤーが当選者として混入してしまう。書き戻し（dirty=true → 伝助）は通常通り実行される
 - **フェーズ3（抽選確定後）**: ○/△/×の全パターンを処理。dirty=trueのレコードは一切触らない
   - **3-A6（WAITLISTED + 伝助○）**: 当日12:00 JST以降かつ**空き枠あり（`WON + OFFERED < 定員`、OFFERED算入）** かつ**対象者が待ち行列の先頭（最小 `waitlist_number` の WAITLISTED）**の場合のみ、WAITLISTED→WONに昇格（dirty=false、伝助は既に○のため書き戻し不要）。後続のキャンセル待ち番号を自動繰り上げ。12:00前・空き枠なし・先頭でない場合は従来通りdirty=trueにして△で書き戻す（抽選バイパス／キュー飛ばし防止・B-5で他経路と空き判定を統一）
