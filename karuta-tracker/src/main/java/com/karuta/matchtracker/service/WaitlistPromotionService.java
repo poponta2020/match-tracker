@@ -1490,8 +1490,11 @@ public class WaitlistPromotionService {
     /**
      * 指定試合の残存キャンセル待ち（WAITLISTED + OFFERED）を 1..N で再採番する。
      * decrement方式では OFFERED が対象外になり番号が崩れるため、全ステータスを一括で再付番する。
+     *
+     * <p>呼び出し元のトランザクション内で実行される想定（管理者手動繰り上げ等、
+     * キューから1名抜けた直後の整列に外部からも利用するため public）。
      */
-    private void renumberRemainingWaitlist(Long sessionId, Integer matchNumber) {
+    public void renumberRemainingWaitlist(Long sessionId, Integer matchNumber) {
         List<PracticeParticipant> remaining = practiceParticipantRepository
                 .findBySessionIdAndMatchNumberAndStatusInOrderByWaitlistNumberAsc(
                         sessionId, matchNumber,

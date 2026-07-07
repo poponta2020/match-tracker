@@ -1135,17 +1135,14 @@ public class LotteryService {
 
                 if (promoteToWon) {
                     // キャンセル待ち/オファー中 → 当選 への管理者手動繰り上げ。
-                    // 当該者の待ち番号を消し、後続のキャンセル待ち番号を1つ繰り下げて欠番を防ぐ。
-                    // オファー関連フィールドもクリアして期限切れ処理の対象から外す。
-                    Integer freedWaitlistNumber = p.getWaitlistNumber();
+                    // 当該者の待ち番号を消し、オファー関連フィールドもクリアして期限切れ処理の対象から外す。
                     p.setWaitlistNumber(null);
                     p.setOfferedAt(null);
                     p.setOfferDeadline(null);
                     practiceParticipantRepository.save(p);
-                    if (freedWaitlistNumber != null) {
-                        practiceParticipantRepository.decrementWaitlistNumbersAfter(
-                                p.getSessionId(), p.getMatchNumber(), freedWaitlistNumber);
-                    }
+                    // 残存キューを 1..N で再採番（WAITLISTED だけでなく OFFERED も含めるため、
+                    // decrement 方式ではなく renumberRemainingWaitlist を使い欠番/重複を防ぐ）。
+                    waitlistPromotionService.renumberRemainingWaitlist(p.getSessionId(), p.getMatchNumber());
                 } else {
                     if (change.getWaitlistNumber() != null) {
                         p.setWaitlistNumber(change.getWaitlistNumber());

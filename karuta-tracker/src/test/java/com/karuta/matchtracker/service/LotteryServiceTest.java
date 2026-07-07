@@ -341,8 +341,8 @@ class LotteryServiceTest {
     }
 
     @Test
-    @DisplayName("editParticipants WAITLISTED→WON: 待ち番号をクリアし後続を繰り下げる（管理者手動繰り上げ）")
-    void editParticipants_waitlistedToWon_clearsWaitlistNumberAndDecrements() {
+    @DisplayName("editParticipants WAITLISTED→WON: 待ち番号をクリアし残存キューを再採番する（管理者手動繰り上げ）")
+    void editParticipants_waitlistedToWon_clearsWaitlistNumberAndRenumbers() {
         PracticeParticipant p = PracticeParticipant.builder()
                 .id(701L).playerId(20L).sessionId(100L).matchNumber(MATCH)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(2)
@@ -369,7 +369,40 @@ class LotteryServiceTest {
         assertThat(p.getOfferDeadline()).isNull();
         assertThat(p.isDirty()).isTrue();
         verify(practiceParticipantRepository).save(p);
-        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, MATCH, 2);
+        // WAITLISTED だけでなく OFFERED も含めて残存キューを 1..N 再採番する
+        verify(waitlistPromotionService).renumberRemainingWaitlist(100L, MATCH);
+    }
+
+    @Test
+    @DisplayName("editParticipants OFFERED→WON: 定員チェックなしで昇格し残存キューを再採番する")
+    void editParticipants_offeredToWon_promotesAndRenumbers() {
+        PracticeParticipant p = PracticeParticipant.builder()
+                .id(704L).playerId(23L).sessionId(100L).matchNumber(MATCH)
+                .status(ParticipantStatus.OFFERED).waitlistNumber(1)
+                .offeredAt(java.time.LocalDateTime.of(2026, 4, 1, 8, 0))
+                .offerDeadline(java.time.LocalDateTime.of(2026, 4, 1, 12, 0))
+                .build();
+        when(practiceParticipantRepository.findById(704L)).thenReturn(Optional.of(p));
+        when(waitlistPromotionService.dispatchSameDayCancelNotifications(anyList())).thenReturn(List.of());
+
+        AdminEditParticipantsRequest.StatusChange change = new AdminEditParticipantsRequest.StatusChange();
+        change.setParticipantId(704L);
+        change.setNewStatus(ParticipantStatus.WON);
+        AdminEditParticipantsRequest req = new AdminEditParticipantsRequest();
+        req.setSessionId(100L);
+        req.setMatchNumber(MATCH);
+        req.setStatusChanges(List.of(change));
+
+        lotteryService.editParticipants(req);
+
+        assertThat(p.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(p.getWaitlistNumber()).isNull();
+        assertThat(p.getOfferedAt()).isNull();
+        assertThat(p.getOfferDeadline()).isNull();
+        verify(practiceParticipantRepository).save(p);
+        verify(waitlistPromotionService).renumberRemainingWaitlist(100L, MATCH);
+        // OFFERED→WON は定員に算入済み（総数不変）のため空き枠チェック（session取得）はしない
+        verify(practiceSessionRepository, never()).findById(100L);
     }
 
     @Test
@@ -391,7 +424,7 @@ class LotteryServiceTest {
         assertThatThrownBy(() -> lotteryService.editParticipants(req))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(practiceParticipantRepository, never()).save(any());
-        verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
+        verify(waitlistPromotionService, never()).renumberRemainingWaitlist(anyLong(), anyInt());
     }
 
     @Test
@@ -419,7 +452,7 @@ class LotteryServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(p.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
         verify(practiceParticipantRepository, never()).save(p);
-        verify(practiceParticipantRepository, never()).decrementWaitlistNumbersAfter(anyLong(), anyInt(), anyInt());
+        verify(waitlistPromotionService, never()).renumberRemainingWaitlist(anyLong(), anyInt());
     }
 
     @Test
