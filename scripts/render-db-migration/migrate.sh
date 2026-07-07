@@ -466,6 +466,13 @@ set_secret "PG_USER"      "$NEW_DB_USER"
 set_secret "PG_PASSWORD"  "$NEW_PG_PASSWORD"
 set_secret "PG_DATABASE"  "$NEW_PG_DATABASE"
 
+# スクレイパー/予約同期系ワークフロー（scrape-kaderu, scrape-higashi-availability,
+# sync-kaderu-reservations[-manual], sync-higashi-reservations）は接続文字列を
+# KADERU_DATABASE_URL から取得する。ここで追随更新しないとローテーションのたびに
+# 古いDBを指したまま全滅する（Issue #1000）。Render の externalConnectionString
+# （GitHub Actions Runner からの外部接続用・URLエンコード済み）をそのまま格納する。
+set_secret "KADERU_DATABASE_URL" "$NEW_PG_EXT_URL"
+
 #=== 15. 成功通知 ===========================================================
 SUMMARY=$(cat <<EOF
 Render PostgreSQL 自動マイグレーション完了

@@ -53,6 +53,7 @@ Render 無料 PostgreSQL の30日制限を回避するため、月次で「新DB
 |---|---|
 | `RENDER_PG_ID` | 現DB の Postgres リソース ID（25日経過判定に使用） |
 | `PG_HOST` / `PG_USER` / `PG_PASSWORD` / `PG_DATABASE` | 現DB の接続情報 |
+| `KADERU_DATABASE_URL` | スクレイパー/予約同期系ワークフローが使う接続URL（Render の externalConnectionString をそのまま格納）。追随更新しないとローテーションのたびに古いDBを指したまま全滅する（Issue #1000） |
 | `OLD_RENDER_PG_ID` | 削除予約中の旧DB ID |
 | `OLD_RENDER_PG_DELETE_AFTER` | 旧DB削除予定日時（ISO 8601） |
 
