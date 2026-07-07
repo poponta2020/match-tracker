@@ -4,6 +4,8 @@ import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
+import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
@@ -67,6 +69,8 @@ class DensukeScheduleWriteServiceTest {
     @Mock private DensukeWriteService densukeWriteService;
     @Mock private DensukeScraper densukeScraper;
     @Mock private LineNotificationService lineNotificationService;
+    @Mock private DensukeRowIdRepository densukeRowIdRepository;
+    @Mock private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
 
     private DensukeScheduleWriteService service;
 
@@ -89,6 +93,8 @@ class DensukeScheduleWriteServiceTest {
                 densukeWriteService,
                 densukeScraper,
                 lineNotificationService,
+                densukeRowIdRepository,
+                densukeDeletionCandidateRepository,
                 /* self = */ null
         );
     }
@@ -225,6 +231,35 @@ class DensukeScheduleWriteServiceTest {
             verify(lineNotificationService, never())
                     .sendDensukeScheduleSyncFailedNotification(any(), any());
         }
+    }
+
+    @Test
+    @DisplayName("伝助側で全行削除され日程集合から消えた日付は、書き込み実績(densuke_row_ids)があれば「新規」として再pushしない")
+    void testPushSkipsDateWithExistingRowIdCache() throws IOException {
+        // Given: アプリ側に 5/10 セッションあり、伝助スクレイピング結果には存在しない
+        // （全行削除された想定）が、過去に当該日付への伝助書き込み実績（densuke_row_ids）がある
+        LocalDate appDate = LocalDate.of(YEAR, MONTH, 10);
+        DensukeUrl url = buildDensukeUrl();
+        PracticeSession session = buildAppSession(appDate);
+
+        when(densukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate(YEAR, MONTH, ORG_ID))
+                .thenReturn(Optional.of(url));
+        when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(YEAR, MONTH, ORG_ID))
+                .thenReturn(List.of(session));
+        when(densukeScraper.scrape(DENSUKE_URL, YEAR))
+                .thenReturn(buildDensukeData(List.of())); // 伝助は空 → 見かけ上は「新規」に見える
+
+        com.karuta.matchtracker.entity.DensukeRowId cachedRowId =
+                com.karuta.matchtracker.entity.DensukeRowId.builder()
+                        .densukeUrlId(url.getId()).sessionDate(appDate).matchNumber(1).densukeRowId("999").build();
+        when(densukeRowIdRepository.findByDensukeUrlId(url.getId())).thenReturn(List.of(cachedRowId));
+
+        // When
+        service.pushNewSchedulesToDensuke(YEAR, MONTH, ORG_ID);
+
+        // Then: 削除検知フローに委ねるべきなので push しない
+        verify(densukePageCreateService, never()).buildScheduleText(any(), any(), any());
+        verify(densukeWriteService, never()).extractPageId(any(Document.class));
     }
 
     @Test

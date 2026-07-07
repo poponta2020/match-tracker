@@ -1296,6 +1296,13 @@ SUPER_ADMIN のみ操作可能。
 - `DensukeScraper.scrape(url, year)` で伝助の現スケジュールを取得し、日付集合を得る
 - アプリの `practice_sessions` のうち伝助に存在しない日付のセッションのみを抽出
 - 差分が無ければ POST せず early return
+- **伝助側で全行削除された日付の誤 push 防止**: 伝助スクレイピング結果に存在しない日付でも、
+  (a) `densuke_row_ids` に当該日付宛ての書き込み実績キャッシュがある、または (b) 当該日付に
+  `DensukeDeletionCandidate`（PENDING/APPROVED）が既に存在する場合は「新規」から除外し push しない。
+  除外しないと、日付単位で全行削除された場合に `DensukeDeletionDetectionService` が検知する前に
+  本機能が日程を再作成してしまい、「検知して承認するまでデータを変更しない」という削除検知フローの
+  前提を壊す（4.1.8 参照）。ただし、Densuke へ一度も書き込み実績が無い（`densuke_row_ids` 未生成）
+  かつ検知未実行の新規セッションが直後に全行削除された極めて狭いタイミングは対象外（既知の限定事項）
 
 **スケジュール文字列:**
 - `DensukePageCreateService.buildScheduleText(newSessions, venueMap, scheduleMap)` を再利用（フォーマット一貫性確保）

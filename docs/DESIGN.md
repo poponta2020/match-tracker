@@ -3436,7 +3436,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **トリガー**: ① `PracticeSessionService.createSession` の `afterCommit` フックで `pushNewSchedulesToDensukeAsync` を `@Async` で即時 push。② `DensukeSyncService.syncAll` の最初のステップで `pushAllForCurrentAndNextMonth` をフォロー同期（即時 push 失敗時の自動回復）
   - **無限ループ防止**: `DensukeImportService.findOrCreateSession` は `practiceSessionRepository.save` を直接呼ぶため `createSession` を経由せず、伝助→アプリ取り込み起因の push 再帰は構造上発生しない
   - **並行制御**: `DensukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate`（`@Lock(PESSIMISTIC_WRITE)`）で同一 (year, month, organizationId) の行ロックをかけ、並行 push の差分計算ズレを防止
-  - **差分計算**: `DensukeScraper.scrape` で伝助の現スケジュール（日付集合）を取得し、アプリ側 `practice_sessions` のうち伝助に存在しない日付のみを抽出。差分なしなら POST せず early return
+  - **差分計算**: `DensukeScraper.scrape` で伝助の現スケジュール（日付集合）を取得し、アプリ側 `practice_sessions` のうち伝助に存在しない日付のみを抽出。差分なしなら POST せず early return。ただし `densuke_row_ids` に書き込み実績がある、または `DensukeDeletionCandidate`（PENDING/APPROVED）が既にある日付は「新規」から除外し push しない（伝助側で全行削除された日付を、削除検知が走る前に誤って再作成してしまうのを防ぐ。Codex レビュー Round 4 CRITICAL 対応）
   - **過去日制約**: 伝助 `/update` は末尾追記しかできないため、伝助の既存最大日付より前の新規日付を push すると `DensukeWriteService.parseAndSaveRowIds` の row id 対応がずれて参加者出欠が別日に書き込まれるデータ破壊リスクがある。差分セッションのうち伝助既存最大日付以前のものは push せず、即時 push 経路のみ管理者へ LINE 通知して手動追加を促す（スケジューラ経路は通知抑制）
   - **スケジュール文字列**: 既存 `DensukePageCreateService.buildScheduleText` を再利用（フォーマット一貫性）。会場未設定・`venue_match_schedules` 不足時の `IllegalStateException` は失敗通知に変換
   - **HTTP 呼び出し**: GET `/list?cd=...` で Cookie と `pageId` を取得 → POST `/update`（`cd`, `id`, `postfix=""`, `schedule`）→ 期待レスポンス HTTP 302。`DensukeWriteService.extractPageId`（package-private に拡張）/ `extractCd` / `extractBase` を共用
