@@ -51,6 +51,7 @@ public class WaitlistPromotionService {
     private final NotificationService notificationService;
     private final LineNotificationService lineNotificationService;
     private final DensukeSyncService densukeSyncService;
+    private final DensukeDeletionGuard densukeDeletionGuard;
 
     public WaitlistPromotionService(
             PracticeParticipantRepository practiceParticipantRepository,
@@ -59,7 +60,8 @@ public class WaitlistPromotionService {
             LotteryDeadlineHelper lotteryDeadlineHelper,
             NotificationService notificationService,
             LineNotificationService lineNotificationService,
-            @Lazy DensukeSyncService densukeSyncService) {
+            @Lazy DensukeSyncService densukeSyncService,
+            DensukeDeletionGuard densukeDeletionGuard) {
         this.practiceParticipantRepository = practiceParticipantRepository;
         this.practiceSessionRepository = practiceSessionRepository;
         this.playerRepository = playerRepository;
@@ -67,6 +69,7 @@ public class WaitlistPromotionService {
         this.notificationService = notificationService;
         this.lineNotificationService = lineNotificationService;
         this.densukeSyncService = densukeSyncService;
+        this.densukeDeletionGuard = densukeDeletionGuard;
     }
 
     /**
@@ -332,6 +335,10 @@ public class WaitlistPromotionService {
             }
         }
 
+        if (densukeDeletionGuard.isApprovedDeletion(session.getOrganizationId(), session.getSessionDate(), matchNumber)) {
+            throw new IllegalStateException("伝助側で削除が承認された試合には参加登録できません。");
+        }
+
         // この試合で既にWONかどうかチェック
         List<PracticeParticipant> existingWon = practiceParticipantRepository
                 .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
@@ -447,6 +454,11 @@ public class WaitlistPromotionService {
         Map<Integer, Integer> vacanciesByMatch = new java.util.LinkedHashMap<>();
 
         for (int matchNumber : targetMatches) {
+            // 伝助側で削除が承認された試合(欠番)はスキップ（他の試合の一括参加は継続する）
+            if (densukeDeletionGuard.isApprovedDeletion(session.getOrganizationId(), session.getSessionDate(), matchNumber)) {
+                continue;
+            }
+
             // 既にWONかどうかチェック
             List<PracticeParticipant> existingRecords = practiceParticipantRepository
                     .findBySessionIdAndPlayerIdAndMatchNumber(sessionId, playerId, matchNumber);
@@ -1093,7 +1105,17 @@ public class WaitlistPromotionService {
             throw new IllegalStateException("復帰対象がありません（WAITLIST_DECLINED状態のものがない）");
         }
 
+        PracticeSession session = practiceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", sessionId));
+
+        int rejoinedCount = 0;
         for (PracticeParticipant p : declined) {
+            // 伝助側で削除が承認された試合(欠番)への復帰はスキップ（他の試合の復帰は継続する）
+            if (densukeDeletionGuard.isApprovedDeletion(
+                    session.getOrganizationId(), session.getSessionDate(), p.getMatchNumber())) {
+                continue;
+            }
+
             // 該当試合の最後尾番号を取得（OFFEREDも含めて重複を防ぐ）
             int maxNumber = practiceParticipantRepository
                     .findMaxWaitlistNumberIncludingOffered(sessionId, p.getMatchNumber())
@@ -1103,6 +1125,7 @@ public class WaitlistPromotionService {
             p.setDirty(true);
             p.setWaitlistNumber(maxNumber + 1);
             practiceParticipantRepository.save(p);
+            rejoinedCount++;
 
             log.info("Player {} rejoined waitlist for session {} match {} (new #{})",
                     playerId, sessionId, p.getMatchNumber(), maxNumber + 1);
@@ -1110,7 +1133,7 @@ public class WaitlistPromotionService {
 
         densukeSyncService.triggerWriteAsync();
 
-        return declined.size();
+        return rejoinedCount;
     }
 
     /**

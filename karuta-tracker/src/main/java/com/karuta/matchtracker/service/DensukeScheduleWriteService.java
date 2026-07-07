@@ -1,9 +1,12 @@
 package com.karuta.matchtracker.service;
 
+import com.karuta.matchtracker.entity.DensukeDeletionCandidate;
 import com.karuta.matchtracker.entity.DensukeUrl;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
+import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
@@ -82,6 +85,8 @@ public class DensukeScheduleWriteService {
     private final DensukeWriteService densukeWriteService;
     private final DensukeScraper densukeScraper;
     private final LineNotificationService lineNotificationService;
+    private final DensukeRowIdRepository densukeRowIdRepository;
+    private final DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     /**
      * 自己参照。{@code @Async}/{@code @Transactional} の AOP プロキシを通すために必要。
      * 同一 bean 内のメソッド呼び出しは Spring プロキシを経由しないため、{@code @Transactional}
@@ -98,6 +103,8 @@ public class DensukeScheduleWriteService {
             DensukeWriteService densukeWriteService,
             DensukeScraper densukeScraper,
             LineNotificationService lineNotificationService,
+            DensukeRowIdRepository densukeRowIdRepository,
+            DensukeDeletionCandidateRepository densukeDeletionCandidateRepository,
             @Lazy DensukeScheduleWriteService self) {
         this.densukeUrlRepository = densukeUrlRepository;
         this.practiceSessionRepository = practiceSessionRepository;
@@ -107,6 +114,8 @@ public class DensukeScheduleWriteService {
         this.densukeWriteService = densukeWriteService;
         this.densukeScraper = densukeScraper;
         this.lineNotificationService = lineNotificationService;
+        this.densukeRowIdRepository = densukeRowIdRepository;
+        this.densukeDeletionCandidateRepository = densukeDeletionCandidateRepository;
         this.self = self;
     }
 
@@ -215,9 +224,24 @@ public class DensukeScheduleWriteService {
         //    新規の過去日に他日付の join-* (row id) が紐づき、参加者出欠が別日に書き込まれるデータ破壊が
         //    発生する（Codex レビュー Round 2 CRITICAL）。よって伝助の既存最大日付以前の新規セッションは
         //    push せず、即時 push 経路のみ管理者へ通知して手動対応に回す。
+        // 4a. 伝助側で全行削除された日付を「新規」として誤って push しないためのガード。
+        //     以前に (a) 当該日付宛ての伝助書き込み実績（densuke_row_ids キャッシュ）があった、
+        //     または (b) 削除検知済み（DensukeDeletionCandidate が PENDING/APPROVED）の日付は、
+        //     現在の伝助スクレイピング結果に存在しなくても「消えた」のであって「新規」ではない。
+        //     ここで除外しないと、DensukeDeletionDetectionService が検知する前に本メソッドが
+        //     その日付を再作成してしまい、「検知して承認するまでデータを変更しない」という
+        //     削除検知フローの前提が崩れる（Codex レビュー Round 4 CRITICAL）。
+        Set<LocalDate> previouslyKnownDates = new HashSet<>();
+        densukeRowIdRepository.findByDensukeUrlId(densukeUrl.getId())
+                .forEach(r -> previouslyKnownDates.add(r.getSessionDate()));
+        densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatusIn(densukeUrl.getId(),
+                        List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED))
+                .forEach(c -> previouslyKnownDates.add(c.getSessionDate()));
+
         LocalDate maxExistingDate = existingDensukeDates.stream().max(LocalDate::compareTo).orElse(null);
         List<PracticeSession> diffSessions = sessions.stream()
                 .filter(s -> !existingDensukeDates.contains(s.getSessionDate()))
+                .filter(s -> !previouslyKnownDates.contains(s.getSessionDate()))
                 .toList();
         List<PracticeSession> newSessions;
         List<PracticeSession> skippedPastSessions;

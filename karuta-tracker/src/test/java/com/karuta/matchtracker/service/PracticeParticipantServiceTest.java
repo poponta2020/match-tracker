@@ -6,6 +6,7 @@ import com.karuta.matchtracker.entity.LotteryExecution;
 import com.karuta.matchtracker.entity.ParticipantStatus;
 import com.karuta.matchtracker.entity.PracticeParticipant;
 import com.karuta.matchtracker.entity.PracticeSession;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
 import com.karuta.matchtracker.repository.LotteryExecutionRepository;
 import com.karuta.matchtracker.repository.PracticeParticipantRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
@@ -54,6 +55,8 @@ class PracticeParticipantServiceTest {
     private LineNotificationService lineNotificationService;
     @Mock
     private OrganizationService organizationService;
+    @Mock
+    private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
 
     @InjectMocks
     private PracticeParticipantService service;
@@ -69,6 +72,7 @@ class PracticeParticipantServiceTest {
         s.setCapacity(capacity);
         s.setOrganizationId(ORG_ID);
         s.setTotalMatches(7);
+        s.setSessionDate(LocalDate.of(2025, 4, 1));
         return s;
     }
 
@@ -500,6 +504,83 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
+    @DisplayName("伝助側で削除が承認された試合には addParticipantToMatch で登録できない")
+    void addParticipantToMatch_rejectsApprovedDensukeDeletion() {
+        LocalDate date = LocalDate.of(2025, 4, 5);
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(date);
+        when(practiceSessionRepository.findBySessionDate(date)).thenReturn(Optional.of(session));
+
+        com.karuta.matchtracker.entity.DensukeDeletionCandidate approved =
+                com.karuta.matchtracker.entity.DensukeDeletionCandidate.builder()
+                        .id(1L).organizationId(ORG_ID).sessionDate(date).matchNumber(2)
+                        .status(com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED)
+                        .build();
+        when(densukeDeletionCandidateRepository.findByOrganizationIdAndSessionDateAndStatus(
+                ORG_ID, date, com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED))
+                .thenReturn(List.of(approved));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addParticipantToMatch(date, 2, 10L, null));
+
+        verify(practiceParticipantRepository, never()).save(any());
+        verifyNoInteractions(densukeSyncService);
+    }
+
+    @Test
+    @DisplayName("伝助側で削除が承認された試合には setMatchParticipants で登録できない")
+    void setMatchParticipants_rejectsApprovedDensukeDeletion() {
+        LocalDate date = LocalDate.of(2025, 4, 5);
+        PracticeSession session = createSession(100L, 4);
+        session.setSessionDate(date);
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+
+        com.karuta.matchtracker.entity.DensukeDeletionCandidate approved =
+                com.karuta.matchtracker.entity.DensukeDeletionCandidate.builder()
+                        .id(1L).organizationId(ORG_ID).sessionDate(date).matchNumber(2)
+                        .status(com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED)
+                        .build();
+        when(densukeDeletionCandidateRepository.findByOrganizationIdAndSessionDateAndStatus(
+                ORG_ID, date, com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED))
+                .thenReturn(List.of(approved));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.setMatchParticipants(100L, 2, List.of(10L)));
+
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("伝助側で削除が承認された試合には registerParticipations で登録できない")
+    void registerParticipations_rejectsApprovedDensukeDeletion() {
+        LocalDate date = LocalDate.of(2025, 4, 10);
+        PracticeSession session = createSession(300L, 4);
+        session.setSessionDate(date);
+        when(playerRepository.existsById(10L)).thenReturn(true);
+        when(practiceSessionRepository.findAllById(List.of(300L))).thenReturn(List.of(session));
+
+        com.karuta.matchtracker.entity.DensukeDeletionCandidate approved =
+                com.karuta.matchtracker.entity.DensukeDeletionCandidate.builder()
+                        .id(1L).organizationId(ORG_ID).sessionDate(date).matchNumber(2)
+                        .status(com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED)
+                        .build();
+        when(densukeDeletionCandidateRepository.findByOrganizationIdInAndSessionDateBetweenAndStatus(
+                List.of(ORG_ID), date, date, com.karuta.matchtracker.entity.DensukeDeletionCandidate.Status.APPROVED))
+                .thenReturn(List.of(approved));
+
+        PracticeParticipationRequest request = PracticeParticipationRequest.builder()
+                .playerId(10L).year(2025).month(4)
+                .participations(List.of(
+                        PracticeParticipationRequest.SessionMatchParticipation.builder()
+                                .sessionId(300L).matchNumber(2).build()))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> service.registerParticipations(request));
+
+        verify(practiceParticipantRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("締切前の場合beforeDeadlineがtrueで返される")
     void getPlayerParticipationStatus_beforeDeadline_returnsTrue() {
         when(practiceSessionRepository.findByYearAndMonth(2025, 4)).thenReturn(List.of());
@@ -556,6 +637,7 @@ class PracticeParticipantServiceTest {
         session2.setCapacity(null);
         session2.setOrganizationId(orgId2);
         session2.setTotalMatches(7);
+        session2.setSessionDate(LocalDate.of(2025, 4, 1));
 
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1, session2));
@@ -652,6 +734,7 @@ class PracticeParticipantServiceTest {
         session2.setCapacity(null);
         session2.setOrganizationId(orgId2);
         session2.setTotalMatches(7);
+        session2.setSessionDate(LocalDate.of(2025, 4, 1));
 
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1));
@@ -687,6 +770,7 @@ class PracticeParticipantServiceTest {
         session2.setCapacity(null);
         session2.setOrganizationId(orgId2);
         session2.setTotalMatches(7);
+        session2.setSessionDate(LocalDate.of(2025, 4, 1));
 
         when(playerRepository.existsById(10L)).thenReturn(true);
         when(practiceSessionRepository.findAllById(any())).thenReturn(List.of(session1));

@@ -59,6 +59,8 @@ class WaitlistPromotionServiceTest {
     private LineNotificationService lineNotificationService;
     @Mock
     private DensukeSyncService densukeSyncService;
+    @Mock
+    private DensukeDeletionGuard densukeDeletionGuard;
 
     @InjectMocks
     private WaitlistPromotionService service;
@@ -141,6 +143,9 @@ class WaitlistPromotionServiceTest {
                 .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                 .status(ParticipantStatus.WAITLIST_DECLINED).build();
 
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                PracticeSession.builder().id(100L).organizationId(1L)
+                        .sessionDate(LocalDate.of(2025, 4, 1)).build()));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLIST_DECLINED))
                 .thenReturn(List.of(p1));
         when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 1))
@@ -160,6 +165,9 @@ class WaitlistPromotionServiceTest {
                 .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                 .status(ParticipantStatus.WAITLIST_DECLINED).build();
 
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                PracticeSession.builder().id(100L).organizationId(1L)
+                        .sessionDate(LocalDate.of(2025, 4, 1)).build()));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLIST_DECLINED))
                 .thenReturn(List.of(p1));
         when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 1))
@@ -168,6 +176,33 @@ class WaitlistPromotionServiceTest {
         service.rejoinWaitlistBySession(100L, 10L);
 
         assertThat(p1.getWaitlistNumber()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("伝助側で削除が承認された試合への復帰はスキップし、他の試合は復帰できる")
+    void rejoinWaitlistBySession_skipsApprovedDensukeDeletion() {
+        PracticeParticipant declinedDeleted = PracticeParticipant.builder()
+                .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
+                .status(ParticipantStatus.WAITLIST_DECLINED).build();
+        PracticeParticipant declinedNormal = PracticeParticipant.builder()
+                .id(2L).sessionId(100L).playerId(10L).matchNumber(2)
+                .status(ParticipantStatus.WAITLIST_DECLINED).build();
+
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                PracticeSession.builder().id(100L).organizationId(1L)
+                        .sessionDate(LocalDate.of(2025, 4, 1)).build()));
+        when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(100L, 10L, ParticipantStatus.WAITLIST_DECLINED))
+                .thenReturn(List.of(declinedDeleted, declinedNormal));
+        when(densukeDeletionGuard.isApprovedDeletion(1L, LocalDate.of(2025, 4, 1), 1)).thenReturn(true);
+        when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 2))
+                .thenReturn(Optional.of(1));
+
+        int count = service.rejoinWaitlistBySession(100L, 10L);
+
+        assertThat(count).isEqualTo(1);
+        assertThat(declinedDeleted.getStatus()).isEqualTo(ParticipantStatus.WAITLIST_DECLINED); // 変更なし
+        assertThat(declinedNormal.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
+        verify(practiceParticipantRepository, never()).save(declinedDeleted);
     }
 
     @Test
@@ -853,6 +888,29 @@ class WaitlistPromotionServiceTest {
         }
 
         @Test
+        @DisplayName("伝助側で削除が承認された試合には参加できない")
+        void handleSameDayJoin_rejectsApprovedDensukeDeletion() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).organizationId(1L).sessionDate(today)
+                    .capacity(6).startTime(LocalTime.of(13, 0)).build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(densukeDeletionGuard.isApprovedDeletion(1L, today, 1)).thenReturn(true);
+
+                assertThatThrownBy(() -> service.handleSameDayJoin(100L, 1, 20L))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("伝助側で削除が承認された試合");
+
+                verify(practiceParticipantRepository, never()).save(any());
+            }
+        }
+
+        @Test
         @DisplayName("過去日のセッションには参加できない")
         void handleSameDayJoin_pastDate() {
             LocalDate today = LocalDate.of(2026, 4, 15);
@@ -982,6 +1040,38 @@ class WaitlistPromotionServiceTest {
                 int result = service.handleSameDayJoinAll(100L, 20L, null);
 
                 assertThat(result).isEqualTo(1); // 2試合目のみ参加
+                verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
+            }
+        }
+
+        @Test
+        @DisplayName("伝助側で削除が承認された試合はスキップし、他の試合は参加できる")
+        void handleSameDayJoinAll_skipsApprovedDensukeDeletion() {
+            LocalDate today = LocalDate.of(2026, 4, 15);
+            PracticeSession session = PracticeSession.builder()
+                    .id(100L).organizationId(1L).sessionDate(today)
+                    .capacity(6).totalMatches(2).startTime(LocalTime.of(13, 0)).build();
+            Player player = Player.builder().id(20L).name("参加者").build();
+
+            try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+                jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+                jstMock.when(JstDateTimeUtil::now).thenReturn(today.atTime(10, 0));
+
+                when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(session));
+                when(playerRepository.findById(20L)).thenReturn(Optional.of(player));
+                // 1試合目: 削除承認済み(欠番) → スキップ
+                when(densukeDeletionGuard.isApprovedDeletion(1L, today, 1)).thenReturn(true);
+                // 2試合目: 空き枠あり
+                when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 2))
+                        .thenReturn(List.of());
+                when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatus(100L, 2, ParticipantStatus.WON))
+                        .thenReturn(List.of());
+
+                int result = service.handleSameDayJoinAll(100L, 20L, null);
+
+                assertThat(result).isEqualTo(1); // 2試合目のみ参加
+                verify(practiceParticipantRepository, never())
+                        .findBySessionIdAndPlayerIdAndMatchNumber(100L, 20L, 1);
                 verify(practiceParticipantRepository, times(1)).save(any(PracticeParticipant.class));
             }
         }

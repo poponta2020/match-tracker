@@ -13,6 +13,8 @@ import com.karuta.matchtracker.util.AdminScopeValidator;
 import com.karuta.matchtracker.entity.Venue;
 import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.entity.DensukeUrl;
+import com.karuta.matchtracker.entity.DensukeDeletionCandidate;
+import com.karuta.matchtracker.repository.DensukeDeletionCandidateRepository;
 import com.karuta.matchtracker.repository.DensukeMemberMappingRepository;
 import com.karuta.matchtracker.repository.DensukeRowIdRepository;
 import com.karuta.matchtracker.repository.DensukeUrlRepository;
@@ -48,6 +50,12 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class PracticeSessionService {
 
+    // 選手向け「伝助で削除されました」表示の対象ステータス。検知時点(PENDING)から承認後(APPROVED)まで
+    // 一貫して表示する。承認後も totalMatches は変更しない欠番方式のため、非表示にすると通常の空き枠に
+    // 見えてしまう。
+    private static final List<DensukeDeletionCandidate.Status> DENSUKE_DELETION_VISIBLE_STATUSES =
+            List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED);
+
     private final PracticeSessionRepository practiceSessionRepository;
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PlayerRepository playerRepository;
@@ -58,6 +66,7 @@ public class PracticeSessionService {
     private final DensukeUrlRepository densukeUrlRepository;
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
+    private final DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     private final DensukeSyncService densukeSyncService;
     private final DensukeScheduleWriteService densukeScheduleWriteService;
     private final AdjacentRoomService adjacentRoomService;
@@ -212,8 +221,26 @@ public class PracticeSessionService {
             }
         }
 
+        // 伝助側で削除が検知された試合番号（カレンダーの灰色×表示用）。承認済み(APPROVED)も対象に含める
+        // （totalMatches が変わらず欠番として通常枠に見えてしまうのを防ぐ）。
+        // セッション横断で1クエリにまとめて取得し、(organizationId, sessionDate) をキーにグルーピングする。
+        Map<String, List<Integer>> pendingDeletionsByOrgAndDate = Map.of();
+        if (!sessions.isEmpty()) {
+            List<Long> orgIdsInMonth = sessions.stream()
+                    .map(PracticeSession::getOrganizationId).distinct().collect(Collectors.toList());
+            pendingDeletionsByOrgAndDate = densukeDeletionCandidateRepository
+                    .findByOrganizationIdInAndSessionDateBetweenAndStatusIn(
+                            orgIdsInMonth, yearMonth.atDay(1), yearMonth.atEndOfMonth(),
+                            DENSUKE_DELETION_VISIBLE_STATUSES)
+                    .stream()
+                    .collect(Collectors.groupingBy(
+                            c -> c.getOrganizationId() + "_" + c.getSessionDate(),
+                            Collectors.mapping(DensukeDeletionCandidate::getMatchNumber, Collectors.toList())));
+        }
+
         final Map<Long, Map<Integer, Long>> finalEffectiveCountMap = effectiveCountMap;
         final boolean finalAggregationFailed = capacityAggregationFailed;
+        final Map<String, List<Integer>> finalPendingDeletionsByOrgAndDate = pendingDeletionsByOrgAndDate;
         return sessions.stream().map(session -> {
             PracticeSessionDto dto = PracticeSessionDto.fromEntity(session);
             Venue venue = session.getVenueId() != null ? venueMap.get(session.getVenueId()) : null;
@@ -226,6 +253,8 @@ public class PracticeSessionService {
                         finalEffectiveCountMap.getOrDefault(session.getId(), Map.of()),
                         venueDefaultCapacity));
             }
+            dto.setDensukeDeletionCandidateMatchNumbers(finalPendingDeletionsByOrgAndDate.get(
+                    session.getOrganizationId() + "_" + session.getSessionDate()));
             return dto;
         }).collect(Collectors.toList());
     }
@@ -777,6 +806,13 @@ public class PracticeSessionService {
         // その日の実施済み試合数を取得
         long completedMatches = matchRepository.countByMatchDate(session.getSessionDate());
         dto.setCompletedMatches((int) completedMatches);
+
+        // 伝助側で削除が検知された試合番号（選手向けバッジ表示用）。承認済み(APPROVED)は totalMatches が
+        // 変わらず欠番として通常枠に見えてしまうため、承認前(PENDING)と同様に表示対象に含める。
+        dto.setDensukeDeletionCandidateMatchNumbers(densukeDeletionCandidateRepository
+                .findByOrganizationIdAndSessionDateAndStatusIn(session.getOrganizationId(), session.getSessionDate(),
+                        DENSUKE_DELETION_VISIBLE_STATUSES)
+                .stream().map(DensukeDeletionCandidate::getMatchNumber).collect(Collectors.toList()));
 
         // 試合ごとの参加人数・参加者情報を集計
         enrichDtoWithMatchDetails(dto, session, allParticipants, playerMap);

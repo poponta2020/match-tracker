@@ -2411,7 +2411,7 @@ public class LineNotificationService {
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION,
-                    ADMIN_DENSUKE_ROWID_ISSUE -> true;
+                    ADMIN_DENSUKE_ROWID_ISSUE, ADMIN_DENSUKE_DELETE_DETECTED -> true;
             // ADMIN_KADERU_SYNC_* は押下者本人 (ADMIN+) への明示的なフィードバックなので
             // preference を持たず常時送信。命名規則上 ADMIN_ プレフィックスを付けることで
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
@@ -3123,6 +3123,60 @@ public class LineNotificationService {
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
             log.warn("Async ADMIN_DENSUKE_ROWID_ISSUE dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 伝助側で試合（日付×試合番号の行）が削除されたことを検知した際、指定団体の管理者
+     * （ADMIN / SUPER_ADMIN）へ LINE 送信する。同一の削除候補について承認/却下されるまでは
+     * 呼び出し元（{@link DensukeDeletionDetectionService}）が新規検知時のみ呼ぶため、
+     * この通知自体は重複送信しない（初回検知時の1回のみ）。preference 制御なし・常時送信。
+     *
+     * @param organizationId 対象団体 ID
+     * @param details        検知した試合の一覧（例: "2026-07-10 第2試合"）
+     */
+    @Async
+    public void sendDensukeDeletionCandidateDetectedNotification(Long organizationId, List<String> details) {
+        if (details == null || details.isEmpty()) return;
+        try {
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            targetAdmins = targetAdmins.stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .distinct()
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_DENSUKE_DELETE_DETECTED: no admins for organization {}", organizationId);
+                return;
+            }
+
+            String message = "[伝助同期：試合の削除を検知]\n"
+                    + "伝助側で以下の試合が削除されたようです。\n"
+                    + String.join("\n", details)
+                    + "\n\n伝助管理ページで内容を確認し、問題なければ削除を承認してください"
+                    + "（承認するまでアプリ側のデータは変更されません）。";
+
+            int sent = 0, failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_DENSUKE_DELETE_DETECTED, message);
+                    if (result == SendResult.SUCCESS) sent++;
+                    else if (result == SendResult.FAILED) failed++;
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_DENSUKE_DELETE_DETECTED to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+            log.info("ADMIN_DENSUKE_DELETE_DETECTED: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            log.warn("Async ADMIN_DENSUKE_DELETE_DETECTED dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

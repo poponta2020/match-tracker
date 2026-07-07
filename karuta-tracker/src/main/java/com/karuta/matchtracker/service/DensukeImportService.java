@@ -45,6 +45,7 @@ public class DensukeImportService {
     private final PracticeParticipantService practiceParticipantService;
     private final LineNotificationService lineNotificationService;
     private final OrganizationService organizationService;
+    private final DensukeDeletionDetectionService densukeDeletionDetectionService;
 
     @Data
     public static class ImportResult {
@@ -77,6 +78,13 @@ public class DensukeImportService {
         DensukeScraper.DensukeData scraped = densukeScraper.scrape(url, year);
         LocalDateTime detectedAt = JstDateTimeUtil.now();
         Map<String, LocalDateTime> memberLastChangeTimes = scraped.getMemberLastChangeTimes();
+
+        // 伝助側で削除された試合（行削除）の検知。既存の参加者同期ロジックとは独立した追加チェックで、
+        // 承認されるまでは何もデータを変更しない。
+        if (targetDate != null) {
+            LocalDate targetMonthStart = targetDate.withDayOfMonth(1);
+            densukeDeletionDetectionService.detectDeletions(scraped, targetMonthStart, organizationId);
+        }
 
         // A-4: 正規化名 → 選手 のグルーピングで名寄せ衝突（同一正規化キーに複数選手）を検知する。
         // 衝突した正規化名は playerNameMap から除外し、取り込みをスキップ（黙って先勝ちにしない）。

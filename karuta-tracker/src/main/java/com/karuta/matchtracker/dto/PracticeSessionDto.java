@@ -63,6 +63,10 @@ public class PracticeSessionDto {
     // matchCapacityStatuses[i] が第 (i+1) 試合のステータス。長さは min(totalMatches, 9)。
     private List<CapacityStatus> matchCapacityStatuses;
 
+    // 伝助側で削除が検知され、管理者の承認待ちの試合番号一覧（未承認のみ・空なら null/空リスト）。
+    // 選手側UIで「伝助側で削除されました」バッジ・カレンダーの灰色×表示に使う。
+    private List<Integer> densukeDeletionCandidateMatchNumbers;
+
     /**
      * 試合ごとの定員到達状況
      */

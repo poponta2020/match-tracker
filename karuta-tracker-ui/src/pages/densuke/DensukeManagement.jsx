@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { isAdmin } from '../../utils/auth';
 import {
   ArrowLeft, RefreshCw, Link2, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle, UserPlus, Loader2, Plus, Settings, RotateCcw
+  AlertCircle, CheckCircle, UserPlus, Loader2, Plus, Settings, RotateCcw, Trash2, X, Check
 } from 'lucide-react';
 import DensukePageCreateModal from './DensukePageCreateModal';
 import DensukeTemplateModal from './DensukeTemplateModal';
@@ -87,6 +87,49 @@ const DensukeManagement = () => {
     }
   }, [updateOrgState]);
 
+  // 伝助側で削除が検知された試合（削除候補）の取得（団体ごと）
+  const fetchDeletionCandidates = useCallback(async (orgId) => {
+    try {
+      const res = await practiceAPI.getDensukeDeletionCandidates(orgId);
+      updateOrgState(orgId, { deletionCandidates: res.data || [] });
+    } catch {
+      // エラー時は一覧表示をクリアしない
+    }
+  }, [updateOrgState]);
+
+  // 削除候補の承認（該当試合の出欠エントリを削除。totalMatches・対戦結果には触れない）
+  const handleApproveDeletion = async (orgId, candidateId) => {
+    updateOrgState(orgId, { deletionActioningId: candidateId });
+    try {
+      await practiceAPI.approveDensukeDeletionCandidate(candidateId);
+      await fetchDeletionCandidates(orgId);
+      fetchWriteStatus(orgId);
+      updateOrgState(orgId, { deletionActioningId: null, success: '削除候補を承認し、出欠エントリを削除しました' });
+      setTimeout(() => updateOrgState(orgId, { success: '' }), 3000);
+    } catch (err) {
+      updateOrgState(orgId, {
+        deletionActioningId: null,
+        error: err.response?.data?.message || '削除候補の承認に失敗しました',
+      });
+    }
+  };
+
+  // 削除候補の却下（データは変更せず、通常表示に戻す）
+  const handleRejectDeletion = async (orgId, candidateId) => {
+    updateOrgState(orgId, { deletionActioningId: candidateId });
+    try {
+      await practiceAPI.rejectDensukeDeletionCandidate(candidateId);
+      await fetchDeletionCandidates(orgId);
+      updateOrgState(orgId, { deletionActioningId: null, success: '削除候補を却下しました' });
+      setTimeout(() => updateOrgState(orgId, { success: '' }), 3000);
+    } catch (err) {
+      updateOrgState(orgId, {
+        deletionActioningId: null,
+        error: err.response?.data?.message || '削除候補の却下に失敗しました',
+      });
+    }
+  };
+
   // 伝助URL取得（団体ごと）
   const fetchUrl = useCallback(async (orgId) => {
     updateOrgState(orgId, { urlLoading: true, error: '', syncResult: null });
@@ -106,14 +149,15 @@ const DensukeManagement = () => {
     }
   }, [year, month, updateOrgState]);
 
-  // 団体リストが変わったら各団体のURL・書き込みステータスを取得
+  // 団体リストが変わったら各団体のURL・書き込みステータス・削除候補を取得
   useEffect(() => {
     if (organizations.length === 0) return;
     organizations.forEach(org => {
       fetchUrl(org.id);
       fetchWriteStatus(org.id);
+      fetchDeletionCandidates(org.id);
     });
-  }, [organizations, fetchUrl, fetchWriteStatus]);
+  }, [organizations, fetchUrl, fetchWriteStatus, fetchDeletionCandidates]);
 
   // 月送り
   const changeMonth = (delta) => {
@@ -156,6 +200,7 @@ const DensukeManagement = () => {
       const res = await practiceAPI.syncDensuke(year, month, orgId);
       updateOrgState(orgId, { syncing: false, syncResult: res.data });
       fetchWriteStatus(orgId);
+      fetchDeletionCandidates(orgId);
       if (res.data.registeredCount > 0 || res.data.createdSessionCount > 0) {
         updateOrgState(orgId, {
           success: `同期完了: ${res.data.createdSessionCount}日作成、${res.data.registeredCount}名登録`,
@@ -184,6 +229,7 @@ const DensukeManagement = () => {
         selectedNames: [],
         success: `${state.selectedNames.length}名を登録し、再同期しました`,
       });
+      fetchDeletionCandidates(orgId);
     } catch (err) {
       updateOrgState(orgId, {
         registering: false,
@@ -446,6 +492,56 @@ const DensukeManagement = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* 削除候補（伝助側で削除が検知された試合） */}
+                {state.deletionCandidates?.length > 0 && (
+                  <div className="mx-5 mb-5 bg-white rounded-lg p-4 border border-amber-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Trash2 className="w-4 h-4 text-amber-600" />
+                      <h3 className="text-sm font-semibold text-amber-700">
+                        削除候補（{state.deletionCandidates.length}件）
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#6b7280] mb-3">
+                      伝助側で以下の試合が削除されたようです。承認すると該当試合の出欠エントリを削除します
+                      （承認するまでアプリ側のデータは変更されません）。
+                    </p>
+                    <div className="space-y-2">
+                      {state.deletionCandidates.map((candidate) => (
+                        <div
+                          key={candidate.id}
+                          className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+                        >
+                          <span className="text-sm text-[#374151]">
+                            {candidate.sessionDate} 第{candidate.matchNumber}試合
+                          </span>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => handleRejectDeletion(org.id, candidate.id)}
+                              disabled={state.deletionActioningId === candidate.id}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-[#d4ddd7] rounded-lg text-[#374151] hover:bg-[#f9f6f2] disabled:opacity-50"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              却下
+                            </button>
+                            <button
+                              onClick={() => handleApproveDeletion(org.id, candidate.id)}
+                              disabled={state.deletionActioningId === candidate.id}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              {state.deletionActioningId === candidate.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                              承認（削除）
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

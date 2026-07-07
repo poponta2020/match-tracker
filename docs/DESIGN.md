@@ -2115,7 +2115,7 @@ Entity Layer (JPA Entity)
 | LINE通知設定 | /settings/line | 全員 | LINE連携の有効化/無効化、友だち追加URL・ワンタイムコード表示、通知種別ON/OFF |
 | LINEチャネル管理 | /admin/line/channels | SUPER_ADMIN | チャネル一覧・登録・無効化・強制解除 |
 | LINE通知スケジュール設定 | /admin/line/schedule | ADMIN+ | スケジュール型通知の送信日数設定 |
-| 伝助管理 | /admin/densuke | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・未登録者一括登録（ADMINは自団体のみ、SUPER_ADMINは全団体） |
+| 伝助管理 | /admin/densuke | ADMIN+ | 団体別の伝助URL管理・手動同期実行・書き込み状況・削除候補の確認と承認/却下・未登録者一括登録（ADMINは自団体のみ、SUPER_ADMINは全団体） |
 | 抽選管理 | /admin/lottery | ADMIN+ | 抽選プレビュー実行→結果確認→確定→通知送信の一連のワークフロー。プレビュー／確定済の両フェーズで LINE 告知用コピーテキスト領域を表示（プレビュー時は警告色）。システム設定へのリンクあり |
 | メンター管理 | /settings/mentor | 全員 | メンター指名・承認・拒否・解除、メンティー管理（試合履歴への導線あり） |
 | プライバシーポリシー | /privacy-policy | なし | プライバシーポリシー |
@@ -3446,7 +3446,7 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **トリガー**: ① `PracticeSessionService.createSession` の `afterCommit` フックで `pushNewSchedulesToDensukeAsync` を `@Async` で即時 push。② `DensukeSyncService.syncAll` の最初のステップで `pushAllForCurrentAndNextMonth` をフォロー同期（即時 push 失敗時の自動回復）
   - **無限ループ防止**: `DensukeImportService.findOrCreateSession` は `practiceSessionRepository.save` を直接呼ぶため `createSession` を経由せず、伝助→アプリ取り込み起因の push 再帰は構造上発生しない
   - **並行制御**: `DensukeUrlRepository.findByYearAndMonthAndOrganizationIdForUpdate`（`@Lock(PESSIMISTIC_WRITE)`）で同一 (year, month, organizationId) の行ロックをかけ、並行 push の差分計算ズレを防止
-  - **差分計算**: `DensukeScraper.scrape` で伝助の現スケジュール（日付集合）を取得し、アプリ側 `practice_sessions` のうち伝助に存在しない日付のみを抽出。差分なしなら POST せず early return
+  - **差分計算**: `DensukeScraper.scrape` で伝助の現スケジュール（日付集合）を取得し、アプリ側 `practice_sessions` のうち伝助に存在しない日付のみを抽出。差分なしなら POST せず early return。ただし `densuke_row_ids` に書き込み実績がある、または `DensukeDeletionCandidate`（PENDING/APPROVED）が既にある日付は「新規」から除外し push しない（伝助側で全行削除された日付を、削除検知が走る前に誤って再作成してしまうのを防ぐ。Codex レビュー Round 4 CRITICAL 対応）
   - **過去日制約**: 伝助 `/update` は末尾追記しかできないため、伝助の既存最大日付より前の新規日付を push すると `DensukeWriteService.parseAndSaveRowIds` の row id 対応がずれて参加者出欠が別日に書き込まれるデータ破壊リスクがある。差分セッションのうち伝助既存最大日付以前のものは push せず、即時 push 経路のみ管理者へ LINE 通知して手動追加を促す（スケジューラ経路は通知抑制）
   - **スケジュール文字列**: 既存 `DensukePageCreateService.buildScheduleText` を再利用（フォーマット一貫性）。会場未設定・`venue_match_schedules` 不足時の `IllegalStateException` は失敗通知に変換
   - **HTTP 呼び出し**: GET `/list?cd=...` で Cookie と `pageId` を取得 → POST `/update`（`cd`, `id`, `postfix=""`, `schedule`）→ 期待レスポンス HTTP 302。`DensukeWriteService.extractPageId`（package-private に拡張）/ `extractCd` / `extractBase` を共用
@@ -3454,6 +3454,19 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
   - **自己注入**: `@Lazy DensukeScheduleWriteService self` をコンストラクタで受け、`@Async` / `@Transactional` の AOP プロキシを通すため同一 bean 内呼び出しを `self.xxx()` 経由で行う
   - **DB マイグレーション**: 新 enum 値 `ADMIN_DENSUKE_PUSH_FAILED`（25 文字、VARCHAR(30) 内に収まる短縮命名）を `line_message_log_notification_type_check` の CHECK 制約に追加するマイグレーション SQL（`database/add_admin_densuke_push_failed_message_log_check.sql`）を本番 DB に適用する必要あり。テーブル定義の変更（カラム長拡張）は不要
   - **設計判断（DB ロックと外部 HTTP のスコープ）**: `@Transactional` 内で `densuke_urls` 行ロック → 伝助 scrape → POST /update まで実行する設計。ロック粒度は (year, month, organizationId) 単位で限定的、保持時間は HTTP タイムアウト（各 10 秒、合計最大 30 秒）に律速され、`pushAllForCurrentAndNextMonth` は各 URL を順次処理するため DB コネクションプール圧迫リスクは抑えられる。将来パフォーマンスが課題化した場合は advisory lock や keyed lock で HTTP 前にトランザクションを閉じる設計に変更を検討（本 PR は現行方式維持、Codex Round 3 WARNING の現行維持判断）
+
+- **伝助側削除検知・承認（DensukeDeletionCandidate）**: 伝助側で試合行（日付×試合番号）が削除された場合を検知し、管理者が明示的に承認するまではアプリ側データを一切変更しない機能。伝助側の行削除で `DensukeWriteService` の行数不一致チェックが解消せず `ADMIN_DENSUKE_ROWID_ISSUE` 通知が5分ごとに繰り返し送信され続ける問題への対応
+  - **検知（`DensukeDeletionDetectionService`）**: `DensukeImportService.importFromDensuke` が既に取得済みのスクレイピング結果を再利用し、既存の参加者同期ロジック（Phase1/Phase3）とは独立した追加チェックとして実行（既存ロジックへの影響を避ける設計判断）。対象団体・月の `PracticeSession.totalMatches` から機械的に導かれる期待値（1〜totalMatches）と実際にスクレイピングで存在する (date, matchNumber) を突き合わせ、期待値にあって実在しないものを新規削除候補（`densuke_deletion_candidates`, PENDING）として記録する
+  - **欠番方式**: 承認しても `PracticeSession.totalMatches` は変更しない。試合番号の詰め直しをすると既存の対戦結果（`Match` エンティティ・参加者データ）が別の試合番号を指してしまうデータ破壊リスクがあるため、totalMatches は維持したまま該当試合番号を「欠番」として扱う
+  - **承認/却下（`DensukeDeletionCandidateService`）**: 承認は該当 (date, matchNumber) の `PracticeParticipant` のみ削除（`Match` には触れない・出欠エントリのみ削除の方針）。却下はデータ変更なし。ADMIN のスコープ検証はクライアント指定の organizationId を信用せず、削除候補自身が持つ organizationId を正として検証（`PracticeSessionService.checkAdminScope` と同じ考え方）
+  - **書き込み側の欠番除外**: `DensukeWriteService.buildScheduleOrder` が urlId 単位で PENDING・APPROVED（REJECTED は含まない）な削除候補を除外してからスケジュール（期待行リスト）を生成。検知時点（PENDING）から既に除外するため、`ADMIN_DENSUKE_ROWID_ISSUE` の行数不一致は承認を待たずそもそも発生しなくなり、個別の重複通知抑制ロジックは不要（当初は団体/URL単位の抑制ヒューリスティックを検討したが、無関係な問題まで抑制するリスクがあり、根本原因である不一致自体を起こさない設計に変更した）。却下（REJECTED）時は除外対象から外れ、データも行数不一致も変わらないため通常どおり報告され続ける
+  - **row_id プリフェッチ側の欠番除外**: `DensukeWriteService.buildRowIdsByKey`（`writePlayerToDensuke` から呼ばれる row_id プリフェッチ）も `buildScheduleOrder` と同じ除外判定（`findDeletionExcludedDateMatchKeys`）を共有し、PENDING・APPROVED な (date, matchNumber) の `densuke_row_ids` キャッシュを読まない。除外しないと、削除された行に紐づく stale な row_id が `buildRegistFormData` に渡り、伝助に実際は反映されていない dirty な参加者が書き込み成功扱い（`dirty=false`）になってしまうデータ不整合が起きる（Codex レビュー Round 5 CRITICAL 対応）
+  - **通知**: 新規検知時のみ `ADMIN_DENSUKE_DELETE_DETECTED` を団体の ADMIN/SUPER_ADMIN に LINE 通知（同一候補は承認/却下されるまで再送しない・preference カラムなしで常時送信）
+  - **再検知の抑止・自動解消**: APPROVED・REJECTED いずれの (date, matchNumber) も再検知の対象から除外する（REJECTED を除外しないと、伝助側の行が欠落したまま次回同期が走った際に同じキーで新規PENDINGを再saveしようとしUNIQUE制約違反になる）。PENDING な候補の行が伝助側で復活した場合は自動的に削除候補を解消する（REJECTED の自動再オープンはしない単純化方針）
+  - **選手向け可視化**: `PracticeSessionDto.densukeDeletionCandidateMatchNumbers`（PENDING・APPROVED の両方）をカレンダーサマリー・詳細取得の両方に付与し、`PracticeList`（カレンダーの試合状況グリッド）は灰色×、`PracticeDetail`/`PracticeParticipation` は「伝助で削除されました」バッジ/表示で検知時点（承認前）から承認後まで一貫して可視化する（承認後も totalMatches は変更しないため、非表示にすると通常の空き枠に見えてしまう）
+  - **バックエンド側の登録ガード**: 表示制御だけでは API 直叩きや表示更新前のタイミングで承認済み欠番に再登録できてしまうため、APPROVED な (団体, 練習日, 試合番号) への新規参加登録・再有効化を拒否する。判定ロジックは `DensukeDeletionGuard`（`@Component`、`DensukeDeletionCandidateRepository` をラップする薄い共有ガード）に切り出し、`PracticeParticipantService`（`setMatchParticipants` / `addParticipantToMatch` / `registerParticipations`）と `WaitlistPromotionService`（`handleSameDayJoin` / `handleSameDayJoinAll` / `rejoinWaitlistBySession`）の計6経路に適用（Codex レビュー Round 6 CRITICAL 対応。当初 `PracticeParticipantService` の3経路のみだったが、選手が同日参加・キャンセル待ち復帰で直接触れる `WaitlistPromotionService` の3経路が漏れていたため拡張した）。単一対象の経路は例外で拒否、バッチ処理（`registerParticipations`／`handleSameDayJoinAll`／`rejoinWaitlistBySession`）は該当 (date, matchNumber) のみスキップし他の登録は継続する
+  - **既知の限定事項（管理者専用経路は未対応）**: `LotteryService.editParticipants`（参加者追加・ステータス変更）・`LotteryService.reExecuteLottery`（再抽選）・`PracticeSessionService.createSession` / `updateSession`（参加者一括登録）は ADMIN 専用の編集系エンドポイントで、今回はガード未適用（監査で確認済み）。管理者が承認済み欠番と認識した上で意図的に操作する分には実害は小さいが、伝助書き込み側は当該 (date, matchNumber) を除外し続けるため、アプリDB上は登録済みなのに伝助に反映されない不整合が生じ得る。別Issueでの追加対応を検討する。なお `DensukeImportService` のフェーズ処理（伝助→アプリ取り込み）は対象外で問題ない — 承認済み欠番は伝助側に行自体が存在せずスクレイピング結果にエントリが現れないため、取り込みロジックが実行される前提が成立しない
+  - **DB マイグレーション**: 新規テーブル `densuke_deletion_candidates`（`database/create_densuke_deletion_candidates.sql`）。新 enum 値 `ADMIN_DENSUKE_DELETE_DETECTED` を `line_message_log_notification_type_check` の CHECK 制約に追加（`database/add_admin_densuke_delete_detected_message_log_check.sql`）
 
 #### コンテナメモリ運用とOOM対策（Issue #953）
 

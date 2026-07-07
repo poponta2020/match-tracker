@@ -38,6 +38,7 @@ class DensukeWriteServiceTest {
     @Mock private DensukeUrlRepository densukeUrlRepository;
     @Mock private DensukeMemberMappingRepository densukeMemberMappingRepository;
     @Mock private DensukeRowIdRepository densukeRowIdRepository;
+    @Mock private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     @Mock private PlayerRepository playerRepository;
     @Mock private DensukeScraper densukeScraper;
     @Mock private LineNotificationService lineNotificationService;
@@ -435,6 +436,30 @@ class DensukeWriteServiceTest {
     // ----------------------------------------------------------------
 
     @Test
+    @DisplayName("削除候補: buildRowIdsByKeyはPENDING/APPROVEDの試合番号を除外し、stale row_idでdirtyが誤って解消されないようにする")
+    void buildRowIdsByKey_excludesPendingAndApprovedDeletionCandidates() {
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(3).build();
+        // 第2試合はPENDINGの削除候補 → row_idキャッシュがあっても除外されるべき
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatusIn(eq(200L), anyList()))
+                .thenReturn(List.of(DensukeDeletionCandidate.builder()
+                        .densukeUrlId(200L).sessionDate(LocalDate.of(2026, 4, 2)).matchNumber(2)
+                        .status(DensukeDeletionCandidate.Status.PENDING).build()));
+        when(densukeRowIdRepository.findByDensukeUrlIdAndSessionDateAndMatchNumber(200L, LocalDate.of(2026, 4, 2), 1))
+                .thenReturn(Optional.of(DensukeRowId.builder().densukeRowId("11").build()));
+        when(densukeRowIdRepository.findByDensukeUrlIdAndSessionDateAndMatchNumber(200L, LocalDate.of(2026, 4, 2), 3))
+                .thenReturn(Optional.of(DensukeRowId.builder().densukeRowId("33").build()));
+
+        Map<String, String> rowIdsByKey = densukeWriteService.buildRowIdsByKey(200L, List.of(s));
+
+        assertThat(rowIdsByKey).containsEntry("100_1", "11");
+        assertThat(rowIdsByKey).containsEntry("100_3", "33");
+        assertThat(rowIdsByKey).doesNotContainKey("100_2");
+        verify(densukeRowIdRepository, never())
+                .findByDensukeUrlIdAndSessionDateAndMatchNumber(200L, LocalDate.of(2026, 4, 2), 2);
+    }
+
+    @Test
     @DisplayName("B-3: join-ID件数がスケジュール件数と不一致なら false（書き込み中止）＋errors記録・保存なし")
     void parseAndSaveRowIds_countMismatch_returnsFalseAndAborts() {
         // schedule: 1セッション×2試合 = 2件
@@ -471,6 +496,29 @@ class DensukeWriteServiceTest {
 
         assertThat(usable).isTrue();
         verify(densukeRowIdRepository).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("削除候補: PENDING(検知〜承認前)の欠番はスケジュール生成から除外され、行数不一致にならない")
+    void parseAndSaveRowIds_excludesPendingDeletionCandidate() {
+        // totalMatches=3 だが第2試合はPENDINGの削除候補 → 期待スケジュールは実質2件
+        PracticeSession s = PracticeSession.builder()
+                .id(100L).sessionDate(LocalDate.of(2026, 4, 2)).totalMatches(3).build();
+        org.jsoup.nodes.Document formDoc = org.jsoup.Jsoup.parse("<table class='listtbl'></table>");
+        Map<String, String> joinInputs = new LinkedHashMap<>();
+        joinInputs.put("join-11", "");
+        joinInputs.put("join-22", "");
+        when(densukeDeletionCandidateRepository.findByDensukeUrlIdAndStatusIn(eq(100L), anyList()))
+                .thenReturn(List.of(DensukeDeletionCandidate.builder()
+                        .densukeUrlId(100L).sessionDate(LocalDate.of(2026, 4, 2)).matchNumber(2)
+                        .status(DensukeDeletionCandidate.Status.PENDING).build()));
+        when(densukeRowIdRepository.findByDensukeUrlId(100L)).thenReturn(List.of());
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        boolean usable = densukeWriteService.parseAndSaveRowIds(100L, List.of(s), formDoc, joinInputs, errors);
+
+        assertThat(usable).isTrue();
+        assertThat(errors).isEmpty();
     }
 
     @Test
