@@ -590,7 +590,7 @@ const MatchResultsView = () => {
             className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Shuffle className="w-5 h-5" />
-            対戦組み合わせを作成
+            編集画面へ移動
           </button>
         )}
         {session && matchPairings.length > 0 && (
