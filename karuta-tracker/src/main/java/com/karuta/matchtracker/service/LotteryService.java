@@ -1121,10 +1121,27 @@ public class LotteryService {
 
                 p.setStatus(change.getNewStatus());
                 p.setDirty(true);
-                if (change.getWaitlistNumber() != null) {
-                    p.setWaitlistNumber(change.getWaitlistNumber());
+
+                if (change.getNewStatus() == ParticipantStatus.WON
+                        && (oldStatus == ParticipantStatus.WAITLISTED || oldStatus == ParticipantStatus.OFFERED)) {
+                    // キャンセル待ち/オファー中 → 当選 への管理者手動繰り上げ。
+                    // 当該者の待ち番号を消し、後続のキャンセル待ち番号を1つ繰り下げて欠番を防ぐ。
+                    // オファー関連フィールドもクリアして期限切れ処理の対象から外す。
+                    Integer freedWaitlistNumber = p.getWaitlistNumber();
+                    p.setWaitlistNumber(null);
+                    p.setOfferedAt(null);
+                    p.setOfferDeadline(null);
+                    practiceParticipantRepository.save(p);
+                    if (freedWaitlistNumber != null) {
+                        practiceParticipantRepository.decrementWaitlistNumbersAfter(
+                                p.getSessionId(), p.getMatchNumber(), freedWaitlistNumber);
+                    }
+                } else {
+                    if (change.getWaitlistNumber() != null) {
+                        p.setWaitlistNumber(change.getWaitlistNumber());
+                    }
+                    practiceParticipantRepository.save(p);
                 }
-                practiceParticipantRepository.save(p);
             }
         }
 

@@ -153,7 +153,7 @@ public class DensukeImportService {
             // --- フェーズ別処理 ---
             switch (phase) {
                 case PHASE1 -> processPhase1(entry, session, deadlineType, playerNameMap, playerIdMap,
-                        unmatchedNameSet, result, memberLastChangeTimes, detectedAt);
+                        unmatchedNameSet, result, pendingNotifications, memberLastChangeTimes, detectedAt);
                 case LOCKED -> {
                     // 抽選実行済み・未確定（admin の確認待ち）窓。
                     // この間に伝助→アプリのインポートを許すと、新規○が PENDING で登録され、
@@ -237,6 +237,7 @@ public class DensukeImportService {
                                DeadlineType deadlineType,
                                Map<String, Long> playerNameMap, Map<Long, String> playerIdMap,
                                Set<String> unmatchedNameSet, ImportResult result,
+                               List<AdminWaitlistNotificationData> pendingNotifications,
                                Map<String, LocalDateTime> memberLastChangeTimes,
                                LocalDateTime detectedAt) {
         List<PracticeParticipant> existing =
@@ -253,11 +254,21 @@ public class DensukeImportService {
             }
         }
 
+        // △の参加者ID（キャンセル待ち希望）を収集。SAME_DAY のみ処理対象とする。
+        // MONTHLY の締切前(抽選前)は「定員が未確定」で △→WAITLISTED の意味論が定まらないため、
+        // 従来どおり △ を無視して現状挙動を維持する（北大かるた会への回帰を避ける）。
+        // 未マッチ △ 名は Phase3 と同様 unmatchedNameSet に記録するのみ（skippedCount は増やさない）。
+        Set<Long> maybePlayerIds = deadlineType == DeadlineType.SAME_DAY
+                ? resolvePlayerIds(entry.getMaybeParticipants(), playerNameMap, unmatchedNameSet)
+                : Collections.emptySet();
+
         // not-○: 既存レコード(dirty=false)を削除（1-E）
         // ただしキャンセル履歴(CANCELLED/DECLINED/WAITLIST_DECLINED)は保持する。
         // 伝助同期成功で dirty=false になった CANCELLED が物理削除されると履歴が失われるため。
+        // また △(maybe) に付け替えた人の既存レコードも削除しない（後段の △ 処理でキャンセル待ちに落とすため）。
         for (PracticeParticipant p : existing) {
             if (!markedPlayerIds.contains(p.getPlayerId())
+                    && !maybePlayerIds.contains(p.getPlayerId())
                     && !p.isDirty()
                     && !isTerminalStatus(p.getStatus())) {
                 practiceParticipantRepository.delete(p);
@@ -328,8 +339,21 @@ public class DensukeImportService {
             matchRegistered++;
         }
 
-        result.getDetails().add(String.format("%s 第%d試合 [Phase1]: %d名登録",
-                entry.getDate(), entry.getMatchNumber(), matchRegistered));
+        // △: SAME_DAY のみ、Phase3 と同一のキャンセル待ち処理を行う（processPhase3Sankaku を再利用）。
+        // 未登録 → 末尾WAITLISTED / WON → キャンセル待ちへ降格 / WAITLISTED・OFFERED → 変更なし /
+        // キャンセル済み → WAITLISTED 復活。これにより締切前でも伝助の △ を忠実に反映する。
+        int matchMaybeProcessed = 0;
+        for (Long playerId : maybePlayerIds) {
+            PracticeParticipant p = existingByPlayerId.get(playerId);
+            if (processPhase3Sankaku(playerId, p, session, entry.getMatchNumber(), pendingNotifications,
+                    playerIdMap, memberLastChangeTimes, detectedAt)) {
+                matchMaybeProcessed++;
+            }
+        }
+        result.setRegisteredCount(result.getRegisteredCount() + matchMaybeProcessed);
+
+        result.getDetails().add(String.format("%s 第%d試合 [Phase1]: %d名登録, △%d件処理",
+                entry.getDate(), entry.getMatchNumber(), matchRegistered, matchMaybeProcessed));
     }
 
     // ========================================================================

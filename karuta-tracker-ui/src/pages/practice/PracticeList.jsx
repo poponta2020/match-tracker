@@ -530,11 +530,9 @@ const PracticeList = () => {
     setEditingMatchNumber(null);
   };
 
-  // 試合別参加者保存後の処理
-  const handleSaveMatchParticipants = async () => {
-    // モーダルを閉じる
-    handleCloseEditModal();
-    // セッション詳細を再取得して更新
+  // 選択中セッションの詳細を再取得して最新化する（モーダルは閉じない）。
+  // 手動繰り上げ後にモーダルを開いたまま一覧を更新する用途で使う。
+  const refreshSelectedSession = async () => {
     if (selectedSession) {
       try {
         const response = await practiceAPI.getById(selectedSession.id);
@@ -546,6 +544,13 @@ const PracticeList = () => {
     // matchCapacityStatuses はサマリーAPI由来のため、月内サマリーも再取得して
     // カレンダーの試合別ステータスグリッドを最新化する
     fetchSessions();
+  };
+
+  // 試合別参加者保存後の処理
+  const handleSaveMatchParticipants = async () => {
+    // モーダルを閉じてからセッション詳細・月内サマリーを再取得する
+    handleCloseEditModal();
+    await refreshSelectedSession();
   };
 
   // アコーディオンのトグル
@@ -1000,7 +1005,7 @@ const PracticeList = () => {
                               className={`text-[#6b7280] transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                             />
                           </button>
-                          {isSuperAdmin(currentPlayer) && (
+                          {(isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1154,6 +1159,7 @@ const PracticeList = () => {
           matchNumber={editingMatchNumber}
           onClose={handleCloseEditModal}
           onSave={handleSaveMatchParticipants}
+          onRefresh={refreshSelectedSession}
         />
       )}
       {/* フローティングアクションボタン (FAB)。過去月とデータ取得失敗時は非表示

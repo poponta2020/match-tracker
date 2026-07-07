@@ -982,6 +982,7 @@ public class PracticeSessionService {
             matchParticipants.put(entry.getKey(),
                     entry.getValue().stream()
                             .map(pp -> PracticeSessionDto.MatchParticipantInfo.builder()
+                                    .participantId(pp.participant().getId())
                                     .playerId(pp.player().getId())
                                     .name(pp.player().getName())
                                     .kyuRank(pp.player().getKyuRank())

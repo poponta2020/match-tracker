@@ -340,6 +340,37 @@ class LotteryServiceTest {
     }
 
     @Test
+    @DisplayName("editParticipants WAITLISTED→WON: 待ち番号をクリアし後続を繰り下げる（管理者手動繰り上げ）")
+    void editParticipants_waitlistedToWon_clearsWaitlistNumberAndDecrements() {
+        PracticeParticipant p = PracticeParticipant.builder()
+                .id(701L).playerId(20L).sessionId(100L).matchNumber(MATCH)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2)
+                .offeredAt(java.time.LocalDateTime.of(2026, 4, 1, 8, 0))
+                .offerDeadline(java.time.LocalDateTime.of(2026, 4, 1, 12, 0))
+                .build();
+        when(practiceParticipantRepository.findById(701L)).thenReturn(Optional.of(p));
+        when(waitlistPromotionService.dispatchSameDayCancelNotifications(anyList())).thenReturn(List.of());
+
+        AdminEditParticipantsRequest.StatusChange change = new AdminEditParticipantsRequest.StatusChange();
+        change.setParticipantId(701L);
+        change.setNewStatus(ParticipantStatus.WON);
+        AdminEditParticipantsRequest req = new AdminEditParticipantsRequest();
+        req.setSessionId(100L);
+        req.setMatchNumber(MATCH);
+        req.setStatusChanges(List.of(change));
+
+        lotteryService.editParticipants(req);
+
+        assertThat(p.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(p.getWaitlistNumber()).isNull();
+        assertThat(p.getOfferedAt()).isNull();
+        assertThat(p.getOfferDeadline()).isNull();
+        assertThat(p.isDirty()).isTrue();
+        verify(practiceParticipantRepository).save(p);
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(100L, MATCH, 2);
+    }
+
+    @Test
     @DisplayName("editParticipants 通常分（当日でない）: dispatchSameDayCancelNotifications が normal 分を返し、バッチ通知が送られる")
     void editParticipants_normalCancel_sendsBatchedAdminNotification() {
         PracticeParticipant p = wonParticipant(601L, 11L);

@@ -447,6 +447,93 @@ class DensukeImportServicePhaseCoverageTest {
     }
 
     @Test
+    @DisplayName("Phase1 SAME_DAY: △ and unregistered creates WAITLISTED at tail")
+    void phase1SameDay_sankakuUnregistered_createsWaitlisted() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 7);
+        PracticeSession session = session(date);
+        DensukeData data = data(date, List.of(), List.of("A"), List.of("A"));
+
+        mockSameDay(data, session, date, true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), MATCH_NUMBER))
+                .thenReturn(Collections.emptyList());
+        when(practiceParticipantRepository.findMaxWaitlistNumber(session.getId(), MATCH_NUMBER))
+                .thenReturn(Optional.of(2));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(practiceParticipantRepository).save(org.mockito.ArgumentMatchers.argThat(p ->
+                p.getPlayerId().equals(1L)
+                        && p.getStatus() == ParticipantStatus.WAITLISTED
+                        && p.getWaitlistNumber() == 3
+                        && p.isDirty()));
+    }
+
+    @Test
+    @DisplayName("Phase1 SAME_DAY: △ and WON demotes to waitlist (Phase3 と同一挙動)")
+    void phase1SameDay_sankakuWon_demotesToWaitlist() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 7);
+        PracticeSession session = session(date);
+        DensukeData data = data(date, List.of(), List.of("A"), List.of("A"));
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(51L).sessionId(session.getId()).playerId(1L)
+                .matchNumber(MATCH_NUMBER).status(ParticipantStatus.WON).dirty(false).build();
+
+        mockSameDay(data, session, date, true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), MATCH_NUMBER))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(1);
+        verify(waitlistPromotionService).demoteToWaitlistSuppressed(51L);
+        // ○集合にいない△の人でも削除ループで消されない
+        verify(practiceParticipantRepository, never()).delete(existing);
+    }
+
+    @Test
+    @DisplayName("Phase1 SAME_DAY: ○→△ に変えた人の既存WAITLISTEDは削除されずスキップされる")
+    void phase1SameDay_sankakuWaitlisted_notDeletedAndSkipped() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 7);
+        PracticeSession session = session(date);
+        DensukeData data = data(date, List.of(), List.of("A"), List.of("A"));
+        PracticeParticipant existing = PracticeParticipant.builder()
+                .id(52L).sessionId(session.getId()).playerId(1L)
+                .matchNumber(MATCH_NUMBER).status(ParticipantStatus.WAITLISTED).waitlistNumber(1)
+                .dirty(false).build();
+
+        mockSameDay(data, session, date, true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), MATCH_NUMBER))
+                .thenReturn(List.of(existing));
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).delete(existing);
+        verify(waitlistPromotionService, never()).demoteToWaitlistSuppressed(52L);
+    }
+
+    @Test
+    @DisplayName("Phase1 MONTHLY: △ は従来どおり無視される（北大への回帰ガード）")
+    void phase1Monthly_sankaku_isIgnored() throws IOException {
+        LocalDate date = LocalDate.of(2026, 4, 7);
+        PracticeSession session = session(date);
+        DensukeData data = data(date, List.of(), List.of("A"), List.of("A"));
+
+        mockPhase1Monthly(data, session, date);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(session.getId(), MATCH_NUMBER))
+                .thenReturn(Collections.emptyList());
+
+        ImportResult result = densukeImportService.importFromDensuke("http://example.com", null, 0L, ORG_ID);
+
+        assertThat(result.getRegisteredCount()).isEqualTo(0);
+        verify(practiceParticipantRepository, never()).save(org.mockito.ArgumentMatchers.any(PracticeParticipant.class));
+        verify(waitlistPromotionService, never()).demoteToWaitlistSuppressed(org.mockito.ArgumentMatchers.anyLong());
+        // MONTHLY では △ 名を未マッチ集合にも入れない（従来挙動維持）
+        assertThat(result.getUnmatchedNames()).doesNotContain("A");
+    }
+
+    @Test
     @DisplayName("Phase1: duplicate guard skips insert when unique key already exists")
     void phase1_duplicateGuard_skipsInsert() throws IOException {
         LocalDate date = LocalDate.of(2026, 4, 7);

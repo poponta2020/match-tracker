@@ -1,14 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
-import { practiceAPI, playerAPI } from '../api';
+import { practiceAPI, playerAPI, lotteryAPI } from '../api';
 import { sortPlayersByRank } from '../utils/playerSort';
 import PlayerChip from './PlayerChip';
 
-const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) => {
+const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onRefresh }) => {
   const [allPlayers, setAllPlayers] = useState([]);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
   // A-1: 保存前の追加/削除サマリー算出用に、編集開始時点のWON/PENDING集合を保持する。
   const [initialPlayerIds, setInitialPlayerIds] = useState([]);
+  // 管理者の手動繰り上げ用: キャンセル待ちの参加者一覧（participantId付き）。
+  const [waitlist, setWaitlist] = useState([]);
+  const [promotingId, setPromotingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +40,13 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
             .map(p => p.playerId);
           setSelectedPlayerIds(ids);
           setInitialPlayerIds(ids);
+
+          // 管理者手動繰り上げ用: キャンセル待ち（WAITLISTED）を待ち番号順に抽出する。
+          const wl = participants
+            .filter(p => typeof p !== 'string' && p.participantId != null && p.status === 'WAITLISTED')
+            .slice()
+            .sort((a, b) => (a.waitlistNumber ?? Number.MAX_SAFE_INTEGER) - (b.waitlistNumber ?? Number.MAX_SAFE_INTEGER));
+          setWaitlist(wl);
         }
       }
     } catch (err) {
@@ -44,6 +54,37 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
       console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 管理者による手動繰り上げ（キャンセル待ち → 当選）。
+  // 繰り上げは即時サーバ反映し、onRefresh で親のセッションを再取得してモーダルを最新化する
+  // （モーダルは開いたまま。連続で繰り上げできる）。
+  const handlePromote = async (participant) => {
+    if (!window.confirm(
+      `${participant.name} さんを第${matchNumber}試合のキャンセル待ちから「当選（参加確定）」に繰り上げます。\n` +
+      `よろしいですか？`
+    )) {
+      return;
+    }
+    try {
+      setPromotingId(participant.participantId);
+      setError('');
+      await lotteryAPI.editParticipants({
+        sessionId: session.id,
+        matchNumber,
+        statusChanges: [{ participantId: participant.participantId, newStatus: 'WON' }],
+      });
+      // 楽観的にモーダル内の一覧から除外しつつ、親の再取得で正となる状態へ更新する。
+      setWaitlist(prev => prev.filter(w => w.participantId !== participant.participantId));
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (err) {
+      setError('繰り上げに失敗しました');
+      console.error('Error promoting participant:', err);
+    } finally {
+      setPromotingId(null);
     }
   };
 
@@ -124,7 +165,7 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
               第{matchNumber}試合の参加者
             </h2>
             <p className="text-xs text-[#8a7568] mt-1">
-              この編集は当選/参加確定者のみを対象とします
+              当選/参加確定者の編集と、キャンセル待ちの手動繰り上げができます
             </p>
           </div>
           <button
@@ -164,6 +205,37 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave }) =
                       >
                         <X size={12} className="text-white/70" />
                       </PlayerChip>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* キャンセル待ち（管理者手動繰り上げ） */}
+              {waitlist.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-xs text-[#8a7568] mb-2">
+                    キャンセル待ち ({waitlist.length}名)
+                  </div>
+                  <div className="space-y-1.5">
+                    {waitlist.map((w) => (
+                      <div
+                        key={w.participantId}
+                        className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5"
+                      >
+                        <span className="text-sm text-[#5f3a2d] flex items-center gap-1.5">
+                          {w.waitlistNumber != null && (
+                            <span className="text-[10px] text-[#b0956a] font-bold">{w.waitlistNumber}</span>
+                          )}
+                          {w.name}
+                        </span>
+                        <button
+                          onClick={() => handlePromote(w)}
+                          disabled={promotingId != null}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-[#4a6b5a] rounded-full hover:bg-[#3d5a4c] disabled:opacity-50 transition-colors flex-shrink-0"
+                        >
+                          {promotingId === w.participantId ? '繰り上げ中...' : '繰り上げ'}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>

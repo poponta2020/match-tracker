@@ -81,6 +81,8 @@ public class PracticeSessionDto {
     @AllArgsConstructor
     @Builder
     public static class MatchParticipantInfo {
+        // 管理者の手動繰り上げ（キャンセル待ち→当選）でステータス変更対象を一意に特定するため公開する。
+        private Long participantId;
         // A-1: モーダルの初期選択を名前一致ではなくplayerId基準にするため公開する。
         // 同姓同名・改名でも取りこぼしなくWON/PENDINGを特定できる。
         private Long playerId;
