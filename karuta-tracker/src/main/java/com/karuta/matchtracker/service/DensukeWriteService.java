@@ -554,17 +554,9 @@ public class DensukeWriteService {
                         p -> p.getSessionId() + "_" + p.getMatchNumber(),
                         p -> p, (a, b) -> a));
 
-        // d. row ID をプリフェッチ
-        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
-        for (PracticeSession session : urlSessions) {
-            for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
-                String key = session.getId() + "_" + matchNum;
-                densukeRowIdRepository
-                        .findByDensukeUrlIdAndSessionDateAndMatchNumber(
-                                urlId, session.getSessionDate(), matchNum)
-                        .ifPresent(r -> rowIdsByKey.put(key, r.getDensukeRowId()));
-            }
-        }
+        // d. row ID をプリフェッチ（PENDING/APPROVED の削除候補は除外。stale row_id での
+        // 誤った dirty=false 解消を防ぐ）
+        Map<String, String> rowIdsByKey = buildRowIdsByKey(urlId, urlSessions);
 
         // e. regist フォームデータを構築
         RegistFormResult registResult = buildRegistFormData(
@@ -979,12 +971,7 @@ public class DensukeWriteService {
      * （却下は「データはそのまま・行数不一致も解消しない」ため、通常どおり不一致が報告され続ける）。
      */
     private List<Map.Entry<LocalDate, Integer>> buildScheduleOrder(List<PracticeSession> sessions, Long urlId) {
-        Set<String> excludedKeys = densukeDeletionCandidateRepository
-                .findByDensukeUrlIdAndStatusIn(urlId,
-                        List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED))
-                .stream()
-                .map(c -> c.getSessionDate() + "_" + c.getMatchNumber())
-                .collect(Collectors.toSet());
+        Set<String> excludedKeys = findDeletionExcludedDateMatchKeys(urlId);
 
         List<Map.Entry<LocalDate, Integer>> list = new ArrayList<>();
         List<PracticeSession> sorted = sessions.stream()
@@ -997,6 +984,42 @@ public class DensukeWriteService {
             }
         }
         return list;
+    }
+
+    /**
+     * urlId 単位で PENDING・APPROVED（削除候補・欠番）な (sessionDate, matchNumber) キー集合を返す。
+     * {@link #buildScheduleOrder} と {@link #buildRowIdsByKey} の両方から、削除候補の除外判定を
+     * 揃えるために共有する。
+     */
+    private Set<String> findDeletionExcludedDateMatchKeys(Long urlId) {
+        return densukeDeletionCandidateRepository
+                .findByDensukeUrlIdAndStatusIn(urlId,
+                        List.of(DensukeDeletionCandidate.Status.PENDING, DensukeDeletionCandidate.Status.APPROVED))
+                .stream()
+                .map(c -> c.getSessionDate() + "_" + c.getMatchNumber())
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * urlId × urlSessions から、書き込み時に使う row_id を (sessionId_matchNumber) キーでプリフェッチする。
+     * PENDING/APPROVED の削除候補（欠番）は除外する。除外しないと、伝助側に実在しない行を指す
+     * stale な row_id が使われ、当該試合の dirty な参加者が実際には未反映のまま dirty=false に
+     * なってしまう（Codex レビュー Round 5 CRITICAL）。package-private でテスト可能にしている。
+     */
+    Map<String, String> buildRowIdsByKey(Long urlId, List<PracticeSession> urlSessions) {
+        Set<String> excludedDateMatchKeys = findDeletionExcludedDateMatchKeys(urlId);
+        Map<String, String> rowIdsByKey = new LinkedHashMap<>();
+        for (PracticeSession session : urlSessions) {
+            for (int matchNum = 1; matchNum <= session.getTotalMatches(); matchNum++) {
+                if (excludedDateMatchKeys.contains(session.getSessionDate() + "_" + matchNum)) continue;
+                String key = session.getId() + "_" + matchNum;
+                densukeRowIdRepository
+                        .findByDensukeUrlIdAndSessionDateAndMatchNumber(
+                                urlId, session.getSessionDate(), matchNum)
+                        .ifPresent(r -> rowIdsByKey.put(key, r.getDensukeRowId()));
+            }
+        }
+        return rowIdsByKey;
     }
 
     /**

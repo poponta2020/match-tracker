@@ -1367,6 +1367,10 @@ SUPER_ADMIN のみ操作可能。
   はそもそも発生しなくなる。個別の重複抑制ロジックは不要
 - 却下（REJECTED）した場合は除外対象から外れる。データも行数不一致も変わらないため、
   `ADMIN_DENSUKE_ROWID_ISSUE` は通常どおり報告され続ける（未解決の問題として管理者に見える状態を維持）
+- `DensukeWriteService.buildRowIdsByKey` も同じ除外集合を使い、PENDING・APPROVED な
+  (date, matchNumber) の `densuke_row_ids` キャッシュはプリフェッチしない。除外しないと、
+  削除された行に紐づく stale な row_id が dirty な参加者の書き込みに使われ、伝助に実際は
+  反映されていないのに `dirty=false`（同期済み扱い）になってしまうデータ不整合が起きる
 
 **通知:**
 - 新規検知時のみ、団体の ADMIN / SUPER_ADMIN へ LINE 通知（`ADMIN_DENSUKE_DELETE_DETECTED`）
