@@ -12,6 +12,8 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
   // 管理者の手動繰り上げ用: キャンセル待ちの参加者一覧（participantId付き）。
   const [waitlist, setWaitlist] = useState([]);
   const [promotingId, setPromotingId] = useState(null);
+  // 定員ガード: WON+OFFERED >= capacity のとき満員（繰り上げ不可）。capacity 未設定時は常に false。
+  const [matchFull, setMatchFull] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -47,6 +49,12 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
             .slice()
             .sort((a, b) => (a.waitlistNumber ?? Number.MAX_SAFE_INTEGER) - (b.waitlistNumber ?? Number.MAX_SAFE_INTEGER));
           setWaitlist(wl);
+
+          // 定員判定（バックエンドの繰り上げガードと同じ WON+OFFERED >= capacity で満員）。
+          const wonOffered = participants.filter(p =>
+            typeof p !== 'string' && (p.status === 'WON' || p.status === 'OFFERED')).length;
+          const cap = session.capacity;
+          setMatchFull(cap != null && wonOffered >= cap);
         }
       }
     } catch (err) {
@@ -81,7 +89,8 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
         await onRefresh();
       }
     } catch (err) {
-      setError('繰り上げに失敗しました');
+      // バックエンドの定員ガード等（400）のメッセージがあれば表示する
+      setError(err?.response?.data?.message || '繰り上げに失敗しました');
       console.error('Error promoting participant:', err);
     } finally {
       setPromotingId(null);
@@ -213,8 +222,11 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
               {/* キャンセル待ち（管理者手動繰り上げ） */}
               {waitlist.length > 0 && (
                 <div className="mb-4">
-                  <div className="text-xs text-[#8a7568] mb-2">
-                    キャンセル待ち ({waitlist.length}名)
+                  <div className="text-xs text-[#8a7568] mb-2 flex items-center justify-between">
+                    <span>キャンセル待ち ({waitlist.length}名)</span>
+                    {matchFull && (
+                      <span className="text-[10px] text-[#c0392b]">定員満（会場拡張が必要）</span>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     {waitlist.map((w) => (
@@ -230,8 +242,9 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
                         </span>
                         <button
                           onClick={() => handlePromote(w)}
-                          disabled={promotingId != null}
-                          className="px-2.5 py-1 text-xs font-medium text-white bg-[#4a6b5a] rounded-full hover:bg-[#3d5a4c] disabled:opacity-50 transition-colors flex-shrink-0"
+                          disabled={promotingId != null || matchFull}
+                          title={matchFull ? '定員に空きがないため繰り上げできません' : undefined}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-[#4a6b5a] rounded-full hover:bg-[#3d5a4c] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                         >
                           {promotingId === w.participantId ? '繰り上げ中...' : '繰り上げ'}
                         </button>

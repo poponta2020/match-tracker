@@ -1104,8 +1104,10 @@ public class LotteryService {
         List<AdminWaitlistNotificationData> promotionDataList = new ArrayList<>();
         if (request.getStatusChanges() != null) {
             for (AdminEditParticipantsRequest.StatusChange change : request.getStatusChanges()) {
-                PracticeParticipant p = practiceParticipantRepository.findById(change.getParticipantId())
-                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", change.getParticipantId()));
+                // 権限境界: 対象参加者が request の sessionId/matchNumber に属することを検証する
+                // （Controller のスコープ検証は request.sessionId のみのため、別セッション/別試合/別団体の
+                //  participantId を混ぜられると他レコードを更新できてしまう IDOR を防ぐ）
+                PracticeParticipant p = findScopedParticipant(change.getParticipantId(), request);
                 ParticipantStatus oldStatus = p.getStatus();
 
                 // WON → CANCELLED は通常キャンセル経路に委譲し、当日12:00分岐・通常繰り上げを統一する。
@@ -1119,11 +1121,19 @@ public class LotteryService {
                     continue;
                 }
 
+                boolean promoteToWon = change.getNewStatus() == ParticipantStatus.WON
+                        && (oldStatus == ParticipantStatus.WAITLISTED || oldStatus == ParticipantStatus.OFFERED);
+                // WAITLISTED→WON は当選総数が増えるため、繰り上げ前に空き枠を確認して定員超過を防ぐ
+                // （OFFERED→WON は既に定員に算入済みで総数が変わらないためチェック不要）。
+                // 定員拡張が必要な場合は会場拡張フロー（隣室予約）で capacity を増やしてから繰り上げる。
+                if (promoteToWon && oldStatus == ParticipantStatus.WAITLISTED) {
+                    ensureVacancyForManualPromotion(request);
+                }
+
                 p.setStatus(change.getNewStatus());
                 p.setDirty(true);
 
-                if (change.getNewStatus() == ParticipantStatus.WON
-                        && (oldStatus == ParticipantStatus.WAITLISTED || oldStatus == ParticipantStatus.OFFERED)) {
+                if (promoteToWon) {
                     // キャンセル待ち/オファー中 → 当選 への管理者手動繰り上げ。
                     // 当該者の待ち番号を消し、後続のキャンセル待ち番号を1つ繰り下げて欠番を防ぐ。
                     // オファー関連フィールドもクリアして期限切れ処理の対象から外す。
@@ -1179,11 +1189,49 @@ public class LotteryService {
         // キャンセル待ち順番変更
         if (request.getWaitlistReorders() != null) {
             for (AdminEditParticipantsRequest.WaitlistReorder reorder : request.getWaitlistReorders()) {
-                PracticeParticipant p = practiceParticipantRepository.findById(reorder.getParticipantId())
-                        .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", reorder.getParticipantId()));
+                PracticeParticipant p = findScopedParticipant(reorder.getParticipantId(), request);
                 p.setWaitlistNumber(reorder.getNewWaitlistNumber());
                 practiceParticipantRepository.save(p);
             }
+        }
+    }
+
+    /**
+     * 参加者を取得し、{@code request} の sessionId / matchNumber に属することを検証する。
+     * Controller のスコープ検証は {@code request.sessionId} のみを対象とするため、
+     * 別セッション・別試合（＝別団体を含む）の participantId を送られて他レコードを
+     * 更新される IDOR を防ぐ。属さない場合は 400（不正リクエスト）として拒否する。
+     */
+    private PracticeParticipant findScopedParticipant(Long participantId, AdminEditParticipantsRequest request) {
+        PracticeParticipant p = practiceParticipantRepository.findById(participantId)
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeParticipant", participantId));
+        if (!java.util.Objects.equals(p.getSessionId(), request.getSessionId())
+                || !java.util.Objects.equals(p.getMatchNumber(), request.getMatchNumber())) {
+            throw new IllegalArgumentException(
+                    "参加者(id=" + participantId + ")は指定された練習日・試合に属していません");
+        }
+        return p;
+    }
+
+    /**
+     * 管理者手動繰り上げ（WAITLISTED→WON）時の定員ガード。
+     * 既に {@code WON + OFFERED >= capacity}（他経路と揃えた空き判定）なら定員超過となるため拒否する。
+     * capacity 未設定（定員なし）の場合は制限しない。
+     */
+    private void ensureVacancyForManualPromotion(AdminEditParticipantsRequest request) {
+        PracticeSession session = practiceSessionRepository.findById(request.getSessionId())
+                .orElseThrow(() -> new ResourceNotFoundException("PracticeSession", request.getSessionId()));
+        Integer capacity = session.getCapacity();
+        if (capacity == null) {
+            return;
+        }
+        long won = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                request.getSessionId(), request.getMatchNumber(), ParticipantStatus.WON);
+        long offered = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
+                request.getSessionId(), request.getMatchNumber(), ParticipantStatus.OFFERED);
+        if (won + offered >= capacity) {
+            throw new IllegalArgumentException(
+                    "定員に空きがないため繰り上げできません（定員拡張が必要です）");
         }
     }
 
