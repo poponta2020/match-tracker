@@ -1385,10 +1385,21 @@ SUPER_ADMIN のみ操作可能。
 - 練習詳細（`/practices/:id`）・出欠登録（`/practices/participation`）: 該当試合番号に
   「伝助で削除されました」バッジ/表示を出し、チェックボックス操作を無効化する
 - 却下時は通常表示に戻る（データは変更されないため）
-- バックエンド側にも二重ガードを設ける（`PracticeParticipantService.setMatchParticipants` /
-  `addParticipantToMatch` / `registerParticipations`）: APPROVED な (団体, 練習日, 試合番号) への
-  新規参加登録はフロントの表示に関わらず `IllegalArgumentException`（400）で拒否する。承認済み欠番が
-  通常枠として再登録され、伝助書き込み時の行数不一致を再発させることを防ぐ
+- バックエンド側にも二重ガードを設ける: APPROVED な (団体, 練習日, 試合番号) への新規参加登録・
+  再有効化はフロントの表示に関わらず拒否する。承認済み欠番が通常枠として再登録され、伝助書き込み時の
+  行数不一致を再発させることを防ぐ。判定ロジックは共有コンポーネント `DensukeDeletionGuard` に切り出し、
+  以下の選手が直接触れる経路に適用（単一対象は例外、バッチ処理は当該試合番号のみスキップして他は継続）:
+  - `PracticeParticipantService.setMatchParticipants` / `addParticipantToMatch`（例外）/
+    `registerParticipations`（バッチ、該当キーのみ拒否）
+  - `WaitlistPromotionService.handleSameDayJoin`（例外）/ `handleSameDayJoinAll`（バッチ、スキップ）/
+    `rejoinWaitlistBySession`（バッチ、スキップ）
+  - **既知の限定事項**: 管理者専用の編集経路（`LotteryService.editParticipants` の参加者追加・
+    ステータス変更、`LotteryService.reExecuteLottery` の再抽選、`PracticeSessionService.createSession` /
+    `updateSession` の参加者一括登録）には本ガードを適用していない。管理者が承認済み欠番と知った上で
+    あえて操作するケースは残るため、必要に応じて別Issueで対応する
+  - `DensukeImportService` のフェーズ処理（伝助→アプリ取り込み）は対象外で問題ない。承認済み欠番は
+    伝助側に行自体が存在しないため、スクレイピング結果に該当 (date, matchNumber) のエントリが
+    現れず、取り込みロジックが実行される前提が成立しない
 
 **API:**
 | メソッド | パス | 権限 | 説明 |

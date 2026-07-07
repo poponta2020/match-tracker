@@ -37,6 +37,7 @@ class WaitlistPromotionServiceAdditionalTest {
     @Mock private NotificationService notificationService;
     @Mock private LineNotificationService lineNotificationService;
     @Mock private DensukeSyncService densukeSyncService;
+    @Mock private DensukeDeletionGuard densukeDeletionGuard;
 
     @InjectMocks
     private WaitlistPromotionService service;
@@ -122,6 +123,9 @@ class WaitlistPromotionServiceAdditionalTest {
                 .status(ParticipantStatus.WAITLIST_DECLINED)
                 .build();
 
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                PracticeSession.builder().id(100L).organizationId(1L)
+                        .sessionDate(LocalDate.of(2026, 5, 1)).build()));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(
                 100L, 10L, ParticipantStatus.WAITLIST_DECLINED)).thenReturn(List.of(declined));
         when(practiceParticipantRepository.findMaxWaitlistNumberIncludingOffered(100L, 1)).thenReturn(Optional.of(3));
@@ -174,6 +178,9 @@ class WaitlistPromotionServiceAdditionalTest {
                 .id(1L).sessionId(100L).playerId(10L).matchNumber(1)
                 .status(ParticipantStatus.WAITLIST_DECLINED).build();
 
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(
+                PracticeSession.builder().id(100L).organizationId(1L)
+                        .sessionDate(LocalDate.of(2026, 5, 1)).build()));
         when(practiceParticipantRepository.findBySessionIdAndPlayerIdAndStatus(
                 100L, 10L, ParticipantStatus.WAITLIST_DECLINED)).thenReturn(List.of(declined));
         // OFFERED#1が残っているので最大番号は1
