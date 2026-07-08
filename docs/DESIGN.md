@@ -2944,14 +2944,16 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 
 ```
 [ユーザー操作（ADMIN+）]
-1. 練習日詳細モーダルで隣室が「空き」の場合、「隣室を予約」ボタンを表示
+1. 練習日詳細モーダルで隣室が expandable（`○` 空き ／ `●` 要問合せ）の場合、予約・拡張ボタンを表示（`×`/`不明` 等は非表示）
+   - `●`（要問合せ＝当日・直近日でかでるがネット予約締切）→ オンライン予約不可のためプロキシをスキップし、初期状態から「予約完了を報告」ボタンを表示（Kaderu 和室でも同様。以降は手順6へ）
    ↓
-2. 「隣室を予約」ボタンクリック
+2. （`○` の場合）「隣室を予約」ボタンクリック
    ↓
 [フロントエンド: PracticeList.jsx]
-3. Kaderu 和室(venueId ∈ {3,4,8,11}) → venueReservationProxyAPI.createSession() でプロキシ予約画面を新規タブに表示
+3. Kaderu 和室(venueId ∈ {3,4,8,11}) かつ `○` → venueReservationProxyAPI.createSession() でプロキシ予約画面を新規タブに表示
    東区民センター 東🌸(venueId=6) → Phase 1 ではプロキシ未対応のため初期状態から「予約完了を報告」ボタンを表示
-   （venueResolver / KADERU_VENUE_IDS 判定で分岐）
+   隣室が `●`（要問合せ）→ プロキシをスキップし「予約完了を報告」を表示
+   （venueResolver / KADERU_VENUE_IDS / adjacentRoomStatus.status 判定で分岐）
    ↓
 4a. プロキシ画面表示成功時 → 「予約完了を報告」ボタンを表示（manual_pending状態）
 4b. プロキシが申込完了を自動検知した場合 → BroadcastChannel 経由で元タブへ通知し、該当セッションを再取得して「会場を拡張」ボタンを表示
@@ -2979,7 +2981,7 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 12. POST /api/practice-sessions/{id}/expand-venue
    ↓
 [バックエンド: AdjacentRoomService.expandVenue()]
-13. 会場を拡張後会場に変更、定員を更新
+13. reservation_confirmed_at != null かつ隣室が expandable（`○`/`●`）であることを再検証し、会場を拡張後会場に変更、定員を更新
    ↓
 14. WaitlistPromotionService.promoteWaitlistedAfterCapacityIncrease(sessionId) を呼び出し（B-1で要承諾に統一）
    - 昇格 OFFERED に通常オファーと同じ応答期限 `calculateOfferDeadline` を付与（auto-confirm=offerDeadline null は廃止）。既存 OFFERED の応答期限一律クリアも廃止（既存OFFEREDは変更しない）
@@ -3000,7 +3002,7 @@ WaitlistPromotionService の `*Suppressed` 系メソッド（`cancelParticipatio
 | `practice_sessions` テーブル | `reservation_confirmed_at` カラム追加 |
 | `AdjacentRoomService` | `confirmReservation()`, `expandVenue()` メソッド追加 |
 | `PracticeSessionController` | `POST /{id}/confirm-reservation`, `POST /{id}/expand-venue` エンドポイント追加（ADMIN+） |
-| `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー。`KADERU_VENUE_IDS` でない venue は「隣室を予約」ボタンをスキップ |
+| `PracticeList.jsx` | 隣室予約→予約完了報告→会場拡張の3段階UIフロー。ボタン表示ゲートは `adjacentRoomStatus.expandable`（`○`/`●`）。`KADERU_VENUE_IDS` でない venue、および隣室が `●`（要問合せ）の場合は「隣室を予約」ボタンをスキップし「予約完了を報告」から開始 |
 | `AdjacentRoomConfig` | `isKaderuRoom` と独立した `isAdjacentCheckTarget` を導入（かでる4部屋 + 東🌸）、`getNightTimeLabel(venueId)` で会場別時間帯ラベル、ROOM_MAP に東🌸(6)↔かっこう(12) / 東全室(10, 定員18) を追加 |
 | `AdjacentRoomNotificationScheduler` | セッションフィルタを `isAdjacentCheckTarget` に切替、通知の時間帯表記を動的化（かでる: 17-21 / 東🌸: 18-21） |
 | `scripts/room-checker/sync-higashi-availability-to-db.js` | 東区民センター かっこう の月表示ページから夜間(18-21)空き状況を `room_availability_cache` に UPSERT |
