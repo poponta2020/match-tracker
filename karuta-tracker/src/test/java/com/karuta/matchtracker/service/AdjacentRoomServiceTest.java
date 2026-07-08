@@ -55,6 +55,7 @@ class AdjacentRoomServiceTest {
         assertEquals("はまなす", result.getAdjacentRoomName());
         assertEquals("○", result.getStatus());
         assertTrue(result.getAvailable());
+        assertTrue(result.getExpandable());
         assertEquals(7L, result.getExpandedVenueId());
         assertEquals("すずらん・はまなす", result.getExpandedVenueName());
         assertEquals(24, result.getExpandedCapacity());
@@ -73,6 +74,24 @@ class AdjacentRoomServiceTest {
 
         assertNotNull(result);
         assertFalse(result.getAvailable());
+        assertFalse(result.getExpandable());
+    }
+
+    @Test
+    @DisplayName("かでる和室の隣室空き状況を取得 - 要問合せ(●)は空きではないが拡張は可能")
+    void getAdjacentRoomAvailability_inquiryRequired() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("●").build();
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+
+        AdjacentRoomStatusDto result = adjacentRoomService.getAdjacentRoomAvailability(3L, date);
+
+        assertNotNull(result);
+        assertEquals("●", result.getStatus());
+        assertFalse(result.getAvailable());   // 空き通知の条件（●では飛ばさない）
+        assertTrue(result.getExpandable());    // 手動確保による拡張は可能
     }
 
     @Test
@@ -158,6 +177,32 @@ class AdjacentRoomServiceTest {
         assertEquals(24, session.getCapacity());
         assertEquals(100L, session.getUpdatedBy());
         assertNull(session.getReservationConfirmedAt()); // 拡張後にクリアされる
+        verify(practiceSessionRepository).save(session);
+        verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(1L);
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 要問合せ(●)＋予約確認済みでも拡張できる（当日の手動確保）")
+    void expandVenue_inquiryRequiredSuccess() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(3L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(LocalDateTime.of(2026, 4, 12, 10, 0)).build();
+        Venue expandedVenue = Venue.builder().id(7L).name("すずらん・はまなす").capacity(24).build();
+        RoomAvailabilityCache cache = RoomAvailabilityCache.builder()
+                .roomName("はまなす").targetDate(date).timeSlot("evening").status("●").build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("はまなす", date, "evening"))
+                .thenReturn(Optional.of(cache));
+        when(venueRepository.findById(7L)).thenReturn(Optional.of(expandedVenue));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+
+        adjacentRoomService.expandVenue(1L, 100L);
+
+        assertEquals(7L, session.getVenueId());
+        assertEquals(24, session.getCapacity());
+        assertNull(session.getReservationConfirmedAt());
         verify(practiceSessionRepository).save(session);
         verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(1L);
     }

@@ -72,12 +72,25 @@ const sessionWithAdjacentRoom = {
     adjacentRoomName: 'hamanasu',
     status: 'open',
     available: true,
+    expandable: true,
     expandedVenueId: 7,
     expandedVenueName: 'suzuran-hamanasu',
     expandedCapacity: 24,
   },
   reservationConfirmedAt: null,
   matchParticipants: {},
+};
+
+// 当日など「●（要問合せ）」: available=false / expandable=true。
+// オンライン予約は不可なので「隣室を予約」は出さず、手動の「予約完了を報告」→「会場を拡張」を辿る。
+const sessionWithInquiryRoom = {
+  ...sessionWithAdjacentRoom,
+  adjacentRoomStatus: {
+    ...sessionWithAdjacentRoom.adjacentRoomStatus,
+    status: '●',
+    available: false,
+    expandable: true,
+  },
 };
 
 const sessionSummary = {
@@ -337,5 +350,30 @@ describe('adjacent room reservation proxy flow', () => {
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
     expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
+  });
+
+  it('lets an admin manually report and expand when the adjacent room is 要問合せ (●)', async () => {
+    practiceAPI.getById.mockResolvedValue({ data: sessionWithInquiryRoom });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PracticeList />);
+
+    const dayCell = await screen.findByText('12');
+    await user.click(dayCell);
+
+    // ● はオンライン予約不可。自動プロキシ予約（隣室を予約）ではなく手動報告を促す。
+    await waitFor(() => {
+      expect(screen.getByText('予約完了を報告')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('予約完了を報告'));
+
+    await waitFor(() => {
+      expect(practiceAPI.confirmReservation).toHaveBeenCalledWith(1);
+      expect(screen.getByText('会場を拡張')).toBeInTheDocument();
+    });
+    // 当日は自動プロキシ予約を一切呼ばない
+    expect(venueReservationProxyAPI.createSession).not.toHaveBeenCalled();
   });
 });
