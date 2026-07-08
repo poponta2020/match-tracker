@@ -1889,6 +1889,13 @@ cron による30分ごとの同期に加え、ADMIN+ ユーザーが任意のタ
    - `adjacent_room_notifications` テーブルで (session_id, remaining_count) の重複送信を防止
 3. **通知**: `NotificationType.ADJACENT_ROOM_AVAILABLE`。会場ごとの時間帯ラベル（`AdjacentRoomConfig.getNightTimeLabel`）を含むメッセージ。SUPER_ADMIN全員 + 該当団体の ADMIN に送信
 
+> **空き状態の区分（`available` と `expandable`）**: `room_availability_cache.status` を `AdjacentRoomStatusDto` の2つの真偽値に写像する。
+> - `○`（空き）… `available=true` / `expandable=true`。オンライン予約可・空き通知の対象。
+> - `●`（要問合せ）… 当日・直近日はかでるがネット予約を締め切るため表示される。`available=false`（**空き通知は送らない**）だが `expandable=true`（電話等で手動確保した前提で管理者が会場拡張できる）。
+> - `×`/`-`/`休館`/`不明` … `available=false` / `expandable=false`（拡張不可）。
+>
+> 空き通知（4.6.3-2）の条件は `available`、会場拡張（`expandVenue`）の可否は `expandable` を用いる。`●` は Kaderu 和室でもオンライン予約（プロキシ）をスキップし、「予約完了を報告 → 会場を拡張」の手動フローで扱う（UI フローは DESIGN.md §7.7）。`expandVenue` は `reservationConfirmedAt != null` かつ隣室が `expandable` であることをサーバー側で再検証する。
+
 #### 4.6.4 ファイル構成
 
 | ファイル | 役割 |

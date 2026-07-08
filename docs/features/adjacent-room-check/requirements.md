@@ -44,6 +44,10 @@ status: completed
   - サイト: 「あかなら(24人)」→ アプリ: 「あかなら」
   - サイト: 「えぞまつ(24人)」→ アプリ: 「えぞまつ」
 - **空き状態**: ○=空き、×=予約済、-=利用不可、●=要問合せ、休館
+- **状態の扱い（会場拡張との関係）**:
+  - `○`（空き）… オンライン予約可。`available=true` / `expandable=true`。空き通知の対象。
+  - `●`（要問合せ）… 当日・直近日はかでるがネット予約を締め切るため表示される。`available=false`（空き通知は飛ばさない）だが `expandable=true`。電話等で手動確保した前提で管理者が手動拡張できる。
+  - `×`/`-`/`休館`/`不明` … `available=false` / `expandable=false`（拡張不可）。
 - **実行方式**: Node.jsスクリプト（Playwright）が定期実行し、結果をPostgreSQLに書き込む。バックエンドはDBを参照するのみ
 - **結果の保存**: 新テーブル `room_availability_cache` に保存
 
@@ -66,10 +70,13 @@ status: completed
 - **データ取得**: セッション詳細取得時に、DBキャッシュから隣室の空き状況を付与して返す
 
 ### 3.5 会場拡張ボタン
-- **表示条件**: 管理者（ADMIN/SUPER_ADMIN）のみ、かつ会場がかでる2・7の和室（ID: 3, 4, 8, 11）の場合
+- **表示条件**: 管理者（ADMIN/SUPER_ADMIN）のみ、かつ隣室が `expandable`（`○` または `●`）の場合
+- **予約フローの分岐（状態別）**:
+  - `○`（空き）… 「隣室を予約（プロキシ自動予約）」→「予約完了を報告」→「会場を拡張」
+  - `●`（要問合せ）… オンライン予約不可のためプロキシ予約はスキップし、「予約完了を報告（電話等での手動確保を記録）」→「会場を拡張」の二段階
 - **確認ダイアログ**: 「すずらんをすずらん・はまなすに拡張しますか？定員が14→24に変更されます」
-- **動作**: venue_idを拡張後Venue IDに変更、capacityを拡張後Venueのcapacityに更新
-- **API**: PracticeSessionの更新エンドポイントを利用するか、専用エンドポイントを追加
+- **動作**: venue_idを拡張後Venue IDに変更、capacityを拡張後Venueのcapacityに更新（拡張時は隣室が `expandable` かつ予約確認済みであることをサーバー側で再検証）
+- **API**: `POST /api/practice-sessions/{id}/expand-venue`（会場拡張）/ `POST /api/practice-sessions/{id}/confirm-reservation`（予約完了報告）
 
 ## 4. 技術設計
 

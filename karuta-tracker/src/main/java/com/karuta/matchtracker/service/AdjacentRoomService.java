@@ -65,6 +65,8 @@ public class AdjacentRoomService {
                 .adjacentRoomName(adjacentRoomName)
                 .status(status)
                 .available("○".equals(status))
+                // ●（要問合せ）は手動確保による拡張を許可するため expandable=true（available とは区別）
+                .expandable("○".equals(status) || "●".equals(status))
                 .expandedVenueId(AdjacentRoomConfig.getExpandedVenueId(venueId))
                 .expandedVenueName(AdjacentRoomConfig.getExpandedVenueName(venueId))
                 .expandedCapacity(AdjacentRoomConfig.getExpandedCapacity(venueId))
@@ -116,9 +118,10 @@ public class AdjacentRoomService {
             throw new IllegalStateException("隣室の予約が確認されていません。先に予約を完了してください");
         }
 
-        // 隣室の空き状況をサーバー側で再検証
+        // 隣室が拡張可能な状態（○ 空き / ● 要問合せ）かをサーバー側で再検証。
+        // ● は「予約完了を報告」で reservationConfirmedAt を立てた上での手動確保を前提に許可する。
         AdjacentRoomStatusDto adjacentRoom = getAdjacentRoomAvailability(currentVenueId, session.getSessionDate());
-        if (adjacentRoom == null || !adjacentRoom.getAvailable()) {
+        if (adjacentRoom == null || !adjacentRoom.getExpandable()) {
             throw new IllegalStateException("隣室が空いていないため、会場を拡張できません");
         }
 

@@ -910,7 +910,7 @@ const PracticeList = () => {
                             : selectedSession.adjacentRoomStatus.status === '●' ? '要問合せ'
                             : '利用不可'}
                         </span>
-                        {selectedSession.adjacentRoomStatus.available && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
+                        {selectedSession.adjacentRoomStatus.expandable && (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
                           reservationReady[selectedSession.id] === true ? (
                             <button
                               onClick={(e) => {
@@ -921,7 +921,7 @@ const PracticeList = () => {
                             >
                               会場を拡張
                             </button>
-                          ) : (reservationReady[selectedSession.id] === 'manual_pending' || !KADERU_VENUE_IDS.has(selectedSession.venueId)) ? (
+                          ) : (reservationReady[selectedSession.id] === 'manual_pending' || !KADERU_VENUE_IDS.has(selectedSession.venueId) || selectedSession.adjacentRoomStatus.status === '●') ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

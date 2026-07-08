@@ -20,8 +20,14 @@ public class AdjacentRoomStatusDto {
     /** 空き状態（○/×/-/●/休館/不明） */
     private String status;
 
-    /** 空きかどうか */
+    /** 空きかどうか（○ のみ。＝オンライン予約可・空き通知の条件） */
     private Boolean available;
+
+    /**
+     * 会場拡張が可能かどうか（○ または ●）。
+     * ●（要問合せ）は当日など online 予約は不可だが、電話等で手動確保すれば拡張できるため true。
+     */
+    private Boolean expandable;
 
     /** 拡張後のVenue ID */
     private Long expandedVenueId;
