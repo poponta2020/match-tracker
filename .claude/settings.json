@@ -1,0 +1,17 @@
+{
+  "model": "opusplan",
+  "advisorModel": "opus",
+  "permissions": {
+    "allow": [
+      "Bash(bash */scripts/ensure-worktree.sh:*)",
+      "Bash(bash */scripts/gate-dod.sh:*)",
+      "Bash(bash */scripts/gate-stop.sh:*)",
+      "Bash(codex exec:*)",
+      "Bash(codex --version)",
+      "Skill"
+    ],
+    "additionalDirectories": [
+      ".claude"
+    ]
+  }
+}
