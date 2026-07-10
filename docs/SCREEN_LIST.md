@@ -314,3 +314,129 @@ karuta-tracker-ui/src/
         ├── VenueList.jsx
         └── VenueForm.jsx
 ```
+
+---
+
+## 公開ページ
+
+パス・コンポーネントは上記「1. 公開画面（認証不要）」表と同一のため再掲しない。差分（既存表に無い事実）のみ記載する。
+
+- `/register/:token`: 招待トークン付きURLでアカウント作成時のデフォルトロールは **PLAYER**。
+
+⚠要確認（`docs/DESIGN.md` §5.1 の記載が上記表・`docs/SPECIFICATION.md` §5.1 と食い違う）:
+- DESIGN §5.1 は「ランディング」のパスを `/landing` としているが、既存表・SPECIFICATION §5.1 は `/`（未認証時）→ `Landing.jsx`。
+- DESIGN §5.1 は「ユーザー登録」のパスを `/register`（トークンなし）としているが、既存表・SPECIFICATION §5.1 は `/register/:token`。
+- DESIGN §5.1 は「プライバシーポリシー」のパスを `/privacy-policy` としているが、既存表・SPECIFICATION §5.1 は `/privacy`。
+- DESIGN §5.1 は「利用規約」のパスを `/terms-of-service` としているが、既存表・SPECIFICATION §5.1 は `/terms`。
+
+---
+
+## 認証必須ページ
+
+全ページは `PrivateRoute` で保護され、未ログイン時は `/login` にリダイレクトする（`kyuRank` 未設定時の `/profile/edit?setup=true` リダイレクトは上記「認証・ルートガード構成」表の `PrivateRoute` 行を参照）。
+
+パス・コンポーネント・権限は各機能別表（2〜9.5節）と重複するため再掲しない。既存表との間で権限・パス表記に相違がある箇所を ⚠要確認 として記録する。
+
+⚠要確認（既存表と `docs/SPECIFICATION.md` §5.2 / `docs/DESIGN.md` §5.1 の記載の相違）:
+- `/players`（選手一覧）: 既存表・ハンバーガーメニュー表は **ADMIN+**（`PlayerList.jsx`、ADMINは初期フィルタが自管轄団体）。SPECIFICATION §5.2 は **SUPER_ADMIN**、DESIGN §5.1 は **全員**。
+- `/players/:id`（選手詳細）: 既存表は **SUPER_ADMIN**（`PlayerDetail.jsx`）。SPECIFICATION §5.2・DESIGN §5.1 はいずれも **ALL/全員**。
+- `/venues/new`・会場編集: 既存表は **SUPER_ADMIN**（会場編集パスは `/venues/edit/:id`）。DESIGN §5.1 は権限を **全員** とし、パスも `/venues/:id/edit` と表記している。
+- 通知設定のパス: 既存表は `/settings/notifications`。SPECIFICATION §5.2・DESIGN §5.1 はいずれも `/settings/line`（旧パスの可能性）。
+- キャンセル待ち状況のパス: 既存表は `/lottery/waitlist`。DESIGN §5.1 は `/lottery/waitlist-status`。
+- 組み合わせ作成のパス: 既存表・SPECIFICATION §5.2 は `/pairings`。DESIGN §5.2（画面遷移と導線）のホーム導線記述は `/pairings/generate`。
+- `/matches` 一覧の列レイアウト説明: SPECIFICATION §5.2 は 6 列グリッド（`grid-cols-[2rem_6.125rem_2.5rem_minmax(0,1fr)_1.5rem_2rem]`、動画アイコン列なし）と記載しているが、既存表（3. 試合管理）は動画アイコン列を含む 7 列グリッド（`1.75rem/5.25rem/2.5rem/minmax(0,1fr)/1.5rem/1.5rem/2rem`）で、既存表の方が最新。
+
+---
+
+## ナビゲーション構造
+
+ボトムナビゲーション本体の構成（アイコン・ラベル・遷移先）は上記「下部ナビゲーション（Layout）」表、ハンバーガーメニューの項目一覧は上記「ハンバーガーメニュー（Home画面）」表を参照（重複のため再掲しない）。
+
+### ボトムナビゲーション表示制御
+
+- `BottomNavContext`（`isVisible` state）で表示/非表示を管理
+- デフォルトは常に表示（`isVisible: true`）
+- コメント入力欄（`MatchCommentThread` 内の textarea）にフォーカス時、ボトムナビをスライドダウンで非表示にする
+- フォーカスが外れると100ms後にスライドアップで再表示する（textarea間のフォーカス移動によるチラつき防止のため遅延あり）
+- `MatchCommentThread` がアンマウントされた場合は自動的に表示状態にリセット
+- アニメーション: `transition-transform duration-300`（`translate-y-0` ⇔ `translate-y-full`）
+
+⚠要確認:
+- ボトムナビゲーションのラベル表記: 既存表は絵文字＋英語ラベル（🏠 Home / ➕ Add / ⚔️ Match / 📅 Schedule / 📊 Record）。SPECIFICATION §5.3 は lucide アイコン名＋日本語ラベル（Home / PlusCircle 結果入力 / ClipboardList 対戦結果 / Calendar スケジュール / List 対戦履歴）。パス・並び順は一致するが表記方式が異なり、どちらが現行UIの実態かは要確認。
+- ハンバーガーメニュー: SPECIFICATION §5.3 のメニュー一覧には、既存表にある「参加練習会」「メンター管理」「動画倉庫」「システム設定」の4項目が記載されていない（SPECIFICATION側の記載漏れ・更新漏れの可能性）。
+
+---
+
+## 画面遷移と導線
+
+#### ホーム画面からの導線
+
+ホーム画面（`/`）には以下のクイックアクション:
+- **試合記録**: `/matches/new` へ遷移（試合登録）
+- **練習記録**: `/practice` へ遷移（カレンダー画面）
+- **組み合わせ**: `/pairings/generate` へ遷移（対戦組み合わせ生成）⚠要確認: 既存表・SPECIFICATION §5.2 では組み合わせ作成のパスは `/pairings`
+
+カレンダー画面（`/practice`）を練習関連機能の中心ハブとして設計。
+- カレンダー画面から以下に遷移可能:
+  - 出欠登録モーダル → 参加登録画面 / キャンセル登録画面（いずれも年月を引き継ぐ）
+  - 練習日編集（SUPER_ADMINのみ）
+
+#### 練習関連の導線フロー
+```
+ホーム画面（/）
+  ↓ 「練習記録」クリック
+カレンダー画面（/practice）
+  ├─ 「出欠登録」ボタン（右下フローティング、過去月のときは非表示）
+  │     ↓
+  │   出欠登録モーダル（AttendanceRegisterModal）
+  │     ├─ 「参加登録」 → /practice/participation?year=YYYY&month=M
+  │     │                   ↓ 保存 → SaveProgressOverlay（保存中／完了／エラー）
+  │     │                   └→ 「カレンダーに戻る」ボタン押下で /practice へ遷移（データ再取得）
+  │     ├─ 「キャンセル登録」 → /practice/cancel?year=YYYY&month=M
+  │     │   （当月扱いの月でのみ表示。来月扱いの月では非表示）
+  │     │                   ↓ キャンセル実行 → SaveProgressOverlay（キャンセル処理中／完了／エラー）
+  │     │                   └→ 「カレンダーに戻る」ボタン押下で /practice へ遷移
+  │     └─ 「閉じる」 → モーダルを閉じる（遷移なし）
+  │
+  ├─ 日付クリック → 選択セッション詳細モーダル表示
+  │   └─ 「出欠登録」ボタン（過去日でない場合のみ表示） → 出欠登録モーダル
+  │
+  └─ 「編集」ボタン（SUPER_ADMINのみ） → 練習日編集画面
+```
+
+---
+
+## 共通レイアウト
+
+### 共通トップバー（PageHeader コンポーネント）
+
+独自トップバー（NavigationBar 等）を持たない画面では、共通コンポーネント `PageHeader`（`karuta-tracker-ui/src/components/PageHeader.jsx`）が画面最上部に固定表示される。
+
+**責務**:
+- `Layout.jsx` のベースナビバー（`bg-[#4a6b5a]` の空の緑バー、`z-40`、ローディング中のフォールバック）の上に `z-50` で重ねて表示し、各画面に「タイトル」と「明示的な戻る導線」を提供する
+- 該当画面の本文先頭にあった H1（および付随アイコン）はトップバーに集約され、本文側からは削除される
+
+**Props**:
+| 名前 | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `title` | `string` | ○ | トップバー中央に表示するタイトル（`<h1>` 要素として描画） |
+| `backTo` | `string` | ○ | 戻るボタン押下時の遷移先パス（`useNavigate()(backTo)` で明示遷移）|
+| `rightActions` | `ReactNode` | × | トップバー右端に配置する追加要素（例: 「すべて削除」「システム設定」） |
+
+**戻り先のグルーピング**（ディープリンク・リロード後も一貫した戻り先を保証するため、`navigate(-1)` ではなく明示的な `backTo` を採用）:
+- 設定グリッドから入る画面 → `/settings`（プロフィール、参加練習会、通知設定、メンター管理、カレンダー購読、組み合わせ作成、会場管理、抽選管理、LINEチャネル管理、LINE通知スケジュール）
+- 抽選管理から入る画面 → `/admin/lottery`（システム設定）。設定グリッドに「システム設定」のメニュー項目はなく、`LotteryManagement` 画面右上の `rightActions` ボタンから到達する画面のため、戻る先は抽選管理に揃える
+- リスト → 詳細・編集 → 親リスト（試合詳細、練習詳細、選手新規/編集、会場新規/編集、札ルール一覧）
+- ホーム導線 → `/`（通知一覧、抽選結果、キャンセル待ち状況、繰り上げ参加のご連絡）
+
+**Z-index 重なり順**:
+- `PageHeader`（`z-50`、固定トップバー） > `Layout` ベースナビバー（`z-40`、空のフォールバック） > 本文
+
+**動的タイトル / 動的 backTo**:
+- 同じコンポーネントが新規/編集で使い回されるページ（`PlayerEdit`, `VenueForm`）は `id` / `isEditMode` から動的に切り替える
+- `PairingGenerator` は `from` クエリパラメータが指定された場合（例: 結果入力画面「対戦変更」ボタンからの遷移）、`backTo={searchParams.get('from') || '/settings'}` で動的に戻り先を設定する
+
+**ローディング・エラー画面**:
+- `if (loading) return <LoadingScreen />` のような早期 return でも `<><PageHeader ... /><LoadingScreen /></>` で包み、空のベースナビバーが見えないようにする
+
+**詳細仕様・要件**: `docs/features/subpage-topbar-title/requirements.md`
