@@ -71,6 +71,7 @@ const Layout = ({ children }) => {
                 <Link
                   key={item.name}
                   to={item.href}
+                  tabIndex={isVisible ? 0 : -1}
                   className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
                 >
                   <Icon
