@@ -80,7 +80,7 @@ kagetra 用: SRC=("apps/web/src/" "apps/mail-worker/src/" "packages/shared/src/"
 - **対応Issue:** #1011
 
 ### タスク2: スキル文言改修 + 新バージョンリリース（ブロックP）
-- [ ] 完了
+- [x] 完了
 - **目的:** quickfix のハードコード除去（profile §docs 参照化）、implement への docs 更新ステップ追加、define-feature/ship への features INDEX 追記ステップ追加、新バージョンとしてリリースし利用側の版を更新する
 - **対応AC:** AC-P4, AC-P5, AC-P6
 - **主な変更領域:** claude-devflow の skills/quickfix, skills/implement, skills/define-feature, skills/ship の SKILL.md、README/GUIDE、バージョン表記。cache 側の利用バージョン更新
