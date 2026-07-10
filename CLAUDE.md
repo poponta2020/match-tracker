@@ -10,6 +10,13 @@
 - `database/` — SQL スキーマ・マイグレーション。論理削除は `deleted_at`
 - DB はローカル・本番とも Render PostgreSQL。接続情報は `CLAUDE.local.md`（gitignore 対象）。デプロイは Render.com、CI は GitHub Actions（JUnit + Jacoco 60%）
 
+## 改修時のナビゲーション（全域 grep の前に docs を起点にする）
+
+1. UI・画面の改修 → [docs/SCREEN_LIST.md](docs/SCREEN_LIST.md) で画面→コンポーネントを特定
+2. 機能・API・フローの改修 → [docs/SPECIFICATION.md](docs/SPECIFICATION.md)（ハブ）→ 該当 `docs/spec/<ドメイン>.md`（冒頭に主要実装パスあり）
+3. DB スキーマ → `docs/design/db.md`／アーキテクチャ・権限 → `docs/design/architecture.md`
+4. 類似の過去改修を探す → [docs/features/INDEX.md](docs/features/INDEX.md)
+
 ## DBマイグレーション適用ルール（最重要）
 
 **`database/` 配下に SQL を追加・変更したら、必ず本番 DB（Render PostgreSQL）にも適用する。**（過去に PR #500 で適用漏れ→本番500エラー Issue #518 の実害あり）
@@ -38,7 +45,7 @@
 1. **承認ポイントは要件確定の1箇所のみ**。実装開始の GO は `/implement` の起動そのもの
 2. **認識合わせ**: 不明点・あやふやな点が1つでもあれば実装前に必ず質問する。推測・仮定で進めない。ユーザーの指示がベストプラクティスに反する場合は懸念と代替案を提示して確認する（最終判断はユーザー）
 3. **影響範囲の調査義務**: 変更前に上流（呼び出し元）・下流（呼び出し先）・FE⇔BE 連携への影響を調査する。影響が広い場合は着手前に報告する
-4. **ドキュメント更新**: 機能追加・変更時は `docs/SPECIFICATION.md` / `docs/SCREEN_LIST.md` / `docs/DESIGN.md` を実装と同じコミットで更新する
+4. **ドキュメント更新**: 機能追加・変更時は profile の `## docs`（docs レジストリ）に従い、該当する正典ファイル（`docs/spec/<ドメイン>.md` 等）を実装と同じコミットで in-place 更新する。更新漏れは DoD の D2 チェックが検出する
 5. **memory記録**: 設計判断/バグ修正/完了/フィードバック時に `.claude/memory/` へ必ず記録（MEMORY.md 索引も更新）
 6. **1PR = 1機能**。ついでリファクタ禁止。Phase 外の要望は memory に記録して混ぜない
 

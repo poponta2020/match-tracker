@@ -1,0 +1,95 @@
+# Features Index
+
+<!-- 規約: 1スラッグ=1行。/define-feature が作成時に、/ship が出荷時に末尾へ追記・更新する。並べ替え禁止。 -->
+<!-- 初期生成（2026-07-10）分はアルファベット順。以降は末尾追記。 -->
+
+- `adjacent-room-check` — かでる2・7隣室空き確認を自動通知し管理者が会場拡張できる機能（主要領域: karuta-tracker-ui, karuta-tracker, database, scripts）
+- `admin-notification-and-org-assignment` — ADMIN向け当日通知拡張・空き枠通知改善・団体設定UI追加（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `admin-scope-check` — ADMINロールの団体スコープ検証漏れ（組合せ/抽選/LINE等）を追加・統一する改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `admin-waitlist-notification-redesign` — 管理者向けキャンセル待ち通知Flex Messageを同一セッション単位に統合・刷新（主要領域: karuta-tracker）
+- `ai-dev-optimization` — AI開発最適化 — docsドメイン分割・レジストリ・DoDゲート（主要領域: docs, scripts）
+- `attendance-flow-by-month` — 抽選状態に応じて出欠登録/キャンセルの動線を月単位で切替える改修（主要領域: karuta-tracker-ui, docs）
+- `attendance-save-progress-screen` — 参加登録・キャンセル保存時の進行状況表示と完了後の遷移タイミング改善（主要領域: karuta-tracker-ui, docs）
+- `beginner-label` — 級未設定ユーザーを「初心者」として表示するラベル変更（主要領域: karuta-tracker-ui）
+- `bye` — 抜け番機能の手動入力対応・論理削除統一の改修（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `bye-absent-status` — 無断欠席を通常の抜け番と区別する「休み」ステータス追加（主要領域: karuta-tracker-ui, karuta-tracker）
+- `calendar-subscription-page-ux` — カレンダー購読画面に目的説明・登録手順・操作説明を追加するUX改善（主要領域: karuta-tracker-ui, docs）
+- `cancellation` — キャンセル・繰り上げオファー周りの期限チェック・タイムゾーン等6項目の改修（主要領域: karuta-tracker-ui, karuta-tracker）
+- `cancelled-participants-deleted-on-no-deadline` — 締切なし設定でキャンセル者が練習詳細モーダルに表示されない不具合の調査引き継ぎ（主要領域: -）
+- `densuke-change-time-tracking` — 伝助ページのメンバー最終更新時刻を取り込みログに記録する観測性改修（主要領域: karuta-tracker）
+- `densuke-import-venue-defaults` — 伝助インポート時にVenueのデフォルト定員・試合数を反映する改修（主要領域: karuta-tracker, docs）
+- `densuke-multi-org` — 伝助連携をわすらもち会に加え北大かるた会でも利用可能にする（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `densuke-page-creator` — アプリの練習日・会場情報から伝助ページを自動作成する機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `densuke-schedule-write-sync` — アプリで新規作成した練習日を伝助スケジュールへ自動追記する同期（主要領域: karuta-tracker, database, docs）
+- `densuke-sync` — 伝助とアプリの双方向同期（出欠・抽選結果の相互反映）（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `densuke-sync-audit-202604` — 伝助同期・キャンセル待ち機能の監査で検出されたテスト/設計問題の修正（主要領域: karuta-tracker）
+- `densuke-sync-blank-protection` — アプリ同期が伝助の未入力マスを誤って×に上書きしないよう保護（主要領域: karuta-tracker, database）
+- `densuke-write-sync` — アプリから伝助への書き込みを実装し双方向同期を実現（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `hide-nav-on-comment-focus` — コメント入力中にボトムナビを非表示にし誤タップを防止（主要領域: karuta-tracker-ui）
+- `higashi-adjacent-room-check` — 東区民センター隣室（かっこう）の空き確認自動通知・会場拡張機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs, scripts）
+- `higashi-community-center-sync` — 東区民センターの予約をスクレイピングしpractice_sessionsへ自動登録（主要領域: docs, scripts）
+- `higashi-reservation-flow-exploration` — 東区民センター予約申込フローの実機探索（reservation-proxy設計の事前調査）（主要領域: scripts）
+- `home-participation-rate` — ホーム画面の参加率TOP3を所属団体単位でフィルタリングする改修（主要領域: karuta-tracker-ui, karuta-tracker）
+- `ical-calendar-feed` — Googleカレンダー等で自動更新されるiCal購読フィード機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `ical-feed-per-match-participation` — iCalイベント時刻を参加試合番号の時間帯に絞り込む改修（主要領域: karuta-tracker, docs）
+- `ical-feed-per-organization` — iCal購読フィードを所属団体ごと・ゲスト参加で分割（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `kaderu-multi-org` — かでる2・7予約取込をわすらもち会にも対応させるマルチ団体化（主要領域: docs, scripts）
+- `line-channel-separation` — 管理者向け・選手向け通知を別のLINEチャネルから送信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `line-confirmation-dialog` — LINEボットのボタン操作全てに確認ダイアログを挟み誤操作を防止（主要領域: karuta-tracker, database）
+- `line-link-lottery-notify` — LINE連携完了時に確定済み抽選結果を自動送信（主要領域: karuta-tracker）
+- `line-notification-messages` — LINE通知メッセージの仕様書と実装の不整合・重複コードを修正（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `line-rich-menu` — PLAYERチャネルにリッチメニューを設定し主要機能への導線を提供（主要領域: karuta-tracker）
+- `lottery` — 抽選機能の重大バグ・認可漏れ・設計不整合を修正する改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `lottery-densuke-integrity` — 抽選と伝助連携の出欠意図が反転しないよう整合性を改修（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `lottery-management` — 管理者が月次抽選を実行・確認・確定する管理画面（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `lottery-notification-consolidation` — 抽選結果通知をプレイヤー単位でまとめ、キャンセル待ち辞退機能を新設（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `lottery-priority-players` — 管理者が月×団体単位で優先選手を指定できる抽選機能拡張（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `lottery-result-copyable-text` — 抽選結果のキャンセル待ちのみを整形しコピーできるテキスト出力機能（主要領域: karuta-tracker-ui, docs）
+- `manual-kaderu-sync` — 練習日登録画面にKaderu予約取込を手動起動するボタンを追加（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `match-change-to-pairing` — 結果一括入力画面の対戦変更導線を組み合わせ作成画面へ一本化（主要領域: karuta-tracker-ui, docs）
+- `match-coaching-status` — 対戦結果に「指導」属性を追加し指導回数/被指導回数を集計（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `match-detail-ui-refresh` — 試合詳細画面のカード統合とコメント欄の条件付き表示によるUI整理（主要領域: karuta-tracker-ui, docs）
+- `match-form-redesign` — 試合フォームをAnti-Slop階層デザインへ刷新し対戦相手選択フローを改善（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `match-history-bye-activities` — 対戦履歴に読み・一人取りなどの抜け番活動を時系列表示（主要領域: karuta-tracker-ui, docs）
+- `match-list-column-alignment` — 対戦履歴一覧の各列を揃えたテーブル風レイアウトに整形（主要領域: karuta-tracker-ui, docs）
+- `match-list-filter-trigger-relocate` — 対戦結果一覧のフィルタトリガーを上部年月表示に再配置（主要領域: karuta-tracker-ui, docs）
+- `match-list-opponent-link` — 対戦一覧から対戦相手の履歴・対戦詳細へワンタップ遷移（主要領域: karuta-tracker-ui, docs）
+- `match-list-venue-and-match-number` — 対戦結果一覧・詳細画面に会場名と試合番号を追加表示（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `match-number-default-by-time-and-progress` — 現在時刻・入力状況に応じて試合結果画面の初期表示試合番号を自動選択（主要領域: karuta-tracker-ui, docs）
+- `match-pairing` — 対戦組み合わせ機能のcreatedByハードコード等10項目の改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `match-record` — 対戦記録機能のnullクリア対応・N+1解消などの改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `match-result-lock` — 結果入力済みペアリングを自動組み合わせ・削除から保護するロック機能（主要領域: karuta-tracker-ui, karuta-tracker）
+- `match-tab-swipe-navigation` — 結果一覧・一括入力・個人入力画面の試合番号タブをスワイプ切替対応（主要領域: karuta-tracker-ui, docs）
+- `match-video` — 試合動画をYouTube限定公開経由で対戦記録に紐付けて閲覧する機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `mentor-feedback` — メンターがメンティーの試合メモを閲覧・コメントできる機能（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `notification-grouping-phase2` — 空き枠通知のセッション単位統合とオファー一括承諾時の管理者通知バグ修正（主要領域: karuta-tracker）
+- `notification-session-grouping-fix` — キャンセル待ち繰り上げオファー通知の未統合経路3箇所を統合版に修正（主要領域: karuta-tracker）
+- `pairing-cancelled-opponent` — 組み合わせ画面にキャンセルした選手をread-time判定で反映（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-card-rule-persistence` — 同一日内で札ルールを日付単位でlocalStorageに永続化し再生成でブレないようにする（主要領域: karuta-tracker-ui, docs）
+- `pairing-drag-and-drop` — 組み合わせ画面の選手入替をドロップダウンからドラッグ&ドロップに移行（主要領域: karuta-tracker-ui）
+- `pairing-line-text-per-match` — 札ルールの決定論的シード化と単一試合単位のLINEテキスト生成（主要領域: karuta-tracker-ui, docs）
+- `pairing-lock-explicit-save-and-help` — 組み合わせロックを明示保存化しヘルプ導線を追加（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-manual-lock` — 結果未入力の対戦組を管理者・選手が明示的にロックできる機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `pairing-player-access-and-empty-cta` — 対戦組み合わせ機能をPLAYERに開放し、空状態に組み合わせ作成CTAを表示（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-player-access-remaining-ops` — 組み合わせ画面の残存admin専用操作（参加者追加等）をPLAYERに開放（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-same-day-duplicate-warning` — 組み合わせ画面で当日重複ペアの警告表示・検知漏れを改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-swap-ux` — 組み合わせ画面の選手入替にタップ選択→タップ配置モードを追加（主要領域: karuta-tracker-ui, docs）
+- `player-bulk-edit` — 選手一覧から複数選手を選択し性別・級・所属団体をまとめて編集（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `practice-attendance-button` — カレンダー画面の参加登録/キャンセルボタンを「出欠登録」1つに統合（主要領域: karuta-tracker-ui, docs）
+- `practice-calendar-capacity-badge` — 練習カレンダーの各日に定員状況（残わずか/満員）バッジを表示（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `practice-calendar-match-status-grid` — 練習カレンダーに試合別の空き状況を○△×グリッドで表示（capacity-badgeを置換）（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
+- `practice-participation` — 練習参加登録画面のクロス団体soft-deleteバグ等3件の改修（主要領域: karuta-tracker, docs）
+- `registration-no-uncheck` — 締切後の参加登録画面で既存登録のチェック外し（暗黙キャンセル）を禁止（主要領域: karuta-tracker-ui, karuta-tracker）
+- `settings-page` — 設定・管理画面への導線を専用Settingsページのアイコングリッドに集約（主要領域: karuta-tracker-ui）
+- `subpage-topbar-title` — 独自トップバーを持たない画面に共通PageHeaderで画面タイトル・戻る導線を表示（主要領域: karuta-tracker-ui）
+- `system-settings-admin` — 抽選締切日数等のシステム設定をUI上で確認・変更できる管理画面（主要領域: karuta-tracker-ui, karuta-tracker）
+- `ux-writing` — 新規メンバーが迷わないようアプリ内の操作導線・ラベル・ヒントを強化（主要領域: karuta-tracker-ui, docs）
+- `venue-reservation-proxy` — 本番環境でも会場予約申込トレイ画面へ到達できるリバースプロキシ機能（かでる2・7）（主要領域: karuta-tracker-ui, karuta-tracker, docs, scripts）
+- `waitlist-cross-channel-fixes` — キャンセル待ち・繰り上げオファーの伝助/アプリ/LINE横断バグ・認可・性能を6項目改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `waitlist-offer-consolidation` — キャンセル待ち繰り上げオファーのLINE通知をセッション単位で1通に統合（主要領域: karuta-tracker-ui, karuta-tracker）
+- `web-push-notifications` — アプリ内通知をWeb Push通知でも全種別配信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker）
+- `お手付き記録` — 個人結果入力画面で自分のお手付き回数・個人メモを記録（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `取り札記録` — 個人結果入力で出札50枚の取り位置とお手付き種類別詳細を記録（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `団体管理` — わすらもち会・北大かるた会の2団体をアプリで独立運用できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `団体別の表示機能` — OrganizationControllerの認可不足・団体フィルタ適用漏れ等9項目の改修（主要領域: karuta-tracker-ui, karuta-tracker）
+- `当日キャンセル補充` — 当日WON参加者キャンセル時に全体募集・先着順で即時補充するフロー（主要領域: karuta-tracker-ui, karuta-tracker, database）

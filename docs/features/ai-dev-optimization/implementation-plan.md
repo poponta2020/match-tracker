@@ -120,7 +120,7 @@ kagetra 用: SRC=("apps/web/src/" "apps/mail-worker/src/" "packages/shared/src/"
 - **対応Issue:** #1015
 
 ### タスク6: レジストリ + ルーティング + ネスト CLAUDE.md + INDEX（ブロックR）
-- [ ] 完了
+- [x] 完了
 - **目的:** project-profile §docs をレジストリ化（決定事項2の devflow:docs ブロック含む）、CLAUDE.md にルーティング指示追加、karuta-tracker/CLAUDE.md と karuta-tracker-ui/CLAUDE.md 新設、docs/features/INDEX.md 生成（全スラッグ）
 - **対応AC:** AC-R6, AC-R7, AC-R8, AC-R9, AC-P1〜P3 の実地有効化
 - **主な変更領域:** .claude/project-profile.md, CLAUDE.md, karuta-tracker/CLAUDE.md（新規）, karuta-tracker-ui/CLAUDE.md（新規）, docs/features/INDEX.md（新規）

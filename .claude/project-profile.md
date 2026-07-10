@@ -69,15 +69,31 @@ task-implementer（実装ワーカー）が厳守する実装規約:
 - DB スキーマ変更（entity の `@Column` 追加等）が必要と判明したら**停止して報告**（migration SQL と本番適用が絡むため main が担当）
 - フロントは既存の `api/` クライアントパターン（client.js 共通設定）と `pages/` 構成に従う
 - ユーザー向け文言は日本語
-- ドキュメント（SPECIFICATION / SCREEN_LIST / DESIGN）の更新は実装と同じコミットに含める
+- ドキュメント更新は `## docs`（docs レジストリ）に従い、正典ファイルを実装と同じコミットに含める
 
 ## docs
 
-全体仕様書（/audit-feature が参照）:
-- `docs/SPECIFICATION.md` — 仕様書
-- `docs/SCREEN_LIST.md` — 画面一覧
-- `docs/DESIGN.md` — 設計書
-- `docs/dev/feature-flow.md` — 機能開発フローの詳細
+docs レジストリ（/quickfix・/implement・/audit-feature・gate-dod.sh が参照）。
+
+**事実タイプ→正典ファイル（1つの事実は1ファイルにのみ書く）:**
+- 機能仕様・フロー・API → `docs/spec/<ドメイン>.md`（索引: `docs/SPECIFICATION.md`。抽選の API 詳細のみ `docs/spec/lottery-api.md`）
+- 画面一覧・ルーティング・ナビゲーション・画面遷移 → `docs/SCREEN_LIST.md`
+- テーブル定義・ER図・初期データ → `docs/design/db.md` + `db-tables-*.md`（本番 introspect 照合済み。**他ファイルへのカラム定義表の記載禁止**）
+- アーキテクチャ・権限・API共通仕様・デプロイ・開発環境 → `docs/design/architecture.md`（索引: `docs/DESIGN.md`）
+- 未実装・TODO → `docs/spec/backlog.md`／用語 → `docs/spec/glossary.md`
+- 変更履歴 → `docs/features/<slug>/`（索引: `docs/features/INDEX.md`。本体 docs への履歴追記禁止）
+- 開発プロセス → `docs/dev/feature-flow.md`
+
+**更新手順:** 該当ドメインファイルを特定 → 見出しを Grep → そのセクションだけ in-place 更新（実装と同じコミットに含める）
+**書き込み規律:** 見出しに連番を付けない／実装参照はファイルパス粒度（行番号禁止）／コード断片のコピー禁止
+
+gate-dod.sh の D2 チェック用パスパターン:
+<!-- devflow:docs -->
+```sh
+DEVFLOW_SRC_PATTERNS=("karuta-tracker/src/" "karuta-tracker-ui/src/" "database/")
+DEVFLOW_DOCS_PATTERNS=("docs/" "CLAUDE.md" "karuta-tracker/CLAUDE.md" "karuta-tracker-ui/CLAUDE.md")
+```
+<!-- /devflow:docs -->
 
 ## worklog
 
