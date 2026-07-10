@@ -37,9 +37,8 @@ const PlayerChip = ({
   className = '',
   onClick,
   children,
-  as,
+  as: Component = onClick ? 'button' : 'span',
 }) => {
-  const Component = as || (onClick ? 'button' : 'span');
   const borderColor = getKyuBorderColor(kyuRank);
 
   return (

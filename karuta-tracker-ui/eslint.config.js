@@ -23,10 +23,7 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
-      // 全角スペース(U+3000)をかるたの読み文字列・表示文言の区切りとして意図的に使用しているため、
-      // テンプレートリテラル内は対象外にする（デフォルトはテンプレートリテラルも検査対象）
-      'no-irregular-whitespace': ['error', { skipTemplates: true }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
     },
   },
   {

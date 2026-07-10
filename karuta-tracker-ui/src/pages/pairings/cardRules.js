@@ -113,6 +113,7 @@ export function generateCardRules(totalMatches, rng = Math.random) {
         type: 'nuki',
         digits: chosen,
         removedCard,
+        // eslint-disable-next-line no-irregular-whitespace -- 全角スペースは表示文言の意図的な区切り
         description: `${chosen.join('.')}　${parseInt(removedCard, 10) || 100}抜き`,
       });
     } else {

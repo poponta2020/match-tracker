@@ -61,6 +61,7 @@ function generateText(date, matchData, cardRules, readersByMatch = {}, targetMat
     const rule = cardRules[i];
     if (!firstBlock) text += '\n';
     firstBlock = false;
+    // eslint-disable-next-line no-irregular-whitespace -- 全角スペースは表示文言の意図的な区切り
     text += `${matchNumber}試合目　${rule ? rule.description : ''}\n`;
 
     const readers = readersByMatch[matchNumber];
@@ -69,6 +70,7 @@ function generateText(date, matchData, cardRules, readersByMatch = {}, targetMat
     }
 
     for (const pairing of match.pairings) {
+      // eslint-disable-next-line no-irregular-whitespace -- 全角スペースは表示文言の意図的な区切り
       text += `${padName(pairing.player1Name)}　${padName(pairing.player2Name)}\n`;
     }
   }
