@@ -29,7 +29,6 @@ const OLD_PATHS = { SPECIFICATION: "docs/SPECIFICATION.md", DESIGN: "docs/DESIGN
 const ACTIONS = ["移設", "分配", "廃止", "ハブ残置"];
 
 const failures = [];
-const warnings = [];
 
 function gitShow(ref, p) {
   return execFileSync("git", ["show", `${ref}:${p}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -164,7 +163,6 @@ if (MODE === "coverage") {
   process.exit(2);
 }
 
-for (const w of warnings) console.log(`WARN ${w}`);
 if (failures.length) {
   console.log(`\n=== ${MODE} 照合: FAIL（${failures.length}件） ===`);
   for (const f of failures) console.log(`  ${f}`);
