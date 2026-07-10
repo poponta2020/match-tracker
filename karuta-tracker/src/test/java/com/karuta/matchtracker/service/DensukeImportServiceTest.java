@@ -497,7 +497,7 @@ class DensukeImportServiceTest {
 
         PracticeSession session = PracticeSession.builder()
                 .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build();
-        // 待ち順位4番目。自分より前に3人（1〜4番目、自分含む）いる想定
+        // 待ち順位4番目。待ち行列中で waitlistNumber<=4 の人数は2人（欠番があり連番ではない）想定
         PracticeParticipant waitlisted = PracticeParticipant.builder()
                 .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).dirty(false).build();
