@@ -11,6 +11,8 @@
 
 ## Auto Review
 - [autoreview_pr1009_round1.md](autoreview_pr1009_round1.md) - PR#1009（伝助キャンセル待ち先頭以外の昇格修正、Issue#1008）round1でCodex pass・AC適合pass、追加code-review非該当
+- [autoreview_pr1022.md](autoreview_pr1022.md) - PR#1022（フロントエンド既存lintエラー46件解消、Issue#1019）2ラウンドでCodex pass・AC適合pass。追加code-review(high)で3件反映（eslint設定の根本対応・no-irregular-whitespace検査範囲維持・disableコメント修正）
 
 ## Ship
 - [ship_pr1007_bottom_nav_ios_scroll.md](ship_pr1007_bottom_nav_ios_scroll.md) - PR#1007出荷完了。iOS Safariのfixed+transform既知バグ修正。DoDのlintは既存負債のため--skip-dod（フォローアップIssue #1019切り出し済み）
+- [ship_pr1022_frontend_lint_debt.md](ship_pr1022_frontend_lint_debt.md) - PR#1022出荷完了（Issue#1019）。既存lintエラー46件解消。DoD全項目PASS。worktree/gate-dodのファイル所在ずれ・プロセスロックの教訓あり
