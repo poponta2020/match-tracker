@@ -12,7 +12,7 @@
  * 旧ファイルは git の <ref>（既定 origin/main）から読む。分割後の main では
  * 旧版を含むコミット（例: 14fe9798）を --ref で指定して再実行できる。
  */
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -32,7 +32,7 @@ const failures = [];
 const warnings = [];
 
 function gitShow(ref, p) {
-  return execSync(`git show ${ref}:${p}`, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return execFileSync("git", ["show", `${ref}:${p}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
 function headings(md) {
