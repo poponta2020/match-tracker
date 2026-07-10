@@ -69,11 +69,13 @@ function parseMap(md) {
 }
 
 function expandTargets(g) {
-  const m = /^(.*)\/\*\.md$/.exec(g);
-  if (!m) return fs.existsSync(g) ? [g] : [];
-  const dir = m[1];
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => path.join(dir, f));
+  return g.split(",").map((s) => s.trim()).filter(Boolean).flatMap((one) => {
+    const m = /^(.*)\/\*\.md$/.exec(one);
+    if (!m) return fs.existsSync(one) ? [one] : [];
+    const dir = m[1];
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => path.join(dir, f));
+  });
 }
 
 function headingMatch(actualNorm, expectedNorm) {

@@ -31,7 +31,7 @@
 | SPECIFICATION | 3.3 対戦組み合わせ | 移設 | docs/spec/matching.md | 機能仕様 |
 | SPECIFICATION | 3.4 対戦結果管理 | 移設 | docs/spec/matches.md | 対戦結果管理 |
 | SPECIFICATION | 3.5 統計機能 | 移設 | docs/spec/stats.md | 機能仕様 |
-| SPECIFICATION | 3.6 会場管理 | 移設 | docs/spec/venues-booking.md | 会場管理 |
+| SPECIFICATION | 3.6 会場管理 | 移設 | docs/spec/venues.md | 会場管理 |
 | SPECIFICATION | 3.7 練習参加抽選システム | 移設 | docs/spec/lottery.md | 機能仕様 |
 | SPECIFICATION | 3.9 メンター機能 | 移設 | docs/spec/mentor.md | 機能仕様 |
 | SPECIFICATION | 3.8 選手プロフィール履歴 | 移設 | docs/spec/players-auth.md | 選手プロフィール履歴 |
@@ -40,10 +40,10 @@
 | SPECIFICATION | 4.1 伝助（Densuke）連携 | 移設 | docs/spec/densuke.md | 機能仕様 |
 | SPECIFICATION | 4.2 カレンダー購読（iCalフィード） | 移設 | docs/spec/calendar.md | 機能仕様 |
 | SPECIFICATION | 4.3 LINE通知連携 | 移設 | docs/spec/notifications.md | LINE通知連携 |
-| SPECIFICATION | 4.4 かでる2・7 予約同期 | 移設 | docs/spec/venues-booking.md | かでる2・7 予約同期 |
-| SPECIFICATION | 4.5 東区民センター予約同期 | 移設 | docs/spec/venues-booking.md | 東区民センター予約同期 |
-| SPECIFICATION | 4.6 隣室空き確認通知 | 移設 | docs/spec/venues-booking.md | 隣室空き確認通知 |
-| SPECIFICATION | 4.7 会場予約プロキシ | 移設 | docs/spec/venues-booking.md | 会場予約プロキシ |
+| SPECIFICATION | 4.4 かでる2・7 予約同期 | 移設 | docs/spec/venue-reservations.md | かでる2・7 予約同期 |
+| SPECIFICATION | 4.5 東区民センター予約同期 | 移設 | docs/spec/venue-reservations.md | 東区民センター予約同期 |
+| SPECIFICATION | 4.6 隣室空き確認通知 | 移設 | docs/spec/venues.md | 隣室空き確認通知 |
+| SPECIFICATION | 4.7 会場予約プロキシ | 移設 | docs/spec/venues.md | 会場予約プロキシ |
 | SPECIFICATION | 5. 画面一覧とルーティング | 廃止 | | |
 | SPECIFICATION | 5.1 公開ページ | 移設 | docs/SCREEN_LIST.md | 公開ページ |
 | SPECIFICATION | 5.2 認証必須ページ | 移設 | docs/SCREEN_LIST.md | 認証必須ページ |
@@ -56,16 +56,16 @@
 | SPECIFICATION | 7.2 選手管理 (`/api/players`) | 移設 | docs/spec/players-auth.md | API |
 | SPECIFICATION | 7.2.1 招待トークン (`/api/invite-tokens`) | 移設 | docs/spec/players-auth.md | API |
 | SPECIFICATION | 7.3 対戦結果 (`/api/matches`) | 移設 | docs/spec/matches.md | API |
-| SPECIFICATION | 7.3.1 試合動画 (`/api/match-videos`) | 移設 | docs/spec/matches.md | API |
+| SPECIFICATION | 7.3.1 試合動画 (`/api/match-videos`) | 移設 | docs/spec/match-videos.md | API |
 | SPECIFICATION | 7.4 抜け番活動 (`/api/bye-activities`) | 移設 | docs/spec/matches.md | API |
 | SPECIFICATION | 7.5 組み合わせ (`/api/match-pairings`) | 移設 | docs/spec/matching.md | API |
 | SPECIFICATION | 7.6 練習日 (`/api/practice-sessions`) | 移設 | docs/spec/practice-sessions.md | API |
 | SPECIFICATION | 7.7 伝助連携 (`/api/practice-sessions`) | 移設 | docs/spec/densuke.md | API |
 | SPECIFICATION | 7.7.1 伝助削除候補 (`/api/densuke-deletion-candidates`) | 移設 | docs/spec/densuke.md | API |
 | SPECIFICATION | 7.8 選手プロフィール (`/api/player-profiles`) | 移設 | docs/spec/players-auth.md | API |
-| SPECIFICATION | 7.9 会場管理 (`/api/venues`) | 移設 | docs/spec/venues-booking.md | API |
+| SPECIFICATION | 7.9 会場管理 (`/api/venues`) | 移設 | docs/spec/venues.md | API |
 | SPECIFICATION | 7.10 カレンダー購読 (iCalフィード) | 移設 | docs/spec/calendar.md | API |
-| SPECIFICATION | 7.11 抽選 (`/api/lottery`) | 移設 | docs/spec/lottery.md | API |
+| SPECIFICATION | 7.11 抽選 (`/api/lottery`) | 移設 | docs/spec/lottery-api.md | API |
 | SPECIFICATION | 7.12 通知 (`/api/notifications`) | 移設 | docs/spec/notifications.md | API |
 | SPECIFICATION | 7.13 Push購読 (`/api/push-subscriptions`) | 移設 | docs/spec/notifications.md | API |
 | SPECIFICATION | 7.14 LINE通知 (`/api/line`) | 移設 | docs/spec/notifications.md | API |
@@ -102,13 +102,13 @@
 | DESIGN | 4.2 選手API | 移設 | docs/spec/players-auth.md | API |
 | DESIGN | 4.2.1 招待トークンAPI (`/api/invite-tokens`) | 移設 | docs/spec/players-auth.md | API |
 | DESIGN | 4.3 試合記録API | 移設 | docs/spec/matches.md | API |
-| DESIGN | 4.3.1 試合動画API (`/api/match-videos`) | 移設 | docs/spec/matches.md | API |
+| DESIGN | 4.3.1 試合動画API (`/api/match-videos`) | 移設 | docs/spec/match-videos.md | API |
 | DESIGN | 4.4 抜け番活動API | 移設 | docs/spec/matches.md | API |
 | DESIGN | 4.5 練習日API | 移設 | docs/spec/practice-sessions.md | API |
 | DESIGN | 4.6 練習参加登録API | 移設 | docs/spec/practice-sessions.md | API |
 | DESIGN | 4.7 対戦組み合わせAPI | 移設 | docs/spec/matching.md | API |
-| DESIGN | 4.8 会場API | 移設 | docs/spec/venues-booking.md | API |
-| DESIGN | 4.9 抽選API | 移設 | docs/spec/lottery.md | API |
+| DESIGN | 4.8 会場API | 移設 | docs/spec/venues.md | API |
+| DESIGN | 4.9 抽選API | 移設 | docs/spec/lottery-api.md | API |
 | DESIGN | 4.10 通知API | 移設 | docs/spec/notifications.md | API |
 | DESIGN | 4.10 カレンダー購読 API（iCalフィード） | 移設 | docs/spec/calendar.md | API |
 | DESIGN | 4.11 Web Push API | 移設 | docs/spec/notifications.md | API |
@@ -120,7 +120,7 @@
 | DESIGN | 5. 画面設計 | 廃止 | | |
 | DESIGN | 5.1 画面一覧 | 移設 | docs/SCREEN_LIST.md | |
 | DESIGN | 5.2 画面遷移と導線 | 移設 | docs/SCREEN_LIST.md | 画面遷移と導線 |
-| DESIGN | 5.3 主要画面設計 | 分配 | docs/spec/*.md | |
+| DESIGN | 5.3 主要画面設計 | 分配 | docs/spec/*.md,docs/SCREEN_LIST.md | |
 | DESIGN | 6. 権限設計 | 移設 | docs/design/architecture.md | 権限設計 |
 | DESIGN | 6.1 ロール定義 | 移設 | docs/design/architecture.md | 権限設計 |
 | DESIGN | 6.2 権限マトリックス | 移設 | docs/design/architecture.md | 権限マトリックス |
@@ -132,10 +132,10 @@
 | DESIGN | 7.4 抽選フロー | 移設 | docs/spec/lottery.md | 抽選フロー |
 | DESIGN | 7.5 当日キャンセル補充フロー | 移設 | docs/spec/lottery.md | 当日キャンセル補充フロー |
 | DESIGN | 7.6 メンター指名・コメントフロー | 移設 | docs/spec/mentor.md | メンター指名・コメントフロー |
-| DESIGN | 7.6.1 試合動画フロー | 移設 | docs/spec/matches.md | 試合動画フロー |
-| DESIGN | 7.7 隣室予約→会場拡張フロー | 移設 | docs/spec/venues-booking.md | 隣室予約→会場拡張フロー |
-| DESIGN | 7.8 かでる予約 → 練習日自動登録フロー | 移設 | docs/spec/venues-booking.md | かでる予約 → 練習日自動登録フロー |
-| DESIGN | 7.9 東区民センター予約 → 練習日自動登録フロー | 移設 | docs/spec/venues-booking.md | 東区民センター予約 → 練習日自動登録フロー |
+| DESIGN | 7.6.1 試合動画フロー | 移設 | docs/spec/match-videos.md | 試合動画フロー |
+| DESIGN | 7.7 隣室予約→会場拡張フロー | 移設 | docs/spec/venues.md | 隣室予約→会場拡張フロー |
+| DESIGN | 7.8 かでる予約 → 練習日自動登録フロー | 移設 | docs/spec/venue-reservations.md | かでる予約 → 練習日自動登録フロー |
+| DESIGN | 7.9 東区民センター予約 → 練習日自動登録フロー | 移設 | docs/spec/venue-reservations.md | 東区民センター予約 → 練習日自動登録フロー |
 | DESIGN | 7.10 取り札記録フロー | 移設 | docs/spec/matches.md | 取り札記録フロー |
 | DESIGN | 8. 未実装機能・TODO | 廃止 | | |
 | DESIGN | 8.1 優先度: 高 | 移設 | docs/spec/backlog.md | 優先度: 高 |

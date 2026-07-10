@@ -100,7 +100,7 @@ kagetra 用: SRC=("apps/web/src/" "apps/mail-worker/src/" "packages/shared/src/"
 - **対応Issue:** #1013
 
 ### タスク4: ドメインファイル移植 + db.md 統合（ブロックR）
-- [ ] 完了
+- [x] 完了
 - **目的:** 対応表に従い docs/spec/*.md（12ファイル）と docs/design/architecture.md, db.md, release-notes.md を作成。db は SPEC §6 と DESIGN §3 を照合統合し、players/matches を本番 PostgreSQL introspect（c:\tmp\dbtool\Q.java 使用）と突き合わせてドリフト解消
 - **対応AC:** AC-R2, AC-R3, AC-R4, AC-R5
 - **主な変更領域:** docs/spec/（新規）、docs/design/（新規）。移植は内容の再配置のみ（リライト禁止。連番見出し→名前見出しの変換と重複統合は行う）
@@ -110,7 +110,7 @@ kagetra 用: SRC=("apps/web/src/" "apps/mail-worker/src/" "packages/shared/src/"
 - **対応Issue:** #1014
 
 ### タスク5: ハブ化 + SCREEN_LIST 統合 + AGENTS.md 追随（ブロックR）
-- [ ] 完了
+- [x] 完了
 - **目的:** SPECIFICATION.md / DESIGN.md を200行以下のハブに書き換え、旧 SPEC §5・DESIGN §5.1/§5.2 を SCREEN_LIST.md へ統合、AGENTS.md 内の docs 参照を新構造に更新する
 - **対応AC:** AC-R1
 - **主な変更領域:** docs/SPECIFICATION.md, docs/DESIGN.md, docs/SCREEN_LIST.md, AGENTS.md
