@@ -484,8 +484,8 @@ class DensukeImportServiceTest {
     }
 
     @Test
-    @DisplayName("B-5: 当日12:00以降・空きありでも待ち行列先頭でなければ昇格せず△書き戻し")
-    void testPhase3A6_afterNoon_notFrontOfQueue_noPromotion() throws IOException {
+    @DisplayName("#1008: 当日12:00以降・空きありでも自分の待ち順位までの人数が空き枠を上回るなら昇格せず△書き戻し")
+    void testPhase3A6_afterNoon_vacancyBelowQueuePosition_noPromotion() throws IOException {
         LocalDate today = LocalDate.of(2026, 4, 2);
         DensukeData data = new DensukeData();
         ScheduleEntry entry = new ScheduleEntry();
@@ -497,13 +497,10 @@ class DensukeImportServiceTest {
 
         PracticeSession session = PracticeSession.builder()
                 .id(100L).sessionDate(today).totalMatches(1).capacity(14).organizationId(1L).build();
+        // 待ち順位4番目。自分より前に3人（1〜4番目、自分含む）いる想定
         PracticeParticipant waitlisted = PracticeParticipant.builder()
                 .id(50L).sessionId(100L).playerId(1L).matchNumber(1)
                 .status(ParticipantStatus.WAITLISTED).waitlistNumber(4).dirty(false).build();
-        // 待ち行列の先頭は別人(id=49)
-        PracticeParticipant front = PracticeParticipant.builder()
-                .id(49L).sessionId(100L).playerId(2L).matchNumber(1)
-                .status(ParticipantStatus.WAITLISTED).waitlistNumber(1).build();
 
         when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
         when(playerService.findAllPlayersRaw()).thenReturn(List.of(player1));
@@ -515,22 +512,72 @@ class DensukeImportServiceTest {
         when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(true);
         when(practiceParticipantRepository.findBySessionIdAndMatchNumber(100L, 1))
                 .thenReturn(List.of(waitlisted));
-        // 空き枠あり（13/14）
+        // 空き枠は1（13/14）だが、自分の待ち順位(4番目)までの人数は2人分あるため足りない
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.WON))
                 .thenReturn(13L);
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(100L, 1, ParticipantStatus.OFFERED))
                 .thenReturn(0L);
-        // 待ち行列先頭は別人 → 対象(id 50)は先頭でない
         when(practiceParticipantRepository
-                .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                        100L, 1, ParticipantStatus.WAITLISTED))
-                .thenReturn(Optional.of(front));
+                .countBySessionIdAndMatchNumberAndStatusAndWaitlistNumberLessThanEqual(
+                        100L, 1, ParticipantStatus.WAITLISTED, 4))
+                .thenReturn(2L);
 
         densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
 
-        // 先頭でないので昇格せず、WAITLISTED のまま dirty=true（△書き戻し・キュー飛ばし防止）
+        // 空き枠(1)が自分の待ち順位までの人数(2)を下回るので昇格せず、WAITLISTEDのままdirty=true（△書き戻し・キュー飛ばし防止）
         assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WAITLISTED);
         assertThat(waitlisted.isDirty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("#1008: 当日12:00以降・待ち行列先頭でなくても自分の待ち順位までが空き枠に収まればWONに昇格する")
+    void testPhase3A6_afterNoon_notFrontOfQueue_butWithinVacancy_promotesToWon() throws IOException {
+        LocalDate today = LocalDate.of(2026, 4, 2);
+        DensukeData data = new DensukeData();
+        ScheduleEntry entry = new ScheduleEntry();
+        entry.setDate(today);
+        entry.setMatchNumber(3);
+        entry.getParticipants().add("武内"); // ○
+        data.getEntries().add(entry);
+        data.setMemberNames(List.of("武内"));
+
+        // #1008 実例を単純化した再現: 定員14、当選7名+オファー0名(空き7)、待ち行列2番目
+        PracticeSession session = PracticeSession.builder()
+                .id(998L).sessionDate(today).totalMatches(3).capacity(14).organizationId(1L).build();
+        PracticeParticipant waitlisted = PracticeParticipant.builder()
+                .id(25413L).sessionId(998L).playerId(82L).matchNumber(3)
+                .status(ParticipantStatus.WAITLISTED).waitlistNumber(2).dirty(false).build();
+
+        Player takeuchi = Player.builder().id(82L).name("武内").role(Player.Role.PLAYER).build();
+
+        when(densukeScraper.scrape(anyString(), anyInt())).thenReturn(data);
+        when(playerService.findAllPlayersRaw()).thenReturn(List.of(takeuchi));
+        when(venueRepository.findAll()).thenReturn(Collections.emptyList());
+        when(practiceSessionRepository.findBySessionDateAndOrganizationId(today, 1L))
+                .thenReturn(Optional.of(session));
+        when(lotteryDeadlineHelper.getDeadlineType(1L)).thenReturn(DeadlineType.MONTHLY);
+        when(lotteryService.isLotteryConfirmed(2026, 4, 1L)).thenReturn(true);
+        when(lotteryDeadlineHelper.isAfterSameDayNoon(today)).thenReturn(true);
+        when(practiceParticipantRepository.findBySessionIdAndMatchNumber(998L, 3))
+                .thenReturn(List.of(waitlisted));
+        // 空き枠7（7/14）。自分(待ち順位2番目)までの人数は2人分で空き枠に収まる
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(998L, 3, ParticipantStatus.WON))
+                .thenReturn(7L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(998L, 3, ParticipantStatus.OFFERED))
+                .thenReturn(0L);
+        when(practiceParticipantRepository
+                .countBySessionIdAndMatchNumberAndStatusAndWaitlistNumberLessThanEqual(
+                        998L, 3, ParticipantStatus.WAITLISTED, 2))
+                .thenReturn(2L);
+
+        densukeImportService.importFromDensuke("http://example.com", null, 0L, 1L);
+
+        // 待ち行列の先頭(waitlistNumber=1)でなくても、空き枠が自分の順位分を賄えるので昇格し、
+        // 伝助への△書き戻し(dirty=true)は発生しない
+        assertThat(waitlisted.getStatus()).isEqualTo(ParticipantStatus.WON);
+        assertThat(waitlisted.getWaitlistNumber()).isNull();
+        assertThat(waitlisted.isDirty()).isFalse();
+        verify(practiceParticipantRepository).decrementWaitlistNumbersAfter(998L, 3, 2);
     }
 
     @Test
