@@ -4,15 +4,17 @@ This file provides guidance to OpenAI Codex when working with code in this repos
 
 ## ドキュメント更新ルール
 
-**実装が完了したら、以下のドキュメントを必ず最新の状態に更新すること。**
+**実装が完了したら、変更に対応する正典ドキュメントを必ず最新の状態に更新すること。** どの事実がどのファイルに住むかの正典レジストリは `.claude/project-profile.md` の `## docs` を参照。
 
 | ファイル | 内容 |
 |---------|------|
-| `docs/SPECIFICATION.md` | 仕様書 |
-| `docs/SCREEN_LIST.md` | 画面一覧 |
-| `docs/DESIGN.md` | 設計書 |
+| `docs/spec/<ドメイン>.md` | ドメイン別仕様（機能・フロー・API の正典。索引は `docs/SPECIFICATION.md`） |
+| `docs/SCREEN_LIST.md` | 画面一覧・ルーティング（画面のSSOT） |
+| `docs/design/db.md`（+ `db-tables-*.md`） | データベース設計（テーブル定義のSSOT） |
+| `docs/design/architecture.md` | アーキテクチャ・権限・API共通仕様（索引は `docs/DESIGN.md`） |
 
-- 新機能追加・既存機能の変更・画面の追加や変更があった場合、該当するドキュメントに漏れなく反映する
+- 新機能追加・既存機能の変更・画面の追加や変更があった場合、該当するドメインファイルの該当セクションを in-place 更新する（同じ事実を複数ファイルに書かない）
+- 見出しに連番を付けない。実装参照はファイルパス粒度（行番号を書かない）。本文に変更履歴を追記しない（履歴は git と `docs/features/`）
 - ドキュメントの更新は実装コードと同じコミットに含める
 
 ## プロジェクト概要
