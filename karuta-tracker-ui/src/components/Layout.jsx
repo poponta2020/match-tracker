@@ -55,34 +55,43 @@ const Layout = ({ children }) => {
         {children}
       </main>
 
-      {/* ボトムナビゲーション: bottom-0固定、safe-area分は背景のみ拡張 */}
-      <nav className={`fixed bottom-0 left-0 right-0 bg-[#4a6b5a] border-t border-[#3d5a4c] z-50 pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}>
-        <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
-          {bottomNavItems.map((item) => {
-            const Icon = item.icon;
-            const active = isBottomNavActive(item.href);
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
-              >
-                <Icon
-                  className={`w-6 h-6 ${
-                    active ? 'text-white' : 'text-[#b8ccbf]'
-                  }`}
-                  strokeWidth={active ? 2.5 : 2}
-                />
-                <span
-                  className={`text-xs mt-0.5 ${
-                    active ? 'text-white font-semibold' : 'text-[#b8ccbf]'
-                  }`}
+      {/* ボトムナビゲーション: fixed要素自体はtransformを持たせず(iOS Safariでfixedが解除されるのを防ぐ)、
+          スライドアニメーションは内側のdivに持たせる。外側のfixed領域は常にpointer-events-noneとし、
+          クリック判定は transform を持つ内側divに委ねる（transformされた要素の当たり判定は
+          見た目の位置に追従するため、スライド中の一部だけ先にクリックを奪うことがない） */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none"
+        aria-hidden={!isVisible}
+      >
+        <div className={`bg-[#4a6b5a] border-t border-[#3d5a4c] pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ${isVisible ? 'translate-y-0 pointer-events-auto' : 'translate-y-full pointer-events-none'}`}>
+          <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
+            {bottomNavItems.map((item) => {
+              const Icon = item.icon;
+              const active = isBottomNavActive(item.href);
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  tabIndex={isVisible ? 0 : -1}
+                  className="flex flex-col items-center justify-center flex-1 h-full transition-colors"
                 >
-                  {item.name}
-                </span>
-              </Link>
-            );
-          })}
+                  <Icon
+                    className={`w-6 h-6 ${
+                      active ? 'text-white' : 'text-[#b8ccbf]'
+                    }`}
+                    strokeWidth={active ? 2.5 : 2}
+                  />
+                  <span
+                    className={`text-xs mt-0.5 ${
+                      active ? 'text-white font-semibold' : 'text-[#b8ccbf]'
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </nav>
     </div>
