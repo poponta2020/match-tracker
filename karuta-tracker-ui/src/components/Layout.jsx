@@ -56,8 +56,12 @@ const Layout = ({ children }) => {
       </main>
 
       {/* ボトムナビゲーション: fixed要素自体はtransformを持たせず(iOS Safariでfixedが解除されるのを防ぐ)、
-          スライドアニメーションは内側のdivに持たせる */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50">
+          スライドアニメーションは内側のdivに持たせる。非表示時は外側のfixed領域が
+          レイアウト上残ってクリックを奪わないようpointer-eventsを切り替える */}
+      <nav
+        className={`fixed bottom-0 left-0 right-0 z-50 ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        aria-hidden={!isVisible}
+      >
         <div className={`bg-[#4a6b5a] border-t border-[#3d5a4c] pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="flex justify-around items-center h-14 max-w-7xl mx-auto">
             {bottomNavItems.map((item) => {
