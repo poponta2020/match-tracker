@@ -323,7 +323,7 @@ karuta-tracker-ui/src/
 
 - `/register/:token`: 招待トークン付きURLでアカウント作成時のデフォルトロールは **PLAYER**。
 
-⚠要確認（分割前の KEEP 旧DESIGN §5.1 の記載が上記表・ KEEP 旧SPECIFICATION §5.1 と食い違う。「旧」は2026-07-10のドメイン分割前の記述で、原文は git 履歴の docs/SPECIFICATION.md・docs/DESIGN.md を参照）:
+⚠要確認（分割前の旧DESIGN §5.1 の記載が上記表・旧SPECIFICATION §5.1 と食い違う。「旧」は2026-07-10のドメイン分割前の記述で、原文は git 履歴の docs/SPECIFICATION.md・docs/DESIGN.md を参照）:
 - 旧DESIGN §5.1 は「ランディング」のパスを `/landing` としているが、既存表・旧SPECIFICATION §5.1 は `/`（未認証時）→ `Landing.jsx`。
 - 旧DESIGN §5.1 は「ユーザー登録」のパスを `/register`（トークンなし）としているが、既存表・旧SPECIFICATION §5.1 は `/register/:token`。
 - 旧DESIGN §5.1 は「プライバシーポリシー」のパスを `/privacy-policy` としているが、既存表・旧SPECIFICATION §5.1 は `/privacy`。
@@ -337,7 +337,7 @@ karuta-tracker-ui/src/
 
 パス・コンポーネント・権限は各機能別表（2〜9.5節）と重複するため再掲しない。既存表との間で権限・パス表記に相違がある箇所を ⚠要確認 として記録する。
 
-⚠要確認（既存表と KEEP 旧SPECIFICATION §5.2 /  KEEP 旧DESIGN §5.1 の記載の相違）:
+⚠要確認（既存表と旧SPECIFICATION §5.2 / 旧DESIGN §5.1 の記載の相違）:
 - `/players`（選手一覧）: 既存表・ハンバーガーメニュー表は **ADMIN+**（`PlayerList.jsx`、ADMINは初期フィルタが自管轄団体）。旧SPECIFICATION §5.2 は **SUPER_ADMIN**、旧DESIGN §5.1 は **全員**。
 - `/players/:id`（選手詳細）: 既存表は **SUPER_ADMIN**（`PlayerDetail.jsx`）。旧SPECIFICATION §5.2・旧DESIGN §5.1 はいずれも **ALL/全員**。
 - `/venues/new`・会場編集: 既存表は **SUPER_ADMIN**（会場編集パスは `/venues/edit/:id`）。旧DESIGN §5.1 は権限を **全員** とし、パスも `/venues/:id/edit` と表記している。
