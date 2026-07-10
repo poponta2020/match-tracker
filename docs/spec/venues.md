@@ -112,7 +112,7 @@ Spring DI では `Map<String, T>` が bean 名キーになるため、会場別 
 
 #### Kaderu (`KADERU`) Phase 1 実装
 
-Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、実サイトの `gotoPage(op)` / `showCalendar(y,m)` / `clickDay(d)` / `setAppStatus(...)` と同じ form 状態を再現する。各応答 HTML から hidden field を `ProxySession.hiddenFields` に保存し、次の POST は保存済み field をベースに必要項目だけを上書きする。日付選択は `op=srch_sst` を維持して `UseYM` / `UseDay` / `UseDate` を更新し、申込トレイ投入は `setAppStatus` の `chk_rsv` 空き再確認後に `op=apply` + `rsv_chk[facilityCode][YYYY/MM/DD][slotIndex]=timeRange` + `requestBtn=申込トレイに入れる` を送信する。申込完了検知は URL / Location の `op=rsv_comp` / `p=rsv_comp`、`op=fix_comp` / `p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。
+Kaderu の Phase 1 実装は `https://k2.p-kashikan.jp/kaderu27/index.php` に対する form 等価 POST で、実サイトの `gotoPage(op)` / `showCalendar(y,m)` / `clickDay(d)` / `setAppStatus(...)` と同じ form 状態を再現する。各応答 HTML から hidden field を `ProxySession.hiddenFields` に保存し、次の POST は保存済み field をベースに必要項目だけを上書きする。日付選択は `op=srch_sst` を維持して `UseYM` / `UseDay` / `UseDate` を更新し、申込トレイ投入は `setAppStatus` の `chk_rsv`（値は `{facilityCode}#{YYYY/MM/DD}#{slotIndex}#{timeRange}` の `#` 区切り）で空きを再確認した後に `op=apply` + `rsv_chk[facilityCode][YYYY/MM/DD][slotIndex]=timeRange` + `requestBtn=申込トレイに入れる` を送信する。申込完了検知は URL / Location の `op=rsv_comp` / `p=rsv_comp`、`op=fix_comp` / `p=fix_comp`、`/complete` と、本文の「申込みを受け付けました」「申込番号」「予約を受付ました」「予約完了」を陽性条件にする。（画面遷移の調査記録: docs/features/venue-reservation-proxy/venues/kaderu.md）
 
 ## 画面
 

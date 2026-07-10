@@ -6,9 +6,9 @@
 
 ## ER図
 
-SPEC（`docs/SPECIFICATION.md` §6.1）と DESIGN（`docs/DESIGN.md` §3.1）の記法・詳細度が異なるため、両方をそのまま統合して掲載する（一方が他方の上位互換ではなく、SPEC は players 起点の関係を網羅的に列挙し、DESIGN は organizations・invite_tokens 等の団体系テーブルの関係を含む）。
+旧SPECIFICATION §6.1 と旧DESIGN §3.1（いずれも2026-07-10のドメイン分割で本ファイルに統合済み。原文は git 履歴参照）の記法・詳細度が異なるため、両方をそのまま統合して掲載する（一方が他方の上位互換ではなく、SPEC は players 起点の関係を網羅的に列挙し、DESIGN は organizations・invite_tokens 等の団体系テーブルの関係を含む）。
 
-### SPEC 6.1（テキスト表記）
+### 旧SPECIFICATION由来（テキスト表記）
 
 ```
 players ──< matches (player1Id, player2Id, winnerId)
@@ -39,7 +39,7 @@ venues ──< practice_sessions (venueId)
 venues ──< venue_match_schedules (venueId)
 ```
 
-### DESIGN 3.1（ボックス図）
+### 旧DESIGN由来（ボックス図）
 
 DESIGN 側は organizations・player_organizations・match_personal_notes・invite_tokens・densuke_urls など、SPEC の一覧に無い関係を含む（特に団体（organizations）を起点とした関係）。原文のまま掲載する。
 

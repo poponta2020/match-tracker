@@ -4,7 +4,7 @@
 
 ## テーブル定義
 
-> 型・制約表記は既定で SPEC（`docs/SPECIFICATION.md`）の記載を採用し、DESIGN（`docs/DESIGN.md`）との相違は各テーブル直後の「⚠要確認」にまとめる。SPEC に無く DESIGN のみに存在するカラムはその旨を都度注記する。`id` 列の `PK, AUTO`（SPEC表記）と `PK, AUTO_INCREMENT`（DESIGN表記）はいずれも自動採番される主キーの同義表記のため、個別の⚠要確認には含めず本文は SPEC 表記 `PK, AUTO` に統一する。DESIGN 側の `ENUM` / `DATETIME` は MySQL 時代の型表記の残存であり、本番は PostgreSQL（`VARCHAR` 系 / `TIMESTAMP`）。値域・NULL制約・長さなど実質的な差異がある列のみ個別に⚠要確認を付す。
+> 型・制約表記は既定で旧SPECIFICATION（2026-07-10分割前。原文は git 履歴参照）の記載を採用し、旧DESIGN との相違は各テーブル直後の「⚠要確認」にまとめる。SPEC に無く DESIGN のみに存在するカラムはその旨を都度注記する。`id` 列の `PK, AUTO`（SPEC表記）と `PK, AUTO_INCREMENT`（DESIGN表記）はいずれも自動採番される主キーの同義表記のため、個別の⚠要確認には含めず本文は SPEC 表記 `PK, AUTO` に統一する。DESIGN 側の `ENUM` / `DATETIME` は MySQL 時代の型表記の残存であり、本番は PostgreSQL（`VARCHAR` 系 / `TIMESTAMP`）。値域・NULL制約・長さなど実質的な差異がある列のみ個別に⚠要確認を付す。
 
 #### players（選手マスタ）
 
