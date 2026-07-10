@@ -233,6 +233,13 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
             Long sessionId, Integer matchNumber, ParticipantStatus status);
 
     /**
+     * 特定セッション・試合・ステータスで、指定した待ち番号以下（＝自分より待ち順位が前 + 自分自身）の件数を取得。
+     * 待ち順位を飛ばさずに繰り上げ可能かどうかの判定（空き枠件数との比較）に使う。
+     */
+    long countBySessionIdAndMatchNumberAndStatusAndWaitlistNumberLessThanEqual(
+            Long sessionId, Integer matchNumber, ParticipantStatus status, Integer waitlistNumber);
+
+    /**
      * 特定セッション・試合のキャンセル待ちで最も若い番号の参加者を取得（特定プレイヤーを除外）
      */
     Optional<PracticeParticipant> findFirstBySessionIdAndMatchNumberAndStatusAndPlayerIdNotOrderByWaitlistNumberAsc(

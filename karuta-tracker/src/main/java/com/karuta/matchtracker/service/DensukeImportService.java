@@ -449,22 +449,27 @@ public class DensukeImportService {
             case WAITLISTED -> {
                 // 当日12:00以降かつ空き枠がある場合: WONに昇格（先着参加の仕様）
                 if (lotteryDeadlineHelper.isAfterSameDayNoon(session.getSessionDate())) {
-                    // B-5: 空き判定を他経路と揃える。OFFERED も定員に算入し（瞬間的定員超過を防ぐ）、
-                    // かつ対象者が待ち行列の先頭（最小 waitlistNumber の WAITLISTED）のときのみ昇格して
-                    // 待ち行列を飛ばした昇格を防ぐ。isFreeRegistrationOpen はこの分岐では対象者自身が
-                    // WAITLISTED のため常に false になり昇格が無効化されるので、同等の判定をここで組む。
+                    // B-5/#1008: 空き判定を他経路と揃える。OFFERED も定員に算入し（瞬間的定員超過を防ぐ）。
+                    // 「待ち行列の厳密な先頭のみ」ではなく「自分の待ち順位まで（自分を含む）の人数が
+                    // 空き枠に収まるか」で判定する。自分より前の人の枠は必ず確保された状態を維持したまま
+                    // （待ち行列を飛ばした昇格は防ぐ）、空きが複数人分あるのに先頭以外が永久に昇格できず
+                    // 伝助の○を毎回△へ強制上書きし続ける問題（#1008）を防ぐ。
+                    // isFreeRegistrationOpen はこの分岐では対象者自身が WAITLISTED のため常に false になり
+                    // 昇格が無効化されるので、同等の判定をここで組む。
                     long wonCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                             session.getId(), matchNumber, ParticipantStatus.WON);
                     long offeredCount = practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(
                             session.getId(), matchNumber, ParticipantStatus.OFFERED);
                     Integer capacity = session.getCapacity();
-                    boolean hasVacancy = capacity != null && (wonCount + offeredCount) < capacity;
-                    boolean atFrontOfQueue = practiceParticipantRepository
-                            .findFirstBySessionIdAndMatchNumberAndStatusOrderByWaitlistNumberAsc(
-                                    session.getId(), matchNumber, ParticipantStatus.WAITLISTED)
-                            .map(front -> front.getId().equals(existing.getId()))
-                            .orElse(true);
-                    if (hasVacancy && atFrontOfQueue) {
+                    long vacancy = capacity != null ? capacity - (wonCount + offeredCount) : 0;
+                    boolean hasVacancy = capacity != null && vacancy > 0;
+                    Integer myWaitlistNumber = existing.getWaitlistNumber();
+                    boolean withinQueuePosition = hasVacancy && myWaitlistNumber != null
+                            && practiceParticipantRepository
+                                    .countBySessionIdAndMatchNumberAndStatusAndWaitlistNumberLessThanEqual(
+                                            session.getId(), matchNumber, ParticipantStatus.WAITLISTED, myWaitlistNumber)
+                                    <= vacancy;
+                    if (hasVacancy && withinQueuePosition) {
                         Integer oldWaitlistNumber = existing.getWaitlistNumber();
                         existing.setStatus(ParticipantStatus.WON);
                         existing.setWaitlistNumber(null);
@@ -482,7 +487,7 @@ public class DensukeImportService {
                         return true;
                     }
                 }
-                // 3-A6: 12:00前または空き枠なし → 抽選バイパス不可。dirty=trueにして△で書き戻す
+                // 3-A6: 12:00前、または空き枠が自分の待ち順位までをカバーしていない → 抽選バイパス不可。dirty=trueにして△で書き戻す
                 existing.setDirty(true);
                 practiceParticipantRepository.save(existing);
                 log.info("Phase3-A6: WAITLISTED player {} set dirty for △ write-back ({})",
