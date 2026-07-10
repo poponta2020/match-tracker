@@ -143,7 +143,7 @@ const MatchForm = () => {
                 });
                 setPracticeSession(editSessionRes.data);
               }
-            } catch (e) {
+            } catch {
               // セッションが見つからなくても編集は許可
             }
           }
@@ -966,18 +966,21 @@ const MatchForm = () => {
 
           <span className="mf-label">活動内容</span>
           <div className="mf-acts">
-            {ACTIVITY_TYPES.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => { markDirty(); setByeActivityType(value); }}
-                className={`mf-act${byeActivityType === value ? ' active' : ''}`}
-              >
-                <span className="ic"><Icon size={20} /></span>
-                <span className="lab">{label}</span>
-                <span className="check"><Check size={18} /></span>
-              </button>
-            ))}
+            {ACTIVITY_TYPES.map(({ value, label, icon }) => {
+              const Icon = icon;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { markDirty(); setByeActivityType(value); }}
+                  className={`mf-act${byeActivityType === value ? ' active' : ''}`}
+                >
+                  <span className="ic"><Icon size={20} /></span>
+                  <span className="lab">{label}</span>
+                  <span className="check"><Check size={18} /></span>
+                </button>
+              );
+            })}
           </div>
 
           {byeActivityType === 'OTHER' && (

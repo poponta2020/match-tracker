@@ -107,7 +107,6 @@ const PracticeEditForm = ({ id }) => {
   );
 };
 
-// ========== 新規登録用カレンダーUI ==========
 const PracticeForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -124,7 +123,12 @@ const PracticeForm = () => {
   // 編集モードは既存フォームを使用
   if (isEdit) return <PracticeEditForm id={id} />;
 
-  // --- 新規登録モード ---
+  return <PracticeNewForm />;
+};
+
+// ========== 新規登録用カレンダーUI ==========
+const PracticeNewForm = () => {
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [venues, setVenues] = useState([]);
   const [entries, setEntries] = useState({}); // { 'YYYY-MM-DD': { venueId, venueName, totalMatches, notes } }

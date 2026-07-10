@@ -23,7 +23,6 @@ const BulkResultInput = () => {
 
   const [session, setSession] = useState(null);
   const [pairings, setPairings] = useState([]);
-  const [matches, setMatches] = useState([]);
   const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
   const tabBarRef = useRef(null);
   const swipeAreaRef = useRef(null); // スワイプ検出面（共通ヘッダー/フッターを除くコンテンツ全域）
@@ -75,7 +74,6 @@ const BulkResultInput = () => {
         setPairings(allPairings);
         const allParticipants = participantsResponse.data || [];
         const sessionMatches = matchesResponse.data;
-        setMatches(sessionMatches);
 
         // 初期表示する試合番号を決定（入力済み最大+1 > 当日かつ会場スケジュールありで時刻ベース > 1試合目）。
         // fetchData は sessionId ごとに1回のみ実行されるため、以降のユーザーのタブ切替・スワイプは上書きしない。
@@ -332,7 +330,7 @@ const BulkResultInput = () => {
       for (const key of changedMatches) {
         if (!key.startsWith('bye-')) continue;
         const byeKey = key.replace('bye-', '');
-        const [mn, pid] = byeKey.split('-').map(Number);
+        const [mn] = byeKey.split('-').map(Number);
         const activity = byeActivities[byeKey];
         if (activity?.activityType) {
           byeMatchNumbers.add(mn);

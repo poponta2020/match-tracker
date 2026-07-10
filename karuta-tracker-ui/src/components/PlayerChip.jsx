@@ -16,6 +16,7 @@ const DEFAULT_BORDER_COLOR = 'border-gray-200';
 /**
  * 級に応じた枠線色クラスを取得
  */
+// eslint-disable-next-line react-refresh/only-export-components -- PlayerChipと密結合の色マッピングのため同一ファイルに置く
 export const getKyuBorderColor = (kyuRank) => {
   return KYU_BORDER_COLORS[kyuRank] || DEFAULT_BORDER_COLOR;
 };
@@ -36,8 +37,9 @@ const PlayerChip = ({
   className = '',
   onClick,
   children,
-  as: Component = onClick ? 'button' : 'span',
+  as,
 }) => {
+  const Component = as || (onClick ? 'button' : 'span');
   const borderColor = getKyuBorderColor(kyuRank);
 
   return (

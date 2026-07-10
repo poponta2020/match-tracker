@@ -147,8 +147,6 @@ const MatchParticipantsEditModal = ({ session, matchNumber, onClose, onSave, onR
     }
   };
 
-  const isSelected = (id) => selectedPlayerIds.includes(id);
-
   // 選択済みプレイヤー（級位→段位→名前順）
   const selectedPlayers = useMemo(() =>
     sortPlayersByRank(allPlayers.filter(p => selectedPlayerIds.includes(p.id))),
