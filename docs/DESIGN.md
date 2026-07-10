@@ -2521,7 +2521,7 @@ Entity Layer (JPA Entity)
 
 **フロントエンド**:
 - `AuthContext` で `currentPlayer.role` を管理
-- `BottomNavContext` でボトムナビゲーションの表示/非表示を管理（`isVisible` state、デフォルト `true`）。`App.jsx` で `BottomNavProvider` として全体をラップ。`Layout.jsx` が `isVisible` を参照してスライドアニメーション（`translate-y-0` ⇔ `translate-y-full`）で切り替え
+- `BottomNavContext` でボトムナビゲーションの表示/非表示を管理（`isVisible` state、デフォルト `true`）。`App.jsx` で `BottomNavProvider` として全体をラップ。`Layout.jsx` が `isVisible` を参照してスライドアニメーション（`translate-y-0` ⇔ `translate-y-full`）で切り替え。position:fixedの要素自体にtransformを直接適用するとiOS Safariでfixedが解除されスクロールに追随してしまうため、fixed指定用の外側`<nav>`（transformなし）とスライドアニメーション用の内側`<div>`（transform）に分離。非表示時はスクリーンリーダー向けに`aria-hidden`、キーボード操作向けに各リンクの`tabIndex`を`-1`に、クリック/タップ判定は内側divの`pointer-events`切り替えで制御（外側の静的なfixed領域が常時クリックを奪わないよう`pointer-events-none`固定）
 - Axiosインターセプターで全リクエストに `X-User-Role` ヘッダー追加
 - `isSuperAdmin()`, `isAdmin()` などのヘルパー関数で条件付き表示
 - `RoleRoute` コンポーネントで管理者専用ルートを保護（`/admin/*`, `/players/*`, `/practice/new` 等）
