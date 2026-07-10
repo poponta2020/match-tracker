@@ -45,7 +45,7 @@ export default function MentorManagement() {
       const playerOrgs = orgsRes.data.filter(org => orgIds.includes(org.id));
       setMyOrgs(playerOrgs);
       setAllPlayers(playersRes.data);
-    } catch (e) {
+    } catch {
       setError('データの取得に失敗しました');
     } finally {
       setLoading(false);

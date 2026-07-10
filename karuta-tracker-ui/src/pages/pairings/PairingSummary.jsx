@@ -61,6 +61,7 @@ function generateText(date, matchData, cardRules, readersByMatch = {}, targetMat
     const rule = cardRules[i];
     if (!firstBlock) text += '\n';
     firstBlock = false;
+    // eslint-disable-next-line no-irregular-whitespace -- 全角スペースは表示文言の意図的な区切り
     text += `${matchNumber}試合目　${rule ? rule.description : ''}\n`;
 
     const readers = readersByMatch[matchNumber];
@@ -69,6 +70,7 @@ function generateText(date, matchData, cardRules, readersByMatch = {}, targetMat
     }
 
     for (const pairing of match.pairings) {
+      // eslint-disable-next-line no-irregular-whitespace -- 全角スペースは表示文言の意図的な区切り
       text += `${padName(pairing.player1Name)}　${padName(pairing.player2Name)}\n`;
     }
   }
@@ -83,7 +85,6 @@ const PairingSummary = () => {
   const matchNumberParam = searchParams.get('matchNumber');
   const [loading, setLoading] = useState(true);
   const [matchData, setMatchData] = useState([]);
-  const [cardRules, setCardRules] = useState([]);
   const [readersByMatch, setReadersByMatch] = useState({});
   // URL の matchNumber が有効（1..totalMatches）なら単一試合モードの対象試合番号。無効/未指定は null（全試合モード）。
   const [targetMatchNumber, setTargetMatchNumber] = useState(null);
@@ -142,7 +143,6 @@ const PairingSummary = () => {
 
         // 札ルール: 日付（＋DB共有 nonce）シードから決定論的に生成（端末・再訪・過去日でブレない）
         const rules = getCardRules(date, totalMatches, currentNonce);
-        setCardRules(rules);
 
         // テキスト生成（単一試合モードでは対象試合のブロックのみ）
         const generatedText = generateText(date, data, rules, readers, validTarget);
@@ -186,7 +186,6 @@ const PairingSummary = () => {
     saveNonce(date, nextNonce); // ローカルキャッシュも更新（フォールバック用）
     setNonce(nextNonce);
     const rules = getCardRules(date, matchData.length, nextNonce);
-    setCardRules(rules);
     setText(generateText(date, matchData, rules, readersByMatch, targetMatchNumber));
   };
 

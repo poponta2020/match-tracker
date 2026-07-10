@@ -28,7 +28,7 @@ const OrganizationSettings = () => {
       ]);
       setOrganizations(orgsRes.data.filter(o => o.code !== 'hokudai'));
       setSelectedOrgIds(playerOrgsRes.data.map(o => o.id));
-    } catch (e) {
+    } catch {
       setError('データの取得に失敗しました');
     } finally {
       setLoading(false);
@@ -59,7 +59,7 @@ const OrganizationSettings = () => {
       setError(null);
       await organizationAPI.updatePlayerOrganizations(currentPlayer.id, selectedOrgIds);
       setSuccess('参加練習会を更新しました');
-    } catch (e) {
+    } catch {
       setError('更新に失敗しました');
     } finally {
       setSaving(false);

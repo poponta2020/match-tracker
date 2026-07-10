@@ -143,7 +143,7 @@ const MatchForm = () => {
                 });
                 setPracticeSession(editSessionRes.data);
               }
-            } catch (e) {
+            } catch {
               // セッションが見つからなくても編集は許可
             }
           }

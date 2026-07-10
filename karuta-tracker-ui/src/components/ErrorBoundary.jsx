@@ -6,7 +6,7 @@ class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     // エラーが発生したことを記録
     return { hasError: true };
   }
@@ -47,7 +47,7 @@ class ErrorBoundary extends Component {
             <p className="mt-2 text-sm text-center text-gray-600">
               申し訳ございません。予期しないエラーが発生しました。
             </p>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="mt-4 text-sm">
                 <summary className="cursor-pointer text-gray-700 font-medium">
                   エラー詳細

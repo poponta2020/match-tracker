@@ -19,7 +19,7 @@ const LineScheduleAdmin = () => {
       setLoading(true);
       const res = await lineAPI.getScheduleSettings();
       setSettings(res.data);
-    } catch (err) {
+    } catch {
       setError('設定の取得に失敗しました');
     } finally {
       setLoading(false);
@@ -33,7 +33,7 @@ const LineScheduleAdmin = () => {
         enabled: !setting.enabled,
       });
       await fetchSettings();
-    } catch (err) {
+    } catch {
       setError('設定の更新に失敗しました');
     }
   };
@@ -48,7 +48,7 @@ const LineScheduleAdmin = () => {
       setMessage('設定を更新しました');
       setTimeout(() => setMessage(null), 2000);
       await fetchSettings();
-    } catch (err) {
+    } catch {
       setError('設定の更新に失敗しました');
     }
   };

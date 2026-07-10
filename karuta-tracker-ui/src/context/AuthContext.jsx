@@ -3,6 +3,7 @@ import { playerAPI } from '../api';
 
 const AuthContext = createContext(null);
 
+// eslint-disable-next-line react-refresh/only-export-components -- 28箇所から参照されるフックの分離は影響範囲が大きいため見送り
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -38,7 +39,7 @@ export const AuthProvider = ({ children }) => {
       const player = response.data;
 
       // firstLoginフラグはログイン判定用のみ。localStorageには保存しない
-      const { firstLogin, ...playerData } = player;
+      const { firstLogin: _firstLogin, ...playerData } = player;
       setCurrentPlayer(playerData);
       localStorage.setItem('currentPlayer', JSON.stringify(playerData));
       localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
@@ -63,16 +64,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (playerData) => {
-    try {
-      const response = await playerAPI.register(playerData);
-      const newPlayer = response.data;
-      setCurrentPlayer(newPlayer);
-      localStorage.setItem('currentPlayer', JSON.stringify(newPlayer));
-      localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
-      return newPlayer;
-    } catch (error) {
-      throw error;
-    }
+    const response = await playerAPI.register(playerData);
+    const newPlayer = response.data;
+    setCurrentPlayer(newPlayer);
+    localStorage.setItem('currentPlayer', JSON.stringify(newPlayer));
+    localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
+    return newPlayer;
   };
 
   const value = {
