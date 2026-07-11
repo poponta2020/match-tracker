@@ -1,11 +1,11 @@
 ---
 status: completed
-change_type: pure-ui
+change_type: ui-refactor
 contract: design-spec.md （本手順書は薄い。視覚の正典は design-spec と Claude Design の A/B/C/D 4カード）
 ---
 # 対戦組み合わせ画面（PairingGenerator）脱カードUI改修 実装手順書
 
-> 純UI改修（挙動変更ゼロ・純フロント）。要件契約は `design-spec.md`（AC / 回帰AC / Non-goals / トークン）。
+> UI改修（主体は視覚・純フロント）。**中核ロジックは挙動不変**だが、ユーザー合意の意図的インタラクション差分3点を含む（日付変更廃止 / LINE生成トグル格納 / 参加者リスト常時展開。詳細は design-spec.md「意図的な挙動差分」）。要件契約は `design-spec.md`（AC / 回帰AC / Non-goals / トークン）。
 > 主対象は `karuta-tracker-ui/src/pages/pairings/PairingGenerator.jsx` のマークアップ／Tailwind クラス置換。
 > **挙動側（`pairingDragLogic` / `pairingLockLogic` / `pairingDisplayLogic` / `lineTextTarget` / `cardRules` / API・DTO）は触らない。**
 
