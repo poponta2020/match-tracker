@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { pairingAPI } from '../../api/pairings';
 import { practiceAPI } from '../../api/practices';
@@ -69,6 +69,27 @@ const PairingGenerator = () => {
 
   // 現在の試合が閲覧専用か（他の試合に未保存の変更がある場合）
   const isReadOnly = hasUnsavedChanges && unsavedDraft.current?.matchNumber !== matchNumber;
+
+  // 試合番号タブの「滑る cream ハイライト」：アクティブタブを実測して位置/幅を追従させる。
+  // jsdom はレイアウトしない（offsetLeft/offsetWidth=0）ため、この視覚表現は verify で担保する。
+  const tabRefs = useRef({}); // num -> button 要素
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+  const [indicatorReady, setIndicatorReady] = useState(false); // 初回計測までは transition を無効化（マウント時の滑り込み防止）
+  const measureIndicator = useCallback(() => {
+    const el = tabRefs.current[matchNumber];
+    if (!el) return;
+    setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    setIndicatorReady(true);
+  }, [matchNumber]);
+  // アクティブタブ・タブ本数が変わったら再計測（レイアウト確定後・描画前に同期実行）
+  useLayoutEffect(() => {
+    measureIndicator();
+  }, [measureIndicator, currentSession?.totalMatches]);
+  // リサイズ・フォント読込での幅変化に追従
+  useEffect(() => {
+    window.addEventListener('resize', measureIndicator);
+    return () => window.removeEventListener('resize', measureIndicator);
+  }, [measureIndicator]);
 
   // ドラッグ＆ドロップ設定
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
@@ -861,9 +882,17 @@ const PairingGenerator = () => {
         );
       })()}
 
-      {/* 試合番号（下線タブ）＋ 連結パネル */}
+      {/* 試合番号タブ（同一フットプリント＋滑る cream ハイライト）＋ 連結パネル */}
       <div>
-        <div className="flex items-end gap-1 border-b border-[#e7e0d4] px-1 overflow-x-auto">
+        <div className="relative flex items-end gap-1 px-1 overflow-x-auto">
+          {/* 滑る cream ハイライト（アクティブタブ位置を実測して追従。下辺=bottom-0 で連結パネルにシームレス接続） */}
+          <span
+            aria-hidden="true"
+            className={`absolute left-0 top-1 bottom-0 z-0 rounded-t-lg bg-[#ebe4d8] ${
+              indicatorReady ? 'transition-[transform,width] duration-200 ease-out' : ''
+            }`}
+            style={{ transform: `translateX(${indicator.left}px)`, width: `${indicator.width}px` }}
+          />
           {Array.from(
             { length: currentSession?.totalMatches || 10 },
             (_, i) => i + 1
@@ -874,8 +903,9 @@ const PairingGenerator = () => {
             return (
               <button
                 key={num}
+                ref={(el) => { tabRefs.current[num] = el; }}
                 onClick={() => setMatchNumber(num)}
-                className={`relative flex-none leading-none px-3.5 pt-2.5 pb-2.5 text-[15px] whitespace-nowrap transition-colors ${
+                className={`relative z-10 flex-none leading-none px-3.5 pt-2.5 pb-2.5 text-[15px] whitespace-nowrap transition-colors ${
                   isActive
                     ? 'text-[#1A3654] font-bold'
                     : `font-semibold ${
@@ -894,8 +924,10 @@ const PairingGenerator = () => {
           })}
         </div>
 
-        {/* 連結パネル（この試合の内容。タブに連結） */}
-        <div className="bg-[#ebe4d8] rounded-b-xl rounded-tr-xl px-5 py-4 space-y-4">
+        {/* 連結パネル（この試合の内容。タブに連結。上辺はフラットにし、任意位置の cream ハイライトと接続） */}
+        <div className="bg-[#ebe4d8] rounded-b-xl px-5 py-4 space-y-4">
+          {/* この連結パネルが第N試合のものであることを静的表示（タブから外した「N試合目」を保持。切替でレイアウトは動かない） */}
+          <div className="text-[13px] font-semibold text-[#8a8275]">{matchNumber}試合目</div>
 
       {/* 参加者セクション（新規作成時のみ＝pairings.length===0。折りたたみは廃止し常時展開。判定は pairingDisplayLogic に集約） */}
       {shouldShowParticipantSection(pairings) && (
