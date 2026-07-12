@@ -16,3 +16,4 @@
 ## Ship
 - [ship_pr1007_bottom_nav_ios_scroll.md](ship_pr1007_bottom_nav_ios_scroll.md) - PR#1007出荷完了。iOS Safariのfixed+transform既知バグ修正。DoDのlintは既存負債のため--skip-dod（フォローアップIssue #1019切り出し済み）
 - [ship_pr1022_frontend_lint_debt.md](ship_pr1022_frontend_lint_debt.md) - PR#1022出荷完了（Issue#1019）。既存lintエラー46件解消。DoD全項目PASS。worktree/gate-dodのファイル所在ずれ・プロセスロックの教訓あり
+- [ship_pr1023_pairings_decard_ui.md](ship_pr1023_pairings_decard_ui.md) - PR#1023出荷（/pairings 脱カードUIリデザイン・design-screen主導・純UI+意図的差分3点）。Codex 2x pass/AC fail→修正/code-reviewでdocs正典更新。ライブ目視のみ未実施(Vercelプレビュー可)。会場名フォールバック純粋関数化(pairingHeader.js)
