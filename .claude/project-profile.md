@@ -7,12 +7,15 @@ devflow プラグインのスキルが読む、このプロジェクトの唯一
 テスト・lint・typecheck コマンド（gate-dod.sh・/fix・/implement が使用。リポジトリルートから実行される）
 <!-- devflow:commands -->
 ```sh
-DEVFLOW_TEST_CMDS=("cd karuta-tracker && ./gradlew test" "cd karuta-tracker-ui && npm run test")
-DEVFLOW_LINT_CMDS=("cd karuta-tracker-ui && npm run lint")
+DEVFLOW_TEST_CMDS=("karuta-tracker/::cd karuta-tracker && ./gradlew test" "database/::cd karuta-tracker && ./gradlew test" "karuta-tracker-ui/::cd karuta-tracker-ui && npm run test")
+DEVFLOW_LINT_CMDS=("karuta-tracker-ui/::cd karuta-tracker-ui && npm run lint")
 DEVFLOW_TYPECHECK_CMDS=()
+DEVFLOW_CI_COVERS=("test")
 ```
 <!-- /devflow:commands -->
 
+- スコープ付き（`パス::コマンド`）: フロントのみの差分で gradle テスト（603件）を回さない。`database/` 変更はバックエンドテストを要求
+- `DEVFLOW_CI_COVERS=("test")`: CI が JUnit + Vitest を実行するため、gate-dod は CI green 時にテストのローカル再実行をスキップする。**lint は CI に含まれていない**（test.yml のコメント参照）ためローカル実行のまま。lint を CI ゲートに組み込んだら "lint" を追加すること
 - E2E は未整備。CI（GitHub Actions: JUnit + Jacoco 60% / room-checker / Vitest）が最終網
 - バックエンドの単一テスト実行: `./gradlew test --tests "com.karuta.matchtracker.service.XxxTest"`
 
@@ -54,6 +57,10 @@ Codex レビュー・code-review に追加するプロジェクト固有観点:
 - `database/*.sql` の変更と entity（`@Column`）変更が同一 PR に揃っているか（片方だけは事故のもと）
 - 論理削除（`deleted_at`）パターンの一貫性。物理 DELETE の混入に注意
 - FE⇔BE のリクエスト/レスポンス形式の不一致（api/ クライアントと DTO の齟齬）
+
+低リスクパス（trivial 高速パス = Codex effort low・AC 適合チェック条件付きスキップの対象。差分<150行・≤4ファイルで全変更がこの範囲内の場合のみ）:
+- `karuta-tracker-ui/src/**` — ただし `karuta-tracker-ui/src/api/**` は除く（FE⇔BE 契約に触れるため通常レビュー）
+- `docs/**`
 
 高リスクパス（レビュー effort を high に上げる対象）:
 - `karuta-tracker/src/main/java/**/interceptor/**`、`**/annotation/**`（認証・認可）
