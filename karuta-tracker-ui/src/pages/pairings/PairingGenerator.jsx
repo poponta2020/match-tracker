@@ -5,7 +5,7 @@ import { practiceAPI } from '../../api/practices';
 import { playerAPI } from '../../api/players';
 import { byeActivityAPI } from '../../api/byeActivities';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users, Shuffle, Trash2, Calendar, Check, Plus, UserPlus, RefreshCw, ChevronDown, ChevronUp, Pencil, FileText, Lock, Unlock, RotateCcw, Ban } from 'lucide-react';
+import { AlertCircle, Trash2, Check, Plus, UserPlus, RefreshCw, ChevronDown, Pencil, FileText, Lock, Unlock, RotateCcw, Ban } from 'lucide-react';
 import { sortPlayersByRank } from '../../utils/playerSort';
 import PlayerChip from '../../components/PlayerChip';
 import PageHeader from '../../components/PageHeader';
@@ -19,13 +19,15 @@ import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelle
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair } from './pairingLockLogic';
+import { formatHeaderDate, resolveHeaderVenue } from './pairingHeader';
 
 
 const PairingGenerator = () => {
   const [searchParams] = useSearchParams();
   // URLパラメータの日付があればそれを使用、なければ今日
   const today = new Date().toISOString().split('T')[0];
-  const [sessionDate, setSessionDate] = useState(searchParams.get('date') || today);
+  // この画面では日付を変更しない（?date= クエリ or 当日デフォルトから受け取る）。日付ピッカーは廃止。
+  const [sessionDate] = useState(searchParams.get('date') || today);
   const initialMatchNumber = parseInt(searchParams.get('matchNumber'), 10);
   const [matchNumber, setMatchNumber] = useState(initialMatchNumber > 0 ? initialMatchNumber : 1);
   // 戻り先: from クエリパラメータがあればそれを使う（結果入力画面からの遷移など）。無ければ従来どおり設定画面
@@ -41,7 +43,6 @@ const PairingGenerator = () => {
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showParticipantList, setShowParticipantList] = useState(true);
   const [matchExistsMap, setMatchExistsMap] = useState({});
   const [isEditingExisting, setIsEditingExisting] = useState(false);
   const [matchLoading, setMatchLoading] = useState(true);
@@ -50,6 +51,7 @@ const PairingGenerator = () => {
   const [isViewMode, setIsViewMode] = useState(false); // 既存組み合わせの閲覧モード
   const [waitingActivities, setWaitingActivities] = useState({}); // playerId -> { activityType, freeText }
   const [lineTextTarget, setLineTextTarget] = useState('all'); // LINE送信用テキストの対象: 'all'(全試合) | 'single'(選択中の試合)
+  const [lineTextOpen, setLineTextOpen] = useState(false); // LINE送信用テキスト導線の開閉（初期は畳む）
 
   const ACTIVITY_TYPES = [
     { value: 'READING', label: '読み' },
@@ -758,13 +760,26 @@ const PairingGenerator = () => {
     return !isParticipant && !isWaiting && !isInPairings;
   });
 
+  // ヘッダに表示する「日付 会場名」。日付はこの画面では変更しない（表示のみ）。
+  // 会場名（currentSession.venueName）が無ければ日付のみにフォールバックする（pairingHeader の純粋関数で判定）。
+  const headerDate = formatHeaderDate(sessionDate);
+  const headerVenue = resolveHeaderVenue(currentSession?.venueName);
+  const headerTitle = (
+    <>
+      <span className="font-bold tabular-nums">{headerDate}</span>
+      {headerVenue ? (
+        <span className="ml-1.5 font-normal">{headerVenue}</span>
+      ) : null}
+    </>
+  );
+
   if (matchLoading) {
     return (
       <>
-        <PageHeader title="組み合わせ作成" backTo={backTo} />
+        <PageHeader title={headerTitle} backTo={backTo} />
         <div className="flex flex-col items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#4a6b5a] mb-4"></div>
-          <p className="text-[#6b7280] text-sm">データを読み込み中...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-[3px] border-[#4a6b5a] mb-4"></div>
+          <p className="text-[#8a8275] text-sm">データを読み込み中...</p>
         </div>
       </>
     );
@@ -772,199 +787,184 @@ const PairingGenerator = () => {
 
   return (
     <>
-      <PageHeader title="組み合わせ作成" backTo={backTo} />
-      <div className="space-y-6">
-      {/* 使い方ヘルプ（ⓘ）。PageHeader 直下・右寄せ。初回訪問時のみ端末単位で自動表示 */}
-      <PairingHelp ready={!matchLoading} />
-      {/* 日付選択 */}
-      <div className="bg-white p-6 rounded-lg shadow-sm space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-[#374151] mb-2">
-            <Calendar className="w-4 h-4 inline mr-1" />
-            日付
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="date"
-              value={sessionDate}
-              onChange={(e) => setSessionDate(e.target.value)}
-              disabled={hasUnsavedChanges}
-              className={`flex-1 px-4 py-2 border border-[#c5cec8] rounded-lg focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : ''}`}
-            />
+      <PageHeader
+        title={headerTitle}
+        backTo={backTo}
+        rightActions={<PairingHelp ready={!matchLoading} variant="header" />}
+      />
+      <div className="space-y-4">
+      {/* LINE送信用テキスト生成導線（トグル格納）。可用性判定は従来どおり（挙動不変） */}
+      {currentSession && (() => {
+        const { allComplete, singleComplete } = computeLineTextAvailability(
+          currentSession.totalMatches, matchExistsMap, matchNumber
+        );
+        // 希望ターゲットを有効性で解決（無効なら有効な方へフォールバック、両方無効なら非表示）
+        const target = resolveLineTextTarget(lineTextTarget, allComplete, singleComplete);
+        if (!target) return null;
+        const to = buildSummaryUrl(sessionDate, matchNumber, target);
+        return (
+          <div>
             <button
-              onClick={() => setSessionDate(today)}
-              disabled={hasUnsavedChanges}
-              className={`px-4 py-2 bg-[#e5ebe7] text-[#374151] rounded-lg transition-colors ${hasUnsavedChanges ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#d4ddd7]'}`}
+              type="button"
+              onClick={() => setLineTextOpen((o) => !o)}
+              aria-expanded={lineTextOpen}
+              className="flex items-center gap-2 w-full text-[11px] font-bold tracking-wider uppercase text-[#8a8275] py-1"
             >
-              今日
+              <FileText className="w-[15px] h-[15px]" />
+              <span>LINE送信用テキスト</span>
+              <ChevronDown className={`w-4 h-4 ml-auto text-[#b3ac9e] transition-transform ${lineTextOpen ? 'rotate-180' : ''}`} />
             </button>
+            {lineTextOpen && (
+              <div className="mt-3 space-y-2.5">
+                {/* セグメントトグル: [ 全試合 | {matchNumber}試合目 ] */}
+                <div className="grid grid-cols-2 gap-[3px] p-[3px] bg-[#e7e0d4] rounded-[10px] text-sm font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setLineTextTarget('all')}
+                    disabled={!allComplete}
+                    className={`py-2 rounded-lg transition-colors ${
+                      target === 'all'
+                        ? 'bg-[#fffdf9] text-[#33463c] shadow-sm'
+                        : allComplete
+                          ? 'text-[#8a8275]'
+                          : 'text-[#bcb5a6] cursor-not-allowed'
+                    }`}
+                  >
+                    全試合
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineTextTarget('single')}
+                    disabled={!singleComplete}
+                    className={`py-2 rounded-lg transition-colors ${
+                      target === 'single'
+                        ? 'bg-[#fffdf9] text-[#33463c] shadow-sm'
+                        : singleComplete
+                          ? 'text-[#8a8275]'
+                          : 'text-[#bcb5a6] cursor-not-allowed'
+                    }`}
+                  >
+                    {matchNumber}試合目
+                  </button>
+                </div>
+                {/* 生成ボタン（選択中セグメントに応じて遷移） */}
+                <Link
+                  to={to}
+                  className="flex items-center justify-center gap-2 w-full border border-[#4a6b5a] text-[#33463c] px-4 py-2.5 rounded-[10px] font-semibold text-sm hover:bg-[#4a6b5a]/10 transition-colors"
+                >
+                  <FileText className="w-[17px] h-[17px]" />
+                  テキストを生成
+                </Link>
+              </div>
+            )}
           </div>
-        </div>
+        );
+      })()}
 
-        {/* 試合番号タブ */}
-        <div>
-          <label className="block text-sm font-medium text-[#374151] mb-2">
-            試合番号
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {Array.from(
-              { length: currentSession?.totalMatches || 10 },
-              (_, i) => i + 1
-            ).map((num) => (
+      {/* 試合番号（下線タブ）＋ 連結パネル */}
+      <div>
+        <div className="flex items-end gap-0.5 border-b border-[#e7e0d4] px-1">
+          {Array.from(
+            { length: currentSession?.totalMatches || 10 },
+            (_, i) => i + 1
+          ).map((num) => {
+            const isActive = matchNumber === num;
+            const isUnsaved = hasUnsavedChanges && unsavedDraft.current?.matchNumber === num;
+            const exists = matchExistsMap[num];
+            return (
               <button
                 key={num}
                 onClick={() => setMatchNumber(num)}
-                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  matchNumber === num
-                    ? 'bg-[#1A3654] text-white shadow-md'
-                    : hasUnsavedChanges && unsavedDraft.current?.matchNumber === num
-                      ? 'bg-[#fef3c7] text-[#b45309] border border-[#fbbf24] hover:bg-[#fde68a]'
-                      : matchExistsMap[num]
-                        ? 'bg-[#e5ebe7] text-[#4a6b5a] border border-[#a5b4aa] hover:bg-[#d4ddd7]'
-                        : 'bg-gray-100 text-[#6b7280] border border-gray-200 hover:bg-gray-200'
+                className={`relative leading-none transition-colors ${
+                  isActive
+                    ? 'flex-none -mb-px px-3.5 pt-2 pb-2.5 rounded-t-lg bg-[#ebe4d8] text-[#1A3654] font-bold text-[21px] whitespace-nowrap'
+                    : `flex-1 pt-2.5 pb-2.5 text-center font-semibold text-[15px] ${
+                        isUnsaved ? 'text-[#b45309]' : exists ? 'text-[#33463c]' : 'text-[#9a9183]'
+                      }`
                 }`}
               >
                 {num}
-                {matchExistsMap[num] && matchNumber !== num && (
-                  <Check className="w-3 h-3 absolute -top-1 -right-1 text-white bg-[#4a6b5a] rounded-full p-0.5" />
+                {isActive && <small className="text-[11px] font-semibold ml-0.5">試合目</small>}
+                {exists && !isActive && (
+                  <span className="absolute top-0.5 left-1/2 -ml-[15px] w-[13px] h-[13px] bg-[#4a6b5a] rounded-full flex items-center justify-center">
+                    <Check className="w-2 h-2 text-white" />
+                  </span>
                 )}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        {/* LINE送信用テキスト生成導線（全試合／単一試合のセグメントトグル＋生成ボタン） */}
-        {currentSession && (() => {
-          const { allComplete, singleComplete } = computeLineTextAvailability(
-            currentSession.totalMatches, matchExistsMap, matchNumber
-          );
-          // 希望ターゲットを有効性で解決（無効なら有効な方へフォールバック、両方無効なら非表示）
-          const target = resolveLineTextTarget(lineTextTarget, allComplete, singleComplete);
-          if (!target) return null;
-          const to = buildSummaryUrl(sessionDate, matchNumber, target);
-          return (
-            <div className="space-y-3">
-              {/* セグメントトグル: [ 全試合 | {matchNumber}試合目 ] */}
-              <div className="grid grid-cols-2 rounded-lg border border-[#a5b4aa] overflow-hidden text-sm font-medium">
-                <button
-                  type="button"
-                  onClick={() => setLineTextTarget('all')}
-                  disabled={!allComplete}
-                  className={`py-2 transition-colors ${
-                    target === 'all'
-                      ? 'bg-[#4a6b5a] text-white'
-                      : allComplete
-                        ? 'bg-white text-[#4a6b5a] hover:bg-[#e5ebe7]'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  全試合
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLineTextTarget('single')}
-                  disabled={!singleComplete}
-                  className={`py-2 border-l border-[#a5b4aa] transition-colors ${
-                    target === 'single'
-                      ? 'bg-[#4a6b5a] text-white'
-                      : singleComplete
-                        ? 'bg-white text-[#4a6b5a] hover:bg-[#e5ebe7]'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {matchNumber}試合目
-                </button>
-              </div>
-              {/* 生成ボタン（選択中セグメントに応じて遷移） */}
-              <Link
-                to={to}
-                className="flex items-center justify-center gap-2 w-full bg-[#2d4a3e] text-white px-6 py-3 rounded-lg hover:bg-[#1e3a2e] transition-colors font-medium text-base shadow-md"
+        {/* 連結パネル（この試合の内容。タブに連結） */}
+        <div className="bg-[#ebe4d8] rounded-b-xl rounded-tr-xl px-5 py-4 space-y-4">
+
+      {/* 参加者セクション（新規作成時のみ＝pairings.length===0。折りたたみは廃止し常時展開。判定は pairingDisplayLogic に集約） */}
+      {shouldShowParticipantSection(pairings) && (
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="inline-flex items-baseline gap-[7px] text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
+              全 <span className="text-[20px] font-bold normal-case tracking-normal text-[#1A2744]">{participants.length}</span>名
+            </span>
+            <div className="inline-flex gap-1">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5b5446] px-2 py-1.5 rounded-lg hover:bg-black/5 disabled:opacity-50 transition-colors"
               >
-                <FileText className="w-5 h-5" />
-                LINE送信用テキスト生成
-              </Link>
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? '更新中...' : '更新'}
+              </button>
+              <button
+                onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#33463c] px-2 py-1.5 rounded-lg hover:bg-black/5 transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                追加
+              </button>
             </div>
-          );
-        })()}
-
-      </div>
-
-      {/* 参加者セクション（組み合わせが1つも無い＝新規作成時のみ表示。既存の組み合わせがあれば結果の有無に関わらず非表示にして閲覧表示と一貫させる。判定は pairingDisplayLogic に集約） */}
-      {shouldShowParticipantSection(pairings) && <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="bg-[#e5ebe7] px-6 py-3 flex items-center justify-between">
-          <button
-            onClick={() => setShowParticipantList(!showParticipantList)}
-            className="flex items-center gap-2 text-[#374151] font-medium"
-          >
-            <Users className="w-4 h-4 text-[#4a6b5a]" />
-            参加者: {participants.length}名
-            {showParticipantList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          <div className="flex gap-2">
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 bg-white text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#f9f6f2] transition-colors text-sm disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? '更新中...' : '更新'}
-            </button>
-            <button
-              onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
-              className="flex items-center gap-1.5 bg-[#4a6b5a] text-white px-3 py-1.5 rounded-lg hover:bg-[#3d5a4c] transition-colors text-sm"
-            >
-              <UserPlus className="w-4 h-4" />
-              追加
-            </button>
           </div>
+          {participants.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {sortPlayersByRank(participants).map((p) => (
+                <PlayerChip
+                  key={p.id}
+                  name={p.name}
+                  kyuRank={p.kyuRank}
+                  className="text-sm bg-[#f9f6f2] text-[#374151]"
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#8a8275]">
+              参加者なし - 更新ボタンまたは選手追加で参加者を登録してください
+            </p>
+          )}
         </div>
+      )}
 
-        {showParticipantList && (
-          <div className="px-6 py-4">
-            {participants.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sortPlayersByRank(participants).map((p) => (
-                  <PlayerChip
-                    key={p.id}
-                    name={p.name}
-                    kyuRank={p.kyuRank}
-                    className="text-sm bg-[#f9f6f2] text-[#374151]"
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[#6b7280]">
-                参加者なし - 更新ボタンまたは選手追加で参加者を登録してください
-              </p>
-            )}
-          </div>
-        )}
-      </div>}
-
-      {/* 自動組み合わせボタン（組み合わせが1つも無い＝新規作成時のみ表示、閲覧モードでは非表示。判定は pairingDisplayLogic に集約） */}
+      {/* 主アクション（対戦編集＝従来の自動組み合わせ。文言のみ変更・挙動不変。新規作成時のみ表示） */}
       {shouldShowAutoMatchButton({ isReadOnly, sessionDate, participants, pairings }) && (
-        <div className="flex justify-center">
+        <div className="flex justify-end">
           <button
             onClick={handleAutoMatch}
             disabled={loading}
-            className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 text-lg font-medium shadow-md"
+            className="inline-flex items-center gap-2 bg-[#1A3654] text-white px-6 py-3 rounded-[10px] font-bold text-[15px] tracking-wide hover:bg-[#122740] transition-colors disabled:bg-gray-400"
           >
-            <Shuffle className="w-5 h-5" />
-            {loading ? '生成中...' : '自動組み合わせ'}
+            {loading ? '生成中...' : '対戦編集'}
           </button>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[13px] leading-relaxed bg-[#fdf0ee] border border-[#f2c9c2] text-[#b3403a]">
+          <AlertCircle className="w-[17px] h-[17px] flex-shrink-0 mt-px" />
           <span>{error}</span>
         </div>
       )}
 
       {notice && (
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex items-center gap-2 text-amber-800">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[13px] leading-relaxed bg-[#fbf3df] border border-[#ecd9a8] text-[#8a5a12]">
+          <AlertCircle className="w-[17px] h-[17px] flex-shrink-0 mt-px" />
           <span>{notice}</span>
         </div>
       )}
@@ -972,23 +972,19 @@ const PairingGenerator = () => {
       {pairings.length > 0 && (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-[#374151]">
-              {isEditingExisting ? `第${matchNumber}試合の組み合わせ` : '生成された組み合わせ'}
-            </h2>
-            {!isReadOnly && !isViewMode && (
-              <div className="flex items-center gap-3">
-                {isEditingExisting && (
-                  <button
-                    onClick={handleDeleteExisting}
-                    className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
-                    disabled={loading}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    全削除
-                  </button>
-                )}
-              </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="inline-flex items-baseline gap-[7px] text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
+              組み合わせ <span className="text-[20px] font-bold normal-case tracking-normal text-[#1A2744]">{pairings.length}</span>組
+            </span>
+            {!isReadOnly && !isViewMode && isEditingExisting && (
+              <button
+                onClick={handleDeleteExisting}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#a3564e] px-1.5 py-1 rounded-md hover:bg-black/5 disabled:opacity-50 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                全削除
+              </button>
             )}
             {!isReadOnly && isViewMode && (
               <button
@@ -1002,7 +998,7 @@ const PairingGenerator = () => {
                   setHasUnsavedChanges(true);
                   saveDraft(materialized, waitingPlayers, isEditingExisting);
                 }}
-                className="flex items-center gap-1.5 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1.5 rounded-lg hover:bg-[#e5ebe7] transition-colors"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b5446] border border-[#d8cfbf] px-3 py-1.5 rounded-[9px] hover:bg-black/5 transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5" />
                 編集
@@ -1010,29 +1006,30 @@ const PairingGenerator = () => {
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
+          <div className="divide-y divide-[#ddd3c2]">
             {pairings.map((pairing, index) => (
               // 両方キャンセルの組は閲覧モードで非表示（試合として成立しないため。結果入力済みは結果を残す）。
               // インデックスを保持するため filter ではなく map 内で null を返す。
               shouldHideRow(pairing) ? null : (
-              <div key={index} className={`px-3 py-2.5 ${showsResultLockedRow(pairing) ? 'bg-gray-50' : ''}`}>
+              <div key={index} className="py-3">
                 {showsResultLockedRow(pairing) ? (
                   /* ロック/結果表示（結果入力済み、またはキャンセルなしの手動ロック）。
-                     片方キャンセルのある手動ロック組はここに来ず、下のキャンセル表示/空き化に回る。 */
+                     片方キャンセルのある手動ロック組はここに来ず、下のキャンセル表示/空き化に回る。
+                     脱カード: 塗り行・塗りバッジをやめ、名前を muted・ラベルをフラット色文字にする。 */
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex items-center justify-center gap-3">
-                      <span className="font-medium text-gray-400 text-sm">{pairing.player1Name}</span>
-                      <span className="text-gray-300 text-xs">vs</span>
-                      <span className="font-medium text-gray-400 text-sm">{pairing.player2Name}</span>
+                      <span className="font-medium text-[#9a9183] text-sm">{pairing.player1Name}</span>
+                      <span className="text-[#cfc7b6] text-xs">vs</span>
+                      <span className="font-medium text-[#9a9183] text-sm">{pairing.player2Name}</span>
                     </div>
                     {pairing.hasResult && (
-                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1d4ed8] whitespace-nowrap">
                         <Lock className="w-3 h-3" />
                         結果入力済
                       </span>
                     )}
                     {pairing.locked && !pairing.hasResult && (
-                      <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#b45309] whitespace-nowrap">
                         <Lock className="w-3 h-3" />
                         ロック
                       </span>
@@ -1041,7 +1038,7 @@ const PairingGenerator = () => {
                       <button
                         onClick={() => handleResetPairing(pairing)}
                         disabled={loading}
-                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 whitespace-nowrap"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-[#c2453b] hover:opacity-80 disabled:opacity-50 whitespace-nowrap"
                         title="組み合わせと結果をリセット"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
@@ -1052,7 +1049,7 @@ const PairingGenerator = () => {
                       <button
                         onClick={() => handleUnlockPairing(index)}
                         disabled={loading}
-                        className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-800 disabled:opacity-50 whitespace-nowrap"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-[#b45309] hover:opacity-80 disabled:opacity-50 whitespace-nowrap"
                         title="手動ロックを解除"
                       >
                         <Unlock className="w-3.5 h-3.5" />
@@ -1066,25 +1063,25 @@ const PairingGenerator = () => {
                        取消線が付いた方がキャンセルした選手。タグは常に右端。 */
                     <div className="flex items-center gap-2">
                       <div className="flex-1 flex items-center justify-center gap-3">
-                        <span className={`font-medium text-sm ${pairing.player1Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player1Name}</span>
-                        <span className="text-[#a5b4aa] text-xs">vs</span>
-                        <span className={`font-medium text-sm ${pairing.player2Cancelled ? 'text-gray-400 line-through' : 'text-[#374151]'}`}>{pairing.player2Name}</span>
+                        <span className={`font-medium text-sm ${pairing.player1Cancelled ? 'text-[#9ca3af] line-through' : 'text-[#374151]'}`}>{pairing.player1Name}</span>
+                        <span className="text-[#cfc7b6] text-xs">vs</span>
+                        <span className={`font-medium text-sm ${pairing.player2Cancelled ? 'text-[#9ca3af] line-through' : 'text-[#374151]'}`}>{pairing.player2Name}</span>
                       </div>
-                      <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6b7280] whitespace-nowrap">
                         <Ban className="w-3 h-3" />
                         キャンセル
                       </span>
                     </div>
                   ) : (
-                    /* 閲覧モード（通常） */
+                    /* 閲覧モード（通常）: プレーン中央寄せ名（現行踏襲・チップ化しない） */
                     <div className="flex items-center justify-center gap-3">
                       <span className="font-medium text-[#374151] text-sm">{pairing.player1Name}</span>
-                      <span className="text-[#a5b4aa] text-xs">vs</span>
+                      <span className="text-[#cfc7b6] text-xs">vs</span>
                       <span className="font-medium text-[#374151] text-sm">{pairing.player2Name}</span>
                     </div>
                   )
                 ) : (
-                  /* 編集モード: ドラッグ＆ドロップ */
+                  /* 編集モード: ドラッグ＆ドロップ（選手チップは元のピル形式を維持） */
                   <div className="flex items-center gap-2">
                     <DroppableSlot
                       id={`slot-pairing-${index}-player1`}
@@ -1100,10 +1097,10 @@ const PairingGenerator = () => {
                           isSelected={selectedPlayer?.playerId === pairing.player1Id}
                         />
                       ) : (
-                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
+                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-[#cabfa9] text-[#9a9183] text-sm text-center">空き</div>
                       )}
                     </DroppableSlot>
-                    <span className="text-[#a5b4aa] text-xs flex-shrink-0">vs</span>
+                    <span className="text-[#cfc7b6] text-xs flex-shrink-0">vs</span>
                     <DroppableSlot
                       id={`slot-pairing-${index}-player2`}
                       data={{ slotType: 'pairing-player2', pairingIndex: index }}
@@ -1118,17 +1115,17 @@ const PairingGenerator = () => {
                           isSelected={selectedPlayer?.playerId === pairing.player2Id}
                         />
                       ) : (
-                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-gray-300 text-gray-400 text-sm text-center">空き</div>
+                        <div className="px-2.5 py-1 rounded-full border-2 border-dashed border-[#cabfa9] text-[#9a9183] text-sm text-center">空き</div>
                       )}
                     </DroppableSlot>
                     <span className="text-xs flex-shrink-0 w-14 text-right">
                       {pairing.recentMatches === null
-                        ? <span className="text-gray-300">...</span>
+                        ? <span className="text-[#cfc7b6]">...</span>
                         : pairing.recentMatches && pairing.recentMatches.length > 0
                           ? pairing.recentMatches[0].matchDate === sessionDate
-                            ? <span className="text-red-600 font-bold">⚠今日</span>
-                            : <span className="text-[#6b7280]">{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
-                          : <span className="text-[#4a6b5a]">初</span>
+                            ? <span className="text-[#dc2626] font-bold">⚠今日</span>
+                            : <span className="text-[#8a8275]">{pairing.recentMatches[0].matchDate.split('-').slice(1).join('/')}</span>
+                          : <span className="text-[#4a6b5a] font-semibold">初</span>
                       }
                     </span>
                     {pairing.player1Id && pairing.player2Id && (
@@ -1136,7 +1133,7 @@ const PairingGenerator = () => {
                         onClick={() => handleLockPairing(index)}
                         disabled={loading}
                         aria-label="ロック"
-                        className="flex items-center p-1 text-[#4a6b5a] hover:text-[#3a5446] disabled:opacity-50 flex-shrink-0"
+                        className="flex items-center p-1 text-[#7d8a82] hover:text-[#4a6b5a] disabled:opacity-50 flex-shrink-0"
                         title="この組をロック（自動組み合わせ・回戦削除から保護。保存時にロック状態を反映）"
                       >
                         <Lock className="w-4 h-4" />
@@ -1156,27 +1153,25 @@ const PairingGenerator = () => {
               isDragActive={!!activeDragItem || !!selectedPlayer}
               onClick={(e) => handleSlotClick({ slotType: 'new-pairing' }, e)}
             >
-              <div className={`border-2 border-dashed rounded-lg p-4 text-center text-sm transition-colors ${(activeDragItem?.source?.type === 'waiting' || selectedPlayer?.source?.type === 'waiting') ? 'border-[#4a6b5a] bg-[#e5ebe7] text-[#4a6b5a]' : 'border-gray-300 text-gray-400'}`}>
+              <div className={`border border-dashed rounded-[10px] p-3 text-center text-xs transition-colors ${(activeDragItem?.source?.type === 'waiting' || selectedPlayer?.source?.type === 'waiting') ? 'border-[#4a6b5a] bg-[#4a6b5a]/10 text-[#4a6b5a]' : 'border-[#cabfa9] text-[#9a9183]'}`}>
                 ここにドロップして新しい組み合わせを作成
               </div>
             </DroppableSlot>
           )}
 
           {!isReadOnly && !isViewMode && (
-            <div className={`${waitingPlayers.length > 0 ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'} p-4 rounded-lg`}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">
-                  待機中の選手{waitingPlayers.length > 0 && `（${waitingPlayers.length}名）`}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
-                    className="flex items-center gap-1 text-sm text-[#4a6b5a] border border-[#a5b4aa] px-3 py-1 rounded hover:bg-[#e5ebe7] transition-colors"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    選手追加
-                  </button>
-                </div>
+            <div className="pt-1">
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <span className="text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
+                  待機中{waitingPlayers.length > 0 && <span className="normal-case tracking-normal text-[#1A2744] text-[15px] font-bold ml-1.5">{waitingPlayers.length}名</span>}
+                </span>
+                <button
+                  onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#33463c] px-2 py-1.5 rounded-lg hover:bg-black/5 transition-colors"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  選手追加
+                </button>
               </div>
               <DroppableSlot
                 id="slot-waiting-list"
@@ -1185,9 +1180,9 @@ const PairingGenerator = () => {
                 onClick={(e) => handleSlotClick({ slotType: 'waiting-list' }, e)}
               >
                 {waitingPlayers.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="divide-y divide-[#ddd3c2]">
                     {sortPlayersByRank(waitingPlayers).map((player) => (
-                      <div key={player.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                      <div key={player.id} className="flex items-center gap-2 py-2.5">
                         <DraggablePlayerChip
                           id={`waiting-${player.id}`}
                           data={{ playerId: player.id, playerName: player.name, kyuRank: player.kyuRank || participants.find(p => p.id === player.id)?.kyuRank, source: { type: 'waiting' } }}
@@ -1200,7 +1195,7 @@ const PairingGenerator = () => {
                             ...prev,
                             [player.id]: { ...prev[player.id], activityType: e.target.value, freeText: e.target.value !== 'OTHER' ? '' : (prev[player.id]?.freeText || '') },
                           }))}
-                          className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 focus:ring-0 focus:border-[#4a6b5a]"
+                          className="flex-1 text-xs bg-transparent border border-[#d8cfbf] rounded-lg px-2.5 py-1.5 text-[#5b5446] focus:ring-0 focus:border-[#4a6b5a]"
                         >
                           <option value="">活動を選択</option>
                           {ACTIVITY_TYPES.map(t => (
@@ -1216,35 +1211,35 @@ const PairingGenerator = () => {
                               [player.id]: { ...prev[player.id], freeText: e.target.value },
                             }))}
                             placeholder="内容"
-                            className="w-24 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 focus:ring-0 focus:border-[#4a6b5a]"
+                            className="w-24 text-xs bg-transparent border border-[#d8cfbf] rounded-lg px-2.5 py-1.5 text-[#5b5446] focus:ring-0 focus:border-[#4a6b5a]"
                           />
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#6b7280]">待機中の選手はいません</p>
+                  <p className="text-xs text-[#8a8275]">待機中の選手はいません</p>
                 )}
               </DroppableSlot>
             </div>
           )}
 
           {isReadOnly ? (
-            <div className="bg-[#fef3c7] border border-[#fbbf24] p-3 rounded-lg text-center">
-              <p className="text-sm text-[#92400e]">
+            <div className="rounded-[10px] px-3 py-2.5 text-center bg-[#fbf3df] border border-[#ecd9a8]">
+              <p className="text-[13px] text-[#8a5a12]">
                 第{unsavedDraft.current?.matchNumber}試合に未保存の組み合わせがあります
               </p>
             </div>
           ) : isViewMode ? (
             null
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pt-1">
               {hasUnsavedChanges && (
                 <p className="text-xs text-[#b45309] text-center">
                   保存するまで他の試合の編集はできません
                 </p>
               )}
-              <div className="flex justify-end gap-3">
+              <div className="flex justify-end items-center gap-2.5">
                 <button
                   onClick={() => {
                     // キャッシュから元の状態に復元
@@ -1270,14 +1265,14 @@ const PairingGenerator = () => {
                     setError('');
                   }}
                   disabled={loading}
-                  className="flex items-center gap-2 text-[#6b7280] bg-gray-100 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors font-medium text-lg"
+                  className="text-[#5b5446] px-4 py-3 rounded-[10px] hover:bg-black/5 transition-colors font-semibold"
                 >
                   キャンセル
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={loading || hasBlockingIncompletePair(pairings)}
-                  className="flex items-center gap-2 bg-[#1A3654] text-white px-8 py-3 rounded-lg hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-medium text-lg shadow-md"
+                  className="inline-flex items-center gap-2 bg-[#1A3654] text-white px-6 py-3 rounded-[10px] hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-bold text-[15px]"
                 >
                   <Check className="w-5 h-5" />
                   {loading ? '保存中...' : '確定して保存'}
@@ -1297,13 +1292,15 @@ const PairingGenerator = () => {
         </DragOverlay>
         </DndContext>
       )}
+        </div>{/* /連結パネル */}
+      </div>{/* /試合番号タブ＋パネル */}
 
       {/* 選手追加モーダル */}
       {showAddPlayer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <UserPlus className="w-6 h-6 text-[#4a6b5a]" />
+        <div className="fixed inset-0 bg-[#1A2744]/[.42] flex items-center justify-center z-50 px-6">
+          <div className="bg-[#fffdf9] border border-[#e7e0d4] rounded-[14px] p-5 max-w-md w-full shadow-[0_18px_40px_rgba(26,39,68,0.22)]">
+            <h2 className="text-[17px] font-bold text-[#1A2744] mb-3.5 flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-[#4a6b5a]" />
               当日参加者を追加
             </h2>
 
@@ -1314,26 +1311,26 @@ const PairingGenerator = () => {
             />
 
             {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2 text-red-700 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 rounded-[10px] px-3 py-2.5 flex items-start gap-2 text-[13px] bg-[#fdf0ee] border border-[#f2c9c2] text-[#b3403a]">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-px" />
                 <span>{error}</span>
               </div>
             )}
 
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2.5">
               <button
                 onClick={() => {
                   setShowAddPlayer(false);
                   setSelectedPlayerId('');
                   setError('');
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-[#5b5446] font-semibold rounded-[10px] hover:bg-black/5 transition-colors"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleAddPlayer}
-                className="px-4 py-2 bg-[#4a6b5a] text-white rounded-lg hover:bg-[#3d5a4c] transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-[#4a6b5a] text-white font-bold rounded-[10px] hover:bg-[#3d5a4c] transition-colors flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 追加

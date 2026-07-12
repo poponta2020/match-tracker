@@ -13,8 +13,11 @@ const HELP_SEEN_KEY = 'pairingHelpSeen';
  *
  * @param {boolean} ready 親のローディングが完了したか（true になってから既読フラグを保存する）。
  *   ローディング中に保存すると、パネルを視認する前に離脱しても既読扱いになってしまうため。
+ * @param {'default'|'header'} variant トリガーの配置・配色。'header' は緑ヘッダ（PageHeader の rightActions）に
+ *   置く用で、白系トリガー＋外側の右寄せラッパを省く。ドロップダウンパネルの中身は不変。
  */
-const PairingHelp = ({ ready = true }) => {
+const PairingHelp = ({ ready = true, variant = 'default' }) => {
+  const isHeader = variant === 'header';
   const [showHelp, setShowHelp] = useState(() => {
     try {
       return !localStorage.getItem(HELP_SEEN_KEY);
@@ -50,14 +53,18 @@ const PairingHelp = ({ ready = true }) => {
   }, [showHelp]);
 
   return (
-    <div className="flex justify-end">
+    <div className={isHeader ? 'flex-shrink-0' : 'flex justify-end'}>
       <div ref={helpRef} className="relative">
         <button
           type="button"
           onClick={() => setShowHelp((prev) => !prev)}
           aria-label="使い方を開く"
           aria-expanded={showHelp}
-          className="inline-flex items-center gap-1 text-xs text-[#4a6b5a] px-2 py-1 rounded-md hover:bg-[#eef2ef] transition-colors"
+          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors ${
+            isHeader
+              ? 'text-white/90 hover:bg-[#3d5a4c]'
+              : 'text-[#4a6b5a] hover:bg-[#eef2ef]'
+          }`}
         >
           <Info className="w-4 h-4" />
           使い方
