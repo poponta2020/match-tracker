@@ -863,7 +863,7 @@ const PairingGenerator = () => {
 
       {/* 試合番号（下線タブ）＋ 連結パネル */}
       <div>
-        <div className="flex items-end gap-0.5 border-b border-[#e7e0d4] px-1">
+        <div className="flex items-end gap-1 border-b border-[#e7e0d4] px-1 overflow-x-auto">
           {Array.from(
             { length: currentSession?.totalMatches || 10 },
             (_, i) => i + 1
@@ -875,16 +875,15 @@ const PairingGenerator = () => {
               <button
                 key={num}
                 onClick={() => setMatchNumber(num)}
-                className={`relative leading-none transition-colors ${
+                className={`relative flex-none leading-none px-3.5 pt-2.5 pb-2.5 text-[15px] whitespace-nowrap transition-colors ${
                   isActive
-                    ? 'flex-none -mb-px px-3.5 pt-2 pb-2.5 rounded-t-lg bg-[#ebe4d8] text-[#1A3654] font-bold text-[21px] whitespace-nowrap'
-                    : `flex-1 pt-2.5 pb-2.5 text-center font-semibold text-[15px] ${
+                    ? 'text-[#1A3654] font-bold'
+                    : `font-semibold ${
                         isUnsaved ? 'text-[#b45309]' : exists ? 'text-[#33463c]' : 'text-[#9a9183]'
                       }`
                 }`}
               >
                 {num}
-                {isActive && <small className="text-[11px] font-semibold ml-0.5">試合目</small>}
                 {exists && !isActive && (
                   <span className="absolute top-0.5 left-1/2 -ml-[15px] w-[13px] h-[13px] bg-[#4a6b5a] rounded-full flex items-center justify-center">
                     <Check className="w-2 h-2 text-white" />
