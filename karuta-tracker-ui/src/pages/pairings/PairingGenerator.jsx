@@ -19,6 +19,7 @@ import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelle
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair } from './pairingLockLogic';
+import { formatHeaderDate, resolveHeaderVenue } from './pairingHeader';
 
 
 const PairingGenerator = () => {
@@ -760,16 +761,14 @@ const PairingGenerator = () => {
   });
 
   // ヘッダに表示する「日付 会場名」。日付はこの画面では変更しない（表示のみ）。
-  // 会場名（currentSession.venueName）が無ければ日付のみにフォールバックする。
-  const headerDate = (() => {
-    const parts = (sessionDate || '').split('-');
-    return parts.length === 3 ? `${Number(parts[1])}/${Number(parts[2])}` : sessionDate;
-  })();
+  // 会場名（currentSession.venueName）が無ければ日付のみにフォールバックする（pairingHeader の純粋関数で判定）。
+  const headerDate = formatHeaderDate(sessionDate);
+  const headerVenue = resolveHeaderVenue(currentSession?.venueName);
   const headerTitle = (
     <>
       <span className="font-bold tabular-nums">{headerDate}</span>
-      {currentSession?.venueName ? (
-        <span className="ml-1.5 font-normal">{currentSession.venueName}</span>
+      {headerVenue ? (
+        <span className="ml-1.5 font-normal">{headerVenue}</span>
       ) : null}
     </>
   );
