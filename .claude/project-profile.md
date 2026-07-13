@@ -58,7 +58,7 @@ Codex レビュー・code-review に追加するプロジェクト固有観点:
 - 論理削除（`deleted_at`）パターンの一貫性。物理 DELETE の混入に注意
 - FE⇔BE のリクエスト/レスポンス形式の不一致（api/ クライアントと DTO の齟齬）
 
-低リスクパス（trivial 高速パス = Codex effort low・AC 適合チェック条件付きスキップの対象。差分<150行・≤4ファイルで全変更がこの範囲内の場合のみ）:
+低リスクパス（trivial 高速パス = Codex effort low の対象。差分<150行・≤4ファイルで全変更がこの範囲内の場合のみ）:
 - `karuta-tracker-ui/src/**` — ただし `karuta-tracker-ui/src/api/**` は除く（FE⇔BE 契約に触れるため通常レビュー）
 - `docs/**`
 

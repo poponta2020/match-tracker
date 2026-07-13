@@ -33,7 +33,8 @@
 /grill-me → /define-feature（要件承認後は技術計画→implementation-plan→Issue までノンストップ）
            ⇄ /design-screen（UI がある場合の収束ループ）
 [実行セッション: opusplan + advisor（既定設定）]
-/implement（起動=実装GO）→ /prepare-pr → /auto-review-loop（Codex⇄/fix + AC適合）→ /ship（DoDゲート）
+/implement（起動=実装GO）→ /prepare-pr → /auto-review-loop（Codex⇄/fix、pass で即終了）→ /ship（DoDゲート）
+※ devflow v0.8.0 で AC適合・追加/code-review・/verify を標準ループから除外（時間対効果の実測による。支障が出たら再装着）
 ```
 
 - 成果物は `docs/features/<slug>/`（requirements.md / design-spec.md / implementation-plan.md）
