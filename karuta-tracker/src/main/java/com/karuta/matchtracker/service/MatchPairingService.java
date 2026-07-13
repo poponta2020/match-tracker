@@ -766,6 +766,9 @@ public class MatchPairingService {
         LocalDate sessionDate = request.getSessionDate();
         Integer matchNumber = request.getMatchNumber();
         List<Long> participantIds = loadActiveParticipantIdsForMatch(sessionDate, matchNumber, organizationId);
+        // 参加者の真は DB（loadActiveParticipantIdsForMatch）。lockedPairs の未保存組は両選手が
+        // この集合に含まれる場合のみ保持し、任意ID・別団体IDの選手名を lockedPairings にエコーしない。
+        Set<Long> activeParticipantIdSet = new HashSet<>(participantIds);
 
         log.info("自動マッチング開始: 日付={}, 試合番号={}, 参加者数={}",
                  sessionDate, matchNumber, participantIds.size());
@@ -791,22 +794,17 @@ public class MatchPairingService {
         boolean useClientLocks = clientLockedPairs != null;
         Set<String> clientLockedPairKeys = useClientLocks
                 ? clientLockedPairs.stream()
-                        .filter(lp -> lp.getPlayer1Id() != null && lp.getPlayer2Id() != null)
+                        .filter(lp -> lp != null && lp.getPlayer1Id() != null && lp.getPlayer2Id() != null)
                         .map(lp -> getPairKey(lp.getPlayer1Id(), lp.getPlayer2Id()))
                         .collect(Collectors.toSet())
                 : Collections.emptySet();
 
         Map<Long, Player> allPlayerMap = new HashMap<>();
-        // ロック判定用に全プレイヤー情報を取得
+        // ロック判定用に全プレイヤー情報を取得。allPlayerIds はアクティブ参加者＋既存ペアの選手。
+        // 未保存ロック組は下のループでアクティブ参加者のものだけ保持するため、その選手は既に
+        // ここに含まれる（任意IDを findAllById に流さない）。
         Set<Long> allPlayerIds = new HashSet<>(participantIds);
         existingPairings.forEach(p -> { allPlayerIds.add(p.getPlayer1Id()); allPlayerIds.add(p.getPlayer2Id()); });
-        // クライアント指定のロック組（未保存＝DB行なしを含む）の選手も名前解決対象に加える（AC-4 で名前が Unknown にならないように）。
-        if (useClientLocks) {
-            clientLockedPairs.forEach(lp -> {
-                if (lp.getPlayer1Id() != null) allPlayerIds.add(lp.getPlayer1Id());
-                if (lp.getPlayer2Id() != null) allPlayerIds.add(lp.getPlayer2Id());
-            });
-        }
         playerRepository.findAllById(allPlayerIds).forEach(p -> allPlayerMap.put(p.getId(), p));
 
         for (MatchPairing pairing : existingPairings) {
@@ -855,10 +853,13 @@ public class MatchPairingService {
         }
 
         // lockedPairs に含まれるが DB に行が無い（未保存）ロック組も保持する（AC-4）。
-        // 名前は allPlayerMap から解決する（上で選手IDを allPlayerIds に加えている）。
+        // ただし参加者の真は DB。両選手がアクティブ参加者の場合のみ保持し、任意ID・別団体IDの
+        // 選手名を lockedPairings にエコーしない（requirements §3.2。組織スコープの穴を作らない）。
         if (useClientLocks) {
             for (AutoMatchingRequest.LockedPairInput lp : clientLockedPairs) {
-                if (lp.getPlayer1Id() == null || lp.getPlayer2Id() == null) continue;
+                if (lp == null || lp.getPlayer1Id() == null || lp.getPlayer2Id() == null) continue;
+                if (!activeParticipantIdSet.contains(lp.getPlayer1Id())
+                        || !activeParticipantIdSet.contains(lp.getPlayer2Id())) continue;
                 String pairKey = getPairKey(lp.getPlayer1Id(), lp.getPlayer2Id());
                 // 既に DB 行経由で保持済み、または lockedPairs 内で重複しているものは追加しない。
                 if (!protectedPairKeys.add(pairKey)) continue;

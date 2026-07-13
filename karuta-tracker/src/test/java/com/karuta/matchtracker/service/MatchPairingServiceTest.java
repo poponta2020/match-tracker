@@ -1842,6 +1842,83 @@ class MatchPairingServiceTest {
             assertThat(result.getPairings()).hasSize(2);
             assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
         }
+
+        @Test
+        @DisplayName("防御: lockedPairs の非参加者ID（DB行なし）は保持されず lockedPairings にエコーされない（参加者の真=DB）")
+        void shouldDropUnsavedLockedPairWithNonParticipantIds() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // 参加者は 1..4。クライアントが非参加者(99,98)の未保存ロック組を送っても保持しない。
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(List.of(AutoMatchingRequest.LockedPairInput.builder()
+                            .player1Id(99L).player2Id(98L).build()))
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // 非参加者ロック組は落とされ、参加者4名だけが再シャッフルされる
+            assertThat(result.getLockedPairings()).isEmpty();
+            assertThat(result.getPairings()).hasSize(2);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        }
+
+        @Test
+        @DisplayName("防御: lockedPairs に null 要素が混じっても 500 にならず有効な組だけ処理する")
+        void shouldTolerateNullElementInLockedPairs() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // Jackson は lockedPairs: [null, {...}] を受理し得る。null 要素で NPE/500 にしない。
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(Arrays.asList(
+                            (AutoMatchingRequest.LockedPairInput) null,
+                            AutoMatchingRequest.LockedPairInput.builder().player1Id(1L).player2Id(2L).build()))
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // null 要素はスキップし、有効な (1,2) は保持。残り (3,4) が再シャッフル。
+            assertThat(result.getLockedPairings()).hasSize(1);
+            assertThat(result.getLockedPairings().get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.getLockedPairings().get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(3L, 4L);
+        }
     }
 
     @Nested
