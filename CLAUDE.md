@@ -34,7 +34,7 @@
            ⇄ /design-screen（UI がある場合の収束ループ）
 [実行セッション: opusplan + advisor（既定設定）]
 /implement（起動=実装GO）→ /prepare-pr → /auto-review-loop（Codex⇄/fix、pass で即終了）→ /ship（DoDゲート）
-※ devflow v0.8.0 で AC適合・追加/code-review・/verify を標準ループから除外（時間対効果の実測による。支障が出たら再装着）
+※ devflow v0.8.0〜v0.9.0 で AC適合・追加/code-review・/verify・マージ前のCI待ちを標準ループから除外（時間対効果の実測による。支障が出たら再装着。マージ後にCIが赤なら追修正）
 ```
 
 - 成果物は `docs/features/<slug>/`（requirements.md / design-spec.md / implementation-plan.md）

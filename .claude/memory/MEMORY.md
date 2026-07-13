@@ -3,7 +3,7 @@
 （devflow パイプラインの記録がここに蓄積される。1メモリ=1ファイル、この索引に1行ずつ追加する）
 
 ## Project
-- [process_lean_review_pipeline_v080.md](process_lean_review_pipeline_v080.md) - devflow v0.8.0でレビュー軽量化（AC適合・追加code-review・/verify除外、pass即終了）。PR#1033実測が根拠。再装着条件の記録あり
+- [process_lean_review_pipeline_v080.md](process_lean_review_pipeline_v080.md) - devflow v0.8.0〜v0.9.0でレビュー軽量化（AC適合・追加code-review・/verify・マージ前CI待ち除外、pass即終了）。PR#1033実測が根拠。再装着条件の記録あり
 - [project_ai_dev_optimization.md](project_ai_dev_optimization.md) - AI開発最適化の要件定義完了（親Issue #1010・タスク8件・3リポジトリ横断）。docsドメイン分割+profile §docsレジストリ+gate-dod docsチェックの設計判断を記録
 - [impl_ai_dev_optimization.md](impl_ai_dev_optimization.md) - AI開発最適化の実装記録（タスク別追記）。gate-dod D2実装済。git-bashのPATHはC:/形式を解決しない教訓あり
 
