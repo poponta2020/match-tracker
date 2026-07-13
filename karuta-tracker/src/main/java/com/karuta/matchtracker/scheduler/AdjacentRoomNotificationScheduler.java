@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -73,7 +74,7 @@ public class AdjacentRoomNotificationScheduler {
         int notifiedCount = 0;
         for (PracticeSession session : targetSessions) {
             try {
-                Integer result = transactionTemplate.execute(status -> processSession(session));
+                Integer result = transactionTemplate.execute(status -> processSession(session, status));
                 notifiedCount += (result != null ? result : 0);
             } catch (Exception e) {
                 log.error("Failed to process adjacent room check for session {}: {}",
@@ -84,7 +85,7 @@ public class AdjacentRoomNotificationScheduler {
         log.info("Adjacent room check completed: {} notification(s) sent", notifiedCount);
     }
 
-    private int processSession(PracticeSession session) {
+    private int processSession(PracticeSession session, TransactionStatus txStatus) {
         Integer capacity = session.getCapacity();
         if (capacity == null || capacity <= 0) return 0;
 
@@ -118,6 +119,16 @@ public class AdjacentRoomNotificationScheduler {
             return 0;
         }
 
+        // 通知済み段階なら insert を試みずにスキップする。
+        // 一意制約違反をこのトランザクション内で catch して握りつぶすと、Hibernate が flush 失敗時点で
+        // トランザクションを rollback-only にマークするためコミットで UnexpectedRollbackException になる
+        // （Issue #1034: 残り人数が変わらない30分ごとの再実行のたびに ERROR ログが出ていた）
+        if (adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(session.getId(), remaining)) {
+            log.debug("Adjacent room notification already sent for session {} (remaining={})",
+                    session.getId(), remaining);
+            return 0;
+        }
+
         // 通知済みレコードを原子的に確保（一意制約で並列実行時の重複を防止）
         // ※ 隣室確認後に保存することで、DB障害時に通知未送信なのに通知済みになる問題を防ぐ
         try {
@@ -127,7 +138,10 @@ public class AdjacentRoomNotificationScheduler {
                     .build());
             adjacentRoomNotificationRepository.flush();
         } catch (DataIntegrityViolationException e) {
-            // 既に他のインスタンスが通知済み → スキップ
+            // 事前チェック後に他インスタンスが通知したTOCTOU競合 → スキップ。
+            // flush 失敗でトランザクションは既にグローバル rollback-only のため、ローカルにも明示して
+            // コミット試行（UnexpectedRollbackException）を回避する（この経路にコミットすべき変更はない）
+            txStatus.setRollbackOnly();
             log.debug("Adjacent room notification already sent for session {} (remaining={})",
                     session.getId(), remaining);
             return 0;

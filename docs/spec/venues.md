@@ -50,7 +50,7 @@ SUPER_ADMIN のみ操作可能。
    - 翌日〜40日先の全セッションから `AdjacentRoomConfig.isAdjacentCheckTarget` で対象をフィルタ
    - 全試合のうち最も定員に近い試合で残り4人以下なら通知対象
    - `room_availability_cache` を照会して隣室が空きなら通知送信
-   - `adjacent_room_notifications` テーブルで (session_id, remaining_count) の重複送信を防止
+   - `adjacent_room_notifications` テーブルで (session_id, remaining_count) の重複送信を防止（事前存在チェックでスキップし、一意制約は並列競合時のバックストップ。トランザクション内で制約違反を握りつぶすと rollback-only 化で毎回 ERROR になるため — Issue #1034）
 3. **通知**: `NotificationType.ADJACENT_ROOM_AVAILABLE`。会場ごとの時間帯ラベル（`AdjacentRoomConfig.getNightTimeLabel`）を含むメッセージ。SUPER_ADMIN全員 + 該当団体の ADMIN に送信
 
 > **空き状態の区分（`available` と `expandable`）**: `room_availability_cache.status` を `AdjacentRoomStatusDto` の2つの真偽値に写像する。
