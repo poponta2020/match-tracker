@@ -345,7 +345,10 @@ const PairingGenerator = () => {
   //  - lockedPairs が配列（空配列含む・再シャッフル）: 常に body に lockedPairs を入れて送る。
   //    バックエンドは手動ロックをクライアント指定で判定（DB の locked は無視。結果入力済みは常に保護）。
   //    ※ [] は truthy だが「非null＝クライアント権威」を明示するため undefined 判定で分岐する。
-  const runAutoMatch = async (lockedPairs) => {
+  // editingExisting: 生成後ドラフトの isEditingExisting。新規作成（対戦編集）は false、
+  // 既存編集からの再シャッフルは現在の isEditingExisting を引き継ぐ（タブ往復での復元時に
+  // 「全削除」ボタン等の編集UI状態がずれないようにする）。
+  const runAutoMatch = async (lockedPairs, editingExisting = false) => {
     if (participants.length === 0) {
       setError('参加者がいません');
       return;
@@ -375,7 +378,8 @@ const PairingGenerator = () => {
       setWaitingPlayers(response.data.waitingPlayers);
       setHasUnsavedChanges(true);
       setIsViewMode(false);
-      saveDraft(combined, response.data.waitingPlayers, false);
+      setIsEditingExisting(editingExisting);
+      saveDraft(combined, response.data.waitingPlayers, editingExisting);
 
       const lockedCount = locked.length * 2;
       const usedParticipantCount =
@@ -415,7 +419,8 @@ const PairingGenerator = () => {
       ? 'ロック済みの組は保持し、それ以外を組み直します。'
       : '全参加者を組み直します。';
     if (!window.confirm(`${label}しますか？\n${detail}`)) return;
-    runAutoMatch(computeLockedPairsInput(pairings));
+    // 再シャッフルは現在の編集コンテキスト（新規生成 or 既存編集）を保つ。
+    runAutoMatch(computeLockedPairsInput(pairings), isEditingExisting);
   };
 
   const handleSave = async () => {
