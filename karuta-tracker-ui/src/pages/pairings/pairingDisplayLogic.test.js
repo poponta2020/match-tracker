@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   shouldShowParticipantSection,
   shouldShowAutoMatchButton,
+  shouldShowReshuffleButton,
+  reshuffleButtonLabel,
   isBothCancelled,
   hasAnyCancelled,
   materializeCancelledSlots,
@@ -28,6 +30,51 @@ describe('shouldShowAutoMatchButton', () => {
     expect(shouldShowAutoMatchButton({
       isReadOnly: false, sessionDate: '2026-06-30', participants: [{ id: 1 }], pairings: [{ player1Id: 1 }],
     })).toBe(false);
+  });
+});
+
+describe('shouldShowReshuffleButton', () => {
+  it('組み合わせが1件以上・編集可能状態なら表示（AC-1）', () => {
+    expect(shouldShowReshuffleButton({
+      isReadOnly: false, isViewMode: false, pairings: [{ player1Id: 1, player2Id: 2 }],
+    })).toBe(true);
+  });
+  it('組み合わせが空なら非表示（新規作成は対戦編集ボタン側）', () => {
+    expect(shouldShowReshuffleButton({ isReadOnly: false, isViewMode: false, pairings: [] })).toBe(false);
+  });
+  it('閲覧モードでは非表示（AC-1）', () => {
+    expect(shouldShowReshuffleButton({
+      isReadOnly: false, isViewMode: true, pairings: [{ player1Id: 1, player2Id: 2 }],
+    })).toBe(false);
+  });
+  it('閲覧専用（他試合に未保存変更）では非表示（AC-1）', () => {
+    expect(shouldShowReshuffleButton({
+      isReadOnly: true, isViewMode: false, pairings: [{ player1Id: 1, player2Id: 2 }],
+    })).toBe(false);
+  });
+});
+
+describe('reshuffleButtonLabel（ロック有無による動的文言・AC-2）', () => {
+  it('ロック済みの組（locked）が1件以上 → 「ロックされた組以外をシャッフル」', () => {
+    expect(reshuffleButtonLabel([
+      { player1Id: 1, player2Id: 2, locked: true },
+      { player1Id: 3, player2Id: 4 },
+    ])).toBe('ロックされた組以外をシャッフル');
+  });
+  it('結果入力済み（hasResult）が1件以上 → 「ロックされた組以外をシャッフル」', () => {
+    expect(reshuffleButtonLabel([
+      { player1Id: 1, player2Id: 2, hasResult: true },
+    ])).toBe('ロックされた組以外をシャッフル');
+  });
+  it('ロック0件 → 「再シャッフル」', () => {
+    expect(reshuffleButtonLabel([
+      { player1Id: 1, player2Id: 2 },
+      { player1Id: 3, player2Id: 4, locked: false, hasResult: false },
+    ])).toBe('再シャッフル');
+  });
+  it('空配列・null → 「再シャッフル」', () => {
+    expect(reshuffleButtonLabel([])).toBe('再シャッフル');
+    expect(reshuffleButtonLabel(null)).toBe('再シャッフル');
   });
 });
 

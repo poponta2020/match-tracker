@@ -27,6 +27,33 @@ export const shouldShowParticipantSection = (pairings) => pairings.length === 0;
 export const shouldShowAutoMatchButton = ({ isReadOnly, sessionDate, participants, pairings }) =>
   !isReadOnly && !!sessionDate && participants.length > 0 && pairings.length === 0;
 
+/**
+ * 「再シャッフル／ロックされた組以外をシャッフル」ボタンの表示可否。
+ * 組み合わせが1件以上あり（pairings.length>0）、編集可能状態（閲覧専用でない・閲覧モードでない）のときに表示する。
+ * 新規作成用「対戦編集」ボタン（pairings.length===0 時）とは排他になる。
+ *
+ * @param {object} params
+ * @param {boolean} params.isReadOnly 他試合に未保存変更がある等で閲覧専用か
+ * @param {boolean} params.isViewMode 既存組み合わせの閲覧モードか
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @returns {boolean}
+ */
+export const shouldShowReshuffleButton = ({ isReadOnly, isViewMode, pairings }) =>
+  !isReadOnly && !isViewMode && pairings.length > 0;
+
+/**
+ * 再シャッフルボタンの文言（ロック済みの組の有無で動的に切り替える）。
+ * - ロック済みの組（hasResult または locked）が1件以上: 「ロックされた組以外をシャッフル」
+ * - 0件: 「再シャッフル」
+ *
+ * @param {Array} pairings 現在表示中の組み合わせ配列
+ * @returns {string}
+ */
+export const reshuffleButtonLabel = (pairings) =>
+  (pairings || []).some((p) => p && (p.hasResult || p.locked))
+    ? 'ロックされた組以外をシャッフル'
+    : '再シャッフル';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 対戦相手キャンセル（pairing-cancelled-opponent）表示判定
 //
