@@ -1531,6 +1531,320 @@ class MatchPairingServiceTest {
     }
 
     @Nested
+    @DisplayName("ロック以外を再シャッフル（autoMatch の lockedPairs 契約拡張）")
+    class ReshuffleExceptLockedTests {
+
+        /** 再シャッフルの共通モック（履歴・同日ペアなし）を仕込む。 */
+        private void stubEmptyHistory(LocalDate sessionDate) {
+            when(matchPairingRepository.findRecentPairingHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findRecentMatchHistory(anyList(), any(LocalDate.class), any(LocalDate.class)))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findTodayMatches(any(LocalDate.class), anyInt()))
+                    .thenReturn(Collections.emptyList());
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+        }
+
+        private List<Long> allPlayerIdsIn(AutoMatchingResult result) {
+            List<Long> ids = new ArrayList<>();
+            result.getPairings().forEach(p -> { ids.add(p.getPlayer1Id()); ids.add(p.getPlayer2Id()); });
+            return ids;
+        }
+
+        @Test
+        @DisplayName("AC-3: lockedPairs で指定した組は DB の locked=false でも保持され、その選手は再シャッフル対象から除外される")
+        void shouldRespectClientLockedPairsEvenWhenDbFlagFalse() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(List.of(AutoMatchingRequest.LockedPairInput.builder()
+                            .player1Id(1L).player2Id(2L).build()))
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            // DB 上は locked=false（＝クライアントがローカルでロックした未保存状態を模す）
+            MatchPairing dbPair = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            dbPair.setLocked(false);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(dbPair));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // (1,2) は保持され、(3,4) のみ再シャッフル対象
+            assertThat(result.getLockedPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion locked = result.getLockedPairings().get(0);
+            assertThat(locked.getPlayer1Id()).isEqualTo(1L);
+            assertThat(locked.getPlayer2Id()).isEqualTo(2L);
+            assertThat(locked.isLocked()).isTrue();
+            assertThat(locked.getId()).isEqualTo(10L); // DB 行があるので id が付く
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(3L, 4L);
+        }
+
+        @Test
+        @DisplayName("AC-5/discriminator: lockedPairs=[]（非null・空）なら DB の locked=true は無視され、その組は再シャッフルされる")
+        void shouldIgnoreDbLockFlagWhenLockedPairsIsEmpty() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // 空配列（非null）を送る＝クライアントが「ロックは0件」と主張する再シャッフル
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(Collections.emptyList())
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            // DB 上は手動ロック済み（locked=true）だが結果なし
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(manualLocked));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // DB の locked フラグは無視 → 保持ゼロ、4人全員が再シャッフルプールに戻る
+            assertThat(result.getLockedPairings()).isEmpty();
+            assertThat(result.getPairings()).hasSize(2);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        }
+
+        @Test
+        @DisplayName("回帰: lockedPairs==null（既存の新規作成フロー）は従来どおり DB の locked=true を保護する")
+        void shouldRespectDbLockFlagWhenLockedPairsIsNull() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // lockedPairs を設定しない＝null（キー欠落）
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+            assertThat(request.getLockedPairs()).isNull();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            MatchPairing manualLocked = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            manualLocked.setLocked(true);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(manualLocked));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // 従来どおり DB locked を保護 → (1,2) は lockedPairings、(3,4) のみ新規
+            assertThat(result.getLockedPairings()).hasSize(1);
+            assertThat(result.getLockedPairings().get(0).getPlayer1Id()).isEqualTo(1L);
+            assertThat(result.getLockedPairings().get(0).getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(3L, 4L);
+        }
+
+        @Test
+        @DisplayName("AC-R2: 結果入力済み（hasResult）は lockedPairs に含めなくても常に保護される")
+        void shouldAlwaysProtectResultLockedRegardlessOfClientLocks() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // lockedPairs=[]（非null・空）でも結果入力済みは保護されるべき
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(Collections.emptyList())
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            MatchPairing resultPair = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(resultPair));
+            Match existingMatch = createMatch(200L, sessionDate, matchNumber, 1L, 2L, 1L, 5);
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(existingMatch));
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            assertThat(result.getLockedPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion locked = result.getLockedPairings().get(0);
+            assertThat(locked.isHasResult()).isTrue();
+            assertThat(locked.getPlayer1Id()).isEqualTo(1L);
+            assertThat(locked.getPlayer2Id()).isEqualTo(2L);
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(3L, 4L);
+        }
+
+        @Test
+        @DisplayName("AC-4: DB 行の無い（未保存）ロック組も lockedPairs で保持され、名前が解決される（Unknown にならない）")
+        void shouldPreserveUnsavedLockedPairAndResolveNames() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Player player5 = createPlayer(5L, "選手E");
+            Player player6 = createPlayer(6L, "選手F");
+            // 未保存ロック組 (5,6) を lockedPairs で指定。DB にはこの組の行は無い。
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(List.of(AutoMatchingRequest.LockedPairInput.builder()
+                            .player1Id(5L).player2Id(6L).build()))
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 5L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 6L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            // DB にペアリング行は無い（未保存）
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player3, player4, player5, player6));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            assertThat(result.getLockedPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion locked = result.getLockedPairings().get(0);
+            assertThat(locked.getPlayer1Id()).isEqualTo(5L);
+            assertThat(locked.getPlayer2Id()).isEqualTo(6L);
+            assertThat(locked.isLocked()).isTrue();
+            assertThat(locked.isHasResult()).isFalse();
+            assertThat(locked.getId()).isNull(); // 未保存なので DB id は無い
+            // 名前解決（allPlayerIds への追加が効いていること）
+            assertThat(locked.getPlayer1Name()).isEqualTo("選手E");
+            assertThat(locked.getPlayer2Name()).isEqualTo("選手F");
+            // 残り (3,4) が再シャッフル
+            assertThat(result.getPairings()).hasSize(1);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(3L, 4L);
+        }
+
+        @Test
+        @DisplayName("AC-8: 再シャッフル対象が奇数人数なら1名が待機者になる")
+        void shouldLeaveOneWaitingWhenReshufflePoolIsOdd() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            Player player5 = createPlayer(5L, "選手E");
+            // (1,2) をロック、残り (3,4,5) の3名＝奇数を再シャッフル
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(List.of(AutoMatchingRequest.LockedPairInput.builder()
+                            .player1Id(1L).player2Id(2L).build()))
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 5L, ParticipantStatus.WON)
+                    ));
+            MatchPairing dbPair = createMatchPairing(10L, sessionDate, matchNumber, 1L, 2L);
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(List.of(dbPair));
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4, player5));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            assertThat(result.getLockedPairings()).hasSize(1);
+            assertThat(result.getPairings()).hasSize(1);       // 3名 → 1組
+            assertThat(result.getWaitingPlayers()).hasSize(1); // 1名待機
+            // ロック済みの 1,2 は待機・再シャッフルに現れない
+            assertThat(result.getWaitingPlayers().get(0).getId()).isIn(3L, 4L, 5L);
+        }
+
+        @Test
+        @DisplayName("AC-9: 待機はサーバ入力に無く、非ロックのアクティブ参加者は常に再シャッフルプールに戻る（ピン留めされない）")
+        void shouldRepoolNonLockedParticipantsIncludingFormerWaiters() {
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            Integer matchNumber = 1;
+            // 直前まで待機者だった選手がいても、再シャッフルではプールに戻る。
+            // 契約上 autoMatch は待機者リストを受け取らない（lockedPairs のみ）ため、
+            // 非ロックのアクティブ参加者は全員プール対象になることを検証する。
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber)
+                    .lockedPairs(Collections.emptyList())
+                    .build();
+
+            PracticeSession session = createSession(100L, sessionDate);
+            when(practiceSessionRepository.findBySessionDate(sessionDate)).thenReturn(Optional.of(session));
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(100L, 1, List.of(ParticipantStatus.WON)))
+                    .thenReturn(Arrays.asList(
+                            createPracticeParticipant(100L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(100L, 1, 4L, ParticipantStatus.WON)
+                    ));
+            when(matchPairingRepository.findBySessionDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber))
+                    .thenReturn(Collections.emptyList());
+            when(playerRepository.findAllById(anyCollection()))
+                    .thenReturn(Arrays.asList(player1, player2, player3, player4));
+            stubEmptyHistory(sessionDate);
+
+            AutoMatchingResult result = matchPairingService.autoMatch(request, null);
+
+            // 4名すべてがペアに組まれ、待機者0（誰も待機にピン留めされない）
+            assertThat(result.getWaitingPlayers()).isEmpty();
+            assertThat(result.getPairings()).hasSize(2);
+            assertThat(allPlayerIdsIn(result)).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        }
+    }
+
+    @Nested
     @DisplayName("結果入力済みロック機能")
     class MatchResultLockTests {
 

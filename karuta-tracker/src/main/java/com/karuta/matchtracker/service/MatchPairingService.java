@@ -779,11 +779,34 @@ public class MatchPairingService {
                 matchRepository.findByMatchDateAndMatchNumber(sessionDate, matchNumber), sessionPlayerIds, orgScoped);
         Set<Long> lockedPlayerIds = new HashSet<>();
         List<AutoMatchingResult.PairingSuggestion> lockedPairingSuggestions = new ArrayList<>();
+        // 保持済み（結果入力済み or 手動ロック）と判定した組のキー。未保存ロック組の二重追加を防ぐ。
+        Set<String> protectedPairKeys = new HashSet<>();
+
+        // 手動ロックの真をどこから取るかを決める（後方互換）:
+        //  - lockedPairs == null（既存の新規作成フロー）: DB の locked フラグを正とする（挙動不変）。
+        //  - lockedPairs != null（空配列含む・再シャッフル）: クライアントの lockedPairs を正とし、
+        //    DB の locked フラグは無視する（ローカルで解除した組は再シャッフル対象・未保存ロック組は保持）。
+        //    結果入力済み（hasResult）は下のループで常に DB から保護する。
+        List<AutoMatchingRequest.LockedPairInput> clientLockedPairs = request.getLockedPairs();
+        boolean useClientLocks = clientLockedPairs != null;
+        Set<String> clientLockedPairKeys = useClientLocks
+                ? clientLockedPairs.stream()
+                        .filter(lp -> lp.getPlayer1Id() != null && lp.getPlayer2Id() != null)
+                        .map(lp -> getPairKey(lp.getPlayer1Id(), lp.getPlayer2Id()))
+                        .collect(Collectors.toSet())
+                : Collections.emptySet();
 
         Map<Long, Player> allPlayerMap = new HashMap<>();
         // ロック判定用に全プレイヤー情報を取得
         Set<Long> allPlayerIds = new HashSet<>(participantIds);
         existingPairings.forEach(p -> { allPlayerIds.add(p.getPlayer1Id()); allPlayerIds.add(p.getPlayer2Id()); });
+        // クライアント指定のロック組（未保存＝DB行なしを含む）の選手も名前解決対象に加える（AC-4 で名前が Unknown にならないように）。
+        if (useClientLocks) {
+            clientLockedPairs.forEach(lp -> {
+                if (lp.getPlayer1Id() != null) allPlayerIds.add(lp.getPlayer1Id());
+                if (lp.getPlayer2Id() != null) allPlayerIds.add(lp.getPlayer2Id());
+            });
+        }
         playerRepository.findAllById(allPlayerIds).forEach(p -> allPlayerMap.put(p.getId(), p));
 
         for (MatchPairing pairing : existingPairings) {
@@ -795,9 +818,13 @@ public class MatchPairingService {
                                  (Math.max(m.getPlayer1Id(), m.getPlayer2Id()) == p2))
                     .findFirst().orElse(null);
             boolean hasResult = matchResult != null;
-            boolean manuallyLocked = Boolean.TRUE.equals(pairing.getLocked());
+            // 手動ロックの判定: lockedPairs 指定時はクライアントの指定を正・未指定時は DB の locked フラグを正とする。
+            boolean manuallyLocked = useClientLocks
+                    ? clientLockedPairKeys.contains(getPairKey(pairing.getPlayer1Id(), pairing.getPlayer2Id()))
+                    : Boolean.TRUE.equals(pairing.getLocked());
             // 保護対象 = 結果入力済み OR 手動ロック。両選手を自動組み合わせ対象から除外する。
             if (hasResult || manuallyLocked) {
+                protectedPairKeys.add(getPairKey(pairing.getPlayer1Id(), pairing.getPlayer2Id()));
                 lockedPlayerIds.add(pairing.getPlayer1Id());
                 lockedPlayerIds.add(pairing.getPlayer2Id());
                 Player player1 = allPlayerMap.get(pairing.getPlayer1Id());
@@ -823,6 +850,31 @@ public class MatchPairingService {
                         .scoreDifference(scoreDiff)
                         .hasResult(hasResult)
                         .locked(manuallyLocked)
+                        .build());
+            }
+        }
+
+        // lockedPairs に含まれるが DB に行が無い（未保存）ロック組も保持する（AC-4）。
+        // 名前は allPlayerMap から解決する（上で選手IDを allPlayerIds に加えている）。
+        if (useClientLocks) {
+            for (AutoMatchingRequest.LockedPairInput lp : clientLockedPairs) {
+                if (lp.getPlayer1Id() == null || lp.getPlayer2Id() == null) continue;
+                String pairKey = getPairKey(lp.getPlayer1Id(), lp.getPlayer2Id());
+                // 既に DB 行経由で保持済み、または lockedPairs 内で重複しているものは追加しない。
+                if (!protectedPairKeys.add(pairKey)) continue;
+                lockedPlayerIds.add(lp.getPlayer1Id());
+                lockedPlayerIds.add(lp.getPlayer2Id());
+                Player player1 = allPlayerMap.get(lp.getPlayer1Id());
+                Player player2 = allPlayerMap.get(lp.getPlayer2Id());
+                lockedPairingSuggestions.add(AutoMatchingResult.PairingSuggestion.builder()
+                        .player1Id(lp.getPlayer1Id())
+                        .player1Name(player1 != null ? player1.getName() : "Unknown")
+                        .player2Id(lp.getPlayer2Id())
+                        .player2Name(player2 != null ? player2.getName() : "Unknown")
+                        .score(0.0)
+                        .recentMatches(Collections.emptyList())
+                        .hasResult(false)
+                        .locked(true)
                         .build());
             }
         }
