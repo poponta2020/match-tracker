@@ -60,3 +60,31 @@ export const hasBlockingIncompletePair = (pairings) =>
   pairings.some(
     (p) => !p.hasResult && !p.locked && !p.cancelledEmptied && (!p.player1Id || !p.player2Id)
   );
+
+/**
+ * 「ロック以外を再シャッフル」で auto-match に送る lockedPairs 入力を現在の画面状態から算出する。
+ * ロック済みの組（結果入力済み hasResult または手動ロック locked。未保存ロックも含む）のうち、
+ * 両選手が揃った組だけを {player1Id, player2Id} に射影する（null player id を送らないガード。
+ * buildSaveRequests と同じく「両選手あり」を不変条件にする）。
+ *
+ * バックエンドは結果入力済みを常に DB から保護するため、hasResult 組を含めても害はなく、
+ * 手動ロック（locked）の真をクライアントから渡すことがこの関数の主目的。
+ */
+export const computeLockedPairsInput = (pairings) =>
+  (pairings || [])
+    .filter((p) => p && (p.hasResult || p.locked) && p.player1Id && p.player2Id)
+    .map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id }));
+
+/**
+ * auto-match（自動組み合わせ／再シャッフル）へ送る request body を組み立てる。
+ * lockedPairs の undefined/配列を「クライアント権威か否か」の境界として厳密に扱う:
+ *  - lockedPairs === undefined（新規作成＝「対戦編集」）: body に lockedPairs キーを含めない
+ *    → バックエンドは従来どおり DB の hasResult/locked から保持組を導出（後方互換・挙動不変）。
+ *  - lockedPairs が配列（空配列 [] を含む・再シャッフル）: 常に body に lockedPairs を入れる
+ *    → バックエンドは手動ロックをクライアント指定で判定（DB の locked は無視・結果入力済みは常に保護）。
+ * [] は truthy なので `if (lockedPairs)` では区別できない。undefined 判定を唯一の分岐条件にする。
+ */
+export const buildAutoMatchBody = (sessionDate, matchNumber, lockedPairs) =>
+  lockedPairs === undefined
+    ? { sessionDate, matchNumber }
+    : { sessionDate, matchNumber, lockedPairs };

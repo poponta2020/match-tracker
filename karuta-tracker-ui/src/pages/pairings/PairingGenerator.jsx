@@ -15,10 +15,10 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
-import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 import { formatHeaderDate, resolveHeaderVenue } from './pairingHeader';
 
 
@@ -339,7 +339,13 @@ const PairingGenerator = () => {
     }
   };
 
-  const handleAutoMatch = async () => {
+  // 自動組み合わせ／再シャッフルの共通実行。
+  //  - lockedPairs === undefined（新規作成＝「対戦編集」）: body に lockedPairs を含めず送る。
+  //    バックエンドは従来どおり DB の hasResult / locked から保持組を導出する（後方互換）。
+  //  - lockedPairs が配列（空配列含む・再シャッフル）: 常に body に lockedPairs を入れて送る。
+  //    バックエンドは手動ロックをクライアント指定で判定（DB の locked は無視。結果入力済みは常に保護）。
+  //    ※ [] は truthy だが「非null＝クライアント権威」を明示するため undefined 判定で分岐する。
+  const runAutoMatch = async (lockedPairs) => {
     if (participants.length === 0) {
       setError('参加者がいません');
       return;
@@ -350,10 +356,7 @@ const PairingGenerator = () => {
     setNotice('');
 
     try {
-      const response = await pairingAPI.autoMatch({
-        sessionDate,
-        matchNumber,
-      });
+      const response = await pairingAPI.autoMatch(buildAutoMatchBody(sessionDate, matchNumber, lockedPairs));
 
       // ロック済みペアリング（結果入力済み or 手動ロック）を先頭に配置し、新規ペアリングを後ろに追加。
       // DTO の hasResult / locked をそのまま尊重する（hasResult:true 固定にしない）。
@@ -398,6 +401,21 @@ const PairingGenerator = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 新規作成用（従来の「対戦編集」）: ロック指定なしで実行（後方互換・挙動不変）。
+  const handleAutoMatch = () => runAutoMatch();
+
+  // ロック以外を再シャッフル: 確認ダイアログ後、現在の画面状態のロック組を lockedPairs として送る。
+  // キャンセル時は何も変えない（AC-6）。ロック0件のときは全参加者を組み直す（AC-5）。
+  const handleReshuffle = () => {
+    const label = reshuffleButtonLabel(pairings);
+    const hasLocks = pairings.some((p) => p && (p.hasResult || p.locked));
+    const detail = hasLocks
+      ? 'ロック済みの組は保持し、それ以外を組み直します。'
+      : '全参加者を組み直します。';
+    if (!window.confirm(`${label}しますか？\n${detail}`)) return;
+    runAutoMatch(computeLockedPairsInput(pairings));
   };
 
   const handleSave = async () => {
@@ -1007,34 +1025,47 @@ const PairingGenerator = () => {
             <span className="inline-flex items-baseline gap-[7px] text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
               組み合わせ <span className="text-[20px] font-bold normal-case tracking-normal text-[#1A2744]">{pairings.length}</span>組
             </span>
-            {!isReadOnly && !isViewMode && isEditingExisting && (
-              <button
-                onClick={handleDeleteExisting}
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#a3564e] px-1.5 py-1 rounded-md hover:bg-black/5 disabled:opacity-50 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                全削除
-              </button>
-            )}
-            {!isReadOnly && isViewMode && (
-              <button
-                onClick={() => {
-                  // 編集モードへ入る際、キャンセルスロットを実体化（両キャンセル組は除去・
-                  // 片キャンセル選手は「空き」に）してから切り替える。これにより編集モードの
-                  // 描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は既存ロジックのまま動く。
-                  const materialized = materializeCancelledSlots(pairings);
-                  setPairings(materialized);
-                  setIsViewMode(false);
-                  setHasUnsavedChanges(true);
-                  saveDraft(materialized, waitingPlayers, isEditingExisting);
-                }}
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b5446] border border-[#d8cfbf] px-3 py-1.5 rounded-[9px] hover:bg-black/5 transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                編集
-              </button>
-            )}
+            <div className="inline-flex items-center gap-1">
+              {/* ロック以外を再シャッフル（編集可能状態のみ）。文言はロック有無で動的に切替。 */}
+              {shouldShowReshuffleButton({ isReadOnly, isViewMode, pairings }) && (
+                <button
+                  onClick={handleReshuffle}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#33463c] px-1.5 py-1 rounded-md hover:bg-black/5 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {reshuffleButtonLabel(pairings)}
+                </button>
+              )}
+              {!isReadOnly && !isViewMode && isEditingExisting && (
+                <button
+                  onClick={handleDeleteExisting}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#a3564e] px-1.5 py-1 rounded-md hover:bg-black/5 disabled:opacity-50 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  全削除
+                </button>
+              )}
+              {!isReadOnly && isViewMode && (
+                <button
+                  onClick={() => {
+                    // 編集モードへ入る際、キャンセルスロットを実体化（両キャンセル組は除去・
+                    // 片キャンセル選手は「空き」に）してから切り替える。これにより編集モードの
+                    // 描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は既存ロジックのまま動く。
+                    const materialized = materializeCancelledSlots(pairings);
+                    setPairings(materialized);
+                    setIsViewMode(false);
+                    setHasUnsavedChanges(true);
+                    saveDraft(materialized, waitingPlayers, isEditingExisting);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b5446] border border-[#d8cfbf] px-3 py-1.5 rounded-[9px] hover:bg-black/5 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  編集
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="divide-y divide-[#ddd3c2]">
