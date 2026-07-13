@@ -72,6 +72,7 @@
 - `pairing-manual-lock` — 結果未入力の対戦組を管理者・選手が明示的にロックできる機能（主要領域: karuta-tracker-ui, karuta-tracker, database, docs）
 - `pairing-player-access-and-empty-cta` — 対戦組み合わせ機能をPLAYERに開放し、空状態に組み合わせ作成CTAを表示（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `pairing-player-access-remaining-ops` — 組み合わせ画面の残存admin専用操作（参加者追加等）をPLAYERに開放（主要領域: karuta-tracker-ui, karuta-tracker, docs）
+- `pairing-reshuffle-except-locked` — /pairingsでロック以外の組だけを最適化再シャッフルできる導線を追加（auto-match契約をlockedPairsで後方互換拡張）（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `pairing-same-day-duplicate-warning` — 組み合わせ画面で当日重複ペアの警告表示・検知漏れを改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `pairing-swap-ux` — 組み合わせ画面の選手入替にタップ選択→タップ配置モードを追加（主要領域: karuta-tracker-ui, docs）
 - `player-bulk-edit` — 選手一覧から複数選手を選択し性別・級・所属団体をまとめて編集（主要領域: karuta-tracker-ui, karuta-tracker, docs）
