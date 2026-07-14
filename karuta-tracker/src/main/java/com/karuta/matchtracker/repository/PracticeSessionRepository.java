@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.entity.PracticeSession;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -68,6 +69,20 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
 
     @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.organizationId IN :orgIds AND ps.sessionDate >= :date ORDER BY ps.sessionDate DESC")
     List<LocalDate> findSessionDatesByOrganizationIdIn(@Param("orgIds") List<Long> orgIds, @Param("date") LocalDate date);
+
+    /**
+     * 指定団体・指定日より前の練習日を降順で取得（自動マッチングの「前回練習日」特定用）。
+     *
+     * 過去30日窓に依存せず、団体の過去セッションを遡って直近の対戦がある練習日を
+     * 特定するために使う。呼び出し側で {@link Pageable} により取得件数を上限付けする。
+     *
+     * @param orgId 団体ID
+     * @param date 基準日（この日は含まない）
+     * @param pageable 取得件数の上限
+     * @return 練習日の日付リスト（新しい順）
+     */
+    @Query("SELECT ps.sessionDate FROM PracticeSession ps WHERE ps.organizationId = :orgId AND ps.sessionDate < :date ORDER BY ps.sessionDate DESC")
+    List<LocalDate> findPastSessionDatesByOrganizationId(@Param("orgId") Long orgId, @Param("date") LocalDate date, Pageable pageable);
 
     /**
      * 指定日以降の直近の練習セッションを1件取得

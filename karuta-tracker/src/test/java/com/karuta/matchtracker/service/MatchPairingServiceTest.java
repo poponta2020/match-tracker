@@ -1318,6 +1318,292 @@ class MatchPairingServiceTest {
     }
 
     @Nested
+    @DisplayName("前回練習日ペアの強い回避（pairing-avoid-previous-practice-opponents）")
+    class PreviousPracticeAvoidanceTests {
+
+        /** 現在セッションの共通スタブ（組織スコープ・WON運用）。参加者IDと前回日の配線は各テストで足す。 */
+        private void stubCurrentSession(LocalDate sessionDate, Integer matchNumber, Long organizationId,
+                                        List<Long> participantIds, List<Player> players) {
+            PracticeSession currentSession = createSession(100L, sessionDate);
+            when(lotteryDeadlineHelper.isLotteryDisabled(organizationId)).thenReturn(false);
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(sessionDate, organizationId))
+                    .thenReturn(Optional.of(currentSession));
+            List<PracticeParticipant> participants = participantIds.stream()
+                    .map(id -> createPracticeParticipant(100L, matchNumber, id, ParticipantStatus.WON))
+                    .collect(java.util.stream.Collectors.toList());
+            when(practiceParticipantRepository.findBySessionIdAndMatchNumberAndStatusIn(
+                    100L, matchNumber, List.of(ParticipantStatus.WON)))
+                    .thenReturn(participants);
+            // getSessionAllPlayerIds(sessionDate, org)
+            when(practiceParticipantRepository.findBySessionId(100L)).thenReturn(participants);
+            when(playerRepository.findAllById(anyCollection())).thenReturn(players);
+            // 同日ペアリング（getTodayPairings / displayHistory 用）は無し
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(sessionDate))
+                    .thenReturn(Collections.emptyList());
+        }
+
+        @Test
+        @DisplayName("AC-1: 前回練習日ペアは、他に相手がいる限り再形成されない（3名で前回1-2→結果は必ず選手3を含む）")
+        void shouldAvoidPreviousPracticeDayPair() {
+            // Given: org=7L, 今回=2024-01-15, 参加者{1,2,3}。前回練習日=2024-01-08 に (1,2) が対戦済み。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L), List.of(player1, player2, player3));
+
+            // 前回練習日の配線: 過去日リスト→[prevDate]、prevDate のセッション参加者{1,2,3}、ペア(1,2)
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(createMatchPairing(50L, prevDate, 1, 1L, 2L)));
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: 3名で1組。前回ペア(1,2)は選ばれず、必ず選手3が組まれる（2要素の組が3を含む＝1-2ではない）。
+            assertThat(result.getPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion pair = result.getPairings().get(0);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).contains(3L);
+        }
+
+        @Test
+        @DisplayName("AC-2: 前回練習日ペアしか残らなくても待機者を増やさず組む（4名・前回全ペア消化→2組・待機0）")
+        void shouldGracefullyDegradeWhenAllPairsArePrevious() {
+            // Given: org=7L, 参加者{1,2,3,4}。前回練習日に全6ペアが消化済み（＝どの組も前回ペア）。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L, 4L), List.of(player1, player2, player3, player4));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 4L, ParticipantStatus.WON)));
+            // 前回に全6ペア（複数試合番号で）を消化
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(
+                            createMatchPairing(51L, prevDate, 1, 1L, 2L),
+                            createMatchPairing(52L, prevDate, 1, 3L, 4L),
+                            createMatchPairing(53L, prevDate, 2, 1L, 3L),
+                            createMatchPairing(54L, prevDate, 2, 2L, 4L),
+                            createMatchPairing(55L, prevDate, 3, 1L, 4L),
+                            createMatchPairing(56L, prevDate, 3, 2L, 3L)));
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: ソフトペナルティ（有限）ゆえ 2組が成立し待機者は増えない（グレースフル劣化）
+            assertThat(result.getPairings()).hasSize(2);
+            assertThat(result.getWaitingPlayers()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("AC-3: 前回練習日の特定は同一団体スコープ（org付きfinderで引き、当日の別団体ペアは混入しない）")
+        void shouldScopePreviousPracticeByOrganization() {
+            // Given: org=7L, 参加者{1,2,3}。前回練習日 org セッション参加者{1,2,3}、ペア(1,2)は自団体。
+            // 同じ prevDate に別団体の (3,99) が存在するが、org セッション参加者フィルタ（99は非参加）で除外される。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L), List.of(player1, player2, player3));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(
+                            createMatchPairing(50L, prevDate, 1, 1L, 2L),   // 自団体ペア（両者参加者）→ ペナルティ対象
+                            createMatchPairing(60L, prevDate, 1, 3L, 99L))); // 別団体ペア（99は非参加者）→ 除外
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: 自団体の前回ペア(1,2)のみ回避され選手3が組まれる。別団体の99は候補に混入しない。
+            assertThat(result.getPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion pair = result.getPairings().get(0);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).contains(3L);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).doesNotContain(99L);
+            // 前回練習日の特定・当日の参加者解決がいずれも org スコープで行われること
+            verify(practiceSessionRepository)
+                    .findPastSessionDatesByOrganizationId(eq(organizationId), eq(sessionDate), any());
+            verify(practiceSessionRepository)
+                    .findBySessionDateAndOrganizationId(prevDate, organizationId);
+        }
+
+        @Test
+        @DisplayName("AC-3(matches経路): 前回練習日ペアは matches からも収集し、別団体の matches は団体スコープで除外する")
+        void shouldCollectPreviousPracticePairsFromMatchesAndScopeByOrganization() {
+            // Given: org=7L, 参加者{1,2,3}。前回練習日はペアリング(match_pairings)が無く、
+            // 試合結果(matches)のみ存在: 自団体(1,2) と 別団体(3,99)。matches 経路でも (1,2) は
+            // 回避対象になり、別団体(3,99: 99は非参加)は filterMatchesBySession で除外される。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L), List.of(player1, player2, player3));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)));
+            // 前回日のペアリング(match_pairings)は無し → 回避対象は matches 経路のみから来る
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(Collections.emptyList());
+            // 前回日の試合結果(matches): 自団体(1,2) と 別団体(3,99)
+            when(matchRepository.findByMatchDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(
+                            createMatch(70L, prevDate, 1, 1L, 2L, 1L, 5),    // 自団体（両者参加者）→ ペナルティ対象
+                            createMatch(71L, prevDate, 1, 3L, 99L, 3L, 3))); // 別団体（99は非参加者）→ 除外
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: matches 由来の前回ペア(1,2)のみ回避され選手3が組まれる。別団体の99は混入しない。
+            assertThat(result.getPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion pair = result.getPairings().get(0);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).contains(3L);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).doesNotContain(99L);
+        }
+
+        @Test
+        @DisplayName("AC-4: 直前の練習日が対戦なしなら、さらに遡って直近の対戦がある練習日を前回練習日とする")
+        void shouldSkipEmptyPracticeDayAndGoFurtherBack() {
+            // Given: 過去日降順 [D-1(対戦なし), D-8(1-2対戦あり)]。D-1 はスキップされ D-8 の (1,2) が回避対象。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate emptyDay = LocalDate.of(2024, 1, 14);   // 直前だが対戦なし
+            LocalDate matchedDay = LocalDate.of(2024, 1, 8);  // さらに遡った直近の対戦がある日
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L), List.of(player1, player2, player3));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(emptyDay, matchedDay));
+            // D-1: セッションはあるが対戦（ペアリング）なし → スキップされる
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(emptyDay, organizationId))
+                    .thenReturn(Optional.of(createSession(300L, emptyDay)));
+            when(practiceParticipantRepository.findBySessionId(300L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(300L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(300L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(300L, 1, 3L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(emptyDay))
+                    .thenReturn(Collections.emptyList());
+            // D-8: (1,2) の対戦あり
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(matchedDay, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, matchedDay)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(matchedDay))
+                    .thenReturn(List.of(createMatchPairing(50L, matchedDay, 1, 1L, 2L)));
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: D-8 の (1,2) が回避対象になり、選手3が組まれる
+            assertThat(result.getPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion pair = result.getPairings().get(0);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).contains(3L);
+        }
+
+        @Test
+        @DisplayName("AC-8: 多人数（6名）で前回ペアが1つあっても、全員が組まれ待機者は新たに増えない")
+        void shouldNotIncreaseWaitingWhenManyParticipants() {
+            // Given: org=7L, 参加者{1..6}（偶数）。前回練習日に (1,2) のみ対戦。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            Player player5 = createPlayer(5L, "選手E");
+            Player player6 = createPlayer(6L, "選手F");
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L, 4L, 5L, 6L),
+                    List.of(player1, player2, player3, player4, player5, player6));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 4L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 5L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 6L, ParticipantStatus.WON)));
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(createMatchPairing(50L, prevDate, 1, 1L, 2L)));
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: 6名で3組、待機者0（前回ペナルティで待機者が新たに増えないこと）。
+            // ※どの組が避けられるかは shuffle 依存のため主張しない（貪欲法の末端効果ゆえ AC-8 の本質は非退行）。
+            assertThat(result.getPairings()).hasSize(3);
+            assertThat(result.getWaitingPlayers()).isEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("createBatch BYE dirty=false")
     class CreateBatchByeDirtyTests {
 
