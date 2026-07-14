@@ -117,13 +117,6 @@ class AdjacentRoomNotificationSchedulerTest {
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
 
-        // 隣室は空き（通知レコード保存に到達する条件）
-        AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
-                .adjacentRoomName("はまなす").status("○").available(true)
-                .expandedVenueId(7L).expandedVenueName("すずらん・はまなす").expandedCapacity(24)
-                .build();
-        when(adjacentRoomService.getAdjacentRoomAvailability(3L, session.getSessionDate())).thenReturn(status);
-
         // 残り3人で既に通知済み
         when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 3)).thenReturn(true);
 
@@ -132,6 +125,8 @@ class AdjacentRoomNotificationSchedulerTest {
         verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
         // 一意制約違反による rollback-only 化を避けるため、insert 自体を試みないこと
         verify(adjacentRoomNotificationRepository, never()).save(any());
+        // 通知済み段階では隣室照会（room_availability_cache SELECT）も短絡すること
+        verify(adjacentRoomService, never()).getAdjacentRoomAvailability(any(), any());
     }
 
     @Test
@@ -158,7 +153,7 @@ class AdjacentRoomNotificationSchedulerTest {
         scheduler.checkCapacityAndNotify();
 
         verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
-        // flush 失敗でグローバル rollback-only 化済みのため、ローカルにも明示してコミット試行
+        // insert 失敗でグローバル rollback-only 化済みのため、ローカルにも明示してコミット試行
         // （= UnexpectedRollbackException）を回避すること
         verify(transactionStatus).setRollbackOnly();
     }

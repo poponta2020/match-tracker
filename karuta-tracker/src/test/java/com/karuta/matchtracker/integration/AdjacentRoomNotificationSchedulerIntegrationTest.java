@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.karuta.matchtracker.config.TestContainersConfig;
+import com.karuta.matchtracker.repository.AdjacentRoomNotificationRepository;
 import com.karuta.matchtracker.scheduler.AdjacentRoomNotificationScheduler;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -17,11 +18,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 
 /**
  * AdjacentRoomNotificationScheduler の実DBトランザクション回帰テスト（Issue #1034）
@@ -44,17 +49,25 @@ class AdjacentRoomNotificationSchedulerIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    /** TOCTOU競合テストで事前チェックのすり抜けを再現するための spy（他のテストでは素通し） */
+    @MockitoSpyBean
+    private AdjacentRoomNotificationRepository adjacentRoomNotificationRepository;
+
     private ListAppender<ILoggingEvent> logAppender;
     private Logger schedulerLogger;
 
     // 監視期間（翌日〜40日先）に確実に入る対象日
     private final LocalDate sessionDate = JstDateTimeUtil.today().plusDays(3);
 
-    @BeforeEach
-    void setUp() {
+    private void resetTables() {
         jdbcTemplate.execute(
                 "TRUNCATE TABLE practice_sessions, adjacent_room_notifications, " +
                 "room_availability_cache, notifications, players RESTART IDENTITY CASCADE");
+    }
+
+    @BeforeEach
+    void setUp() {
+        resetTables();
 
         // venue 3（すずらん・隣室チェック対象）の未来セッション。
         // capacity=4・参加者0人 → 残り4人 = 閾値ちょうどで通知対象になる
@@ -78,9 +91,7 @@ class AdjacentRoomNotificationSchedulerIntegrationTest {
     @AfterEach
     void tearDown() {
         schedulerLogger.detachAppender(logAppender);
-        jdbcTemplate.execute(
-                "TRUNCATE TABLE practice_sessions, adjacent_room_notifications, " +
-                "room_availability_cache, notifications RESTART IDENTITY CASCADE");
+        resetTables();
     }
 
     private Long sessionId() {
@@ -124,6 +135,38 @@ class AdjacentRoomNotificationSchedulerIntegrationTest {
                 .isEmpty();
 
         // 重複レコードが増えず、通知も再送されない
+        Integer recordCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM adjacent_room_notifications WHERE session_id = ?",
+                Integer.class, sessionId());
+        assertThat(recordCount).isEqualTo(1);
+
+        Integer sentNotifications = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM notifications", Integer.class);
+        assertThat(sentNotifications).isZero();
+    }
+
+    @Test
+    @DisplayName("回帰: TOCTOU競合（事前チェックすり抜け→実DBの一意制約違反）でも rollback-only の ERROR にならない")
+    void concurrentDuplicateInsert_doesNotLogRollbackOnlyError() {
+        // 他インスタンスが insert 済みの状態
+        jdbcTemplate.update(
+                "INSERT INTO adjacent_room_notifications (session_id, remaining_count, notified_at) " +
+                "VALUES (?, 4, NOW())", sessionId());
+
+        // 事前チェックだけをすり抜けさせ（チェック後に他インスタンスが insert した競合を再現）、
+        // save() を実DBの一意制約に衝突させて catch → setRollbackOnly() 経路を実トランザクションで通す
+        doReturn(false).when(adjacentRoomNotificationRepository)
+                .existsBySessionIdAndRemainingCount(anyLong(), eq(4));
+
+        scheduler.checkCapacityAndNotify();
+
+        // setRollbackOnly() によりコミット試行が行われず、静かにロールバックされること
+        // （setRollbackOnly() を外すとグローバル rollback-only だけが残り、コミット時の
+        //  UnexpectedRollbackException が外側 catch で ERROR ログになりこの assert が落ちる）
+        assertThat(errorLogs())
+                .as("TOCTOU競合スキップで ERROR ログが出ないこと")
+                .isEmpty();
+
         Integer recordCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM adjacent_room_notifications WHERE session_id = ?",
                 Integer.class, sessionId());
