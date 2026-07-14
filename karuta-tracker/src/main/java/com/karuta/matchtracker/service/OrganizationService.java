@@ -8,9 +8,9 @@ import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
 import com.karuta.matchtracker.repository.PushNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -158,14 +158,14 @@ public class OrganizationService {
         if (playerOrganizationRepository.existsByPlayerIdAndOrganizationId(playerId, organizationId)) {
             return;
         }
-        try {
-            PlayerOrganization po = PlayerOrganization.builder()
-                    .playerId(playerId)
-                    .organizationId(organizationId)
-                    .build();
-            playerOrganizationRepository.save(po);
-        } catch (DataIntegrityViolationException e) {
-            // 同時リクエストで既に登録済みの場合は無視（冪等性保証）
+        // ID が IDENTITY 採番のため save() は即時 INSERT となり、並列リクエストとの一意制約違反を
+        // catch しても参加中トランザクションの rollback-only マークは解除できず、呼び出し元の
+        // コミットが UnexpectedRollbackException で 500 になる（Issue #1037）。
+        // 例外を発生させない ON CONFLICT DO NOTHING の原子的 INSERT で冪等性を保証する。
+        int inserted = playerOrganizationRepository.insertIfAbsent(
+                playerId, organizationId, JstDateTimeUtil.now());
+        if (inserted == 0) {
+            // 同時リクエストが先に登録済み（通知設定も先行リクエスト側が作成する）
             log.debug("Player {} already belongs to organization {} (concurrent insert)", playerId, organizationId);
             return;
         }
