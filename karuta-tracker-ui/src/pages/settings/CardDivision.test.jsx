@@ -95,8 +95,12 @@ describe('CardDivision', () => {
     await screen.findByDisplayValue(/1試合目/);
 
     const user = userEvent.setup();
+    // clipboard 未実装環境でも writeText を持たせてから spy する（空オブジェクトだと spy が例外になる）
     if (!navigator.clipboard) {
-      Object.defineProperty(navigator, 'clipboard', { value: {}, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: vi.fn().mockResolvedValue(undefined) },
+        configurable: true,
+      });
     }
     vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
 
