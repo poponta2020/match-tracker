@@ -27,6 +27,16 @@ public interface PracticeSessionRepository extends JpaRepository<PracticeSession
     Optional<PracticeSession> findBySessionDate(LocalDate sessionDate);
 
     /**
+     * 日付で練習日を全件検索（団体をまたぐ）。
+     * 一意制約は (session_date, organization_id) の複合のため、同一日に複数団体のセッションが並ぶ。
+     * 札分けリマインダースケジューラが当日の全団体セッションを走査するのに使う。
+     *
+     * @param sessionDate 練習日
+     * @return 当該日の全セッション（団体別）
+     */
+    List<PracticeSession> findAllBySessionDate(LocalDate sessionDate);
+
+    /**
      * 期間内の練習日を取得（日付の昇順）
      */
     @Query("SELECT ps FROM PracticeSession ps WHERE ps.sessionDate BETWEEN :startDate AND :endDate ORDER BY ps.sessionDate ASC")

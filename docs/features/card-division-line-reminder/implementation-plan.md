@@ -44,7 +44,7 @@ status: completed
 - **対応Issue:** #1047
 
 ### タスク3: 1試合目3時間前スケジューラ＋LINE送信　★scheduler/通知の高リスクパス
-- [ ] 完了
+- [x] 完了（CardDivisionReminderScheduler＋sendCardDivisionReminder。per-orgゲート・dedupeKey=sessionId）
 - **目的:** 当日セッションの1試合目開始3時間前に、購読者へ札組テキストをLINE送信する。
 - **対応AC:** AC-6, AC-7, AC-8
 - **主な変更領域:**
