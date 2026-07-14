@@ -43,7 +43,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: 前回練習日回避ロジックの実装 ＋ 決定的コアテスト ＋ spec更新
-- [ ] 完了
+- [x] 完了
 - **目的:** 自動シャッフルで同一団体の前回練習日ペアに強いペナルティを加え、他に相手がいる限り再形成しない。相手が尽きた場合は待機者を増やさず組む。
 - **対応AC:** AC-1, AC-2, AC-5, AC-9
 - **主な変更領域:**
@@ -60,7 +60,7 @@ status: completed
 - **対応Issue:** #1042
 
 ### タスク2: 団体スコープ・エッジ・回帰テストの網羅
-- [ ] 完了
+- [x] 完了
 - **目的:** 団体スコープ・遡り・多人数時の非退行など残りACをテストで固定する。
 - **対応AC:** AC-3, AC-4, AC-6, AC-7, AC-8, AC-9
 - **主な変更領域:** `karuta-tracker/src/test/java/com/karuta/matchtracker/service/MatchPairingServiceTest.java`（既存 `MatchPairingIntegrationTest` に統合テストを足すかは実装時判断）

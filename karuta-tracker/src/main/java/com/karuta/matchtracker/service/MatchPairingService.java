@@ -35,6 +35,20 @@ public class MatchPairingService {
     private static final double SAME_DAY_PENALTY_SCORE = -1000.0;
     private static final double INTERVAL_BASE_SCORE = 100.0;
 
+    /**
+     * 前回練習日（同一団体）で組んだペアに加算する固定ペナルティ。
+     *
+     * スコア計算パスに乗る非・前回ペアのベーススコアは常に (-100, 0]（同日ペアは
+     * {@code todayMatches} でスコア前に完全除外され、履歴クエリの endDate は排他ゆえ
+     * daysAgo >= 1 が保証される）。よって前回ペアは必ず [-1100, -1000) に落ち、全ての
+     * 非・前回ペアより厳密に下位になる。一方で有限値のため「他に組める相手がいない」
+     * 少人数ケースでは最後の手段として選択され、待機者を増やさない（グレースフル劣化）。
+     */
+    private static final double PREVIOUS_PRACTICE_PENALTY = -1000.0;
+
+    /** 前回練習日を特定するために遡る過去セッションの最大件数（クエリ上限）。 */
+    private static final int MAX_PREV_LOOKBACK = 20;
+
     /** 選手起点の最近ペアリング取得で返す最大件数。 */
     private static final int RECENT_PAIRINGS_LIMIT = 30;
 
@@ -955,6 +969,16 @@ public class MatchPairingService {
         // 組織スコープを引き継ぎ、別団体の前試合ペアが当該団体の候補から除外されないようにする
         Set<String> todayMatches = getTodayPairings(sessionDate, matchNumber, sessionPlayerIds, orgScoped);
 
+        // 前回練習日（同一団体）で組んだペア集合を求める（強い回避用）。
+        // 実効団体IDの解決は loadActiveParticipantIdsForMatch（L1131）と同じ縮退挙動に倣い、
+        // organizationId==null（SUPER_ADMIN）のときは当日セッションから団体を解決する。
+        Long effectiveOrganizationId = organizationId != null
+                ? organizationId
+                : practiceSessionRepository.findBySessionDate(sessionDate)
+                        .map(com.karuta.matchtracker.entity.PracticeSession::getOrganizationId)
+                        .orElse(null);
+        Set<String> previousPracticePairKeys = findPreviousPracticePairKeys(sessionDate, effectiveOrganizationId);
+
         // スコアを計算して最適なペアリングを生成
         List<AutoMatchingResult.PairingSuggestion> pairings = new ArrayList<>();
         Set<Long> paired = new HashSet<>();
@@ -975,7 +999,7 @@ public class MatchPairingService {
                     String pairKey = getPairKey(p1, p2);
                     if (todayMatches.contains(pairKey)) continue;
 
-                    double score = calculatePairScore(p1, p2, matchHistoryMap, sessionDate);
+                    double score = calculatePairScore(p1, p2, matchHistoryMap, sessionDate, previousPracticePairKeys);
 
                     if (score > bestScore) {
                         bestScore = score;
@@ -1221,32 +1245,83 @@ public class MatchPairingService {
 
     /**
      * ペアのスコアを計算
+     *
+     * <p>既存の日数ベーススコアを算出したうえで、候補ペアが「前回練習日ペア集合」
+     * （同一団体の直近の対戦がある練習日に組まれたペア）に含まれる場合は
+     * {@link #PREVIOUS_PRACTICE_PENALTY} を加算し、他に組める相手がいる限り再形成
+     * されないよう強く回避する（ソフトペナルティ＝グレースフル劣化）。</p>
      */
     private double calculatePairScore(Long player1, Long player2,
                                       Map<String, List<LocalDate>> matchHistoryMap,
-                                      LocalDate sessionDate) {
+                                      LocalDate sessionDate,
+                                      Set<String> previousPracticePairKeys) {
         String pairKey = getPairKey(player1, player2);
         List<LocalDate> history = matchHistoryMap.getOrDefault(pairKey, Collections.emptyList());
 
+        double base;
         if (history.isEmpty()) {
             // 初対戦は高スコア
-            return 0;
+            base = 0;
+        } else {
+            // 最後の対戦からの日数に基づいてスコアを計算（日数が多いほど高スコア）
+            LocalDate lastMatch = history.stream().max(LocalDate::compareTo).orElse(null);
+            if (lastMatch == null) {
+                base = 0;
+            } else {
+                long daysAgo = ChronoUnit.DAYS.between(lastMatch, sessionDate);
+                // 同日または未来の日付の場合は最低スコアを返す
+                base = daysAgo <= 0 ? SAME_DAY_PENALTY_SCORE : -(INTERVAL_BASE_SCORE / daysAgo);
+            }
         }
 
-        // 最後の対戦からの日数に基づいてスコアを計算（日数が多いほど高スコア）
-        LocalDate lastMatch = history.stream().max(LocalDate::compareTo).orElse(null);
-        if (lastMatch == null) {
-            return 0;
+        // 前回練習日ペアは固定ペナルティを加算して強く回避する（最後の手段としてのみ選択）
+        if (previousPracticePairKeys.contains(pairKey)) {
+            base += PREVIOUS_PRACTICE_PENALTY;
         }
+        return base;
+    }
 
-        long daysAgo = ChronoUnit.DAYS.between(lastMatch, sessionDate);
-
-        // 同日または未来の日付の場合は最低スコアを返す
-        if (daysAgo <= 0) {
-            return SAME_DAY_PENALTY_SCORE;
+    /**
+     * 同一団体の「前回練習日」に組まれた全ペアのキー集合を求める（自動シャッフルの強い回避用）。
+     *
+     * <p>「前回練習日」= 今回のセッション日より前で、実際に対戦（組み合わせ／試合結果）がある
+     * 直近の練習日 1 日分。直前の練習日が対戦なし（中止・記録なし）の場合は、対戦がある日まで
+     * さらに遡る。過去30日窓には依存せず、団体の過去セッションを最大 {@link #MAX_PREV_LOOKBACK}
+     * 件まで降順に遡って特定する。</p>
+     *
+     * <p>ペアは {@code match_pairings}（組み合わせ）と {@code matches}（試合結果）の両方から収集し、
+     * いずれも当該団体のその日のセッション参加者で AND フィルタ（{@code orgScoped=true}）する。
+     * これにより別団体の同日ペアはペナルティ対象に混入しない。</p>
+     *
+     * @param sessionDate 今回のセッション日
+     * @param organizationId 実効団体ID（null＝団体を解決できない SUPER_ADMIN ケースは空集合＝ペナルティなし）
+     * @return 前回練習日ペアのキー集合（該当なしは空集合）
+     */
+    private Set<String> findPreviousPracticePairKeys(LocalDate sessionDate, Long organizationId) {
+        if (organizationId == null) {
+            return Collections.emptySet();
         }
-
-        return -(INTERVAL_BASE_SCORE / daysAgo);
+        List<LocalDate> pastDates = practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                organizationId, sessionDate, PageRequest.of(0, MAX_PREV_LOOKBACK));
+        for (LocalDate day : pastDates) {
+            Set<Long> dayPlayerIds = getSessionAllPlayerIds(day, organizationId);
+            Set<String> pairKeys = new HashSet<>();
+            // 組み合わせ（match_pairings）から収集（団体スコープ AND フィルタ）
+            for (MatchPairing p : filterPairingsBySession(
+                    matchPairingRepository.findBySessionDateOrderByMatchNumber(day), dayPlayerIds, true)) {
+                pairKeys.add(getPairKey(p.getPlayer1Id(), p.getPlayer2Id()));
+            }
+            // 試合結果（matches）からも収集（同上）
+            for (Match m : filterMatchesBySession(
+                    matchRepository.findByMatchDateOrderByMatchNumber(day), dayPlayerIds, true)) {
+                pairKeys.add(getPairKey(m.getPlayer1Id(), m.getPlayer2Id()));
+            }
+            // 対戦がある最初の日＝前回練習日。その集合を返して探索を打ち切る（対戦なしの日は自然にスキップ）。
+            if (!pairKeys.isEmpty()) {
+                return pairKeys;
+            }
+        }
+        return Collections.emptySet();
     }
 
     /**
