@@ -1,7 +1,6 @@
 package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.entity.Organization;
-import com.karuta.matchtracker.entity.PlayerOrganization;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LineNotificationPreferenceRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
@@ -14,8 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,12 +44,13 @@ class OrganizationServiceTest {
     @DisplayName("未所属の場合、団体と通知設定が追加される")
     void ensure_notMember_addsOrganizationAndNotificationPreferences() {
         when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(1L, 2L)).thenReturn(false);
+        when(playerOrganizationRepository.insertIfAbsent(eq(1L), eq(2L), any(LocalDateTime.class))).thenReturn(1);
         when(pushNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(1L, 2L)).thenReturn(Optional.empty());
         when(lineNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(1L, 2L)).thenReturn(Optional.empty());
 
         organizationService.ensurePlayerBelongsToOrganization(1L, 2L);
 
-        verify(playerOrganizationRepository).save(any(PlayerOrganization.class));
+        verify(playerOrganizationRepository).insertIfAbsent(eq(1L), eq(2L), any(LocalDateTime.class));
         verify(pushNotificationPreferenceRepository).save(any());
         verify(lineNotificationPreferenceRepository).save(any());
     }
@@ -62,7 +62,7 @@ class OrganizationServiceTest {
 
         organizationService.ensurePlayerBelongsToOrganization(1L, 2L);
 
-        verify(playerOrganizationRepository, never()).save(any());
+        verify(playerOrganizationRepository, never()).insertIfAbsent(anyLong(), anyLong(), any());
         verify(pushNotificationPreferenceRepository, never()).save(any());
         verify(lineNotificationPreferenceRepository, never()).save(any());
     }
@@ -73,19 +73,20 @@ class OrganizationServiceTest {
         organizationService.ensurePlayerBelongsToOrganization(1L, null);
 
         verify(playerOrganizationRepository, never()).existsByPlayerIdAndOrganizationId(anyLong(), anyLong());
-        verify(playerOrganizationRepository, never()).save(any());
+        verify(playerOrganizationRepository, never()).insertIfAbsent(anyLong(), anyLong(), any());
     }
 
     @Test
-    @DisplayName("同時リクエストでユニーク制約違反が発生しても例外にならない")
+    @DisplayName("同時リクエストと競合しても例外にならない（ON CONFLICT で挿入0行）")
     void ensure_concurrentInsert_handledGracefully() {
         when(playerOrganizationRepository.existsByPlayerIdAndOrganizationId(1L, 2L)).thenReturn(false);
-        when(playerOrganizationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+        // 事前チェック通過後に別リクエストが先に登録 → ON CONFLICT DO NOTHING で挿入0行
+        when(playerOrganizationRepository.insertIfAbsent(eq(1L), eq(2L), any(LocalDateTime.class))).thenReturn(0);
 
         organizationService.ensurePlayerBelongsToOrganization(1L, 2L);
 
-        verify(playerOrganizationRepository).save(any(PlayerOrganization.class));
-        // 例外は握り潰されるので、通知設定は作成されない（既に別リクエストで作成済み）
+        verify(playerOrganizationRepository).insertIfAbsent(eq(1L), eq(2L), any(LocalDateTime.class));
+        // 競合に負けた側は通知設定を作成しない（先行リクエスト側が作成済み）
         verify(pushNotificationPreferenceRepository, never()).save(any());
     }
 
