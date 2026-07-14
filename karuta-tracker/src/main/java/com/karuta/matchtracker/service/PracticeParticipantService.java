@@ -24,6 +24,8 @@ import com.karuta.matchtracker.util.JstDateTimeUtil;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,6 +48,11 @@ public class PracticeParticipantService {
             ParticipantStatus.CANCELLED,
             ParticipantStatus.DECLINED,
             ParticipantStatus.WAITLIST_DECLINED);
+
+    /** 参加率ランキングの並び順: 参加率降順 → 参加試合数降順 */
+    private static final Comparator<ParticipationRateDto> RATE_ORDER =
+            Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
+                    .thenComparing(Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed());
 
     private final PracticeParticipantRepository practiceParticipantRepository;
     private final PracticeSessionRepository practiceSessionRepository;
@@ -808,8 +815,7 @@ public class PracticeParticipantService {
     @Transactional(readOnly = true)
     public List<ParticipationRateDto> getParticipationRateTop3(int year, int month) {
         return computeAllParticipationRates(year, month).stream()
-                .sorted(java.util.Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
-                        .thenComparing(java.util.Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
+                .sorted(RATE_ORDER)
                 .limit(3).collect(Collectors.toList());
     }
 
@@ -827,67 +833,88 @@ public class PracticeParticipantService {
 
         List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
         List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-        return buildParticipationRates(sessions, allParticipants, null);
+        return buildParticipationRates(sessions, allParticipants, null, loadActivePlayerNames());
     }
 
-    // === 団体フィルタ対応メソッド ===
+    // === 団体別参加率グループ（ホーム画面用） ===
 
+    /**
+     * ホーム画面の参加率グループ（団体別 top3 + 自分の参加率）を一括構築する。
+     *
+     * 月間データ（セッション・参加者・団体メンバー・プレイヤー名）を1回だけロードし、
+     * 全グループをメモリ上で導出する。以前はグループ ×（top3 / myRate）ごとに同じ月間データを
+     * 再ロードしており（最大6回のフル再計算）、DB との RTT が大きい環境で /api/home が
+     * 数十秒かかる原因になっていた。
+     *
+     * グループ構成:
+     * <ul>
+     *   <li>1団体所属: その団体のみ（団体名はフロント側で非表示）</li>
+     *   <li>複数団体所属: 「全体」（全団体合算）+ 各団体</li>
+     * </ul>
+     * myRate は各グループの全参加率リストから対象プレイヤーを引き当てる（top3 圏外でも再計算しない）。
+     */
     @Transactional(readOnly = true)
-    public List<ParticipationRateDto> getParticipationRateTop3(int year, int month, Long organizationId) {
-        return computeAllParticipationRates(year, month, organizationId).stream()
-                .sorted(java.util.Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
-                        .thenComparing(java.util.Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
-                .limit(3).collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<ParticipationRateDto> getParticipationRateTop3(int year, int month, List<Long> organizationIds) {
-        return computeAllParticipationRates(year, month, organizationIds).stream()
-                .sorted(java.util.Comparator.comparingDouble(ParticipationRateDto::getRate).reversed()
-                        .thenComparing(java.util.Comparator.comparingInt(ParticipationRateDto::getParticipatedMatches).reversed()))
-                .limit(3).collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public ParticipationRateDto getPlayerParticipationRate(Long playerId, int year, int month, Long organizationId) {
-        return computeAllParticipationRates(year, month, organizationId).stream()
-                .filter(r -> r.getPlayerId().equals(playerId)).findFirst().orElse(null);
-    }
-
-    @Transactional(readOnly = true)
-    public ParticipationRateDto getPlayerParticipationRate(Long playerId, int year, int month, List<Long> organizationIds) {
-        return computeAllParticipationRates(year, month, organizationIds).stream()
-                .filter(r -> r.getPlayerId().equals(playerId)).findFirst().orElse(null);
-    }
-
-    private List<ParticipationRateDto> computeAllParticipationRates(int year, int month, Long organizationId) {
+    public List<ParticipationGroupDto> getParticipationGroups(Long playerId, int year, int month,
+                                                              List<OrganizationDto> organizations) {
+        if (organizations.isEmpty()) {
+            return List.of();
+        }
         LocalDate today = JstDateTimeUtil.today();
-        List<PracticeSession> sessions = practiceSessionRepository.findByYearAndMonthAndOrganizationId(year, month, organizationId).stream()
-                .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
-        if (sessions.isEmpty()) return List.of();
+        List<Long> orgIds = organizations.stream().map(OrganizationDto::getId).toList();
 
-        Set<Long> memberPlayerIds = playerOrganizationRepository.findByOrganizationId(organizationId).stream()
-                .map(PlayerOrganization::getPlayerId).collect(Collectors.toSet());
+        // 月間データを1回だけロード
+        List<PracticeSession> allSessions = practiceSessionRepository
+                .findByOrganizationIdInAndYearAndMonth(orgIds, year, month).stream()
+                .filter(s -> !s.getSessionDate().isAfter(today)).toList();
+        List<Long> allSessionIds = allSessions.stream().map(PracticeSession::getId).toList();
+        List<PracticeParticipant> allParticipants = allSessionIds.isEmpty()
+                ? List.of()
+                : practiceParticipantRepository.findBySessionIdIn(allSessionIds);
+        Map<Long, Set<Long>> memberIdsByOrg = playerOrganizationRepository.findByOrganizationIdIn(orgIds).stream()
+                .collect(Collectors.groupingBy(PlayerOrganization::getOrganizationId,
+                        Collectors.mapping(PlayerOrganization::getPlayerId, Collectors.toSet())));
+        Map<Long, String> names = loadActivePlayerNames();
 
-        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
-        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-        return buildParticipationRates(sessions, allParticipants, memberPlayerIds);
+        List<ParticipationGroupDto> groups = new ArrayList<>();
+        if (organizations.size() > 1) {
+            // 全体（全団体合算）
+            Set<Long> allMemberIds = memberIdsByOrg.values().stream()
+                    .flatMap(Set::stream).collect(Collectors.toSet());
+            groups.add(buildGroup(playerId, null, "全体", allSessions, allParticipants, allMemberIds, names));
+        }
+        for (OrganizationDto org : organizations) {
+            List<PracticeSession> orgSessions = allSessions.stream()
+                    .filter(s -> org.getId().equals(s.getOrganizationId())).toList();
+            Set<Long> orgSessionIds = orgSessions.stream()
+                    .map(PracticeSession::getId).collect(Collectors.toSet());
+            List<PracticeParticipant> orgParticipants = allParticipants.stream()
+                    .filter(pp -> orgSessionIds.contains(pp.getSessionId())).toList();
+            groups.add(buildGroup(playerId, org.getId(), org.getName(), orgSessions, orgParticipants,
+                    memberIdsByOrg.getOrDefault(org.getId(), Set.of()), names));
+        }
+        return groups;
     }
 
-    private List<ParticipationRateDto> computeAllParticipationRates(int year, int month, List<Long> organizationIds) {
-        LocalDate today = JstDateTimeUtil.today();
-        List<PracticeSession> sessions = practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(organizationIds, year, month).stream()
-                .filter(s -> !s.getSessionDate().isAfter(today)).collect(Collectors.toList());
-        if (sessions.isEmpty()) return List.of();
+    private ParticipationGroupDto buildGroup(Long playerId, Long orgId, String orgName,
+                                             List<PracticeSession> sessions,
+                                             List<PracticeParticipant> participants,
+                                             Set<Long> memberPlayerIds,
+                                             Map<Long, String> names) {
+        List<ParticipationRateDto> rates = buildParticipationRates(sessions, participants, memberPlayerIds, names);
+        List<ParticipationRateDto> top3 = rates.stream().sorted(RATE_ORDER).limit(3).toList();
+        ParticipationRateDto myRate = rates.stream()
+                .filter(r -> r.getPlayerId().equals(playerId)).findFirst().orElse(null);
+        return ParticipationGroupDto.builder()
+                .organizationId(orgId)
+                .organizationName(orgName)
+                .top3(top3)
+                .myRate(myRate)
+                .build();
+    }
 
-        Set<Long> memberPlayerIds = organizationIds.stream()
-                .flatMap(orgId -> playerOrganizationRepository.findByOrganizationId(orgId).stream())
-                .map(PlayerOrganization::getPlayerId)
-                .collect(Collectors.toSet());
-
-        List<Long> sessionIds = sessions.stream().map(PracticeSession::getId).collect(Collectors.toList());
-        List<PracticeParticipant> allParticipants = practiceParticipantRepository.findBySessionIdIn(sessionIds);
-        return buildParticipationRates(sessions, allParticipants, memberPlayerIds);
+    private Map<Long, String> loadActivePlayerNames() {
+        return playerRepository.findAllActive().stream()
+                .collect(Collectors.toMap(Player::getId, Player::getName));
     }
 
     /**
@@ -904,11 +931,13 @@ public class PracticeParticipantService {
      * </ul>
      *
      * @param memberPlayerIds 対象プレイヤーのフィルタ。null の場合は全プレイヤーを対象とする。
+     * @param names playerId → 表示名のマップ（呼び出し元で1回だけロードして渡す）
      */
     private List<ParticipationRateDto> buildParticipationRates(
             List<PracticeSession> sessions,
             List<PracticeParticipant> allParticipants,
-            Set<Long> memberPlayerIds) {
+            Set<Long> memberPlayerIds,
+            Map<Long, String> names) {
 
         int totalScheduledMatches = sessions.stream()
                 .mapToInt(s -> s.getTotalMatches() != null ? s.getTotalMatches() : 0).sum();
@@ -927,9 +956,6 @@ public class PracticeParticipantService {
                 .forEach(pp -> perPlayerPerSession
                         .computeIfAbsent(pp.getPlayerId(), k -> new HashMap<>())
                         .merge(pp.getSessionId(), 1, Integer::sum));
-
-        Map<Long, String> names = playerRepository.findAllActive().stream()
-                .collect(Collectors.toMap(Player::getId, Player::getName));
 
         return perPlayerPerSession.entrySet().stream()
                 .map(entry -> {

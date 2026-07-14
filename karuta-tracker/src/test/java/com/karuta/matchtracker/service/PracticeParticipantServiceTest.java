@@ -1202,8 +1202,8 @@ class PracticeParticipantServiceTest {
     }
 
     @Test
-    @DisplayName("参加率TOP3(団体別): 全試合WON+抜け番(matchNumber=null)でも各セッションで予定試合数を上限にキャップし100%を超えない")
-    void getParticipationRateTop3_byeAndFullMatches_cappedAt100Percent() {
+    @DisplayName("参加率グループ(団体別): 全試合WON+抜け番(matchNumber=null)でも各セッションで予定試合数を上限にキャップし100%を超えない")
+    void getParticipationGroups_byeAndFullMatches_cappedAt100Percent() {
         LocalDate today = LocalDate.of(2026, 6, 19);
         try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
             jstMock.when(JstDateTimeUtil::today).thenReturn(today);
@@ -1211,9 +1211,9 @@ class PracticeParticipantServiceTest {
             PracticeSession session = createSession(100L, 7); // totalMatches=7
             session.setSessionDate(LocalDate.of(2026, 6, 10));
 
-            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 6, ORG_ID))
+            when(practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(List.of(ORG_ID), 2026, 6))
                     .thenReturn(List.of(session));
-            when(playerOrganizationRepository.findByOrganizationId(ORG_ID))
+            when(playerOrganizationRepository.findByOrganizationIdIn(List.of(ORG_ID)))
                     .thenReturn(List.of(com.karuta.matchtracker.entity.PlayerOrganization.builder()
                             .playerId(10L).organizationId(ORG_ID).build()));
 
@@ -1232,20 +1232,28 @@ class PracticeParticipantServiceTest {
             player.setName("白石新菜");
             when(playerRepository.findAllActive()).thenReturn(List.of(player));
 
-            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 =
-                    service.getParticipationRateTop3(2026, 6, ORG_ID);
+            java.util.List<com.karuta.matchtracker.dto.ParticipationGroupDto> groups =
+                    service.getParticipationGroups(10L, 2026, 6,
+                            List.of(com.karuta.matchtracker.dto.OrganizationDto.builder()
+                                    .id(ORG_ID).name("テスト団体").build()));
 
+            // 1団体所属 → 「全体」グループなしでその団体のみ
+            assertThat(groups).hasSize(1);
+            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 = groups.get(0).getTop3();
             assertThat(top3).hasSize(1);
             // 8行あっても totalMatches=7 でキャップ
             assertThat(top3.get(0).getParticipatedMatches()).isEqualTo(7);
             assertThat(top3.get(0).getTotalScheduledMatches()).isEqualTo(7);
             assertThat(top3.get(0).getRate()).isEqualTo(1.0); // 114%ではなく100%
+            // myRate は同一データから引き当てられる
+            assertThat(groups.get(0).getMyRate()).isNotNull();
+            assertThat(groups.get(0).getMyRate().getRate()).isEqualTo(1.0);
         }
     }
 
     @Test
-    @DisplayName("参加率TOP3(団体別): CANCELLED/WAITLISTED/DECLINED 等の無効ステータスは分子に含めない")
-    void getParticipationRateTop3_excludesInactiveStatuses() {
+    @DisplayName("参加率グループ(団体別): CANCELLED/WAITLISTED/DECLINED 等の無効ステータスは分子に含めない")
+    void getParticipationGroups_excludesInactiveStatuses() {
         LocalDate today = LocalDate.of(2026, 6, 19);
         try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
             jstMock.when(JstDateTimeUtil::today).thenReturn(today);
@@ -1253,9 +1261,9 @@ class PracticeParticipantServiceTest {
             PracticeSession session = createSession(100L, 7); // totalMatches=7
             session.setSessionDate(LocalDate.of(2026, 6, 10));
 
-            when(practiceSessionRepository.findByYearAndMonthAndOrganizationId(2026, 6, ORG_ID))
+            when(practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(List.of(ORG_ID), 2026, 6))
                     .thenReturn(List.of(session));
-            when(playerOrganizationRepository.findByOrganizationId(ORG_ID))
+            when(playerOrganizationRepository.findByOrganizationIdIn(List.of(ORG_ID)))
                     .thenReturn(List.of(com.karuta.matchtracker.entity.PlayerOrganization.builder()
                             .playerId(10L).organizationId(ORG_ID).build()));
 
@@ -1276,13 +1284,100 @@ class PracticeParticipantServiceTest {
             player.setName("白石新菜");
             when(playerRepository.findAllActive()).thenReturn(List.of(player));
 
-            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 =
-                    service.getParticipationRateTop3(2026, 6, ORG_ID);
+            java.util.List<com.karuta.matchtracker.dto.ParticipationGroupDto> groups =
+                    service.getParticipationGroups(10L, 2026, 6,
+                            List.of(com.karuta.matchtracker.dto.OrganizationDto.builder()
+                                    .id(ORG_ID).name("テスト団体").build()));
 
+            assertThat(groups).hasSize(1);
+            java.util.List<com.karuta.matchtracker.dto.ParticipationRateDto> top3 = groups.get(0).getTop3();
             assertThat(top3).hasSize(1);
             assertThat(top3.get(0).getParticipatedMatches()).isEqualTo(4); // 有効4のみ
             assertThat(top3.get(0).getTotalScheduledMatches()).isEqualTo(7);
             assertThat(top3.get(0).getRate()).isEqualTo(4.0 / 7.0);
+        }
+    }
+
+    @Test
+    @DisplayName("参加率グループ(複数団体): 全体+各団体の3グループを構築し、月間データのロードは各リポジトリ1回だけ")
+    void getParticipationGroups_multiOrg_buildsAllGroupsWithSingleLoad() {
+        LocalDate today = LocalDate.of(2026, 6, 19);
+        Long org2Id = 2L;
+        try (MockedStatic<JstDateTimeUtil> jstMock = mockStatic(JstDateTimeUtil.class)) {
+            jstMock.when(JstDateTimeUtil::today).thenReturn(today);
+
+            // 団体1のセッション(100L)と団体2のセッション(200L)、各 totalMatches=7
+            PracticeSession session1 = createSession(100L, 7); // organizationId=ORG_ID
+            session1.setSessionDate(LocalDate.of(2026, 6, 10));
+            PracticeSession session2 = createSession(200L, 7);
+            session2.setOrganizationId(org2Id);
+            session2.setSessionDate(LocalDate.of(2026, 6, 12));
+
+            when(practiceSessionRepository.findByOrganizationIdInAndYearAndMonth(List.of(ORG_ID, org2Id), 2026, 6))
+                    .thenReturn(List.of(session1, session2));
+            when(playerOrganizationRepository.findByOrganizationIdIn(List.of(ORG_ID, org2Id)))
+                    .thenReturn(List.of(
+                            com.karuta.matchtracker.entity.PlayerOrganization.builder()
+                                    .playerId(10L).organizationId(ORG_ID).build(),
+                            com.karuta.matchtracker.entity.PlayerOrganization.builder()
+                                    .playerId(20L).organizationId(org2Id).build()));
+
+            // p10=団体1で3試合WON、p20=団体2で7試合WON
+            java.util.List<PracticeParticipant> participants = new java.util.ArrayList<>();
+            for (int m = 1; m <= 3; m++) {
+                participants.add(buildParticipant(100L, 10L, m, ParticipantStatus.WON));
+            }
+            for (int m = 1; m <= 7; m++) {
+                participants.add(buildParticipant(200L, 20L, m, ParticipantStatus.WON));
+            }
+            when(practiceParticipantRepository.findBySessionIdIn(List.of(100L, 200L)))
+                    .thenReturn(participants);
+
+            com.karuta.matchtracker.entity.Player p10 = new com.karuta.matchtracker.entity.Player();
+            p10.setId(10L);
+            p10.setName("白石新菜");
+            com.karuta.matchtracker.entity.Player p20 = new com.karuta.matchtracker.entity.Player();
+            p20.setId(20L);
+            p20.setName("泉駆");
+            when(playerRepository.findAllActive()).thenReturn(List.of(p10, p20));
+
+            java.util.List<com.karuta.matchtracker.dto.ParticipationGroupDto> groups =
+                    service.getParticipationGroups(10L, 2026, 6, List.of(
+                            com.karuta.matchtracker.dto.OrganizationDto.builder().id(ORG_ID).name("団体1").build(),
+                            com.karuta.matchtracker.dto.OrganizationDto.builder().id(org2Id).name("団体2").build()));
+
+            // 全体 + 団体1 + 団体2 の3グループ（この順）
+            assertThat(groups).hasSize(3);
+            assertThat(groups.get(0).getOrganizationId()).isNull();
+            assertThat(groups.get(0).getOrganizationName()).isEqualTo("全体");
+            assertThat(groups.get(1).getOrganizationId()).isEqualTo(ORG_ID);
+            assertThat(groups.get(2).getOrganizationId()).isEqualTo(org2Id);
+
+            // 全体: 分母14（7+7）、p20=7/14 が1位、p10=3/14。myRate は p10
+            com.karuta.matchtracker.dto.ParticipationGroupDto all = groups.get(0);
+            assertThat(all.getTop3()).hasSize(2);
+            assertThat(all.getTop3().get(0).getPlayerId()).isEqualTo(20L);
+            assertThat(all.getTop3().get(0).getRate()).isEqualTo(7.0 / 14.0);
+            assertThat(all.getMyRate().getPlayerId()).isEqualTo(10L);
+            assertThat(all.getMyRate().getRate()).isEqualTo(3.0 / 14.0);
+
+            // 団体1: 自団体セッションのみが分母（7）。他団体の参加は混入しない
+            com.karuta.matchtracker.dto.ParticipationGroupDto g1 = groups.get(1);
+            assertThat(g1.getTop3()).hasSize(1);
+            assertThat(g1.getTop3().get(0).getPlayerId()).isEqualTo(10L);
+            assertThat(g1.getTop3().get(0).getRate()).isEqualTo(3.0 / 7.0);
+
+            // 団体2: p10 は非メンバーなので myRate は null
+            com.karuta.matchtracker.dto.ParticipationGroupDto g2 = groups.get(2);
+            assertThat(g2.getTop3()).hasSize(1);
+            assertThat(g2.getTop3().get(0).getPlayerId()).isEqualTo(20L);
+            assertThat(g2.getMyRate()).isNull();
+
+            // 月間データのロードは各リポジトリ1回だけ（改修の主目的: グループ×top3/myRate ごとの再ロード撤廃）
+            verify(practiceSessionRepository, times(1)).findByOrganizationIdInAndYearAndMonth(anyList(), anyInt(), anyInt());
+            verify(practiceParticipantRepository, times(1)).findBySessionIdIn(anyList());
+            verify(playerOrganizationRepository, times(1)).findByOrganizationIdIn(anyList());
+            verify(playerRepository, times(1)).findAllActive();
         }
     }
 
