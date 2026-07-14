@@ -62,7 +62,14 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
             <span
               key={c}
               className="tr-chip"
-              onClick={(e) => { e.stopPropagation(); unplace(c); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                // 札を選択中（arm状態）なら、既存チップの上をタップしても
+                // そのマスへ配置する（マスが埋まっていても隙間を狙う必要をなくす）。
+                // 非選択時は従来どおりタップした札を不明に戻す。
+                if (selected != null) place(field, side, tier, takenBy);
+                else unplace(c);
+              }}
             >
               {kimariji(c)}
             </span>
@@ -102,7 +109,7 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
             盤面は<b>自分視点</b>。上が<b>敵陣（奥）</b>、下が<b>自陣（手前）</b>。<br />
             敵陣は<b>上段が手前・下段が奥</b>、左右も相手基準（<b>敵陣右＝画面の左</b>）。<br />
             各マスの左＝<span className="g">取った（緑）</span>／右＝<span className="r">取られた（赤）</span>。<br />
-            「不明」の札をタップ → 置きたいマスをタップで配置。配置済みの札をタップで不明に戻す。
+            「不明」の札をタップ → 置きたいマスをタップで配置（<b>マス内に札があってもその上でOK</b>）。札を選んでいない時は、配置済みの札をタップで不明に戻せる。
           </div>
         )}
 
