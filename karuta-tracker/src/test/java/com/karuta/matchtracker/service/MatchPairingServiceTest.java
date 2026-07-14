@@ -1468,6 +1468,51 @@ class MatchPairingServiceTest {
         }
 
         @Test
+        @DisplayName("AC-3(matches経路): 前回練習日ペアは matches からも収集し、別団体の matches は団体スコープで除外する")
+        void shouldCollectPreviousPracticePairsFromMatchesAndScopeByOrganization() {
+            // Given: org=7L, 参加者{1,2,3}。前回練習日はペアリング(match_pairings)が無く、
+            // 試合結果(matches)のみ存在: 自団体(1,2) と 別団体(3,99)。matches 経路でも (1,2) は
+            // 回避対象になり、別団体(3,99: 99は非参加)は filterMatchesBySession で除外される。
+            LocalDate sessionDate = LocalDate.of(2024, 1, 15);
+            LocalDate prevDate = LocalDate.of(2024, 1, 8);
+            Integer matchNumber = 1;
+            Long organizationId = 7L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder()
+                    .sessionDate(sessionDate).matchNumber(matchNumber).build();
+
+            stubCurrentSession(sessionDate, matchNumber, organizationId,
+                    List.of(1L, 2L, 3L), List.of(player1, player2, player3));
+
+            when(practiceSessionRepository.findPastSessionDatesByOrganizationId(
+                    eq(organizationId), eq(sessionDate), any()))
+                    .thenReturn(List.of(prevDate));
+            when(practiceSessionRepository.findBySessionDateAndOrganizationId(prevDate, organizationId))
+                    .thenReturn(Optional.of(createSession(200L, prevDate)));
+            when(practiceParticipantRepository.findBySessionId(200L))
+                    .thenReturn(List.of(
+                            createPracticeParticipant(200L, 1, 1L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 2L, ParticipantStatus.WON),
+                            createPracticeParticipant(200L, 1, 3L, ParticipantStatus.WON)));
+            // 前回日のペアリング(match_pairings)は無し → 回避対象は matches 経路のみから来る
+            when(matchPairingRepository.findBySessionDateOrderByMatchNumber(prevDate))
+                    .thenReturn(Collections.emptyList());
+            // 前回日の試合結果(matches): 自団体(1,2) と 別団体(3,99)
+            when(matchRepository.findByMatchDateOrderByMatchNumber(prevDate))
+                    .thenReturn(List.of(
+                            createMatch(70L, prevDate, 1, 1L, 2L, 1L, 5),    // 自団体（両者参加者）→ ペナルティ対象
+                            createMatch(71L, prevDate, 1, 3L, 99L, 3L, 3))); // 別団体（99は非参加者）→ 除外
+
+            // When
+            AutoMatchingResult result = matchPairingService.autoMatch(request, organizationId);
+
+            // Then: matches 由来の前回ペア(1,2)のみ回避され選手3が組まれる。別団体の99は混入しない。
+            assertThat(result.getPairings()).hasSize(1);
+            AutoMatchingResult.PairingSuggestion pair = result.getPairings().get(0);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).contains(3L);
+            assertThat(List.of(pair.getPlayer1Id(), pair.getPlayer2Id())).doesNotContain(99L);
+        }
+
+        @Test
         @DisplayName("AC-4: 直前の練習日が対戦なしなら、さらに遡って直近の対戦がある練習日を前回練習日とする")
         void shouldSkipEmptyPracticeDayAndGoFurtherBack() {
             // Given: 過去日降順 [D-1(対戦なし), D-8(1-2対戦あり)]。D-1 はスキップされ D-8 の (1,2) が回避対象。
