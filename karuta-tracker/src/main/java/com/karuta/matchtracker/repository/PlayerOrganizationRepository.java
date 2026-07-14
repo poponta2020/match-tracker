@@ -19,6 +19,8 @@ public interface PlayerOrganizationRepository extends JpaRepository<PlayerOrgani
 
     List<PlayerOrganization> findByOrganizationId(Long organizationId);
 
+    List<PlayerOrganization> findByOrganizationIdIn(List<Long> organizationIds);
+
     boolean existsByPlayerIdAndOrganizationId(Long playerId, Long organizationId);
 
     /**

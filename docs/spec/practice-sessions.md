@@ -165,7 +165,7 @@ WON（抽選済みの当選）登録と PENDING（抽選前の参加申込）の
   - **1団体所属時**: 団体名ラベルなしで1セクション
   - **複数団体所属時**: 「全体」（全所属団体合算）→ 団体A → 団体B の順で複数セクション表示
   - レスポンス構造: `participationGroups` 配列（各要素に `organizationId`, `organizationName`, `top3`, `myRate`）
-  - **参加率の算出**: 分子は有効参加（`WON`/`PENDING`）の試合数のみ（`CANCELLED`/`DECLINED`/`WAITLISTED`/`OFFERED`/`WAITLIST_DECLINED` は除外）。抜け番（非ABSENT、`matchNumber=null`）も参加に含むが、各セッションで予定試合数（`totalMatches`）を上限にキャップしてから合算するため参加率は100%を超えない。分母は当日以前の各セッションの `totalMatches` 合計。算出ロジックは `PracticeParticipantService.buildParticipationRates`
+  - **参加率の算出**: 分子は有効参加（`WON`/`PENDING`）の試合数のみ（`CANCELLED`/`DECLINED`/`WAITLISTED`/`OFFERED`/`WAITLIST_DECLINED` は除外）。抜け番（非ABSENT、`matchNumber=null`）も参加に含むが、各セッションで予定試合数（`totalMatches`）を上限にキャップしてから合算するため参加率は100%を超えない。分母は当日以前の各セッションの `totalMatches` 合計。グループ構築は `PracticeParticipantService.getParticipationGroups`（月間データを1回だけロードし全グループ+myRateを導出）、算出ロジックは同 `buildParticipationRates`
 
 **データフロー**:
 1. `GET /api/home?playerId={playerId}` - ホーム画面統合APIで全データを1リクエストで取得
