@@ -155,6 +155,9 @@
 - `densuke_member_mappings`: プレイヤー×URLごとの伝助メンバーID（`mi` パラメータ）をキャッシュ
 - `densuke_row_ids`: URL×日付×試合番号ごとの `join-{id}` フィールドIDをキャッシュ
 
+**メンバーマッピングのトランザクション隔離:**
+`densuke_member_mappings` への INSERT は書き込みバッチのトランザクションから隔離した独立トランザクション（`DensukeMemberMappingWriter`、REQUIRES_NEW）で即コミットする。同一トランザクションで INSERT すると、一意制約違反（並行登録との TOCTOU 競合）1件で PostgreSQL がトランザクション全体を abort し、バッチ内の他プレイヤーの書き込み結果や `dirty=false` 更新まで破棄されるため。マッピングは冪等なマスターデータであり、バッチが後で失敗しても先行コミットが残ることに害はない。競合時は再取得して同一プレイヤーなら成功扱い、別プレイヤーなら当該プレイヤーのみ書き込みスキップしてバッチを継続する。
+
 #### アプリ→伝助 練習日同期（DensukeScheduleWriteService）
 
 アプリで新規練習日を追加した際に、対応する伝助ページの候補日程欄へ自動で末尾追記する機能。
