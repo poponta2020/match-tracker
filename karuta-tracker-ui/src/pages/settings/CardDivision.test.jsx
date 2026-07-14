@@ -148,6 +148,19 @@ describe('CardDivision', () => {
     expect(screen.queryByRole('button', { name: /コピー/ })).not.toBeInTheDocument();
   });
 
+  it('参加練習会が0件のとき空表示＋参加練習会への導線を出す', async () => {
+    mocks.organizationGetPlayerOrganizations.mockResolvedValue({ data: [] });
+
+    renderPage();
+
+    await screen.findByText('参加練習会が設定されていません。');
+    expect(screen.getByRole('link', { name: /参加練習会/ })).toHaveAttribute(
+      'href',
+      '/settings/organizations'
+    );
+    expect(mocks.getCardDivision).not.toHaveBeenCalled();
+  });
+
   it('LINE linked=false のとき未連携案内文言が表示される', async () => {
     mocks.lineGetStatus.mockResolvedValue({ data: { enabled: true, linked: false } });
     mocks.getCardDivision.mockResolvedValue({

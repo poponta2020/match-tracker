@@ -183,16 +183,25 @@ const CardDivision = () => {
           </div>
         )}
 
-        {playerOrgs.map((org) => (
-          <OrgCardDivisionBlock
-            key={org.id}
-            org={org}
-            playerId={playerId}
-            showHeader={showOrgHeaders}
-            linked={linked}
-            onError={setError}
-          />
-        ))}
+        {playerOrgs.length === 0 ? (
+          <div className="bg-white rounded-lg border p-4 space-y-2">
+            <p className="text-sm text-gray-600">参加練習会が設定されていません。</p>
+            <Link to="/settings/organizations" className="text-sm text-[#4a6b5a] underline">
+              設定 → 参加練習会 から練習会を選択してください
+            </Link>
+          </div>
+        ) : (
+          playerOrgs.map((org) => (
+            <OrgCardDivisionBlock
+              key={org.id}
+              org={org}
+              playerId={playerId}
+              showHeader={showOrgHeaders}
+              linked={linked}
+              onError={setError}
+            />
+          ))
+        )}
       </div>
     </>
   );
