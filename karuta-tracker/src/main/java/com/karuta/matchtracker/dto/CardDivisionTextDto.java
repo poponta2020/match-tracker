@@ -21,4 +21,6 @@ public class CardDivisionTextDto {
     private Long organizationId;
     /** 札分けテキスト全文（セッションが無ければ null。会場名はヘッダに含まれる） */
     private String text;
+    /** この (プレイヤー, 団体) が札分けリマインダー LINE 通知を購読中か（既定 OFF） */
+    private boolean subscribed;
 }

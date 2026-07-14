@@ -2443,6 +2443,27 @@ public class LineNotificationService {
     }
 
     /**
+     * 札分けリマインダーの購読フラグ（{@code card_division_reminder}）を per-(player, org) で設定する。
+     *
+     * <p><b>札分けトグル専用の部分更新</b>。{@link #updatePreferences} は DTO 全フィールドを上書きするため、
+     * preference 行がまだ無いプレイヤーに札分けだけを送る目的で使うと他の通知種別まで OFF に潰してしまう
+     * （新規行の primitive boolean 既定は false）。ここでは既存行があれば {@code cardDivisionReminder} のみを
+     * 差し替え、無ければ <b>他種別を @Builder.Default（全 ON）で埋めた行を新規作成</b>して札分けだけを設定する。
+     * これにより「札分けを ON にしたら他の通知が消えた」事故を防ぐ。
+     */
+    @Transactional
+    public void setCardDivisionReminder(Long playerId, Long organizationId, boolean enabled) {
+        LineNotificationPreference pref = lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, organizationId)
+                .orElseGet(() -> LineNotificationPreference.builder()
+                        .playerId(playerId)
+                        .organizationId(organizationId)
+                        .build()); // 他種別は @Builder.Default（全 ON）で埋まる
+        pref.setCardDivisionReminder(enabled);
+        lineNotificationPreferenceRepository.save(pref);
+    }
+
+    /**
      * 札分けリマインダー（{@link LineNotificationType#CARD_DIVISION_REMINDER}）を、指定セッションの団体を
      * <b>購読しているプレイヤー</b>へ LINE 送信する。1試合目開始3時間前スケジューラから呼ばれる。
      *

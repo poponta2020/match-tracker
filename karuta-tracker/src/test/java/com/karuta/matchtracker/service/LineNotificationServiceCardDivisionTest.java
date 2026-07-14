@@ -164,4 +164,55 @@ class LineNotificationServiceCardDivisionTest {
             assertThat(dtos.get(0).isCardDivisionReminder()).isTrue();
         }
     }
+
+    @Nested
+    @DisplayName("setCardDivisionReminder（トグル部分更新・他種別を潰さない）")
+    class SetSubscription {
+
+        @Test
+        @DisplayName("既存行がある場合は card_division_reminder のみ差し替え、他種別は保持")
+        void existingRowKeepsOtherTypes() {
+            LineNotificationPreference existing = LineNotificationPreference.builder()
+                    .playerId(PLAYER_ID)
+                    .organizationId(ORG_ID)
+                    .lotteryResult(true)
+                    .matchPairing(false)      // ユーザーが個別に OFF にしていた種別
+                    .cardDivisionReminder(false)
+                    .build();
+            when(lineNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(PLAYER_ID, ORG_ID))
+                    .thenReturn(Optional.of(existing));
+
+            service.setCardDivisionReminder(PLAYER_ID, ORG_ID, true);
+
+            LineNotificationPreference saved = capturedSave();
+            assertThat(saved.getCardDivisionReminder()).isTrue();
+            assertThat(saved.getLotteryResult()).isTrue();   // 保持
+            assertThat(saved.getMatchPairing()).isFalse();   // OFF のまま保持（潰さない）
+        }
+
+        @Test
+        @DisplayName("行が無い場合は他種別を全 ON の既定で埋めた行を作成し、札分けのみ設定")
+        void missingRowCreatesWithDefaultsOn() {
+            when(lineNotificationPreferenceRepository.findByPlayerIdAndOrganizationId(PLAYER_ID, ORG_ID))
+                    .thenReturn(Optional.empty());
+
+            service.setCardDivisionReminder(PLAYER_ID, ORG_ID, true);
+
+            LineNotificationPreference saved = capturedSave();
+            assertThat(saved.getPlayerId()).isEqualTo(PLAYER_ID);
+            assertThat(saved.getOrganizationId()).isEqualTo(ORG_ID);
+            assertThat(saved.getCardDivisionReminder()).isTrue();
+            // 「札分けを ON にしたら他の通知が消えた」事故が起きないこと
+            assertThat(saved.getLotteryResult()).isTrue();
+            assertThat(saved.getMatchPairing()).isTrue();
+            assertThat(saved.getMatchVideoRegistered()).isTrue();
+        }
+
+        private LineNotificationPreference capturedSave() {
+            ArgumentCaptor<LineNotificationPreference> captor =
+                    ArgumentCaptor.forClass(LineNotificationPreference.class);
+            verify(lineNotificationPreferenceRepository).save(captor.capture());
+            return captor.getValue();
+        }
+    }
 }
