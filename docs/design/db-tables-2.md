@@ -212,6 +212,7 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 | mentor_comment | BOOLEAN | NOT NULL, DEFAULT TRUE | メンターコメント・メモ更新通知 |
 | densuke_page_created | BOOLEAN | NOT NULL, DEFAULT TRUE | 伝助ページ自動作成完了通知（出典: introspect から追加） |
 | match_video_registered | BOOLEAN | NOT NULL, DEFAULT TRUE | 試合動画登録通知 |
+| card_division_reminder | BOOLEAN | NOT NULL, DEFAULT FALSE | 札分けリマインダー（1試合目開始3時間前）。購読制のため既存慣習と逆で**デフォルト FALSE** |
 | updated_at | TIMESTAMP | NOT NULL | — |
 
 （本番 introspect 照合済み: updated_at は TIMESTAMP。⚠解消。**一意制約・organization_id は DESIGN の ER図（db.md）表記が正**——本番には `organization_id` カラムが存在し、一意制約は `player_id` 単体ではなく `(player_id, organization_id)` の複合UNIQUE。旧ドキュメントの「player_id 単体UNIQUE・organization_id列なし」表記は誤り。加えて `admin_waitlist_update` / `densuke_page_created` の2列が旧ドキュメント未記載だったため追加）

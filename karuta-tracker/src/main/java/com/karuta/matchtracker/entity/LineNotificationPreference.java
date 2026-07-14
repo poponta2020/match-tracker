@@ -108,6 +108,11 @@ public class LineNotificationPreference {
     @Builder.Default
     private Boolean matchVideoRegistered = true;
 
+    /** 札分けリマインダー（1試合目開始3時間前）。既存慣習と逆でデフォルト OFF（購読制） */
+    @Column(name = "card_division_reminder", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
+    @Builder.Default
+    private Boolean cardDivisionReminder = false;
+
     /** 更新日時 */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;

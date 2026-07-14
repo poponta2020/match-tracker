@@ -12,7 +12,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: 新LINE通知種別＋preferenceカラム（デフォルトOFF）＋マイグレーション　★main担当（本番DB適用を含む）
-- [ ] 完了
+- [x] 完了（本番DB適用済み 2026-07-15: card_division_reminder カラム DEFAULT FALSE ＋ CHECK制約25種別）
 - **目的:** 札分けリマインダー用の通知種別と per-(player, org) 購読フラグ（既定OFF）を用意する。
 - **対応AC:** AC-4, AC-5
 - **主な変更領域:**

@@ -1073,6 +1073,7 @@ public class LineNotificationService {
         pref.setMentorComment(dto.isMentorComment());
         pref.setDensukePageCreated(dto.isDensukePageCreated());
         pref.setMatchVideoRegistered(dto.isMatchVideoRegistered());
+        pref.setCardDivisionReminder(dto.isCardDivisionReminder());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -2409,6 +2410,7 @@ public class LineNotificationService {
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
+            case CARD_DIVISION_REMINDER -> pref.getCardDivisionReminder();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION,
                     ADMIN_DENSUKE_ROWID_ISSUE, ADMIN_DENSUKE_DELETE_DETECTED -> true;
@@ -2418,6 +2420,26 @@ public class LineNotificationService {
             // 押下者の ADMIN チャネル binding 経由で push される。
             case ADMIN_KADERU_SYNC_COMPLETED, ADMIN_KADERU_SYNC_FAILED -> true;
         };
+    }
+
+    /**
+     * 札分けリマインダー（{@link LineNotificationType#CARD_DIVISION_REMINDER}）の購読可否を
+     * 団体スコープで直接判定する。デフォルト OFF のため、レコードが無ければ {@code false} を返す。
+     *
+     * <p>{@link #isNotificationEnabled} の汎用パス（レコード無し＝デフォルト ON、複数団体の
+     * anyMatch）には依存できない。スケジューラは「セッションの団体」に対応する preference 行のみを
+     * 見て購読者を絞る必要があるため、DENSUKE_PAGE_CREATED（per-org 直接参照）と同じ方針で
+     * per-(player, org) を明示判定する。
+     *
+     * @param playerId プレイヤー ID
+     * @param organizationId セッションの団体 ID
+     * @return その団体で札分けリマインダーを ON にしている場合のみ true（レコード無し＝false）
+     */
+    public boolean isCardDivisionReminderEnabled(Long playerId, Long organizationId) {
+        return lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, organizationId)
+                .map(LineNotificationPreference::getCardDivisionReminder)
+                .orElse(false);
     }
 
     private void logMessage(Long channelId, Long playerId, LineNotificationType type,
