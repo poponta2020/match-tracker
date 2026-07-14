@@ -28,6 +28,7 @@ public class LineNotificationPreferenceDto {
     private boolean mentorComment;
     private boolean densukePageCreated;
     private boolean matchVideoRegistered;
+    private boolean cardDivisionReminder;
 
     public static LineNotificationPreferenceDto fromEntity(LineNotificationPreference entity) {
         return LineNotificationPreferenceDto.builder()
@@ -48,6 +49,7 @@ public class LineNotificationPreferenceDto {
             .mentorComment(entity.getMentorComment())
             .densukePageCreated(entity.getDensukePageCreated())
             .matchVideoRegistered(entity.getMatchVideoRegistered())
+            .cardDivisionReminder(entity.getCardDivisionReminder())
             .build();
     }
 }

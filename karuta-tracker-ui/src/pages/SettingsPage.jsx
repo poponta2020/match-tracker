@@ -14,6 +14,7 @@ import {
   LogOut,
   Rss,
   Video,
+  LayoutGrid,
 } from 'lucide-react';
 import { isAdmin, isSuperAdmin } from '../utils/auth';
 
@@ -31,6 +32,7 @@ const SettingsPage = () => {
     { label: 'プロフィール', icon: User, path: '/profile', visible: true },
     { label: '参加練習会', icon: Building2, path: '/settings/organizations', visible: true },
     { label: '通知設定', icon: Bell, path: '/settings/notifications', visible: true },
+    { label: '札分け確認', icon: LayoutGrid, path: '/settings/card-division', visible: true },
     { label: 'メンター管理', icon: Users, path: '/settings/mentor', visible: true },
     { label: '動画倉庫', icon: Video, path: '/videos', visible: true },
     { label: 'カレンダー購読', icon: Rss, path: '/settings/calendar', visible: true },

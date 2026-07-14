@@ -1073,6 +1073,7 @@ public class LineNotificationService {
         pref.setMentorComment(dto.isMentorComment());
         pref.setDensukePageCreated(dto.isDensukePageCreated());
         pref.setMatchVideoRegistered(dto.isMatchVideoRegistered());
+        pref.setCardDivisionReminder(dto.isCardDivisionReminder());
 
         lineNotificationPreferenceRepository.save(pref);
     }
@@ -2409,6 +2410,7 @@ public class LineNotificationService {
             case MENTEE_MEMO_UPDATE -> pref.getMentorComment();
             case DENSUKE_PAGE_CREATED -> pref.getDensukePageCreated();
             case MATCH_VIDEO_REGISTERED -> pref.getMatchVideoRegistered();
+            case CARD_DIVISION_REMINDER -> pref.getCardDivisionReminder();
             // 管理者向け重要通知。preference カラム未追加のため常時有効
             case ADMIN_DENSUKE_PUSH_FAILED, ADMIN_DENSUKE_CONFIRM_DIFF, ADMIN_DENSUKE_NAME_COLLISION,
                     ADMIN_DENSUKE_ROWID_ISSUE, ADMIN_DENSUKE_DELETE_DETECTED -> true;
@@ -2418,6 +2420,131 @@ public class LineNotificationService {
             // 押下者の ADMIN チャネル binding 経由で push される。
             case ADMIN_KADERU_SYNC_COMPLETED, ADMIN_KADERU_SYNC_FAILED -> true;
         };
+    }
+
+    /**
+     * 札分けリマインダー（{@link LineNotificationType#CARD_DIVISION_REMINDER}）の購読可否を
+     * 団体スコープで直接判定する。デフォルト OFF のため、レコードが無ければ {@code false} を返す。
+     *
+     * <p>{@link #isNotificationEnabled} の汎用パス（レコード無し＝デフォルト ON、複数団体の
+     * anyMatch）には依存できない。スケジューラは「セッションの団体」に対応する preference 行のみを
+     * 見て購読者を絞る必要があるため、DENSUKE_PAGE_CREATED（per-org 直接参照）と同じ方針で
+     * per-(player, org) を明示判定する。
+     *
+     * @param playerId プレイヤー ID
+     * @param organizationId セッションの団体 ID
+     * @return その団体で札分けリマインダーを ON にしている場合のみ true（レコード無し＝false）
+     */
+    public boolean isCardDivisionReminderEnabled(Long playerId, Long organizationId) {
+        return lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, organizationId)
+                .map(LineNotificationPreference::getCardDivisionReminder)
+                .orElse(false);
+    }
+
+    /**
+     * 札分けリマインダーの購読フラグ（{@code card_division_reminder}）を per-(player, org) で設定する。
+     *
+     * <p><b>札分けトグル専用の部分更新</b>。{@link #updatePreferences} は DTO 全フィールドを上書きするため、
+     * preference 行がまだ無いプレイヤーに札分けだけを送る目的で使うと他の通知種別まで OFF に潰してしまう
+     * （新規行の primitive boolean 既定は false）。ここでは既存行があれば {@code cardDivisionReminder} のみを
+     * 差し替え、無ければ <b>他種別を @Builder.Default（全 ON）で埋めた行を新規作成</b>して札分けだけを設定する。
+     * これにより「札分けを ON にしたら他の通知が消えた」事故を防ぐ。
+     */
+    @Transactional
+    public void setCardDivisionReminder(Long playerId, Long organizationId, boolean enabled) {
+        LineNotificationPreference pref = lineNotificationPreferenceRepository
+                .findByPlayerIdAndOrganizationId(playerId, organizationId)
+                .orElseGet(() -> LineNotificationPreference.builder()
+                        .playerId(playerId)
+                        .organizationId(organizationId)
+                        .build()); // 他種別は @Builder.Default（全 ON）で埋まる
+        pref.setCardDivisionReminder(enabled);
+        lineNotificationPreferenceRepository.save(pref);
+    }
+
+    /**
+     * 札分けリマインダー（{@link LineNotificationType#CARD_DIVISION_REMINDER}）を、指定セッションの団体を
+     * <b>購読しているプレイヤー</b>へ LINE 送信する。1試合目開始3時間前スケジューラから呼ばれる。
+     *
+     * <p><b>不変条件（重要）</b>: 送信対象は必ず {@link #isCardDivisionReminderEnabled} の
+     * <b>per-org ゲート</b>（レコード無し＝OFF）で先に絞る。本種別はカラム DEFAULT FALSE の購読制だが、
+     * {@link #isNotificationEnabled} の汎用パスは「preference 行が1つも無いプレイヤー＝デフォルト ON」を
+     * 返すため、per-org ゲートを外して全団体メンバーへ素の {@code sendToPlayer} を撒くと未購読者にも届く。
+     * ここを「簡略化」で bare send に落とさないこと。
+     *
+     * <p>二重送信防止は {@code dedupeKey = sessionId}（同一セッション×プレイヤーで1回）。空き枠通知
+     * （{@code sendVacancyNotification}）と同じ {@code tryAcquireSendRight} → 送信 → mark の原子的経路を用いる。
+     * 参加確定の有無は問わない（札組は練習会共通の公開情報）。
+     *
+     * @param sessionId 対象セッション ID（dedupeKey に使う）
+     * @param organizationId セッションの団体 ID（購読判定・受信者抽出のスコープ）
+     * @param text 送信する札分けテキスト全文
+     */
+    public void sendCardDivisionReminder(Long sessionId, Long organizationId, String text) {
+        List<Long> recipientIds = playerOrganizationRepository.findByOrganizationId(organizationId).stream()
+                .map(PlayerOrganization::getPlayerId)
+                .distinct()
+                // per-org 購読ゲート（レコード無し＝OFF）。resolveChannel の anyMatch(デフォルト ON) に依存しない
+                .filter(playerId -> isCardDivisionReminderEnabled(playerId, organizationId))
+                .toList();
+
+        if (recipientIds.isEmpty()) {
+            log.info("CARD_DIVISION_REMINDER: no subscribers for session {} (org {})", sessionId, organizationId);
+            return;
+        }
+
+        String dedupeKey = String.valueOf(sessionId);
+        int sent = 0, alreadyNotified = 0, failed = 0, channelSkipped = 0;
+
+        for (Long playerId : recipientIds) {
+            ResolvedChannel resolved = resolveChannel(playerId, LineNotificationType.CARD_DIVISION_REMINDER, text);
+            if (resolved == null) {
+                channelSkipped++;
+                continue;
+            }
+
+            // 原子的に送信権を確保（INSERT ... ON CONFLICT DO NOTHING）
+            if (!lineMessageLogService.tryAcquireSendRight(
+                    resolved.channel().getId(), playerId, LineNotificationType.CARD_DIVISION_REMINDER, text, dedupeKey)) {
+                alreadyNotified++;
+                continue;
+            }
+
+            boolean sentOne = false;
+            try {
+                boolean success = lineMessagingService.sendPushMessage(
+                        resolved.channel().getChannelAccessToken(), resolved.assignment().getLineUserId(), text);
+                if (success) {
+                    sentOne = true;
+                    sent++;
+                } else {
+                    int updated = lineMessageLogService.markReservationFailed(
+                            playerId, LineNotificationType.CARD_DIVISION_REMINDER, dedupeKey, "LINE API送信失敗");
+                    if (updated == 0) {
+                        log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                    }
+                    failed++;
+                }
+            } catch (Exception e) {
+                log.error("Failed to send card division reminder to player {}: {}", playerId, e.getMessage());
+                int updated = lineMessageLogService.markReservationFailed(
+                        playerId, LineNotificationType.CARD_DIVISION_REMINDER, dedupeKey, e.getMessage());
+                if (updated == 0) {
+                    log.warn("markReservationFailed updated 0 rows: player={}, dedupeKey={}", playerId, dedupeKey);
+                }
+                failed++;
+            }
+
+            // 送信成功後のステータス更新（リトライ付き）。送信済みなのに FAILED にすると重複送信の原因になるため
+            // markReservationSucceeded が例外を投げても markReservationFailed は呼ばない
+            if (sentOne) {
+                markSucceededWithRetry(playerId, LineNotificationType.CARD_DIVISION_REMINDER, dedupeKey);
+            }
+        }
+
+        log.info("CARD_DIVISION_REMINDER session {} (org {}): sent={}, alreadyNotified={}, failed={}, channelSkipped={}",
+                sessionId, organizationId, sent, alreadyNotified, failed, channelSkipped);
     }
 
     private void logMessage(Long channelId, Long playerId, LineNotificationType type,
