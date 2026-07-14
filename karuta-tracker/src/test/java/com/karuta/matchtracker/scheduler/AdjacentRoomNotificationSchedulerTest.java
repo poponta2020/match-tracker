@@ -19,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
@@ -46,6 +47,8 @@ class AdjacentRoomNotificationSchedulerTest {
     private PlayerRepository playerRepository;
     @Mock
     private TransactionTemplate transactionTemplate;
+    @Mock
+    private TransactionStatus transactionStatus;
 
     @InjectMocks
     private AdjacentRoomNotificationScheduler scheduler;
@@ -55,7 +58,7 @@ class AdjacentRoomNotificationSchedulerTest {
         // TransactionTemplateのexecuteをコールバック即実行に設定
         lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
+            return callback.doInTransaction(transactionStatus);
         });
     }
 
@@ -104,7 +107,7 @@ class AdjacentRoomNotificationSchedulerTest {
     }
 
     @Test
-    @DisplayName("既に通知済みの段階 → 通知しない")
+    @DisplayName("既に通知済みの段階 → 事前存在チェックでスキップし、insertを試みない")
     void noNotify_whenAlreadyNotified() {
         PracticeSession session = buildKaderuSession(1L, 14, 1);
         when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
@@ -114,19 +117,45 @@ class AdjacentRoomNotificationSchedulerTest {
         when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
                 .thenReturn(0L);
 
-        // 隣室は空き（通知レコード保存に到達する条件）
+        // 残り3人で既に通知済み
+        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 3)).thenReturn(true);
+
+        scheduler.checkCapacityAndNotify();
+
+        verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
+        // 一意制約違反による rollback-only 化を避けるため、insert 自体を試みないこと
+        verify(adjacentRoomNotificationRepository, never()).save(any());
+        // 通知済み段階では隣室照会（room_availability_cache SELECT）も短絡すること
+        verify(adjacentRoomService, never()).getAdjacentRoomAvailability(any(), any());
+    }
+
+    @Test
+    @DisplayName("並列競合で insert が一意制約違反 → 例外を漏らさずスキップし、ローカル rollback-only を立てる")
+    void noNotify_whenConcurrentDuplicateInsert_marksRollbackOnly() {
+        PracticeSession session = buildKaderuSession(1L, 14, 1);
+        when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
+
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.WON))
+                .thenReturn(11L);
+        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
+                .thenReturn(0L);
+
         AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
                 .adjacentRoomName("はまなす").status("○").available(true)
                 .expandedVenueId(7L).expandedVenueName("すずらん・はまなす").expandedCapacity(24)
                 .build();
         when(adjacentRoomService.getAdjacentRoomAvailability(3L, session.getSessionDate())).thenReturn(status);
 
-        // 残り3人で既に通知済み → save時に一意制約違反
+        // 事前チェック時点では未通知だが、insert までの間に別インスタンスが通知（TOCTOU）
+        when(adjacentRoomNotificationRepository.existsBySessionIdAndRemainingCount(1L, 3)).thenReturn(false);
         when(adjacentRoomNotificationRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
 
         scheduler.checkCapacityAndNotify();
 
         verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
+        // insert 失敗でグローバル rollback-only 化済みのため、ローカルにも明示してコミット試行
+        // （= UnexpectedRollbackException）を回避すること
+        verify(transactionStatus).setRollbackOnly();
     }
 
     @Test
