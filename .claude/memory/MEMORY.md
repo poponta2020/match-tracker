@@ -16,6 +16,7 @@
 - [autoreview_pr1022.md](autoreview_pr1022.md) - PR#1022（フロントエンド既存lintエラー46件解消、Issue#1019）2ラウンドでCodex pass・AC適合pass。追加code-review(high)で3件反映（eslint設定の根本対応・no-irregular-whitespace検査範囲維持・disableコメント修正）
 
 ## Ship
+- [ship_pr1050_pairing_avoid_previous_practice.md](ship_pr1050_pairing_avoid_previous_practice.md) - PR#1050出荷（自動シャッフルで同一団体の前回練習日ペアを強く回避、親#1041/子#1042#1043）。ソフト強ペナルティ=グレースフル劣化。auto-review 2R収束(R1 blocker=matches経路テスト欠落→main直修正)。cross-org除外はbehavioral検証不可の教訓
 - [ship_pr1044_torifuda_place_over_chip.md](ship_pr1044_torifuda_place_over_chip.md) - PR#1044出荷（取り札記録の盤面で札選択中は既存チップの上でもそのマスへ配置可、Issueなし）。stopPropagation子がモード操作で親の当たり判定を潰す不具合→子onClickをarm状態で分岐。TorifudaBoard初テスト追加。1R Codex pass(low)
 - [ship_pr1040_home_api_roundtrips.md](ship_pr1040_home_api_roundtrips.md) - PR#1040出荷（/api/home参加率グループの月間データ1回ロード化）。ローカル→オレゴンRTT環境で15〜24秒の主因＝最大6回フル再計算を撤廃。pg_stat_user_tables前後差分で往復数を実証した調査手法つき
 - [ship_pr1039_ensure_org_rollback_only.md](ship_pr1039_ensure_org_rollback_only.md) - PR#1039出荷（自動所属の並列競合rollback-only 500、Issue#1037）。ON CONFLICT DO NOTHINGで例外の発生自体を除去（#1035=setRollbackOnly/#1038=REQUIRES_NEWと使い分け根拠あり）。#1034発の同型横展開これで全件完了

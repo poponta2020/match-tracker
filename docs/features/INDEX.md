@@ -94,3 +94,4 @@
 - `団体管理` — わすらもち会・北大かるた会の2団体をアプリで独立運用できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
 - `団体別の表示機能` — OrganizationControllerの認可不足・団体フィルタ適用漏れ等9項目の改修（主要領域: karuta-tracker-ui, karuta-tracker）
 - `当日キャンセル補充` — 当日WON参加者キャンセル時に全体募集・先着順で即時補充するフロー（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `pairing-avoid-previous-practice-opponents` — 自動シャッフルで同一団体の前回練習日に組んだペアも強く避ける改修（主要領域: karuta-tracker）[shipped: PR #1050]
