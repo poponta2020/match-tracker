@@ -27,7 +27,7 @@ status: completed
 - **対応Issue:** #1046
 
 ### タスク2: 札組テキスト生成のサーバー移植＋取得API
-- [ ] 完了
+- [x] 完了（cardRules.js の PRNG を Java 移植・ゴールデンパリティテスト green。GET /api/card-division）
 - **目的:** 日付・団体（会場・試合数）から札組テキストを生成する単一のサーバーサービスと取得APIを作る。画面・LINE 双方がこれを使う。
 - **対応AC:** AC-1, AC-2, AC-3
 - **主な変更領域:**

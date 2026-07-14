@@ -226,6 +226,15 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 
 **詳細仕様・要件**: `docs/features/pairing-card-rule-persistence/requirements.md`
 
+### 札分け確認・通知（札組テキストのサーバー生成）
+
+全プレイヤーが「その日の札分け（各試合の出札ルール＝札組番号）」をテキストで確認でき（設定→札分け確認）、希望者は1試合目開始3時間前に LINE で受け取れる（購読制・デフォルト OFF）。LINE はサーバー送信で送信時にクライアントが介在しないため、**札組テキストをバックエンドで一元生成**する（`CardDivisionTextService`）。画面（`GET /api/card-division`）も LINE 送信も同一サービスを使い、JS/Java 二重実装のドリフトを防ぐ。
+
+- **決定論生成の Java 移植**: `cardRules.js` の `hashSeed`（FNV-1a 32bit）→ `mulberry32` → 部分 Fisher-Yates → 3試合サイクルを `CardDivisionTextService` に移植（32bit 符号なし演算を厳密再現）。`cardRules.js` は**変更しない**。移植の一致は `CardDivisionTextServiceTest` の**ゴールデン・クロス言語パリティテスト**（cardRules.js を実行して採取した (date, nonce, totalMatches) フィクスチャと各試合の (種別, digits, removedCard) 一致）で担保する。同日なら わすら・北大の札組は完全一致（団体非依存＝日付シードのまま）。
+- **テキスト形式**: `【M/D 会場名】`（月・日は10の位0を省略）＋各行 `N試合目：<札ルール>`。抜き行のみ `番号(決まり字)抜き`（例 `41(こひ)`、`100(もも)`）。決まり字マスタは `util/Kimariji.java`（`kimariji.js` の `KIMARIJI` を補正値込みで複製）。抜き札番号は `parseInt(removedCard)||100`（"00"→100）。対戦ペアは載せない（札組のみ）。
+- **会場名・試合数・nonce**: `PracticeSession`（date+org）→ 会場名（`Venue`）・`totalMatches`・`CardRuleNonceService.getNonce(date)` から解決。会場未設定なら `【M/D】`。当日該当団体のセッションが無ければ `hasSession=false`・`text=null`。
+- LINE 送信（スケジューラ・通知種別）は `docs/spec/notifications.md` を参照。
+
 ## フロー
 
 ### 自動マッチングフロー
