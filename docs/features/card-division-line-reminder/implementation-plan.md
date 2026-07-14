@@ -56,7 +56,7 @@ status: completed
 - **対応Issue:** #1048
 
 ### タスク4: 設定導線＋「札分け確認」画面（表示・コピー・LINEトグル・未連携案内）
-- [ ] 完了
+- [x] 完了（設定グリッド導線＋/settings/card-division＋api/cardDivision.js。Vitest 5件 green・lint 0エラー）
 - **目的:** 全プレイヤーが当日の札組を確認・コピーでき、練習会ごとにLINE通知を購読できるUIを追加する。
 - **対応AC:** AC-9, AC-10, AC-11
 - **主な変更領域:**
