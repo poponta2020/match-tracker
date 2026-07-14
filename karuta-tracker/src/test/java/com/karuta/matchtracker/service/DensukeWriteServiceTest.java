@@ -37,6 +37,7 @@ class DensukeWriteServiceTest {
     @Mock private PracticeSessionRepository practiceSessionRepository;
     @Mock private DensukeUrlRepository densukeUrlRepository;
     @Mock private DensukeMemberMappingRepository densukeMemberMappingRepository;
+    @Mock private DensukeMemberMappingWriter densukeMemberMappingWriter;
     @Mock private DensukeRowIdRepository densukeRowIdRepository;
     @Mock private DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     @Mock private PlayerRepository playerRepository;
@@ -362,13 +363,11 @@ class DensukeWriteServiceTest {
     void testSaveMemberMapping_noConflict_returnsTrue() {
         when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
                 .thenReturn(Optional.empty());
-        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
 
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 
         assertThat(result).isTrue();
-        verify(densukeMemberMappingRepository).save(any(DensukeMemberMapping.class));
+        verify(densukeMemberMappingWriter).insertInNewTransaction(1L, 100L, "mi1");
     }
 
     @Test
@@ -382,7 +381,7 @@ class DensukeWriteServiceTest {
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 
         assertThat(result).isTrue();
-        verify(densukeMemberMappingRepository, never()).save(any(DensukeMemberMapping.class));
+        verify(densukeMemberMappingWriter, never()).insertInNewTransaction(any(), any(), any());
     }
 
     @Test
@@ -396,7 +395,7 @@ class DensukeWriteServiceTest {
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 
         assertThat(result).isFalse();
-        verify(densukeMemberMappingRepository, never()).save(any(DensukeMemberMapping.class));
+        verify(densukeMemberMappingWriter, never()).insertInNewTransaction(any(), any(), any());
     }
 
     @Test
@@ -407,8 +406,8 @@ class DensukeWriteServiceTest {
         when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(otherPlayerMapping));
-        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
-                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"))
+                .when(densukeMemberMappingWriter).insertInNewTransaction(1L, 100L, "mi1");
 
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 
@@ -423,8 +422,8 @@ class DensukeWriteServiceTest {
         when(densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(1L, "mi1"))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(samePlayerMapping));
-        when(densukeMemberMappingRepository.save(any(DensukeMemberMapping.class)))
-                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"));
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate key"))
+                .when(densukeMemberMappingWriter).insertInNewTransaction(1L, 100L, "mi1");
 
         boolean result = densukeWriteService.saveMemberMapping(1L, 100L, "mi1", "テスト選手");
 

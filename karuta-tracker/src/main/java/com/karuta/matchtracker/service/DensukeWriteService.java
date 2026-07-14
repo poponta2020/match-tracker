@@ -47,6 +47,7 @@ public class DensukeWriteService {
     private final PracticeSessionRepository practiceSessionRepository;
     private final DensukeUrlRepository densukeUrlRepository;
     private final DensukeMemberMappingRepository densukeMemberMappingRepository;
+    private final DensukeMemberMappingWriter densukeMemberMappingWriter;
     private final DensukeRowIdRepository densukeRowIdRepository;
     private final DensukeDeletionCandidateRepository densukeDeletionCandidateRepository;
     private final PlayerRepository playerRepository;
@@ -682,15 +683,15 @@ public class DensukeWriteService {
             return false;
         }
         try {
-            densukeMemberMappingRepository.save(DensukeMemberMapping.builder()
-                    .densukeUrlId(urlId)
-                    .playerId(playerId)
-                    .densukeMemberId(mi)
-                    .build());
+            // Issue #1036: INSERT は REQUIRES_NEW（別コネクション）に隔離する。同一トランザクションで
+            // INSERT すると一意制約違反時に PostgreSQL が現トランザクション全体を abort（25P02）し、
+            // 下の TOCTOU 救済クエリも呼び出し元バッチの後続 DB 操作もすべて失敗するため。
+            densukeMemberMappingWriter.insertInNewTransaction(urlId, playerId, mi);
             log.info("Mapped densuke member: player={}, mi={}", playerName, mi);
             return true;
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // TOCTOU: チェック後に並行処理で先に登録された場合 → 再取得して同一プレイヤーなら成功扱い
+            //（abort したのは Writer 側の内側トランザクションのみで、現トランザクションは健全なまま）
             Optional<DensukeMemberMapping> retry =
                     densukeMemberMappingRepository.findByDensukeUrlIdAndDensukeMemberId(urlId, mi);
             if (retry.isPresent() && retry.get().getPlayerId().equals(playerId)) {
