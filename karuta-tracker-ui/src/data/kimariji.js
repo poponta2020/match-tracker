@@ -72,12 +72,16 @@ export function compareKimariji(a, b) {
  * 同一1文字目内は決まり字の五十音順」で比較する。
  */
 export function compareCardsByDecisionOrder(noA, noB) {
-  const a = kimariji(noA);
-  const b = kimariji(noB);
+  // kimariji() は未定義番号でも String(no) を返すため通常は空にならないが、
+  // 将来の変更に備え `|| ''` で防御（空文字は1文字目が undefined→末尾扱い）。
+  const a = kimariji(noA) || '';
+  const b = kimariji(noB) || '';
   const rankA = FIRST_CHAR_ORDER.indexOf(a[0]);
   const rankB = FIRST_CHAR_ORDER.indexOf(b[0]);
   const firstRankA = rankA === -1 ? FIRST_CHAR_ORDER.length : rankA;
   const firstRankB = rankB === -1 ? FIRST_CHAR_ORDER.length : rankB;
   if (firstRankA !== firstRankB) return firstRankA - firstRankB;
-  return compareKimariji(a, b);
+  const byKimariji = compareKimariji(a, b);
+  if (byKimariji !== 0) return byKimariji;
+  return Number(noA) - Number(noB); // 決まり字が同一/欠損でも札番号で安定ソート
 }

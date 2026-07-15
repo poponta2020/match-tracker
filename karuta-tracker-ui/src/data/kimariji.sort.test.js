@@ -22,6 +22,12 @@ describe('決まり字順ソート', () => {
     expect(sorted).toEqual([76, 11]);
   });
 
+  it('未知/範囲外の札番号でもクラッシュせず末尾に安定ソートされる', () => {
+    // 999 はマスター未定義 → kimariji は "999" を返し1文字目が並び順表に無い＝末尾
+    const sorted = [...[999, 43, 3]].sort(compareCardsByDecisionOrder);
+    expect(sorted).toEqual([43, 3, 999]); // あい(43) → あし(3) → 999
+  });
+
   it('compareKimariji の比較結果（負・正・0）', () => {
     expect(compareKimariji('あい', 'あきの')).toBeLessThan(0);
     expect(compareKimariji('あきの', 'あい')).toBeGreaterThan(0);

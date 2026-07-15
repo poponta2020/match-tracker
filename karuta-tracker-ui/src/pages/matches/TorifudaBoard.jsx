@@ -8,6 +8,7 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { kimariji, compareCardsByDecisionOrder } from '../../data/kimariji';
 import { computeDrop, encodeCellId, POOL_ID, createTrailingClickGuard } from './torifudaDragLogic';
 import './TorifudaRecord.css';
@@ -22,14 +23,20 @@ const OWN_SIDES = ['LEFT', 'RIGHT'];
 
 // ドラッグ可能な札チップ。onClick（タップ操作）と useDraggable を併存させる。
 function DraggableChip({ cardNo, className, onClick, children }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `card-${cardNo}`,
     data: { cardNo },
   });
+  // ドラッグ中は掴んだ札をポインタに追従表示（transform 未適用だと動きが見えない）
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    ...(isDragging ? { zIndex: 20, position: 'relative' } : null),
+  };
   return (
     <span
       ref={setNodeRef}
       className={`${className}${isDragging ? ' dragging' : ''}`}
+      style={style}
       onClick={onClick}
       {...listeners}
       {...attributes}
