@@ -16,6 +16,7 @@
 - [autoreview_pr1022.md](autoreview_pr1022.md) - PR#1022（フロントエンド既存lintエラー46件解消、Issue#1019）2ラウンドでCodex pass・AC適合pass。追加code-review(high)で3件反映（eslint設定の根本対応・no-irregular-whitespace検査範囲維持・disableコメント修正）
 
 ## Ship
+- [impl_remove_shuffle_icon_edit_button.md](impl_remove_shuffle_icon_edit_button.md) - PR#1066出荷（対戦結果画面matches/resultの「編集画面へ移動」ボタンからlucide Shuffle装飾アイコン削除、Issueなし・quickfix）。1ファイル1挿入2削除、遷移/文言不変。lint 0err・MatchResultsView 12テストpass。auto-review 1R pass(low,19.6k)＝trivial高速パス。docs no-change-needed
 - [ship_pr1063_pairing_view_unpaired_chips.md](ship_pr1063_pairing_view_unpaired_chips.md) - PR#1063出荷（/pairings 閲覧時に未組み合わせ選手を待機中チップ表示、親#1061/子#1062）。純フロント単一タスク。核心=waitingPlayersは{id,name}のみで級/段/ロール欠落→advisorが枠線色・Codexが並び順を同根から別観点で検出、ソート前にparticipants補完で両治。auto-review 2R収束(medium,63k)。AC-6はverify未実施
 - [ship_pr1060_torifuda_record_dnd_view.md](ship_pr1060_torifuda_record_dnd_view.md) - PR#1060出荷（取り札記録の改修=①D&D配置②決まり字順③象限内動的幅④保存後は試合詳細へ遷移＋読取専用表示、親#1052/子#1053-1057）。フロントのみ・Wave1(task1∥task2)＋task3/4/5直列。@dnd-kitはjsdom e2e不可→computeDrop/trailing-clickガードを純モジュール化、transform未適用だとドラッグ中動かない。auto-review 4R収束(全high)=MatchDetail本人性ガード/stale記録クリアを段階深堀り、kimariji crashはfallback見落としfalse-positive
 - [ship_pr1059_pairing_lock_display_fixes.md](ship_pr1059_pairing_lock_display_fixes.md) - PR#1059出荷（/pairingsロック表示3改善＝A通知削除/Bバッジ重複解消/C全削除→対戦をリセット、親#1058）。純フロント・単一タスク直列。shouldShowManualLockBadge=canShowUnlockの厳密な補集合で編集/閲覧を排他。auto-review 1R pass(medium,32k)。教訓=docs更新前に対象文字列の実在をgrep確認・変更文言をテスト全体grepしアサート無しを確認(AC-6ブラインドスポット)
