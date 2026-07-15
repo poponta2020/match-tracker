@@ -1133,7 +1133,7 @@ const PracticeList = () => {
                 </button>
               ) : (
                 <button
-                  onClick={openAttendanceModal}
+                  onClick={() => navigate(`/practice/attendance?sessionId=${selectedSession.id}`)}
                   className="flex-1 py-2 text-sm font-medium text-[#4a6b5a] border border-[#4a6b5a] rounded-lg hover:bg-[#4a6b5a] hover:text-white transition-colors whitespace-nowrap"
                 >
                   出欠登録
@@ -1171,7 +1171,7 @@ const PracticeList = () => {
             className="bg-[#4a6b5a] text-white pl-4 pr-5 py-3 rounded-full shadow-lg hover:bg-[#3d5a4c] transition-all hover:shadow-xl flex items-center gap-2"
           >
             <CalendarCheck className="w-5 h-5" />
-            <span className="text-sm font-medium">出欠登録</span>
+            <span className="text-sm font-medium">出欠一括登録</span>
           </button>
         </div>
       )}
