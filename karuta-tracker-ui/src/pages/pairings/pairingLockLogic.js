@@ -27,6 +27,18 @@ export const canShowUnlock = ({ isReadOnly, isViewMode, pairing }) =>
   !isReadOnly && !isViewMode && !!pairing.locked && !pairing.hasResult;
 
 /**
+ * 静的な「ロック」バッジを表示するか（手動ロック専用）。
+ * 手動ロック中（locked && !hasResult）かつ「解除」ボタンが出ない場合のみ true。
+ * 編集モードでは canShowUnlock が true になり「解除」ボタンで代替されるためバッジは出さず、
+ * 閲覧／読み取り専用モードでは「解除」ボタンが無いためバッジがロック中の唯一の視覚指標になる。
+ * 「ロック」バッジと「解除」ボタンの二重表示を排他にする（pairing-lock-display-fixes 変更B）。
+ * pairing が null の場合は canShowUnlock を呼ばず false を返す（`pairing && ...` の短絡で null 安全）。
+ */
+export const shouldShowManualLockBadge = ({ isReadOnly, isViewMode, pairing }) =>
+  !!(pairing && pairing.locked && !pairing.hasResult)
+  && !canShowUnlock({ isReadOnly, isViewMode, pairing });
+
+/**
  * 一括保存（createBatch）リクエストの各要素を生成する。
  * 結果入力済み（hasResult）はバックエンドで保護されるため送信対象から除外し、
  * 両選手が揃った完成済みの組のみを対象とする（未完成行はUIの保存ボタン無効化でも防ぐが、

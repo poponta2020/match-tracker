@@ -11,7 +11,7 @@ import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraf
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
-import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
 vi.mock('../../api/client', () => ({
@@ -899,6 +899,39 @@ describe('手動ロック（pairing-manual-lock）', () => {
     });
   });
 
+  describe('手動ロックバッジの表示条件（shouldShowManualLockBadge・pairing-lock-display-fixes 変更B）', () => {
+    // 本番 PairingGenerator と ViewRow ハーネスが共有する pairingLockLogic.shouldShowManualLockBadge の実関数を検証する。
+    // 「解除」ボタンが出る編集モードではバッジを出さず（重複排除）、ボタンの無い閲覧/読み取り専用でのみバッジを出す。
+
+    it('編集モード＋手動ロック → false（解除ボタンのみ・バッジ非表示）', () => {
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: false, pairing: { locked: true } })).toBe(false);
+    });
+    it('閲覧モード＋手動ロック → true（バッジ表示）', () => {
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: true, pairing: { locked: true } })).toBe(true);
+    });
+    it('読み取り専用＋手動ロック → true（バッジ表示）', () => {
+      expect(shouldShowManualLockBadge({ isReadOnly: true, isViewMode: false, pairing: { locked: true } })).toBe(true);
+    });
+    it('結果入力済み＋手動ロックはいずれのモードでも false（「結果入力済」バッジが担うため出さない）', () => {
+      const p = { locked: true, hasResult: true };
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: false, pairing: p })).toBe(false);
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: true, pairing: p })).toBe(false);
+      expect(shouldShowManualLockBadge({ isReadOnly: true, isViewMode: false, pairing: p })).toBe(false);
+    });
+    it('未ロックはいずれのモードでも false', () => {
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: false, pairing: { locked: false } })).toBe(false);
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: true, pairing: { locked: false } })).toBe(false);
+    });
+    it('編集モードではバッジと解除ボタンが排他（一方が true のとき他方は false）', () => {
+      const args = { isReadOnly: false, isViewMode: false, pairing: { locked: true } };
+      expect(canShowUnlock(args)).toBe(true);
+      expect(shouldShowManualLockBadge(args)).toBe(false);
+    });
+    it('pairing が null でも例外を投げず false（null 安全）', () => {
+      expect(shouldShowManualLockBadge({ isReadOnly: false, isViewMode: true, pairing: null })).toBe(false);
+    });
+  });
+
   describe('保存リクエスト生成（結果入力済みのみ除外し locked を同梱）', () => {
     // 本番 handleSave が使う pairingLockLogic.buildSaveRequests / hasNothingToSave の実関数を検証する。
 
@@ -1216,7 +1249,7 @@ describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', ()
           {pairing.hasResult && (
             <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">結果入力済</span>
           )}
-          {pairing.locked && !pairing.hasResult && (
+          {shouldShowManualLockBadge({ isReadOnly: false, isViewMode: true, pairing }) && (
             <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">ロック</span>
           )}
         </div>
