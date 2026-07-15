@@ -15,7 +15,7 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
@@ -1202,6 +1202,30 @@ const PairingGenerator = () => {
               )
             ))}
           </div>
+
+          {/* 閲覧時の未組み合わせ選手（待機中）チップ一覧（読み取り専用）。
+              一部だけ組がある試合の閲覧/読み取り専用モードで、まだどの組にも入っていない参加者を
+              参加者一覧と同じチップで表示する。表示可否は編集モードの待機中ガードの厳密な補集合
+              （相互排他）。チップのみ ―― 活動プルダウン・選手追加・D&D・ドロップゾーンは出さない。 */}
+          {shouldShowViewModeUnpairedSection({ isReadOnly, isViewMode, pairings, waitingPlayers }) && (
+            <div className="pt-1">
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <span className="text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
+                  待機中<span className="normal-case tracking-normal text-[#1A2744] text-[15px] font-bold ml-1.5">{waitingPlayers.length}名</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {sortPlayersByRank(waitingPlayers).map((player) => (
+                  <PlayerChip
+                    key={player.id}
+                    name={player.name}
+                    kyuRank={player.kyuRank}
+                    className="text-sm bg-[#f9f6f2] text-[#374151]"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {!isReadOnly && !isViewMode && (waitingPlayers.length > 0 || selectedPlayer?.source?.type === 'waiting') && (
             <DroppableSlot

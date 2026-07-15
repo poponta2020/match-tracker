@@ -147,6 +147,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 参加者一覧（新規作成時のみ・折りたたみ廃止で常時展開）
 - 主アクション「対戦編集」ボタン（＝従来の自動マッチング。文言変更のみ・挙動不変）→ `POST /api/match-pairings/auto-match`
 - **参加者一覧・「自動マッチング」ボタンは、その試合にまだ組み合わせが1つも無いとき（新規作成時 = `pairings.length === 0`）のみ表示**。既存の組み合わせがある試合は、結果入力済み・未入力に関わらず組み合わせ表示（閲覧モード/編集）に統一し、作成UIは出さない（結果未入力の試合と表示を一貫させるため）
+- **閲覧／読み取り専用モードの未組み合わせ選手チップ（pairing-view-unpaired-chips）**: 一部だけ組がある試合を閲覧（`isViewMode`）または読み取り専用（`isReadOnly`＝他試合に未保存編集がある状態でこの試合を見ている）で表示しているとき、まだどの組にも入っていない参加者（`waitingPlayers`）を「待機中 N名」＋読み取り専用の名前チップ（`PlayerChip` を `sortPlayersByRank` 順・参加者一覧と同スタイル `flex flex-wrap gap-2`）で組み合わせ一覧の直後に表示する。チップのみ（活動プルダウン・選手追加・D&D・ドロップゾーンは出さない）。表示可否は `shouldShowViewModeUnpairedSection`（pairingDisplayLogic）= `(isReadOnly || isViewMode) && pairings.length>0 && waitingPlayers.length>0` で、編集モードの待機中セクションのガード `!isReadOnly && !isViewMode` の**厳密な補集合（相互排他）**。`pairings.length>0` は `isReadOnly` が組0件でも真になりうるため参加者一覧（`pairings.length===0` で表示）との二重表示を防ぐガードとして必須。`waitingPlayers` の算出（組に含まれない組み合わせ対象参加者）は既存経路のまま不変で、表示ガードのみの追加
 - 組み合わせ表示ヘッダ（編集可能状態）に**再シャッフルボタン**（動的文言・確認ダイアログ）→ `POST /api/match-pairings/auto-match`（`lockedPairs` にロック組を同梱）。表示可否は `shouldShowReshuffleButton`、文言は `reshuffleButtonLabel`（pairingDisplayLogic）。送信 body は `computeLockedPairsInput` ＋ `buildAutoMatchBody`（pairingLockLogic）で組み立てる（`undefined`＝対戦編集は `lockedPairs` を送らず、配列＝再シャッフルは空配列でも必ず送る）
 - 提案されたペア一覧（ドラッグ&ドロップ / タップ選択対応）
   - 選手カード（DraggablePlayerChip）を長押し/クリックでドラッグして入れ替え

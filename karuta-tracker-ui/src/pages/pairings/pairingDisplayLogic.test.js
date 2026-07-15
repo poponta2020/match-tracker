@@ -3,6 +3,7 @@ import {
   shouldShowParticipantSection,
   shouldShowAutoMatchButton,
   shouldShowReshuffleButton,
+  shouldShowViewModeUnpairedSection,
   reshuffleButtonLabel,
   isBothCancelled,
   hasAnyCancelled,
@@ -50,6 +51,40 @@ describe('shouldShowReshuffleButton', () => {
   it('閲覧専用（他試合に未保存変更）では非表示（AC-1）', () => {
     expect(shouldShowReshuffleButton({
       isReadOnly: true, isViewMode: false, pairings: [{ player1Id: 1, player2Id: 2 }],
+    })).toBe(false);
+  });
+});
+
+describe('shouldShowViewModeUnpairedSection（閲覧時の未組み合わせチップ表示可否）', () => {
+  const pairing = [{ player1Id: 1, player2Id: 2 }];
+  const waiting = [{ id: 3, name: '田中' }];
+
+  it('閲覧モード・組あり・待機あり → true（AC-1）', () => {
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: false, isViewMode: true, pairings: pairing, waitingPlayers: waiting,
+    })).toBe(true);
+  });
+  it('読み取り専用モード・組あり・待機あり → true（AC-2）', () => {
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: true, isViewMode: false, pairings: pairing, waitingPlayers: waiting,
+    })).toBe(true);
+  });
+  it('組0件なら isViewMode/isReadOnly に関わらず false（参加者一覧との二重表示防止・AC-3）', () => {
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: false, isViewMode: true, pairings: [], waitingPlayers: waiting,
+    })).toBe(false);
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: true, isViewMode: false, pairings: [], waitingPlayers: waiting,
+    })).toBe(false);
+  });
+  it('待機0名なら false（空セクションを出さない・AC-4）', () => {
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: false, isViewMode: true, pairings: pairing, waitingPlayers: [],
+    })).toBe(false);
+  });
+  it('編集モード（isReadOnly:false かつ isViewMode:false）なら常に false（編集の待機中セクションと相互排他・AC-5）', () => {
+    expect(shouldShowViewModeUnpairedSection({
+      isReadOnly: false, isViewMode: false, pairings: pairing, waitingPlayers: waiting,
     })).toBe(false);
   });
 });
