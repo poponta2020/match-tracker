@@ -7,6 +7,13 @@ import { cardDivisionAPI } from '../../api/cardDivision';
 import { Copy, Check, AlertCircle } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import PageHeader from '../../components/PageHeader';
+import { addOneIsoDay } from '../../utils/date';
+
+// ISO 日付（'2026-07-05'）を M/D 表示（'7/5'。10の位が0の月日は省略）にする
+const formatMonthDay = (iso) => {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${m}/${d}`;
+};
 
 const Toggle = ({ enabled, onClick, color = 'bg-[#06C755]' }) => (
   <button
@@ -23,23 +30,93 @@ const Toggle = ({ enabled, onClick, color = 'bg-[#06C755]' }) => (
   </button>
 );
 
+/**
+ * 1日分（今日 or 明日）の札分けブロック。
+ * ラベル（「今日 M/D」「明日 M/D」）＋テキストエリア＋その日専用のコピーボタンを表示する。
+ * セッションが無ければ emptyMessage の空表示。copied 状態は日ごとに独立。
+ * 明日ブロックは provisional=true で「暫定」注記を添える。
+ */
+const DayCardDivision = ({ label, dateIso, hasSession, text, emptyMessage, provisional, onError }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      onError('コピーに失敗しました');
+    }
+  };
+
+  const labelText = dateIso ? `${label} ${formatMonthDay(dateIso)}` : label;
+  const showText = hasSession && !!text;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">{labelText}</span>
+        {showText && (
+          <button
+            onClick={handleCopy}
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
+              copied ? 'bg-[#4a6b5a] text-white' : 'bg-[#4a6b5a] text-white hover:bg-[#3d5a4c]'
+            }`}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? 'コピーしました' : 'コピー'}
+          </button>
+        )}
+      </div>
+      {showText ? (
+        <textarea
+          readOnly
+          value={text}
+          className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm text-gray-700 leading-relaxed whitespace-pre resize-y focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+        />
+      ) : (
+        <p className="text-sm text-gray-500">{emptyMessage}</p>
+      )}
+      {/* 明日ブロックは常に暫定注記を出す（セッションの有無自体も確定前に変わりうるため。AC-18） */}
+      {provisional && <p className="text-xs text-gray-500">暫定（確定前に変わる場合あり）</p>}
+    </div>
+  );
+};
+
 const OrgCardDivisionBlock = ({ org, playerId, showHeader, linked, onError }) => {
   const [loading, setLoading] = useState(true);
-  const [hasSession, setHasSession] = useState(false);
-  const [text, setText] = useState(null);
+  const [today, setToday] = useState({ date: null, hasSession: false, text: null });
+  const [tomorrow, setTomorrow] = useState({ date: null, hasSession: false, text: null });
   const [subscribed, setSubscribed] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await cardDivisionAPI.getCardDivision(playerId, org.id);
+        // 今日: date 未指定で取得（BE が JST 今日を解決してレスポンスの date に載せる）
+        const todayRes = await cardDivisionAPI.getCardDivision(playerId, org.id);
         if (cancelled) return;
-        setHasSession(!!res.data?.hasSession);
-        setText(res.data?.text ?? null);
-        setSubscribed(!!res.data?.subscribed);
+        const todayDate = todayRes?.data?.date ?? null;
+        setToday({
+          date: todayDate,
+          hasSession: !!todayRes?.data?.hasSession,
+          text: todayRes?.data?.text ?? null,
+        });
+        setSubscribed(!!todayRes?.data?.subscribed);
+        // 明日: 今日レスポンスの date（BE基準）を +1 した日付で再取得（直列）。
+        // FE の new Date() で明日を作らない（デバイスTZ差で「今日が2回」や欠落を招くため）。
+        if (todayDate) {
+          const tomorrowDate = addOneIsoDay(todayDate);
+          const tomorrowRes = await cardDivisionAPI.getCardDivision(playerId, org.id, tomorrowDate);
+          if (cancelled) return;
+          setTomorrow({
+            date: tomorrowDate,
+            hasSession: !!tomorrowRes?.data?.hasSession,
+            text: tomorrowRes?.data?.text ?? null,
+          });
+        }
       } catch {
         if (!cancelled) {
           onError('札分け情報の取得に失敗しました');
@@ -53,17 +130,6 @@ const OrgCardDivisionBlock = ({ org, playerId, showHeader, linked, onError }) =>
       cancelled = true;
     };
   }, [org.id, playerId]);
-
-  const handleCopy = async () => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      onError('コピーに失敗しました');
-    }
-  };
 
   const handleToggle = async () => {
     const next = !subscribed;
@@ -87,28 +153,26 @@ const OrgCardDivisionBlock = ({ org, playerId, showHeader, linked, onError }) =>
 
       {loading ? (
         <p className="text-sm text-gray-500">読み込み中...</p>
-      ) : hasSession && text ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">本日の札分け</span>
-            <button
-              onClick={handleCopy}
-              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                copied ? 'bg-[#4a6b5a] text-white' : 'bg-[#4a6b5a] text-white hover:bg-[#3d5a4c]'
-              }`}
-            >
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {copied ? 'コピーしました' : 'コピー'}
-            </button>
-          </div>
-          <textarea
-            readOnly
-            value={text}
-            className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm text-gray-700 leading-relaxed whitespace-pre resize-y focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+      ) : (
+        <div className="space-y-4">
+          <DayCardDivision
+            label="今日"
+            dateIso={today.date}
+            hasSession={today.hasSession}
+            text={today.text}
+            emptyMessage="今日は練習がありません"
+            onError={onError}
+          />
+          <DayCardDivision
+            label="明日"
+            dateIso={tomorrow.date}
+            hasSession={tomorrow.hasSession}
+            text={tomorrow.text}
+            emptyMessage="明日は練習がありません"
+            provisional
+            onError={onError}
           />
         </div>
-      ) : (
-        <p className="text-sm text-gray-500">本日は練習がありません</p>
       )}
 
       <div className="flex items-center justify-between pt-2 border-t">

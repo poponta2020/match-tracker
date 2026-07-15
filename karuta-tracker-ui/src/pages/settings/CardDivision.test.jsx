@@ -55,6 +55,19 @@ const renderPage = () =>
 
 const singleOrg = [{ id: 1, name: 'わすらもち会', color: '#ff0000' }];
 
+// 1日分のレスポンス生成ヘルパー（今日/明日で別レスポンスを mockResolvedValueOnce で積む）
+const sessionRes = (date, text, subscribed = false) => ({
+  data: { hasSession: true, date, organizationId: 1, text, subscribed },
+});
+const noSessionRes = (date, subscribed = false) => ({
+  data: { hasSession: false, date, organizationId: 1, text: null, subscribed },
+});
+
+// 今日→明日の2回取得を順に積む（1回目=今日、2回目=明日）
+const mockTodayTomorrow = (todayRes, tomorrowRes) => {
+  mocks.getCardDivision.mockResolvedValueOnce(todayRes).mockResolvedValueOnce(tomorrowRes);
+};
+
 describe('CardDivision', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,31 +81,56 @@ describe('CardDivision', () => {
     cleanup();
   });
 
-  it('当日セッションありのブロックで札組テキストが表示される', async () => {
-    mocks.getCardDivision.mockResolvedValue({
-      data: {
-        hasSession: true,
-        date: '2026-07-15',
-        organizationId: 1,
-        text: '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7',
-        subscribed: false,
-      },
-    });
+  // AC-14: 今日・明日の2枠が常に表示される
+  it('各練習会ブロックに「今日」「明日」の2枠が表示される', async () => {
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9')
+    );
 
     renderPage();
 
-    const textarea = await screen.findByDisplayValue(/1試合目：一の位1\.3\.5\.6\.7/);
-    expect(textarea).toBeInTheDocument();
+    expect(await screen.findByText(/今日 7\/15/)).toBeInTheDocument();
+    expect(screen.getByText(/明日 7\/16/)).toBeInTheDocument();
   });
 
-  it('「コピー」押下で navigator.clipboard.writeText がテキスト内容で呼ばれる', async () => {
-    const text = '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7';
-    mocks.getCardDivision.mockResolvedValue({
-      data: { hasSession: true, date: '2026-07-15', organizationId: 1, text, subscribed: false },
-    });
+  // AC-15/AC-18: 明日にセッションが無ければ空表示。ただし暫定注記は明日ブロックに常に出る
+  it('明日にセッションが無くても「明日は練習がありません」＋暫定注記を表示する', async () => {
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
+      noSessionRes('2026-07-16')
+    );
 
     renderPage();
-    await screen.findByDisplayValue(/1試合目/);
+
+    await screen.findByText(/今日 7\/15/);
+    expect(await screen.findByText('明日は練習がありません')).toBeInTheDocument();
+    // AC-18: 明日はセッション有無に関わらず暫定注記（今日ブロックには付かない＝1件）
+    expect(screen.getAllByText('暫定（確定前に変わる場合あり）')).toHaveLength(1);
+  });
+
+  // AC-15: 今日にセッションが無ければ「今日は練習がありません」
+  it('今日にセッションが無ければ「今日は練習がありません」を表示する', async () => {
+    mockTodayTomorrow(
+      noSessionRes('2026-07-15'),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9')
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('今日は練習がありません')).toBeInTheDocument();
+    expect(await screen.findByText(/明日 7\/16/)).toBeInTheDocument();
+  });
+
+  // AC-16: 今日・明日それぞれのテキストを独立したコピーボタンで個別にコピーできる
+  it('今日・明日それぞれのコピーボタンが各テキストで writeText を呼ぶ', async () => {
+    const todayText = '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7';
+    const tomorrowText = '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9';
+    mockTodayTomorrow(sessionRes('2026-07-15', todayText), sessionRes('2026-07-16', tomorrowText));
+
+    renderPage();
+    await screen.findByText(/今日 7\/15/);
+    await screen.findByText(/明日 7\/16/);
 
     const user = userEvent.setup();
     // clipboard 未実装環境でも writeText を持たせてから spy する（空オブジェクトだと spy が例外になる）
@@ -104,31 +142,67 @@ describe('CardDivision', () => {
     }
     vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
 
-    const copyButton = screen.getByRole('button', { name: /コピー/ });
-    await user.click(copyButton);
+    const copyButtons = screen.getAllByRole('button', { name: /コピー/ });
+    expect(copyButtons).toHaveLength(2); // 今日・明日で1つずつ
 
+    await user.click(copyButtons[0]);
     await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(text);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(todayText);
+    });
+
+    await user.click(copyButtons[1]);
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(tomorrowText);
     });
   });
 
-  it('購読トグル押下で updateSubscription が enabled 反転値で呼ばれる', async () => {
-    mocks.getCardDivision.mockResolvedValue({
-      data: {
-        hasSession: true,
-        date: '2026-07-15',
-        organizationId: 1,
-        text: '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7',
-        subscribed: false,
-      },
+  // AC-17: 明日分は今日レスポンスの date を +1 した日付で取得される（FE の new Date に依存しない）
+  it('明日分は今日レスポンスの date を +1 した日付で取得される', async () => {
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9')
+    );
+
+    renderPage();
+    await screen.findByText(/今日 7\/15/);
+
+    await waitFor(() => {
+      expect(mocks.getCardDivision).toHaveBeenCalledTimes(2);
     });
+    // 1回目: date 未指定（今日）。2回目: 今日レスポンスの date '2026-07-15' を +1 した '2026-07-16'
+    expect(mocks.getCardDivision).toHaveBeenNthCalledWith(1, 1, 1);
+    expect(mocks.getCardDivision).toHaveBeenNthCalledWith(2, 1, 1, '2026-07-16');
+  });
+
+  // AC-18: 明日ブロックに「暫定」注記が表示される（今日ブロックには付かない）
+  it('明日ブロックに「暫定（確定前に変わる場合あり）」の注記が表示される', async () => {
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9')
+    );
+
+    renderPage();
+
+    const notes = await screen.findAllByText('暫定（確定前に変わる場合あり）');
+    expect(notes).toHaveLength(1); // 明日ブロックのみ
+  });
+
+  // AC-21回帰: 購読トグル押下で updateSubscription が enabled 反転値で呼ばれる
+  it('購読トグル押下で updateSubscription が enabled 反転値で呼ばれる', async () => {
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7', false),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9', false)
+    );
     mocks.updateSubscription.mockResolvedValue({ data: {} });
 
     renderPage();
-    await screen.findByDisplayValue(/1試合目/);
+    await screen.findByText(/今日 7\/15/);
 
     const user = userEvent.setup();
-    const toggle = screen.getByText('この練習会の札分けをLINEで受け取る').closest('div').querySelector('button');
+    const toggle = screen
+      .getByText('この練習会の札分けをLINEで受け取る')
+      .closest('div')
+      .querySelector('button');
     await user.click(toggle);
 
     await waitFor(() => {
@@ -140,18 +214,7 @@ describe('CardDivision', () => {
     });
   });
 
-  it('hasSession=false の団体は空表示（テキストなし）', async () => {
-    mocks.getCardDivision.mockResolvedValue({
-      data: { hasSession: false, date: '2026-07-15', organizationId: 1, text: null, subscribed: false },
-    });
-
-    renderPage();
-
-    await screen.findByText('本日は練習がありません');
-    expect(screen.queryByRole('textbox', { name: '' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /コピー/ })).not.toBeInTheDocument();
-  });
-
+  // AC-21回帰: 参加練習会が0件のとき空表示＋導線（getCardDivision は呼ばれない）
   it('参加練習会が0件のとき空表示＋参加練習会への導線を出す', async () => {
     mocks.organizationGetPlayerOrganizations.mockResolvedValue({ data: [] });
 
@@ -165,17 +228,13 @@ describe('CardDivision', () => {
     expect(mocks.getCardDivision).not.toHaveBeenCalled();
   });
 
+  // AC-21回帰: LINE linked=false のとき未連携案内文言が表示される
   it('LINE linked=false のとき未連携案内文言が表示される', async () => {
     mocks.lineGetStatus.mockResolvedValue({ data: { enabled: true, linked: false } });
-    mocks.getCardDivision.mockResolvedValue({
-      data: {
-        hasSession: true,
-        date: '2026-07-15',
-        organizationId: 1,
-        text: '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7',
-        subscribed: false,
-      },
-    });
+    mockTodayTomorrow(
+      sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
+      sessionRes('2026-07-16', '【7/16 かでる10】\n1試合目：十の位2.4.6.8.9')
+    );
 
     renderPage();
 

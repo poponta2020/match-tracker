@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { toLocalISODate, todayLocalISODate } from './date';
+import { addOneIsoDay, toLocalISODate, todayLocalISODate } from './date';
 
 describe('toLocalISODate', () => {
   it('ローカルの年月日を YYYY-MM-DD に組み立てる（2桁ゼロ埋め）', () => {
@@ -32,5 +32,26 @@ describe('todayLocalISODate', () => {
     // 固定時刻: ローカル 2026-06-17 03:00
     vi.setSystemTime(new Date(2026, 5, 17, 3, 0, 0));
     expect(todayLocalISODate()).toBe('2026-06-17');
+  });
+});
+
+describe('addOneIsoDay（TZ非依存で ISO 日付を1日進める。札分けの「明日」算出に使用）', () => {
+  it('通常日を1日進める', () => {
+    expect(addOneIsoDay('2026-07-15')).toBe('2026-07-16');
+  });
+  it('月末をまたいで翌月へ繰り上げる', () => {
+    expect(addOneIsoDay('2026-07-31')).toBe('2026-08-01');
+  });
+  it('年末をまたいで翌年へ繰り上げる', () => {
+    expect(addOneIsoDay('2026-12-31')).toBe('2027-01-01');
+  });
+  it('うるう年 2/28 → 2/29', () => {
+    expect(addOneIsoDay('2028-02-28')).toBe('2028-02-29');
+  });
+  it('平年 2/28 → 3/1', () => {
+    expect(addOneIsoDay('2026-02-28')).toBe('2026-03-01');
+  });
+  it('ゼロ埋め（月・日）を維持する', () => {
+    expect(addOneIsoDay('2026-01-09')).toBe('2026-01-10');
   });
 });
