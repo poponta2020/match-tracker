@@ -18,7 +18,7 @@ import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } f
 import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
-import { togglePairingLock, canLockPairing, canShowUnlock, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 import { formatHeaderDate, resolveHeaderVenue } from './pairingHeader';
 
 
@@ -347,7 +347,7 @@ const PairingGenerator = () => {
   //    ※ [] は truthy だが「非null＝クライアント権威」を明示するため undefined 判定で分岐する。
   // editingExisting: 生成後ドラフトの isEditingExisting。新規作成（対戦編集）は false、
   // 既存編集からの再シャッフルは現在の isEditingExisting を引き継ぐ（タブ往復での復元時に
-  // 「全削除」ボタン等の編集UI状態がずれないようにする）。
+  // 「対戦をリセット」ボタン等の編集UI状態がずれないようにする）。
   const runAutoMatch = async (lockedPairs, editingExisting = false) => {
     if (participants.length === 0) {
       setError('参加者がいません');
@@ -388,16 +388,6 @@ const PairingGenerator = () => {
         setNotice(
           `表示中の参加者数(${participants.length}名)と最新の組み合わせ対象参加者数(${usedParticipantCount}名)が異なるため、最新の組み合わせ対象で生成しました。`
         );
-      }
-      if (locked.length > 0) {
-        const resultLockedCount = locked.filter(p => p.hasResult).length;
-        const manualLockedCount = locked.filter(p => !p.hasResult && p.locked).length;
-        const parts = [];
-        if (resultLockedCount > 0) parts.push(`結果入力済みの${resultLockedCount}組`);
-        if (manualLockedCount > 0) parts.push(`手動ロックの${manualLockedCount}組`);
-        if (parts.length > 0) {
-          setNotice(prev => (prev ? prev + ' ' : '') + `${parts.join('・')}はロックされています。`);
-        }
       }
     } catch (err) {
       console.error('Auto matching failed:', err);
@@ -488,8 +478,8 @@ const PairingGenerator = () => {
   const handleDeleteExisting = async () => {
     const lockedCount = pairings.filter(p => p.hasResult || p.locked).length;
     const msg = lockedCount > 0
-      ? `ロック済みの${lockedCount}組を除く組み合わせを削除しますか？\n（結果入力済み・手動ロックの組は保持されます。結果入力済みは個別にリセット、手動ロックは解除してください）`
-      : '既存の組み合わせを削除しますか？';
+      ? `ロック済みの${lockedCount}組を除く対戦組み合わせをリセットしますか？\n（結果入力済み・手動ロックの組は保持されます。結果入力済みは個別にリセット、手動ロックは解除してください）`
+      : '既存の対戦組み合わせをリセットしますか？';
     if (!window.confirm(msg)) {
       return;
     }
@@ -1049,7 +1039,7 @@ const PairingGenerator = () => {
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#a3564e] px-1.5 py-1 rounded-md hover:bg-black/5 disabled:opacity-50 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  全削除
+                  対戦をリセット
                 </button>
               )}
               {!isReadOnly && isViewMode && (
@@ -1095,7 +1085,7 @@ const PairingGenerator = () => {
                         結果入力済
                       </span>
                     )}
-                    {pairing.locked && !pairing.hasResult && (
+                    {shouldShowManualLockBadge({ isReadOnly, isViewMode, pairing }) && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#b45309] whitespace-nowrap">
                         <Lock className="w-3 h-3" />
                         ロック
