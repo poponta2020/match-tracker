@@ -90,11 +90,16 @@ const MatchDetail = () => {
 
   // 取り札記録の取得（本人＝当該試合の当事者が、通常URLで閲覧するときのみ）。
   // メンター閲覧（?playerId=）や、当事者でないユーザーが /matches/:id を直接開いた場合は取得しない。
+  // 依存は match の当事者ID（primitive）に絞り、無関係な match 再取得（動画編集等）での再実行・ちらつきを避ける。
+  const matchPlayer1Id = match?.player1Id;
+  const matchPlayer2Id = match?.player2Id;
+  const viewerId = currentPlayer?.id;
   useEffect(() => {
-    if (isOtherPlayer || !match) { setCardRecord(null); return; }
-    const isOwnMatch = currentPlayer?.id != null &&
-      (Number(match.player1Id) === currentPlayer.id || Number(match.player2Id) === currentPlayer.id);
-    if (!isOwnMatch) { setCardRecord(null); return; }
+    // 試合/閲覧者が変わったら前試合の私的記録を即クリア（取得完了までの stale 表示を防ぐ）
+    setCardRecord(null);
+    const isOwnMatch = !isOtherPlayer && viewerId != null &&
+      (Number(matchPlayer1Id) === viewerId || Number(matchPlayer2Id) === viewerId);
+    if (!isOwnMatch) return;
     let cancelled = false;
     matchAPI.getCardRecord(id)
       .then((res) => {
@@ -116,7 +121,7 @@ const MatchDetail = () => {
       })
       .catch(() => { if (!cancelled) setCardRecord(null); });
     return () => { cancelled = true; };
-  }, [id, isOtherPlayer, match, currentPlayer?.id]);
+  }, [id, isOtherPlayer, matchPlayer1Id, matchPlayer2Id, viewerId]);
 
   const handleDelete = async () => {
     setDeleting(true);
