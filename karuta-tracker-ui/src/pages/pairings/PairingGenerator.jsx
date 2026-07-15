@@ -1219,7 +1219,10 @@ const PairingGenerator = () => {
                   <PlayerChip
                     key={player.id}
                     name={player.name}
-                    kyuRank={player.kyuRank}
+                    // waitingPlayers は {id,name} のみ（loadExistingPairingsToState）のため、
+                    // 参加者一覧・編集モード待機中と同じく participants から kyuRank を補完し、
+                    // 級別の枠線色を参加者一覧チップと揃える。
+                    kyuRank={player.kyuRank || participants.find((p) => p.id === player.id)?.kyuRank}
                     className="text-sm bg-[#f9f6f2] text-[#374151]"
                   />
                 ))}
