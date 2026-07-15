@@ -72,8 +72,9 @@ function DroppablePool({ children }) {
  * @param onChange (nextPlacements) => void
  * @param scoreDifference 枚数差（不明プールの母数=50-枚数差の算出用）
  * @param isLesson 指導試合なら母数は50にフォールバック
+ * @param readOnly true のとき配置済みの札のみを操作不可で表示（不明プール・D&D・タップ・info を出さない）
  */
-export default function TorifudaBoard({ cards, placements, onChange, scoreDifference, isLesson }) {
+export default function TorifudaBoard({ cards, placements, onChange, scoreDifference, isLesson, readOnly = false }) {
   const [selected, setSelected] = useState(null); // 不明から選択中の札番号
   const [showInfo, setShowInfo] = useState(false);
   // 実ドラッグ直後の trailing click を1回だけ無視するガード（footgun 対策）
@@ -127,6 +128,20 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
     <div className="tr-quad" key={`${field}-${side}-${tier}`}>
       {['SELF', 'OPPONENT'].map((takenBy) => {
         const half = cellCards(field, side, tier, takenBy);
+        if (readOnly) {
+          // 読み取り専用: ドラッグ/タップ不可のプレーンチップのみ（見た目は踏襲）
+          return (
+            <div
+              key={takenBy}
+              className={`tr-half ${takenBy === 'SELF' ? 'take' : 'taken'}`}
+              style={{ flexGrow: Math.max(half.length, 1) }}
+            >
+              {half.map((c) => (
+                <span key={c} className="tr-chip">{kimariji(c)}</span>
+              ))}
+            </div>
+          );
+        }
         return (
           <DroppableHalf
             key={takenBy}
@@ -173,6 +188,21 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
       </div>
     </div>
   );
+
+  if (readOnly) {
+    // 試合詳細（本人閲覧）での読み取り専用表示。不明プール・info・操作なし。
+    return (
+      <div className="tr">
+        <div className="tr-sec">
+          <div className="tr-sec-hd">
+            <div className="tr-title"><h3>取り札</h3></div>
+          </div>
+          {renderField('ENEMY', ENEMY_TIERS, ENEMY_SIDES, '敵 陣', 'enemy')}
+          {renderField('OWN', OWN_TIERS, OWN_SIDES, '自 陣', 'own')}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="tr">

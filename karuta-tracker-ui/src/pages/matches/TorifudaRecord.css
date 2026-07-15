@@ -99,6 +99,8 @@
 .tr-ote-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .tr-ote-hd .no { width: 20px; height: 20px; border-radius: 50%; background: #efe7db; color: var(--taupe-tx); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .tr-ote-hd .t { font-size: 12.5px; font-weight: 800; color: var(--taupe-tx); letter-spacing: .04em; }
+/* 読み取り専用のお手付き内容（試合詳細） */
+.tr-ote-ro { font-size: 13px; line-height: 1.6; color: var(--ink); }
 .tr-types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
 .tr-type { height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--hair1); border-radius: 8px; font-size: 11.5px; font-weight: 700; color: var(--taupe-tx); background: transparent; cursor: pointer; }
 .tr-type.on { background: var(--navy); border-color: var(--navy); color: #fff; }

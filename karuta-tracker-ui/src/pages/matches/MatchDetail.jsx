@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { matchAPI, matchCommentsAPI, matchVideoAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchCommentThread from './MatchCommentThread';
+import TorifudaBoard from './TorifudaBoard';
+import OtetsukiDetails from './OtetsukiDetails';
+import './TorifudaRecord.css';
 import VideoRegisterModal from '../../components/VideoRegisterModal';
 import { useAuth } from '../../context/AuthContext';
 import { ROLES } from '../../utils/auth';
@@ -24,6 +27,8 @@ const MatchDetail = () => {
   const isOtherPlayer = queryPlayerId && Number(queryPlayerId) !== currentPlayer?.id;
   const [hasMentorRelation, setHasMentorRelation] = useState(false);
   const [menteeIdForComments, setMenteeIdForComments] = useState(null);
+  // 取り札記録（本人閲覧のみ・読み取り専用表示用）: { placements, details }
+  const [cardRecord, setCardRecord] = useState(null);
   const [commentsByOthersExist, setCommentsByOthersExist] = useState(false);
   // 試合動画セクション用の状態
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -82,6 +87,32 @@ const MatchDetail = () => {
       })
       .catch(() => setCommentsByOthersExist(false));
   }, [id, menteeIdForComments, currentPlayer?.id]);
+
+  // 取り札記録の取得（本人閲覧時のみ。メンター閲覧=?playerId= では取得も表示もしない）
+  useEffect(() => {
+    if (isOtherPlayer) { setCardRecord(null); return; }
+    let cancelled = false;
+    matchAPI.getCardRecord(id)
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data || {};
+        const placements = {};
+        (data.cardPlacements || []).forEach((p) => {
+          placements[p.cardNo] = { takenBy: p.takenBy, field: p.field, side: p.side, tier: p.tier };
+        });
+        const details = (data.otetsukiDetails || []).map((o) => ({
+          type: o.type,
+          hikkakeTarget: o.hikkakeTarget,
+          ankiDirection: o.ankiDirection,
+          mishearingReadCardNo: o.mishearingReadCardNo,
+          mishearingTouchedCardNo: o.mishearingTouchedCardNo,
+          otherText: o.otherText,
+        }));
+        setCardRecord({ placements, details });
+      })
+      .catch(() => { if (!cancelled) setCardRecord(null); });
+    return () => { cancelled = true; };
+  }, [id, isOtherPlayer]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -297,6 +328,24 @@ const MatchDetail = () => {
           </div>
         )}
       </div>
+
+      {/* 取り札・お手付き詳細（本人閲覧のみ・読み取り専用）。記録が無ければ非表示 */}
+      {!isOtherPlayer && cardRecord &&
+        (Object.keys(cardRecord.placements).length > 0 ||
+          cardRecord.details.some((d) => d && d.type)) && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          {Object.keys(cardRecord.placements).length > 0 && (
+            <TorifudaBoard
+              cards={Object.keys(cardRecord.placements).map(Number)}
+              placements={cardRecord.placements}
+              readOnly
+            />
+          )}
+          {cardRecord.details.some((d) => d && d.type) && (
+            <OtetsukiDetails details={cardRecord.details} readOnly />
+          )}
+        </div>
+      )}
 
       {/* 試合動画
           - 動画あり: YouTube 埋め込み再生 + タイトル + 外部リンク（編集/削除は登録者本人 or 管理者のみ）
