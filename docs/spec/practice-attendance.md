@@ -1,8 +1,8 @@
 # 出欠登録
 
-> **責務:** カレンダー画面（`/practice`）の出欠登録モーダル・試合別ステータスグリッド・記号凡例、および練習参加登録画面（`/practice/participation`）の仕様
-> **関連画面:** `/practice`（出欠登録モーダル・試合別ステータスグリッド）、`/practice/participation`（練習参加登録）
-> **主要実装:** `karuta-tracker-ui/src/components/AttendanceRegisterModal.jsx`、`karuta-tracker-ui/src/components/SaveProgressOverlay.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeList.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx`、`karuta-tracker-ui/src/pages/practice/utils/attendanceMode.js`、`karuta-tracker-ui/src/pages/practice/utils/sameDayConfirm.js`、`karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeSessionService.java`（`findSessionSummariesByYearMonth`）（練習日エンティティ・API・練習日管理全般は docs/spec/practice-sessions.md 参照）
+> **責務:** カレンダー画面（`/practice`）の出欠登録モーダル・試合別ステータスグリッド・記号凡例、練習参加登録画面（`/practice/participation`）、および1日分の出欠登録画面（`/practice/attendance`）の仕様
+> **関連画面:** `/practice`（出欠登録モーダル・試合別ステータスグリッド）、`/practice/participation`（月まとめ参加登録）、`/practice/attendance`（1日分の参加＋理由付きキャンセル）
+> **主要実装:** `karuta-tracker-ui/src/components/AttendanceRegisterModal.jsx`、`karuta-tracker-ui/src/components/SaveProgressOverlay.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeList.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeSessionAttendance.jsx`、`karuta-tracker-ui/src/pages/practice/utils/attendanceMode.js`、`karuta-tracker-ui/src/pages/practice/utils/attendanceScreen.js`、`karuta-tracker-ui/src/pages/practice/utils/sameDayConfirm.js`、`karuta-tracker/src/main/java/com/karuta/matchtracker/service/PracticeSessionService.java`（`findSessionSummariesByYearMonth`）（練習日エンティティ・API・練習日管理全般は docs/spec/practice-sessions.md 参照）
 
 ## 機能仕様
 
@@ -169,3 +169,29 @@
 5. 成功時: オーバーレイを `success` 状態に切替え（「参加登録を保存しました」と「カレンダーに戻る」ボタン）。失敗時: `error` 状態に切替え、サーバーからのエラーメッセージ（`err.response?.data?.message`）を表示
 6. ユーザーが「カレンダーに戻る」を押下 → `/practice`（カレンダー画面）へ遷移（エラー時は「閉じる」で編集中のチェック状態を保持したまま画面に戻り再試行可）
 7. カレンダー画面で自動的にデータ再取得
+
+### 1日分の出欠登録
+**パス**: `/practice/attendance?sessionId=<セッションID>`（静的セグメントのため React Router v6 のランキングで `/practice/:id` より優先。ガードは全ロール）
+
+カレンダー（`/practice`）のセッション詳細ポップアップ「出欠登録」ボタンから遷移する、**押した日付のそのセッション1件**に閉じた出欠画面。月まとめの `/practice/participation`・`/practice/cancel` の挙動 union を1セッションにスコープして再構成したもの（新規API・DB・マイグレーションなし。既存 `registerParticipations` / `cancelMultiple` を流用）。同日に複数団体のセッションがあってもポップアップで開いた1件のみを対象とする。
+
+**表示内容**:
+- **上部バー（緑）**: ← 戻る（`/practice`）＋「M/D(曜) 会場名」。直下に団体カラーのドット＋団体名（`org.color`）。
+- **参加/キャンセルの排他振り分け**（純関数 `resolveAttendanceSections`。各試合は最大1セクションにのみ現れる）:
+  - **参加する試合**（未参加・抽選前・伝助削除でない試合）: 各行「第N試合／時間／人数 or 満員ラベル／チェック」。末尾に「満員でも申込できます（キャンセル待ちになる場合あり）」注記＋「参加を保存」。
+  - **参加をキャンセル**（WON / PENDING。**当月扱いのみ**）: 試合選択→理由（体調不良／仕事・学業／家庭／交通機関／その他。`その他`＝自由記述必須）→「選択した試合をキャンセル」（実行前 `window.confirm`）。
+  - **読み取り専用**（WAITLISTED / OFFERED 等、操作対象外の参加）: ステータス表示のみ。
+- **満員でもチェック可**: capacity 到達（`matchParticipantCounts[n] >= capacity`＝カレンダーの `FULL` と同閾値）でも抽選前は登録可。満員は情報表示にとどめチェックボックスを無効化しない。登録不可は「抽選確定済み（ステータス表示）」「伝助削除（×）」のみ。
+- **当月扱い／来月扱いの区別**（`resolveAttendanceMode`）:
+  - **当月扱い**: 既存アクティブ参加は参加トグルに出さず、取り消しは理由付きキャンセルで行う。
+  - **来月扱い**（未来月・抽選確定なし）: 全試合をトグル表示し登録済みは pre-check。外すと理由なし取消（`registerParticipations` の全置換で反映）。理由付きキャンセルセクションは非表示。
+  - **抽選確定済みセッション**: 参加トグル不可（保存ボタンなし）、WON / PENDING のみ理由付きキャンセル可。
+- **伝助削除承認済みの試合番号**: 参加トグルを出さず × 表示（参加不可）。
+- **SAME_DAY 当日12:00以降の確認ダイアログ**: 参加保存は `needsSameDayConfirm`（SAME_DAY 団体・当日・変更あり）、キャンセルは当日12時判定で追加確認を表示（各既存画面と同一判定）。
+- **完了/エラー**: `SaveProgressOverlay`（保存中／完了／エラー）。完了「カレンダーに戻る」→ `/practice`。エラーは状態維持で再試行。参加保存は `expectedVersion` を送り 409 は再読込。
+
+**データフロー**:
+1. `sessionId` 付きで遷移。`GET /api/practice-sessions/{id}`（会場・団体・`venueSchedules`・`matchParticipantCounts`・`densukeDeletionCandidateMatchNumbers`・`capacity`・`totalMatches`）と `GET /api/organizations` を取得し、セッション日付から年月を導出。
+2. 続けて `GET /api/practice-sessions/participations/player/{playerId}`（**全置換ペイロードの seed**）と `.../status`（`participations[sessionId]` の status・participantId・waitlistNumber、`version`、`lotteryExecuted`、`hasAnyExecutedLotteryInMonth`）を取得。**seed の取得失敗は握りつぶさず全体エラーに流し、保存ボタンに到達させない**（空 seed で保存すると対象日以外の同月参加が全消えするため）。
+3. 参加保存: 月の参加マップ（seed）に対象セッションの希望集合を差し替えて全置換ペイロードを組み（純関数 `buildMonthParticipationsPayload`。他日の参加を必ず保持）、`POST /api/practice-sessions/participations`。
+4. キャンセル: 対象セッションの選択試合（WON/PENDING）の `participantId` を集約し `POST /api/lottery/cancel`（`participantIds`）。
