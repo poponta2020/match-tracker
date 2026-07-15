@@ -726,6 +726,7 @@ const MatchForm = () => {
         await saveCardRecordFor(id);
         navigate('/matches');
       } else {
+        let createdMatchId;
         if (formData.opponentId) {
           const player1Id = currentPlayer.id;
           const player2Id = formData.opponentId;
@@ -748,7 +749,8 @@ const MatchForm = () => {
           };
 
           const createdRes = await matchAPI.createDetailed(detailedData);
-          await saveCardRecordFor(createdRes.data?.id);
+          createdMatchId = createdRes.data?.id;
+          await saveCardRecordFor(createdMatchId);
         } else {
           const submitData = {
             ...formData,
@@ -757,10 +759,11 @@ const MatchForm = () => {
             matchNumber: parseInt(formData.matchNumber),
           };
           const createdRes = await matchAPI.create(submitData);
-          await saveCardRecordFor(createdRes.data?.id);
+          createdMatchId = createdRes.data?.id;
+          await saveCardRecordFor(createdMatchId);
         }
 
-        navigate('/');
+        navigate(createdMatchId ? `/matches/${createdMatchId}` : '/');
       }
     } catch (err) {
       console.error('保存エラー:', err);
@@ -781,7 +784,7 @@ const MatchForm = () => {
 
             await matchAPI.update(existingMatchId, submitData);
             await saveCardRecordFor(existingMatchId);
-            navigate('/');
+            navigate(`/matches/${existingMatchId}`);
           } catch (updateErr) {
             console.error('更新エラー:', updateErr);
             setError(
