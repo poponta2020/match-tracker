@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { kimariji } from '../../data/kimariji';
+import { kimariji, compareCardsByDecisionOrder } from '../../data/kimariji';
 import './TorifudaRecord.css';
 
 // 盤面の並び（design-spec 取り札記録・A案）:
@@ -23,7 +23,7 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
   const [showInfo, setShowInfo] = useState(false);
 
   const placed = placements || {};
-  const poolCards = cards.filter((c) => !placed[c]);
+  const poolCards = cards.filter((c) => !placed[c]).sort(compareCardsByDecisionOrder);
 
   const sd = Number(scoreDifference);
   const placeable = (isLesson || scoreDifference == null || scoreDifference === '' || Number.isNaN(sd))
