@@ -70,19 +70,16 @@ const DayCardDivision = ({ label, dateIso, hasSession, text, emptyMessage, provi
         )}
       </div>
       {showText ? (
-        <>
-          <textarea
-            readOnly
-            value={text}
-            className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm text-gray-700 leading-relaxed whitespace-pre resize-y focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
-          />
-          {provisional && (
-            <p className="text-xs text-gray-500">暫定（確定前に変わる場合あり）</p>
-          )}
-        </>
+        <textarea
+          readOnly
+          value={text}
+          className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm text-gray-700 leading-relaxed whitespace-pre resize-y focus:ring-2 focus:ring-[#4a6b5a] focus:border-transparent"
+        />
       ) : (
         <p className="text-sm text-gray-500">{emptyMessage}</p>
       )}
+      {/* 明日ブロックは常に暫定注記を出す（セッションの有無自体も確定前に変わりうるため。AC-18） */}
+      {provisional && <p className="text-xs text-gray-500">暫定（確定前に変わる場合あり）</p>}
     </div>
   );
 };

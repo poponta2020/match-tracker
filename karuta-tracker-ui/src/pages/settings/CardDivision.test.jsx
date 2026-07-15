@@ -94,8 +94,8 @@ describe('CardDivision', () => {
     expect(screen.getByText(/明日 7\/16/)).toBeInTheDocument();
   });
 
-  // AC-15: 明日にセッションが無ければ「明日は練習がありません」
-  it('明日にセッションが無ければ「明日は練習がありません」を表示する', async () => {
+  // AC-15/AC-18: 明日にセッションが無ければ空表示。ただし暫定注記は明日ブロックに常に出る
+  it('明日にセッションが無くても「明日は練習がありません」＋暫定注記を表示する', async () => {
     mockTodayTomorrow(
       sessionRes('2026-07-15', '【7/15 かでる2・7】\n1試合目：一の位1.3.5.6.7'),
       noSessionRes('2026-07-16')
@@ -105,6 +105,8 @@ describe('CardDivision', () => {
 
     await screen.findByText(/今日 7\/15/);
     expect(await screen.findByText('明日は練習がありません')).toBeInTheDocument();
+    // AC-18: 明日はセッション有無に関わらず暫定注記（今日ブロックには付かない＝1件）
+    expect(screen.getAllByText('暫定（確定前に変わる場合あり）')).toHaveLength(1);
   });
 
   // AC-15: 今日にセッションが無ければ「今日は練習がありません」
