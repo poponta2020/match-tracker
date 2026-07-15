@@ -34,6 +34,7 @@
 - `ical-feed-per-match-participation` — iCalイベント時刻を参加試合番号の時間帯に絞り込む改修（主要領域: karuta-tracker, docs）
 - `ical-feed-per-organization` — iCal購読フィードを所属団体ごと・ゲスト参加で分割（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `kaderu-multi-org` — かでる2・7予約取込をわすらもち会にも対応させるマルチ団体化（主要領域: docs, scripts）
+- `card-division-line-reminder` — その日の札分け（札組）をアプリでテキスト確認＋希望者へ1試合目3時間前にLINE通知（全プレイヤー開放・デフォルトOFF）（主要領域: karuta-tracker-ui, karuta-tracker, database, docs） [shipped: PR #1051]
 - `line-channel-separation` — 管理者向け・選手向け通知を別のLINEチャネルから送信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
 - `line-confirmation-dialog` — LINEボットのボタン操作全てに確認ダイアログを挟み誤操作を防止（主要領域: karuta-tracker, database）
 - `line-link-lottery-notify` — LINE連携完了時に確定済み抽選結果を自動送信（主要領域: karuta-tracker）
