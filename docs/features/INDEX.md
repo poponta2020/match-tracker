@@ -98,3 +98,4 @@
 - `pairing-avoid-previous-practice-opponents` — 自動シャッフルで同一団体の前回練習日に組んだペアも強く避ける改修（主要領域: karuta-tracker）[shipped: PR #1050]
 
 - `pairing-lock-display-fixes` — /pairings のロック通知削除・ロック済み組のアイコン重複解消（解除のみ）・「全削除」→「対戦をリセット」改名（ボタン＋確認ダイアログ）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1059]
+- `pairing-view-unpaired-chips` — /pairings 閲覧時に未組み合わせの参加者を参加者一覧と同じチップで表示する改修（主要領域: karuta-tracker-ui）[shipped: PR #1063]
