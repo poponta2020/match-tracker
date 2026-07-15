@@ -88,9 +88,13 @@ const MatchDetail = () => {
       .catch(() => setCommentsByOthersExist(false));
   }, [id, menteeIdForComments, currentPlayer?.id]);
 
-  // 取り札記録の取得（本人閲覧時のみ。メンター閲覧=?playerId= では取得も表示もしない）
+  // 取り札記録の取得（本人＝当該試合の当事者が、通常URLで閲覧するときのみ）。
+  // メンター閲覧（?playerId=）や、当事者でないユーザーが /matches/:id を直接開いた場合は取得しない。
   useEffect(() => {
-    if (isOtherPlayer) { setCardRecord(null); return; }
+    if (isOtherPlayer || !match) { setCardRecord(null); return; }
+    const isOwnMatch = currentPlayer?.id != null &&
+      (Number(match.player1Id) === currentPlayer.id || Number(match.player2Id) === currentPlayer.id);
+    if (!isOwnMatch) { setCardRecord(null); return; }
     let cancelled = false;
     matchAPI.getCardRecord(id)
       .then((res) => {
@@ -112,7 +116,7 @@ const MatchDetail = () => {
       })
       .catch(() => { if (!cancelled) setCardRecord(null); });
     return () => { cancelled = true; };
-  }, [id, isOtherPlayer]);
+  }, [id, isOtherPlayer, match, currentPlayer?.id]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -216,6 +220,10 @@ const MatchDetail = () => {
   const otetsukiCount = isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount;
   const personalNotes = isOtherPlayer ? match.menteePersonalNotes : match.myPersonalNotes;
   const hasNotes = otetsukiCount != null || personalNotes;
+
+  // 取り札・お手付き詳細は「当該試合の当事者本人が通常URLで閲覧」するときのみ表示する
+  const isOwnMatch = currentPlayer?.id != null &&
+    (Number(match.player1Id) === currentPlayer.id || Number(match.player2Id) === currentPlayer.id);
 
   // 試合動画セクション用の導出値
   const video = match.video;
@@ -329,8 +337,8 @@ const MatchDetail = () => {
         )}
       </div>
 
-      {/* 取り札・お手付き詳細（本人閲覧のみ・読み取り専用）。記録が無ければ非表示 */}
-      {!isOtherPlayer && cardRecord &&
+      {/* 取り札・お手付き詳細（当該試合の当事者本人が通常閲覧するときのみ・読み取り専用）。記録が無ければ非表示 */}
+      {!isOtherPlayer && isOwnMatch && cardRecord &&
         (Object.keys(cardRecord.placements).length > 0 ||
           cardRecord.details.some((d) => d && d.type)) && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
