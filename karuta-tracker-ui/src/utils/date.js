@@ -23,4 +23,20 @@ export const toLocalISODate = (date = new Date()) =>
  */
 export const todayLocalISODate = () => toLocalISODate(new Date());
 
+/**
+ * ISO 日付文字列（`YYYY-MM-DD`）を1日進める。
+ *
+ * 上の `toLocalISODate` 系がローカルTZ基準なのに対し、こちらは **TZ 非依存**（`Date.UTC` ベース）。
+ * 「明日」の日付を、サーバーがJSTで解決した当日（API レスポンスの `date`）を基準に算出する用途で、
+ * デバイスの現在時刻・タイムゾーンに一切依存しない純関数として使う。月末・年末・うるう年の繰り上げも正しく処理する。
+ * @param {string} iso `YYYY-MM-DD`
+ * @returns {string} 翌日の `YYYY-MM-DD`（例: '2026-07-31' → '2026-08-01'）
+ */
+export const addOneIsoDay = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  // Date.UTC は日・月・年のオーバーフローを正規化する（d+1 が月末を超えても翌月へ繰り上がる）
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+};
+
 export default todayLocalISODate;
