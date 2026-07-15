@@ -16,6 +16,7 @@
 - [autoreview_pr1022.md](autoreview_pr1022.md) - PR#1022（フロントエンド既存lintエラー46件解消、Issue#1019）2ラウンドでCodex pass・AC適合pass。追加code-review(high)で3件反映（eslint設定の根本対応・no-irregular-whitespace検査範囲維持・disableコメント修正）
 
 ## Ship
+- [ship_pr1059_pairing_lock_display_fixes.md](ship_pr1059_pairing_lock_display_fixes.md) - PR#1059出荷（/pairingsロック表示3改善＝A通知削除/Bバッジ重複解消/C全削除→対戦をリセット、親#1058）。純フロント・単一タスク直列。shouldShowManualLockBadge=canShowUnlockの厳密な補集合で編集/閲覧を排他。auto-review 1R pass(medium,32k)。教訓=docs更新前に対象文字列の実在をgrep確認・変更文言をテスト全体grepしアサート無しを確認(AC-6ブラインドスポット)
 - [ship_pr1051_card_division_line_reminder.md](ship_pr1051_card_division_line_reminder.md) - PR#1051出荷（札分け確認＆LINE通知、親#1045/子#1046-1049）。札組テキストBE一元生成(cardRules.jsゴールデンパリティ)＋購読制デフォルトOFF(per-orgゲート)＋3h前スケジューラ(dedupeKey=sessionId)＋購読部分更新API。本番DB適用済(CHECK25種別)。auto-review 2R収束(R1=clipboardテスト堅牢化)
 - [ship_pr1050_pairing_avoid_previous_practice.md](ship_pr1050_pairing_avoid_previous_practice.md) - PR#1050出荷（自動シャッフルで同一団体の前回練習日ペアを強く回避、親#1041/子#1042#1043）。ソフト強ペナルティ=グレースフル劣化。auto-review 2R収束(R1 blocker=matches経路テスト欠落→main直修正)。cross-org除外はbehavioral検証不可の教訓
 - [ship_pr1044_torifuda_place_over_chip.md](ship_pr1044_torifuda_place_over_chip.md) - PR#1044出荷（取り札記録の盤面で札選択中は既存チップの上でもそのマスへ配置可、Issueなし）。stopPropagation子がモード操作で親の当たり判定を潰す不具合→子onClickをarm状態で分岐。TorifudaBoard初テスト追加。1R Codex pass(low)
