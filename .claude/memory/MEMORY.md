@@ -16,6 +16,7 @@
 - [autoreview_pr1022.md](autoreview_pr1022.md) - PR#1022（フロントエンド既存lintエラー46件解消、Issue#1019）2ラウンドでCodex pass・AC適合pass。追加code-review(high)で3件反映（eslint設定の根本対応・no-irregular-whitespace検査範囲維持・disableコメント修正）
 
 ## Ship
+- [ship_pr1060_torifuda_record_dnd_view.md](ship_pr1060_torifuda_record_dnd_view.md) - PR#1060出荷（取り札記録の改修=①D&D配置②決まり字順③象限内動的幅④保存後は試合詳細へ遷移＋読取専用表示、親#1052/子#1053-1057）。フロントのみ・Wave1(task1∥task2)＋task3/4/5直列。@dnd-kitはjsdom e2e不可→computeDrop/trailing-clickガードを純モジュール化、transform未適用だとドラッグ中動かない。auto-review 4R収束(全high)=MatchDetail本人性ガード/stale記録クリアを段階深堀り、kimariji crashはfallback見落としfalse-positive
 - [ship_pr1059_pairing_lock_display_fixes.md](ship_pr1059_pairing_lock_display_fixes.md) - PR#1059出荷（/pairingsロック表示3改善＝A通知削除/Bバッジ重複解消/C全削除→対戦をリセット、親#1058）。純フロント・単一タスク直列。shouldShowManualLockBadge=canShowUnlockの厳密な補集合で編集/閲覧を排他。auto-review 1R pass(medium,32k)。教訓=docs更新前に対象文字列の実在をgrep確認・変更文言をテスト全体grepしアサート無しを確認(AC-6ブラインドスポット)
 - [ship_pr1051_card_division_line_reminder.md](ship_pr1051_card_division_line_reminder.md) - PR#1051出荷（札分け確認＆LINE通知、親#1045/子#1046-1049）。札組テキストBE一元生成(cardRules.jsゴールデンパリティ)＋購読制デフォルトOFF(per-orgゲート)＋3h前スケジューラ(dedupeKey=sessionId)＋購読部分更新API。本番DB適用済(CHECK25種別)。auto-review 2R収束(R1=clipboardテスト堅牢化)
 - [ship_pr1050_pairing_avoid_previous_practice.md](ship_pr1050_pairing_avoid_previous_practice.md) - PR#1050出荷（自動シャッフルで同一団体の前回練習日ペアを強く回避、親#1041/子#1042#1043）。ソフト強ペナルティ=グレースフル劣化。auto-review 2R収束(R1 blocker=matches経路テスト欠落→main直修正)。cross-org除外はbehavioral検証不可の教訓

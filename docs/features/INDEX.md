@@ -91,7 +91,7 @@
 - `waitlist-offer-consolidation` — キャンセル待ち繰り上げオファーのLINE通知をセッション単位で1通に統合（主要領域: karuta-tracker-ui, karuta-tracker）
 - `web-push-notifications` — アプリ内通知をWeb Push通知でも全種別配信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker）
 - `お手付き記録` — 個人結果入力画面で自分のお手付き回数・個人メモを記録（主要領域: karuta-tracker-ui, karuta-tracker, database）
-- `取り札記録` — 個人結果入力で出札50枚の取り位置とお手付き種類別詳細を記録（主要領域: karuta-tracker-ui, karuta-tracker, database）
+- `取り札記録` — 個人結果入力で出札50枚の取り位置とお手付き種類別詳細を記録（主要領域: karuta-tracker-ui, karuta-tracker, database）[shipped: PR #1060]
 - `団体管理` — わすらもち会・北大かるた会の2団体をアプリで独立運用できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
 - `団体別の表示機能` — OrganizationControllerの認可不足・団体フィルタ適用漏れ等9項目の改修（主要領域: karuta-tracker-ui, karuta-tracker）
 - `当日キャンセル補充` — 当日WON参加者キャンセル時に全体募集・先着順で即時補充するフロー（主要領域: karuta-tracker-ui, karuta-tracker, database）
