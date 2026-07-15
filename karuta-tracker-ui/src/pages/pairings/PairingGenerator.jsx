@@ -1215,14 +1215,19 @@ const PairingGenerator = () => {
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {sortPlayersByRank(waitingPlayers).map((player) => (
+                {/* waitingPlayers は {id,name} のみ（loadExistingPairingsToState）で級・段・ロールを
+                    持たない。参加者一覧と同じ並び（sortPlayersByRank: ロール→級→段→名前）と級別枠線色を
+                    得るには、ソート前に participants の情報を補完する必要がある。 */}
+                {sortPlayersByRank(
+                  waitingPlayers.map((player) => {
+                    const full = participants.find((p) => p.id === player.id);
+                    return full ? { ...full, ...player } : player;
+                  }),
+                ).map((player) => (
                   <PlayerChip
                     key={player.id}
                     name={player.name}
-                    // waitingPlayers は {id,name} のみ（loadExistingPairingsToState）のため、
-                    // 参加者一覧・編集モード待機中と同じく participants から kyuRank を補完し、
-                    // 級別の枠線色を参加者一覧チップと揃える。
-                    kyuRank={player.kyuRank || participants.find((p) => p.id === player.id)?.kyuRank}
+                    kyuRank={player.kyuRank}
                     className="text-sm bg-[#f9f6f2] text-[#374151]"
                   />
                 ))}
