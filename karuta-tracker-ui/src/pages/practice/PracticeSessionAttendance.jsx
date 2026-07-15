@@ -36,21 +36,30 @@ const STATUS_LABEL = {
 
 const HAIRLINE = '#e5ddd0';
 
-const formatBarDate = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
+// 'YYYY-MM-DD' をローカル日付として安全にパースする。
+// new Date('YYYY-MM-DD') は UTC 深夜として解釈され、負オフセットTZのブラウザでは
+// 前日・前月にずれる。年月は全置換 API（registerParticipations）の seed 月に直結するため、
+// ここでずれると別月の参加を誤って置換し他日データを壊す。ローカルコンストラクタで回避する。
+const parseIsoDateLocal = (dateStr) => {
+  const parts = (dateStr || '').split('-').map(Number);
+  if (parts.length === 3 && parts.every((n) => Number.isInteger(n))) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  return new Date(dateStr); // 想定外フォーマットのフォールバック
 };
 
-const formatConfirmDate = (dateStr) => {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ja-JP', {
+const formatBarDate = (dateStr) => {
+  if (!dateStr) return '';
+  return parseIsoDateLocal(dateStr).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
+};
+
+const formatConfirmDate = (dateStr) =>
+  parseIsoDateLocal(dateStr).toLocaleDateString('ja-JP', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     weekday: 'short',
   });
-};
 
 const timeRangeFor = (session, matchNumber) => {
   const schedule = (session?.venueSchedules || []).find((s) => s.matchNumber === matchNumber);
@@ -109,7 +118,7 @@ const PracticeSessionAttendance = () => {
           organizationAPI.getAll().catch(() => ({ data: [] })),
         ]);
         const sessionData = sessionRes.data;
-        const d = new Date(sessionData.sessionDate);
+        const d = parseIsoDateLocal(sessionData.sessionDate);
         const year = d.getFullYear();
         const month = d.getMonth() + 1;
 
@@ -150,8 +159,9 @@ const PracticeSessionAttendance = () => {
     return () => { cancelled = true; };
   }, [currentPlayer?.id, sessionId, reloadKey]);
 
-  const year = session ? new Date(session.sessionDate).getFullYear() : null;
-  const month = session ? new Date(session.sessionDate).getMonth() + 1 : null;
+  const parsedSessionDate = session ? parseIsoDateLocal(session.sessionDate) : null;
+  const year = parsedSessionDate ? parsedSessionDate.getFullYear() : null;
+  const month = parsedSessionDate ? parsedSessionDate.getMonth() + 1 : null;
 
   const { isCurrentMonth: isCurrentMonthMode } = useMemo(
     () => (session ? resolveAttendanceMode(year, month, hasMonthlyLottery) : { isCurrentMonth: false }),
