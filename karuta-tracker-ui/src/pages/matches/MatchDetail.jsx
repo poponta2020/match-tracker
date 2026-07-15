@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { matchAPI, matchCommentsAPI, matchVideoAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import MatchCommentThread from './MatchCommentThread';
+import TorifudaBoard from './TorifudaBoard';
+import OtetsukiDetails from './OtetsukiDetails';
+import './TorifudaRecord.css';
 import VideoRegisterModal from '../../components/VideoRegisterModal';
 import { useAuth } from '../../context/AuthContext';
 import { ROLES } from '../../utils/auth';
@@ -24,6 +27,8 @@ const MatchDetail = () => {
   const isOtherPlayer = queryPlayerId && Number(queryPlayerId) !== currentPlayer?.id;
   const [hasMentorRelation, setHasMentorRelation] = useState(false);
   const [menteeIdForComments, setMenteeIdForComments] = useState(null);
+  // 取り札記録（本人閲覧のみ・読み取り専用表示用）: { placements, details }
+  const [cardRecord, setCardRecord] = useState(null);
   const [commentsByOthersExist, setCommentsByOthersExist] = useState(false);
   // 試合動画セクション用の状態
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -82,6 +87,41 @@ const MatchDetail = () => {
       })
       .catch(() => setCommentsByOthersExist(false));
   }, [id, menteeIdForComments, currentPlayer?.id]);
+
+  // 取り札記録の取得（本人＝当該試合の当事者が、通常URLで閲覧するときのみ）。
+  // メンター閲覧（?playerId=）や、当事者でないユーザーが /matches/:id を直接開いた場合は取得しない。
+  // 依存は match の当事者ID（primitive）に絞り、無関係な match 再取得（動画編集等）での再実行・ちらつきを避ける。
+  const matchPlayer1Id = match?.player1Id;
+  const matchPlayer2Id = match?.player2Id;
+  const viewerId = currentPlayer?.id;
+  useEffect(() => {
+    // 試合/閲覧者が変わったら前試合の私的記録を即クリア（取得完了までの stale 表示を防ぐ）
+    setCardRecord(null);
+    const isOwnMatch = !isOtherPlayer && viewerId != null &&
+      (Number(matchPlayer1Id) === viewerId || Number(matchPlayer2Id) === viewerId);
+    if (!isOwnMatch) return;
+    let cancelled = false;
+    matchAPI.getCardRecord(id)
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data || {};
+        const placements = {};
+        (data.cardPlacements || []).forEach((p) => {
+          placements[p.cardNo] = { takenBy: p.takenBy, field: p.field, side: p.side, tier: p.tier };
+        });
+        const details = (data.otetsukiDetails || []).map((o) => ({
+          type: o.type,
+          hikkakeTarget: o.hikkakeTarget,
+          ankiDirection: o.ankiDirection,
+          mishearingReadCardNo: o.mishearingReadCardNo,
+          mishearingTouchedCardNo: o.mishearingTouchedCardNo,
+          otherText: o.otherText,
+        }));
+        setCardRecord({ placements, details });
+      })
+      .catch(() => { if (!cancelled) setCardRecord(null); });
+    return () => { cancelled = true; };
+  }, [id, isOtherPlayer, matchPlayer1Id, matchPlayer2Id, viewerId]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -185,6 +225,10 @@ const MatchDetail = () => {
   const otetsukiCount = isOtherPlayer ? match.menteeOtetsukiCount : match.myOtetsukiCount;
   const personalNotes = isOtherPlayer ? match.menteePersonalNotes : match.myPersonalNotes;
   const hasNotes = otetsukiCount != null || personalNotes;
+
+  // 取り札・お手付き詳細は「当該試合の当事者本人が通常URLで閲覧」するときのみ表示する
+  const isOwnMatch = currentPlayer?.id != null &&
+    (Number(match.player1Id) === currentPlayer.id || Number(match.player2Id) === currentPlayer.id);
 
   // 試合動画セクション用の導出値
   const video = match.video;
@@ -297,6 +341,24 @@ const MatchDetail = () => {
           </div>
         )}
       </div>
+
+      {/* 取り札・お手付き詳細（当該試合の当事者本人が通常閲覧するときのみ・読み取り専用）。記録が無ければ非表示 */}
+      {!isOtherPlayer && isOwnMatch && cardRecord &&
+        (Object.keys(cardRecord.placements).length > 0 ||
+          cardRecord.details.some((d) => d && d.type)) && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          {Object.keys(cardRecord.placements).length > 0 && (
+            <TorifudaBoard
+              cards={Object.keys(cardRecord.placements).map(Number)}
+              placements={cardRecord.placements}
+              readOnly
+            />
+          )}
+          {cardRecord.details.some((d) => d && d.type) && (
+            <OtetsukiDetails details={cardRecord.details} readOnly />
+          )}
+        </div>
+      )}
 
       {/* 試合動画
           - 動画あり: YouTube 埋め込み再生 + タイトル + 外部リンク（編集/削除は登録者本人 or 管理者のみ）

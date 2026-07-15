@@ -39,3 +39,49 @@ export const ALL_KIMARIJI = Array.from({ length: 100 }, (_, i) => ({
   no: i + 1,
   kimariji: KIMARIJI[i + 1],
 }));
+
+// 決まり字1文字目の並び順（むすめふさほせ…）
+export const FIRST_CHAR_ORDER = 'むすめふさほせうつしもゆいちひきはやよかみたこおわなあ';
+
+// 五十音辞書順（濁点・半濁点・小書きを基本音の直後に並べた照合順）
+export const KANA_COLLATION = 'あぁいぃうぅえぇおぉかがきぎくぐけげこごさざしじすずせぜそぞただちぢつっづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもやゃゆゅよょらりるれろわゐゑをんー';
+
+/** 五十音辞書順における文字の順位。未知の文字は末尾扱い。 */
+export function kanaRank(ch) {
+  const idx = KANA_COLLATION.indexOf(ch);
+  return idx === -1 ? KANA_COLLATION.length : idx;
+}
+
+/**
+ * 決まり字文字列同士の比較（「・」を除去した上で五十音辞書順、
+ * 完全一致する接頭辞なら短い方を先に）。
+ */
+export function compareKimariji(a, b) {
+  const sa = a.replace(/・/g, '');
+  const sb = b.replace(/・/g, '');
+  const len = Math.min(sa.length, sb.length);
+  for (let i = 0; i < len; i++) {
+    const diff = kanaRank(sa[i]) - kanaRank(sb[i]);
+    if (diff !== 0) return diff;
+  }
+  return sa.length - sb.length;
+}
+
+/**
+ * 札番号同士を「決まり字1文字目＝むすめふさほせ…順、
+ * 同一1文字目内は決まり字の五十音順」で比較する。
+ */
+export function compareCardsByDecisionOrder(noA, noB) {
+  // kimariji() は未定義番号でも String(no) を返すため通常は空にならないが、
+  // 将来の変更に備え `|| ''` で防御（空文字は1文字目が undefined→末尾扱い）。
+  const a = kimariji(noA) || '';
+  const b = kimariji(noB) || '';
+  const rankA = FIRST_CHAR_ORDER.indexOf(a[0]);
+  const rankB = FIRST_CHAR_ORDER.indexOf(b[0]);
+  const firstRankA = rankA === -1 ? FIRST_CHAR_ORDER.length : rankA;
+  const firstRankB = rankB === -1 ? FIRST_CHAR_ORDER.length : rankB;
+  if (firstRankA !== firstRankB) return firstRankA - firstRankB;
+  const byKimariji = compareKimariji(a, b);
+  if (byKimariji !== 0) return byKimariji;
+  return Number(noA) - Number(noB); // 決まり字が同一/欠損でも札番号で安定ソート
+}

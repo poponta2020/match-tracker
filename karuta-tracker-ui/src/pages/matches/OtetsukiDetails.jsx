@@ -1,4 +1,4 @@
-import { ALL_KIMARIJI } from '../../data/kimariji';
+import { ALL_KIMARIJI, kimariji } from '../../data/kimariji';
 import './TorifudaRecord.css';
 
 const TYPES = [
@@ -7,6 +7,8 @@ const TYPES = [
   { key: 'MISHEARING', label: '聞き間違い' },
   { key: 'OTHER', label: 'その他' },
 ];
+
+const labelOf = (list, key) => list.find((x) => x.key === key)?.label || '';
 
 const HIKKAKE_TARGETS = [
   { key: 'OWN_LEFT_TOP', label: '自陣 左上' },
@@ -25,8 +27,10 @@ const ANKI_DIRS = [
  * @param count お手付き回数（枠数）
  * @param details 詳細配列（各要素 { type, hikkakeTarget, ankiDirection, mishearingReadCardNo, mishearingTouchedCardNo, otherText }）
  * @param onChange (nextDetails) => void
+ * @param readOnly true のとき、記録済み詳細（type 有りのみ）を操作不可で静的表示する
  */
-export default function OtetsukiDetails({ count, details, onChange }) {
+export default function OtetsukiDetails({ count, details, onChange, readOnly = false }) {
+  if (readOnly) return <OtetsukiDetailsReadOnly details={details} />;
   if (!count || count < 1) return null;
 
   const list = Array.from({ length: count }, (_, i) => details[i] || { type: null });
@@ -135,6 +139,46 @@ export default function OtetsukiDetails({ count, details, onChange }) {
                 onChange={(e) => update(i, { otherText: e.target.value })}
               />
             )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 種類別の記録内容を静的テキストで表す（読み取り専用）。
+function readOnlyBody(d) {
+  switch (d.type) {
+    case 'HIKKAKE':
+      return d.hikkakeTarget ? `払おうとした上段: ${labelOf(HIKKAKE_TARGETS, d.hikkakeTarget)}` : '—';
+    case 'ANKI_MISS':
+      return d.ankiDirection ? labelOf(ANKI_DIRS, d.ankiDirection) : '—';
+    case 'MISHEARING':
+      return `読まれた札: ${d.mishearingReadCardNo ? kimariji(d.mishearingReadCardNo) : '—'} ／ 触った札: ${d.mishearingTouchedCardNo ? kimariji(d.mishearingTouchedCardNo) : '—'}`;
+    case 'OTHER':
+      return d.otherText || '—';
+    default:
+      return '';
+  }
+}
+
+// 試合詳細（本人閲覧）でお手付き詳細を読み取り専用表示する。
+function OtetsukiDetailsReadOnly({ details }) {
+  const items = (details || []).filter((d) => d && d.type);
+  if (items.length === 0) return null;
+  return (
+    <div className="tr">
+      <div className="tr-sec">
+        <div className="tr-sec-hd">
+          <div className="tr-title"><h3>お手付きの内容</h3></div>
+        </div>
+        {items.map((d, i) => (
+          <div className="tr-ote" key={i}>
+            <div className="tr-ote-hd">
+              <span className="no">{i + 1}</span>
+              <span className="t">{labelOf(TYPES, d.type)}</span>
+            </div>
+            <div className="tr-ote-ro">{readOnlyBody(d)}</div>
           </div>
         ))}
       </div>

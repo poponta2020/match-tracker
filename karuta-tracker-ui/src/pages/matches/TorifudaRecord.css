@@ -55,16 +55,21 @@
 .tr-fld-hd .nm { font-size: 12px; font-weight: 800; letter-spacing: .16em; color: #33463c; }
 .tr-board { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 8px; }
 .tr-quad {
-  display: grid; grid-template-columns: 1fr 1fr; min-height: 58px;
+  display: flex; min-height: 58px;
   border: 1px solid #b7ae98; border-radius: 8px; overflow: hidden; background: var(--surface);
 }
+/* flex-basis:0 + inline flexGrow(札数比例) で「少ない側の未使用幅を多い側が吸収」（③）。
+   min-width で空/少数側もタップ・ドロップ可能な最小幅を保つ。 */
 .tr-half {
   padding: 4px 0; display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start;
-  justify-content: center; cursor: pointer;
+  justify-content: center; cursor: pointer; flex-basis: 0; min-width: 26px;
 }
 .tr-half.take { background: var(--take-bg); }
 .tr-half.taken { background: var(--taken-bg); border-left: 1px dashed var(--taken-line); }
 .tr-half.armed { outline: 2px solid var(--navy); outline-offset: -2px; }
+/* ドラッグ中のドロップ可能ハイライト（arm と併存） */
+.tr-half.over { outline: 2px solid var(--green); outline-offset: -2px; background: #e7f0e7; }
+.tr-half.taken.over { outline-color: var(--red); background: #f7e7e4; }
 
 /* 札チップ（縦書き・実物の札風。決まり字は最大4文字） */
 .tr-chip {
@@ -76,6 +81,8 @@
   line-height: 1; letter-spacing: .02em; white-space: nowrap; cursor: pointer;
 }
 .tr-chip.sel { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(26, 54, 84, .25); background: #eef1f6; }
+/* ドラッグ中の札（掴んでいる元チップ） */
+.tr-chip.dragging { opacity: .45; }
 
 /* 不明プール（敵陣と自陣の間） */
 .tr-pool { margin: 9px -20px; padding: 11px 20px; background: #faf6ef; border-top: 1px dashed var(--hair1); border-bottom: 1px dashed var(--hair1); }
@@ -83,7 +90,8 @@
 .tr-pool-hd .t { font-size: 12px; font-weight: 800; color: var(--taupe-tx); }
 .tr-pool-hd .c { font-size: 11px; font-weight: 700; color: var(--taupe2); }
 .tr-pool-hd .hint { margin-left: auto; font-size: 10.5px; color: var(--taupe2); }
-.tr-pool-wrap { display: flex; flex-wrap: wrap; gap: 3px; min-height: 46px; }
+.tr-pool-wrap { display: flex; flex-wrap: wrap; gap: 3px; min-height: 46px; border-radius: 8px; }
+.tr-pool-wrap.over { outline: 2px dashed var(--taupe2); outline-offset: 3px; }
 .tr-pool-empty { font-size: 12px; color: var(--taupe2); padding: 14px 0; text-align: center; width: 100%; }
 
 /* お手付き詳細 */
@@ -91,6 +99,8 @@
 .tr-ote-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .tr-ote-hd .no { width: 20px; height: 20px; border-radius: 50%; background: #efe7db; color: var(--taupe-tx); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .tr-ote-hd .t { font-size: 12.5px; font-weight: 800; color: var(--taupe-tx); letter-spacing: .04em; }
+/* 読み取り専用のお手付き内容（試合詳細） */
+.tr-ote-ro { font-size: 13px; line-height: 1.6; color: var(--ink); }
 .tr-types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
 .tr-type { height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--hair1); border-radius: 8px; font-size: 11.5px; font-weight: 700; color: var(--taupe-tx); background: transparent; cursor: pointer; }
 .tr-type.on { background: var(--navy); border-color: var(--navy); color: #fff; }
