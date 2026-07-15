@@ -174,12 +174,14 @@ public class CardDivisionTextService {
     /**
      * 札分けテキストを組み立てる。
      * <pre>
-     * 【M/D 会場名】
-     * 1試合目：一の位1.3.5.6.7
+     * 7/5(日) 会場名
+     *
+     * 1試合目：一の位　1.3.5.6.7
      * 2試合目：1.4.5　41(こひ)抜き
-     * 3試合目：十の位2.4.6.8.9
+     * 3試合目：十の位　2.4.6.8.9
      * </pre>
-     * ヘッダの月・日は10の位が0のとき省略（7/5・10/9・12/25）。会場名が空なら {@code 【M/D】}。
+     * ヘッダは {@code M/D(曜) 会場名}（すべて半角。曜日は日付から算出）。月・日は10の位が0のとき省略
+     * （7/5・10/9・12/25）。会場名が空なら {@code M/D(曜)}。ヘッダ行の直後に空白行を1行挟む。
      *
      * @param venueName 会場名（null/空なら省略）
      */
@@ -187,24 +189,32 @@ public class CardDivisionTextService {
         List<CardRule> rules = generateCardRules(date.toString(), nonce, totalMatches);
 
         StringBuilder sb = new StringBuilder();
-        sb.append('【').append(date.getMonthValue()).append('/').append(date.getDayOfMonth());
+        sb.append(date.getMonthValue()).append('/').append(date.getDayOfMonth());
+        sb.append('(').append(japaneseWeekday(date)).append(')');
         if (venueName != null && !venueName.isBlank()) {
             sb.append(' ').append(venueName);
         }
-        sb.append('】');
 
+        // ヘッダ行の直後に空白行を1行入れる（先頭試合の前を "\n\n"、以降は "\n"）
         for (int i = 0; i < rules.size(); i++) {
-            sb.append('\n').append(i + 1).append("試合目：").append(renderRule(rules.get(i)));
+            sb.append(i == 0 ? "\n\n" : "\n").append(i + 1).append("試合目：").append(renderRule(rules.get(i)));
         }
         return sb.toString();
+    }
+
+    /** 曜日（月火水木金土日）。{@code DayOfWeek.getValue()} は MONDAY=1..SUNDAY=7。 */
+    private static final String[] JP_WEEKDAYS = {"月", "火", "水", "木", "金", "土", "日"};
+
+    private static String japaneseWeekday(LocalDate date) {
+        return JP_WEEKDAYS[date.getDayOfWeek().getValue() - 1];
     }
 
     /** 札ルール1つを表示文言に変換する。抜き行のみ決まり字を {@code 番号(決まり字)抜き} で付与する。 */
     private String renderRule(CardRule rule) {
         String joined = joinDigits(rule.digits());
         return switch (rule.type()) {
-            case "ones" -> "一の位" + joined;
-            case "tens" -> "十の位" + joined;
+            case "ones" -> "一の位" + FULL_WIDTH_SPACE + joined;
+            case "tens" -> "十の位" + FULL_WIDTH_SPACE + joined;
             case "nuki" -> {
                 int num = Integer.parseInt(rule.removedCard());
                 if (num == 0) num = 100; // "00" → 100（parseInt(removedCard)||100 相当）
