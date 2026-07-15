@@ -262,6 +262,41 @@ describe('参加保存ペイロード（AC-3/AC-10）', () => {
     });
   });
 
+  it('締切後の未参加追加は既存参加を含む月全体ペイロードを送る（backend が既存を skip する契約）', async () => {
+    // beforeDeadline=false でも payload は PracticeParticipation.handleSave と同じく既存込みで送る。
+    // registerAfterDeadline は existsActive(=PENDING含む) を skip し未参加のみ追加するため安全。
+    configure({
+      session: defaultSession({ id: 945, sessionDate: '2026-06-25' }),
+      monthParticipations: { 945: [1], 900: [2] },
+      statusData: {
+        participations: { 945: [{ matchNumber: 1, status: 'PENDING', participantId: 555 }] },
+        version: 3,
+        lotteryExecuted: {},
+        hasAnyExecutedLotteryInMonth: false,
+        beforeDeadline: false,
+      },
+    });
+    const user = userEvent.setup();
+    render(<PracticeSessionAttendance />);
+    await screen.findByText('参加する試合');
+
+    await user.click(within(registerSection()).getByLabelText('第2試合に参加'));
+    await user.click(screen.getByText('参加を保存'));
+
+    await waitFor(() => expect(practiceAPI.registerParticipations).toHaveBeenCalledTimes(1));
+    expect(practiceAPI.registerParticipations).toHaveBeenCalledWith({
+      playerId: 10,
+      year: 2026,
+      month: 6,
+      participations: [
+        { sessionId: 900, matchNumber: 2 }, // 他日は保持
+        { sessionId: 945, matchNumber: 1 }, // 既存（backend が skip）
+        { sessionId: 945, matchNumber: 2 }, // 追加
+      ],
+      expectedVersion: 3,
+    });
+  });
+
   it('保存成功で SaveProgressOverlay 完了→「カレンダーに戻る」で /practice へ（AC-9）', async () => {
     const user = userEvent.setup();
     render(<PracticeSessionAttendance />);

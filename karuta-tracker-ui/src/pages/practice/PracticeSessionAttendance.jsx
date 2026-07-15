@@ -234,11 +234,13 @@ const PracticeSessionAttendance = () => {
         })
       : false;
 
-  // キャンセル: 当日12時以降なら追加確認（PracticeCancelPage と同じ判定）
+  // キャンセル: 当日12時以降なら追加確認。日付比較はローカル基準（needsSameDayConfirm の
+  // formatYmdLocal と同じ）。toISOString の UTC 日付を使うと日本時間の境界でずれ、参加側の
+  // 当日判定（ローカル）と不整合になるため、ローカルの YYYY-MM-DD を組んで比較する。
   const isSameDayAfterNoon = () => {
     if (!session) return false;
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     return session.sessionDate === todayStr && now.getHours() >= 12;
   };
 
