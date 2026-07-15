@@ -1184,9 +1184,10 @@ const MatchForm = () => {
           ></textarea>
         </div>
 
-        {/* 取り札・お手付きの記録（任意・折りたたみ） */}
+        {/* 取り札・お手付きの記録（任意・折りたたみ）
+            data-swipe-ignore: 盤面のドラッグ操作・お手付き入力を試合番号スワイプ切替から除外する（C-5） */}
         {practiceSession && (
-          <div className="tr">
+          <div className="tr" data-swipe-ignore>
             <button
               type="button"
               className="tr-bar"

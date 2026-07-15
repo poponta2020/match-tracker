@@ -157,6 +157,27 @@ describe('MatchForm - 試合番号スワイプ移動と未保存警告', () => {
   });
 });
 
+describe('MatchForm - 盤面ドラッグはスワイプ切替を誘発しない（C-5）', () => {
+  it('data-swipe-ignore 配下（盤面）起点の横タッチでは試合番号が切り替わらない', async () => {
+    renderForm();
+    await waitFor(() => expect(tab(1)).toHaveAttribute('data-active', 'true'));
+
+    // 「取り札・お手付きを記録」折りたたみを展開して盤面を出す
+    fireEvent.click(screen.getByRole('button', { name: /取り札・お手付きを記録/ }));
+    await screen.findByText('敵 陣');
+
+    // 盤面内の要素（data-swipe-ignore 配下）起点で「次の試合」相当の横スワイプ
+    const board = document.querySelector('.tr-board');
+    expect(board).toBeTruthy();
+    fireEvent.touchStart(board, { touches: [{ clientX: 200, clientY: 200 }] });
+    fireEvent.touchEnd(board, { changedTouches: [{ clientX: 80, clientY: 200 }] }); // dx=-120（本来 next 方向）
+
+    // 盤面起点は除外されるため切り替わらない
+    await new Promise((r) => setTimeout(r, 50));
+    expect(tab(1)).toHaveAttribute('data-active', 'true');
+  });
+});
+
 describe('MatchForm - スワイプ操作ヒント', () => {
   it('新規入力でタブ2件以上なら案内テキストを表示する', async () => {
     renderForm();

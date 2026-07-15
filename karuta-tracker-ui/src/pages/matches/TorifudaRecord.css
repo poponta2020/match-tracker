@@ -65,6 +65,9 @@
 .tr-half.take { background: var(--take-bg); }
 .tr-half.taken { background: var(--taken-bg); border-left: 1px dashed var(--taken-line); }
 .tr-half.armed { outline: 2px solid var(--navy); outline-offset: -2px; }
+/* ドラッグ中のドロップ可能ハイライト（arm と併存） */
+.tr-half.over { outline: 2px solid var(--green); outline-offset: -2px; background: #e7f0e7; }
+.tr-half.taken.over { outline-color: var(--red); background: #f7e7e4; }
 
 /* 札チップ（縦書き・実物の札風。決まり字は最大4文字） */
 .tr-chip {
@@ -76,6 +79,8 @@
   line-height: 1; letter-spacing: .02em; white-space: nowrap; cursor: pointer;
 }
 .tr-chip.sel { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(26, 54, 84, .25); background: #eef1f6; }
+/* ドラッグ中の札（掴んでいる元チップ） */
+.tr-chip.dragging { opacity: .45; }
 
 /* 不明プール（敵陣と自陣の間） */
 .tr-pool { margin: 9px -20px; padding: 11px 20px; background: #faf6ef; border-top: 1px dashed var(--hair1); border-bottom: 1px dashed var(--hair1); }
@@ -83,7 +88,8 @@
 .tr-pool-hd .t { font-size: 12px; font-weight: 800; color: var(--taupe-tx); }
 .tr-pool-hd .c { font-size: 11px; font-weight: 700; color: var(--taupe2); }
 .tr-pool-hd .hint { margin-left: auto; font-size: 10.5px; color: var(--taupe2); }
-.tr-pool-wrap { display: flex; flex-wrap: wrap; gap: 3px; min-height: 46px; }
+.tr-pool-wrap { display: flex; flex-wrap: wrap; gap: 3px; min-height: 46px; border-radius: 8px; }
+.tr-pool-wrap.over { outline: 2px dashed var(--taupe2); outline-offset: 3px; }
 .tr-pool-empty { font-size: 12px; color: var(--taupe2); padding: 14px 0; text-align: center; width: 100%; }
 
 /* お手付き詳細 */
