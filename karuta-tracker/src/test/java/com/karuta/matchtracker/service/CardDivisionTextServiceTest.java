@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       ゴールデン一致する。フィクスチャは cardRules.js を <b>実際に走らせて</b>採取したもの
  *       （3サイクル位置すべて・サイクル境界をまたぐ totalMatches 3/4/6/7・nonce≠0 を網羅）。</li>
  *   <li>AC-2: 抜き行に {@code 番号(決まり字)抜き}（41→41(こひ)、100→100(もも)）。一の位・十の位に決まり字なし。</li>
- *   <li>AC-3: ヘッダ {@code 【M/D 会場名】} の月・日で10の位0を省略（7/5・10/9・12/25）。</li>
+ *   <li>AC-3: ヘッダ {@code M/D(曜) 会場名}（囲みかっこなし・曜日付き）の月・日で10の位0を省略（7/5・10/9・12/25）。</li>
  * </ul>
  *
  * PRNG 生成（generateCardRules）とテキスト整形（buildText）はリポジトリ依存を持たないため、
@@ -75,13 +75,14 @@ class CardDivisionTextServiceTest {
         String text = service.buildText(LocalDate.of(2026, 7, 5), "かでる2・7", 6, 20);
 
         assertThat(text).isEqualTo(String.join("\n",
-                "【7/5 かでる2・7】",
-                "1試合目：一の位1.3.4.5.7",
+                "7/5(日) かでる2・7",
+                "",
+                "1試合目：一の位　1.3.4.5.7",
                 "2試合目：0.2.9　91(きり)抜き",
-                "3試合目：十の位1.3.5.6.7",
-                "4試合目：一の位1.2.5.7.8",
+                "3試合目：十の位　1.3.5.6.7",
+                "4試合目：一の位　1.2.5.7.8",
                 "5試合目：0.3.6　100(もも)抜き",
-                "6試合目：十の位1.2.4.7.8"));
+                "6試合目：十の位　1.2.4.7.8"));
     }
 
     @Test
@@ -95,18 +96,18 @@ class CardDivisionTextServiceTest {
     }
 
     @Test
-    @DisplayName("AC-3: ヘッダの月・日で10の位0を省略（7/5・10/9・12/25）")
+    @DisplayName("AC-3: ヘッダの月・日で10の位0を省略・曜日付き（7/5(日)・10/9(金)・12/25(金)）")
     void headerTensDigitZeroSuppression() {
-        assertThat(service.buildText(LocalDate.of(2026, 7, 5), "会場", 1, 0)).startsWith("【7/5 会場】");
-        assertThat(service.buildText(LocalDate.of(2026, 10, 9), "会場", 1, 0)).startsWith("【10/9 会場】");
-        assertThat(service.buildText(LocalDate.of(2026, 12, 25), "会場", 1, 0)).startsWith("【12/25 会場】");
+        assertThat(service.buildText(LocalDate.of(2026, 7, 5), "会場", 1, 0)).startsWith("7/5(日) 会場");
+        assertThat(service.buildText(LocalDate.of(2026, 10, 9), "会場", 1, 0)).startsWith("10/9(金) 会場");
+        assertThat(service.buildText(LocalDate.of(2026, 12, 25), "会場", 1, 0)).startsWith("12/25(金) 会場");
     }
 
     @Test
-    @DisplayName("会場名が空ならヘッダは 【M/D】（会場なし）")
+    @DisplayName("会場名が空ならヘッダは M/D(曜)（会場なし・囲みかっこなし）")
     void headerWithoutVenue() {
-        assertThat(service.buildText(LocalDate.of(2026, 7, 5), null, 1, 0)).startsWith("【7/5】");
-        assertThat(service.buildText(LocalDate.of(2026, 7, 5), "  ", 1, 0)).startsWith("【7/5】");
+        assertThat(service.buildText(LocalDate.of(2026, 7, 5), null, 1, 0)).startsWith("7/5(日)\n\n");
+        assertThat(service.buildText(LocalDate.of(2026, 7, 5), "  ", 1, 0)).startsWith("7/5(日)\n\n");
     }
 
     // ------------------------------------------------------------------

@@ -68,7 +68,7 @@ class LineNotificationServiceCardDivisionSendTest {
 
     private static final Long ORG = 1L;
     private static final Long SESSION_ID = 555L;
-    private static final String TEXT = "【7/5 かでる2・7】\n1試合目：一の位1.3.5.6.7";
+    private static final String TEXT = "7/5(日) かでる2・7\n\n1試合目：一の位　1.3.5.6.7";
 
     @BeforeEach
     void setUp() {
