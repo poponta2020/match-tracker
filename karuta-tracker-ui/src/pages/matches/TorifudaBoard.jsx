@@ -40,12 +40,14 @@ function DraggableChip({ cardNo, className, onClick, children }) {
 }
 
 // ドロップ可能なマス半分（取った／取られた）。
-function DroppableHalf({ field, side, tier, takenBy, armed, onClick, children }) {
+// flexGrow は札数に比例（③ 少ない側の未使用横幅を多い側が吸収）。min-width は CSS で担保。
+function DroppableHalf({ field, side, tier, takenBy, armed, chipCount, onClick, children }) {
   const { setNodeRef, isOver } = useDroppable({ id: encodeCellId(field, side, tier, takenBy) });
   return (
     <div
       ref={setNodeRef}
       className={`tr-half ${takenBy === 'SELF' ? 'take' : 'taken'}${armed ? ' armed' : ''}${isOver ? ' over' : ''}`}
+      style={{ flexGrow: Math.max(chipCount, 1) }}
       onClick={onClick}
     >
       {children}
@@ -123,39 +125,43 @@ export default function TorifudaBoard({ cards, placements, onChange, scoreDiffer
 
   const renderQuad = (field, side, tier) => (
     <div className="tr-quad" key={`${field}-${side}-${tier}`}>
-      {['SELF', 'OPPONENT'].map((takenBy) => (
-        <DroppableHalf
-          key={takenBy}
-          field={field}
-          side={side}
-          tier={tier}
-          takenBy={takenBy}
-          armed={selected != null}
-          onClick={() => {
-            if (guard.consumeClick()) return; // ドラッグ直後の合成 click を無視
-            place(field, side, tier, takenBy);
-          }}
-        >
-          {cellCards(field, side, tier, takenBy).map((c) => (
-            <DraggableChip
-              key={c}
-              cardNo={c}
-              className="tr-chip"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (guard.consumeClick()) return; // ドラッグ移動/解除の trailing click を打ち消さない
-                // 札を選択中（arm状態）なら、既存チップの上をタップしても
-                // そのマスへ配置する（マスが埋まっていても隙間を狙う必要をなくす）。
-                // 非選択時は従来どおりタップした札を不明に戻す。
-                if (selected != null) place(field, side, tier, takenBy);
-                else unplace(c);
-              }}
-            >
-              {kimariji(c)}
-            </DraggableChip>
-          ))}
-        </DroppableHalf>
-      ))}
+      {['SELF', 'OPPONENT'].map((takenBy) => {
+        const half = cellCards(field, side, tier, takenBy);
+        return (
+          <DroppableHalf
+            key={takenBy}
+            field={field}
+            side={side}
+            tier={tier}
+            takenBy={takenBy}
+            armed={selected != null}
+            chipCount={half.length}
+            onClick={() => {
+              if (guard.consumeClick()) return; // ドラッグ直後の合成 click を無視
+              place(field, side, tier, takenBy);
+            }}
+          >
+            {half.map((c) => (
+              <DraggableChip
+                key={c}
+                cardNo={c}
+                className="tr-chip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (guard.consumeClick()) return; // ドラッグ移動/解除の trailing click を打ち消さない
+                  // 札を選択中（arm状態）なら、既存チップの上をタップしても
+                  // そのマスへ配置する（マスが埋まっていても隙間を狙う必要をなくす）。
+                  // 非選択時は従来どおりタップした札を不明に戻す。
+                  if (selected != null) place(field, side, tier, takenBy);
+                  else unplace(c);
+                }}
+              >
+                {kimariji(c)}
+              </DraggableChip>
+            ))}
+          </DroppableHalf>
+        );
+      })}
     </div>
   );
 
