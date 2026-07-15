@@ -42,6 +42,28 @@ export const shouldShowReshuffleButton = ({ isReadOnly, isViewMode, pairings }) 
   !isReadOnly && !isViewMode && pairings.length > 0;
 
 /**
+ * 閲覧時の「未組み合わせ選手（待機中）チップ一覧」セクションの表示可否。
+ * 一部だけ組が作られている試合を閲覧しているとき、まだどの組にも入っていない参加者
+ * （waitingPlayers）を読み取り専用チップで一覧表示するためのガード。
+ *
+ * 条件: (isReadOnly || isViewMode) && pairings.length > 0 && waitingPlayers.length > 0
+ * - これは編集モードの待機中セクションのガード `!isReadOnly && !isViewMode` の**厳密な補集合**であり、
+ *   閲覧用チップ一覧と編集用待機中セクションが同時に出ることはない（相互排他）。
+ * - `pairings.length > 0` は必須。isReadOnly は「他試合を編集中に、まだ組が無いこの試合を見ている」
+ *   状態（pairings.length === 0）でも真になりうるため、これが無いと参加者一覧セクション
+ *   （shouldShowParticipantSection = pairings.length === 0 で表示）と二重表示になる。
+ *
+ * @param {object} params
+ * @param {boolean} params.isReadOnly 他試合に未保存変更がある等で閲覧専用か
+ * @param {boolean} params.isViewMode 既存組み合わせの閲覧モードか
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @param {Array} params.waitingPlayers 未組み合わせ（待機中）の参加者配列
+ * @returns {boolean}
+ */
+export const shouldShowViewModeUnpairedSection = ({ isReadOnly, isViewMode, pairings, waitingPlayers }) =>
+  (isReadOnly || isViewMode) && pairings.length > 0 && waitingPlayers.length > 0;
+
+/**
  * 再シャッフルボタンの文言（ロック済みの組の有無で動的に切り替える）。
  * - ロック済みの組（hasResult または locked）が1件以上: 「ロックされた組以外をシャッフル」
  * - 0件: 「再シャッフル」
