@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { matchAPI, pairingAPI, practiceAPI, byeActivityAPI, matchVideoAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Shuffle, Video } from 'lucide-react';
+import { AlertCircle, CheckCircle, Edit, ChevronLeft, ChevronRight, Calendar, Plus, BookOpen, User, Eye, UsersRound, MoreHorizontal, UserX, Video } from 'lucide-react';
 import LoadingScreen from '../../components/LoadingScreen';
 import VideoPlayerModal from '../../components/VideoPlayerModal';
 import MatchCarousel from '../../components/MatchCarousel';
@@ -589,7 +589,6 @@ const MatchResultsView = () => {
             onClick={() => navigate(`/pairings?date=${selectedDate}`)}
             className="w-full mt-6 py-3 px-4 bg-[#1A3654] text-white rounded-lg hover:bg-[#122740] flex items-center justify-center gap-2 font-semibold transition-colors"
           >
-            <Shuffle className="w-5 h-5" />
             編集画面へ移動
           </button>
         )}
