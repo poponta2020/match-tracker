@@ -263,6 +263,24 @@ describe('参加保存ペイロード（AC-3/AC-10）', () => {
 
     expect(await screen.findByText('処理に失敗しました')).toBeInTheDocument();
   });
+
+  it('409 応答でエラー表示＋最新再読込する（AC-10）', async () => {
+    practiceAPI.registerParticipations.mockRejectedValue({
+      response: { status: 409, data: { message: '他の端末で更新されました' } },
+    });
+    const user = userEvent.setup();
+    render(<PracticeSessionAttendance />);
+    await screen.findByText('参加する試合');
+    // 初期ロードで getPlayerParticipations は1回呼ばれている
+    expect(practiceAPI.getPlayerParticipations).toHaveBeenCalledTimes(1);
+
+    await user.click(within(registerSection()).getByLabelText('第2試合に参加'));
+    await user.click(screen.getByText('参加を保存'));
+
+    expect(await screen.findByText('処理に失敗しました')).toBeInTheDocument();
+    // reloadKey 更新で最新を再取得（getPlayerParticipations が再度呼ばれる）
+    await waitFor(() => expect(practiceAPI.getPlayerParticipations).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe('理由付きキャンセル（AC-4）', () => {
