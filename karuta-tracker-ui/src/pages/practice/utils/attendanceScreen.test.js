@@ -230,6 +230,51 @@ describe('resolveAttendanceSections', () => {
       });
       expect(result.registerMatches).toEqual([1, 2]);
     });
+
+    it('beforeDeadline 省略時は締切前扱い（全トグル・既存挙動を維持）', () => {
+      const result = resolveAttendanceSections({
+        session: session(),
+        isCurrentMonthMode: false,
+        lotteryExecutedForSession: false,
+        monthParticipationsForSession: [1],
+        statusesForSession: [{ matchNumber: 1, status: 'PENDING' }],
+      });
+      expect(result.registerMatches).toEqual([1, 2, 3]);
+      expect(result.showCancelSection).toBe(false);
+    });
+  });
+
+  describe('来月扱い×締切後（beforeDeadline=false）— 全置換サイレントno-op回帰の防止', () => {
+    it('締切後は既存参加をトグルに出さず理由付きキャンセルへ回す（全トグルにしない）', () => {
+      // registerAfterDeadline は payload 省略分を削除しない。既存を uncheck 全置換保存しても
+      // 実データが残るため、締切後の来月扱いは当月扱いパーティションに倒す。
+      const result = resolveAttendanceSections({
+        session: session(),
+        isCurrentMonthMode: false,
+        lotteryExecutedForSession: false,
+        beforeDeadline: false,
+        monthParticipationsForSession: [1],
+        statusesForSession: [{ matchNumber: 1, status: 'PENDING', participantId: 555 }],
+      });
+      // 既存の第1はキャンセル側（理由付き）に出す。参加トグルには出さない
+      expect(result.cancelMatches).toEqual([1]);
+      expect(result.registerMatches).not.toContain(1);
+      expect(result.showCancelSection).toBe(true);
+    });
+
+    it('締切後でも未参加の追加登録は可能（ロックは既存参加の解除のみ）', () => {
+      const result = resolveAttendanceSections({
+        session: session(),
+        isCurrentMonthMode: false,
+        lotteryExecutedForSession: false,
+        beforeDeadline: false,
+        monthParticipationsForSession: [1],
+        statusesForSession: [{ matchNumber: 1, status: 'PENDING', participantId: 555 }],
+      });
+      // 未参加の第2・第3は参加側に残る（registerAfterDeadline が追加を処理する）
+      expect(result.registerMatches).toEqual([2, 3]);
+      expect(result.showRegisterSection).toBe(true);
+    });
   });
 
   describe('抽選確定済みセッション', () => {

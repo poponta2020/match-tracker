@@ -215,6 +215,27 @@ describe('来月扱い（AC-5）', () => {
     // キャンセルセクションは非表示
     expect(screen.queryByText('参加をキャンセル')).not.toBeInTheDocument();
   });
+
+  it('未来月でも締切後（beforeDeadline=false）は既存参加を理由付きキャンセルへ回す（全トグルにしない）', async () => {
+    configure({
+      session: defaultSession({ id: 945, sessionDate: '2026-06-25' }),
+      monthParticipations: { 945: [1] },
+      statusData: {
+        participations: { 945: [{ matchNumber: 1, status: 'PENDING', participantId: 555 }] },
+        version: 7,
+        lotteryExecuted: {},
+        hasAnyExecutedLotteryInMonth: false,
+        beforeDeadline: false,
+      },
+    });
+    render(<PracticeSessionAttendance />);
+    await screen.findByText('参加をキャンセル');
+    // 既存の第1は参加トグルに出ず、キャンセル側に出る
+    expect(within(registerSection()).queryByLabelText('第1試合に参加')).not.toBeInTheDocument();
+    expect(within(cancelSection()).getByLabelText('第1試合をキャンセル対象に選択')).toBeInTheDocument();
+    // 未参加の追加登録は可能
+    expect(within(registerSection()).getByLabelText('第2試合に参加')).toBeInTheDocument();
+  });
 });
 
 describe('参加保存ペイロード（AC-3/AC-10）', () => {

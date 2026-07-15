@@ -71,6 +71,7 @@ const PracticeSessionAttendance = () => {
   const [participationVersion, setParticipationVersion] = useState(null);
   const [lotteryExecutedMap, setLotteryExecutedMap] = useState({});
   const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false);
+  const [beforeDeadline, setBeforeDeadline] = useState(true);
 
   const [desiredMatchNumbers, setDesiredMatchNumbers] = useState([]);
   const [selectedCancelMatches, setSelectedCancelMatches] = useState([]);
@@ -133,6 +134,8 @@ const PracticeSessionAttendance = () => {
         setParticipationVersion(statusData.version ?? null);
         setLotteryExecutedMap(statusData.lotteryExecuted || {});
         setHasMonthlyLottery(Boolean(statusData.hasAnyExecutedLotteryInMonth));
+        // 締切後（false）は来月扱いでも既存参加をトグル解除できないようにする（PracticeParticipation と同判定）
+        setBeforeDeadline(statusData.beforeDeadline !== false);
       } catch (err) {
         if (!cancelled) {
           console.error('出欠データ取得エラー:', err);
@@ -173,10 +176,11 @@ const PracticeSessionAttendance = () => {
       session,
       isCurrentMonthMode,
       lotteryExecutedForSession,
+      beforeDeadline,
       monthParticipationsForSession,
       statusesForSession,
     });
-  }, [session, isCurrentMonthMode, lotteryExecutedForSession, monthParticipationsForSession, statusesForSession]);
+  }, [session, isCurrentMonthMode, lotteryExecutedForSession, beforeDeadline, monthParticipationsForSession, statusesForSession]);
 
   const capacity = session?.capacity || null;
   const isFull = (matchNumber) => {

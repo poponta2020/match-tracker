@@ -87,13 +87,21 @@ export function buildMonthParticipationsPayload(
  *
  * モード差:
  *  - 抽選確定済みセッション: 追加登録不可（register 非表示）、WON/PENDING のみキャンセル可
- *  - 来月扱い（未来月・抽選前）: 全試合をトグル（登録済みは呼び出し側で pre-check）、キャンセル非表示
- *  - 当月扱い（抽選前）: 未参加=参加側 / WON・PENDING=キャンセル側 / その他アクティブ=readonly
+ *  - 来月扱い（未来月・抽選前）で**締切前**: 全試合をトグル（登録済みは呼び出し側で pre-check）、キャンセル非表示
+ *  - 当月扱い、**または締切後**（未来月でも）: 既存参加はトグルに出さず理由付きキャンセルへ回す
+ *    （未参加=参加側 / WON・PENDING=キャンセル側 / その他アクティブ=readonly）
+ *
+ * ⚠ 締切後（`beforeDeadline=false`）の来月扱いを全トグルにしてはならない。バックエンドの
+ * `registerAfterDeadline` は payload から省略された既存参加を削除しない（追加のみ）ため、既存参加を
+ * uncheck して全置換保存しても実データは残り、UI と食い違う（サイレント no-op）。既存
+ * `PracticeParticipation.isLockedRegistration`（`!isCurrentMonthMode && beforeDeadline` のときのみ
+ * 解除可、それ以外はロック）と同じ判定で、締切後は理由付きキャンセル（`cancelMultiple`）へ回す。
  *
  * @param {object} params
  * @param {{ totalMatches?: number, densukeDeletionCandidateMatchNumbers?: number[] }} params.session
  * @param {boolean} params.isCurrentMonthMode resolveAttendanceMode の isCurrentMonth
  * @param {boolean} params.lotteryExecutedForSession 当該セッションの抽選確定済みフラグ
+ * @param {boolean} [params.beforeDeadline=true] 締切前か（`PlayerParticipationStatusDto.beforeDeadline`。既定 true）
  * @param {number[]} params.monthParticipationsForSession 月マップの対象セッション分（希望集合の seed）
  * @param {Array<{ matchNumber: number, status: string }>} params.statusesForSession 対象セッションのステータス配列
  * @returns {{
@@ -108,6 +116,7 @@ export function resolveAttendanceSections({
   session,
   isCurrentMonthMode,
   lotteryExecutedForSession,
+  beforeDeadline = true,
   monthParticipationsForSession,
   statusesForSession,
 }) {
@@ -145,8 +154,8 @@ export function resolveAttendanceSections({
     };
   }
 
-  // 来月扱い: 全試合をトグル（登録済みは呼び出し側で pre-check）、キャンセルセクションなし
-  if (!isCurrentMonthMode) {
+  // 来月扱い（未来月・抽選前）かつ締切前: 全試合をトグル（登録済みは呼び出し側で pre-check）、キャンセルなし
+  if (!isCurrentMonthMode && beforeDeadline) {
     return {
       showRegisterSection: notDeleted.length > 0,
       registerMatches: notDeleted,
@@ -156,7 +165,8 @@ export function resolveAttendanceSections({
     };
   }
 
-  // 当月扱い（抽選前）: 未参加=参加側 / WON・PENDING=キャンセル側 / その他アクティブ=readonly
+  // 当月扱い、または締切後の未来月: 未参加=参加側 / WON・PENDING=キャンセル側 / その他アクティブ=readonly
+  // （締切後の既存参加は理由付きキャンセルへ回す。全置換 uncheck では消えないため）
   const registerMatches = notDeleted.filter((m) => !isActive(m));
   const cancelMatches = notDeleted.filter(isCancellable);
   const readonlyStatusMatches = notDeleted.filter(
