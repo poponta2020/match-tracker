@@ -9,8 +9,10 @@ import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -221,5 +223,61 @@ public class LineChatReservationService {
         if (orgId != null) {
             lineNotificationService.sendChatReserveAlert(orgId, message);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // ワーカーAPI（タスク3）
+    // ------------------------------------------------------------------
+
+    /** ワーカーが処理すべき予約（PENDING・CANCEL_PENDING）を送信予定の昇順で返す。 */
+    @Transactional(readOnly = true)
+    public List<LineChatReservation> getWorkerTasks() {
+        return reservationRepository.findByStatusInOrderByScheduledSendAtAsc(
+                List.of(ReservationStatus.PENDING, ReservationStatus.CANCEL_PENDING));
+    }
+
+    /**
+     * ワーカーの結果報告を適用する。遷移を検証し、不正なら {@code 409 Conflict}、対象が無ければ {@code 404}。
+     * RESERVING（＝処理開始の宣言）で試行回数を加算する。
+     */
+    @Transactional
+    public LineChatReservation applyWorkerResult(Long id, ReservationStatus newStatus,
+                                                 String errorCode, String errorMessage) {
+        LineChatReservation r = reservationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "予約が見つかりません"));
+        if (!isValidWorkerTransition(r.getStatus(), newStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "不正な状態遷移: " + r.getStatus() + " -> " + newStatus);
+        }
+        if (newStatus == ReservationStatus.RESERVING) {
+            r.setAttemptCount(r.getAttemptCount() + 1);
+        }
+        r.setStatus(newStatus);
+        r.setErrorCode(errorCode);
+        r.setErrorMessage(errorMessage);
+        return reservationRepository.save(r);
+    }
+
+    /**
+     * ワーカーが起こしてよい状態遷移か（純関数・AC-3）。
+     * <pre>
+     *   PENDING       → RESERVING
+     *   RESERVING     → RESERVED | FAILED | MANUAL_REVIEW_REQUIRED | DRY_RUN_SUCCEEDED
+     *   CANCEL_PENDING→ CANCELLED | MANUAL_REVIEW_REQUIRED
+     * </pre>
+     * それ以外（RESERVED/FAILED/…からの遷移、reserved→reserving 等の逆行）は不可。
+     * FAILED→PENDING は管理画面の手動再試行（タスク5）でのみ許可され、ワーカー経路では起こさない。
+     */
+    static boolean isValidWorkerTransition(ReservationStatus from, ReservationStatus to) {
+        return switch (from) {
+            case PENDING -> to == ReservationStatus.RESERVING;
+            case RESERVING -> to == ReservationStatus.RESERVED
+                    || to == ReservationStatus.FAILED
+                    || to == ReservationStatus.MANUAL_REVIEW_REQUIRED
+                    || to == ReservationStatus.DRY_RUN_SUCCEEDED;
+            case CANCEL_PENDING -> to == ReservationStatus.CANCELLED
+                    || to == ReservationStatus.MANUAL_REVIEW_REQUIRED;
+            default -> false;
+        };
     }
 }

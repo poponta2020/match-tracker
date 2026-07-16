@@ -14,6 +14,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -297,5 +300,90 @@ class LineChatReservationServiceTest {
         service().recreateAfterCancellation(TODAY, NOW);
 
         verify(reservationRepository, never()).tryInsertPendingReservation(any(), any(), any(), any(), any());
+    }
+
+    // ===== applyWorkerResult / 遷移検証（AC-3）=====
+
+    @Test
+    @DisplayName("PENDING→RESERVING は試行回数を加算して更新する")
+    void applyResultPendingToReserving() {
+        LineChatReservation r = reservation(100L, ReservationStatus.PENDING, "t", SEND_AT);
+        r.setAttemptCount(0);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LineChatReservation out = service().applyWorkerResult(100L, ReservationStatus.RESERVING, null, null);
+
+        assertThat(out.getStatus()).isEqualTo(ReservationStatus.RESERVING);
+        assertThat(out.getAttemptCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("RESERVING→RESERVED は成功として更新（error はクリア）")
+    void applyResultReservingToReserved() {
+        LineChatReservation r = reservation(100L, ReservationStatus.RESERVING, "t", SEND_AT);
+        r.setErrorCode("PREV");
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LineChatReservation out = service().applyWorkerResult(100L, ReservationStatus.RESERVED, null, null);
+
+        assertThat(out.getStatus()).isEqualTo(ReservationStatus.RESERVED);
+        assertThat(out.getErrorCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("CANCEL_PENDING→CANCELLED は許可")
+    void applyResultCancelPendingToCancelled() {
+        LineChatReservation r = reservation(100L, ReservationStatus.CANCEL_PENDING, "t", SEND_AT);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+        when(reservationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LineChatReservation out = service().applyWorkerResult(100L, ReservationStatus.CANCELLED, null, null);
+
+        assertThat(out.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("不正遷移（RESERVED→RESERVING）は 409 で拒否し保存しない")
+    void applyResultInvalidTransitionConflict() {
+        LineChatReservation r = reservation(100L, ReservationStatus.RESERVED, "t", SEND_AT);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() ->
+                service().applyWorkerResult(100L, ReservationStatus.RESERVING, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("存在しない予約への報告は 404")
+    void applyResultNotFound() {
+        when(reservationRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                service().applyWorkerResult(999L, ReservationStatus.RESERVING, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("isValidWorkerTransition: 代表的な許可/不許可")
+    void transitionMatrix() {
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.PENDING, ReservationStatus.RESERVING)).isTrue();
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.RESERVING, ReservationStatus.MANUAL_REVIEW_REQUIRED)).isTrue();
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.RESERVING, ReservationStatus.DRY_RUN_SUCCEEDED)).isTrue();
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.PENDING, ReservationStatus.RESERVED)).isFalse();
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.RESERVED, ReservationStatus.RESERVING)).isFalse();
+        assertThat(LineChatReservationService.isValidWorkerTransition(
+                ReservationStatus.CANCELLED, ReservationStatus.PENDING)).isFalse();
     }
 }

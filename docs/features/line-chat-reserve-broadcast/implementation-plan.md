@@ -44,7 +44,7 @@ status: completed
 - **対応Issue:** #1087
 
 ### タスク3: ワーカーAPI＋サービストークン認証
-- [ ] 完了
+- [x] 完了
 - **目的:** ワーカーが予約タスクを取得し結果を報告する専用APIを新設する
 - **対応AC:** AC-2, AC-3
 - **主な変更領域:** `interceptor/ServiceTokenInterceptor.java`（新規）、`config/WebConfig.java`（interceptor 登録）、`controller/LineChatWorkerController.java`（新規）、`dto/LineChatWorkerTaskDto.java`・`dto/LineChatWorkerResultRequest.java`（新規）
