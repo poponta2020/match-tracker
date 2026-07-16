@@ -99,3 +99,6 @@
 
 - `pairing-lock-display-fixes` — /pairings のロック通知削除・ロック済み組のアイコン重複解消（解除のみ）・「全削除」→「対戦をリセット」改名（ボタン＋確認ダイアログ）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1059]
 - `pairing-view-unpaired-chips` — /pairings 閲覧時に未組み合わせの参加者を参加者一覧と同じチップで表示する改修（主要領域: karuta-tracker-ui）[shipped: PR #1063]
+
+- `practice-per-date-attendance` — カレンダー日付ポップアップの「出欠登録」を1日分の参加＋理由付きキャンセル画面に変更（FABは出欠一括登録に改名）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1073]
+- `design-md-anti-slop` — 脱AIスロップのデザイン正典 docs/design/design.md 新設＋Home脱カード・パイロット改修（カード原則禁止＋許可リスト・washi語彙正典化・単一ファイル）（主要領域: docs, karuta-tracker-ui）
