@@ -30,6 +30,11 @@ line_channels ──< line_channel_assignments (lineChannelId)
 line_channels ──< line_linking_codes (lineChannelId)
 line_channels ──< line_message_log (lineChannelId)
 
+organizations ──< line_broadcast_group (organizationId)
+line_broadcast_group ──< line_channels (broadcastGroupId, GROUP種別botのみ)
+line_broadcast_group ──< line_broadcast_send (broadcastGroupId)
+practice_sessions ──< line_broadcast_send (sessionId)
+
 practice_sessions ──< practice_participants (sessionId)
 practice_sessions ──< lottery_executions (sessionId)
 

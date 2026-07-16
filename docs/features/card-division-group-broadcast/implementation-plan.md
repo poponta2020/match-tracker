@@ -97,7 +97,8 @@ status: completed
 - **対応Issue:** #1081
 
 ### タスク8: 北大かるた会の初期セットアップ（bot 10体割当）＋運用手順
-- [ ] 完了
+- [ ] 完了（**seed SQL＋runbook 準備済み・実行はデプロイ後**）
+- ⚠ **実行タイミング注意**: `channel_type='GROUP'` への転用は、旧コード（ChannelType=PLAYER/ADMIN のみ）が本番稼働中に実行すると enum deserialize 障害（毎時 `LineMessageCountSyncScheduler.findAll()` 等）を起こす。**PRマージ→Renderデプロイ完了確認→ seed 実行→ Webhook設定→ bot招待** の順で行う。seed=`database/seed_hokudai_broadcast_bots.sql`、手順=`docs/features/card-division-group-broadcast/setup-runbook.md`。
 - **目的:** 今回対象の北海道大学かるた会（**org_id=2**）の配信グループを作成し、未使用 `PLAYER/AVAILABLE`（在庫47体）から**10体を `GROUP` に付替え・割当**する。わすら(org 1)は将来同UIから追加（コード改修不要）。
 - **対応AC:** AC-13（本番適用）
 - **主な変更領域:** 管理UI/APIでの登録（タスク6/7）または seed SQL（`database/`）で org 2 の `line_broadcast_group` 作成＋10チャネルを `GROUP`＋`broadcast_group_id` 設定 → **本番適用**。あわせて**人手運用手順**を要件/画面に明示: ①各botのLINEチャネルで「グループ参加許可」＋Webhook有効化（既存 `migrate-webhook-urls` 流用）、②全体グループへ10体を招待（→ `join` でグループID自動捕捉）。
