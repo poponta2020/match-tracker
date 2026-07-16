@@ -292,7 +292,7 @@ dedupeKeyの粒度（出典: DESIGN のみ）:
 | created_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
 | updated_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
 
-インデックス: `line_broadcast_group_pkey(id)`, `idx_lbg_org` (organization_id)
+インデックス: `line_broadcast_group_pkey(id)`, `idx_lbg_org_unique` (organization_id・UNIQUE＝1団体1グループを担保)
 
 ---
 

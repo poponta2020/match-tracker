@@ -3,6 +3,13 @@
 このPRのコードがマージ・デプロイされた**後**に運用者が行う手順。bot群のデータ転用（`channel_type='GROUP'`）は
 旧コードのデプロイ中に実行すると enum deserialize 障害を起こすため、**必ずデプロイ完了後**に実行する。
 
+## 前提: スキーマ migration
+
+`database/add_card_division_group_broadcast.sql`（新テーブル・カラム・`idx_lbs_dedupe`）は**本PRで本番に適用済み**。
+本番 Hibernate は新テーブルを自動生成しない構成のため、`DataInitializer` が起動時に `idx_lbs_dedupe` の存在を要求する
+（未適用だと起動時に fail-fast＝migration 名付きエラー）。**未適用の環境に本機能を展開する場合は、コードデプロイ前に
+この migration を適用すること。**
+
 ## 実行順序
 
 1. **PR マージ → Render 自動デプロイ完了を確認**（新コードが serving＝ヘルスチェック healthy）。

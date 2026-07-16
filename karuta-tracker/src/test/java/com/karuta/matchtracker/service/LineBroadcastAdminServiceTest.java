@@ -122,13 +122,30 @@ class LineBroadcastAdminServiceTest {
     }
 
     @Test
-    @DisplayName("createGroup: ADMIN が他団体を作成 → Forbidden")
-    void createGroupScopeReject() {
+    @DisplayName("createGroup: ADMIN は自団体(adminOrgId)を強制採用しクライアント入力のorganizationIdを無視する")
+    void createGroupAdminUsesOwnOrg() {
+        when(lineBroadcastGroupRepository.findByOrganizationId(ORG)).thenReturn(List.of());
+        when(lineBroadcastGroupRepository.save(any())).thenAnswer(inv -> {
+            LineBroadcastGroup g = inv.getArgument(0);
+            g.setId(GROUP_ID);
+            return g;
+        });
         LineBroadcastGroupCreateRequest req = new LineBroadcastGroupCreateRequest();
-        req.setOrganizationId(999L);
+        req.setOrganizationId(999L); // 他団体を入れても無視される
         req.setName("x");
 
-        assertThatThrownBy(() -> service.createGroup("ADMIN", ORG, req))
+        var dto = service.createGroup("ADMIN", ORG, req);
+
+        assertThat(dto.getOrganizationId()).isEqualTo(ORG);
+    }
+
+    @Test
+    @DisplayName("createGroup: 団体未確定のADMINは作成不可 → Forbidden")
+    void createGroupAdminNullOrgForbidden() {
+        LineBroadcastGroupCreateRequest req = new LineBroadcastGroupCreateRequest();
+        req.setName("x");
+
+        assertThatThrownBy(() -> service.createGroup("ADMIN", null, req))
                 .isInstanceOf(ForbiddenException.class);
         verify(lineBroadcastGroupRepository, never()).save(any());
     }

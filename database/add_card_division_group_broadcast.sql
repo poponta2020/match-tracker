@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS line_broadcast_group (
     created_at TIMESTAMP NOT NULL DEFAULT now(),
     updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_lbg_org ON line_broadcast_group (organization_id);
+-- 1団体1配信グループを DB でも担保（並行作成・手動投入での重複＝同一セッション多重配信を防ぐ）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lbg_org_unique ON line_broadcast_group (organization_id);
 
 -- 3. 全体配信ログ兼 dedupe
 CREATE TABLE IF NOT EXISTS line_broadcast_send (

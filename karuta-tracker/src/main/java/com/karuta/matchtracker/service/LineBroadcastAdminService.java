@@ -15,6 +15,7 @@ import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.LineBroadcastSendRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.util.AdminScopeValidator;
 import lombok.RequiredArgsConstructor;
@@ -57,14 +58,26 @@ public class LineBroadcastAdminService {
 
     @Transactional
     public LineBroadcastGroupDto createGroup(String role, Long adminOrgId, LineBroadcastGroupCreateRequest request) {
-        AdminScopeValidator.validateScope(role, adminOrgId, request.getOrganizationId(),
-                "他団体の配信グループは作成できません");
-        // 1団体1グループ（Non-goals: 複数グループは今回スコープ外）
-        if (!lineBroadcastGroupRepository.findByOrganizationId(request.getOrganizationId()).isEmpty()) {
+        // ADMIN は自団体を強制（クライアント入力の organizationId は使わない＝既存の自団体スコープ強制パターンに揃える）。
+        // SUPER_ADMIN のみ request.organizationId で対象団体を指定する。
+        final Long targetOrgId;
+        if ("ADMIN".equals(role)) {
+            if (adminOrgId == null) {
+                throw new ForbiddenException("団体が未確定のため配信グループを作成できません");
+            }
+            targetOrgId = adminOrgId;
+        } else {
+            targetOrgId = request.getOrganizationId();
+            if (targetOrgId == null) {
+                throw new IllegalArgumentException("organizationId は必須です");
+            }
+        }
+        // 1団体1グループ（Non-goals: 複数グループは今回スコープ外。DB でも一意インデックスで担保）
+        if (!lineBroadcastGroupRepository.findByOrganizationId(targetOrgId).isEmpty()) {
             throw new IllegalStateException("この団体の配信グループは既に存在します");
         }
         LineBroadcastGroup group = LineBroadcastGroup.builder()
-                .organizationId(request.getOrganizationId())
+                .organizationId(targetOrgId)
                 .name(request.getName())
                 .enabled(true)
                 .expectedRecipientCount(request.getExpectedRecipientCount())
