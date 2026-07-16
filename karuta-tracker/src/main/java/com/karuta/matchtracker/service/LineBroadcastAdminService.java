@@ -126,7 +126,12 @@ public class LineBroadcastAdminService {
         log.info("Assigned channel {} to broadcast group {} as GROUP bot", channelId, groupId);
     }
 
-    /** bot の割り当てを解除し PLAYER プールに戻す（グループID捕捉もクリア）。 */
+    /**
+     * bot の配信グループ割り当てを解除する。
+     * 個人割当（PLAYER）プールには戻さず、未割当の GROUP/AVAILABLE として残す
+     * （全体グループに招待済みだった bot が個人1:1通知チャネルに再利用されるのを防ぎ、AC-2 の分離境界を守る）。
+     * グループID捕捉もクリアする。
+     */
     @Transactional
     public void unassignBot(String role, Long adminOrgId, Long groupId, Long channelId) {
         loadScoped(role, adminOrgId, groupId);
@@ -135,12 +140,12 @@ public class LineBroadcastAdminService {
         if (!groupId.equals(channel.getBroadcastGroupId())) {
             throw new IllegalStateException("このbotはこの配信グループに割り当てられていません");
         }
-        channel.setChannelType(ChannelType.PLAYER);
+        // channel_type は GROUP のまま（PLAYER プールへ戻さない）。割当と捕捉グループIDのみ解除
         channel.setBroadcastGroupId(null);
         channel.setLineGroupId(null);
         channel.setStatus(ChannelStatus.AVAILABLE);
         lineChannelRepository.save(channel);
-        log.info("Unassigned channel {} from broadcast group {} (back to PLAYER pool)", channelId, groupId);
+        log.info("Unassigned channel {} from broadcast group {} (kept as unassigned GROUP)", channelId, groupId);
     }
 
     /** ローテーション稼働状況（次配信bot・各bot残枠・当月残り可能回数・枯渇アラート）。 */

@@ -226,8 +226,8 @@ class LineBroadcastAdminServiceTest {
     }
 
     @Test
-    @DisplayName("unassignBot: PLAYER に戻し broadcast_group_id / line_group_id をクリア")
-    void unassignBotRestoresPlayer() {
+    @DisplayName("unassignBot: 個人プールに戻さず GROUP のまま broadcast_group_id / line_group_id をクリア")
+    void unassignBotKeepsGroupType() {
         when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
         LineChannel ch = channel(10L, ChannelType.GROUP, ChannelStatus.AVAILABLE, GROUP_ID);
         ch.setLineGroupId("G-1");
@@ -237,7 +237,8 @@ class LineBroadcastAdminServiceTest {
 
         ArgumentCaptor<LineChannel> captor = ArgumentCaptor.forClass(LineChannel.class);
         verify(lineChannelRepository).save(captor.capture());
-        assertThat(captor.getValue().getChannelType()).isEqualTo(ChannelType.PLAYER);
+        // 個人割当プールに戻さない（GROUP のまま）＝AC-2 分離境界を解除操作で破らない
+        assertThat(captor.getValue().getChannelType()).isEqualTo(ChannelType.GROUP);
         assertThat(captor.getValue().getBroadcastGroupId()).isNull();
         assertThat(captor.getValue().getLineGroupId()).isNull();
     }
