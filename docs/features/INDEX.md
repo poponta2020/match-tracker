@@ -102,3 +102,4 @@
 
 - `practice-per-date-attendance` — カレンダー日付ポップアップの「出欠登録」を1日分の参加＋理由付きキャンセル画面に変更（FABは出欠一括登録に改名）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1073]
 - `design-md-anti-slop` — 脱AIスロップのデザイン正典 docs/design/design.md 新設＋Home脱カード・パイロット改修（カード原則禁止＋許可リスト・washi語彙正典化・単一ファイル）（主要領域: docs, karuta-tracker-ui）
+- `card-division-group-broadcast` — 札分けを団体の全体LINEグループへ自動一斉配信（未使用bot10体をローテして無料枠200通/月を吸収・30分前/8:00フォールバック・管理画面）（主要領域: karuta-tracker, karuta-tracker-ui, database, docs）[shipped: PR #1083]
