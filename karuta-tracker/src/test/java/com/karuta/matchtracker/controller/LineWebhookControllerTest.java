@@ -32,6 +32,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -411,6 +412,87 @@ class LineWebhookControllerTest {
                         )
                 ))
         );
+    }
+
+    @Test
+    @DisplayName("join event captures the group id on the firing channel (AC-3)")
+    void handleWebhook_joinEvent_capturesGroupId() throws Exception {
+        LineChannel channel = channel();
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "join",
+                                "source", java.util.Map.of("type", "group", "groupId", "G-XYZ")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineChannelRepository).save(channel);
+        assertThat(channel.getLineGroupId()).isEqualTo("G-XYZ");
+    }
+
+    @Test
+    @DisplayName("leave event clears the matching stored group id")
+    void handleWebhook_leaveEvent_clearsGroupId() throws Exception {
+        LineChannel channel = channel();
+        channel.setLineGroupId("G-XYZ");
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "leave",
+                                "source", java.util.Map.of("type", "group", "groupId", "G-XYZ")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk());
+
+        verify(lineChannelRepository).save(channel);
+        assertThat(channel.getLineGroupId()).isNull();
+    }
+
+    @Test
+    @DisplayName("leave event for a different group does not clear the stored group id")
+    void handleWebhook_leaveEventOtherGroup_keepsGroupId() throws Exception {
+        LineChannel channel = channel();
+        channel.setLineGroupId("G-XYZ");
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "leave",
+                                "source", java.util.Map.of("type", "group", "groupId", "G-OTHER")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk());
+
+        verify(lineChannelRepository, never()).save(any());
+        assertThat(channel.getLineGroupId()).isEqualTo("G-XYZ");
     }
 
     private LineChannel channel() {

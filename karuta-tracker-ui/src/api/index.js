@@ -8,6 +8,7 @@ export { homeAPI } from './home';
 export { lotteryAPI } from './lottery';
 export { notificationAPI } from './notifications';
 export { lineAPI } from './line';
+export { lineBroadcastAPI } from './lineBroadcast';
 export { inviteAPI } from './invite';
 export { byeActivityAPI } from './byeActivities';
 export { systemSettingsAPI } from './systemSettings';

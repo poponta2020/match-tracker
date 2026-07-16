@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 @Table(name = "line_channels", indexes = {
     @Index(name = "idx_line_channel_status", columnList = "status"),
     @Index(name = "idx_line_channel_line_id", columnList = "line_channel_id"),
-    @Index(name = "idx_line_channel_type", columnList = "channel_type")
+    @Index(name = "idx_line_channel_type", columnList = "channel_type"),
+    @Index(name = "idx_line_channel_broadcast_group", columnList = "broadcast_group_id")
 })
 @Getter
 @Setter
@@ -65,6 +66,14 @@ public class LineChannel {
     /** 送信数リセット日時 */
     @Column(name = "message_count_reset_at")
     private LocalDateTime messageCountResetAt;
+
+    /** 全体配信グループ（GROUP 種別チャネルのみ設定。個人割当プールとの分離用） */
+    @Column(name = "broadcast_group_id")
+    private Long broadcastGroupId;
+
+    /** 招待された全体LINEグループのID（join Webhookで捕捉。未捕捉なら配信不可） */
+    @Column(name = "line_group_id", length = 50)
+    private String lineGroupId;
 
     /** 作成日時 */
     @Column(name = "created_at", nullable = false, updatable = false)

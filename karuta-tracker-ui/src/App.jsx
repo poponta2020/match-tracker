@@ -42,6 +42,7 @@ import NotificationList from './pages/notifications/NotificationList';
 import NotificationSettings from './pages/notifications/NotificationSettings';
 import LineChannelAdmin from './pages/line/LineChannelAdmin';
 import LineScheduleAdmin from './pages/line/LineScheduleAdmin';
+import CardDivisionBroadcastAdmin from './pages/line/CardDivisionBroadcastAdmin';
 import DensukeManagement from './pages/densuke/DensukeManagement';
 import SystemSettings from './pages/settings/SystemSettings';
 import OrganizationSettings from './pages/settings/OrganizationSettings';
@@ -157,6 +158,7 @@ function App() {
             <Route path="/settings/calendar" element={<ProtectedPage><CalendarSubscriptionPage /></ProtectedPage>} />
             <Route path="/admin/line/channels" element={<RoleProtectedPage requiredRole="SUPER_ADMIN"><LineChannelAdmin /></RoleProtectedPage>} />
             <Route path="/admin/line/schedule" element={<RoleProtectedPage requiredRole="ADMIN"><LineScheduleAdmin /></RoleProtectedPage>} />
+            <Route path="/admin/line/broadcast" element={<RoleProtectedPage requiredRole="ADMIN"><CardDivisionBroadcastAdmin /></RoleProtectedPage>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

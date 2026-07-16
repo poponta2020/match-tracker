@@ -132,7 +132,7 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 | line_channel_id | VARCHAR(50) | NOT NULL, UNIQUE | LINE発行のチャネルID |
 | channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（DESIGNでは「暗号化保存」と付記） |
 | channel_access_token | TEXT | NOT NULL | アクセストークン（DESIGNでは「暗号化保存」と付記） |
-| channel_type | VARCHAR(10) | NOT NULL, DEFAULT 'PLAYER' | チャネル用途（PLAYER: 選手用 / ADMIN: 管理者用） |
+| channel_type | VARCHAR(10) | NOT NULL, DEFAULT 'PLAYER' | チャネル用途（PLAYER: 選手用 / ADMIN: 管理者用 / GROUP: 全体LINE配信用bot） |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE' | AVAILABLE/ASSIGNED/LINKED/DISABLED |
 | friend_add_url | TEXT | — | 友だち追加URL |
 | monthly_message_count | INT | NOT NULL, DEFAULT 0 | 当月送信数 |
@@ -141,10 +141,12 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 | updated_at | TIMESTAMP | NOT NULL | — |
 | qr_code_url | TEXT | — | 友だち追加QRコード画像URL（出典: introspect から追加） |
 | basic_id | VARCHAR(30) | — | LINE公式アカウントのベーシックID（出典: introspect から追加） |
+| broadcast_group_id | BIGINT | — | 全体配信グループ line_broadcast_group.id（GROUP種別botのみ設定・個人割当プールとの分離用） |
+| line_group_id | VARCHAR(50) | — | 招待された全体LINEグループのID（join Webhookで捕捉・未捕捉なら配信不可） |
 
-（本番 introspect 照合済み: message_count_reset_at/created_at/updated_at は TIMESTAMP。⚠解消。qr_code_url/basic_id は旧ドキュメント未記載のため追加）
+（本番 introspect 照合済み: message_count_reset_at/created_at/updated_at は TIMESTAMP。⚠解消。qr_code_url/basic_id は旧ドキュメント未記載のため追加。channel_type に CHECK 制約は無い＝GROUP 追加時の張り直し不要。broadcast_group_id/line_group_id は card-division-group-broadcast で追加）
 
-インデックス: `line_channels_pkey(id)`, `idx_line_channel_status` (status), `idx_line_channel_line_id` (line_channel_id), `idx_line_channel_type` (channel_type)（出典: DESIGN のみ）
+インデックス: `line_channels_pkey(id)`, `idx_line_channel_status` (status), `idx_line_channel_line_id` (line_channel_id), `idx_line_channel_type` (channel_type), `idx_line_channel_broadcast_group` (broadcast_group_id)（出典: DESIGN のみ）
 
 ---
 
@@ -273,6 +275,47 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 dedupeKeyの粒度（出典: DESIGN のみ）:
 - 試合単位通知（sendSameDayVacancyNotification）: `sessionId:matchNumber`
 - セッション統合通知（sendConsolidatedSameDayVacancyNotification）: `sessionId`
+
+---
+
+#### line_broadcast_group（全体LINE配信グループ設定）
+
+団体ごとの全体LINEグループ（bot群ローテで札分けを一斉配信）。card-division-group-broadcast で追加。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| organization_id | BIGINT | NOT NULL | 配信対象団体 organizations.id |
+| name | VARCHAR(100) | NOT NULL | 管理用表示名 |
+| enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 無効なら配信対象外 |
+| expected_recipient_count | INT | — | 想定受信数（枠会計用。未設定なら送信時に実グループ人数APIで解決） |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
+| updated_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
+
+インデックス: `line_broadcast_group_pkey(id)`, `idx_lbg_org_unique` (organization_id・UNIQUE＝1団体1グループを担保)
+
+---
+
+#### line_broadcast_send（全体LINE配信ログ兼 dedupe）
+
+全体配信の送信ログ兼「一度きり」担保。個人通知の player_id スコープ dedupe は流用できないため、(配信グループ, セッション) スコープの専用表。card-division-group-broadcast で追加。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| broadcast_group_id | BIGINT | NOT NULL | line_broadcast_group.id |
+| session_id | BIGINT | NOT NULL | practice_sessions.id |
+| line_channel_id | BIGINT | — | 配信に使用した bot（GROUP種別チャネル）。枯渇 SKIPPED 時は null |
+| recipient_count | INT | — | 想定受信数（成功時に bot の当月消費へ即時加算する値） |
+| status | VARCHAR(20) | NOT NULL, CHECK | RESERVED/SUCCESS/FAILED/SKIPPED |
+| error_message | TEXT | — | 失敗・スキップ理由 |
+| sent_at | TIMESTAMP | NOT NULL | 送信（予約）日時 |
+
+部分ユニーク制約: `(broadcast_group_id, session_id) WHERE status IN ('SUCCESS', 'RESERVED')`（`idx_lbs_dedupe`。`INSERT ... ON CONFLICT DO NOTHING` で原子的に一度きりを担保。FAILED/SKIPPED は再試行のため対象外）
+
+インデックス: `line_broadcast_send_pkey(id)`, `idx_lbs_group_session` (broadcast_group_id, session_id), `idx_lbs_group_sent` (broadcast_group_id, sent_at)
+
+**重複送信防止・回復フロー（個人版と同型）:** `tryAcquireBroadcastRight`(RESERVED insert・ON CONFLICT) → 送信 → 成功 `markBroadcastSucceeded`(SUCCESS) / 失敗 `markBroadcastFailed`(FAILED)。クラッシュ時は `releaseStaleBroadcastReservations`（10分＝配信ウィンドウ最小30分より短い）で残留 RESERVED を FAILED に解放し同一ウィンドウ内で再送可能にする。
 
 ---
 
