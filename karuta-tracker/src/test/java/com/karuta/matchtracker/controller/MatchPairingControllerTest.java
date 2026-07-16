@@ -89,14 +89,16 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("ADMIN は RoleCheckInterceptor 経由で adminOrganizationId が伝播し、組織スコープで取得する")
-        void shouldGetPairingsByDateScopedByAdminOrganizationId() throws Exception {
-            // Given: ADMIN ユーザーで Player.adminOrganizationId=7L を持つ
+        @DisplayName("ADMIN は organizationId 未指定の閲覧では会員団体スコープ（非限定 null）で取得する")
+        void shouldGetPairingsByDateAsAdminUnscopedWhenNoOrg() throws Exception {
+            // Given: ADMIN（admin_org=7L・7Lの会員）。閲覧は resolveViewingOrganizationId により
+            // organizationId 未指定なら null（非限定）で取得され、admin_org で強制スコープしない
+            // （他団体の会員でもある ADMIN がその会員団体のペアリングを閲覧できるようにするため）。
             LocalDate date = LocalDate.of(2024, 1, 15);
             Long adminUserId = 1L;
             Long adminOrgId = 7L;
             mockAdminScopeForDate(date, adminUserId, adminOrgId);
-            when(matchPairingService.getByDate(date, false, adminOrgId))
+            when(matchPairingService.getByDate(date, false, null))
                     .thenReturn(Collections.emptyList());
 
             // When & Then
@@ -105,9 +107,9 @@ class MatchPairingControllerTest {
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
-            // 組織スコープ付きで呼ばれる（null では呼ばれない）
-            verify(matchPairingService).getByDate(date, false, adminOrgId);
-            verify(matchPairingService, never()).getByDate(date, false, (Long) null);
+            // 非限定（null）で呼ばれる。admin_org で強制スコープされない。
+            verify(matchPairingService).getByDate(date, false, null);
+            verify(matchPairingService, never()).getByDate(date, false, adminOrgId);
         }
 
         @Test
@@ -337,15 +339,15 @@ class MatchPairingControllerTest {
         }
 
         @Test
-        @DisplayName("ADMIN は adminOrganizationId で組織スコープ取得する")
-        void shouldGetPairingByDateAndMatchNumberScopedByAdminOrganizationId() throws Exception {
-            // Given
+        @DisplayName("ADMIN は organizationId 未指定の閲覧では会員団体スコープ（非限定 null）で取得する")
+        void shouldGetPairingByDateAndMatchNumberAsAdminUnscopedWhenNoOrg() throws Exception {
+            // Given: 閲覧は resolveViewingOrganizationId により admin_org 強制せず非限定（null）
             LocalDate date = LocalDate.of(2024, 1, 15);
             Integer matchNumber = 3;
             Long adminUserId = 1L;
             Long adminOrgId = 7L;
             mockAdminScopeForDate(date, adminUserId, adminOrgId);
-            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber, adminOrgId))
+            when(matchPairingService.getByDateAndMatchNumber(date, matchNumber, null))
                     .thenReturn(Collections.emptyList());
 
             // When & Then
@@ -355,9 +357,9 @@ class MatchPairingControllerTest {
                             .param("matchNumber", "3"))
                     .andExpect(status().isOk());
 
-            verify(matchPairingService).getByDateAndMatchNumber(date, matchNumber, adminOrgId);
+            verify(matchPairingService).getByDateAndMatchNumber(date, matchNumber, null);
             verify(matchPairingService, never())
-                    .getByDateAndMatchNumber(date, matchNumber, (Long) null);
+                    .getByDateAndMatchNumber(date, matchNumber, adminOrgId);
         }
 
         @Test
@@ -1335,6 +1337,73 @@ class MatchPairingControllerTest {
         }
 
         @Test
+        @DisplayName("ADMIN は admin_org とは別の『所属している他団体』のセッションでも自動マッチングできる（会員パリティ・本バグ修正）")
+        void shouldAutoMatchAsAdminForMemberOrgOtherThanAdminOrg() throws Exception {
+            // Given: ADMIN の admin_org=7L（Y）だが、org=8L（X）にも所属（会員）。
+            // 当日は X=8L のセッションのみ存在（Y=7L のセッションは無い）。
+            // 旧実装は admin_org=7L 固定で 403 になっていたが、会員パリティ統一により
+            // 会員団体 8L のスコープで実行できる。
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long adminUserId = 1L;
+            Long adminOrgId = 7L;
+            Long memberOrgId = 8L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+
+            Player admin = new Player();
+            admin.setId(adminUserId);
+            admin.setAdminOrganizationId(adminOrgId);
+            when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+            when(organizationService.getPlayerOrganizationIds(adminUserId))
+                    .thenReturn(List.of(adminOrgId, memberOrgId));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(1L, date, memberOrgId)));
+
+            AutoMatchingResult result = AutoMatchingResult.builder()
+                    .pairings(Collections.emptyList())
+                    .waitingPlayers(Collections.emptyList())
+                    .build();
+            when(matchPairingService.autoMatch(any(AutoMatchingRequest.class), eq(memberOrgId)))
+                    .thenReturn(result);
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings/auto-match")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+
+            // 会員団体 8L のスコープで実行される（admin_org=7L では実行されない）
+            verify(matchPairingService).autoMatch(any(AutoMatchingRequest.class), eq(memberOrgId));
+            verify(matchPairingService, never()).autoMatch(any(AutoMatchingRequest.class), eq(adminOrgId));
+        }
+
+        @Test
+        @DisplayName("ADMIN は所属していない団体のセッションでは自動マッチングできず 403（会員パリティ）")
+        void shouldReturn403ForAdminAutoMatchOutsideMemberOrgs() throws Exception {
+            // Given: ADMIN は org=7L のみ所属。当日は所属外 org=99L のセッションのみ。
+            LocalDate date = LocalDate.of(2024, 1, 15);
+            Long adminUserId = 1L;
+            AutoMatchingRequest request = AutoMatchingRequest.builder().sessionDate(date).matchNumber(1).build();
+
+            Player admin = new Player();
+            admin.setId(adminUserId);
+            admin.setAdminOrganizationId(7L);
+            when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+            when(organizationService.getPlayerOrganizationIds(adminUserId)).thenReturn(List.of(7L));
+            when(practiceSessionRepository.findByDateRange(date, date))
+                    .thenReturn(List.of(buildSession(1L, date, 99L)));
+
+            // When & Then
+            mockMvc.perform(post("/api/match-pairings/auto-match")
+                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden());
+
+            verify(matchPairingService, never()).autoMatch(any(), any());
+        }
+
+        @Test
         @DisplayName("奇数人数の場合は待機選手が含まれる")
         void shouldIncludeWaitingPlayersForOddNumber() throws Exception {
             // Given
@@ -1588,12 +1657,12 @@ class MatchPairingControllerTest {
         admin.setAdminOrganizationId(adminOrgId);
         when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
 
-        PracticeSession session = new PracticeSession();
-        session.setId(1L);
-        session.setSessionDate(date);
-        session.setOrganizationId(adminOrgId);
-        when(practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId))
-                .thenReturn(Optional.of(session));
+        // ADMIN も PLAYER と同じ会員団体スコープに統一されたため、所属団体＋当日セッションで
+        // 検証・解決される（admin_org 固定ではない）。
+        when(organizationService.getPlayerOrganizationIds(adminUserId))
+                .thenReturn(List.of(adminOrgId));
+        when(practiceSessionRepository.findByDateRange(date, date))
+                .thenReturn(List.of(buildSession(1L, date, adminOrgId)));
     }
 
     private void mockAdminScopeForPairingId(Long pairingId, Long adminUserId, Long adminOrgId) {
@@ -1601,6 +1670,9 @@ class MatchPairingControllerTest {
         admin.setId(adminUserId);
         admin.setAdminOrganizationId(adminOrgId);
         when(playerRepository.findById(adminUserId)).thenReturn(Optional.of(admin));
+        // 会員団体スコープ統一により、ペアリング所属組織が ADMIN の所属団体に含まれるかで検証される
+        when(organizationService.getPlayerOrganizationIds(adminUserId))
+                .thenReturn(List.of(adminOrgId));
         when(matchPairingService.getOrganizationIdByPairingId(pairingId)).thenReturn(adminOrgId);
     }
 

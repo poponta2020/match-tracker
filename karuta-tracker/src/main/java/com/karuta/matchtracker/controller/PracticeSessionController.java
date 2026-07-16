@@ -57,22 +57,19 @@ public class PracticeSessionController {
      * 日付で練習日を取得
      *
      * 組織スコープのルール（OrganizationScopeResolver と一致）:
-     *  - ADMIN: 自団体スコープを強制（adminOrganizationId）。クエリで他団体IDが
-     *    指定された場合は 403。
-     *  - PLAYER: organizationId 任意指定可。指定時は本人の所属団体に含まれる
-     *    必要があり、不一致なら 403。未指定なら日付のみで取得。
+     *  - ADMIN / PLAYER: organizationId 任意指定可。未指定なら日付のみで取得（非限定）。
+     *    指定時は本人の所属団体に含まれる必要があり、不一致なら 403。ADMIN も admin_org
+     *    固定ではなく会員団体スコープで統一（閲覧は resolveViewingOrganizationId）。
      *  - SUPER_ADMIN: organizationId 任意指定可。指定なしなら日付のみで取得。
      *
      * 同日に複数団体のセッションがある場合、画面側 (PairingGenerator 等) は
      * organizationId を明示的に渡すことで autoMatch / createBatch と同じ組織の
      * セッション・pairingIncludesPending を取得できる。
      *
-     * @RequireRole は ADMIN への adminOrganizationId 設定を有効化するために必須。
-     * RoleCheckInterceptor は @RequireRole 未付与のメソッドではこの属性をセットせず
-     * 早期 return するため、付けないと ADMIN 経路の組織スコープが効かない。
+     * @RequireRole は RoleCheckInterceptor が currentUserId 等の属性をセットするために必須。
      *
      * @param date 日付
-     * @param organizationId 組織スコープ（任意。PLAYER / SUPER_ADMIN が同日複数団体時の曖昧性を解消するために指定可能）
+     * @param organizationId 組織スコープ（任意。同日複数団体時の曖昧性を解消するために指定可能）
      * @return 練習日情報
      */
     @GetMapping("/date")
@@ -83,7 +80,7 @@ public class PracticeSessionController {
             HttpServletRequest httpRequest) {
         log.debug("GET /api/practice-sessions/date?date={}, organizationId={} - Getting practice session by date",
                 date, organizationId);
-        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        Long effectiveOrgId = organizationScopeResolver.resolveViewingOrganizationId(httpRequest, organizationId);
         PracticeSessionDto session = practiceSessionService.findByDateWithParticipants(date, effectiveOrgId);
         return ResponseEntity.ok(session);
     }
@@ -388,10 +385,10 @@ public class PracticeSessionController {
         log.info("POST /api/practice-sessions/date/{}/matches/{}/participants/{} - Adding participant to match",
                 date, matchNumber, playerId);
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
         Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
         // スコープ検証で確定した organizationId を実更新にも渡し、検証と更新の対象セッションを一致させる
-        Long organizationId = practiceSessionService.checkScopeByDate(date, role, adminOrgId, currentUserId);
+        // （ADMIN も PLAYER と同じ会員団体スコープ。checkScopeByDate 内で currentUserId から解決する）
+        Long organizationId = practiceSessionService.checkScopeByDate(date, role, currentUserId);
         practiceParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId);
         // 更新後の練習セッション情報を、書き込みと同じ団体スコープで取得して返す
         // （同日に複数団体のセッションがある場合に別団体セッションを返す/非一意で例外になるのを防ぐ）

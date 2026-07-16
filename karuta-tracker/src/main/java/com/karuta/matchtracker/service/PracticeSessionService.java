@@ -719,10 +719,11 @@ public class PracticeSessionService {
      * 団体スコープ付きで特定でき、検証と更新の対象ずれ（別団体セッションへの書き込み）を防ぐ:</p>
      * <ul>
      *   <li>SUPER_ADMIN: スコープ強制なし。{@code null} を返す（更新側は日付のみで特定）。</li>
-     *   <li>ADMIN: 自団体のセッションが対象日付に存在しなければ {@link ForbiddenException}。存在すれば adminOrganizationId を返す。</li>
-     *   <li>PLAYER: 所属団体のセッションが対象日付に存在しなければ {@link ForbiddenException}。
-     *       同日に複数の所属団体のセッションがあり操作対象が一意に定まらない場合も {@link ForbiddenException}
-     *       （別団体データ誤汚染防止の安全側フォールバック）。1件のみ一致すればその団体IDを返す。</li>
+     *   <li>ADMIN / PLAYER: 所属団体（player_organizations）のセッションが対象日付に存在しなければ
+     *       {@link ForbiddenException}。同日に複数の所属団体のセッションがあり操作対象が一意に定まらない
+     *       場合も {@link ForbiddenException}（別団体データ誤汚染防止の安全側フォールバック）。1件のみ一致
+     *       すればその団体IDを返す。ADMIN も admin_org 固定ではなく PLAYER と同じ会員団体スコープで統一し、
+     *       他団体の会員でもある ADMIN がその団体の試合に参加者を追加できるようにする。</li>
      *   <li>その他のロール: {@link ForbiddenException}。</li>
      * </ul>
      *
@@ -730,19 +731,10 @@ public class PracticeSessionService {
      * セッションIDベースの {@link #checkAdminScope} とは別物のため、他のADMIN専用
      * エンドポイントには影響しない。</p>
      */
-    public Long checkScopeByDate(LocalDate date, String role, Long adminOrganizationId, Long currentUserId) {
+    public Long checkScopeByDate(LocalDate date, String role, Long currentUserId) {
         if ("SUPER_ADMIN".equals(role)) return null;
 
-        if ("ADMIN".equals(role)) {
-            if (adminOrganizationId == null) {
-                throw new ForbiddenException("他団体の練習日は編集できません");
-            }
-            practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrganizationId)
-                    .orElseThrow(() -> new ForbiddenException("他団体の練習日は編集できません"));
-            return adminOrganizationId;
-        }
-
-        if ("PLAYER".equals(role)) {
+        if ("ADMIN".equals(role) || "PLAYER".equals(role)) {
             if (currentUserId == null) {
                 throw new ForbiddenException("他団体の練習日は編集できません");
             }

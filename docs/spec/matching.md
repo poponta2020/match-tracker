@@ -77,7 +77,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 **結果入力済みロック:**
 - 試合結果が入力済みのペアリングは自動マッチング・手動変更・一括保存で上書き・削除されない
 - ロック判定: 対応する `matches` レコードの存在有無（`session_date` / `match_number` / `player1_id` / `player2_id` で照合）
-- ロック済みペアリングのリセット: 全ロール（PLAYER+）が個別ペアリング単位で確認ダイアログ付きリセット可能（`match_pairings` と `matches` の両方を削除。ADMIN/PLAYER は自/所属団体のみ）
+- ロック済みペアリングのリセット: 全ロール（PLAYER+）が個別ペアリング単位で確認ダイアログ付きリセット可能（`match_pairings` と `matches` の両方を削除。ADMIN/PLAYER は所属団体のみ）
 - 試合結果の編集・削除時はロックが自動解除される（`matches` レコードの変更・削除によりロック条件が消滅するため）
 
 **手動ロック（pairing-manual-lock）:**
@@ -291,18 +291,18 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 
 | メソッド | パス | 権限 | 説明 |
 |---|---|---|---|
-| GET | `/date?date=&light=` | ALL | 日付別取得 |
-| GET | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号で取得 |
+| GET | `/date?date=&light=` | ALL | 日付別取得（閲覧スコープ=`resolveViewingOrganizationId`。ADMIN も PLAYER と同じ会員団体スコープで、organizationId 未指定なら非限定。他団体会員の ADMIN もその団体の組み合わせを閲覧可） |
+| GET | `/date-and-match?date=&matchNumber=` | ALL | 日付+試合番号で取得（閲覧スコープは `/date` と同じ） |
 | GET | `/exists?date=&matchNumber=` | ALL | 存在確認 |
 | GET | `/pair-history?player1Id=&player2Id=&sessionDate=` | ALL | ペアの対戦履歴 |
 | GET | `/player/{playerId}` | ALL | 選手起点の最近ペアリング取得（動画倉庫の登録モーダル「選手起点」で結果未入力の試合も選べるようにする用途。閲覧は全選手可のため団体スコープなし） |
-| POST | `/` | PLAYER+ | 単一作成（ADMIN/PLAYERは自/所属団体のみ） |
-| POST | `/batch?date=&matchNumber=` | PLAYER+ | 一括作成（ADMIN/PLAYERは自/所属団体のみ） |
-| POST | `/auto-match` | PLAYER+ | 自動マッチング（ADMIN/PLAYERは自/所属団体のみ） |
-| PUT | `/{id}/player?newPlayerId=&side=` | PLAYER+ | 選手差し替え（ADMIN/PLAYERは自/所属団体のみ） |
+| POST | `/` | PLAYER+ | 単一作成（ADMIN/PLAYER は所属団体のみ） |
+| POST | `/batch?date=&matchNumber=` | PLAYER+ | 一括作成（ADMIN/PLAYER は所属団体のみ） |
+| POST | `/auto-match` | PLAYER+ | 自動マッチング（ADMIN/PLAYER は所属団体のみ） |
+| PUT | `/{id}/player?newPlayerId=&side=` | PLAYER+ | 選手差し替え（ADMIN/PLAYER は所属団体のみ） |
 | DELETE | `/{id}` | ADMIN+ | 単一削除 |
-| DELETE | `/{id}/with-result` | PLAYER+ | ペアリング+対応する試合結果を同時削除（リセット）（ADMIN/PLAYERは自/所属団体のみ） |
-| DELETE | `/date-and-match?date=&matchNumber=` | PLAYER+ | 日付+試合番号の全削除（ADMIN/PLAYERは自/所属団体のみ） |
+| DELETE | `/{id}/with-result` | PLAYER+ | ペアリング+対応する試合結果を同時削除（リセット）（ADMIN/PLAYER は所属団体のみ） |
+| DELETE | `/date-and-match?date=&matchNumber=` | PLAYER+ | 日付+試合番号の全削除（ADMIN/PLAYER は所属団体のみ） |
 
 ### GET `/api/match-pairings/date?date={date}`
 **説明**: 日付別組み合わせ取得
@@ -401,12 +401,12 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 
 ### DELETE `/api/match-pairings/{id}/with-result`
 **説明**: ペアリングと対応する試合結果を同時削除（リセット）
-**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`。ADMIN/PLAYER は自/所属団体のペアリングのみ、他団体は 403）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByPairingId`。ADMIN/PLAYER は所属団体のペアリングのみ、他団体は 403）
 **レスポンス**: 削除されたペアリング情報（`MatchPairingDto`、`hasResult=true`、`matchId`付き）
 
 ### DELETE `/api/match-pairings/date-and-match?date={date}&matchNumber={matchNumber}`
 **説明**: 組み合わせ削除（結果入力済み・手動ロックの組は保持）
-**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByDate`。ADMIN/PLAYER は自/所属団体のセッションのみ、他団体は 403）
+**権限**: SUPER_ADMIN, ADMIN, PLAYER（`validateScopeByDate`。ADMIN/PLAYER は所属団体のセッションのみ、他団体は 403）
 
 ### PATCH `/api/match-pairings/{id}/lock`
 **説明**: 指定組を手動ロック（二重ブッキング検証付き）。同一 `(session_date, match_number)`・同一組織スコープ内で対象2選手のいずれかが別の組に含まれる場合は 409 Conflict（`DuplicateResourceException`）

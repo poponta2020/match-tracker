@@ -66,4 +66,48 @@ public class OrganizationScopeResolver {
         }
         return requestedOrganizationId;
     }
+
+    /**
+     * 閲覧（読み取り）APIの組織スコープを解決する。
+     *
+     * 書き込み系の {@link #resolveEffectiveOrganizationId} が ADMIN を
+     * {@code adminOrganizationId} に強制するのと異なり、こちらは <b>ADMIN を PLAYER と同じ
+     * 「会員団体スコープ」で扱う</b>（SUPER_ADMIN は全団体横断のまま）。他団体の会員でもある
+     * ADMIN が、その会員団体の対戦組み合わせ・練習日を閲覧できるようにするための解決ルール。
+     *
+     * <ul>
+     *   <li>SUPER_ADMIN: {@code requestedOrganizationId} をそのまま返す（未指定なら {@code null}＝非限定）。</li>
+     *   <li>ADMIN / PLAYER: {@code requestedOrganizationId} 未指定なら {@code null}（日付のみ・非限定）。
+     *       指定時は当該ユーザーの所属団体（{@code player_organizations}）に含まれる必要があり、
+     *       含まれなければ 403。</li>
+     * </ul>
+     *
+     * フロントは現状 organizationId を渡さないため実質すべて {@code null}（非限定）になり、
+     * 閲覧は「全ロールで所属団体の対戦組み合わせを見られる」という権限マトリックスに一致する。
+     *
+     * @param httpRequest             RoleCheckInterceptor によりロール属性がセット済みのリクエスト
+     * @param requestedOrganizationId クライアントから渡された organizationId（任意）
+     * @return 組織スコープに使うべき organizationId（null は組織非限定）
+     * @throws ForbiddenException     所属外の団体IDを指定した場合
+     */
+    public Long resolveViewingOrganizationId(HttpServletRequest httpRequest,
+                                             Long requestedOrganizationId) {
+        String role = (String) httpRequest.getAttribute("currentUserRole");
+        if ("SUPER_ADMIN".equals(role)) {
+            return requestedOrganizationId;
+        }
+        // ADMIN / PLAYER 共通の会員団体スコープ
+        if (requestedOrganizationId == null) {
+            return null;
+        }
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId == null) {
+            throw new ForbiddenException("参加していない団体のリソースにはアクセスできません");
+        }
+        List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
+        if (!playerOrgIds.contains(requestedOrganizationId)) {
+            throw new ForbiddenException("参加していない団体のリソースにはアクセスできません");
+        }
+        return requestedOrganizationId;
+    }
 }
