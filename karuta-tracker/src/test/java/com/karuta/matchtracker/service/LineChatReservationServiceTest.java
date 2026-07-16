@@ -156,6 +156,44 @@ class LineChatReservationServiceTest {
     }
 
     @Test
+    @DisplayName("グループ無効化 × RESERVED → CANCEL_PENDING（無効化後もLINE予約が残るため取消）")
+    void disabledGroupReservedBecomesCancelPending() {
+        LineChatReservation r = reservation(100L, ReservationStatus.RESERVED, "t", SEND_AT);
+        PracticeSession s = session(100L, ORG, TOMORROW);
+        LineBroadcastGroup disabled = LineBroadcastGroup.builder()
+                .id(GROUP_ID).organizationId(ORG).name("g").enabled(false).build();
+        when(reservationRepository.findByStatusNotAndScheduledSendAtAfter(eq(ReservationStatus.CANCELLED), any()))
+                .thenReturn(List.of(r));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(s));
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(disabled));
+
+        service().detectChanges(NOW);
+
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCEL_PENDING);
+        assertThat(r.getErrorCode()).isEqualTo("GROUP_INACTIVE");
+        verify(reservationRepository).save(r);
+    }
+
+    @Test
+    @DisplayName("グループ無効化 × PENDING → CANCELLED（LINE側に無いので直接取消）")
+    void disabledGroupPendingBecomesCancelled() {
+        LineChatReservation r = reservation(100L, ReservationStatus.PENDING, "t", SEND_AT);
+        PracticeSession s = session(100L, ORG, TOMORROW);
+        LineBroadcastGroup disabled = LineBroadcastGroup.builder()
+                .id(GROUP_ID).organizationId(ORG).name("g").enabled(false).build();
+        when(reservationRepository.findByStatusNotAndScheduledSendAtAfter(eq(ReservationStatus.CANCELLED), any()))
+                .thenReturn(List.of(r));
+        when(practiceSessionRepository.findById(100L)).thenReturn(Optional.of(s));
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(disabled));
+
+        service().detectChanges(NOW);
+
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        assertThat(r.getErrorCode()).isEqualTo("GROUP_INACTIVE");
+        verify(reservationRepository).save(r);
+    }
+
+    @Test
     @DisplayName("内容変更 × RESERVED → CANCEL_PENDING（取消→再予約へ正規化）")
     void contentChangedReservedBecomesCancelPending() {
         LineChatReservation r = reservation(100L, ReservationStatus.RESERVED, "旧本文", SEND_AT);

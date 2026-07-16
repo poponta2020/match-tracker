@@ -134,11 +134,14 @@ public class LineChatReservationService {
 
             Optional<PracticeSession> sessionOpt = practiceSessionRepository.findById(r.getSessionId());
             Optional<LineBroadcastGroup> groupOpt = groupRepository.findById(r.getBroadcastGroupId());
-            boolean sessionValid = sessionOpt.isPresent() && groupOpt.isPresent()
+            // グループが無効化(enabled=false)された場合も配信対象外＝予約を残さない。
+            // 無効化後もチャット予約はLINE側に残り予定送信され得るため（push経路と異なり disabled でも発火する）取り消す。
+            boolean groupActive = groupOpt.isPresent() && Boolean.TRUE.equals(groupOpt.get().getEnabled());
+            boolean valid = sessionOpt.isPresent() && groupActive
                     && groupOpt.get().getOrganizationId().equals(sessionOpt.get().getOrganizationId());
 
-            if (!sessionValid) {
-                // セッション削除・団体不一致・グループ消失
+            if (!valid) {
+                // セッション削除・グループ消失/無効化・団体不一致 → 取消
                 if (st == ReservationStatus.RESERVED) {
                     // LINE側に予約が残っている可能性 → ワーカーに削除させる
                     r.setStatus(ReservationStatus.CANCEL_PENDING);
@@ -146,8 +149,9 @@ public class LineChatReservationService {
                     // PENDING/FAILED は LINE側に何もない → 直接取消
                     r.setStatus(ReservationStatus.CANCELLED);
                 }
-                r.setErrorCode("SESSION_REMOVED");
-                r.setErrorMessage("対象セッションが削除/変更されたため取消");
+                r.setErrorCode(sessionOpt.isEmpty() ? "SESSION_REMOVED"
+                        : (!groupActive ? "GROUP_INACTIVE" : "ORG_MISMATCH"));
+                r.setErrorMessage("対象セッション削除・配信グループ無効化・団体不一致のため取消");
                 reservationRepository.save(r);
                 continue;
             }
