@@ -122,14 +122,14 @@ class CardDivisionBroadcastServiceTest {
         when(lineChannelRepository.findByBroadcastGroupIdAndChannelType(GROUP_ID, ChannelType.GROUP))
                 .thenReturn(List.of(bot(1, 0), bot(2, 130)));
         when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
-        when(lineBroadcastSendService.tryAcquire(eq(GROUP_ID), eq(SESSION_ID), anyLong(), anyInt()))
+        when(lineBroadcastSendService.tryAcquire(eq(GROUP_ID), eq(SESSION_ID), anyLong(), anyInt(), any()))
                 .thenReturn(true);
         when(lineMessagingService.sendPushMessage(anyString(), anyString(), anyString())).thenReturn(true);
 
         service.processGroupBroadcast(group(70), session(ORG), now);
 
         // 選択は id2（消費130を使い切る）1体のみ
-        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 2L, 70);
+        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 2L, 70, now);
         verify(lineMessagingService, times(1)).sendPushMessage(eq("token-2"), eq("G-2"), anyString());
         verify(lineBroadcastSendService).markSucceeded(GROUP_ID, SESSION_ID);
         verify(lineBroadcastSendService).incrementChannelMonthlyCount(2L, 70);
@@ -145,7 +145,7 @@ class CardDivisionBroadcastServiceTest {
         service.processGroupBroadcast(group(70), session(ORG), now);
 
         verify(lineChannelRepository, never()).findByBroadcastGroupIdAndChannelType(anyLong(), any());
-        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt());
+        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any());
         verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
     }
 
@@ -155,7 +155,7 @@ class CardDivisionBroadcastServiceTest {
         when(lineChannelRepository.findByBroadcastGroupIdAndChannelType(GROUP_ID, ChannelType.GROUP))
                 .thenReturn(List.of(bot(1, 0)));
         when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
-        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt())).thenReturn(false);
+        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any())).thenReturn(false);
 
         service.processGroupBroadcast(group(70), session(ORG), now);
 
@@ -172,9 +172,9 @@ class CardDivisionBroadcastServiceTest {
 
         service.processGroupBroadcast(group(70), session(ORG), now);
 
-        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt());
+        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any());
         verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
-        verify(lineBroadcastSendService).recordSkipped(eq(GROUP_ID), eq(SESSION_ID), anyString());
+        verify(lineBroadcastSendService).recordSkipped(eq(GROUP_ID), eq(SESSION_ID), anyString(), any());
     }
 
     @Test
@@ -183,7 +183,7 @@ class CardDivisionBroadcastServiceTest {
         service.processGroupBroadcast(group(70), session(999L), now);
 
         verify(lineBroadcastSendService, never()).releaseStale(any());
-        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt());
+        verify(lineBroadcastSendService, never()).tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any());
         verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
     }
 
@@ -199,7 +199,7 @@ class CardDivisionBroadcastServiceTest {
 
         service.processGroupBroadcast(group(70), session(ORG), now);
 
-        verify(lineBroadcastSendService).recordSkipped(eq(GROUP_ID), eq(SESSION_ID), anyString());
+        verify(lineBroadcastSendService).recordSkipped(eq(GROUP_ID), eq(SESSION_ID), anyString(), any());
         verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
     }
 
@@ -209,13 +209,13 @@ class CardDivisionBroadcastServiceTest {
         when(lineChannelRepository.findByBroadcastGroupIdAndChannelType(GROUP_ID, ChannelType.GROUP))
                 .thenReturn(List.of(bot(1, 0)));
         when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
-        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt())).thenReturn(true);
+        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any())).thenReturn(true);
         when(lineMessagingService.sendPushMessage(anyString(), anyString(), anyString())).thenReturn(true);
 
         service.processGroupBroadcast(group(70), session(ORG), now);
 
         verify(lineMessagingService, never()).getGroupMemberCount(anyString(), anyString());
-        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 1L, 70);
+        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 1L, 70, now);
     }
 
     @Test
@@ -225,12 +225,12 @@ class CardDivisionBroadcastServiceTest {
                 .thenReturn(List.of(bot(1, 0)));
         when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
         when(lineMessagingService.getGroupMemberCount("token-1", "G-1")).thenReturn(68);
-        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt())).thenReturn(true);
+        when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any())).thenReturn(true);
         when(lineMessagingService.sendPushMessage(anyString(), anyString(), anyString())).thenReturn(true);
 
         service.processGroupBroadcast(group(null), session(ORG), now);
 
-        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 1L, 68);
+        verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 1L, 68, now);
         verify(lineBroadcastSendService).incrementChannelMonthlyCount(1L, 68);
     }
 }

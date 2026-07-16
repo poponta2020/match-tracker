@@ -107,7 +107,8 @@ public class CardDivisionBroadcastService {
         LineChannel bot = selected.get();
 
         // 原子的に送信権を確保（AC-6）。false なら並行/前回ポーリングが確保済み → 何もしない
-        if (!lineBroadcastSendService.tryAcquire(groupId, sessionId, bot.getId(), expected)) {
+        // sent_at には注入 now を渡し、releaseStale の cutoff と時刻基準を揃える
+        if (!lineBroadcastSendService.tryAcquire(groupId, sessionId, bot.getId(), expected, now)) {
             return;
         }
 
@@ -133,7 +134,7 @@ public class CardDivisionBroadcastService {
         // 同日に既に SKIPPED を記録済みならログ肥大を避けて再記録しない
         LocalDateTime dayStart = now.toLocalDate().atStartOfDay();
         if (!lineBroadcastSendService.hasSkippedSince(groupId, sessionId, dayStart)) {
-            lineBroadcastSendService.recordSkipped(groupId, sessionId, reason);
+            lineBroadcastSendService.recordSkipped(groupId, sessionId, reason, now);
         }
     }
 

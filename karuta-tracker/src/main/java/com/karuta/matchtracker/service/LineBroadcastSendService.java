@@ -4,7 +4,6 @@ import com.karuta.matchtracker.entity.LineBroadcastSend;
 import com.karuta.matchtracker.entity.LineBroadcastSend.BroadcastStatus;
 import com.karuta.matchtracker.repository.LineBroadcastSendRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
-import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -29,12 +28,15 @@ public class LineBroadcastSendService {
 
     /**
      * 原子的に送信権を確保する（INSERT ... ON CONFLICT DO NOTHING）。
+     * sent_at には呼び出し側の注入時刻 now を使う（RESERVED 解放の cutoff と同一の時刻基準に揃え、
+     * クラッシュ回復の解放判定が確実に働くようにする）。
      * @return true=確保成功（このプロセスが送信する）、false=既に送信済み/送信中
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean tryAcquire(Long groupId, Long sessionId, Long channelId, Integer recipientCount) {
+    public boolean tryAcquire(Long groupId, Long sessionId, Long channelId, Integer recipientCount,
+                              LocalDateTime now) {
         return repository.tryAcquireBroadcastRight(
-                groupId, sessionId, channelId, recipientCount, JstDateTimeUtil.now()) > 0;
+                groupId, sessionId, channelId, recipientCount, now) > 0;
     }
 
     /** RESERVED → SUCCESS に確定する。@return 更新行数 */
@@ -63,7 +65,7 @@ public class LineBroadcastSendService {
 
     /** 枯渇・未設定でスキップした事実を記録する（管理画面のアラート実体・AC-9）。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordSkipped(Long groupId, Long sessionId, String reason) {
+    public void recordSkipped(Long groupId, Long sessionId, String reason, LocalDateTime now) {
         repository.save(LineBroadcastSend.builder()
                 .broadcastGroupId(groupId)
                 .sessionId(sessionId)
@@ -71,7 +73,7 @@ public class LineBroadcastSendService {
                 .recipientCount(0)
                 .status(BroadcastStatus.SKIPPED)
                 .errorMessage(reason)
-                .sentAt(JstDateTimeUtil.now())
+                .sentAt(now)
                 .build());
     }
 
