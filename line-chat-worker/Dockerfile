@@ -19,8 +19,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 # 本番イメージは実ブラウザ操作が必要なため Chromium を含めてインストールする
 # （CI では PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 でスキップしている点と対照的）。
+# ブラウザ導入は lockfile で固定したローカル Playwright CLI を明示的に使い、
+# npx による外部フォールバック取得（ライブラリとドライバのバージョン不一致）を避ける。
 RUN npm ci --omit=dev \
-    && npx playwright install --with-deps chromium
+    && ./node_modules/.bin/playwright install --with-deps chromium
 
 COPY --from=builder /app/dist ./dist
 
