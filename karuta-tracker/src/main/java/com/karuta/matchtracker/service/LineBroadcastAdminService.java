@@ -42,9 +42,16 @@ public class LineBroadcastAdminService {
     /** 配信グループ一覧（ADMIN は自団体のみ・SUPER_ADMIN は全団体）。 */
     @Transactional(readOnly = true)
     public List<LineBroadcastGroupDto> listGroups(String role, Long adminOrgId) {
-        List<LineBroadcastGroup> groups = "ADMIN".equals(role) && adminOrgId != null
-                ? lineBroadcastGroupRepository.findByOrganizationId(adminOrgId)
-                : lineBroadcastGroupRepository.findAll();
+        final List<LineBroadcastGroup> groups;
+        if ("ADMIN".equals(role)) {
+            // 団体未確定の ADMIN は fail-closed（全団体を漏らさない）
+            if (adminOrgId == null) {
+                return List.of();
+            }
+            groups = lineBroadcastGroupRepository.findByOrganizationId(adminOrgId);
+        } else {
+            groups = lineBroadcastGroupRepository.findAll();
+        }
         return groups.stream().map(this::toDto).toList();
     }
 

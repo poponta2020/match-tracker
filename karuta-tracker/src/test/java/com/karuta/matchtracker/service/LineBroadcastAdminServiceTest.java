@@ -82,6 +82,16 @@ class LineBroadcastAdminServiceTest {
     }
 
     @Test
+    @DisplayName("listGroups: 団体未確定の ADMIN は fail-closed（空・全団体を漏らさない）")
+    void listGroupsAdminNullOrgFailsClosed() {
+        var result = service.listGroups("ADMIN", null);
+
+        assertThat(result).isEmpty();
+        verify(lineBroadcastGroupRepository, never()).findAll();
+        verify(lineBroadcastGroupRepository, never()).findByOrganizationId(any());
+    }
+
+    @Test
     @DisplayName("listGroups: SUPER_ADMIN は全団体")
     void listGroupsSuperAdminAll() {
         when(lineBroadcastGroupRepository.findAll()).thenReturn(List.of(group(ORG)));
