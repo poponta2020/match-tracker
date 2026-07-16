@@ -7,10 +7,11 @@ import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
 import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
 import com.karuta.matchtracker.service.CardDivisionBroadcastService;
+import com.karuta.matchtracker.service.CardDivisionScheduleResolver;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -43,7 +44,18 @@ class CardDivisionBroadcastSchedulerTest {
     @Mock private LineBroadcastGroupRepository lineBroadcastGroupRepository;
     @Mock private CardDivisionBroadcastService cardDivisionBroadcastService;
 
-    @InjectMocks private CardDivisionBroadcastScheduler scheduler;
+    private CardDivisionBroadcastScheduler scheduler;
+
+    @BeforeEach
+    void setUp() {
+        // 送信時刻解決は実物の CardDivisionScheduleResolver（モックの venue リポジトリを包む）を使う。
+        // ウィンドウ判定と時刻解決の実挙動をそのまま検証するため resolver はモックにしない。
+        scheduler = new CardDivisionBroadcastScheduler(
+                practiceSessionRepository,
+                lineBroadcastGroupRepository,
+                cardDivisionBroadcastService,
+                new CardDivisionScheduleResolver(venueMatchScheduleRepository));
+    }
 
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 16);
     private static final Long ORG = 2L;

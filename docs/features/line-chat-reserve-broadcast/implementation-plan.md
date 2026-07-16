@@ -33,7 +33,7 @@ status: completed
 - **対応Issue:** #1086
 
 ### タスク2: 予約キュー生成スケジューラ（20:00バッチ＋リコンサイル）
-- [ ] 完了
+- [x] 完了
 - **目的:** 前日20:00に翌日分の予約レコードを冪等生成し、変更検知・滞留検知を行う
 - **対応AC:** AC-1, AC-5
 - **主な変更領域:** `scheduler/LineChatReservationScheduler.java`（新規）、`service/LineChatReservationService.java`（新規）、`docs/spec/notifications.md`
