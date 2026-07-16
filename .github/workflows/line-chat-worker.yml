@@ -1,0 +1,46 @@
+name: line-chat-worker CI
+
+# line-chat-worker/ のユニットテストのみを対象とする。
+# 実DOM操作（Playwright Chromium 起動によるLINE操作）はCIで行わない
+# （Page Object は雛形＝not-implemented のみで、タスク7で実DOMを確定してから
+# 実機検証する。CIは純ロジック層・appApi client・datetime 変換のユニットテストのみを回す）。
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'line-chat-worker/**'
+      - '.github/workflows/line-chat-worker.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'line-chat-worker/**'
+      - '.github/workflows/line-chat-worker.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (no Playwright browser download)
+        working-directory: ./line-chat-worker
+        env:
+          # npm ci で playwright パッケージ自体は入れるが、Chromium バイナリは
+          # 実DOM操作を行わないユニットテストには不要なのでスキップする。
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Lint
+        working-directory: ./line-chat-worker
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: ./line-chat-worker
+        run: npm test
