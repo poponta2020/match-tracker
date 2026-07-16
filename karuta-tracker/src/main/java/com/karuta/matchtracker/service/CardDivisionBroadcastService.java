@@ -185,6 +185,7 @@ public class CardDivisionBroadcastService {
         List<BotQuota> quotas = bots.stream()
                 .map(c -> new BotQuota(
                         c.getId(),
+                        c.getLineChannelId(),
                         c.getChannelName(),
                         monthlyCount(c),
                         MONTHLY_QUOTA - monthlyCount(c),
@@ -217,6 +218,7 @@ public class CardDivisionBroadcastService {
     /** 各 bot の枠状況（管理画面表示用） */
     public record BotQuota(
             Long channelId,
+            String lineChannelId,
             String channelName,
             int monthlyMessageCount,
             int remainingQuota,

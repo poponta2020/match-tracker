@@ -71,7 +71,7 @@ status: completed
 - **対応Issue:** #1079
 
 ### タスク6: 管理API（グループ/ bot割当/ 状況/ ログ）
-- [ ] 完了
+- [x] 完了
 - **目的:** 管理者が配信グループ登録・bot群割当・稼働状況/ログ確認・枯渇把握を行える。
 - **対応AC:** AC-9, AC-10
 - **主な変更領域:** 新 `controller/LineBroadcastAdminController.java`（`/api/admin/line/broadcast`）＋ `service/LineBroadcastAdminService`（または既存Serviceに集約）＋DTO。エンドポイント（`@RequireRole(ADMIN+)`・`AdminScopeValidator` で org スコープ）:
