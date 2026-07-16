@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.dto;
 
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 
 /**
@@ -11,6 +12,7 @@ public class LineBroadcastGroupUpdateRequest {
 
     private String name;
     private Boolean enabled;
+    @Min(1)
     private Integer expectedRecipientCount;
     /**
      * 想定受信数を「未設定」に戻すフラグ。true なら expectedRecipientCount を null に更新する

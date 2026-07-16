@@ -58,7 +58,7 @@ public class LineBroadcastAdminController {
     @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
     public ResponseEntity<LineBroadcastGroupDto> updateGroup(
             @PathVariable Long groupId,
-            @RequestBody LineBroadcastGroupUpdateRequest body, HttpServletRequest request) {
+            @Valid @RequestBody LineBroadcastGroupUpdateRequest body, HttpServletRequest request) {
         return ResponseEntity.ok(
                 lineBroadcastAdminService.updateGroup(role(request), adminOrgId(request), groupId, body));
     }

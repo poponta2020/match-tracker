@@ -204,6 +204,19 @@ class LineBroadcastAdminServiceTest {
     }
 
     @Test
+    @DisplayName("assignBot: DISABLED チャネルは割当で再有効化させない")
+    void assignBotRejectsDisabled() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        // 無効化された GROUP bot（同一グループ）を再割当しようとしても拒否
+        when(lineChannelRepository.findById(10L))
+                .thenReturn(Optional.of(channel(10L, ChannelType.GROUP, ChannelStatus.DISABLED, GROUP_ID)));
+
+        assertThatThrownBy(() -> service.assignBot("SUPER_ADMIN", null, GROUP_ID, 10L))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lineChannelRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("assignBot: ADMIN が他団体グループを操作 → Forbidden")
     void assignBotScopeReject() {
         when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(999L)));

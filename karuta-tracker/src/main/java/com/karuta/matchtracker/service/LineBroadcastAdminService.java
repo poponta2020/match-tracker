@@ -100,6 +100,11 @@ public class LineBroadcastAdminService {
         LineChannel channel = lineChannelRepository.findById(channelId)
                 .orElseThrow(() -> new ResourceNotFoundException("LineChannel", channelId));
 
+        // 無効化されたチャネルは割当で再有効化させない（DISABLED の意味を壊さない）
+        if (channel.getStatus() == ChannelStatus.DISABLED) {
+            throw new IllegalStateException("無効化されたチャネルは配信botに割り当てできません");
+        }
+
         switch (channel.getChannelType()) {
             case PLAYER -> {
                 if (channel.getStatus() != ChannelStatus.AVAILABLE) {
