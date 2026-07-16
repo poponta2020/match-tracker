@@ -2,17 +2,24 @@ package com.karuta.matchtracker.service;
 
 import com.karuta.matchtracker.dto.LineBroadcastGroupCreateRequest;
 import com.karuta.matchtracker.dto.LineBroadcastLogsDto;
+import com.karuta.matchtracker.dto.LineChatReservationDto;
+import com.karuta.matchtracker.dto.LineChatReservationsDto;
 import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.LineBroadcastSend;
 import com.karuta.matchtracker.entity.LineBroadcastSend.BroadcastStatus;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
+import com.karuta.matchtracker.entity.LineChatReservation;
+import com.karuta.matchtracker.entity.LineChatReservation.ReservationStatus;
 import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.LineBroadcastSendRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
+import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +56,7 @@ class LineBroadcastAdminServiceTest {
     @Mock private LineChannelRepository lineChannelRepository;
     @Mock private OrganizationRepository organizationRepository;
     @Mock private CardDivisionBroadcastService cardDivisionBroadcastService;
+    @Mock private LineChatReservationRepository lineChatReservationRepository;
 
     @InjectMocks private LineBroadcastAdminService service;
 
@@ -290,5 +299,129 @@ class LineBroadcastAdminServiceTest {
         assertThat(dto.getNextBotChannelId()).isEqualTo(10L);
         assertThat(dto.getRemainingBroadcasts()).isEqualTo(2);
         assertThat(dto.isExhausted()).isFalse();
+    }
+
+    // ===== getReservations / retryReservation（タスク5・AC-9） =====
+
+    private static final Long RESERVATION_ID = 200L;
+
+    private LineChatReservation reservation(ReservationStatus status, LocalDateTime scheduledSendAt) {
+        return LineChatReservation.builder()
+                .id(RESERVATION_ID)
+                .broadcastGroupId(GROUP_ID)
+                .sessionId(50L)
+                .status(status)
+                .messageText("札分けテキスト")
+                .scheduledSendAt(scheduledSendAt)
+                .attemptCount(1)
+                .build();
+    }
+
+    @Test
+    @DisplayName("getReservations: ADMIN が他団体グループを閲覧 → Forbidden")
+    void getReservationsScopeReject() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(999L)));
+
+        assertThatThrownBy(() -> service.getReservations("ADMIN", ORG, GROUP_ID))
+                .isInstanceOf(ForbiddenException.class);
+        verify(lineChatReservationRepository, never())
+                .findTop200ByBroadcastGroupIdInOrderByScheduledSendAtDescIdDesc(any());
+    }
+
+    @Test
+    @DisplayName("getReservations: 団体未確定の ADMIN は fail-closed（Forbidden）")
+    void getReservationsAdminNullOrgForbidden() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+
+        assertThatThrownBy(() -> service.getReservations("ADMIN", null, GROUP_ID))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("getReservations: MANUAL_REVIEW_REQUIRED があれば hasManualReviewRequired=true")
+    void getReservationsFlagsManualReview() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        LocalDateTime future = JstDateTimeUtil.now().plusHours(3);
+        LineChatReservation manualReview = reservation(ReservationStatus.MANUAL_REVIEW_REQUIRED, future);
+        when(lineChatReservationRepository
+                .findTop200ByBroadcastGroupIdInOrderByScheduledSendAtDescIdDesc(List.of(GROUP_ID)))
+                .thenReturn(List.of(manualReview));
+
+        LineChatReservationsDto dto = service.getReservations("SUPER_ADMIN", null, GROUP_ID);
+
+        assertThat(dto.isHasManualReviewRequired()).isTrue();
+        assertThat(dto.getReservations()).hasSize(1);
+        assertThat(dto.getReservations().get(0).getStatus()).isEqualTo("MANUAL_REVIEW_REQUIRED");
+    }
+
+    @Test
+    @DisplayName("retryReservation: FAILED かつ余裕があれば PENDING に戻し error をクリアする")
+    void retryReservationSucceedsWhenFailedWithMargin() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        LocalDateTime future = JstDateTimeUtil.now().plusHours(2); // 余裕あり（マージン30分超）
+        LineChatReservation r = reservation(ReservationStatus.FAILED, future);
+        r.setErrorCode("LINE_AUTH_EXPIRED");
+        r.setErrorMessage("認証切れ");
+        when(lineChatReservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.of(r));
+        when(lineChatReservationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LineChatReservationDto dto = service.retryReservation("SUPER_ADMIN", null, GROUP_ID, RESERVATION_ID);
+
+        assertThat(dto.getStatus()).isEqualTo("PENDING");
+        assertThat(dto.getErrorCode()).isNull();
+        assertThat(dto.getErrorMessage()).isNull();
+        assertThat(r.getStatus()).isEqualTo(ReservationStatus.PENDING);
+        assertThat(r.getErrorCode()).isNull();
+        assertThat(r.getErrorMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("retryReservation: FAILED でも送信予定まで余裕がなければ拒否")
+    void retryReservationRejectsWhenNoMargin() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        LocalDateTime soon = JstDateTimeUtil.now().plusMinutes(10); // マージン30分未満
+        LineChatReservation r = reservation(ReservationStatus.FAILED, soon);
+        when(lineChatReservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.retryReservation("SUPER_ADMIN", null, GROUP_ID, RESERVATION_ID))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lineChatReservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("retryReservation: FAILED 以外は拒否")
+    void retryReservationRejectsWhenNotFailed() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        LocalDateTime future = JstDateTimeUtil.now().plusHours(2);
+        LineChatReservation r = reservation(ReservationStatus.RESERVED, future);
+        when(lineChatReservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.retryReservation("SUPER_ADMIN", null, GROUP_ID, RESERVATION_ID))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lineChatReservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("retryReservation: 別グループの予約idは拒否")
+    void retryReservationRejectsWhenDifferentGroup() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        LocalDateTime future = JstDateTimeUtil.now().plusHours(2);
+        LineChatReservation r = reservation(ReservationStatus.FAILED, future);
+        r.setBroadcastGroupId(999L); // 別グループ
+        when(lineChatReservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> service.retryReservation("SUPER_ADMIN", null, GROUP_ID, RESERVATION_ID))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lineChatReservationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("retryReservation: 存在しない予約idは404相当")
+    void retryReservationNotFound() {
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+        when(lineChatReservationRepository.findById(RESERVATION_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.retryReservation("SUPER_ADMIN", null, GROUP_ID, RESERVATION_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

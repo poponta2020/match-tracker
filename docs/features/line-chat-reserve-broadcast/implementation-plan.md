@@ -66,7 +66,7 @@ status: completed
 - **対応Issue:** #1089
 
 ### タスク5: 管理API＋管理画面（予約状況セクション）
-- [ ] 完了
+- [x] 完了
 - **目的:** 予約状況の可視化・アラート表示・手動再試行を管理画面に追加する
 - **対応AC:** AC-9
 - **主な変更領域:** `controller/LineBroadcastAdminController.java`（一覧・再試行エンドポイント追加）、`service/LineBroadcastAdminService.java`、`dto/`（予約DTO）、`karuta-tracker-ui/src/pages/line/CardDivisionBroadcastAdmin.jsx`＋`src/api/lineBroadcast.js`、`docs/SCREEN_LIST.md`
@@ -77,7 +77,7 @@ status: completed
 - **対応Issue:** #1090
 
 ### タスク6: ワーカー本体（line-chat-worker/ 新設）
-- [ ] 完了
+- [x] 完了（スケルトン＋ロジック層＋mock-PO unit test。実DOMセレクタは未確定＝タスク7）
 - **目的:** VM常駐のPlaywrightワーカー一式（ロジック層＋雛形Page Object＋運用資材）を作る
 - **対応AC:** AC-6, AC-7, AC-8（ロジック層）, AC-14（ワーカーunit）
 - **主な変更領域:** `line-chat-worker/`（新規ディレクトリ全体: package.json/tsconfig/src/config・appApi/client・usecases/reserveMessage・cancelReservation・detect/authState・line/pages（インターフェース＋雛形）・index.ts メインループ）、`Dockerfile`・`docker-compose.yml`、`line-chat-worker/RUNBOOK.md`（初回ログイン storageState 作成→VM配置・デプロイ・認証更新・障害対応）、`scripts/create-auth-state.ts`（ローカルheadedログイン）、CI へ worker の lint+unit test ジョブ追加

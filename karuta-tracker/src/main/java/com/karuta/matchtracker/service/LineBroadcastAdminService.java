@@ -6,23 +6,30 @@ import com.karuta.matchtracker.dto.LineBroadcastGroupUpdateRequest;
 import com.karuta.matchtracker.dto.LineBroadcastLogsDto;
 import com.karuta.matchtracker.dto.LineBroadcastSendDto;
 import com.karuta.matchtracker.dto.LineBroadcastStatusDto;
+import com.karuta.matchtracker.dto.LineChatReservationDto;
+import com.karuta.matchtracker.dto.LineChatReservationsDto;
 import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.LineBroadcastSend.BroadcastStatus;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
+import com.karuta.matchtracker.entity.LineChatReservation;
+import com.karuta.matchtracker.entity.LineChatReservation.ReservationStatus;
 import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.LineBroadcastSendRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
+import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import com.karuta.matchtracker.util.AdminScopeValidator;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -39,6 +46,7 @@ public class LineBroadcastAdminService {
     private final LineChannelRepository lineChannelRepository;
     private final OrganizationRepository organizationRepository;
     private final CardDivisionBroadcastService cardDivisionBroadcastService;
+    private final LineChatReservationRepository lineChatReservationRepository;
 
     /** 配信グループ一覧（ADMIN は自団体のみ・SUPER_ADMIN は全団体）。 */
     @Transactional(readOnly = true)
@@ -178,6 +186,50 @@ public class LineBroadcastAdminService {
                 .toList();
         boolean hasRecentSkip = logs.stream().anyMatch(l -> BroadcastStatus.SKIPPED.name().equals(l.getStatus()));
         return LineBroadcastLogsDto.builder().logs(logs).hasRecentSkip(hasRecentSkip).build();
+    }
+
+    /** チャット予約の状況一覧＋要確認アラート状態（AC-9・タスク5）。直近200件を送信予定時刻の新しい順で返す。 */
+    @Transactional(readOnly = true)
+    public LineChatReservationsDto getReservations(String role, Long adminOrgId, Long groupId) {
+        loadScoped(role, adminOrgId, groupId);
+        LocalDateTime now = JstDateTimeUtil.now();
+        List<LineChatReservationDto> reservations = lineChatReservationRepository
+                .findTop200ByBroadcastGroupIdInOrderByScheduledSendAtDescIdDesc(List.of(groupId)).stream()
+                .map(r -> LineChatReservationDto.fromEntity(r, now))
+                .toList();
+        boolean hasManualReviewRequired = reservations.stream()
+                .anyMatch(r -> ReservationStatus.MANUAL_REVIEW_REQUIRED.name().equals(r.getStatus()));
+        return LineChatReservationsDto.builder()
+                .reservations(reservations)
+                .hasManualReviewRequired(hasManualReviewRequired)
+                .build();
+    }
+
+    /**
+     * 予約の手動再試行（AC-9・タスク5）。FAILED かつ送信予定時刻まで安全マージンがある場合のみ PENDING に戻す。
+     * それ以外（別グループの予約・FAILED以外・マージン超過）は {@link IllegalStateException}。
+     */
+    @Transactional
+    public LineChatReservationDto retryReservation(String role, Long adminOrgId, Long groupId, Long reservationId) {
+        loadScoped(role, adminOrgId, groupId);
+        LineChatReservation reservation = lineChatReservationRepository.findById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("LineChatReservation", reservationId));
+        if (!groupId.equals(reservation.getBroadcastGroupId())) {
+            throw new IllegalStateException("この予約はこの配信グループに属していません");
+        }
+        LocalDateTime now = JstDateTimeUtil.now();
+        boolean retryable = reservation.getStatus() == ReservationStatus.FAILED
+                && now.isBefore(reservation.getScheduledSendAt().minusMinutes(
+                        LineChatReservationService.RESERVE_MARGIN_MINUTES));
+        if (!retryable) {
+            throw new IllegalStateException("再試行できる状態ではありません");
+        }
+        reservation.setStatus(ReservationStatus.PENDING);
+        reservation.setErrorCode(null);
+        reservation.setErrorMessage(null);
+        LineChatReservation saved = lineChatReservationRepository.save(reservation);
+        log.info("Manually retried chat reservation {} for group {}", reservationId, groupId);
+        return LineChatReservationDto.fromEntity(saved, now);
     }
 
     // ===== helpers =====

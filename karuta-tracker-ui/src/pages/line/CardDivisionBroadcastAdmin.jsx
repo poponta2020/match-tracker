@@ -18,6 +18,28 @@ const STATUS_STYLES = {
   SKIPPED: 'bg-yellow-100 text-yellow-800',
 };
 
+const RESERVATION_STATUS_LABELS = {
+  PENDING: '予約待ち',
+  RESERVING: '処理中',
+  RESERVED: '予約済み',
+  FAILED: '失敗',
+  MANUAL_REVIEW_REQUIRED: '要確認',
+  CANCEL_PENDING: '取消処理中',
+  CANCELLED: '取消済み',
+  DRY_RUN_SUCCEEDED: 'dry-run成功',
+};
+
+const RESERVATION_STATUS_STYLES = {
+  PENDING: 'bg-gray-100 text-gray-700',
+  RESERVING: 'bg-blue-100 text-blue-800',
+  RESERVED: 'bg-green-100 text-green-800',
+  FAILED: 'bg-red-100 text-red-800',
+  MANUAL_REVIEW_REQUIRED: 'bg-orange-100 text-orange-800',
+  CANCEL_PENDING: 'bg-yellow-100 text-yellow-800',
+  CANCELLED: 'bg-gray-100 text-gray-500',
+  DRY_RUN_SUCCEEDED: 'bg-purple-100 text-purple-800',
+};
+
 const CardDivisionBroadcastAdmin = () => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,9 +54,11 @@ const CardDivisionBroadcastAdmin = () => {
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [status, setStatus] = useState(null);
   const [logs, setLogs] = useState(null);
+  const [reservations, setReservations] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
   const [assignChannelId, setAssignChannelId] = useState('');
+  const [retryingId, setRetryingId] = useState(null);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -56,12 +80,14 @@ const CardDivisionBroadcastAdmin = () => {
     try {
       setDetailLoading(true);
       setDetailError(null);
-      const [statusRes, logsRes] = await Promise.all([
+      const [statusRes, logsRes, reservationsRes] = await Promise.all([
         lineBroadcastAPI.getStatus(groupId),
         lineBroadcastAPI.getLogs(groupId),
+        lineBroadcastAPI.getReservations(groupId),
       ]);
       setStatus(statusRes.data);
       setLogs(logsRes.data);
+      setReservations(reservationsRes.data);
     } catch {
       setDetailError('稼働状況・配信ログの取得に失敗しました');
     } finally {
@@ -79,6 +105,7 @@ const CardDivisionBroadcastAdmin = () => {
     setSelectedGroupId(groupId === selectedGroupId ? null : groupId);
     setStatus(null);
     setLogs(null);
+    setReservations(null);
     setDetailError(null);
     setAssignChannelId('');
   };
@@ -170,6 +197,19 @@ const CardDivisionBroadcastAdmin = () => {
       await fetchGroups();
     } catch {
       setDetailError('botの割当解除に失敗しました');
+    }
+  };
+
+  const handleRetryReservation = async (groupId, reservationId) => {
+    try {
+      setDetailError(null);
+      setRetryingId(reservationId);
+      await lineBroadcastAPI.retryReservation(groupId, reservationId);
+      await fetchDetail(groupId);
+    } catch {
+      setDetailError('予約の再試行に失敗しました');
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -358,12 +398,15 @@ const CardDivisionBroadcastAdmin = () => {
                           group={group}
                           status={status}
                           logs={logs}
+                          reservations={reservations}
+                          retryingId={retryingId}
                           loading={detailLoading}
                           error={detailError}
                           assignChannelId={assignChannelId}
                           onAssignChannelIdChange={setAssignChannelId}
                           onAssignBot={(e) => handleAssignBot(e, group.id)}
                           onUnassignBot={(channelId) => handleUnassignBot(group.id, channelId)}
+                          onRetryReservation={(reservationId) => handleRetryReservation(group.id, reservationId)}
                         />
                       </td>
                     </tr>
@@ -389,12 +432,15 @@ const GroupDetail = ({
   group,
   status,
   logs,
+  reservations,
+  retryingId,
   loading,
   error,
   assignChannelId,
   onAssignChannelIdChange,
   onAssignBot,
   onUnassignBot,
+  onRetryReservation,
 }) => {
   if (loading) {
     return <p className="text-sm text-gray-500">読み込み中...</p>;
@@ -563,6 +609,72 @@ const GroupDetail = ({
                   <tr>
                     <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                       配信ログはまだありません
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 予約状況（LINEチャット予約送信） */}
+      {reservations && (
+        <div className="bg-white border rounded-lg p-4 space-y-3">
+          <h3 className="font-semibold text-gray-700">予約状況</h3>
+
+          {reservations.hasManualReviewRequired && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-orange-600" />
+              <p className="text-orange-800 text-sm">
+                要確認の予約があります。内容をご確認のうえ対応してください。
+              </p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">送信予定時刻</th>
+                  <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">セッション</th>
+                  <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">状態</th>
+                  <th className="text-left px-2 py-2 text-gray-600 whitespace-nowrap">エラー</th>
+                  <th className="text-right px-2 py-2 text-gray-600 whitespace-nowrap">試行回数</th>
+                  <th className="text-right px-2 py-2 text-gray-600 whitespace-nowrap">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reservations.reservations.map((r) => (
+                  <tr key={r.id} className="border-b last:border-b-0">
+                    <td className="px-2 py-2 whitespace-nowrap">{r.scheduledSendAt}</td>
+                    <td className="px-2 py-2 whitespace-nowrap">{r.sessionId}</td>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          RESERVATION_STATUS_STYLES[r.status] || 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {RESERVATION_STATUS_LABELS[r.status] || r.status}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-gray-500">{r.errorMessage || '-'}</td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">{r.attemptCount}</td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => onRetryReservation(r.id)}
+                        disabled={!r.retryable || retryingId === r.id}
+                        className="px-2 py-1 text-xs bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4c] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        再試行
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {reservations.reservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                      予約はまだありません
                     </td>
                   </tr>
                 )}

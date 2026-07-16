@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   unassignBot: vi.fn(),
   getStatus: vi.fn(),
   getLogs: vi.fn(),
+  getReservations: vi.fn(),
+  retryReservation: vi.fn(),
 }));
 
 vi.mock('../../api', () => ({
@@ -22,6 +24,8 @@ vi.mock('../../api', () => ({
     unassignBot: mocks.unassignBot,
     getStatus: mocks.getStatus,
     getLogs: mocks.getLogs,
+    getReservations: mocks.getReservations,
+    retryReservation: mocks.retryReservation,
   },
 }));
 
@@ -98,12 +102,53 @@ const baseLogs = {
   hasRecentSkip: true,
 };
 
+const baseReservations = {
+  reservations: [
+    {
+      id: 10,
+      sessionId: 5,
+      status: 'RESERVED',
+      scheduledSendAt: '2026-07-01T08:30:00',
+      errorCode: null,
+      errorMessage: null,
+      attemptCount: 1,
+      updatedAt: '2026-07-01T08:00:00',
+      retryable: false,
+    },
+    {
+      id: 11,
+      sessionId: 6,
+      status: 'FAILED',
+      scheduledSendAt: '2026-07-02T08:30:00',
+      errorCode: 'LINE_AUTH_EXPIRED',
+      errorMessage: '認証切れ',
+      attemptCount: 2,
+      updatedAt: '2026-07-02T08:00:00',
+      retryable: true,
+    },
+    {
+      id: 12,
+      sessionId: 7,
+      status: 'MANUAL_REVIEW_REQUIRED',
+      scheduledSendAt: '2026-07-03T08:30:00',
+      errorCode: 'RESERVING_TIMEOUT',
+      errorMessage: '滞留',
+      attemptCount: 1,
+      updatedAt: '2026-07-03T08:00:00',
+      retryable: false,
+    },
+  ],
+  hasManualReviewRequired: true,
+};
+
 describe('CardDivisionBroadcastAdmin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getGroups.mockResolvedValue({ data: [baseGroup] });
     mocks.getStatus.mockResolvedValue({ data: baseStatus });
     mocks.getLogs.mockResolvedValue({ data: baseLogs });
+    mocks.getReservations.mockResolvedValue({ data: baseReservations });
+    mocks.retryReservation.mockResolvedValue({ data: {} });
     mocks.createGroup.mockResolvedValue({ data: baseGroup });
     mocks.updateGroup.mockResolvedValue({ data: baseGroup });
     mocks.assignBot.mockResolvedValue({ data: {} });
@@ -244,5 +289,45 @@ describe('CardDivisionBroadcastAdmin', () => {
     await screen.findByText('全体グループA');
     expect(screen.getByText(/グループトーク参加を許可/)).toBeInTheDocument();
     expect(screen.getByText(/join Webhookでグループ ID が自動捕捉される/)).toBeInTheDocument();
+  });
+
+  it('shows reservation status badges and a manual-review alert', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('全体グループA');
+    await user.click(screen.getByRole('button', { name: '詳細' }));
+
+    await waitFor(() => {
+      expect(mocks.getReservations).toHaveBeenCalledWith(1);
+    });
+
+    expect(await screen.findByText('要確認の予約があります。内容をご確認のうえ対応してください。')).toBeInTheDocument();
+    expect(screen.getByText('予約済み')).toBeInTheDocument();
+    expect(screen.getByText('要確認')).toBeInTheDocument();
+    expect(screen.getByText('認証切れ')).toBeInTheDocument();
+  });
+
+  it('only enables the retry button for retryable FAILED reservations', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('全体グループA');
+    await user.click(screen.getByRole('button', { name: '詳細' }));
+
+    await screen.findByText('要確認の予約があります。内容をご確認のうえ対応してください。');
+
+    const retryButtons = screen.getAllByRole('button', { name: '再試行' });
+    // reservations順: RESERVED(retryable=false), FAILED(retryable=true), MANUAL_REVIEW_REQUIRED(retryable=false)
+    expect(retryButtons).toHaveLength(3);
+    expect(retryButtons[0]).toBeDisabled();
+    expect(retryButtons[1]).toBeEnabled();
+    expect(retryButtons[2]).toBeDisabled();
+
+    await user.click(retryButtons[1]);
+
+    await waitFor(() => {
+      expect(mocks.retryReservation).toHaveBeenCalledWith(1, 11);
+    });
   });
 });
