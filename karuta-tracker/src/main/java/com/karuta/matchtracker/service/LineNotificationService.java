@@ -2419,6 +2419,8 @@ public class LineNotificationService {
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
             // 押下者の ADMIN チャネル binding 経由で push される。
             case ADMIN_KADERU_SYNC_COMPLETED, ADMIN_KADERU_SYNC_FAILED -> true;
+            // チャット予約送信の失敗・要確認・ログイン失効・フォールバック発動アラート（管理者向け・常時有効）
+            case ADMIN_CHAT_RESERVE_ALERT -> true;
         };
     }
 
@@ -3304,6 +3306,57 @@ public class LineNotificationService {
                     organizationId, targetAdmins.size(), sent, failed);
         } catch (Exception e) {
             log.warn("Async ADMIN_DENSUKE_DELETE_DETECTED dispatch failed: org={}, err={}",
+                    organizationId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * チャット予約送信（line-chat-reserve-broadcast）の異常を、指定団体の管理者（ADMIN / SUPER_ADMIN）へ
+     * ベストエフォートで LINE 送信する（{@link LineNotificationType#ADMIN_CHAT_RESERVE_ALERT}）。
+     * 予約失敗・要確認（結果不明/重複/滞留）・ログイン失効・フォールバックpush発動時に呼ぶ。
+     *
+     * <p>ベストエフォート: 送信失敗しても呼び出し元の予約処理・配信処理を壊さない（{@code @Async}＋例外飲み込み）。
+     * 本文・認証情報は渡さない（状態・理由のみ）。管理画面アラートの実体は予約レコードの状態
+     * （MANUAL_REVIEW_REQUIRED / FAILED 等）が担うため、この LINE 通知はその補助。
+     *
+     * @param organizationId 対象団体 ID
+     * @param message        管理者向けメッセージ（本文・秘匿値を含めないこと）
+     */
+    @Async
+    public void sendChatReserveAlert(Long organizationId, String message) {
+        if (message == null || message.isBlank()) return;
+        try {
+            List<Player> targetAdmins = new ArrayList<>(
+                    playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN));
+            targetAdmins.addAll(playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                    Player.Role.ADMIN, organizationId));
+            targetAdmins = targetAdmins.stream()
+                    .filter(p -> p.getDeletedAt() == null)
+                    .distinct()
+                    .toList();
+
+            if (targetAdmins.isEmpty()) {
+                log.info("ADMIN_CHAT_RESERVE_ALERT: no admins for organization {}", organizationId);
+                return;
+            }
+
+            int sent = 0, failed = 0;
+            for (Player admin : targetAdmins) {
+                try {
+                    SendResult result = sendToPlayer(admin.getId(),
+                            LineNotificationType.ADMIN_CHAT_RESERVE_ALERT, message);
+                    if (result == SendResult.SUCCESS) sent++;
+                    else if (result == SendResult.FAILED) failed++;
+                } catch (Exception e) {
+                    log.warn("Failed to send ADMIN_CHAT_RESERVE_ALERT to admin {}: {}",
+                            admin.getId(), e.getMessage());
+                    failed++;
+                }
+            }
+            log.info("ADMIN_CHAT_RESERVE_ALERT: organizationId={}, adminCount={}, sent={}, failed={}",
+                    organizationId, targetAdmins.size(), sent, failed);
+        } catch (Exception e) {
+            log.warn("Async ADMIN_CHAT_RESERVE_ALERT dispatch failed: org={}, err={}",
                     organizationId, e.getMessage(), e);
         }
     }

@@ -47,6 +47,17 @@ public class LineBroadcastGroup {
     @Column(name = "expected_recipient_count")
     private Integer expectedRecipientCount;
 
+    /**
+     * チャット予約送信のワーカーが対象チャットを照合するための識別情報（初回登録時に保存・nullable）。
+     * OAM のチャットURL等に含まれる安定した識別子。Phase 3（本番投入）で登録する。
+     */
+    @Column(name = "chat_room_id", length = 100)
+    private String chatRoomId;
+
+    /** チャット予約送信のワーカーが照合する表示名（グループ名。不一致なら TARGET_CHAT_MISMATCH で停止）。 */
+    @Column(name = "chat_room_name", length = 200)
+    private String chatRoomName;
+
     /** 作成日時 */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

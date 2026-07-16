@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.config;
 
 import com.karuta.matchtracker.interceptor.RoleCheckInterceptor;
+import com.karuta.matchtracker.interceptor.ServiceTokenInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final RoleCheckInterceptor roleCheckInterceptor;
+    private final ServiceTokenInterceptor serviceTokenInterceptor;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
@@ -61,8 +63,13 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // ロール認証はワーカーAPIには適用しない（サービストークン認証で守るため）
         registry.addInterceptor(roleCheckInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/line/webhook/**");
+                .excludePathPatterns("/api/line/webhook/**", "/api/line-chat-worker/**");
+
+        // ワーカーAPIはサービストークン認証のみ（AC-2）
+        registry.addInterceptor(serviceTokenInterceptor)
+                .addPathPatterns("/api/line-chat-worker/**");
     }
 }

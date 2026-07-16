@@ -26,4 +26,12 @@ export const lineBroadcastAPI = {
   // 配信ログを取得する
   getLogs: (groupId) =>
     apiClient.get(`/admin/line/broadcast/groups/${groupId}/logs`),
+
+  // チャット予約の状況一覧を取得する
+  getReservations: (groupId) =>
+    apiClient.get(`/admin/line/broadcast/groups/${groupId}/reservations`),
+
+  // 予約を手動で再試行する（FAILED かつ送信予定まで余裕がある場合のみ成功）
+  retryReservation: (groupId, reservationId) =>
+    apiClient.post(`/admin/line/broadcast/groups/${groupId}/reservations/${reservationId}/retry`),
 };

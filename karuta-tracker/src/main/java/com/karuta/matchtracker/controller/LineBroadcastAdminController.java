@@ -7,6 +7,8 @@ import com.karuta.matchtracker.dto.LineBroadcastGroupDto;
 import com.karuta.matchtracker.dto.LineBroadcastGroupUpdateRequest;
 import com.karuta.matchtracker.dto.LineBroadcastLogsDto;
 import com.karuta.matchtracker.dto.LineBroadcastStatusDto;
+import com.karuta.matchtracker.dto.LineChatReservationDto;
+import com.karuta.matchtracker.dto.LineChatReservationsDto;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.LineBroadcastAdminService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -96,5 +98,23 @@ public class LineBroadcastAdminController {
     public ResponseEntity<LineBroadcastLogsDto> getLogs(
             @PathVariable Long groupId, HttpServletRequest request) {
         return ResponseEntity.ok(lineBroadcastAdminService.getLogs(role(request), adminOrgId(request), groupId));
+    }
+
+    /** チャット予約の状況一覧＋要確認アラート状態（AC-9） */
+    @GetMapping("/groups/{groupId}/reservations")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<LineChatReservationsDto> getReservations(
+            @PathVariable Long groupId, HttpServletRequest request) {
+        return ResponseEntity.ok(
+                lineBroadcastAdminService.getReservations(role(request), adminOrgId(request), groupId));
+    }
+
+    /** 予約の手動再試行（FAILED かつ送信予定まで安全マージンがある場合のみ PENDING に戻す） */
+    @PostMapping("/groups/{groupId}/reservations/{reservationId}/retry")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN})
+    public ResponseEntity<LineChatReservationDto> retryReservation(
+            @PathVariable Long groupId, @PathVariable Long reservationId, HttpServletRequest request) {
+        return ResponseEntity.ok(lineBroadcastAdminService.retryReservation(
+                role(request), adminOrgId(request), groupId, reservationId));
     }
 }

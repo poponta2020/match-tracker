@@ -34,6 +34,8 @@ organizations ──< line_broadcast_group (organizationId)
 line_broadcast_group ──< line_channels (broadcastGroupId, GROUP種別botのみ)
 line_broadcast_group ──< line_broadcast_send (broadcastGroupId)
 practice_sessions ──< line_broadcast_send (sessionId)
+line_broadcast_group ──< line_chat_reservations (broadcastGroupId)
+practice_sessions ──< line_chat_reservations (sessionId)
 
 practice_sessions ──< practice_participants (sessionId)
 practice_sessions ──< lottery_executions (sessionId)

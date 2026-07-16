@@ -2,11 +2,10 @@ package com.karuta.matchtracker.scheduler;
 
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.PracticeSession;
-import com.karuta.matchtracker.entity.VenueMatchSchedule;
 import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
-import com.karuta.matchtracker.repository.VenueMatchScheduleRepository;
 import com.karuta.matchtracker.service.CardDivisionBroadcastService;
+import com.karuta.matchtracker.service.CardDivisionScheduleResolver;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,15 +38,15 @@ import java.util.List;
 public class CardDivisionBroadcastScheduler {
 
     private final PracticeSessionRepository practiceSessionRepository;
-    private final VenueMatchScheduleRepository venueMatchScheduleRepository;
     private final LineBroadcastGroupRepository lineBroadcastGroupRepository;
     private final CardDivisionBroadcastService cardDivisionBroadcastService;
+    private final CardDivisionScheduleResolver scheduleResolver;
 
-    /** 1試合目開始の何分前に配信するか。 */
-    private static final int MINUTES_BEFORE = 30;
+    /** 1試合目開始の何分前に配信するか（送信時刻の解決は {@link CardDivisionScheduleResolver} と共有）。 */
+    private static final int MINUTES_BEFORE = CardDivisionScheduleResolver.MINUTES_BEFORE;
 
     /** 開始時刻が特定できない場合のフォールバック配信時刻・ウィンドウ。 */
-    private static final LocalTime FALLBACK_START = LocalTime.of(8, 0);
+    private static final LocalTime FALLBACK_START = CardDivisionScheduleResolver.FALLBACK_START;
     private static final LocalTime FALLBACK_WINDOW_CLOSE = LocalTime.of(12, 0);
 
     @Scheduled(fixedDelay = 180000, initialDelay = 120000) // 3分ごと、起動120秒後に初回実行
@@ -105,18 +104,9 @@ public class CardDivisionBroadcastScheduler {
     }
 
     /**
-     * 1試合目の開始時刻を解決する。{@code venue_match_schedules} の match_number=1 を第一情報源とし、
-     * 無ければ {@link PracticeSession#getStartTime()}、いずれも無ければ {@code null}（→ 8:00 フォールバック）。
+     * 1試合目の開始時刻を解決する（{@link CardDivisionScheduleResolver} へ委譲。予約送信と共通）。
      */
     LocalTime resolveFirstMatchStartTime(PracticeSession session) {
-        Long venueId = session.getVenueId();
-        if (venueId != null) {
-            for (VenueMatchSchedule vms : venueMatchScheduleRepository.findByVenueIdOrderByMatchNumberAsc(venueId)) {
-                if (vms.getMatchNumber() != null && vms.getMatchNumber() == 1 && vms.getStartTime() != null) {
-                    return vms.getStartTime();
-                }
-            }
-        }
-        return session.getStartTime();
+        return scheduleResolver.resolveFirstMatchStartTime(session);
     }
 }

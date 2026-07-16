@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+
+# 認証状態・アーティファクト（Cookie/セッション情報を含むため絶対にコミットしない）
+storage-state*.json
+artifacts/
+*.png
+*.zip
+
+*.log
+.env
+.env.*

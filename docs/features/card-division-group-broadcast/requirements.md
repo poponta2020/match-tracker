@@ -130,3 +130,7 @@ next_section: —
 
 - 「全体LINE配信管理」画面のレイアウト（配信グループ一覧＋登録フォーム／bot群割当の割当・解除UI／各botの残枠バー・次配信bot強調・当月残り回数／配信ログ一覧／枯渇アラートの見せ方／未参加bot・セットアップ未完（グループ許可・Webhook・招待）の状態バッジ）。既存 `/admin/line` 系のLINEチャネル管理UIのパターン踏襲を基本とする。
 - 運用者向けの「セットアップ手順」（許可設定→Webhook→招待）の画面内ガイダンスの置き方。
+
+## 変更履歴
+
+- 2026-07-17（line-chat-reserve-broadcast）: **bot 10体ローテ作戦は不成立**。LINE仕様上「1グループに参加できる公式アカウントは1体まで」であり、10体を全体グループに投入する前提が崩れた（実装後・seed投入前に判明）。本機能の push 配信基盤（`CardDivisionBroadcastScheduler`／`CardDivisionBroadcastService`・枠ゲート・dedupe）は削除せず、**単一botのフォールバック経路**として役割変更した（主経路はチャット予約送信＝[[line-chat-reserve-broadcast]]）。フォールバックは (グループ, セッション) の予約状態でガードし、予約が RESERVED なら push せず、PENDING/FAILED/未作成なら従来どおり push（月200通≒70名グループへ月2回分）する。ローテ選択（`selectBot`）・10体割当 UI は bot 1体構成でもそのまま動くため残置。

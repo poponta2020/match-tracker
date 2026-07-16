@@ -4,8 +4,11 @@ import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
+import com.karuta.matchtracker.entity.LineChatReservation;
+import com.karuta.matchtracker.entity.LineChatReservation.ReservationStatus;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.LineChannelRepository;
+import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,8 @@ public class CardDivisionBroadcastService {
     private final LineChannelRepository lineChannelRepository;
     private final LineMessagingService lineMessagingService;
     private final LineBroadcastSendService lineBroadcastSendService;
+    private final LineChatReservationRepository lineChatReservationRepository;
+    private final LineNotificationService lineNotificationService;
 
     /** LINE無料枠（1チャネル/月） */
     static final int MONTHLY_QUOTA = 200;
@@ -65,6 +70,30 @@ public class CardDivisionBroadcastService {
         if (!group.getOrganizationId().equals(session.getOrganizationId())) {
             log.error("Broadcast org mismatch: group {} (org {}) vs session {} (org {}) — skipped",
                     groupId, group.getOrganizationId(), sessionId, session.getOrganizationId());
+            return;
+        }
+
+        // チャット予約状態によるフォールバックガード（line-chat-reserve-broadcast・AC-4）。
+        // 予約が生きている/処理中なら push しない（70名への二重配信を防ぐ）。push は予約が未成立の時だけ。
+        Optional<LineChatReservation> reservation = lineChatReservationRepository
+                .findFirstByBroadcastGroupIdAndSessionIdAndStatusNot(
+                        groupId, sessionId, ReservationStatus.CANCELLED);
+        ReservationGate gate = gateForReservation(reservation);
+        if (gate != ReservationGate.PROCEED) {
+            if (gate == ReservationGate.SUPPRESS_ALERT) {
+                ReservationStatus st = reservation.get().getStatus();
+                // 抑止のアラートは1日1回に絞る（SKIPPED記録の有無で dedupe）
+                if (!lineBroadcastSendService.hasSkippedSince(
+                        groupId, sessionId, now.toLocalDate().atStartOfDay())) {
+                    lineNotificationService.sendChatReserveAlert(group.getOrganizationId(),
+                            "[チャット予約] 予約が" + st + "のため全体pushを抑止しました（session=" + sessionId + "）");
+                }
+                recordSkippedOnce(groupId, sessionId, now,
+                        "チャット予約が" + st + "のため全体push抑止");
+                log.info("Broadcast suppressed by chat reservation {}: group={}, session={}",
+                        st, groupId, sessionId);
+            }
+            // SUPPRESS_SILENT（RESERVED）＝正常にLINE側が送信する → 記録もアラートもしない
             return;
         }
 
@@ -123,11 +152,42 @@ public class CardDivisionBroadcastService {
             lineBroadcastSendService.incrementChannelMonthlyCount(bot.getId(), expected);
             log.info("Card division broadcast sent: group={}, session={}, bot={}, recipients={}",
                     groupId, sessionId, bot.getId(), expected);
+            // フォールバックpush発動をアラート（AC-10）。チャット予約が未成立のため push で配信した事実を管理者へ通知。
+            lineNotificationService.sendChatReserveAlert(group.getOrganizationId(),
+                    "[チャット予約] 予約が未成立のためフォールバックの全体pushで配信しました（session=" + sessionId + "）");
         } else {
             lineBroadcastSendService.markFailed(groupId, sessionId, "LINE API送信失敗");
             log.warn("Card division broadcast send failed: group={}, session={}, bot={}",
                     groupId, sessionId, bot.getId());
         }
+    }
+
+    /** フォールバックpushの発火判定結果。 */
+    enum ReservationGate {
+        /** 予約が未成立（PENDING/FAILED/未作成）→ フォールバックpushする。 */
+        PROCEED,
+        /** 予約が RESERVED（LINE側が送信）→ pushしない・記録もアラートもしない。 */
+        SUPPRESS_SILENT,
+        /** 予約が処理中/要確認/取消中（RESERVING/MANUAL_REVIEW_REQUIRED/CANCEL_PENDING/DRY_RUN）→ pushせずアラート。 */
+        SUPPRESS_ALERT
+    }
+
+    /**
+     * チャット予約状態に応じたフォールバックpushの発火判定（純関数・AC-4）。
+     * push するのは予約が未成立の時（PENDING/FAILED/active行なし）だけ。それ以外は二重配信を避けて抑止する。
+     * RESERVED のみ「正常」として無言で抑止し、その他の抑止はアラートする。
+     * 引数は active（非CANCELLED）予約なので、CANCELLED がここに来ることはない。
+     */
+    static ReservationGate gateForReservation(Optional<LineChatReservation> active) {
+        if (active.isEmpty()) {
+            return ReservationGate.PROCEED;
+        }
+        return switch (active.get().getStatus()) {
+            case PENDING, FAILED -> ReservationGate.PROCEED;
+            case RESERVED -> ReservationGate.SUPPRESS_SILENT;
+            // RESERVING / MANUAL_REVIEW_REQUIRED / CANCEL_PENDING / DRY_RUN_SUCCEEDED
+            default -> ReservationGate.SUPPRESS_ALERT;
+        };
     }
 
     private void recordSkippedOnce(Long groupId, Long sessionId, LocalDateTime now, String reason) {
