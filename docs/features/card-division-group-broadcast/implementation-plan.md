@@ -32,7 +32,7 @@ status: completed
 - **対応Issue:** #1076
 
 ### タスク3: ローテ＋全体配信サービス（核）
-- [ ] 完了
+- [x] 完了
 - **目的:** 1配信グループ×1セッションを、残枠のあるbot1体で原子的に一度だけグループ配信する。
 - **対応AC:** AC-1, AC-4, AC-5, AC-6, AC-8, AC-9
 - **主な変更領域:** 新 `service/CardDivisionBroadcastService.java`。
