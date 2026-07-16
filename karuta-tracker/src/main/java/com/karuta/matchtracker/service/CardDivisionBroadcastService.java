@@ -24,6 +24,11 @@ import java.util.Optional;
  *
  * <p>札組テキストは個人通知と完全同一（{@link CardDivisionTextService#buildTextForSession}・AC-1）。
  * 生成アルゴリズムは一切変更しない。
+ *
+ * <p><b>dedupe 不変条件</b>: 1 セッション（＝特定の練習日。{@code practice_sessions} は
+ * {@code (session_date, organization_id)} 一意で id は再利用されない）につき全体配信は<b>恒久的に一度きり</b>。
+ * よって dedupe は {@code (broadcast_group_id, session_id)} で足り、日付・月粒度は不要（同一 id が翌月に
+ * 再配信対象になることはない）。同日に同一団体が2セッションを持つ場合はセッションごとに1回ずつ配信する。
  */
 @Slf4j
 @Service
@@ -188,7 +193,7 @@ public class CardDivisionBroadcastService {
                         c.getLineChannelId(),
                         c.getChannelName(),
                         monthlyCount(c),
-                        MONTHLY_QUOTA - monthlyCount(c),
+                        Math.max(0, MONTHLY_QUOTA - monthlyCount(c)), // 200超過時に負数を出さない（表示・運用判断のブレ防止）
                         c.getLineGroupId() != null && !c.getLineGroupId().isBlank(),
                         c.getStatus() != ChannelStatus.DISABLED))
                 .toList();
