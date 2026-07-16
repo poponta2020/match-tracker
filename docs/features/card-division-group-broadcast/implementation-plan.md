@@ -86,7 +86,7 @@ status: completed
 - **対応Issue:** #1080
 
 ### タスク7: 管理画面 FE
-- [ ] 完了
+- [x] 完了
 - **目的:** タスク6のAPIを、既存 `/admin/line` 系UIパターンで可視化・操作する。
 - **対応AC:** AC-11
 - **主な変更領域:** 新 `pages/line/CardDivisionBroadcastAdmin.jsx`＋`api/lineBroadcast.js`（または `api/line.js` 拡張）＋`App.jsx` ルート（`/admin/line/broadcast`・ADMIN+）＋`SettingsPage.jsx` 導線＋`docs/SCREEN_LIST.md`。グループ一覧/登録・bot割当・残枠バー・次配信bot強調・当月残り回数・配信ログ・枯渇アラート・未参加(グループID未捕捉)/セットアップ未完バッジ・運用手順ガイダンス。
