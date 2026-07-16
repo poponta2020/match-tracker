@@ -21,7 +21,7 @@ status: completed
 - **対応Issue:** #1075
 
 ### タスク2: グループ人数取得API（LineMessagingService）
-- [ ] 完了
+- [x] 完了
 - **目的:** ローテのゲート `当月送信数 + 想定受信数 ≤ 200` に使う実グループ人数を取得する。
 - **対応AC:** AC-4, AC-5
 - **主な変更領域:** `service/LineMessagingService.java` に `getGroupMemberCount(token, groupId)`（`GET /v2/bot/group/{groupId}/members/count`。失敗時 -1、既存 `getMonthlyMessageConsumption` に倣う）。

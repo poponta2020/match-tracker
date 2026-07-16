@@ -28,6 +28,7 @@ public class LineMessagingService {
     private static final String RICH_MENU_IMAGE_API_URL = "https://api-data.line.me/v2/bot/richmenu";
     private static final String RICH_MENU_DEFAULT_API_URL = "https://api.line.me/v2/bot/user/all/richmenu";
     private static final String QUOTA_CONSUMPTION_API_URL = "https://api.line.me/v2/bot/message/quota/consumption";
+    private static final String GROUP_MEMBER_COUNT_API_URL = "https://api.line.me/v2/bot/group/%s/members/count";
     private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(5);
     private final RestTemplate restTemplate = new RestTemplate();
     private final RestTemplate syncRestTemplate;
@@ -280,6 +281,36 @@ public class LineMessagingService {
             }
         } catch (Exception e) {
             log.error("Failed to get message consumption: {}", e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * 全体LINEグループの参加人数を取得する（ローテの枠会計 {@code 当月送信数 + 想定受信数 ≤ 200} 用）。
+     * bot は対象グループに参加している必要がある。
+     *
+     * @return グループの参加人数。取得失敗時は -1
+     */
+    public int getGroupMemberCount(String channelAccessToken, String groupId) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(channelAccessToken);
+
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            String url = String.format(GROUP_MEMBER_COUNT_API_URL, groupId);
+            ResponseEntity<String> response = syncRestTemplate.exchange(
+                url, HttpMethod.GET, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode node = objectMapper.readTree(response.getBody());
+                return node.path("count").asInt(-1);
+            } else {
+                log.warn("Failed to get group member count for group {}. Status: {}",
+                    groupId, response.getStatusCode());
+                return -1;
+            }
+        } catch (Exception e) {
+            log.error("Failed to get group member count for group {}: {}", groupId, e.getMessage());
             return -1;
         }
     }
