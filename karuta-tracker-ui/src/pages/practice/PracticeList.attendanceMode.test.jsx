@@ -83,7 +83,7 @@ describe('PracticeList × resolveAttendanceMode の連携', () => {
 
     render(<PracticeList />);
 
-    expect(await screen.findByRole('button', { name: /出欠登録/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /出欠一括登録/ })).toBeTruthy();
   });
 
   it('FABを押すと AttendanceRegisterModal が両ボタン（参加登録/キャンセル登録）で開く（当月扱い）', async () => {
@@ -94,7 +94,7 @@ describe('PracticeList × resolveAttendanceMode の連携', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PracticeList />);
 
-    await user.click(await screen.findByRole('button', { name: /出欠登録/ }));
+    await user.click(await screen.findByRole('button', { name: /出欠一括登録/ }));
 
     expect(screen.getByRole('button', { name: /参加登録/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /キャンセル登録/ })).toBeTruthy();
@@ -111,6 +111,74 @@ describe('PracticeList × resolveAttendanceMode の連携', () => {
     });
 
     // FAB は描画されない（誤った来月扱い判定で操作させないため）
-    expect(screen.queryByRole('button', { name: /出欠登録/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /出欠一括登録/ })).toBeNull();
+  });
+});
+
+describe('セッション詳細ポップアップの出欠導線（AC-1/AC-11/AC-12）', () => {
+  const futureSession = {
+    id: 945,
+    sessionDate: '2026-05-25',
+    venueName: 'テスト会場',
+    organizationId: 1,
+    totalMatches: 3,
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
+    practiceAPI.getPlayerParticipations.mockResolvedValue({ data: {} });
+    practiceAPI.getPlayerParticipationStatus.mockResolvedValue({
+      data: { participations: {}, lotteryExecuted: {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('ポップアップ「出欠登録」押下で /practice/attendance?sessionId=<id> へ遷移し、月まとめモーダルは開かない（AC-1）', async () => {
+    practiceAPI.getSessionSummaries.mockResolvedValue({ data: [futureSession] });
+    practiceAPI.getById.mockResolvedValue({ data: { ...futureSession, matchParticipants: {} } });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PracticeList />);
+
+    const dayCell = (await screen.findByText('25')).closest('td');
+    await user.click(dayCell);
+
+    // 完全一致 '出欠登録' はポップアップ内ボタンのみ（FAB は '出欠一括登録'）
+    await user.click(await screen.findByRole('button', { name: '出欠登録' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/practice/attendance?sessionId=945');
+    // AttendanceRegisterModal（参加登録/キャンセル登録）は開かない
+    expect(screen.queryByRole('button', { name: /参加登録/ })).toBeNull();
+  });
+
+  it('過去日はポップアップに「出欠登録」を出さず「試合結果」を出す（AC-11）', async () => {
+    const pastSession = { ...futureSession, id: 900, sessionDate: '2026-05-10' };
+    practiceAPI.getSessionSummaries.mockResolvedValue({ data: [pastSession] });
+    practiceAPI.getById.mockResolvedValue({ data: { ...pastSession, matchParticipants: {} } });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PracticeList />);
+
+    const dayCell = (await screen.findByText('10')).closest('td');
+    await user.click(dayCell);
+
+    expect(await screen.findByRole('button', { name: '試合結果' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '出欠登録' })).toBeNull();
+  });
+
+  it('FAB ラベルは「出欠一括登録」で押下すると AttendanceRegisterModal が開く（AC-12）', async () => {
+    practiceAPI.getSessionSummaries.mockResolvedValue({ data: [] });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PracticeList />);
+
+    await user.click(await screen.findByRole('button', { name: /出欠一括登録/ }));
+    expect(screen.getByRole('button', { name: /参加登録/ })).toBeTruthy();
   });
 });

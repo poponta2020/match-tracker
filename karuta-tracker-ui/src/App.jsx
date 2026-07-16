@@ -20,6 +20,7 @@ import PracticeForm from './pages/practice/PracticeForm';
 import PracticeDetail from './pages/practice/PracticeDetail';
 import PracticeParticipation from './pages/practice/PracticeParticipation';
 import PracticeCancelPage from './pages/practice/PracticeCancelPage';
+import PracticeSessionAttendance from './pages/practice/PracticeSessionAttendance';
 import PairingGenerator from './pages/pairings/PairingGenerator';
 import PairingSummary from './pages/pairings/PairingSummary';
 import PlayerList from './pages/players/PlayerList';
@@ -107,6 +108,8 @@ function App() {
             <Route path="/practice/:id/edit" element={<RoleProtectedPage requiredRole="ADMIN"><PracticeForm /></RoleProtectedPage>} />
             <Route path="/practice/participation" element={<ProtectedPage><PracticeParticipation /></ProtectedPage>} />
             <Route path="/practice/cancel" element={<ProtectedPage><PracticeCancelPage /></ProtectedPage>} />
+            {/* 1日分の出欠登録（静的セグメントのため React Router v6 ランキングで /practice/:id より優先） */}
+            <Route path="/practice/attendance" element={<ProtectedPage><PracticeSessionAttendance /></ProtectedPage>} />
 
             {/* 抽選 */}
             <Route path="/lottery/results" element={<ProtectedPage><LotteryResults /></ProtectedPage>} />
