@@ -4,8 +4,11 @@ import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
+import com.karuta.matchtracker.entity.LineChatReservation;
+import com.karuta.matchtracker.entity.LineChatReservation.ReservationStatus;
 import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.LineChannelRepository;
+import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +50,8 @@ class CardDivisionBroadcastServiceTest {
     @Mock private LineChannelRepository lineChannelRepository;
     @Mock private LineMessagingService lineMessagingService;
     @Mock private LineBroadcastSendService lineBroadcastSendService;
+    @Mock private LineChatReservationRepository lineChatReservationRepository;
+    @Mock private LineNotificationService lineNotificationService;
 
     @InjectMocks private CardDivisionBroadcastService service;
 
@@ -232,5 +237,101 @@ class CardDivisionBroadcastServiceTest {
 
         verify(lineBroadcastSendService).tryAcquire(GROUP_ID, SESSION_ID, 1L, 68, now);
         verify(lineBroadcastSendService).incrementChannelMonthlyCount(1L, 68);
+    }
+
+    private void stubReservation(ReservationStatus status) {
+        LineChatReservation r = LineChatReservation.builder()
+                .id(9L).broadcastGroupId(GROUP_ID).sessionId(SESSION_ID)
+                .status(status).messageText("t").scheduledSendAt(now).attemptCount(0).build();
+        when(lineChatReservationRepository.findFirstByBroadcastGroupIdAndSessionIdAndStatusNot(
+                GROUP_ID, SESSION_ID, ReservationStatus.CANCELLED)).thenReturn(Optional.of(r));
+    }
+
+    @Nested
+    @DisplayName("チャット予約フォールバックガード（AC-4/AC-10）")
+    class FallbackGuard {
+
+        @Test
+        @DisplayName("gateForReservation 純関数: 未作成/PENDING/FAILED→PROCEED、RESERVED→SILENT、他→ALERT")
+        void gateDecision() {
+            assertThat(CardDivisionBroadcastService.gateForReservation(Optional.empty()))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.PROCEED);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.PENDING)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.PROCEED);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.FAILED)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.PROCEED);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.RESERVED)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.SUPPRESS_SILENT);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.RESERVING)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.SUPPRESS_ALERT);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.MANUAL_REVIEW_REQUIRED)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.SUPPRESS_ALERT);
+            assertThat(CardDivisionBroadcastService.gateForReservation(res(ReservationStatus.CANCEL_PENDING)))
+                    .isEqualTo(CardDivisionBroadcastService.ReservationGate.SUPPRESS_ALERT);
+        }
+
+        private Optional<LineChatReservation> res(ReservationStatus status) {
+            return Optional.of(LineChatReservation.builder().status(status).build());
+        }
+
+        @Test
+        @DisplayName("RESERVED → push しない・記録もアラートもしない（正常）")
+        void reservedSuppressesSilently() {
+            stubReservation(ReservationStatus.RESERVED);
+
+            service.processGroupBroadcast(group(70), session(ORG), now);
+
+            verify(lineBroadcastSendService, never()).releaseStale(any());
+            verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
+            verify(lineBroadcastSendService, never()).recordSkipped(anyLong(), anyLong(), anyString(), any());
+            verify(lineNotificationService, never()).sendChatReserveAlert(anyLong(), anyString());
+        }
+
+        @Test
+        @DisplayName("RESERVING → push せず、抑止アラート＋SKIPPED記録（CANCEL_PENDINGも同様）")
+        void reservingSuppressesWithAlert() {
+            stubReservation(ReservationStatus.RESERVING);
+            when(lineBroadcastSendService.hasSkippedSince(anyLong(), anyLong(), any())).thenReturn(false);
+
+            service.processGroupBroadcast(group(70), session(ORG), now);
+
+            verify(lineMessagingService, never()).sendPushMessage(anyString(), anyString(), anyString());
+            verify(lineNotificationService).sendChatReserveAlert(eq(ORG), anyString());
+            verify(lineBroadcastSendService).recordSkipped(eq(GROUP_ID), eq(SESSION_ID), anyString(), any());
+        }
+
+        @Test
+        @DisplayName("PENDING → フォールバックpushへ、成功でフォールバック発動アラート")
+        void pendingProceedsToFallbackPush() {
+            stubReservation(ReservationStatus.PENDING);
+            when(lineChannelRepository.findByBroadcastGroupIdAndChannelType(GROUP_ID, ChannelType.GROUP))
+                    .thenReturn(List.of(bot(1, 0)));
+            when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
+            when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushMessage(anyString(), anyString(), anyString())).thenReturn(true);
+
+            service.processGroupBroadcast(group(70), session(ORG), now);
+
+            verify(lineMessagingService).sendPushMessage(eq("token-1"), eq("G-1"), anyString());
+            verify(lineNotificationService).sendChatReserveAlert(eq(ORG), anyString());
+        }
+
+        @Test
+        @DisplayName("予約が無い（未作成）→ 従来どおり push し、成功でフォールバック発動アラート")
+        void absentReservationProceedsToPush() {
+            // findFirst はデフォルト Optional.empty()
+            when(lineChannelRepository.findByBroadcastGroupIdAndChannelType(GROUP_ID, ChannelType.GROUP))
+                    .thenReturn(List.of(bot(1, 0)));
+            when(lineBroadcastSendService.hasBlockingSend(GROUP_ID, SESSION_ID)).thenReturn(false);
+            when(lineBroadcastSendService.tryAcquire(anyLong(), anyLong(), anyLong(), anyInt(), any()))
+                    .thenReturn(true);
+            when(lineMessagingService.sendPushMessage(anyString(), anyString(), anyString())).thenReturn(true);
+
+            service.processGroupBroadcast(group(70), session(ORG), now);
+
+            verify(lineMessagingService).sendPushMessage(anyString(), anyString(), anyString());
+            verify(lineNotificationService).sendChatReserveAlert(eq(ORG), anyString());
+        }
     }
 }

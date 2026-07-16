@@ -55,7 +55,7 @@ status: completed
 - **対応Issue:** #1088
 
 ### タスク4: フォールバック統合＋管理者アラート
-- [ ] 完了
+- [x] 完了
 - **目的:** 予約状態に応じて既存push経路をガードし、異常時に管理者へ通知する
 - **対応AC:** AC-4, AC-10
 - **主な変更領域:** `service/CardDivisionBroadcastService.java`（冒頭ガード追加のみ）、`service/LineNotificationService.java`（ADMIN_CHAT_RESERVE_ALERT 送信メソッド）、`docs/features/card-division-group-broadcast/requirements.md`（変更履歴追記: 1グループ1bot制約でローテ不成立→単一botフォールバックへ役割変更）
