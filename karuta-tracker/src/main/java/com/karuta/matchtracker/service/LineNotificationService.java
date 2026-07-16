@@ -2419,6 +2419,8 @@ public class LineNotificationService {
             // LineNotificationType.getRequiredChannelType() が ADMIN チャネルを返し、
             // 押下者の ADMIN チャネル binding 経由で push される。
             case ADMIN_KADERU_SYNC_COMPLETED, ADMIN_KADERU_SYNC_FAILED -> true;
+            // チャット予約送信の失敗・要確認・ログイン失効・フォールバック発動アラート（管理者向け・常時有効）
+            case ADMIN_CHAT_RESERVE_ALERT -> true;
         };
     }
 

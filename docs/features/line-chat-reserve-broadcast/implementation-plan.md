@@ -22,7 +22,7 @@ status: completed
 - **対応Issue:** #1085
 
 ### タスク1: DBスキーマ・エンティティ基盤
-- [ ] 完了
+- [x] 完了
 - **目的:** 予約キューの永続化基盤と通知種別を用意する
 - **対応AC:** AC-13（＋AC-1/3/4の土台）
 - **主な変更領域:** `database/create_line_chat_reservations.sql`（新規）、`entity/LineChatReservation.java`（新規）、`entity/LineBroadcastGroup.java`（chat_room_id 等の識別情報カラム追加）、`entity/LineMessageLog.java`（`ADMIN_CHAT_RESERVE_ALERT` 追加）、`repository/LineChatReservationRepository.java`（新規）、`docs/design/db.md`

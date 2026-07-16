@@ -85,7 +85,8 @@ public class LineMessageLog {
         ADMIN_KADERU_SYNC_COMPLETED,
         ADMIN_KADERU_SYNC_FAILED,
         MATCH_VIDEO_REGISTERED,
-        CARD_DIVISION_REMINDER;
+        CARD_DIVISION_REMINDER,
+        ADMIN_CHAT_RESERVE_ALERT;
 
         /** 通知種別に対応するチャネル用途を返す */
         public ChannelType getRequiredChannelType() {

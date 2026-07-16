@@ -27,6 +27,7 @@ public class DataInitializer implements ApplicationRunner {
         initScheduleSettings();
         validateDedupeIndex();
         validateBroadcastDedupeIndex();
+        validateChatReservationDedupeIndex();
     }
 
     private void initScheduleSettings() {
@@ -106,6 +107,35 @@ public class DataInitializer implements ApplicationRunner {
             throw new IllegalStateException(
                     "必須インデックス idx_lbs_dedupe の作成に失敗しました。"
                     + " database/add_card_division_group_broadcast.sql を手動で実行してください。", e);
+        }
+    }
+
+    /**
+     * チャット予約キューの冪等生成 tryInsertPendingReservation が依存する部分ユニークインデックス
+     * (idx_lcr_group_session_active) を検証する。Hibernate ddl-auto=update では部分インデックスは
+     * 自動生成されないため、存在しなければ自動作成を試み、それでも失敗した場合は fail-fast する。
+     * テーブル自体は entity から自動生成される。
+     */
+    private void validateChatReservationDedupeIndex() {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM pg_indexes WHERE indexname = 'idx_lcr_group_session_active'",
+                    Integer.class);
+            if (count != null && count > 0) {
+                log.info("dedupe インデックス検証OK: idx_lcr_group_session_active が存在します");
+                return;
+            }
+            log.warn("必須インデックス idx_lcr_group_session_active が未検出。自動作成を試みます...");
+            jdbcTemplate.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_lcr_group_session_active "
+                    + "ON line_chat_reservations (broadcast_group_id, session_id) "
+                    + "WHERE status <> 'CANCELLED'");
+            log.info("idx_lcr_group_session_active を自動作成しました");
+        } catch (Exception e) {
+            log.error("dedupe インデックス idx_lcr_group_session_active の検証/作成に失敗しました: {}", e.getMessage());
+            throw new IllegalStateException(
+                    "必須インデックス idx_lcr_group_session_active の作成に失敗しました。"
+                    + " database/create_line_chat_reservations.sql を手動で実行してください。", e);
         }
     }
 }

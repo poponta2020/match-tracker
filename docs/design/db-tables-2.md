@@ -259,6 +259,8 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 
 （本番 introspect 照合済み: sent_at は TIMESTAMP。⚠解消。reference_id 列は旧ドキュメント未記載のため追加）
 
+CHECK制約: `line_message_log_notification_type_check`（notification_type を `LineNotificationType` enum の全値に限定。line-chat-reserve-broadcast で `ADMIN_CHAT_RESERVE_ALERT` を追加＝DROP→全値で張り直し。本番 introspect 照合済み 2026-07-17）
+
 部分ユニーク制約: `(player_id, notification_type, dedupe_key, sent_at::date) WHERE status IN ('SUCCESS', 'RESERVED') AND dedupe_key IS NOT NULL`（`idx_lml_dedupe_daily_unique`。本番 introspect 照合済み: `dedupe_key IS NOT NULL` 条件が旧ドキュメント未記載だったため追加）
 
 インデックス: `line_message_log_pkey(id)`, `idx_lml_channel` (line_channel_id), `idx_lml_player` (player_id), `idx_lml_type_sent` (notification_type, sent_at), `idx_lml_dedupe` (player_id, notification_type, dedupe_key, sent_at)（出典: DESIGN のみ）。加えて同一内容の旧命名インデックス `idx_line_log_channel` / `idx_line_log_player` / `idx_line_log_type_sent` が重複して存在（実害なし、出典: introspect から追加）
@@ -289,6 +291,8 @@ dedupeKeyの粒度（出典: DESIGN のみ）:
 | name | VARCHAR(100) | NOT NULL | 管理用表示名 |
 | enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | 無効なら配信対象外 |
 | expected_recipient_count | INT | — | 想定受信数（枠会計用。未設定なら送信時に実グループ人数APIで解決） |
+| chat_room_id | VARCHAR(100) | — | チャット予約送信ワーカーが照合する安定識別子（line-chat-reserve-broadcast で追加・Phase 3 登録） |
+| chat_room_name | VARCHAR(200) | — | 同ワーカーが照合する表示名（不一致なら TARGET_CHAT_MISMATCH で停止・line-chat-reserve-broadcast で追加） |
 | created_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
 | updated_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
 
@@ -316,6 +320,32 @@ dedupeKeyの粒度（出典: DESIGN のみ）:
 インデックス: `line_broadcast_send_pkey(id)`, `idx_lbs_group_session` (broadcast_group_id, session_id), `idx_lbs_group_sent` (broadcast_group_id, sent_at)
 
 **重複送信防止・回復フロー（個人版と同型）:** `tryAcquireBroadcastRight`(RESERVED insert・ON CONFLICT) → 送信 → 成功 `markBroadcastSucceeded`(SUCCESS) / 失敗 `markBroadcastFailed`(FAILED)。クラッシュ時は `releaseStaleBroadcastReservations`（10分＝配信ウィンドウ最小30分より短い）で残留 RESERVED を FAILED に解放し同一ウィンドウ内で再送可能にする。
+
+---
+
+#### line_chat_reservations（LINEチャット予約送信キュー）
+
+札分け全体配信を Messaging API push（通数課金）ではなく LINE OAM の「チャット予約送信」（無料通数対象外）で行うための予約キュー。アプリが (配信グループ, セッション) 単位で予約タスクを生成し、VM常駐 Playwright ワーカーが OAM 上で予約登録して結果を報告する。実送信はLINE側の予約機構が担う。line-chat-reserve-broadcast で追加。
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO | — |
+| broadcast_group_id | BIGINT | NOT NULL | line_broadcast_group.id |
+| session_id | BIGINT | NOT NULL | practice_sessions.id |
+| status | VARCHAR(30) | NOT NULL, CHECK | PENDING/RESERVING/RESERVED/FAILED/MANUAL_REVIEW_REQUIRED/CANCEL_PENDING/CANCELLED/DRY_RUN_SUCCEEDED |
+| message_text | TEXT | NOT NULL | 予約する本文（個人通知と完全同一の札分けテキスト） |
+| scheduled_send_at | TIMESTAMP | NOT NULL | 送信予定時刻（JST。1試合目開始30分前／情報なしは8:00） |
+| error_code | VARCHAR(50) | — | エラーコード（TARGET_CHAT_MISMATCH / LINE_AUTH_EXPIRED 等・機械可読） |
+| error_message | TEXT | — | エラー詳細（本文・認証情報は含めない） |
+| attempt_count | INT | NOT NULL, DEFAULT 0 | 試行回数 |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
+| updated_at | TIMESTAMP | NOT NULL, DEFAULT now() | — |
+
+部分ユニーク制約: `(broadcast_group_id, session_id) WHERE status <> 'CANCELLED'`（`idx_lcr_group_session_active`。非CANCELLED行は常に1件＝20:00バッチの冪等・二重予約防止。編集は「取消→再予約」に正規化するため CANCELLED 行は履歴として複数残りうる）
+
+インデックス: `line_chat_reservations_pkey(id)`, `idx_lcr_status` (status), `idx_lcr_group_session` (broadcast_group_id, session_id), `idx_lcr_scheduled` (scheduled_send_at)
+
+**状態遷移（結果報告APIで検証）:** `PENDING → RESERVING → RESERVED | FAILED | MANUAL_REVIEW_REQUIRED | DRY_RUN_SUCCEEDED`、`FAILED → PENDING`（管理画面の手動再試行）、`CANCEL_PENDING → CANCELLED | MANUAL_REVIEW_REQUIRED`。冪等生成は `tryInsertPendingReservation`（`INSERT ... ON CONFLICT DO NOTHING`）。
 
 ---
 
