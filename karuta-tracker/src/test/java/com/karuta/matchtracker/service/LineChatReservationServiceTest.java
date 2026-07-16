@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -368,6 +369,27 @@ class LineChatReservationServiceTest {
 
         assertThat(out.getStatus()).isEqualTo(ReservationStatus.RESERVED);
         assertThat(out.getErrorCode()).isNull();
+        // 成功はアラートしない
+        verify(lineNotificationService, never()).sendChatReserveAlert(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("applyWorkerResult: FAILED/MANUAL_REVIEW_REQUIRED で管理者アラートを発火する（AC-10）")
+    void applyResultFailureFiresAlert() {
+        LineChatReservation failing = reservation(100L, ReservationStatus.RESERVING, "t", SEND_AT);
+        when(reservationRepository.findById(100L)).thenReturn(Optional.of(failing));
+        when(reservationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
+
+        service().applyWorkerResult(100L, ReservationStatus.FAILED, "LINE_AUTH_EXPIRED", "auth");
+
+        verify(lineNotificationService).sendChatReserveAlert(eq(ORG), any());
+
+        // MANUAL_REVIEW_REQUIRED も同様（別の予約で確認）
+        LineChatReservation review = reservation(101L, ReservationStatus.RESERVING, "t", SEND_AT);
+        when(reservationRepository.findById(101L)).thenReturn(Optional.of(review));
+        service().applyWorkerResult(101L, ReservationStatus.MANUAL_REVIEW_REQUIRED, "CONFIRM_RESULT_UNKNOWN", null);
+        verify(lineNotificationService, times(2)).sendChatReserveAlert(eq(ORG), any());
     }
 
     @Test

@@ -292,7 +292,16 @@ public class LineChatReservationService {
         r.setStatus(newStatus);
         r.setErrorCode(errorCode);
         r.setErrorMessage(errorMessage);
-        return reservationRepository.save(r);
+        LineChatReservation saved = reservationRepository.save(r);
+
+        // AC-10: ワーカー起因の失敗・要確認（ログイン失効/重複/結果不明/対象不一致等）は
+        // 管理画面の状態表示に加え、ベストエフォートの管理者LINE通知でも早期に知らせる（本文・秘匿値は含めない）。
+        if (newStatus == ReservationStatus.FAILED || newStatus == ReservationStatus.MANUAL_REVIEW_REQUIRED) {
+            alert(saved.getBroadcastGroupId(),
+                    "[チャット予約] 予約が" + newStatus + "になりました（session=" + saved.getSessionId()
+                            + (errorCode != null ? ", code=" + errorCode : "") + "）");
+        }
+        return saved;
     }
 
     /**
