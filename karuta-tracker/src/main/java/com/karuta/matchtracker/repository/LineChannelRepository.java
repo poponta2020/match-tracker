@@ -33,4 +33,10 @@ public interface LineChannelRepository extends JpaRepository<LineChannel, Long> 
     /** 用途別のチャネル一覧を取得 */
     List<LineChannel> findAllByChannelType(ChannelType channelType);
 
+    /** 配信グループに割り当てられたチャネル（bot）一覧を取得 */
+    List<LineChannel> findByBroadcastGroupId(Long broadcastGroupId);
+
+    /** 配信グループに割り当てられた指定用途のチャネル一覧を取得 */
+    List<LineChannel> findByBroadcastGroupIdAndChannelType(Long broadcastGroupId, ChannelType channelType);
+
 }

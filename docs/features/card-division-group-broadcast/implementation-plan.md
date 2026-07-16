@@ -10,7 +10,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: スキーマ基盤（テーブル・カラム・ChannelType.GROUP・リポジトリ）
-- [ ] 完了
+- [x] 完了
 - **目的:** 全体配信のデータモデルを用意し、`GROUP` 種別で個人割当プールと分離する。
 - **対応AC:** AC-2, AC-6, AC-13
 - **主な変更領域:** `entity/ChannelType.java`（+GROUP）／新 `entity/LineBroadcastGroup.java`（`organization_id`・name・enabled・想定受信数nullable）／`entity/LineChannel.java`（+`broadcast_group_id` nullable・+`line_group_id` nullable）／新 `entity/LineBroadcastSend.java`（broadcast_group_id・session_id・line_channel_id・recipient_count・status[RESERVED/SUCCESS/FAILED/SKIPPED]・error・sent_at）／新リポジトリ3種／`database/add_card_division_group_broadcast.sql`。
