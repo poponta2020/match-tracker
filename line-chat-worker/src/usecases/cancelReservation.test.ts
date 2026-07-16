@@ -32,13 +32,29 @@ function createMockPo(overrides: Partial<Record<keyof ChatPage, unknown>> = {}):
 }
 
 describe("cancelReservation", () => {
-  it("reports CANCELLED when the reservation is found and deleted", async () => {
+  it("opens and verifies the target chat before deleting, then reports CANCELLED", async () => {
     const po = createMockPo();
 
     const outcome = await cancelReservation(po, baseTask);
 
     expect(outcome).toEqual({ report: true, status: "CANCELLED" });
+    // 削除の前に対象チャットを開いて照合していること（誤チャット削除の防止）
+    expect(po.openChat).toHaveBeenCalledWith(baseTask.chatRoomName, baseTask.chatRoomId);
+    expect(po.verifyTargetChat).toHaveBeenCalledWith(baseTask.chatRoomName, baseTask.chatRoomId);
     expect(po.deleteReservation).toHaveBeenCalledWith(baseTask.scheduledSendAt, expect.any(String));
+  });
+
+  it("does not delete and reports TARGET_CHAT_MISMATCH when the opened chat does not match", async () => {
+    const po = createMockPo({ verifyTargetChat: vi.fn().mockResolvedValue(false) });
+
+    const outcome = await cancelReservation(po, baseTask);
+
+    expect(outcome).toMatchObject({
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "TARGET_CHAT_MISMATCH",
+    });
+    expect(po.deleteReservation).not.toHaveBeenCalled();
   });
 
   it("reports MANUAL_REVIEW_REQUIRED/OLD_RESERVATION_NOT_FOUND when the old reservation cannot be located", async () => {
@@ -53,12 +69,38 @@ describe("cancelReservation", () => {
     });
   });
 
-  it("does not report a result and signals abortCycle when an auth wall is detected (CANCEL_PENDING has no valid FAILED transition)", async () => {
+  it("reports MANUAL_REVIEW_REQUIRED/LINE_AUTH_EXPIRED and aborts the cycle when an auth wall is detected before opening (AC-7)", async () => {
     const po = createMockPo({ detectAuthWall: vi.fn().mockResolvedValue("LOGIN_REQUIRED" as AuthState) });
 
     const outcome = await cancelReservation(po, baseTask);
 
-    expect(outcome).toEqual({ report: false, abortCycle: true, reason: expect.any(String) });
+    expect(outcome).toMatchObject({
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "LINE_AUTH_EXPIRED",
+      abortCycle: true,
+    });
+    expect(po.openChat).not.toHaveBeenCalled();
+    expect(po.deleteReservation).not.toHaveBeenCalled();
+  });
+
+  it("reports LINE_AUTH_EXPIRED when an auth wall appears after opening the chat (before deleting)", async () => {
+    const po = createMockPo({
+      detectAuthWall: vi
+        .fn()
+        .mockResolvedValueOnce("OK" as AuthState)
+        .mockResolvedValueOnce("CAPTCHA" as AuthState),
+    });
+
+    const outcome = await cancelReservation(po, baseTask);
+
+    expect(outcome).toMatchObject({
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "LINE_AUTH_EXPIRED",
+      abortCycle: true,
+    });
+    expect(po.openChat).toHaveBeenCalled();
     expect(po.deleteReservation).not.toHaveBeenCalled();
   });
 });
