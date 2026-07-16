@@ -7,6 +7,7 @@ import com.karuta.matchtracker.entity.PracticeSession;
 import com.karuta.matchtracker.repository.LineBroadcastGroupRepository;
 import com.karuta.matchtracker.repository.LineChatReservationRepository;
 import com.karuta.matchtracker.repository.PracticeSessionRepository;
+import com.karuta.matchtracker.util.JstDateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -100,8 +101,26 @@ public class LineChatReservationService {
     @Transactional
     public void reconcile(LocalDate today, LocalDateTime now) {
         promoteStaleReserving(now);
+        expireStalePending(now);
         detectChanges(now);
         recreateAfterCancellation(today, now);
+    }
+
+    /**
+     * 送信予定時刻までの安全マージンを切った未処理 PENDING を FAILED(PENDING_EXPIRED) に落とす。
+     * ワーカー停止・認証失効等で登録が間に合わなかった予約を、過去時刻での予約登録に進ませない
+     * （{@link #getWorkerTasks} のマージン条件と同じ境界）。FAILED はフォールバックpush経路が拾い、
+     * 管理画面にも可視化される。
+     */
+    void expireStalePending(LocalDateTime now) {
+        LocalDateTime cutoff = now.plusMinutes(RESERVE_MARGIN_MINUTES);
+        for (LineChatReservation r : reservationRepository.findByStatusAndScheduledSendAtBefore(
+                ReservationStatus.PENDING, cutoff)) {
+            r.setStatus(ReservationStatus.FAILED);
+            r.setErrorCode("PENDING_EXPIRED");
+            r.setErrorMessage("送信予定時刻までの安全マージンを切ったため予約登録を打ち切り（フォールバックpushに委譲）");
+            reservationRepository.save(r);
+        }
     }
 
     /** RESERVING が滞留した予約を MANUAL_REVIEW_REQUIRED へ昇格し、管理者へアラートする。 */
@@ -236,8 +255,22 @@ public class LineChatReservationService {
     /** ワーカーが処理すべき予約（PENDING・CANCEL_PENDING）を送信予定の昇順で返す。 */
     @Transactional(readOnly = true)
     public List<LineChatReservation> getWorkerTasks() {
+        return getWorkerTasks(JstDateTimeUtil.now());
+    }
+
+    /**
+     * ワーカーへ渡す予約タスクを解決する（{@code now} 注入でテスト可能）。
+     * CANCEL_PENDING は期限に関係なく渡す（LINE側予約の削除が必要）。PENDING は送信予定時刻まで
+     * 安全マージンがあるものだけ渡し、過去・直前の予約登録（LINE側が拒否/丸めで誤配信し得る）を避ける。
+     * マージンを切った PENDING は {@link #expireStalePending} が FAILED に落とす。
+     */
+    @Transactional(readOnly = true)
+    public List<LineChatReservation> getWorkerTasks(LocalDateTime now) {
         return reservationRepository.findByStatusInOrderByScheduledSendAtAsc(
-                List.of(ReservationStatus.PENDING, ReservationStatus.CANCEL_PENDING));
+                        List.of(ReservationStatus.PENDING, ReservationStatus.CANCEL_PENDING)).stream()
+                .filter(r -> r.getStatus() == ReservationStatus.CANCEL_PENDING
+                        || now.isBefore(r.getScheduledSendAt().minusMinutes(RESERVE_MARGIN_MINUTES)))
+                .toList();
     }
 
     /**

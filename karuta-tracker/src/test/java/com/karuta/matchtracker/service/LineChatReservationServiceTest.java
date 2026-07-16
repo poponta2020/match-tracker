@@ -408,6 +408,41 @@ class LineChatReservationServiceTest {
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
 
+    // ===== getWorkerTasks のマージン絞り込み / expireStalePending =====
+
+    @Test
+    @DisplayName("getWorkerTasks: PENDINGは送信予定まで余裕(30分)がある行だけ、CANCEL_PENDINGは常に渡す")
+    void getWorkerTasksFiltersPendingByMargin() {
+        // NOW=2026-07-17 20:00
+        LineChatReservation future = reservation(1L, ReservationStatus.PENDING, "t",
+                LocalDateTime.of(2026, 7, 17, 23, 0)); // sendAt-30=22:30 > now → 渡す
+        LineChatReservation soon = reservation(2L, ReservationStatus.PENDING, "t",
+                LocalDateTime.of(2026, 7, 17, 20, 20)); // sendAt-30=19:50 < now → 除外
+        LineChatReservation cancel = reservation(3L, ReservationStatus.CANCEL_PENDING, "t",
+                LocalDateTime.of(2026, 7, 17, 19, 0)); // 過去でも渡す
+        when(reservationRepository.findByStatusInOrderByScheduledSendAtAsc(any()))
+                .thenReturn(List.of(cancel, soon, future));
+
+        List<LineChatReservation> tasks = service().getWorkerTasks(NOW);
+
+        assertThat(tasks).extracting(LineChatReservation::getSessionId).containsExactlyInAnyOrder(1L, 3L);
+    }
+
+    @Test
+    @DisplayName("expireStalePending: 送信予定まで余裕を切ったPENDINGを FAILED(PENDING_EXPIRED) に落とす")
+    void expireStalePendingMarksFailed() {
+        LineChatReservation stale = reservation(1L, ReservationStatus.PENDING, "t",
+                LocalDateTime.of(2026, 7, 17, 20, 20));
+        when(reservationRepository.findByStatusAndScheduledSendAtBefore(eq(ReservationStatus.PENDING), any()))
+                .thenReturn(List.of(stale));
+
+        service().expireStalePending(NOW);
+
+        assertThat(stale.getStatus()).isEqualTo(ReservationStatus.FAILED);
+        assertThat(stale.getErrorCode()).isEqualTo("PENDING_EXPIRED");
+        verify(reservationRepository).save(stale);
+    }
+
     @Test
     @DisplayName("isValidWorkerTransition: 代表的な許可/不許可")
     void transitionMatrix() {

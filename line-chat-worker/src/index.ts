@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { chromium } from "playwright";
 import { loadConfig } from "./config/index.js";
 import { createAppApiClient } from "./appApi/client.js";
@@ -71,6 +72,15 @@ function sleep(ms: number): Promise<void> {
 async function main(): Promise<void> {
   const config = loadConfig();
   const api = createAppApiClient(config);
+
+  // storageState（LINEログインセッション）が未配置なら、Playwright の不明瞭な例外より前に
+  // パスを含む明示的なエラーで停止する（運用者が RUNBOOK の初回ログイン手順で作成・配置するための検知）。
+  if (!existsSync(config.storageStatePath)) {
+    throw new Error(
+      `storageState が見つかりません: ${config.storageStatePath}。` +
+        `RUNBOOK の初回ログイン手順（scripts/create-auth-state.ts）で作成し、VMの永続ボリュームに配置してください。`,
+    );
+  }
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: config.storageStatePath });

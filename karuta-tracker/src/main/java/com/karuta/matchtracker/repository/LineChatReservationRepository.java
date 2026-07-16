@@ -66,6 +66,9 @@ public interface LineChatReservationRepository extends JpaRepository<LineChatRes
     /** 指定ステータスかつ最終更新が cutoff より前の予約（RESERVING 滞留の昇格判定用）。 */
     List<LineChatReservation> findByStatusAndUpdatedAtBefore(ReservationStatus status, LocalDateTime cutoff);
 
+    /** 指定ステータスかつ送信予定が cutoff より前の予約（マージン切れ PENDING の失効判定用）。 */
+    List<LineChatReservation> findByStatusAndScheduledSendAtBefore(ReservationStatus status, LocalDateTime cutoff);
+
     /** 送信予定が未来の active（非CANCELLED）予約（リコンサイルの変更検知対象。過去分＝送信済みは触らない）。 */
     List<LineChatReservation> findByStatusNotAndScheduledSendAtAfter(ReservationStatus status, LocalDateTime after);
 
