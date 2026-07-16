@@ -76,8 +76,10 @@ Entity Layer (JPA Entity)
 - パスワード平文比較
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
-- 対戦組み合わせ書き込みAPI（`MatchPairingController`）のスコープ検証は `validateScopeByDate` / `validateScopeByPairingId` で実施。SUPER_ADMIN はスコープなし、ADMIN は `adminOrganizationId` で照合、PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` で取得した所属団体IDリストに対象セッション／ペアリングの組織IDが含まれているかを照合する。PLAYER に開放している書き込み操作は、作成・一括作成・自動マッチング・選手差し替え・ロック/解除に加え、**全削除（`deleteByDateAndMatchNumber`）・結果込みリセット（`resetWithResult`）**も含む（いずれも上記スコープ検証を通過する）
-- 練習日への参加者追加 API（`PracticeSessionController.addParticipantToMatch`、`POST /api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}`）も PLAYER に開放。スコープ検証は `PracticeSessionService.checkScopeByDate(date, role, adminOrganizationId, currentUserId)` で実施し、`MatchPairingController.validateScopeByDate` ＋ `resolveOrganizationIdForScopedWrite` と同一の考え方（SUPER_ADMIN はスコープなし、ADMIN は自団体セッションの存在で照合、PLAYER は所属団体のセッションが対象日付に存在するかで照合、不一致は 403）。**同メソッドは検証だけでなく書き込み対象の `organizationId` を一意に確定して返し、`PracticeParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId)` がその団体スコープ（`findBySessionDateAndOrganizationId`）でセッションを特定する**（検証と実更新の対象セッションを一致させ、同日に複数団体のセッションがある場合に別団体セッションへ書き込む対象ずれを防ぐ）。PLAYER で同日に複数の所属団体のセッションがあり一意に定まらない場合は 403。SUPER_ADMIN（`organizationId=null`）は従来どおり日付のみで特定する。同メソッドはセッションIDベースの `checkAdminScope`（ADMIN専用の他エンドポイント用）とは別物
+- **対戦組み合わせは ADMIN も PLAYER と同じ「会員団体スコープ」で統一**（SUPER_ADMIN のみ全団体横断）。ADMIN の `adminOrganizationId` 固定スコープは廃止し、ADMIN でも本人の所属団体（`player_organizations`）であれば対象になる（他団体の会員でもある ADMIN が、その会員団体の組み合わせを閲覧・操作できるようにするため）。
+  - **閲覧（読み取り）**: `OrganizationScopeResolver.resolveViewingOrganizationId` を使用（`GET /api/match-pairings/date`・`/date-and-match`、`GET /api/practice-sessions/date`）。ADMIN / PLAYER 共通で「organizationId 未指定なら `null`（非限定）／指定時は本人の所属団体でなければ 403」。SUPER_ADMIN は素通し。書き込み系の `resolveEffectiveOrganizationId`（ADMIN を `adminOrganizationId` に強制。`KaderuSyncTrigger` / `MatchVideo` が使用）とは別メソッド。
+  - **書き込み**: `MatchPairingController` の `validateScopeByDate` / `validateScopeByPairingId` / `resolveOrganizationIdForScopedWrite` / `…ByPairingId` は、SUPER_ADMIN はスコープなし、ADMIN / PLAYER は `OrganizationService.getPlayerOrganizationIds(currentUserId)` の所属団体IDに対象セッション／ペアリングの組織IDが含まれるかで照合する（ADMIN も会員団体ベースに統一）。PLAYER / ADMIN に開放している書き込み操作は、作成・一括作成・自動マッチング・選手差し替え・ロック/解除に加え、**全削除（`deleteByDateAndMatchNumber`）・結果込みリセット（`resetWithResult`）**も含む。個別削除（`DELETE /{id}`）はロール制限が ADMIN+ のまま（会員団体スコープは適用）。
+- 練習日への参加者追加 API（`PracticeSessionController.addParticipantToMatch`、`POST /api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}`）も PLAYER に開放。スコープ検証は `PracticeSessionService.checkScopeByDate(date, role, currentUserId)` で実施し、`MatchPairingController.validateScopeByDate` ＋ `resolveOrganizationIdForScopedWrite` と同一の考え方（SUPER_ADMIN はスコープなし、ADMIN / PLAYER は所属団体のセッションが対象日付に存在するかで照合し会員団体スコープで統一、不一致は 403）。**同メソッドは検証だけでなく書き込み対象の `organizationId` を一意に確定して返し、`PracticeParticipantService.addParticipantToMatch(date, matchNumber, playerId, organizationId)` がその団体スコープ（`findBySessionDateAndOrganizationId`）でセッションを特定する**（検証と実更新の対象セッションを一致させ、同日に複数団体のセッションがある場合に別団体セッションへ書き込む対象ずれを防ぐ）。ADMIN / PLAYER で同日に複数の所属団体のセッションがあり一意に定まらない場合は 403。SUPER_ADMIN（`organizationId=null`）は従来どおり日付のみで特定する。同メソッドはセッションIDベースの `checkAdminScope`（ADMIN専用の他エンドポイント用）とは別物
 - 選手起点の最近ペアリング取得 `GET /api/match-pairings/player/{playerId}`（`MatchPairingService.getRecentByPlayerId` / `MatchPairingRepository.findRecentByPlayerId`）は、`@RequireRole` 全ロールの参照系で団体スコープを適用しない（閲覧は全選手可。選手別履歴の参照という用途が getByDate 等の組織限定取得と異なるため）。`(player1Id = :playerId OR player2Id = :playerId)` で `sessionDate DESC, matchNumber DESC` 順・`Pageable` で直近30件に制限し、選手名は `collectPlayerNames` で一括解決（N+1回避）。動画倉庫の登録モーダル「選手起点」で結果未入力（`match_pairings` のみ）の試合も選択肢に含めるための軽量レスポンス（`recentMatches`・試合結果は付与しない）
 - フロントエンド `RoleRoute`（`components/RoleRoute.jsx`）— ルートレベルのロール保護コンポーネント。`PrivateRoute`（ログインチェック）の内側で使用し、権限不足時はホームにリダイレクト
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
@@ -111,10 +113,12 @@ Entity Layer (JPA Entity)
 | | 練習日一覧・詳細 | ○ | ○ | ○ |
 | 練習参加 | 参加登録 | ○ | ○ | ○ |
 | | 参加状況閲覧 | ○ | ○ | ○ |
-| 対戦組み合わせ | 組み合わせ作成・選手差し替え | ○ | ○（自団体のみ） | ○（所属団体のみ） |
-| | 自動マッチング | ○ | ○（自団体のみ） | ○（所属団体のみ） |
-| | 組み合わせ削除（個別/一括/結果込みリセット） | ○ | ○（自団体のみ） | × |
-| | 組み合わせロック/解除（手動ロック） | ○ | ○（自団体のみ） | ○（所属団体のみ） |
+| 対戦組み合わせ | 組み合わせ作成・選手差し替え | ○ | ○（所属団体のみ） | ○（所属団体のみ） |
+| | 自動マッチング | ○ | ○（所属団体のみ） | ○（所属団体のみ） |
+| | 組み合わせ削除（一括/結果込みリセット） | ○ | ○（所属団体のみ） | ○（所属団体のみ） |
+| | 組み合わせ削除（個別 `DELETE /{id}`） | ○ | ○（所属団体のみ） | × |
+| | 組み合わせロック/解除（手動ロック） | ○ | ○（所属団体のみ） | ○（所属団体のみ） |
+| | 組み合わせ・セッション閲覧 | ○ | ○（所属団体は非限定閲覧可） | ○（所属団体は非限定閲覧可） |
 | | 組み合わせ閲覧 | ○ | ○ | ○ |
 | 会場管理 | 会場CRUD | ○ | ○ | ○ |
 | 抽選 | 月別抽選実行 | ○ | ○（自団体のみ） | × |

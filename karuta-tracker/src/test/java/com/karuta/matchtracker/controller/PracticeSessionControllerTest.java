@@ -142,11 +142,11 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions/date - ADMIN は RoleCheckInterceptor 経由で adminOrganizationId が設定されサービスに伝播する")
-    void testGetSessionByDateScopedByAdminOrganizationId() throws Exception {
-        // Given: ADMIN ロールのプレイヤーで、Player.adminOrganizationId=7L を持つ。
-        // RoleCheckInterceptor が X-User-Role=ADMIN を見て playerRepository.findById から
-        // adminOrganizationId を取り出し、リクエスト属性にセットする経路を検証する。
+    @DisplayName("GET /api/practice-sessions/date - ADMIN は organizationId 未指定なら会員団体スコープ（非限定 null）で取得する")
+    void testGetSessionByDateAdminUnscopedWhenNoOrg() throws Exception {
+        // Given: ADMIN（admin_org=7L）。閲覧は resolveViewingOrganizationId により admin_org 強制せず、
+        // organizationId 未指定なら null（非限定）でサービスに伝播する（他団体会員でもある ADMIN が
+        // その会員団体のセッションを閲覧できるようにするため）。
         Long adminOrgId = 7L;
         Long adminUserId = 99L;
         com.karuta.matchtracker.entity.Player adminPlayer = new com.karuta.matchtracker.entity.Player();
@@ -158,7 +158,7 @@ class PracticeSessionControllerTest {
         adminPlayer.setRole(com.karuta.matchtracker.entity.Player.Role.ADMIN);
         adminPlayer.setAdminOrganizationId(adminOrgId);
         when(playerRepository.findById(adminUserId)).thenReturn(java.util.Optional.of(adminPlayer));
-        when(practiceSessionService.findByDateWithParticipants(today, adminOrgId)).thenReturn(testSessionDto);
+        when(practiceSessionService.findByDateWithParticipants(today, null)).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
@@ -168,10 +168,10 @@ class PracticeSessionControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
 
-        // サービスは adminOrganizationId=7L で呼ばれる（null で呼ばれてはいけない）
-        verify(practiceSessionService).findByDateWithParticipants(today, adminOrgId);
+        // サービスは null（非限定）で呼ばれる（admin_org=7L では呼ばれない）
+        verify(practiceSessionService).findByDateWithParticipants(today, null);
         verify(practiceSessionService, org.mockito.Mockito.never())
-                .findByDateWithParticipants(today, (Long) null);
+                .findByDateWithParticipants(today, adminOrgId);
     }
 
     @Test
@@ -741,7 +741,7 @@ class PracticeSessionControllerTest {
         // Given: checkScopeByDate が所属団体ID(7L)を返す（= 所属団体内で一意に解決）
         Long playerUserId = 10L;
         Long orgId = 7L;
-        when(practiceSessionService.checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId)))
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("PLAYER"), eq(playerUserId)))
                 .thenReturn(orgId);
         when(practiceSessionService.findByDate(eq(today), eq(orgId))).thenReturn(testSessionDto);
 
@@ -753,7 +753,7 @@ class PracticeSessionControllerTest {
                 .andExpect(jsonPath("$.id").value(1));
 
         // 検証で確定した organizationId が実更新にもレスポンス取得にも渡る（検証・更新・応答の対象一致）
-        verify(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
+        verify(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), eq(playerUserId));
         verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, orgId);
         verify(practiceSessionService).findByDate(today, orgId);
     }
@@ -764,7 +764,7 @@ class PracticeSessionControllerTest {
         // Given: checkScopeByDate が ForbiddenException を投げる（所属外）
         Long playerUserId = 10L;
         doThrow(new ForbiddenException("他団体の練習日は編集できません"))
-                .when(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), any(), eq(playerUserId));
+                .when(practiceSessionService).checkScopeByDate(eq(today), eq("PLAYER"), eq(playerUserId));
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
@@ -777,18 +777,17 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("POST 参加者追加: ADMIN は自団体のセッションに追加できる（200・従来通り）")
+    @DisplayName("POST 参加者追加: ADMIN は所属団体のセッションに追加できる（200・会員パリティ）")
     void addParticipantToMatch_admin_returns200() throws Exception {
-        // Given: checkScopeByDate が自団体ID(1L)を返す
-        when(practiceSessionService.checkScopeByDate(eq(today), eq("ADMIN"), any(), any()))
+        // Given: checkScopeByDate が所属団体ID(1L)を返す（ADMIN も会員団体スコープで解決）
+        when(practiceSessionService.checkScopeByDate(eq(today), eq("ADMIN"), any()))
                 .thenReturn(1L);
         when(practiceSessionService.findByDate(eq(today), eq(1L))).thenReturn(testSessionDto);
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
                         today.toString(), 3, 20L)
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
-                        .header("X-Admin-Organization-Id", "1"))
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isOk());
 
         verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, 1L);

@@ -106,4 +106,56 @@ class OrganizationScopeResolverTest {
         assertThat(resolver.resolveEffectiveOrganizationId(httpRequest, 7L)).isEqualTo(7L);
         assertThat(resolver.resolveEffectiveOrganizationId(httpRequest, null)).isNull();
     }
+
+    // ===== resolveViewingOrganizationId（閲覧用・ADMIN を PLAYER と同じ会員団体スコープに統一） =====
+
+    @Test
+    @DisplayName("閲覧: ADMIN は organizationId 未指定なら null（会員団体スコープ・非限定）を返す")
+    void viewingAdminWithoutRequestedOrgReturnsNull() {
+        stubRoleAttributes("ADMIN", 7L, 1L);
+
+        // 書き込み系と違い adminOrganizationId で強制スコープしない（他団体会員でもある ADMIN が閲覧できる）
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, null)).isNull();
+    }
+
+    @Test
+    @DisplayName("閲覧: ADMIN は所属団体IDを指定すればそれを返す（admin_org 以外の会員団体も可）")
+    void viewingAdminWithBelongingOrgPasses() {
+        stubRoleAttributes("ADMIN", 7L, 1L);
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(7L, 8L));
+
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, 8L)).isEqualTo(8L);
+    }
+
+    @Test
+    @DisplayName("閲覧: ADMIN は所属外の団体IDを指定すると 403")
+    void viewingAdminWithNonBelongingOrgIsForbidden() {
+        stubRoleAttributes("ADMIN", 7L, 1L);
+        when(organizationService.getPlayerOrganizationIds(1L)).thenReturn(List.of(7L));
+
+        assertThatThrownBy(() -> resolver.resolveViewingOrganizationId(httpRequest, 99L))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("参加していない団体");
+    }
+
+    @Test
+    @DisplayName("閲覧: PLAYER は未指定→null / 所属団体→その団体 / 所属外→403")
+    void viewingPlayerBehavesLikeMemberScope() {
+        stubRoleAttributes("PLAYER", null, 10L);
+        when(organizationService.getPlayerOrganizationIds(10L)).thenReturn(List.of(7L));
+
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, null)).isNull();
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, 7L)).isEqualTo(7L);
+        assertThatThrownBy(() -> resolver.resolveViewingOrganizationId(httpRequest, 99L))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("閲覧: SUPER_ADMIN は requestedOrganizationId を素通し（未指定は null）")
+    void viewingSuperAdminPassesThrough() {
+        stubRoleAttributes("SUPER_ADMIN", null, 1L);
+
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, 7L)).isEqualTo(7L);
+        assertThat(resolver.resolveViewingOrganizationId(httpRequest, null)).isNull();
+    }
 }

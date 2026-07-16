@@ -33,14 +33,13 @@ public class MatchPairingController {
     /**
      * 指定日の対戦組み合わせを取得
      *
-     * 組織スコープのルール (OrganizationScopeResolver と共通):
-     *  - ADMIN: 自団体スコープ強制。クエリで他団体IDが指定された場合は 403。
-     *  - PLAYER: organizationId 任意。本人所属でなければ 403。未指定なら日付のみ。
+     * 閲覧用の組織スコープ (OrganizationScopeResolver#resolveViewingOrganizationId):
+     *  - ADMIN / PLAYER: organizationId 任意。未指定なら日付のみ（非限定）。指定時は本人の
+     *    所属団体でなければ 403（ADMIN も admin_org 固定ではなく会員団体スコープ）。
      *  - SUPER_ADMIN: organizationId 任意。未指定なら日付のみ。
      *
-     * これにより、PairingGenerator 等のフロント画面が autoMatch / createBatch /
-     * getSessionByDate と同じ組織のペアリングを取得でき、別団体の組み合わせが
-     * 混入しないようにする。
+     * 他団体の会員でもある ADMIN が、その会員団体のペアリングを閲覧できるようにするため、
+     * 書き込み系の自団体強制とは分けて会員団体スコープで解決する。
      */
     @GetMapping("/date")
     @RequireRole({Role.PLAYER, Role.ADMIN, Role.SUPER_ADMIN})
@@ -54,7 +53,7 @@ public class MatchPairingController {
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        Long effectiveOrgId = organizationScopeResolver.resolveViewingOrganizationId(httpRequest, organizationId);
         List<MatchPairingDto> pairings = matchPairingService.getByDate(date, light, effectiveOrgId);
         return ResponseEntity.ok(pairings);
     }
@@ -76,7 +75,7 @@ public class MatchPairingController {
         if (currentUserId != null && !hasSessionOnDateForUser(date, currentUserId)) {
             return ResponseEntity.ok(List.of());
         }
-        Long effectiveOrgId = organizationScopeResolver.resolveEffectiveOrganizationId(httpRequest, organizationId);
+        Long effectiveOrgId = organizationScopeResolver.resolveViewingOrganizationId(httpRequest, organizationId);
         List<MatchPairingDto> pairings = matchPairingService.getByDateAndMatchNumber(date, matchNumber, effectiveOrgId);
         return ResponseEntity.ok(pairings);
     }
@@ -280,25 +279,16 @@ public class MatchPairingController {
      * 書き込みリクエストの団体スコープ検証（日付ベース）。
      *
      * - SUPER_ADMIN: スコープ強制なし。
-     * - ADMIN: 自団体のセッションが対象日付に存在しなければ ForbiddenException。
-     * - PLAYER: 所属団体のいずれかのセッションが対象日付に存在しなければ ForbiddenException。
+     * - ADMIN / PLAYER: 所属団体（player_organizations）のいずれかのセッションが対象日付に
+     *   存在しなければ ForbiddenException。ADMIN も admin_org 固定ではなく PLAYER と同じ
+     *   会員団体スコープで統一する（他団体の会員でもある ADMIN がその団体の組み合わせを操作できる）。
      * - その他のロール: ForbiddenException。
      */
     private void validateScopeByDate(LocalDate date, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
         if ("SUPER_ADMIN".equals(role)) return;
 
-        if ("ADMIN".equals(role)) {
-            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-            if (adminOrgId == null) {
-                throw new ForbiddenException("他団体の組み合わせは操作できません");
-            }
-            practiceSessionRepository.findBySessionDateAndOrganizationId(date, adminOrgId)
-                    .orElseThrow(() -> new ForbiddenException("他団体の組み合わせは操作できません"));
-            return;
-        }
-
-        if ("PLAYER".equals(role)) {
+        if ("ADMIN".equals(role) || "PLAYER".equals(role)) {
             Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
             if (currentUserId == null) {
                 throw new ForbiddenException("他団体の組み合わせは操作できません");
@@ -320,8 +310,8 @@ public class MatchPairingController {
      * 書き込みリクエストの団体スコープ検証（MatchPairing IDベース：ペアリング所属組織で照合）。
      *
      * - SUPER_ADMIN: スコープ強制なし。
-     * - ADMIN: 自団体と一致しなければ ForbiddenException。
-     * - PLAYER: 所属団体のいずれとも一致しなければ ForbiddenException。
+     * - ADMIN / PLAYER: ペアリングの所属組織が本人の所属団体（player_organizations）に
+     *   含まれなければ ForbiddenException。ADMIN も admin_org 固定ではなく会員団体スコープで統一。
      * - その他のロール: ForbiddenException。
      */
     private void validateScopeByPairingId(Long pairingId, HttpServletRequest httpRequest) {
@@ -333,15 +323,7 @@ public class MatchPairingController {
             throw new ForbiddenException("他団体の組み合わせは操作できません");
         }
 
-        if ("ADMIN".equals(role)) {
-            Long adminOrgId = (Long) httpRequest.getAttribute("adminOrganizationId");
-            if (adminOrgId == null || !adminOrgId.equals(pairingOrgId)) {
-                throw new ForbiddenException("他団体の組み合わせは操作できません");
-            }
-            return;
-        }
-
-        if ("PLAYER".equals(role)) {
+        if ("ADMIN".equals(role) || "PLAYER".equals(role)) {
             Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
             if (currentUserId == null) {
                 throw new ForbiddenException("他団体の組み合わせは操作できません");
@@ -360,19 +342,15 @@ public class MatchPairingController {
      * 書き込みリクエストの団体スコープに使う organizationId を、ロールに応じて解決する。
      *
      * - SUPER_ADMIN: null（組織非限定。サービス層は同日全セッションを対象に動作）。
-     * - ADMIN: adminOrganizationId。
-     * - PLAYER: 対象日付の PracticeSession のうち、所属団体に含まれるものの組織ID。
-     *   2件以上該当する（複数団体所属で同日に複数団体の練習がある）場合は、
-     *   どの団体のペアリングを操作しているか曖昧になり別団体データの誤汚染リスク
-     *   があるため ForbiddenException で拒否する（フロント側で organizationId を
-     *   明示する仕組みが整うまでの安全側フォールバック）。
+     * - ADMIN / PLAYER: 対象日付の PracticeSession のうち、所属団体に含まれるものの組織ID
+     *   （ADMIN も admin_org 固定ではなく会員団体スコープで統一）。2件以上該当する
+     *   （複数団体所属で同日に複数団体の練習がある）場合は、どの団体のペアリングを操作
+     *   しているか曖昧になり別団体データの誤汚染リスクがあるため ForbiddenException で拒否する
+     *   （フロント側で organizationId を明示する仕組みが整うまでの安全側フォールバック）。
      */
     private Long resolveOrganizationIdForScopedWrite(LocalDate date, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        if ("ADMIN".equals(role)) {
-            return (Long) httpRequest.getAttribute("adminOrganizationId");
-        }
-        if ("PLAYER".equals(role)) {
+        if ("ADMIN".equals(role) || "PLAYER".equals(role)) {
             Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
             if (currentUserId == null) return null;
             List<Long> playerOrgIds = organizationService.getPlayerOrganizationIds(currentUserId);
@@ -394,15 +372,12 @@ public class MatchPairingController {
      * MatchPairing ID を起点に、書き込みリクエストの団体スコープに使う organizationId を解決する。
      *
      * - SUPER_ADMIN: null（組織非限定）。
-     * - ADMIN: adminOrganizationId。
-     * - PLAYER: ペアリングの所属組織ID（既に validateScopeByPairingId で所属団体に含まれることが検証されている前提）。
+     * - ADMIN / PLAYER: ペアリングの所属組織ID（既に validateScopeByPairingId で所属団体に
+     *   含まれることが検証されている前提。ADMIN も admin_org 固定ではなく会員団体スコープで統一）。
      */
     private Long resolveOrganizationIdForScopedWriteByPairingId(Long pairingId, HttpServletRequest httpRequest) {
         String role = (String) httpRequest.getAttribute("currentUserRole");
-        if ("ADMIN".equals(role)) {
-            return (Long) httpRequest.getAttribute("adminOrganizationId");
-        }
-        if ("PLAYER".equals(role)) {
+        if ("ADMIN".equals(role) || "PLAYER".equals(role)) {
             return matchPairingService.getOrganizationIdByPairingId(pairingId);
         }
         return null;
