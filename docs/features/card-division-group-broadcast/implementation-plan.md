@@ -60,7 +60,7 @@ status: completed
 - **対応Issue:** #1078
 
 ### タスク5: join Webhook でグループID捕捉
-- [ ] 完了
+- [x] 完了
 - **目的:** botが全体グループに招待された時、そのbotにグループIDを保存する。
 - **対応AC:** AC-3
 - **主な変更領域:** `controller/LineWebhookController.java` に `join`（必要なら `memberJoined`）分岐を追加 → `source.groupId` を発火チャネルの `line_channels.line_group_id` に保存（署名検証は既存経路のまま）。`leave`/`memberLeft` は `line_group_id` クリア（配信不能検知）。

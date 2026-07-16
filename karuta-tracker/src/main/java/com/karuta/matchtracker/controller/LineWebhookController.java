@@ -95,7 +95,41 @@ public class LineWebhookController {
             case "message" -> handleMessage(channel, event);
             case "postback" -> handlePostback(channel, event);
             case "unfollow" -> handleUnfollow(channel, event);
+            case "join" -> handleJoin(channel, event);
+            case "leave" -> handleLeave(channel, event);
             default -> log.debug("Ignoring event type: {}", type);
+        }
+    }
+
+    /**
+     * bot が全体グループに招待された（join）時、そのチャネルに紐づく形でグループIDを保存する（AC-3）。
+     * 全体LINE一斉配信（card-division-group-broadcast）で、このチャネルの配信先グループとして使う。
+     */
+    private void handleJoin(LineChannel channel, JsonNode event) {
+        String groupId = event.path("source").path("groupId").asText(null);
+        if (groupId == null || groupId.isBlank()) {
+            log.warn("join event without groupId on channel {}", channel.getLineChannelId());
+            return;
+        }
+        channel.setLineGroupId(groupId);
+        lineChannelRepository.save(channel);
+        log.info("Captured LINE group id {} for channel {} (join)", groupId, channel.getLineChannelId());
+    }
+
+    /**
+     * bot がグループから退出/削除された（leave）時、配信不能になるためグループIDをクリアする。
+     * 別グループの leave が有効なグループIDを誤って消さないよう、保存済みグループIDと一致する場合のみクリアする。
+     */
+    private void handleLeave(LineChannel channel, JsonNode event) {
+        String groupId = event.path("source").path("groupId").asText(null);
+        String stored = channel.getLineGroupId();
+        if (stored != null && (groupId == null || stored.equals(groupId))) {
+            channel.setLineGroupId(null);
+            lineChannelRepository.save(channel);
+            log.info("Cleared LINE group id for channel {} (leave)", channel.getLineChannelId());
+        } else {
+            log.debug("leave event ignored on channel {} (stored={}, event={})",
+                    channel.getLineChannelId(), stored, groupId);
         }
     }
 
