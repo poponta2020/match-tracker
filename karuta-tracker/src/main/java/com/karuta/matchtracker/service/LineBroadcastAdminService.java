@@ -84,7 +84,10 @@ public class LineBroadcastAdminService {
         if (request.getEnabled() != null) {
             group.setEnabled(request.getEnabled());
         }
-        if (request.getExpectedRecipientCount() != null) {
+        // 明示的な未設定化（clearフラグ）を「省略（更新しない）」と区別して扱う
+        if (Boolean.TRUE.equals(request.getClearExpectedRecipientCount())) {
+            group.setExpectedRecipientCount(null);
+        } else if (request.getExpectedRecipientCount() != null) {
             group.setExpectedRecipientCount(request.getExpectedRecipientCount());
         }
         return toDto(lineBroadcastGroupRepository.save(group));

@@ -129,11 +129,14 @@ const CardDivisionBroadcastAdmin = () => {
 
   const handleSaveEdit = async (groupId) => {
     try {
-      await lineBroadcastAPI.updateGroup(groupId, {
-        name: editForm.name,
-        expectedRecipientCount:
-          editForm.expectedRecipientCount === '' ? null : Number(editForm.expectedRecipientCount),
-      });
+      const body = { name: editForm.name };
+      if (editForm.expectedRecipientCount === '') {
+        // 空欄 = 未設定に戻す（送信時に実グループ人数APIで解決する挙動へ復帰）
+        body.clearExpectedRecipientCount = true;
+      } else {
+        body.expectedRecipientCount = Number(editForm.expectedRecipientCount);
+      }
+      await lineBroadcastAPI.updateGroup(groupId, body);
       setEditingGroupId(null);
       await fetchGroups();
       if (selectedGroupId === groupId) {

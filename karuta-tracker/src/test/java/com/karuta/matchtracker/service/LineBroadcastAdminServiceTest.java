@@ -146,6 +146,37 @@ class LineBroadcastAdminServiceTest {
     }
 
     @Test
+    @DisplayName("updateGroup: clearExpectedRecipientCount=true で想定受信数を未設定(null)に戻せる")
+    void updateGroupClearsExpectedRecipient() {
+        LineBroadcastGroup g = group(ORG);
+        g.setExpectedRecipientCount(70);
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(g));
+        when(lineBroadcastGroupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var req = new com.karuta.matchtracker.dto.LineBroadcastGroupUpdateRequest();
+        req.setClearExpectedRecipientCount(true);
+        service.updateGroup("SUPER_ADMIN", null, GROUP_ID, req);
+
+        assertThat(g.getExpectedRecipientCount()).isNull();
+    }
+
+    @Test
+    @DisplayName("updateGroup: 想定受信数を省略した部分更新（enabledのみ）は既存値を消さない")
+    void updateGroupPreservesExpectedWhenOmitted() {
+        LineBroadcastGroup g = group(ORG);
+        g.setExpectedRecipientCount(70);
+        when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(g));
+        when(lineBroadcastGroupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var req = new com.karuta.matchtracker.dto.LineBroadcastGroupUpdateRequest();
+        req.setEnabled(false);
+        service.updateGroup("SUPER_ADMIN", null, GROUP_ID, req);
+
+        assertThat(g.getExpectedRecipientCount()).isEqualTo(70);
+        assertThat(g.getEnabled()).isFalse();
+    }
+
+    @Test
     @DisplayName("assignBot: 未使用PLAYERチャネルを GROUP に転用し broadcast_group_id を設定")
     void assignBotFlipsPlayerToGroup() {
         when(lineBroadcastGroupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group(ORG)));
