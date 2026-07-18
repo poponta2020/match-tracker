@@ -122,15 +122,16 @@ describe("OamChatPage.findDuplicateReservation", () => {
     expect(await checkDuplicate(ok(fractional))).toBe("UNKNOWN");
   });
 
-  it("aborts the scheduled-messages request after a bounded timeout", async () => {
-    // page.evaluate にも browser の fetch にも既定のタイムアウトが無いため、
-    // AbortController でリクエストを打ち切っていることをページ内コードの実行で確かめる。
+  // page.evaluate にも browser の fetch にも既定のタイムアウトが無いため、応答を返さない
+  // サーバーでは await が戻らずポーリングの期限判定に到達できない（ワーカーが無期限に停止する）。
+  // 「応答しない fetch が期限到来で確実に中断されること」を実際に abort させて確かめる。
+  it("aborts the scheduled-messages request when the timeout elapses", async () => {
     const page = createPage(ok({ list: [] }));
     const po = new OamChatPage(page, ACCOUNT);
     await po.openChat("グループ名", ROOM);
     await po.findDuplicateReservation(SEND_AT, "");
 
-    // evaluate に渡した関数を、fetch をスタブしたページ相当の環境で実行して signal を検査する。
+    // evaluate に渡されたページ内関数を取り出し、応答しない fetch のもとで実行する。
     const [pageFn, arg] = (page.evaluate as unknown as { mock: { calls: unknown[][] } }).mock.calls[0] as [
       (a: { path: string; timeoutMs: number }) => Promise<unknown>,
       { path: string; timeoutMs: number },
@@ -140,17 +141,26 @@ describe("OamChatPage.findDuplicateReservation", () => {
     let seenSignal: AbortSignal | undefined;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = ((_url: string, init: RequestInit) => {
-      seenSignal = init.signal as AbortSignal;
-      return Promise.resolve({ status: 200, text: () => Promise.resolve("{}") } as unknown as Response);
+      const signal = init.signal as AbortSignal;
+      seenSignal = signal;
+      // 決して解決しない＝サーバーが応答を完了しない状況。abort でのみ終わる。
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("AbortError")));
+      });
     }) as typeof fetch;
+
+    vi.useFakeTimers();
     try {
-      await pageFn(arg);
+      const pending = pageFn(arg);
+      const rejects = expect(pending).rejects.toThrow("AbortError");
+      // 期限までタイマーを進めると abort が発火し、await が有限時間で終わる。
+      await vi.advanceTimersByTimeAsync(arg.timeoutMs);
+      await rejects;
+      expect(seenSignal?.aborted).toBe(true);
     } finally {
+      vi.useRealTimers();
       globalThis.fetch = originalFetch;
     }
-
-    expect(seenSignal).toBeInstanceOf(AbortSignal);
-    expect(seenSignal?.aborted).toBe(false);
   });
 });
 
