@@ -92,3 +92,43 @@ describe("OamChatPage.findDuplicateReservation", () => {
     expect(await checkDuplicate(new Error("net::ERR_ABORTED"))).toBe("UNKNOWN");
   });
 });
+
+describe("OamChatPage.deleteReservation", () => {
+  /** 削除操作のクリック経路まで通せる Page スタブ。予約一覧は常に REAL_PAYLOAD（＝消えない）を返す。 */
+  function createDeletePage(): Page {
+    const clickable = { click: () => Promise.resolve(), waitFor: () => Promise.resolve() };
+    const banner = {
+      first: () => ({ ...clickable, getByRole: () => clickable }),
+      getByRole: () => clickable,
+    };
+    // page.getByRole は「バナー（filter でしぼる）」と「削除ボタン（そのまま click）」の両方に使われる。
+    const filterable = { filter: () => filterable, ...banner, ...clickable };
+    return {
+      goto: vi.fn().mockResolvedValue(undefined),
+      url: () => `https://chat.line.biz/${ACCOUNT}/chat/${ROOM}`,
+      locator: () => ({ count: () => Promise.resolve(1) }),
+      // ループ内の待機で偽クロックを進め、実時間を待たずにタイムアウトへ到達させる。
+      waitForTimeout: vi.fn().mockImplementation((ms: number) => {
+        vi.advanceTimersByTime(ms);
+        return Promise.resolve();
+      }),
+      getByRole: () => filterable,
+      getByText: () => clickable,
+      evaluate: vi.fn().mockResolvedValue({ status: 200, body: JSON.stringify(REAL_PAYLOAD) }),
+    } as unknown as Page;
+  }
+
+  // 回帰: 削除操作をしても一覧から消えない場合、CANCELLED を報告してはならない。
+  // DELETED を返すと、LINE側に予約が残ったまま「取消済み」と記録され誤配信に気づけなくなる。
+  it("returns UNKNOWN (never DELETED) when the reservation still appears after the delete action", async () => {
+    vi.useFakeTimers();
+    try {
+      const po = new OamChatPage(createDeletePage(), ACCOUNT);
+      await po.openChat("グループ名", ROOM);
+
+      expect(await po.deleteReservation(SEND_AT, "")).toBe("UNKNOWN");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
