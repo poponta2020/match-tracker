@@ -144,12 +144,26 @@ export class OamChatPage implements ChatPage {
     return entries;
   }
 
-  /** 一覧に「対象日時の有効な予約」が含まれるか（JST壁時計・分精度で比較）。 */
-  private hasReservationAt(entries: ScheduledMessage[], scheduledSendAt: string): boolean {
+  /**
+   * 一覧における「対象日時の予約」の状態（JST壁時計・分精度で比較）。
+   *
+   * 判定を**対象日時のエントリだけ**に絞っているのが要点。`SCHEDULED` 以外の状態値は
+   * それが有効な予約を表すのか判断できないが、
+   * - 対象日時に存在すれば `UNKNOWN`（＝重複かもしれないので予約を作らせない）
+   * - 別日時にしか存在しなければ対象の判定に無関係なので `NONE` のままでよい
+   *
+   * 「一覧に1件でも未知の状態があれば全体を UNKNOWN」にはしない。送信済みエントリが一覧に
+   * 残る仕様だった場合、前日の配信が残っているだけで以後の予約が永久に作れなくなるため
+   * （実測では送信後の一覧は空だったが、状態値の全集合は未確認なので保守的にこの形にする）。
+   */
+  private reservationStateAt(entries: ScheduledMessage[], scheduledSendAt: string): DuplicateCheck {
     const expected = jstBannerDateTime(scheduledSendAt);
-    return entries.some(
-      (e) => e.status === "SCHEDULED" && jstBannerDateTime(new Date(e.scheduledAt).toISOString()) === expected,
+    const atTarget = entries.filter(
+      (e) => jstBannerDateTime(new Date(e.scheduledAt).toISOString()) === expected,
     );
+    if (atTarget.length === 0) return "NONE";
+    if (atTarget.some((e) => e.status === "SCHEDULED")) return "FOUND";
+    return "UNKNOWN";
   }
 
   private currentHost(): string {
@@ -210,7 +224,7 @@ export class OamChatPage implements ChatPage {
     // 二重予約になるため、日時一致のみで保守的に重複とみなす。
     const entries = await this.fetchScheduledMessages();
     if (entries === null) return "UNKNOWN";
-    return this.hasReservationAt(entries, scheduledSendAt) ? "FOUND" : "NONE";
+    return this.reservationStateAt(entries, scheduledSendAt);
   }
 
   async inputMessage(text: string): Promise<void> {
@@ -278,7 +292,7 @@ export class OamChatPage implements ChatPage {
       const entries = await this.fetchScheduledMessages();
       if (entries !== null) {
         lastEntries = entries;
-        if (this.hasReservationAt(entries, scheduledSendAt)) return "MATCHED";
+        if (this.reservationStateAt(entries, scheduledSendAt) === "FOUND") return "MATCHED";
       }
       await this.page.waitForTimeout(500);
     }
@@ -292,7 +306,11 @@ export class OamChatPage implements ChatPage {
     // 存在有無はまず予約一覧APIで確定する（DOM の描画待ちで NOT_FOUND と誤判定しないため）。
     const before = await this.fetchScheduledMessages();
     if (before === null) return "UNKNOWN";
-    if (!this.hasReservationAt(before, scheduledSendAt)) return "NOT_FOUND";
+    const state = this.reservationStateAt(before, scheduledSendAt);
+    // 対象日時に解釈できない状態のエントリがある場合、削除すべきか判断できない。
+    // 誤って別状態のメッセージを消さないよう、操作せず人手確認へ回す。
+    if (state === "UNKNOWN") return "UNKNOWN";
+    if (state === "NONE") return "NOT_FOUND";
 
     // ここから先は「予約が存在する」ことが確定している。削除操作にはバナーのUIが要るので、
     // 描画されるまで待つ（出ないのは想定外＝異常。NOT_FOUND ではなく UNKNOWN で人手確認へ）。
@@ -317,7 +335,9 @@ export class OamChatPage implements ChatPage {
     const deadline = Date.now() + OamChatPage.BANNER_TIMEOUT_MS;
     while (Date.now() < deadline) {
       const after = await this.fetchScheduledMessages();
-      if (after !== null && !this.hasReservationAt(after, scheduledSendAt)) return "DELETED";
+      // 対象日時のエントリが完全に消えた（NONE）ときだけ削除成功と見なす。
+      // UNKNOWN のまま期限切れなら、残っている可能性を否定できないので DELETED にはしない。
+      if (after !== null && this.reservationStateAt(after, scheduledSendAt) === "NONE") return "DELETED";
       await this.page.waitForTimeout(500);
     }
     // 消えたことを確認できなかった＝LINE側に残っている可能性がある。CANCELLED を報告してはならない。

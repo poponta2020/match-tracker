@@ -64,9 +64,20 @@ describe("OamChatPage.findDuplicateReservation", () => {
     expect(await checkDuplicate(ok(other))).toBe("NONE");
   });
 
-  it("ignores entries that are not SCHEDULED (already sent or cancelled)", async () => {
+  // 対象日時に SCHEDULED 以外のエントリがある場合、その状態値が有効な予約を表すのか
+  // 判断できない。「SCHEDULED でないから予約なし」と決めつけると二重予約になりうる。
+  it("returns UNKNOWN when a non-SCHEDULED entry occupies the target datetime", async () => {
     const sent = { list: [{ ...REAL_PAYLOAD.list[0], status: "SENT" }] };
-    expect(await checkDuplicate(ok(sent))).toBe("NONE");
+    expect(await checkDuplicate(ok(sent))).toBe("UNKNOWN");
+  });
+
+  // 一方、別日時の未知状態エントリは対象の判定に無関係。ここまで UNKNOWN にすると、
+  // 送信済みエントリが一覧に残る仕様だった場合に以後の予約が永久に作れなくなる。
+  it("returns NONE when a non-SCHEDULED entry exists only at a different datetime", async () => {
+    const otherDay = {
+      list: [{ ...REAL_PAYLOAD.list[0], status: "SENT", scheduledAt: 1788217200000 - 86_400_000 }],
+    };
+    expect(await checkDuplicate(ok(otherDay))).toBe("NONE");
   });
 
   // ここから下が本バグの本体。いずれも「予約なし(NONE)」に潰れると二重予約に直結する。
