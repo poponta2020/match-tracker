@@ -1,5 +1,6 @@
 package com.karuta.matchtracker.integration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.config.PasswordHashMigrationRunner;
 import com.karuta.matchtracker.dto.LoginRequest;
 import com.karuta.matchtracker.dto.LoginResponse;
@@ -20,18 +21,28 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * パスワードの BCrypt 化と認証トークンのライフサイクルの統合テスト（auth-tokenization タスク2）
  *
- * HTTP ではなくサービス層を直接呼ぶ。認証インターセプタの挙動（deny by default 等）は
- * タスク3 の {@code AuthenticationIntegrationTest} が受け持ち、ここは
- * 「パスワードがハッシュで保存されるか」「保存したパスワードでログインできるか」に集中する。
+ * 主にサービス層を直接呼び、「パスワードがハッシュで保存されるか」
+ * 「保存したパスワードでログインできるか」を検証する。
+ *
+ * 加えて {@code HttpRoundTripTests} では HTTP 経由の往復も検証する。
+ * このクラスは {@code AuthTokenService} をモックしない（{@link BaseIntegrationTest} を直接継承）ため、
+ * 実際に発行されたトークンがインターセプタで解決される経路を通す唯一のテストになっている。
+ * deny by default の網羅的な検証は {@code AuthenticationIntegrationTest} が受け持つ。
  */
 @DisplayName("パスワードハッシュ化・トークンライフサイクル統合テスト")
 class AuthPasswordIntegrationTest extends BaseIntegrationTest {
@@ -56,6 +67,9 @@ class AuthPasswordIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private PasswordHashMigrationRunner passwordHashMigrationRunner;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private static final String BCRYPT_PREFIX_REGEX = "^\\$2[aby]\\$.+";
 
@@ -230,6 +244,83 @@ class AuthPasswordIntegrationTest extends BaseIntegrationTest {
             Integer tokenCount = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM auth_tokens", Integer.class);
             assertThat(tokenCount).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("AC-20: HTTP 経由のトークン往復（実サービス・モックなし）")
+    class HttpRoundTripTests {
+
+        /**
+         * ログイン → 保護エンドポイント → ログアウト → 再ログインを HTTP で通しで検証する。
+         *
+         * <p>スライステストや {@link BaseAuthenticatedIntegrationTest} は
+         * {@code AuthTokenService} をモックしているため、
+         * 「発行された実トークンがインターセプタで解決され、リクエスト属性まで届く」
+         * 経路そのものはそこでは実行されない。ここだけが実物を通す。
+         */
+        @Test
+        @DisplayName("ログイン→認証付きアクセス→ログアウト→再ログインが通しで動く")
+        void testFullTokenRoundTripOverHttp() throws Exception {
+            createPlayerViaService("往復太郎", "password123");
+
+            // 1. 未認証では保護エンドポイントを叩けない
+            mockMvc.perform(get("/api/players"))
+                    .andExpect(status().isUnauthorized());
+
+            // 2. ログインして実トークンを受け取る
+            String loginResponse = mockMvc.perform(post("/api/players/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"往復太郎\",\"password\":\"password123\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.token").isNotEmpty())
+                    .andReturn().getResponse().getContentAsString();
+            String token = objectMapper.readTree(loginResponse).get("token").asText();
+
+            // 3. そのトークンで保護エンドポイントを叩ける
+            mockMvc.perform(get("/api/players")
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk());
+
+            // 4. ログアウトするとそのトークンは使えなくなる
+            mockMvc.perform(post("/api/players/logout")
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isNoContent());
+
+            mockMvc.perform(get("/api/players")
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isUnauthorized());
+
+            // 5. 再ログインすると別の有効なトークンが発行される
+            String secondLogin = mockMvc.perform(post("/api/players/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"往復太郎\",\"password\":\"password123\"}"))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String newToken = objectMapper.readTree(secondLogin).get("token").asText();
+
+            assertThat(newToken).isNotEqualTo(token);
+            mockMvc.perform(get("/api/players")
+                            .header("Authorization", "Bearer " + newToken))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("実トークンでもロール不足なら 403（PLAYER は選手削除できない）")
+        void testRealTokenStillEnforcesRole() throws Exception {
+            PlayerDto created = createPlayerViaService("権限太郎", "password123");
+
+            String loginResponse = mockMvc.perform(post("/api/players/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"権限太郎\",\"password\":\"password123\"}"))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String token = objectMapper.readTree(loginResponse).get("token").asText();
+
+            // DELETE /api/players/{id} は SUPER_ADMIN 専用
+            mockMvc.perform(delete("/api/players/" + created.getId())
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isForbidden());
         }
     }
 

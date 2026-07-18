@@ -107,6 +107,46 @@ class AuthenticationIntegrationTest extends BaseAuthenticatedIntegrationTest {
     }
 
     @Nested
+    @DisplayName("AC-15: OrganizationController のロール判定がトークン由来になっている")
+    class OrganizationControllerRoleTests {
+
+        @Test
+        @DisplayName("他人の参加団体は PLAYER では操作できない（403）")
+        void testOtherPlayersOrganizationsRejectedForPlayer() throws Exception {
+            // 主体は playerId=42。パス上の 1 は別人
+            mockMvc.perform(put("/api/organizations/players/1")
+                            .header("Authorization", AuthTestSupport.bearer(42L, Role.PLAYER))
+                            .contentType("application/json")
+                            .content("{\"organizationIds\":[1]}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("X-User-Role: SUPER_ADMIN を詐称しても PLAYER のままなので 403")
+        void testSpoofedSuperAdminHeaderDoesNotBypassOwnerCheck() throws Exception {
+            // かつては getHeader("X-User-Role") を直読みしていたため、このヘッダーで素通りできた
+            mockMvc.perform(put("/api/organizations/players/1")
+                            .header("Authorization", AuthTestSupport.bearer(42L, Role.PLAYER))
+                            .header("X-User-Role", "SUPER_ADMIN")
+                            .contentType("application/json")
+                            .content("{\"organizationIds\":[1]}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("SUPER_ADMIN トークンなら他人の参加団体も操作できる")
+        void testSuperAdminTokenCanUpdateOthers() throws Exception {
+            Long targetId = createMemberPlayer("団体変更対象選手", 1L);
+
+            mockMvc.perform(put("/api/organizations/players/" + targetId)
+                            .header("Authorization", AuthTestSupport.bearer(99L, Role.SUPER_ADMIN))
+                            .contentType("application/json")
+                            .content("{\"organizationIds\":[2]}"))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Nested
     @DisplayName("AC-8: 許可リストは未認証で従来どおり通る")
     class PublicEndpointTests {
 
