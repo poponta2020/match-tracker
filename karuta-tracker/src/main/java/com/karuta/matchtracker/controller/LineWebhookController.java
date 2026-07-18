@@ -145,7 +145,28 @@ public class LineWebhookController {
         log.info("Follow event received on channel {}", channel.getLineChannelId());
     }
 
+    /**
+     * イベントの発生元が 1:1 トーク（{@code source.type == "user"}）かどうか。
+     *
+     * <p>連携コード入力・postback 操作はいずれも 1:1 トーク専用の機能であり、グループ／複数人トーク
+     * （{@code group} / {@code room}）で応答してはならない。全体配信用の公式アカウントはグループに
+     * 参加した状態で「アプリからの一方的な配信」だけを行うため、メンバーの発言に反応すると
+     * 意図しないノイズになる（グループ内の発言でも {@code source.userId} は取得できてしまうため、
+     * userId の有無ではガードできない）。
+     *
+     * <p>判定は fail-closed（{@code "user"} と明示された場合のみ true）。LINE の webhook は
+     * {@code source.type} を常に含むため、欠落・未知の値は不正なペイロードとみなして黙って無視する。
+     */
+    private static boolean isOneToOneUserSource(JsonNode event) {
+        return "user".equals(event.path("source").path("type").asText());
+    }
+
     private void handleMessage(LineChannel channel, JsonNode event) {
+        // グループ／複数人トークでの発言には一切応答しない（配信専用アカウント対策）
+        if (!isOneToOneUserSource(event)) {
+            return;
+        }
+
         JsonNode messageNode = event.get("message");
         if (messageNode == null || !"text".equals(messageNode.path("type").asText())) {
             return;
@@ -177,6 +198,11 @@ public class LineWebhookController {
     }
 
     private void handlePostback(LineChannel channel, JsonNode event) {
+        // グループ／複数人トークからの postback にも応答しない（handleMessage と同じ理由）
+        if (!isOneToOneUserSource(event)) {
+            return;
+        }
+
         String data = event.path("postback").path("data").asText("");
         String lineUserId = event.path("source").path("userId").asText();
         String replyToken = event.has("replyToken") ? event.get("replyToken").asText() : null;
