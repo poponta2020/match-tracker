@@ -54,15 +54,36 @@
    - **個人招待（SINGLE_USE）**: 1回限り使用可能。特定個人への招待向け
    - 招待トークンは団体に紐づき、登録時にその団体の参加設定が自動で初期値となる
 
-### 認証方式（プロトタイプ仕様）
+### 認証方式
 
-現在の認証はプロトタイプ段階であり、将来的にJWT等のトークン認証に置き換え予定。
+認証はサーバが発行・検証するトークンで行う。クライアントの自己申告（かつての `X-User-Role` / `X-User-Id` ヘッダー）は**一切参照しない**。
 
-- **ログイン**: 選手名（`name`）+ パスワードで認証
-- **パスワード**: 平文で保存・比較（プロトタイプ。将来的にBCryptハッシュ化予定）
+- **ログイン**: 選手名（`name`）+ パスワードで認証し、成功時にトークンを発行する
+- **パスワード**: BCrypt ハッシュで保存・照合（最低8文字）。平文は保存しない。書き込み経路（選手作成・選手更新・招待登録・伝助の自動登録）はすべてサービス層の `PasswordEncoder` を通す
 - **パスワード変更強制**: `require_password_change` フラグが `true` の場合、ログイン後に `/profile/edit?changePassword=true` へリダイレクトし、パスワード変更を強制する。変更完了後にフラグは自動的に `false` にリセットされる
-- **セッション管理**: ログイン成功時にプレイヤー情報（`organizationIds` を含む）を `localStorage` に保存。トークンは `dummy-token` を使用
-- **権限チェック**: リクエストヘッダー `X-User-Role` にロールを付与し、バックエンドの `RoleCheckInterceptor` が `@RequireRole` アノテーションで制御
+- **セッション管理**: ログイン成功時にプレイヤー情報（`organizationIds` を含む）を `localStorage` に保存し、トークンは `authToken` に保存する。以降の全リクエストに `Authorization: Bearer <token>` を付与する
+- **トークン**: 32バイトの乱数（hex 64文字）の不透明トークン。DB（`auth_tokens`）には SHA-256 ハッシュのみを保存し、生トークンは保存しない。有効期限は発行から約1年
+- **失効**: パスワード変更・選手の論理削除でその選手の全トークンを失効させる。ログアウト（`POST /api/players/logout`）は当該トークンのみを失効させる
+- **認証の既定（deny by default）**: `/api/**` は既定で認証必須。下記の公開エンドポイントのみ未認証で通る。`@RequireRole` の有無は**認可判定にのみ**使い、認証要否には使わない（アノテーションの付け忘れで穴が開かない構造にするため）
+- **認可**: `@RequireRole` アノテーションを `RoleCheckInterceptor` が検査する。認証されていなければ **401**、認証済みだが権限が足りなければ **403** を返す
+- フロントエンドは 401 を受けると `localStorage` をクリアして `/login` へ遷移する
+
+#### 未認証で通る公開エンドポイント
+
+これ以外の `/api/**` はすべて 401 になる。
+
+| エンドポイント | 理由 |
+|---|---|
+| `POST /api/players/login` | ログイン（認証前） |
+| `GET /api/invite-tokens/validate/{token}` | 招待リンクの検証（認証前） |
+| `POST /api/invite-tokens/register` | 招待リンクからの公開登録（認証前） |
+| `GET /api/organizations` | 招待登録画面が未ログインで呼ぶ（**完全一致**。`/api/organizations/players/{id}` は含まない） |
+| `GET /api/venue-reservation-proxy/view`・`/fetch/**` | capability トークンで保護済み |
+| `POST /api/line/webhook/{lineChannelId}` | LINE 署名検証で保護済み（インターセプタ対象外） |
+| `/api/line-chat-worker/**` | サービストークンで保護済み（インターセプタ対象外） |
+| `/ping`・`/ical/**` | `/api/**` の外のため対象外（iCal はフィードトークンで保護） |
+
+> **認可の粒度は別問題**: 本方式が保証するのは「ログインしていること」と「ロールを偽装できないこと」まで。ログイン済みの会員が他人の `playerId` を指定して他人のデータを参照できる問題（`GET /api/home?playerId=` 等）は未解決で、別 Issue で扱う。
 
 ### 選手プロパティ
 
@@ -192,8 +213,8 @@
 | PUT | `/{id}/role?role=` | SUPER_ADMIN | ロール変更 |
 
 #### POST /api/players/login
-**説明**: ログイン
-**権限**: なし
+**説明**: ログイン。成功時に認証トークンを発行する
+**権限**: 不要（公開エンドポイント）
 **リクエスト**:
 ```json
 {
@@ -215,9 +236,17 @@
   "adminOrganizationId": null,
   "organizationIds": [1, 3],
   "firstLogin": false,
-  "requirePasswordChange": false
+  "requirePasswordChange": false,
+  "token": "3f2a…（hex 64文字）"
 }
 ```
+
+`token` は以降の全リクエストの `Authorization: Bearer` に載せる。サーバ側では復元できないため、クライアントが保存する。
+
+#### POST /api/players/logout
+**説明**: ログアウト。`Authorization` ヘッダーのトークンのみを失効させる（他端末のトークンは維持）
+**権限**: 認証必須（ロール不問）
+**レスポンス**: `204 No Content`
 
 #### GET /api/players
 **説明**: 全アクティブ選手取得

@@ -72,8 +72,10 @@ Entity Layer (JPA Entity)
 ## 認証・認可
 
 **現在の実装**:
-- 簡易的なヘッダーベース認証（`X-User-Role`, `X-User-Id`）
-- パスワード平文比較
+- **サーバ発行トークンによる認証**（`Authorization: Bearer <token>`）。`RoleCheckInterceptor` がトークンを検証し、そこから解決した選手を `currentUserId` / `currentUserRole` / `adminOrganizationId` のリクエスト属性にセットする。かつての `X-User-Role` / `X-User-Id` ヘッダーは**一切参照しない**（クライアントの自己申告のため誰でもロールを詐称できた）
+- **deny by default**: `/api/**` は既定で認証必須。公開エンドポイント（ログイン・招待検証/登録・`GET /api/organizations` 完全一致・会場予約プロキシ）のみ許可リストで通す。`@RequireRole` の有無は**認可判定にのみ**使い、認証要否には使わない。未認証は **401**、権限不足は **403**
+- トークンは不透明ランダム（hex 64文字）+ DB 永続（`auth_tokens`）。DB には SHA-256 ハッシュのみ保存。有効期限は約1年で、パスワード変更・論理削除・ログアウトで失効させる。詳細と公開エンドポイント一覧は `docs/spec/players-auth.md`
+- パスワードは **BCrypt ハッシュ**（`spring-security-crypto` のみ利用。`spring-boot-starter-security` は導入せず、フィルタチェーンは有効化しない）
 - `@RequireRole` アノテーション + `RoleCheckInterceptor`（ロール検証 + ユーザーID伝播）
 - `AdminScopeValidator`（`util/AdminScopeValidator.java`）— ADMINの団体スコープ検証ユーティリティ。ADMINが自団体以外のリソースを操作しようとした場合に `ForbiddenException` をスロー。各Controllerから共通利用
 - **対戦組み合わせは ADMIN も PLAYER と同じ「会員団体スコープ」で統一**（SUPER_ADMIN のみ全団体横断）。ADMIN の `adminOrganizationId` 固定スコープは廃止し、ADMIN でも本人の所属団体（`player_organizations`）であれば対象になる（他団体の会員でもある ADMIN が、その会員団体の組み合わせを閲覧・操作できるようにするため）。
@@ -85,9 +87,9 @@ Entity Layer (JPA Entity)
 - `PrivateRoute` は未認証時に `/login` へリダイレクトする際、遷移元の `location`（パス＋クエリパラメータ）を `state.from` に保持する。`Login` はログイン成功後に `state.from` があれば元URLへ復帰する（LINEリッチメニュー等の外部導線で未ログイン時に正しく復帰するため）
 
 **TODO**:
-- Spring Security + JWT導入
-- BCryptパスワードハッシュ化
-- セッション管理
+- **認可（authorization）の粒度設計**: ログイン済みの会員が他人の `playerId` を指定して他人のデータを参照できる（`GET /api/home?playerId=` 等）。現方式が保証するのは「ログイン済みであること」と「ロールを偽装できないこと」まで
+- ログイン試行回数制限・ブルートフォース対策
+- 期限切れ `auth_tokens` レコードの定期削除
 
 ## 権限設計
 
