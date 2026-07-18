@@ -124,7 +124,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$", hasSize(1)));
 
         // 5. 試合を削除
-        mockMvc.perform(delete("/api/matches/" + matchId))
+        mockMvc.perform(delete("/api/matches/" + matchId)
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 6. 削除後は試合が存在しない

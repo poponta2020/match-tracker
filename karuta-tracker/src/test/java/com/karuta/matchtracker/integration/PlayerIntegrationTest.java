@@ -68,6 +68,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -99,7 +100,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 9. 選手を削除（論理削除）
         mockMvc.perform(delete("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 10. 削除後は全選手リストに含まれない
@@ -237,7 +238,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 選手を削除
         mockMvc.perform(delete("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 削除した選手を更新しようとする
@@ -246,6 +247,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isBadRequest());

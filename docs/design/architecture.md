@@ -145,6 +145,8 @@ Entity Layer (JPA Entity)
 - `RoleCheckInterceptor` がリクエストヘッダー `X-User-Role` と `X-User-Id` を検証
 - `@RequireRole` 付きエンドポイントでは `X-User-Id` 必須（リクエスト属性 `currentUserId` / `currentUserRole` にセット）
 - 権限不足の場合は `403 Forbidden`
+- **`@RequireRole` が無いハンドラは素通りする（fail-open）**。`RoleCheckInterceptor` は注釈が無ければ `currentUserId` を設定するだけで認証を要求せず、Spring Security も導入していないため、状態変更系（POST / PUT / DELETE / PATCH）に注釈を付け忘れるとそのまま未認証で叩ける。過去に6件の実害があった（Issue #1105）ので、変更系エンドポイントを追加したら必ず `@RequireRole` を付けること
+- **本人のデータだけを操作させたい場合は「`@RequireRole` ＋ ハンドラ内の本人チェック」の二段構え**にする（`@RequireRole` だけではロールが一致する他人のデータを操作できてしまう）。`PlayerController.checkSelfOrSuperAdmin` / `LineUserController.checkSelfOrSuperAdmin` / `OrganizationController.checkPlayerAccess` が同型。対象IDをリクエストボディから受け取る場合は特に注意（`currentUserId` と突き合わせる）
 - ADMIN時は `RoleCheckInterceptor` が `adminOrganizationId` をリクエスト属性にセット
 - `AdminScopeValidator.validateScope()` でADMINの団体スコープを統一的に検証（練習日・組み合わせ・抽選・LINE送信・抜け番・伝助・システム設定）
 

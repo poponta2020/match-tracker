@@ -66,6 +66,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -104,12 +105,14 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // 5. 有効期限を設定
         LocalDate validTo = LocalDate.of(2024, 12, 31);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("validTo", validTo.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validTo").value(validTo.toString()));
 
         // 6. プロフィールを削除
-        mockMvc.perform(delete("/api/player-profiles/" + profileId))
+        mockMvc.perform(delete("/api/player-profiles/" + profileId)
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 7. 削除後は現在のプロフィールが存在しない
@@ -173,6 +176,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -191,6 +195,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response1 = mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated())
@@ -211,6 +216,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
@@ -236,6 +242,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -248,6 +255,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // validFromより前の日付をvalidToに設定しようとする
         LocalDate invalidValidTo = validFrom.minusDays(1);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("validTo", invalidValidTo.toString()))
                 .andExpect(status().isBadRequest());
     }
@@ -300,6 +308,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -361,6 +370,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -374,6 +384,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());

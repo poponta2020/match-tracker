@@ -50,6 +50,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -84,6 +85,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -92,7 +94,8 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.schedules", hasSize(1)));
 
         // 4. 会場を削除
-        mockMvc.perform(delete("/api/venues/" + venueId))
+        mockMvc.perform(delete("/api/venues/" + venueId)
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         // 5. 削除後は取得できない
@@ -120,6 +123,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/venues")
+                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
@@ -158,6 +162,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -192,6 +197,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -225,12 +231,14 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         // 同じ名前で再度作成を試みる
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -259,6 +267,7 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())

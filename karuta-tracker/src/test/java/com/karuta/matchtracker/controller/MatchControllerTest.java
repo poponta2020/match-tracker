@@ -339,13 +339,14 @@ class MatchControllerTest {
     @DisplayName("DELETE /api/matches/{id} - 試合結果を削除できる")
     void testDeleteMatch() throws Exception {
         // Given
-        doNothing().when(matchService).deleteMatch(1L);
+        doNothing().when(matchService).deleteMatch(eq(1L), any(), any());
 
         // When & Then
-        mockMvc.perform(delete("/api/matches/1"))
+        mockMvc.perform(delete("/api/matches/1")
+                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
-        verify(matchService).deleteMatch(1L);
+        verify(matchService).deleteMatch(1L, 1L, com.karuta.matchtracker.entity.Player.Role.ADMIN);
     }
 
     @Test
