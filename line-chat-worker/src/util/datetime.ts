@@ -46,9 +46,7 @@ export function parseIsoToJstParts(iso: string): JstDateTimeParts {
 }
 
 /**
- * JST構成要素を "YYYY/MM/DD" "HH:mm" の暫定表現に整形する（表示・ログ・比較用の共通フォーマット）。
- * OAM の実際の入力欄書式が確定するまでの暫定値。ChatPage 実装（タスク7）で必要な形式へ
- * 変換すること（このまま入力欄に渡せると仮定しない）。
+ * JST構成要素を "YYYY/MM/DD" "HH:mm" 表現に整形する（表示・ログ・バナー照合用の共通フォーマット）。
  */
 export function formatJstParts(parts: JstDateTimeParts): { dateText: string; timeText: string } {
   const pad = (n: number): string => String(n).padStart(2, "0");
@@ -56,4 +54,35 @@ export function formatJstParts(parts: JstDateTimeParts): { dateText: string; tim
     dateText: `${parts.year}/${pad(parts.month)}/${pad(parts.day)}`,
     timeText: `${pad(parts.hour)}:${pad(parts.minute)}`,
   };
+}
+
+/**
+ * OAM 予約モーダルの native `<input type="date">` に渡す値（"YYYY-MM-DD"・JST壁時計）。
+ * タスク7で実DOM確定: date 入力は ISO 形式（min=今日/max=約4ヶ月）。
+ */
+export function jstDateInputValue(iso: string): string {
+  const p = parseIsoToJstParts(iso);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
+/**
+ * OAM 予約モーダルの native `<input type="time" step="600">` に渡す値（"HH:mm"・JST壁時計）。
+ * 注意: 実DOM上、10分非境界の値は入力側でエラー無く10分単位へスナップされる（例 09:45→09:50）。
+ * その場合バナー日時が意図とズレ、verifyScheduledEntry が MISMATCHED を返す（サイレント誤送信防止）。
+ */
+export function jstTimeInputValue(iso: string): string {
+  const p = parseIsoToJstParts(iso);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+/**
+ * 予約確定後にチャット画面に出る「送信予定」バナー
+ * （`メッセージは<YYYY/MM/DD> <HH:mm>に送信されます。`）に含まれる日時文字列（"YYYY/MM/DD HH:mm"）。
+ * verifyScheduledEntry / findDuplicateReservation の日時一致判定に使う。
+ */
+export function jstBannerDateTime(iso: string): string {
+  const { dateText, timeText } = formatJstParts(parseIsoToJstParts(iso));
+  return `${dateText} ${timeText}`;
 }

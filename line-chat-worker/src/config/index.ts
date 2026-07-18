@@ -1,6 +1,12 @@
 export interface WorkerConfig {
   appBaseUrl: string;
   serviceToken: string;
+  /**
+   * OAM チャットのアカウントパス（ログイン後URL `https://chat.line.biz/U<...>` の `U<...>` 部分）。
+   * ルームURL `https://chat.line.biz/<accountPath>/chat/<chatRoomId>` の構築に使う。
+   * WorkerTask には含まれない per-OA 定数（v1は単一OA）。実DOM調査（タスク7）で構造確定。
+   */
+  oamAccountPath: string;
   pollIntervalMs: number;
   dryRun: boolean;
   storageStatePath: string;
@@ -23,6 +29,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   return {
     appBaseUrl: requireEnv(env, "APP_BASE_URL"),
     serviceToken: requireEnv(env, "LINE_CHAT_WORKER_TOKEN"),
+    oamAccountPath: requireEnv(env, "LINE_OAM_ACCOUNT_PATH"),
     pollIntervalMs: parsePositiveInt(env.POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS),
     dryRun: parseBoolean(env.DRY_RUN, false),
     storageStatePath: env.STORAGE_STATE_PATH ?? DEFAULT_STORAGE_STATE_PATH,

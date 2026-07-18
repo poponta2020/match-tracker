@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: config.storageStatePath });
   const page = await context.newPage();
-  const po = new OamChatPage(page);
+  const po = new OamChatPage(page, config.oamAccountPath);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

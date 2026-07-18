@@ -12,6 +12,7 @@ services:
       TZ: Asia/Tokyo
       APP_BASE_URL: ${APP_BASE_URL}
       LINE_CHAT_WORKER_TOKEN: ${LINE_CHAT_WORKER_TOKEN}
+      LINE_OAM_ACCOUNT_PATH: ${LINE_OAM_ACCOUNT_PATH}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-300000}
       DRY_RUN: ${DRY_RUN:-false}
       STORAGE_STATE_PATH: /data/storage-state.json

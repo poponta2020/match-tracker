@@ -88,7 +88,7 @@ status: completed
 - **対応Issue:** #1091
 
 ### タスク7: Phase 2 ローカルPoC＝実DOM調査とPage Object確定（ユーザー協働）
-- [ ] 完了
+- [x] ほぼ完了（2026-07-17）: 実DOM調査→`OamChatPage` セレクタ確定→テストグループで **dry-run→本予約→重複検出→取消 が PoC PASS**（`scripts/poc-run.ts`）。根拠は [phase2-dom-findings.md](phase2-dom-findings.md)。残: 「実際に指定時刻に届く」の実配信確認（任意・ユーザー協働）と PR#2 出荷。**別対応メモ: 送信時刻10分境界の丸めはBE側で必要**（非境界はOAMがスナップ→verifyがMISMATCH）。
 - **目的:** chat.line.biz の実DOMを調査してセレクタを確定し、テストグループで予約登録→検証→削除→dry-run を実走する
 - **対応AC:** AC-6/7/8 の実機成立、複数行テキスト入力の忠実性確認（要件§6の未解決論点）
 - **主な変更領域:** `line-chat-worker/src/line/pages/*.ts`（セレクタ実装）、必要に応じ usecase 微修正、RUNBOOK 追記
