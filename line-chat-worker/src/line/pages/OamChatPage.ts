@@ -189,9 +189,15 @@ export class OamChatPage implements ChatPage {
       .waitFor({ state: "visible", timeout: 5_000 });
     // メニューは閉じ、残る「削除」は確認モーダルのボタン。
     await this.page.getByRole("button", { name: "削除", exact: true }).click();
-    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
 
-    return (await this.scheduledBanner(expected).count()) === 0 ? "DELETED" : "NOT_FOUND";
+    // 対象バナーが消える（hidden/detached）まで待つ。固定待ち＋即時countだと OAM の削除反映が
+    // 遅れた場合に、実際は削除進行中でも NOT_FOUND と誤判定するため（消失を明示的に待つ）。
+    try {
+      await banner.first().waitFor({ state: "hidden", timeout: OamChatPage.BANNER_TIMEOUT_MS });
+    } catch {
+      return "NOT_FOUND";
+    }
+    return "DELETED";
   }
 
   async screenshot(path: string): Promise<void> {
