@@ -22,9 +22,12 @@ export const playerAPI = {
   // 選手検索
   search: (params) => apiClient.get('/players/search', { params }),
 
-  // ログイン（仮実装 - 後でSpring Securityと連携）
+  // ログイン
   login: (name, password) =>
     apiClient.post('/players/login', { name, password }),
+
+  // ログアウト（当該トークンのみ失効）
+  logout: () => apiClient.post('/players/logout'),
 
   // プロフィール取得
   getProfile: (id) => apiClient.get(`/players/${id}/profile`),
