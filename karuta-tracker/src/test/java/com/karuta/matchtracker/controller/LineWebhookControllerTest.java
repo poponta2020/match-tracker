@@ -47,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(LineWebhookController.class)
 @DisplayName("LineWebhookController tests")
-class LineWebhookControllerTest {
+class LineWebhookControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

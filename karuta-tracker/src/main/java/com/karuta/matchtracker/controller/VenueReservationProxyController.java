@@ -32,7 +32,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <p><strong>認可モデル:</strong></p>
  * <ul>
- *   <li>{@code POST /session}: ヘッダー認証 ({@code X-User-Role}/{@code X-User-Id}) + {@code @RequireRole(ADMIN+)}。
+ *   <li>{@code POST /session}: トークン認証 ({@code Authorization: Bearer}) + {@code @RequireRole(ADMIN+)}。
  *       ここでサーバ側で短命 (15分) なプロキシ token を発行する。</li>
  *   <li>{@code GET /view} / {@code ANY /fetch/**}: token 自体を capability として検証する。
  *       これらはブラウザの新規タブでの通常 GET 遷移として呼ばれるため、API クライアント

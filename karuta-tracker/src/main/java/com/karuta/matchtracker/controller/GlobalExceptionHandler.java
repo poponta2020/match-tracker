@@ -4,6 +4,7 @@ import com.karuta.matchtracker.dto.ErrorResponse;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
+import com.karuta.matchtracker.exception.UnauthorizedException;
 import com.karuta.matchtracker.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -114,6 +115,30 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    /**
+     * UnauthorizedExceptionのハンドリング
+     * HTTPステータス: 401 Unauthorized
+     *
+     * フロントエンドは 401 を受けると localStorage をクリアして /login へ遷移する。
+     */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorizedException(
+            UnauthorizedException ex,
+            HttpServletRequest request) {
+
+        log.warn("Unauthorized access: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                ex.getMessage(),
+                HttpStatus.UNAUTHORIZED.value(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
                 .body(errorResponse);
     }
 

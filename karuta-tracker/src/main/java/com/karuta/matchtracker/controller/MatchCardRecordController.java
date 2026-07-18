@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 取り札記録（配置＋お手付き詳細）のREST。
- * オーナーはヘッダ X-User-Id（currentUserId）＝記録者本人。他人分は扱わない。
+ * オーナーは認証トークン由来の currentUserId ＝記録者本人。他人分は扱わない。
  */
 @RestController
 @RequestMapping("/api/matches/{matchId}/card-record")

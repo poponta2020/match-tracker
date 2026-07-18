@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.FeedInfoDto;
 import com.karuta.matchtracker.dto.GuestFeedDto;
@@ -29,11 +31,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * IcalCalendarSettingsController バリデーションテスト
  *
  * RoleCheckInterceptor は @WebMvcTest 配下でも WebConfig 経由で適用されるため、
- * X-User-Id / X-User-Role ヘッダーで認証コンテキストを与える。
+ * Authorization: Bearer の合成トークン（AuthTestSupport）で認証コンテキストを与える。
  */
 @WebMvcTest(IcalCalendarSettingsController.class)
 @DisplayName("IcalCalendarSettingsController バリデーションテスト")
-class IcalCalendarSettingsControllerTest {
+class IcalCalendarSettingsControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     private static final long USER_ID = 100L;
 
@@ -57,8 +59,7 @@ class IcalCalendarSettingsControllerTest {
         when(icalCalendarFeedService.getFeedInfo(USER_ID)).thenReturn(info);
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
-                        .header("X-User-Id", String.valueOf(USER_ID))
-                        .header("X-User-Role", "PLAYER")
+                        .header("Authorization", AuthTestSupport.bearer(USER_ID, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Collections.emptyMap())))
                 .andExpect(status().isOk());
@@ -77,8 +78,7 @@ class IcalCalendarSettingsControllerTest {
         body.put("displayNames", null);
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
-                        .header("X-User-Id", String.valueOf(USER_ID))
-                        .header("X-User-Role", "PLAYER")
+                        .header("Authorization", AuthTestSupport.bearer(USER_ID, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk());
@@ -93,8 +93,7 @@ class IcalCalendarSettingsControllerTest {
         Map<String, Object> body = Map.of("displayNames", Map.of("1", tooLong));
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
-                        .header("X-User-Id", String.valueOf(USER_ID))
-                        .header("X-User-Role", "PLAYER")
+                        .header("Authorization", AuthTestSupport.bearer(USER_ID, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -108,8 +107,7 @@ class IcalCalendarSettingsControllerTest {
         Map<String, Object> body = Map.of("displayNames", Map.of("not-a-number", "わすら"));
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
-                        .header("X-User-Id", String.valueOf(USER_ID))
-                        .header("X-User-Role", "PLAYER")
+                        .header("Authorization", AuthTestSupport.bearer(USER_ID, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -126,8 +124,7 @@ class IcalCalendarSettingsControllerTest {
         when(icalCalendarFeedService.updateDisplayNames(anyLong(), anyMap())).thenReturn(info);
 
         mockMvc.perform(patch("/api/calendar/feed/display-names")
-                        .header("X-User-Id", String.valueOf(USER_ID))
-                        .header("X-User-Role", "PLAYER")
+                        .header("Authorization", AuthTestSupport.bearer(USER_ID, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk());

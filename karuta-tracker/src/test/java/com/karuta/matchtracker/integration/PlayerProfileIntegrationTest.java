@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerProfileCreateRequest;
@@ -23,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 選手プロフィール履歴管理の複雑なシナリオをテスト
  */
 @DisplayName("PlayerProfile統合テスト")
-class PlayerProfileIntegrationTest extends BaseIntegrationTest {
+class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -41,7 +43,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -67,7 +69,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         String createResponse = mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.playerId").value(playerId))
@@ -83,7 +86,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         Long profileId = objectMapper.readTree(createResponse).get("id").asLong();
 
         // 2. 現在のプロフィールを取得
-        mockMvc.perform(get("/api/player-profiles/current/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/current/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(profileId))
                 .andExpect(jsonPath("$.grade").value("C"));
@@ -91,12 +95,14 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // 3. 特定日のプロフィールを取得
         LocalDate queryDate = LocalDate.of(2024, 6, 1);
         mockMvc.perform(get("/api/player-profiles/at-date/" + playerId)
-                        .param("date", queryDate.toString()))
+                        .param("date", queryDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(profileId));
 
         // 4. プロフィール履歴を取得
-        mockMvc.perform(get("/api/player-profiles/history/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/history/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(profileId));
@@ -104,16 +110,19 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // 5. 有効期限を設定
         LocalDate validTo = LocalDate.of(2024, 12, 31);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
-                        .param("validTo", validTo.toString()))
+                        .param("validTo", validTo.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validTo").value(validTo.toString()));
 
         // 6. プロフィールを削除
-        mockMvc.perform(delete("/api/player-profiles/" + profileId))
+        mockMvc.perform(delete("/api/player-profiles/" + profileId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNoContent());
 
         // 7. 削除後は現在のプロフィールが存在しない
-        mockMvc.perform(get("/api/player-profiles/current/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/current/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -133,7 +142,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         createProfile(playerId, PlayerProfile.Grade.B, PlayerProfile.Dan.二, date3);
 
         // 履歴を取得（新しい順）
-        mockMvc.perform(get("/api/player-profiles/history/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/history/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)))
                 .andExpect(jsonPath("$[0].grade").value("B"))
@@ -144,7 +154,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$[2].dan").value("無"));
 
         // 現在のプロフィールはB級二段
-        mockMvc.perform(get("/api/player-profiles/current/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/current/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grade").value("B"))
                 .andExpect(jsonPath("$.dan").value("二"));
@@ -152,7 +163,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // 2023年7月時点ではC級初段
         LocalDate historicalDate = LocalDate.of(2023, 7, 1);
         mockMvc.perform(get("/api/player-profiles/at-date/" + playerId)
-                        .param("date", historicalDate.toString()))
+                        .param("date", historicalDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grade").value("C"))
                 .andExpect(jsonPath("$.dan").value("初"));
@@ -160,7 +172,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // 2022年時点ではプロフィールが存在しない
         LocalDate beforeDate = LocalDate.of(2022, 12, 31);
         mockMvc.perform(get("/api/player-profiles/at-date/" + playerId)
-                        .param("date", beforeDate.toString()))
+                        .param("date", beforeDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -174,7 +187,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated());
     }
 
@@ -192,7 +206,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         String response1 = mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request1)))
+                        .content(objectMapper.writeValueAsString(request1))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.validTo").isEmpty())
                 .andReturn()
@@ -212,11 +227,13 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request2)))
+                        .content(objectMapper.writeValueAsString(request2))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated());
 
         // 1つ目のプロフィールのvalid_toが設定されているか確認
-        mockMvc.perform(get("/api/player-profiles/history/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/history/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[1].id").value(profileId1))
@@ -237,7 +254,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         String response = mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
@@ -248,17 +266,20 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         // validFromより前の日付をvalidToに設定しようとする
         LocalDate invalidValidTo = validFrom.minusDays(1);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
-                        .param("validTo", invalidValidTo.toString()))
+                        .param("validTo", invalidValidTo.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     @DisplayName("存在しない選手のプロフィールは404を返す")
     void testNonExistentPlayer() throws Exception {
-        mockMvc.perform(get("/api/player-profiles/current/999"))
+        mockMvc.perform(get("/api/player-profiles/current/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(get("/api/player-profiles/history/999"))
+        mockMvc.perform(get("/api/player-profiles/history/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -274,7 +295,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated())
@@ -285,7 +306,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         Long newPlayerId = objectMapper.readTree(response).get("id").asLong();
 
         // プロフィールが存在しない
-        mockMvc.perform(get("/api/player-profiles/current/" + newPlayerId))
+        mockMvc.perform(get("/api/player-profiles/current/" + newPlayerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -301,7 +323,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalidRequest)))
+                        .content(objectMapper.writeValueAsString(invalidRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
@@ -318,7 +341,7 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String player2Response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(player2Request)))
                 .andExpect(status().isCreated())
@@ -335,13 +358,15 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
         createProfile(player2Id, PlayerProfile.Grade.B, PlayerProfile.Dan.二, LocalDate.of(2024, 1, 1));
 
         // 選手1の現在のプロフィール
-        mockMvc.perform(get("/api/player-profiles/current/" + playerId))
+        mockMvc.perform(get("/api/player-profiles/current/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerName").value("テスト選手"))
                 .andExpect(jsonPath("$.grade").value("C"));
 
         // 選手2の現在のプロフィール
-        mockMvc.perform(get("/api/player-profiles/current/" + player2Id))
+        mockMvc.perform(get("/api/player-profiles/current/" + player2Id)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerName").value("選手2"))
                 .andExpect(jsonPath("$.grade").value("B"));
@@ -362,7 +387,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request1)))
+                        .content(objectMapper.writeValueAsString(request1))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated());
 
         // 同じvalidFromで2つ目を登録すると成功する（重複チェックなし）
@@ -375,7 +401,8 @@ class PlayerProfileIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(post("/api/player-profiles")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request2)))
+                        .content(objectMapper.writeValueAsString(request2))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated());
     }
 }

@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PracticeParticipationRequest;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
@@ -34,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(PracticeSessionController.class)
 @Import(com.karuta.matchtracker.util.OrganizationScopeResolver.class)
 @DisplayName("PracticeSessionController 単体テスト")
-class PracticeSessionControllerTest {
+class PracticeSessionControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -99,7 +101,8 @@ class PracticeSessionControllerTest {
         when(practiceSessionService.findById(1L)).thenReturn(testSessionDto);
 
         // When & Then
-        mockMvc.perform(get("/api/practice-sessions/1"))
+        mockMvc.perform(get("/api/practice-sessions/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1))
@@ -116,7 +119,8 @@ class PracticeSessionControllerTest {
                 .thenThrow(new ResourceNotFoundException("PracticeSession", 999L));
 
         // When & Then
-        mockMvc.perform(get("/api/practice-sessions/999"))
+        mockMvc.perform(get("/api/practice-sessions/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));
@@ -133,7 +137,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
@@ -163,7 +167,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
@@ -183,7 +187,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
@@ -192,11 +196,11 @@ class PracticeSessionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/practice-sessions/date - X-User-Role ヘッダーなしは 403")
-    void testGetSessionByDateWithoutAuthIsForbidden() throws Exception {
+    @DisplayName("GET /api/practice-sessions/date - 認証トークンなしは 401")
+    void testGetSessionByDateWithoutAuthIsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verify(practiceSessionService, org.mockito.Mockito.never())
                 .findByDateWithParticipants(any(), any());
@@ -222,7 +226,7 @@ class PracticeSessionControllerTest {
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
                         .param("organizationId", "99")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN)))
                 .andExpect(status().isForbidden());
 
         verify(practiceSessionService, org.mockito.Mockito.never())
@@ -243,7 +247,7 @@ class PracticeSessionControllerTest {
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
                         .param("organizationId", orgId.toString())
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
@@ -262,7 +266,7 @@ class PracticeSessionControllerTest {
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
                         .param("organizationId", "99")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                 .andExpect(status().isForbidden());
 
         verify(practiceSessionService, org.mockito.Mockito.never())
@@ -280,7 +284,7 @@ class PracticeSessionControllerTest {
         mockMvc.perform(get("/api/practice-sessions/date")
                         .param("date", today.toString())
                         .param("organizationId", orgId.toString())
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
@@ -293,19 +297,20 @@ class PracticeSessionControllerTest {
         // Given
         int year = today.getYear();
         int month = today.getMonthValue();
-        when(practiceSessionService.findSessionsByYearMonth(year, month))
+        when(practiceSessionService.findSessionsByYearMonthAndPlayer(year, month, 1L))
                 .thenReturn(List.of(testSessionDto));
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/year-month")
                         .param("year", String.valueOf(year))
-                        .param("month", String.valueOf(month)))
+                        .param("month", String.valueOf(month))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(practiceSessionService).findSessionsByYearMonth(year, month);
+        verify(practiceSessionService).findSessionsByYearMonthAndPlayer(year, month, 1L);
     }
 
     @Test
@@ -316,7 +321,8 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(get("/api/practice-sessions/exists")
-                        .param("date", today.toString()))
+                        .param("date", today.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(content().string("true"));
@@ -333,7 +339,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -353,7 +359,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -376,7 +382,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("totalMatches", "15"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -395,7 +401,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/practice-sessions/1/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("totalMatches", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -415,7 +421,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .header("X-Admin-Organization-Id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
@@ -428,7 +434,7 @@ class PracticeSessionControllerTest {
     void testConfirmReservationPlayerForbidden() throws Exception {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isForbidden());
 
         verify(adjacentRoomService, never()).confirmReservation(any(), any());
@@ -443,7 +449,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/confirm-reservation")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .header("X-Admin-Organization-Id", "1"))
                 .andExpect(status().isBadRequest());
 
@@ -461,7 +467,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .header("X-Admin-Organization-Id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
@@ -474,7 +480,7 @@ class PracticeSessionControllerTest {
     void testExpandVenuePlayerForbidden() throws Exception {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isForbidden());
 
         verify(adjacentRoomService, never()).expandVenue(any(), any());
@@ -489,7 +495,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/1/expand-venue")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .header("X-Admin-Organization-Id", "1"))
                 .andExpect(status().isBadRequest());
 
@@ -504,7 +510,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/practice-sessions/1")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(practiceSessionService).deleteSession(1L);
@@ -528,7 +534,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/participations")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "10")
+                        .header("Authorization", AuthTestSupport.bearer(10L, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(participationRequest)))
                 .andExpect(status().isCreated());
@@ -552,7 +558,7 @@ class PracticeSessionControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/participations")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "10")
+                        .header("Authorization", AuthTestSupport.bearer(10L, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(participationRequest)))
                 .andExpect(status().isForbidden());
@@ -576,7 +582,7 @@ class PracticeSessionControllerTest {
 
         // When & Then（ADMIN userId=1 が playerId=99 で登録）
         mockMvc.perform(post("/api/practice-sessions/participations")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(participationRequest)))
                 .andExpect(status().isCreated());
@@ -600,7 +606,7 @@ class PracticeSessionControllerTest {
 
         // When & Then（SUPER_ADMIN userId=1 が playerId=99 で登録）
         mockMvc.perform(post("/api/practice-sessions/participations")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(participationRequest)))
                 .andExpect(status().isCreated());
@@ -626,7 +632,7 @@ class PracticeSessionControllerTest {
         mockMvc.perform(post("/api/practice-sessions/participations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(participationRequest)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verify(practiceParticipantService, never()).registerParticipations(any());
     }
@@ -652,8 +658,7 @@ class PracticeSessionControllerTest {
         when(densukePageCreateService.createPage(any())).thenReturn(res);
 
         mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
@@ -676,8 +681,7 @@ class PracticeSessionControllerTest {
                 .thenThrow(new IllegalStateException("2026年5月に練習日が登録されていません"));
 
         mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isBadRequest())
@@ -692,8 +696,7 @@ class PracticeSessionControllerTest {
         // 空リクエスト → @NotNull 違反
 
         mockMvc.perform(post("/api/practice-sessions/densuke/create-page")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isBadRequest());
@@ -710,8 +713,7 @@ class PracticeSessionControllerTest {
                         .param("year", "2026")
                         .param("month", "5")
                         .param("organizationId", "1")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(practiceSessionService).deleteDensukeUrl(2026, 5, 1L);
@@ -726,8 +728,7 @@ class PracticeSessionControllerTest {
                         .param("year", "2026")
                         .param("month", "5")
                         .param("organizationId", "1")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("2026年5月の伝助URLは登録されていません"));
     }
@@ -748,7 +749,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
                         today.toString(), 3, 20L)
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
@@ -769,7 +770,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
                         today.toString(), 3, 20L)
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                        .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                 .andExpect(status().isForbidden());
 
         // スコープ検証で弾かれるため実際の追加処理は呼ばれない
@@ -787,7 +788,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
                         today.toString(), 3, 20L)
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                 .andExpect(status().isOk());
 
         verify(practiceParticipantService).addParticipantToMatch(today, 3, 20L, 1L);
@@ -800,7 +801,7 @@ class PracticeSessionControllerTest {
         // When & Then
         mockMvc.perform(post("/api/practice-sessions/date/{date}/matches/{matchNumber}/participants/{playerId}",
                         today.toString(), 3, 20L))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verify(practiceParticipantService, never()).addParticipantToMatch(any(), any(), any(), any());
     }
