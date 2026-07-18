@@ -55,6 +55,9 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private VenueMatchScheduleRepository venueMatchScheduleRepository;
 
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     private static final String KNOWN_PASSWORD = "password123";
     private static final String PLAYER_NAME = "被害者選手";
 
@@ -162,11 +165,14 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
                 .as("旧 seed/all が実行されると practice_sessions は deleteAll される")
                 .isEqualTo(1);
 
-        String password = playerRepository.findByName(PLAYER_NAME)
+        String storedPassword = playerRepository.findByName(PLAYER_NAME)
                 .map(com.karuta.matchtracker.entity.Player::getPassword)
                 .orElse(null);
-        assertThat(password)
+        // パスワードは BCrypt ハッシュで保存されるため平文比較はできない。
+        // 「登録時のパスワードのままであること」を encoder 経由で確認する（auth-tokenization）
+        assertThat(storedPassword).isNotNull();
+        assertThat(passwordEncoder.matches(KNOWN_PASSWORD, storedPassword))
                 .as("旧 seed/all が実行されると全選手のパスワードが pppppppp に上書きされる")
-                .isEqualTo(KNOWN_PASSWORD);
+                .isTrue();
     }
 }

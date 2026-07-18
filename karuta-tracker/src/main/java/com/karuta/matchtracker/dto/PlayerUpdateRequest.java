@@ -34,13 +34,20 @@ public class PlayerUpdateRequest {
 
     /**
      * 更新対象のフィールドのみエンティティに適用
+     *
+     * パスワードは呼び出し元（サービス層）が {@code PasswordEncoder} でハッシュ化した値を渡す。
+     * DTO に encoder を注入せず、引数で受け取ることでハッシュ化の漏れをコンパイルエラーにする。
+     *
+     * @param player          更新対象の選手
+     * @param encodedPassword BCrypt でハッシュ化済みのパスワード。
+     *                        パスワードを変更しない場合は null（{@code getPassword()} が null のとき）
      */
-    public void applyTo(Player player) {
+    public void applyTo(Player player, String encodedPassword) {
         if (name != null) {
             player.setName(name);
         }
-        if (password != null) {
-            player.setPassword(password);  // 実際はハッシュ化が必要
+        if (encodedPassword != null) {
+            player.setPassword(encodedPassword);
             player.setRequirePasswordChange(false);
         }
         if (gender != null) {

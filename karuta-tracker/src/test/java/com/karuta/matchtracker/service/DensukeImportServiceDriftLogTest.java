@@ -34,7 +34,7 @@ class DensukeImportServiceDriftLogTest {
         service = new DensukeImportService(
                 null, null, null, null, null, null,
                 null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         Logger logger = (Logger) LoggerFactory.getLogger(DensukeImportService.class);
         appender = new ListAppender<>();

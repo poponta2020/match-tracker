@@ -12,6 +12,7 @@ import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,13 @@ public class DensukeImportService {
     private final LineNotificationService lineNotificationService;
     private final OrganizationService organizationService;
     private final DensukeDeletionDetectionService densukeDeletionDetectionService;
+    private final PasswordEncoder passwordEncoder;
+
+    /**
+     * 伝助から自動登録した選手の初期パスワード。
+     * requirePasswordChange=true を立てているため、初回ログイン後に変更させる。
+     */
+    private static final String DENSUKE_DEFAULT_PASSWORD = "pppppppp";
 
     @Data
     public static class ImportResult {
@@ -963,6 +971,27 @@ public class DensukeImportService {
     // registerAndSync（既存ロジック維持）
     // ========================================================================
 
+    /**
+     * 伝助から自動登録する選手のエンティティを組み立てる。
+     *
+     * パスワードは必ず BCrypt ハッシュ化して格納する（平文を保存しない）。
+     * ネットワーク I/O を伴う {@link #registerAndSync} から切り出しているのは、
+     * パスワード書き込み経路をテストから直接検証できるようにするため（AC-11b）。
+     *
+     * @param name 正規化済みの選手名
+     * @return 未保存の選手エンティティ
+     */
+    public Player buildAutoRegisteredPlayer(String name) {
+        return Player.builder()
+                .name(name)
+                .password(passwordEncoder.encode(DENSUKE_DEFAULT_PASSWORD))
+                .gender(Player.Gender.その他)
+                .dominantHand(Player.DominantHand.右)
+                .role(Player.Role.PLAYER)
+                .requirePasswordChange(true)
+                .build();
+    }
+
     @Transactional
     public ImportResult registerAndSync(List<String> names, String url, LocalDate targetDate,
                                          Long createdBy, Long organizationId) throws IOException {
@@ -972,14 +1001,7 @@ public class DensukeImportService {
             if (playerRepository.findByNameAndActive(name).isPresent()) {
                 continue;
             }
-            Player player = Player.builder()
-                    .name(name)
-                    .password("pppppppp")
-                    .gender(Player.Gender.その他)
-                    .dominantHand(Player.DominantHand.右)
-                    .role(Player.Role.PLAYER)
-                    .requirePasswordChange(true)
-                    .build();
+            Player player = buildAutoRegisteredPlayer(name);
             playerRepository.save(player);
             organizationService.ensurePlayerBelongsToOrganization(player.getId(), organizationId);
             created++;

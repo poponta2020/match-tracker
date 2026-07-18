@@ -45,6 +45,12 @@ class PlayerServiceTest {
     @Mock
     private OrganizationService organizationService;
 
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @Mock
+    private AuthTokenService authTokenService;
+
     @InjectMocks
     private PlayerService playerService;
 
@@ -195,7 +201,7 @@ class PlayerServiceTest {
     @DisplayName("選手を新規登録できる")
     void testCreatePlayer() {
         // Given
-        Player newPlayer = createRequest.toEntity();
+        Player newPlayer = createRequest.toEntity("$2a$10$encoded");
         newPlayer.setId(2L);
         when(playerRepository.findByNameAndActive(anyString())).thenReturn(Optional.empty());
         when(playerRepository.save(any(Player.class))).thenReturn(newPlayer);
@@ -351,6 +357,9 @@ class PlayerServiceTest {
                 new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "password123");
 
         when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+        // パスワードは BCrypt で照合される（平文比較ではない）
+        when(passwordEncoder.matches("password123", "password123")).thenReturn(true);
+        when(authTokenService.issue(player)).thenReturn("issued-token");
 
         PlayerOrganization po = PlayerOrganization.builder()
                 .id(1L).playerId(1L).organizationId(10L).build();
@@ -365,6 +374,7 @@ class PlayerServiceTest {
         assertThat(response.getName()).isEqualTo("山田太郎");
         assertThat(response.getRole()).isEqualTo(Player.Role.PLAYER);
         assertThat(response.getOrganizationIds()).containsExactly(10L);
+        assertThat(response.getToken()).isEqualTo("issued-token");
         verify(playerRepository).findByNameAndActive("山田太郎");
         verify(playerOrganizationRepository).findByPlayerId(1L);
     }

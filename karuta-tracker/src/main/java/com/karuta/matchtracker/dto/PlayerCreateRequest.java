@@ -42,11 +42,16 @@ public class PlayerCreateRequest {
 
     /**
      * リクエストからエンティティへ変換（デフォルトロール: PLAYER）
+     *
+     * パスワードは呼び出し元（サービス層）が {@code PasswordEncoder} でハッシュ化した値を渡す。
+     * DTO に encoder を注入せず、引数で受け取ることでハッシュ化の漏れをコンパイルエラーにする。
+     *
+     * @param encodedPassword BCrypt でハッシュ化済みのパスワード
      */
-    public Player toEntity() {
+    public Player toEntity(String encodedPassword) {
         return Player.builder()
                 .name(name)
-                .password(password)  // 実際はハッシュ化が必要
+                .password(encodedPassword)
                 .gender(gender)
                 .dominantHand(dominantHand)
                 .danRank(danRank)

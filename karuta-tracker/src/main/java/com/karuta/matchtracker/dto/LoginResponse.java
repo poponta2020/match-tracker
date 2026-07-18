@@ -31,9 +31,18 @@ public class LoginResponse {
     private boolean requirePasswordChange;
 
     /**
-     * エンティティからレスポンスへ変換
+     * サーバ発行の認証トークン（生トークン）
+     * クライアントはこれを保存し、以降のリクエストの Authorization: Bearer に載せる
      */
-    public static LoginResponse fromEntity(Player player, boolean firstLogin, List<Long> organizationIds) {
+    private String token;
+
+    /**
+     * エンティティからレスポンスへ変換
+     *
+     * @param token ログイン時に発行した生トークン
+     */
+    public static LoginResponse fromEntity(Player player, boolean firstLogin, List<Long> organizationIds,
+                                           String token) {
         if (player == null) {
             return null;
         }
@@ -50,6 +59,7 @@ public class LoginResponse {
                 .organizationIds(organizationIds)
                 .firstLogin(firstLogin)
                 .requirePasswordChange(Boolean.TRUE.equals(player.getRequirePasswordChange()))
+                .token(token)
                 .build();
     }
 }

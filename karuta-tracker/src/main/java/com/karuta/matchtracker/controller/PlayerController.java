@@ -10,6 +10,8 @@ import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.service.PlayerService;
+import com.karuta.matchtracker.util.BearerTokenExtractor;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +43,21 @@ public class PlayerController {
         log.info("POST /api/players/login - Login attempt for: {}", request.getName());
         LoginResponse response = playerService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ログアウト（当該トークンのみ失効させる）
+     *
+     * 認証必須（許可リスト外のため、有効なトークンが無ければインターセプタが 401 を返す）。
+     *
+     * @param httpRequest Authorization ヘッダーから失効対象のトークンを取得するために使用
+     * @return 204 No Content
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest httpRequest) {
+        log.info("POST /api/players/logout");
+        playerService.logout(BearerTokenExtractor.extract(httpRequest));
+        return ResponseEntity.noContent().build();
     }
 
     /**
