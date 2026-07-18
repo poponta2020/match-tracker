@@ -182,6 +182,7 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -205,6 +206,7 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -233,6 +235,7 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("validTo", validTo.toString()))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -251,6 +254,7 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .param("validTo", invalidValidTo.toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -266,7 +270,8 @@ class PlayerProfileControllerTest {
         doNothing().when(playerProfileService).deleteProfile(1L);
 
         // When & Then
-        mockMvc.perform(delete("/api/player-profiles/1"))
+        mockMvc.perform(delete("/api/player-profiles/1")
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         verify(playerProfileService).deleteProfile(1L);

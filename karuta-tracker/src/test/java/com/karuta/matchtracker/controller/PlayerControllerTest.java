@@ -265,6 +265,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/players/1")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -283,7 +284,7 @@ class PlayerControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/players/1")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         verify(playerService).deletePlayer(1L);

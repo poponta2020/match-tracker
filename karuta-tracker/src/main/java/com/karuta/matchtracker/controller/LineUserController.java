@@ -1,16 +1,20 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannelAssignment;
 import com.karuta.matchtracker.entity.LineChannelAssignment.AssignmentStatus;
 import com.karuta.matchtracker.entity.LineLinkingCode;
+import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
 import com.karuta.matchtracker.service.LineChannelService;
 import com.karuta.matchtracker.service.LineLinkingService;
 import com.karuta.matchtracker.service.LineNotificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -42,13 +46,16 @@ public class LineUserController {
      * LINE通知を有効化する（チャネル割り当て+コード発行）
      */
     @PostMapping("/{channelType}/enable")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<?> enableLineNotification(
             @PathVariable ChannelType channelType,
-            @RequestBody Map<String, Long> body) {
+            @RequestBody Map<String, Long> body,
+            HttpServletRequest httpRequest) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().body("playerId is required");
         }
+        checkSelfOrSuperAdmin(playerId, httpRequest);
 
         try {
             LineChannel channel = lineChannelService.assignChannel(playerId, channelType);
@@ -72,13 +79,16 @@ public class LineUserController {
      * LINE通知を無効化する（チャネル解放）
      */
     @DeleteMapping("/{channelType}/disable")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<Void> disableLineNotification(
             @PathVariable ChannelType channelType,
-            @RequestBody Map<String, Long> body) {
+            @RequestBody Map<String, Long> body,
+            HttpServletRequest httpRequest) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().build();
         }
+        checkSelfOrSuperAdmin(playerId, httpRequest);
 
         lineChannelService.releaseChannel(playerId, channelType);
         return ResponseEntity.noContent().build();
@@ -88,13 +98,16 @@ public class LineUserController {
      * ワンタイムコードを再発行する
      */
     @PostMapping("/{channelType}/reissue-code")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<?> reissueCode(
             @PathVariable ChannelType channelType,
-            @RequestBody Map<String, Long> body) {
+            @RequestBody Map<String, Long> body,
+            HttpServletRequest httpRequest) {
         Long playerId = body.get("playerId");
         if (playerId == null) {
             return ResponseEntity.badRequest().body("playerId is required");
         }
+        checkSelfOrSuperAdmin(playerId, httpRequest);
 
         try {
             LineLinkingCode code = lineLinkingService.reissueCode(playerId, channelType);
@@ -146,8 +159,32 @@ public class LineUserController {
      * 通知設定を更新する
      */
     @PutMapping("/preferences")
-    public ResponseEntity<Void> updatePreferences(@RequestBody LineNotificationPreferenceDto dto) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Void> updatePreferences(
+            @RequestBody LineNotificationPreferenceDto dto,
+            HttpServletRequest httpRequest) {
+        checkSelfOrSuperAdmin(dto.getPlayerId(), httpRequest);
         lineNotificationService.updatePreferences(dto);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 対象 playerId が本人か、SUPER_ADMIN であることを検証する。
+     *
+     * enable / reissue-code はレスポンスに LINE 連携用のワンタイムコードを含むため、
+     * ここを開けると他人のコードを窃取して通知チャネルを乗っ取れてしまう（Issue #1105）。
+     */
+    private void checkSelfOrSuperAdmin(Long targetPlayerId, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId == null) {
+            throw new ForbiddenException("認証が必要です");
+        }
+        if (currentUserId.equals(targetPlayerId)) {
+            return;
+        }
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole != Role.SUPER_ADMIN) {
+            throw new ForbiddenException("他のユーザーのLINE連携は操作できません");
+        }
     }
 }

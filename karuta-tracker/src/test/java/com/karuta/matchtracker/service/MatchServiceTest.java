@@ -76,6 +76,9 @@ class MatchServiceTest {
     @Mock
     private PracticeParticipantService practiceParticipantService;
 
+    @Mock
+    private OrganizationService organizationService;
+
     @InjectMocks
     private MatchService matchService;
 
@@ -473,13 +476,12 @@ class MatchServiceTest {
     @DisplayName("試合結果を削除できる")
     void testDeleteMatch() {
         // Given
-        when(matchRepository.existsById(1L)).thenReturn(true);
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
 
-        // When
-        matchService.deleteMatch(1L);
+        // When（ADMIN は所有者判定の対象外）
+        matchService.deleteMatch(1L, 99L, Player.Role.ADMIN);
 
         // Then
-        verify(matchRepository).existsById(1L);
         verify(matchRepository).deleteById(1L);
     }
 
@@ -487,13 +489,39 @@ class MatchServiceTest {
     @DisplayName("存在しない試合を削除するとResourceNotFoundExceptionが発生")
     void testDeleteMatchNotFound() {
         // Given
-        when(matchRepository.existsById(999L)).thenReturn(false);
+        when(matchRepository.findById(999L)).thenReturn(Optional.empty());
 
         // When & Then
-        assertThatThrownBy(() -> matchService.deleteMatch(999L))
+        assertThatThrownBy(() -> matchService.deleteMatch(999L, 99L, Player.Role.ADMIN))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Match")
                 .hasMessageContaining("999");
+        verify(matchRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("PLAYER は自分が参加した試合を削除できる（Issue #1105）")
+    void testDeleteMatchByParticipatingPlayer() {
+        // Given: testMatch の player1Id は 1L
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+
+        // When
+        matchService.deleteMatch(1L, 1L, Player.Role.PLAYER);
+
+        // Then
+        verify(matchRepository).deleteById(1L);
+    }
+
+    @Test
+    @DisplayName("PLAYER は無関係な試合を削除できない（Issue #1105）")
+    void testDeleteMatchByUnrelatedPlayerIsForbidden() {
+        // Given: 参加者でもなく、所属団体のセッションでもない
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
+        when(organizationService.getPlayerOrganizationIds(99L)).thenReturn(List.of());
+
+        // When & Then
+        assertThatThrownBy(() -> matchService.deleteMatch(1L, 99L, Player.Role.PLAYER))
+                .isInstanceOf(ForbiddenException.class);
         verify(matchRepository, never()).deleteById(any());
     }
 

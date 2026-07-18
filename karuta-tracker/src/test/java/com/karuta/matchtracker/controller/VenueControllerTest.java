@@ -184,6 +184,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -204,6 +205,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isConflict())
@@ -229,6 +231,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -255,6 +258,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -276,6 +280,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -302,6 +307,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/venues/1")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -322,6 +328,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/venues/999")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isNotFound())
@@ -340,6 +347,7 @@ class VenueControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/venues/1")
+                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isConflict())
@@ -358,7 +366,8 @@ class VenueControllerTest {
         doNothing().when(venueService).deleteVenue(1L);
 
         // When & Then
-        mockMvc.perform(delete("/api/venues/1"))
+        mockMvc.perform(delete("/api/venues/1")
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNoContent());
 
         verify(venueService).deleteVenue(1L);
@@ -372,7 +381,8 @@ class VenueControllerTest {
                 .when(venueService).deleteVenue(999L);
 
         // When & Then
-        mockMvc.perform(delete("/api/venues/999"))
+        mockMvc.perform(delete("/api/venues/999")
+                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));

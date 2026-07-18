@@ -104,12 +104,22 @@ public class ByeActivityController {
      * 本人の場合はplayerIdの一致を検証
      */
     @PutMapping("/{id}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<ByeActivityDto> update(
             @PathVariable Long id,
             @Valid @RequestBody ByeActivityUpdateRequest request,
             HttpServletRequest httpRequest) {
         log.info("抜け番活動更新: id={}, type={}", id, request.getActivityType());
         Long userId = (Long) httpRequest.getAttribute("currentUserId");
+        // PLAYER は本人の記録のみ更新可（ADMIN+ は代理修正のため他人も可）。
+        // この検証は javadoc に書かれながら長らく未配線だった（Issue #1105）。
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole == Role.PLAYER) {
+            Long ownerId = byeActivityService.getPlayerIdForActivity(id);
+            if (!ownerId.equals(userId)) {
+                throw new ForbiddenException("他の選手の抜け番活動は更新できません");
+            }
+        }
         ByeActivityDto updated = byeActivityService.update(id, request, userId);
         return ResponseEntity.ok(updated);
     }
