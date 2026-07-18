@@ -91,6 +91,56 @@ describe("OamChatPage.findDuplicateReservation", () => {
   it("returns UNKNOWN (never NONE) when the request itself fails", async () => {
     expect(await checkDuplicate(new Error("net::ERR_ABORTED"))).toBe("UNKNOWN");
   });
+
+  // scheduledAt が epoch ミリ秒でない値を素通しすると 1970年の予約として解釈され、
+  // 「日時が一致しない＝予約なし」に潰れて二重予約になる。単位違いは UNKNOWN に落とす。
+  it("returns UNKNOWN (never NONE) when scheduledAt looks like epoch seconds, not milliseconds", async () => {
+    const seconds = { list: [{ ...REAL_PAYLOAD.list[0], scheduledAt: 1788217200 }] };
+    expect(await checkDuplicate(ok(seconds))).toBe("UNKNOWN");
+  });
+
+  it("returns UNKNOWN (never NONE) when scheduledAt is out of the representable range", async () => {
+    // 範囲外の値をそのまま new Date(...).toISOString() に渡すと RangeError で
+    // サイクル全体が落ち、タスクが RESERVING のまま滞留する。
+    const huge = { list: [{ ...REAL_PAYLOAD.list[0], scheduledAt: 1e20 }] };
+    expect(await checkDuplicate(ok(huge))).toBe("UNKNOWN");
+  });
+
+  it("returns UNKNOWN (never NONE) when scheduledAt is not an integer", async () => {
+    const fractional = { list: [{ ...REAL_PAYLOAD.list[0], scheduledAt: 1788217200000.5 }] };
+    expect(await checkDuplicate(ok(fractional))).toBe("UNKNOWN");
+  });
+
+  it("aborts the scheduled-messages request after a bounded timeout", async () => {
+    // page.evaluate にも browser の fetch にも既定のタイムアウトが無いため、
+    // AbortController でリクエストを打ち切っていることをページ内コードの実行で確かめる。
+    const page = createPage(ok({ list: [] }));
+    const po = new OamChatPage(page, ACCOUNT);
+    await po.openChat("グループ名", ROOM);
+    await po.findDuplicateReservation(SEND_AT, "");
+
+    // evaluate に渡した関数を、fetch をスタブしたページ相当の環境で実行して signal を検査する。
+    const [pageFn, arg] = (page.evaluate as unknown as { mock: { calls: unknown[][] } }).mock.calls[0] as [
+      (a: { path: string; timeoutMs: number }) => Promise<unknown>,
+      { path: string; timeoutMs: number },
+    ];
+    expect(arg.timeoutMs).toBeGreaterThan(0);
+
+    let seenSignal: AbortSignal | undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init: RequestInit) => {
+      seenSignal = init.signal as AbortSignal;
+      return Promise.resolve({ status: 200, text: () => Promise.resolve("{}") } as unknown as Response);
+    }) as typeof fetch;
+    try {
+      await pageFn(arg);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
+    expect(seenSignal?.aborted).toBe(false);
+  });
 });
 
 describe("OamChatPage.deleteReservation", () => {

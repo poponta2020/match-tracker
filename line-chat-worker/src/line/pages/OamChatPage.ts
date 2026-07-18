@@ -37,6 +37,22 @@ export class OamChatPage implements ChatPage {
   private static readonly ROOM_READY_TIMEOUT_MS = 20_000;
   private static readonly BANNER_TIMEOUT_MS = 15_000;
 
+  /**
+   * 予約一覧API1回あたりのハードタイムアウト。
+   * `page.evaluate` にも browser の `fetch` にも既定のタイムアウトが無いため、
+   * これが無いと応答を返さないサーバーで await が戻らず、ポーリングの期限判定に到達できない
+   * （常駐ワーカーがタスクを占有したまま無期限に停止する）。
+   */
+  private static readonly SCHEDULED_API_TIMEOUT_MS = 10_000;
+  /**
+   * `scheduledAt` を epoch ミリ秒として妥当と見なす範囲（2000-01-01 〜 2100-01-01）。
+   * epoch「秒」や単位違いの値は範囲外となり UNKNOWN に落ちる（1970年として解釈されて
+   * 「日時が一致しない＝予約なし」と誤判定するのを防ぐ）。Date の表現範囲外による
+   * `toISOString()` の RangeError もここで防いでいる。
+   */
+  private static readonly EPOCH_MS_MIN = 946_684_800_000;
+  private static readonly EPOCH_MS_MAX = 4_102_444_800_000;
+
   private static readonly SEL_EDITOR = "#editor";
   private static readonly SEL_SCHEDULE_TOGGLE = 'a[aria-label="oa.chat.button.scheduledmessages"]';
   private static readonly SEL_CUSTOM_RADIO = "#date3";
@@ -83,14 +99,18 @@ export class OamChatPage implements ChatPage {
     let raw: { status: number; body: string };
     try {
       raw = await this.page.evaluate(
-        (p) =>
-          fetch(p, { credentials: "include" }).then((res) =>
-            res.text().then((body) => ({ status: res.status, body })),
-          ),
-        path,
+        (arg) => {
+          // AbortController でリクエスト（ボディ読み出しを含む）を必ず有限時間で打ち切る。
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), arg.timeoutMs);
+          return fetch(arg.path, { credentials: "include", signal: controller.signal })
+            .then((res) => res.text().then((body) => ({ status: res.status, body })))
+            .finally(() => clearTimeout(timer));
+        },
+        { path, timeoutMs: OamChatPage.SCHEDULED_API_TIMEOUT_MS },
       );
     } catch {
-      return null; // ページ遷移中・オリジン不一致・ネットワーク断など
+      return null; // ページ遷移中・オリジン不一致・ネットワーク断・タイムアウトなど
     }
     if (raw.status !== 200) return null;
 
@@ -108,7 +128,15 @@ export class OamChatPage implements ChatPage {
       const e = item as { scheduledAt?: unknown; status?: unknown };
       // 想定した形でない要素が1つでもあれば、一覧全体を「解釈できなかった」として扱う。
       // 一部だけ読めた前提で「一致なし＝予約なし」と結論づけると誤判定が二重予約になるため。
-      if (typeof e?.scheduledAt !== "number" || !Number.isFinite(e.scheduledAt) || typeof e?.status !== "string") {
+      // epoch ミリ秒として妥当な整数であることまで検証する（単位違い・異常値を素通しすると
+      // 「1970年の予約」として日時が一致せず NONE に潰れ、二重予約に直結する）。
+      if (
+        typeof e?.scheduledAt !== "number" ||
+        !Number.isInteger(e.scheduledAt) ||
+        e.scheduledAt < OamChatPage.EPOCH_MS_MIN ||
+        e.scheduledAt > OamChatPage.EPOCH_MS_MAX ||
+        typeof e?.status !== "string"
+      ) {
         return null;
       }
       entries.push({ scheduledAt: e.scheduledAt, status: e.status });
