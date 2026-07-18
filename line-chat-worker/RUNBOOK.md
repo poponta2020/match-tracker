@@ -3,10 +3,17 @@
 LINE Official Account Manager（OAM）のチャット予約送信を自動化する常駐ワーカーの運用手順。
 機能仕様は [`docs/features/line-chat-reserve-broadcast/requirements.md`](../docs/features/line-chat-reserve-broadcast/requirements.md) を参照。
 
-**現状（2026-07時点）**: タスク7（Phase 2 ローカルPoC）で `src/line/pages/OamChatPage.ts` の実DOM
-セレクタを確定・実走検証済み（テストグループで dry-run→予約→重複検出→取消 が PASS）。
-実DOM調査の根拠は [`docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md`](../docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md)。
-Phase 3（VM常駐・2週間セッション観測→本番投入）は未実施。それまで本番グループへは投入しない。
+**現状（2026-07-18時点）**: タスク7（Phase 2 ローカルPoC）で `src/line/pages/OamChatPage.ts` の実DOM
+セレクタを確定・実走検証済み。実DOM調査の根拠は
+[`docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md`](../docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md)。
+
+**タスク8a（VMデプロイ＋smoke）完了**: Oracle VM の `~/line-chat-worker` で
+常駐稼働中（`restart: unless-stopped`）。**Smoke A**（トークン無し=401／不正=403／正当=200）と
+**Smoke B**（VMのIPからテストグループへ dry-run → `DRY_RUN_SUCCEEDED`）が PASS。
+**2週間の事前観測は廃止**し「smoke＋本番初回の目視確認」に差し替え済み（requirements.md §7・変更履歴）。
+
+**タスク8b（本番投入）は未実施**。現在 `line_broadcast_group` は `enabled=f`・`chat_room_id=null` のため
+**予約は1件も生成されない安全な停止状態**。本番投入は下記「9. 本番投入手順」に従うこと。
 
 **確定した主な挙動（詳細は phase2-dom-findings.md）**:
 - ルームURL `https://chat.line.biz/<accountPath>/chat/<chatRoomId>` へ直接ナビ可能。`chatRoomId` は `C…`（LINEグループID）。
@@ -132,3 +139,32 @@ HEADED=1 \
 - `HEADED=1` で可視ブラウザ。スクショは `poc-artifacts/`（`*.png` は gitignore）。
 - 期待出力: `POC_RESULT: PASS`（dry-run=DRY_RUN_SUCCEEDED / 本予約=RESERVED / 重複=DUPLICATE_RESERVATION_FOUND / 取消=CANCELLED）。
 - **実際の配信確認**（「指定時刻に届く」）は、近い10分境界を `POC_SCHEDULED_SEND_AT` に指定して取消せずに置き、テストグループで受信を確認する。
+
+## 9. 本番投入手順（タスク8b・未実施）
+
+現在は `line_broadcast_group` が `enabled=f`・`chat_room_id=null` のため予約が生成されない**安全な停止状態**。
+以下を順に実施して初めて本番配信が動き出す。**途中で止めても配信欠落は起きない**（既存pushフォールバックが拾う）。
+
+1. **本番OAを決める**: 全体グループ（約70名）に参加させる公式アカウントを1体決め、必要ならリネームする。
+   - **storageState は LINE Business ID 単位で、配下の全OAに同一セッションで入れることを実測済み**（2026-07-18）。
+     したがってOAを変えても**再ログインは不要**で、`.env` の `LINE_OAM_ACCOUNT_PATH` 差し替えだけでよい。
+   - アカウントパスは、そのOAのチャットを開いた時のURL `https://chat.line.biz/U…` の `U…` 部分。
+2. **OAを本番全体グループへ招待**し、そのルームを開いて URL `…/chat/C…` の `C…`（=`chatRoomId`）を控える。
+3. **VMの `.env` を更新**（SSH接続情報＝ホスト・ユーザー・鍵は `CLAUDE.local.md` の「Oracle Cloud VM」節を参照）:
+   ```
+   cd ~/line-chat-worker && sed -i 's/^LINE_OAM_ACCOUNT_PATH=.*/LINE_OAM_ACCOUNT_PATH=<本番OAのU…>/' .env
+   ```
+4. **DBに本番グループを登録して有効化**（`line_broadcast_group` id=1 が北海道大学かるた会 全体グループ）:
+   ```sql
+   UPDATE line_broadcast_group
+      SET chat_room_id = '<C…>', chat_room_name = '<OAM上のグループ表示名と完全一致させる>',
+          enabled = true, updated_at = now()
+    WHERE id = 1;
+   ```
+   - `chat_room_name` は**ワーカーが `heading[level=4]` と厳密一致で照合**する（不一致は `TARGET_CHAT_MISMATCH` で停止）。
+     OAM画面に出る名前をそのまま入れること（人数表記 `(70)` は含めない）。
+5. **ワーカー再起動**: `sudo docker compose restart line-chat-worker`
+6. **初回1〜2回は目視確認**（最重要ゲート）: 前日20:00バッチ→ワーカー予約後、OAM上で
+   「メッセージは YYYY/MM/DD HH:mm に送信されます」バナーの**日時と本文**を人が確認する。
+   問題なければ以後は完全自動。
+7. 異常時は「4. 障害対応」を参照。予約状態は管理画面（全体LINE配信管理の予約状況セクション）でも確認できる。
