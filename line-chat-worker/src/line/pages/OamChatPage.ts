@@ -37,6 +37,13 @@ export class OamChatPage implements ChatPage {
     private readonly accountPath: string,
   ) {}
 
+  /**
+   * openChat 後に #editor が現れなかった（＝chat.line.biz 上でルームを開けない異常）を表すフラグ。
+   * 認証面リダイレクトを伴わない失効（認証中断・セッション不完全・エラー画面）も壁として検知する。
+   * openChat が実行毎に false へリセットするため、常に直近の openChat 結果を反映する。
+   */
+  private editorMissingAfterOpen = false;
+
   private roomUrl(chatRoomId: string): string {
     return `https://chat.line.biz/${this.accountPath}/chat/${chatRoomId}`;
   }
@@ -55,6 +62,7 @@ export class OamChatPage implements ChatPage {
   }
 
   async openChat(_chatRoomName: string, chatRoomId: string): Promise<void> {
+    this.editorMissingAfterOpen = false;
     // commit で即解決（重いSPAで domcontentloaded がタイムアウトするのを避ける）。失敗しても続行し
     // 後段の待機で状態を確定する。
     await this.page
@@ -64,13 +72,16 @@ export class OamChatPage implements ChatPage {
     // ルーム準備（#editor 出現）か認証面リダイレクトのどちらかが確定するまで待つ。
     const deadline = Date.now() + OamChatPage.ROOM_READY_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (this.isOnAuthSurface()) return;
+      if (this.isOnAuthSurface()) return; // host ベースの壁判定（detectAuthWall）に委ねる
       if ((await this.page.locator(OamChatPage.SEL_EDITOR).count()) > 0) {
         await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
         return;
       }
       await this.page.waitForTimeout(500);
     }
+    // 認証面リダイレクトも無いのに #editor が出ない＝chat.line.biz 上でルームを開けない異常
+    // （認証中断・セッション不完全・エラー画面等）。壁として扱い detectAuthWall で再ログインを促す。
+    this.editorMissingAfterOpen = true;
   }
 
   async verifyTargetChat(chatRoomName: string, chatRoomId: string): Promise<boolean> {
@@ -82,9 +93,10 @@ export class OamChatPage implements ChatPage {
   }
 
   async detectAuthWall(): Promise<AuthState> {
-    // positive判定のみ: 認証面に積極的に居るときだけ壁とする（about:blank・chat.line.biz は OK）。
-    // openChat 前の初回は page=about:blank のため OK を返し、誤ってサイクルを止めない。
-    return this.isOnAuthSurface() ? "LOGIN_REQUIRED" : "OK";
+    // positive判定のみ: 認証面に居る、または openChat 後に #editor が出なかった場合だけ壁とする。
+    // openChat 前の初回は page=about:blank かつ editorMissingAfterOpen=false のため OK を返し、
+    // 誤ってサイクルを止めない（openChat が実行毎にフラグをリセットする）。
+    return this.isOnAuthSurface() || this.editorMissingAfterOpen ? "LOGIN_REQUIRED" : "OK";
   }
 
   async findDuplicateReservation(scheduledSendAt: string, _textPrefix: string): Promise<boolean> {
