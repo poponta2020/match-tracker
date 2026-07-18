@@ -75,7 +75,7 @@ curl -X POST -H "X-User-Role: SUPER_ADMIN" -H "X-User-Id: 1" https://<api-host>/
 ## 影響範囲
 
 - 削除: `karuta-tracker/src/main/java/com/karuta/matchtracker/controller/DataSeedController.java`
-- 追加: 回帰テスト（`POST /api/seed/all` / `/venue-schedules` が 404 であることを MockMvc で検証）
+- 追加: 回帰テスト（`POST /api/seed/all` / `/venue-schedules` が成功レスポンスにならず、練習日程・選手パスワード・会場の試合時間割が破壊されないことを MockMvc + Testcontainers で検証）
 - **DB スキーマ変更なし** → 本番 DB へのマイグレーション適用は不要
 - フロントエンド変更なし
 - 本番デプロイ後に初めてエンドポイントが消える（デプロイまでは露出が続く）
