@@ -3,9 +3,17 @@
 LINE Official Account Manager（OAM）のチャット予約送信を自動化する常駐ワーカーの運用手順。
 機能仕様は [`docs/features/line-chat-reserve-broadcast/requirements.md`](../docs/features/line-chat-reserve-broadcast/requirements.md) を参照。
 
-**現状（2026-07時点）**: タスク6（このディレクトリ）はロジック層・雛形Page Object・運用資材のみ。
-`src/line/pages/*.ts` の実DOM操作はタスク7（Phase 2 ローカルPoC）で確定する。
-それまでワーカーを実運用に投入しない。
+**現状（2026-07時点）**: タスク7（Phase 2 ローカルPoC）で `src/line/pages/OamChatPage.ts` の実DOM
+セレクタを確定・実走検証済み（テストグループで dry-run→予約→重複検出→取消 が PASS）。
+実DOM調査の根拠は [`docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md`](../docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md)。
+Phase 3（VM常駐・2週間セッション観測→本番投入）は未実施。それまで本番グループへは投入しない。
+
+**確定した主な挙動（詳細は phase2-dom-findings.md）**:
+- ルームURL `https://chat.line.biz/<accountPath>/chat/<chatRoomId>` へ直接ナビ可能。`chatRoomId` は `C…`（LINEグループID）。
+- 本文の改行は Shift+Enter（Enter は即送信）。予約は「送信ボタン横の分割ドロップダウン→送信日時を設定モーダル→設定」。
+- 予約確定後は「メッセージは YYYY/MM/DD HH:mm に送信されます」バナーで検証。削除は ⋮→削除→確認削除。
+- **時刻は10分単位**（step=600）。非境界の分は入力側でスナップされ、verify が MISMATCH を検出（サイレント誤送信はしない）。→ **BE側で送信時刻を10分境界に丸める対応が別途必要**。
+- chat.line.biz は Playwright Chromium(headless) のUAは通す（アプリ内Electronブラウザは非対応）。
 
 ## 1. 初回ログイン・storageState 作成（ローカルPC・headed）
 
@@ -32,10 +40,12 @@ LINE Official Account Manager（OAM）のチャット予約送信を自動化す
    ```
    APP_BASE_URL=https://<本番アプリのURL>
    LINE_CHAT_WORKER_TOKEN=<十分に長いランダム値。アプリ側 LINE_CHAT_WORKER_TOKEN と一致させる>
+   LINE_OAM_ACCOUNT_PATH=<ログイン後URL https://chat.line.biz/U... の U... 部分（対象OA固有）>
    POLL_INTERVAL_MS=300000
    DRY_RUN=false
    ARTIFACT_RETENTION_DAYS=14
    ```
+   - `LINE_OAM_ACCOUNT_PATH` は、ログイン済みブラウザで chat.line.biz を開いた時のURL `https://chat.line.biz/U186…` の `U186…` 部分。ルームURLの組み立てに使う（WorkerTask には含まれない per-OA 定数）。
 4. 手順1で作成した `storage-state.json` を、docker volume `line-chat-worker-data` の
    `/data/storage-state.json` に配置する（初回起動前にコンテナへコピー、または
    ボリュームをマウントしたコンテナ内から `cp` する）。
@@ -99,3 +109,26 @@ npm test
 
 実ブラウザ操作を伴うテストはCIに含めない（`.github/workflows/line-chat-worker.yml` はユニットテストのみ）。
 実DOM調査・実機検証はタスク7（Phase 2 ローカルPoC）で行う。
+
+## 8. ローカルPoC実走（実チャット・テストグループで実DOMコードパスを検証）
+
+実ワーカーコード（`OamChatPage` + usecases）を合成 WorkerTask でテストグループに対して駆動し、
+dry-run→本予約→重複検出→取消 を一気に検証する（アプリAPI・本番DBを介さない）。
+
+```
+cd line-chat-worker
+# 1) storageState を作成（未作成なら）
+npx tsx scripts/create-auth-state.ts ./storage-state.json
+# 2) PoC 実走（テストグループの識別情報を env で渡す）
+HEADED=1 \
+  LINE_OAM_ACCOUNT_PATH=U186... \
+  POC_CHAT_ROOM_ID=C3e4... \
+  POC_CHAT_ROOM_NAME=テスト \
+  npx tsx scripts/poc-run.ts
+```
+
+- `POC_CHAT_ROOM_ID` は対象グループを一度開いた時のURL `.../chat/C…` の `C…` 部分。
+- 既定の予約日時は「翌日08:00 JST」（当日発火しない・10分境界）。`POC_SCHEDULED_SEND_AT` で上書き可。
+- `HEADED=1` で可視ブラウザ。スクショは `poc-artifacts/`（`*.png` は gitignore）。
+- 期待出力: `POC_RESULT: PASS`（dry-run=DRY_RUN_SUCCEEDED / 本予約=RESERVED / 重複=DUPLICATE_RESERVATION_FOUND / 取消=CANCELLED）。
+- **実際の配信確認**（「指定時刻に届く」）は、近い10分境界を `POC_SCHEDULED_SEND_AT` に指定して取消せずに置き、テストグループで受信を確認する。

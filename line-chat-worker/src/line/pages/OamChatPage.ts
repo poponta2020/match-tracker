@@ -1,66 +1,205 @@
 import type { Page } from "playwright";
 import type { AuthState } from "../../detect/authState.js";
+import { jstBannerDateTime, jstDateInputValue, jstTimeInputValue } from "../../util/datetime.js";
 import type {
   ChatPage,
   DeleteReservationResult,
   ScheduledEntryCheck,
 } from "./ChatPage.js";
 
-const NOT_IMPLEMENTED_MESSAGE = "not implemented — task7 で実DOM確定";
-
 /**
- * `ChatPage` の Playwright 実装（雛形）。
+ * `ChatPage` の Playwright 実装。
  *
- * 【厳守】このファイルには実DOMセレクタを一切書かない。すべてのメソッドは
- * `not implemented` を throw する。タスク7（Phase 2 ローカルPoC）で
- * chat.line.biz の実DOMを調査してから実装する。
+ * 実DOMセレクタはタスク7（Phase 2 ローカルPoC）で chat.line.biz を実調査して確定した。
+ * 詳細な根拠は docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md を参照。
  *
- * Playwright ロケーター方針（実装時に踏襲すること。ChatPage.ts のコメントも参照）:
- * - getByRole / getByLabel / テキストベースのロケーターを優先する
- * - 自動生成クラス名に依存しない
- * - 複数一致するロケーターはエラーとして扱う
+ * ロケーター方針（要件書 §6）:
+ * - getByRole / getByLabel / テキスト・安定属性（`#editor`, `aria-label`）を優先し、自動生成クラス名に依存しない
+ * - 認証情報・本文は stdout に出力しない（スクショは artifact のみ）
  */
 export class OamChatPage implements ChatPage {
-  constructor(private readonly page: Page) {}
+  /** ログイン後の認証面ホスト（ここに居たら壁とみなす）。 */
+  private static readonly AUTH_HOSTS = new Set(["account.line.biz", "access.line.me"]);
+  private static readonly SPA_SETTLE_MS = 1_500;
+  private static readonly ROOM_READY_TIMEOUT_MS = 20_000;
+  private static readonly BANNER_TIMEOUT_MS = 15_000;
 
-  async openChat(_chatRoomName: string, _chatRoomId: string): Promise<void> {
-    void this.page;
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  private static readonly SEL_EDITOR = "#editor";
+  private static readonly SEL_SCHEDULE_TOGGLE = 'a[aria-label="oa.chat.button.scheduledmessages"]';
+  private static readonly SEL_CUSTOM_RADIO = "#date3";
+  private static readonly SEL_DATE_INPUT = 'input[type="date"]';
+  private static readonly SEL_TIME_INPUT = 'input[type="time"]';
+  private static readonly BANNER_KEYWORD = "送信されます";
+
+  constructor(
+    private readonly page: Page,
+    /** OAM チャットのアカウントパス（例 "U186..."）。config.oamAccountPath 由来。 */
+    private readonly accountPath: string,
+  ) {}
+
+  private roomUrl(chatRoomId: string): string {
+    return `https://chat.line.biz/${this.accountPath}/chat/${chatRoomId}`;
   }
 
-  async verifyTargetChat(_chatRoomName: string, _chatRoomId: string): Promise<boolean> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  private currentHost(): string {
+    try {
+      return new URL(this.page.url()).host;
+    } catch {
+      return "";
+    }
+  }
+
+  /** 認証面（account.line.biz / access.line.me）に居るか。about:blank・chat.line.biz は false。 */
+  private isOnAuthSurface(): boolean {
+    return OamChatPage.AUTH_HOSTS.has(this.currentHost());
+  }
+
+  async openChat(_chatRoomName: string, chatRoomId: string): Promise<void> {
+    // commit で即解決（重いSPAで domcontentloaded がタイムアウトするのを避ける）。失敗しても続行し
+    // 後段の待機で状態を確定する。
+    await this.page
+      .goto(this.roomUrl(chatRoomId), { waitUntil: "commit", timeout: 60_000 })
+      .catch(() => undefined);
+
+    // ルーム準備（#editor 出現）か認証面リダイレクトのどちらかが確定するまで待つ。
+    const deadline = Date.now() + OamChatPage.ROOM_READY_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (this.isOnAuthSurface()) return;
+      if ((await this.page.locator(OamChatPage.SEL_EDITOR).count()) > 0) {
+        await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
+        return;
+      }
+      await this.page.waitForTimeout(500);
+    }
+  }
+
+  async verifyTargetChat(chatRoomName: string, chatRoomId: string): Promise<boolean> {
+    const urlOk = this.page.url().includes(chatRoomId);
+    // チャットヘッダーのグループ名（level=4 の見出し）。
+    const nameOk =
+      (await this.page.getByRole("heading", { level: 4, name: chatRoomName, exact: true }).count()) > 0;
+    return urlOk && nameOk;
   }
 
   async detectAuthWall(): Promise<AuthState> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+    // positive判定のみ: 認証面に積極的に居るときだけ壁とする（about:blank・chat.line.biz は OK）。
+    // openChat 前の初回は page=about:blank のため OK を返し、誤ってサイクルを止めない。
+    return this.isOnAuthSurface() ? "LOGIN_REQUIRED" : "OK";
   }
 
-  async findDuplicateReservation(_scheduledSendAt: string, _textPrefix: string): Promise<boolean> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async findDuplicateReservation(scheduledSendAt: string, _textPrefix: string): Promise<boolean> {
+    // 対象日時と一致する「送信予定」バナーが既に存在するか（バナーは日時のみ含む・本文は含まない）。
+    const expected = jstBannerDateTime(scheduledSendAt);
+    return (await this.scheduledBanner(expected).count()) > 0;
   }
 
-  async inputMessage(_text: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async inputMessage(text: string): Promise<void> {
+    const editor = this.page.locator(OamChatPage.SEL_EDITOR);
+    await editor.click();
+    // 既存ドラフトを消してから入力（サイクル間の残留防止）。
+    await this.page.keyboard.press("Control+A");
+    await this.page.keyboard.press("Delete");
+
+    // Enter=送信 なので改行は Shift+Enter。行内は type。
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].length > 0) {
+        await this.page.keyboard.type(lines[i]);
+      }
+      if (i < lines.length - 1) {
+        await this.page.keyboard.press("Shift+Enter");
+      }
+    }
+
+    // echo検証（本文の改行・文字化けを確定前に検出）。textarea-ex.value は配列を返すことがある。
+    const raw = await editor.evaluate((el) => (el as unknown as { value: unknown }).value);
+    const candidates = Array.isArray(raw)
+      ? [raw.join(""), raw.join("\n")]
+      : [String(raw ?? "")];
+    if (!candidates.some((c) => c === text)) {
+      throw new Error("INPUT_ECHO_MISMATCH: 入力欄の内容が意図した本文と一致しませんでした");
+    }
   }
 
-  async setScheduledDateTime(_scheduledSendAt: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async setScheduledDateTime(scheduledSendAt: string): Promise<void> {
+    // 予約モーダル（送信ボタン横の分割ドロップダウン）を開く。
+    await this.page.locator(OamChatPage.SEL_SCHEDULE_TOGGLE).first().click();
+    await this.page.locator(OamChatPage.SEL_CUSTOM_RADIO).waitFor({ state: "attached", timeout: 10_000 });
+
+    // 任意日時(CUSTOM)を選択。隠しradioへの通常clickは効かないため実DOM clickイベントを dispatch。
+    const dateInput = this.page.locator(OamChatPage.SEL_DATE_INPUT);
+    await this.page.locator(OamChatPage.SEL_CUSTOM_RADIO).dispatchEvent("click");
+    // 有効化を待つ（フォールバックでラベル左端のラジオ円をクリック）。
+    if (!(await this.waitEnabled(dateInput, 3_000))) {
+      await this.page
+        .locator('label[for="date3"]')
+        .click({ position: { x: 8, y: 12 } })
+        .catch(() => undefined);
+      await this.waitEnabled(dateInput, 3_000);
+    }
+
+    // native の date/time 入力へ投入（time は step=600＝10分単位。非境界はスナップされる）。
+    await dateInput.fill(jstDateInputValue(scheduledSendAt));
+    await this.page.locator(OamChatPage.SEL_TIME_INPUT).fill(jstTimeInputValue(scheduledSendAt));
+    // 【dry-run はここで screenshot して終了する（`設定` を押さない）】
   }
 
   async confirmReservation(): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+    await this.page.getByRole("button", { name: "設定", exact: true }).click();
+    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
   }
 
-  async verifyScheduledEntry(_scheduledSendAt: string, _textPrefix: string): Promise<ScheduledEntryCheck> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async verifyScheduledEntry(scheduledSendAt: string, _textPrefix: string): Promise<ScheduledEntryCheck> {
+    const expected = jstBannerDateTime(scheduledSendAt);
+    // 確定後、いずれかの「送信予定」バナーが出るまで待つ（出なければ TIMEOUT）。
+    const anyBanner = this.page.getByText(new RegExp(OamChatPage.BANNER_KEYWORD));
+    try {
+      await anyBanner.first().waitFor({ state: "visible", timeout: OamChatPage.BANNER_TIMEOUT_MS });
+    } catch {
+      return "TIMEOUT";
+    }
+    // 対象日時と一致するバナーがあれば MATCHED、バナーはあるが日時不一致なら MISMATCHED。
+    return (await this.scheduledBanner(expected).count()) > 0 ? "MATCHED" : "MISMATCHED";
   }
 
-  async deleteReservation(_scheduledSendAt: string, _textPrefix: string): Promise<DeleteReservationResult> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async deleteReservation(scheduledSendAt: string, _textPrefix: string): Promise<DeleteReservationResult> {
+    const expected = jstBannerDateTime(scheduledSendAt);
+    const banner = this.scheduledBanner(expected);
+    if ((await banner.count()) === 0) {
+      return "NOT_FOUND";
+    }
+
+    // 対象バナーの ⋮（option）→ メニューの「削除」→ 確認モーダルの「削除」。
+    await banner.first().getByRole("button", { name: "option" }).click();
+    await this.page.getByRole("button", { name: "削除", exact: true }).click();
+    await this.page
+      .getByText("この予約メッセージを削除しますか")
+      .waitFor({ state: "visible", timeout: 5_000 });
+    // メニューは閉じ、残る「削除」は確認モーダルのボタン。
+    await this.page.getByRole("button", { name: "削除", exact: true }).click();
+    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
+
+    return (await this.scheduledBanner(expected).count()) === 0 ? "DELETED" : "NOT_FOUND";
   }
 
-  async screenshot(_path: string): Promise<void> {
-    throw new Error(NOT_IMPLEMENTED_MESSAGE);
+  async screenshot(path: string): Promise<void> {
+    await this.page.screenshot({ path, fullPage: false });
+  }
+
+  /** 指定日時を含む「送信予定」バナー（role=alert かつ "…送信されます" かつ日時一致）。 */
+  private scheduledBanner(expectedDateTime: string) {
+    return this.page
+      .getByRole("alert")
+      .filter({ hasText: OamChatPage.BANNER_KEYWORD })
+      .filter({ hasText: expectedDateTime });
+  }
+
+  private async waitEnabled(locator: ReturnType<Page["locator"]>, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await locator.isEnabled().catch(() => false)) return true;
+      await this.page.waitForTimeout(200);
+    }
+    return false;
   }
 }

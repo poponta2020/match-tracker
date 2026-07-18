@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatJstParts, parseIsoToJstParts } from "./datetime.js";
+import {
+  formatJstParts,
+  jstBannerDateTime,
+  jstDateInputValue,
+  jstTimeInputValue,
+  parseIsoToJstParts,
+} from "./datetime.js";
 
 describe("parseIsoToJstParts", () => {
   it("converts a +09:00 offset datetime to matching JST parts", () => {
@@ -34,5 +40,31 @@ describe("formatJstParts", () => {
   it("zero-pads month/day/hour/minute", () => {
     const result = formatJstParts({ year: 2026, month: 7, day: 5, hour: 8, minute: 0 });
     expect(result).toEqual({ dateText: "2026/07/05", timeText: "08:00" });
+  });
+});
+
+describe("jstDateInputValue (native <input type=date>)", () => {
+  it("formats JST date as YYYY-MM-DD", () => {
+    expect(jstDateInputValue("2026-07-18T08:00:00+09:00")).toBe("2026-07-18");
+  });
+
+  it("rolls the date forward from UTC across JST midnight", () => {
+    expect(jstDateInputValue("2026-07-17T23:00:00Z")).toBe("2026-07-18");
+  });
+});
+
+describe("jstTimeInputValue (native <input type=time>)", () => {
+  it("formats JST time as HH:mm", () => {
+    expect(jstTimeInputValue("2026-07-18T08:00:00+09:00")).toBe("08:00");
+  });
+
+  it("zero-pads single-digit minutes", () => {
+    expect(jstTimeInputValue("2026-07-18T07:05:00+09:00")).toBe("07:05");
+  });
+});
+
+describe("jstBannerDateTime (『送信予定』バナー照合)", () => {
+  it("joins date and time as 'YYYY/MM/DD HH:mm' matching the OAM banner", () => {
+    expect(jstBannerDateTime("2026-07-18T08:00:00+09:00")).toBe("2026/07/18 08:00");
   });
 });
