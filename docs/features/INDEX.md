@@ -38,6 +38,7 @@
 - `line-channel-separation` — 管理者向け・選手向け通知を別のLINEチャネルから送信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
 - `line-confirmation-dialog` — LINEボットのボタン操作全てに確認ダイアログを挟み誤操作を防止（主要領域: karuta-tracker, database）
 - `line-link-lottery-notify` — LINE連携完了時に確定済み抽選結果を自動送信（主要領域: karuta-tracker）
+- `lottery-fair-share-rotation` — 抽選のcascade（連鎖落選）廃止＋二値救済をプレイ回数fair-shareへ一般化し、1日全落ち・連日落ちを解消（主要領域: karuta-tracker, karuta-tracker-ui, docs）
 - `line-notification-messages` — LINE通知メッセージの仕様書と実装の不整合・重複コードを修正（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `line-rich-menu` — PLAYERチャネルにリッチメニューを設定し主要機能への導線を提供（主要領域: karuta-tracker）
 - `lottery` — 抽選機能の重大バグ・認可漏れ・設計不整合を修正する改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
@@ -103,4 +104,4 @@
 - `practice-per-date-attendance` — カレンダー日付ポップアップの「出欠登録」を1日分の参加＋理由付きキャンセル画面に変更（FABは出欠一括登録に改名）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1073]
 - `design-md-anti-slop` — 脱AIスロップのデザイン正典 docs/design/design.md 新設＋Home脱カード・パイロット改修（カード原則禁止＋許可リスト・washi語彙正典化・単一ファイル）（主要領域: docs, karuta-tracker-ui）
 - `card-division-group-broadcast` — 札分けを団体の全体LINEグループへ自動一斉配信（未使用bot10体をローテして無料枠200通/月を吸収・30分前/8:00フォールバック・管理画面）（主要領域: karuta-tracker, karuta-tracker-ui, database, docs）[shipped: PR #1083]
-- `line-chat-reserve-broadcast` — 札分け全体配信をLINEチャット予約送信（通数対象外・Playwright×Oracle VM常駐ワーカー）に差し替え、既存pushは単一botフォールバック化（bot10体ローテは1グループ1bot制約で不成立）（主要領域: karuta-tracker, karuta-tracker-ui, database, line-chat-worker(新設), docs） [shipped: PR #1096 (T1-6); T7-8 残]
+- `line-chat-reserve-broadcast` — 札分け全体配信をLINEチャット予約送信（通数対象外・Playwright×Oracle VM常駐ワーカー）に差し替え、既存pushは単一botフォールバック化（bot10体ローテは1グループ1bot制約で不成立）（主要領域: karuta-tracker, karuta-tracker-ui, database, line-chat-worker(新設), docs） [shipped: PR #1096 (T1-6); T7-8 残] [shipped: PR #1097 (送信時刻10分floor)]
