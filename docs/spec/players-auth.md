@@ -176,7 +176,7 @@
 ### 団体 (`/api/organizations`)
 
 #### GET /api/organizations
-- **権限**: なし
+- **権限**: 不要（公開エンドポイント。招待登録画面が未ログインで呼ぶ）
 - **説明**: 団体一覧を取得
 - **レスポンス**: `[{ id, code, name, color, deadlineType }]`
 
@@ -250,7 +250,7 @@
 
 #### GET /api/players
 **説明**: 全アクティブ選手取得
-**権限**: なし
+**権限**: 認証必須（ロール不問）
 **レスポンス**: `List<PlayerDto>`
 - 各選手に `organizationIds`（所属団体IDリスト）が含まれる
 
@@ -273,7 +273,7 @@
 
 #### PUT /api/players/{id}
 **説明**: 選手情報更新
-**権限**: なし
+**権限**: 認証必須（ロール不問）
 **リクエスト**: `PlayerUpdateRequest`（全フィールドオプショナル）
 
 #### DELETE /api/players/{id}
@@ -353,12 +353,12 @@
 
 #### GET /api/invite-tokens/validate/{token}
 **説明**: トークン有効性検証
-**権限**: なし（公開）
+**権限**: 不要（公開エンドポイント）
 **レスポンス**: `InviteTokenResponse`（無効時は404またはエラー）
 
 #### POST /api/invite-tokens/register
 **説明**: 招待トークンを使った公開登録
-**権限**: なし（公開）
+**権限**: 不要（公開エンドポイント）
 **リクエスト**: `PublicRegisterRequest`
 ```json
 {
