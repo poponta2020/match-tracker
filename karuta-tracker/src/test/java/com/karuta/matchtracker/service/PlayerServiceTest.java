@@ -49,6 +49,9 @@ class PlayerServiceTest {
     private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     @Mock
+    private PasswordPolicy passwordPolicy;
+
+    @Mock
     private AuthTokenService authTokenService;
 
     @InjectMocks

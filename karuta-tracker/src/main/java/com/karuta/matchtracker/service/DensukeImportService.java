@@ -12,7 +12,6 @@ import com.karuta.matchtracker.repository.VenueRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,7 +46,7 @@ public class DensukeImportService {
     private final LineNotificationService lineNotificationService;
     private final OrganizationService organizationService;
     private final DensukeDeletionDetectionService densukeDeletionDetectionService;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
 
     /**
      * 伝助から自動登録した選手の初期パスワード。
@@ -984,7 +983,7 @@ public class DensukeImportService {
     public Player buildAutoRegisteredPlayer(String name) {
         return Player.builder()
                 .name(name)
-                .password(passwordEncoder.encode(DENSUKE_DEFAULT_PASSWORD))
+                .password(passwordPolicy.encode(DENSUKE_DEFAULT_PASSWORD))
                 .gender(Player.Gender.その他)
                 .dominantHand(Player.DominantHand.右)
                 .role(Player.Role.PLAYER)

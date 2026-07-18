@@ -36,8 +36,14 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class PasswordHashMigrationRunner implements ApplicationRunner {
 
-    /** BCrypt ハッシュの接頭辞。これにマッチする値は変換済みとみなす */
-    private static final Pattern BCRYPT_PATTERN = Pattern.compile("^\\$2[aby]\\$.*");
+    /**
+     * BCrypt ハッシュの完全形（60文字。接頭辞 + コスト2桁 + salt/hash 53文字）。
+     *
+     * 接頭辞だけで判定すると、たまたま "$2a$" で始まる平文が「移行済み」と誤判定されて
+     * 変換されず、その会員が BCrypt 照合に失敗してログイン不能になる。形式全体を検査する。
+     */
+    private static final Pattern BCRYPT_PATTERN =
+            Pattern.compile("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
 
     private final PlayerRepository playerRepository;
     private final PasswordEncoder passwordEncoder;

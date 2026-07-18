@@ -38,9 +38,9 @@ class PasswordWriteSiteArchitectureTest {
     private static final Pattern WRITE_SITE =
             Pattern.compile("(?:\\.password|setPassword)\\(([^;]*?)\\)\\s*[;\\n]");
 
-    /** 許容する値: サービス層でハッシュ化済みの変数、または その場で encode したもの */
+    /** 許容する値: ハッシュ化済みの変数、またはチョークポイント経由で encode したもの */
     private static final Pattern ALLOWED =
-            Pattern.compile("encodedPassword|passwordEncoder\\.encode\\(");
+            Pattern.compile("encodedPassword|passwordPolicy\\.encode\\(|passwordEncoder\\.encode\\(");
 
     @Test
     @DisplayName("本番コードのパスワード書き込みは、すべてハッシュ化済みの値を渡している")

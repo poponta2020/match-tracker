@@ -200,6 +200,20 @@ class AuthPasswordIntegrationTest extends BaseIntegrationTest {
         }
 
         @Test
+        @DisplayName("BCrypt接頭辞に似ているだけの平文も移行される（接頭辞判定では取りこぼす）")
+        void testMigration_ConvertsPlaintextThatLooksLikeBcryptPrefix() {
+            // "$2a$" で始まるが BCrypt ハッシュではない平文。接頭辞だけで判定していると
+            // 「移行済み」と誤判定され、この会員がログイン不能になる
+            Long id = insertPlaintextPlayer("接頭辞紛らわしい選手", "$2a$notarealhash");
+
+            passwordHashMigrationRunner.run(null);
+
+            assertThat(storedPassword(id)).matches("^\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}$");
+            assertThat(playerService.login(
+                    new LoginRequest("接頭辞紛らわしい選手", "$2a$notarealhash")).getToken()).isNotBlank();
+        }
+
+        @Test
         @DisplayName("冪等: 既にハッシュ済みの行は再実行しても変化しない（二重ハッシュ化しない）")
         void testMigration_IsIdempotent() {
             Long id = insertPlaintextPlayer("冪等六郎", "legacypass");

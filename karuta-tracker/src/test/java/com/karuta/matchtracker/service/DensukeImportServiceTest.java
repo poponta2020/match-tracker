@@ -48,7 +48,7 @@ class DensukeImportServiceTest {
     @Mock private LineNotificationService lineNotificationService;
     @Mock private OrganizationService organizationService;
     @Mock private DensukeDeletionDetectionService densukeDeletionDetectionService;
-    @Mock private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    @Mock private PasswordPolicy passwordPolicy;
 
     @InjectMocks
     private DensukeImportService densukeImportService;

@@ -13,7 +13,6 @@ import com.karuta.matchtracker.repository.InviteTokenRepository;
 import com.karuta.matchtracker.repository.OrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerOrganizationRepository;
 import com.karuta.matchtracker.repository.PlayerRepository;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,7 +36,7 @@ public class InviteTokenService {
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final OrganizationRepository organizationRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
 
     /** グループ用トークンの有効期限（時間） */
     private static final int MULTI_USE_EXPIRY_HOURS = 72;
@@ -120,7 +119,7 @@ public class InviteTokenService {
                 });
 
         // 選手を登録（パスワードはサービス層で BCrypt ハッシュ化してから DTO に渡す）
-        Player player = request.toEntity(passwordEncoder.encode(request.getPassword()));
+        Player player = request.toEntity(passwordPolicy.encode(request.getPassword()));
         Player saved = playerRepository.save(player);
 
         // SINGLE_USE トークンは使用済みにする

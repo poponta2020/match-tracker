@@ -150,10 +150,11 @@ LINEボット経由の確認アクション（action + params で処理内容を
 | カラム | 型 | 制約 | 説明 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO | — |
-| player_id | BIGINT | NOT NULL | トークンの持ち主の選手ID（選手単位の一括失効に使う） |
+| player_id | BIGINT | NOT NULL, FK(players.id) | トークンの持ち主の選手ID（選手単位の一括失効に使う） |
 | token_hash | VARCHAR(64) | NOT NULL, UNIQUE | 生トークンの SHA-256 hex。検証時の検索キー |
 | issued_at | TIMESTAMP | NOT NULL | 発行日時 |
 | expires_at | TIMESTAMP | NOT NULL | 有効期限（発行の約1年後） |
 | revoked_at | TIMESTAMP | — | 失効日時。NULL なら有効 |
 
+外部キー: `fk_auth_tokens_player(player_id) → players(id)`（`ON DELETE CASCADE` は付けない。選手の削除は論理削除が正で、物理削除は制約違反として弾く）
 インデックス: `auth_tokens_pkey(id)`, `auth_tokens_token_hash_key(token_hash)`, `idx_auth_tokens_player_id(player_id)`, `idx_auth_tokens_expires_at(expires_at)`

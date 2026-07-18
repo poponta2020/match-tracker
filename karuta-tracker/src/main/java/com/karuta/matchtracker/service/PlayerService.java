@@ -42,6 +42,7 @@ public class PlayerService {
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final OrganizationService organizationService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
     private final AuthTokenService authTokenService;
 
     /**
@@ -151,7 +152,7 @@ public class PlayerService {
                     throw new DuplicateResourceException("Player", "name", request.getName());
                 });
 
-        Player player = request.toEntity(passwordEncoder.encode(request.getPassword()));
+        Player player = request.toEntity(passwordPolicy.encode(request.getPassword()));
         Player saved = playerRepository.save(player);
 
         log.info("Successfully created player with id: {}", saved.getId());
@@ -183,7 +184,7 @@ public class PlayerService {
         }
 
         boolean passwordChanged = request.getPassword() != null;
-        String encodedPassword = passwordChanged ? passwordEncoder.encode(request.getPassword()) : null;
+        String encodedPassword = passwordChanged ? passwordPolicy.encode(request.getPassword()) : null;
 
         request.applyTo(player, encodedPassword);
         Player updated = playerRepository.save(player);
