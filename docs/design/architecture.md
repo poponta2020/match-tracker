@@ -280,6 +280,15 @@ npm run dev
 ```
 → `http://localhost:5173`
 
+### Codex cloud 開発環境
+
+- Codex cloud の Environment で Setup script に `bash .codex/cloud-setup.sh`、Maintenance script に `bash .codex/cloud-maintenance.sh` を設定する。
+- Environment secret `DEVFLOW_GITHUB_TOKEN` には private リポジトリ `poponta2020/claude-devflow` を read できる fine-grained GitHub token を設定する。
+- 初期化スクリプトは共通 devflow の `main` を `$CODEX_HOME/shared/claude-devflow` に取得し、Codex 用の薄いアダプタースキルをユーザースコープへリンクする。スキル本体はこのリポジトリへ複製しない。
+- Codex cloud の処理はクラウド上の一時 checkout で完結するため、ローカルPCを起動しておく必要はない。本番DBや外部サービスを使うタスクでは、必要な secret を Environment に個別登録する。
+- PR 出荷時は devflow の既定方針どおり CI pending を PASS として扱う。既に失敗が確定している check はマージを止める。
+- GitHub Actions の自動レビューは repository secret `OPENAI_API_KEY` と variable `CODEX_REVIEW_ENABLED=true` を設定した時だけ有効になる。中央 private リポジトリの reusable workflow access も許可する。レビューが `pass` なら即マージし、`needs_changes` はCodex cloudの `auto-review-loop` が引き継ぐ。
+
 ## 設計上の重要ポイント
 
 ### player1_id < player2_id 制約
