@@ -18,9 +18,12 @@
 --   ON DELETE CASCADE は付けない。選手の削除は論理削除（deleted_at）が正で、
 --   物理削除は制約違反として弾きたいため（万一 ID が再利用されると、古いトークンが
 --   別人に解決されてしまう）。
+-- 外部キーはインラインで書かない。インライン REFERENCES は PostgreSQL が
+-- auth_tokens_player_id_fkey を自動生成するため、下の ALTER と合わせて
+-- 新規環境では同じ制約が2本できてしまう。命名を1本に揃えるため ALTER 側に寄せる。
 CREATE TABLE IF NOT EXISTS auth_tokens (
     id BIGSERIAL PRIMARY KEY,
-    player_id BIGINT NOT NULL REFERENCES players(id),
+    player_id BIGINT NOT NULL,
     token_hash VARCHAR(64) NOT NULL UNIQUE,
     issued_at TIMESTAMP NOT NULL,
     expires_at TIMESTAMP NOT NULL,
