@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { cancelReservation } from "./cancelReservation.js";
-import type { ChatPage, DeleteReservationResult } from "../line/pages/ChatPage.js";
+import type { ChatPage, DeleteReservationResult, DuplicateCheck } from "../line/pages/ChatPage.js";
 import type { AuthState } from "../detect/authState.js";
 import type { WorkerTask } from "../domain/types.js";
 
@@ -20,7 +20,7 @@ function createMockPo(overrides: Partial<Record<keyof ChatPage, unknown>> = {}):
     openChat: vi.fn().mockResolvedValue(undefined),
     verifyTargetChat: vi.fn().mockResolvedValue(true),
     detectAuthWall: vi.fn().mockResolvedValue("OK" as AuthState),
-    findDuplicateReservation: vi.fn().mockResolvedValue(false),
+    findDuplicateReservation: vi.fn().mockResolvedValue("NONE" as DuplicateCheck),
     inputMessage: vi.fn().mockResolvedValue(undefined),
     setScheduledDateTime: vi.fn().mockResolvedValue(undefined),
     confirmReservation: vi.fn().mockResolvedValue(undefined),
@@ -66,6 +66,20 @@ describe("cancelReservation", () => {
       report: true,
       status: "MANUAL_REVIEW_REQUIRED",
       errorCode: "OLD_RESERVATION_NOT_FOUND",
+    });
+  });
+
+  // 回帰: 削除できたと確認できていないのに CANCELLED を報告すると、LINE側に旧予約が残ったまま
+  // 「取消済み」と記録され、意図しない配信に誰も気づけなくなる。
+  it("never reports CANCELLED when the delete result could not be determined", async () => {
+    const po = createMockPo({ deleteReservation: vi.fn().mockResolvedValue("UNKNOWN" as DeleteReservationResult) });
+
+    const outcome = await cancelReservation(po, baseTask);
+
+    expect(outcome).toMatchObject({
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "CANCEL_RESULT_UNKNOWN",
     });
   });
 

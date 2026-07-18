@@ -28,7 +28,7 @@ function createMockPo(overrides: Partial<Record<keyof ChatPage, unknown>> = {}):
     openChat: vi.fn().mockResolvedValue(undefined),
     verifyTargetChat: vi.fn().mockResolvedValue(true),
     detectAuthWall: vi.fn().mockResolvedValue("OK" as AuthState),
-    findDuplicateReservation: vi.fn().mockResolvedValue(false),
+    findDuplicateReservation: vi.fn().mockResolvedValue("NONE"),
     inputMessage: vi.fn().mockResolvedValue(undefined),
     setScheduledDateTime: vi.fn().mockResolvedValue(undefined),
     confirmReservation: vi.fn().mockResolvedValue(undefined),

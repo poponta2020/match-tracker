@@ -4,8 +4,21 @@ import { jstBannerDateTime, jstDateInputValue, jstTimeInputValue } from "../../u
 import type {
   ChatPage,
   DeleteReservationResult,
+  DuplicateCheck,
   ScheduledEntryCheck,
 } from "./ChatPage.js";
+
+/**
+ * OAM 内部API `…/messages/scheduled` の1件分（2026-07-18 実測）。
+ * 実サンプル: `{"scheduledMessageId":"agpx…","message":{"text":"…","type":"textV2"},
+ *              "scheduledAt":1788217200000,"status":"SCHEDULED"}`
+ */
+interface ScheduledMessage {
+  /** 送信予定時刻（epoch ミリ秒）。 */
+  scheduledAt: number;
+  /** "SCHEDULED" 以外（送信済み・取消済み等）は重複判定の対象外。 */
+  status: string;
+}
 
 /**
  * `ChatPage` の Playwright 実装。
@@ -44,8 +57,71 @@ export class OamChatPage implements ChatPage {
    */
   private editorMissingAfterOpen = false;
 
+  /** 直近に openChat したルームID。予約一覧APIの組み立てに使う。 */
+  private currentChatRoomId: string | null = null;
+
   private roomUrl(chatRoomId: string): string {
     return `https://chat.line.biz/${this.accountPath}/chat/${chatRoomId}`;
+  }
+
+  /**
+   * 対象ルームの予約メッセージ一覧を OAM 内部APIから取得する（DOM 非依存）。
+   *
+   * 【なぜ DOM ではなく API か】「予約が無い」ことの確定は、バナー要素の不在では原理的に行えない。
+   * SPA の描画は #editor の出現とは独立で、待ち時間を固定にすると重いルームで
+   * 「まだ描画されていない」を「予約が無い」と誤認する（＝二重予約）。この経路は
+   * ルーム表示時に OAM 自身が叩いている API で、応答は予約の有無そのものを表す。
+   *
+   * @returns 取得・解釈に成功した場合のみ配列。失敗（非200・JSON不正・想定外の形）は
+   *          すべて `null`（＝UNKNOWN）を返す。**呼び出し側は null を「予約なし」と扱ってはならない。**
+   */
+  private async fetchScheduledMessages(): Promise<ScheduledMessage[] | null> {
+    const chatRoomId = this.currentChatRoomId;
+    if (chatRoomId === null) return null;
+    const path = `/api/v1/bots/${this.accountPath}/chats/${chatRoomId}/messages/scheduled`;
+
+    let raw: { status: number; body: string };
+    try {
+      raw = await this.page.evaluate(
+        (p) =>
+          fetch(p, { credentials: "include" }).then((res) =>
+            res.text().then((body) => ({ status: res.status, body })),
+          ),
+        path,
+      );
+    } catch {
+      return null; // ページ遷移中・オリジン不一致・ネットワーク断など
+    }
+    if (raw.status !== 200) return null;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw.body);
+    } catch {
+      return null;
+    }
+    const list = (parsed as { list?: unknown } | null)?.list;
+    if (!Array.isArray(list)) return null;
+
+    const entries: ScheduledMessage[] = [];
+    for (const item of list) {
+      const e = item as { scheduledAt?: unknown; status?: unknown };
+      // 想定した形でない要素が1つでもあれば、一覧全体を「解釈できなかった」として扱う。
+      // 一部だけ読めた前提で「一致なし＝予約なし」と結論づけると誤判定が二重予約になるため。
+      if (typeof e?.scheduledAt !== "number" || !Number.isFinite(e.scheduledAt) || typeof e?.status !== "string") {
+        return null;
+      }
+      entries.push({ scheduledAt: e.scheduledAt, status: e.status });
+    }
+    return entries;
+  }
+
+  /** 一覧に「対象日時の有効な予約」が含まれるか（JST壁時計・分精度で比較）。 */
+  private hasReservationAt(entries: ScheduledMessage[], scheduledSendAt: string): boolean {
+    const expected = jstBannerDateTime(scheduledSendAt);
+    return entries.some(
+      (e) => e.status === "SCHEDULED" && jstBannerDateTime(new Date(e.scheduledAt).toISOString()) === expected,
+    );
   }
 
   private currentHost(): string {
@@ -63,6 +139,7 @@ export class OamChatPage implements ChatPage {
 
   async openChat(_chatRoomName: string, chatRoomId: string): Promise<void> {
     this.editorMissingAfterOpen = false;
+    this.currentChatRoomId = chatRoomId;
     // commit で即解決（重いSPAで domcontentloaded がタイムアウトするのを避ける）。失敗しても続行し
     // 後段の待機で状態を確定する。
     await this.page
@@ -99,10 +176,13 @@ export class OamChatPage implements ChatPage {
     return this.isOnAuthSurface() || this.editorMissingAfterOpen ? "LOGIN_REQUIRED" : "OK";
   }
 
-  async findDuplicateReservation(scheduledSendAt: string, _textPrefix: string): Promise<boolean> {
-    // 対象日時と一致する「送信予定」バナーが既に存在するか（バナーは日時のみ含む・本文は含まない）。
-    const expected = jstBannerDateTime(scheduledSendAt);
-    return (await this.scheduledBanner(expected).count()) > 0;
+  async findDuplicateReservation(scheduledSendAt: string, _textPrefix: string): Promise<DuplicateCheck> {
+    // 予約一覧APIを唯一の根拠にする（バナーDOMは描画待ちのレースで「無い」と誤認しうる）。
+    // 本文冒頭では絞らない: 同一日時で本文だけ異なる予約を「別物＝重複なし」と誤判定すると
+    // 二重予約になるため、日時一致のみで保守的に重複とみなす。
+    const entries = await this.fetchScheduledMessages();
+    if (entries === null) return "UNKNOWN";
+    return this.hasReservationAt(entries, scheduledSendAt) ? "FOUND" : "NONE";
   }
 
   async inputMessage(text: string): Promise<void> {
@@ -162,23 +242,38 @@ export class OamChatPage implements ChatPage {
   }
 
   async verifyScheduledEntry(scheduledSendAt: string, _textPrefix: string): Promise<ScheduledEntryCheck> {
-    const expected = jstBannerDateTime(scheduledSendAt);
-    // 確定後、いずれかの「送信予定」バナーが出るまで待つ（出なければ TIMEOUT）。
-    const anyBanner = this.page.getByText(new RegExp(OamChatPage.BANNER_KEYWORD));
-    try {
-      await anyBanner.first().waitFor({ state: "visible", timeout: OamChatPage.BANNER_TIMEOUT_MS });
-    } catch {
-      return "TIMEOUT";
+    // 確定直後はサーバ反映に若干の遅れがあるため、一覧に現れるまでポーリングする。
+    // 判定は findDuplicateReservation と同じ予約一覧APIで行い、DOM 描画の遅速に左右されないようにする。
+    const deadline = Date.now() + OamChatPage.BANNER_TIMEOUT_MS;
+    let lastEntries: ScheduledMessage[] | null = null;
+    while (Date.now() < deadline) {
+      const entries = await this.fetchScheduledMessages();
+      if (entries !== null) {
+        lastEntries = entries;
+        if (this.hasReservationAt(entries, scheduledSendAt)) return "MATCHED";
+      }
+      await this.page.waitForTimeout(500);
     }
-    // 対象日時と一致するバナーがあれば MATCHED、バナーはあるが日時不一致なら MISMATCHED。
-    return (await this.scheduledBanner(expected).count()) > 0 ? "MATCHED" : "MISMATCHED";
+    // 予約自体は存在するのに対象日時と一致しない＝10分丸め等でずれた（サイレント誤送信を防ぐ）。
+    if (lastEntries !== null && lastEntries.some((e) => e.status === "SCHEDULED")) return "MISMATCHED";
+    // 一件も現れない、または一覧を取得できなかった＝結果不明。
+    return "TIMEOUT";
   }
 
   async deleteReservation(scheduledSendAt: string, _textPrefix: string): Promise<DeleteReservationResult> {
+    // 存在有無はまず予約一覧APIで確定する（DOM の描画待ちで NOT_FOUND と誤判定しないため）。
+    const before = await this.fetchScheduledMessages();
+    if (before === null) return "UNKNOWN";
+    if (!this.hasReservationAt(before, scheduledSendAt)) return "NOT_FOUND";
+
+    // ここから先は「予約が存在する」ことが確定している。削除操作にはバナーのUIが要るので、
+    // 描画されるまで待つ（出ないのは想定外＝異常。NOT_FOUND ではなく UNKNOWN で人手確認へ）。
     const expected = jstBannerDateTime(scheduledSendAt);
     const banner = this.scheduledBanner(expected);
-    if ((await banner.count()) === 0) {
-      return "NOT_FOUND";
+    try {
+      await banner.first().waitFor({ state: "visible", timeout: OamChatPage.BANNER_TIMEOUT_MS });
+    } catch {
+      return "UNKNOWN";
     }
 
     // 対象バナーの ⋮（option）→ メニューの「削除」→ 確認モーダルの「削除」。
@@ -190,14 +285,15 @@ export class OamChatPage implements ChatPage {
     // メニューは閉じ、残る「削除」は確認モーダルのボタン。
     await this.page.getByRole("button", { name: "削除", exact: true }).click();
 
-    // 対象バナーが消える（hidden/detached）まで待つ。固定待ち＋即時countだと OAM の削除反映が
-    // 遅れた場合に、実際は削除進行中でも NOT_FOUND と誤判定するため（消失を明示的に待つ）。
-    try {
-      await banner.first().waitFor({ state: "hidden", timeout: OamChatPage.BANNER_TIMEOUT_MS });
-    } catch {
-      return "NOT_FOUND";
+    // 削除の成否も一覧APIで確定する（バナーの消失は描画都合で遅れうるため根拠にしない）。
+    const deadline = Date.now() + OamChatPage.BANNER_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const after = await this.fetchScheduledMessages();
+      if (after !== null && !this.hasReservationAt(after, scheduledSendAt)) return "DELETED";
+      await this.page.waitForTimeout(500);
     }
-    return "DELETED";
+    // 消えたことを確認できなかった＝LINE側に残っている可能性がある。CANCELLED を報告してはならない。
+    return "UNKNOWN";
   }
 
   async screenshot(path: string): Promise<void> {
