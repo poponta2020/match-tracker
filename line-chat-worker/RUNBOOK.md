@@ -140,26 +140,47 @@ HEADED=1 \
 - 期待出力: `POC_RESULT: PASS`（dry-run=DRY_RUN_SUCCEEDED / 本予約=RESERVED / 重複=DUPLICATE_RESERVATION_FOUND / 取消=CANCELLED）。
 - **実際の配信確認**（「指定時刻に届く」）は、近い10分境界を `POC_SCHEDULED_SEND_AT` に指定して取消せずに置き、テストグループで受信を確認する。
 
-## 9. 本番投入手順（タスク8b・未実施）
+## 9. 本番投入手順（タスク8b・**2026-07-18 実施済み**）
 
-現在は `line_broadcast_group` が `enabled=f`・`chat_room_id=null` のため予約が生成されない**安全な停止状態**。
-以下を順に実施して初めて本番配信が動き出す。**途中で止めても配信欠落は起きない**（既存pushフォールバックが拾う）。
+**実施済みの設定値**（本番全体グループ「令和8年度北海道大学かるたサークル」67名）:
+
+| 項目 | 値 |
+| --- | --- |
+| OA | `@773ifizy`「好きな札分け発表ドラゴン」 |
+| `LINE_OAM_ACCOUNT_PATH` | `U16c48919ba75082b834935062155dbba` |
+| `line_broadcast_group.chat_room_id`（OAM側） | `C432cd420dfface41b6201aaca8fd15f3` |
+| `line_broadcast_group.chat_room_name` | `令和8年度北海道大学かるたサークル` |
+| `line_channels` id=21 `line_group_id`（webhook側） | `Cd6632033fa170a4ac57a887ac599901a` |
+
+> **⚠️ 2つの `C…` は別物**。OAM側＝予約送信用、webhook側＝フォールバックpush用。取り違えると404/送信失敗になる。
+> 詳細は [phase2-dom-findings.md §11](../docs/features/line-chat-reserve-broadcast/phase2-dom-findings.md)。
+
+以下は**別グループ・別OAへ切り替える場合**の手順。**途中で止めても配信欠落は起きない**（既存pushフォールバックが拾う）。
 
 1. **本番OAを決める**: 全体グループ（約70名）に参加させる公式アカウントを1体決め、必要ならリネームする。
    - **storageState は LINE Business ID 単位で、配下の全OAに同一セッションで入れることを実測済み**（2026-07-18）。
      したがってOAを変えても**再ログインは不要**で、`.env` の `LINE_OAM_ACCOUNT_PATH` 差し替えだけでよい。
    - アカウントパスは、そのOAのチャットを開いた時のURL `https://chat.line.biz/U…` の `U…` 部分。
-2. **OAを本番全体グループへ招待**し、そのルームを開いて URL `…/chat/C…` の `C…`（=`chatRoomId`）を控える。
+2. **OAを本番全体グループへ招待**する。**招待だけでは OAM のチャット一覧にルームが出ない**ので、
+   グループ内で誰かに一言発言してもらう（この自動応答は reply＝**無料通数を消費しない**）。
+   ルームが出たら開いて URL `…/chat/C…` の `C…` を控える ＝ **OAM側ID（予約送信用）**。
+   push用の webhook側IDは、発言時に webhook が `line_channels.line_group_id` へ自動捕捉する（**別の値**・手入力しない）。
 3. **VMの `.env` を更新**（SSH接続情報＝ホスト・ユーザー・鍵は `CLAUDE.local.md` の「Oracle Cloud VM」節を参照）:
    ```
    cd ~/line-chat-worker && sed -i 's/^LINE_OAM_ACCOUNT_PATH=.*/LINE_OAM_ACCOUNT_PATH=<本番OAのU…>/' .env
    ```
 4. **DBに本番グループを登録して有効化**（`line_broadcast_group` id=1 が北海道大学かるた会 全体グループ）:
    ```sql
+   -- 予約送信の宛先（OAM側ID）
    UPDATE line_broadcast_group
-      SET chat_room_id = '<C…>', chat_room_name = '<OAM上のグループ表示名と完全一致させる>',
+      SET chat_room_id = '<OAM側C…>', chat_room_name = '<OAM上のグループ表示名と完全一致させる>',
           enabled = true, updated_at = now()
     WHERE id = 1;
+   -- フォールバックpush用: 使うOAをGROUP botとして group 1 に割り当てる
+   -- （line_group_id は webhook が捕捉済みのはず。null ならフォールバックは候補なしでSKIPされる）
+   UPDATE line_channels SET channel_type = 'GROUP', broadcast_group_id = 1 WHERE id = <新OAのid>;
+   -- 旧OAを候補から外す（別グループへ誤爆させない）
+   UPDATE line_channels SET line_group_id = NULL WHERE id = <旧OAのid>;
    ```
    - `chat_room_name` は**ワーカーが `heading[level=4]` と厳密一致で照合**する（不一致は `TARGET_CHAT_MISMATCH` で停止）。
      OAM画面に出る名前をそのまま入れること（人数表記 `(70)` は含めない）。

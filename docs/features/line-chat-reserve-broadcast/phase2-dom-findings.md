@@ -92,3 +92,36 @@
 - **本文の厳密照合**: 現状は日時一致＋構成上の一致。⋮「内容を編集」で本文を読む実装にするかは設計判断。
 - **複数予約の可否**: 未検証（1ルーム1予約前提で実装）。
 - **datetime.ts**: `formatJstParts` は "YYYY/MM/DD"（バナー照合用）と、native input 用の "YYYY-MM-DD"/"HH:mm" の両方が要る。
+
+## 11. 【最重要】チャットルームID と webhookグループID は別物（2026-07-18 発見）
+
+**同じLINEグループに対して識別子が2系統あり、取り違えると必ず失敗する。**
+
+| 用途 | 呼び名 | 取得元 | 本番全体グループの実値 |
+| --- | --- | --- | --- |
+| **チャット予約（ワーカー）** | OAMチャットルームID | OAM の URL `chat.line.biz/<acct>/chat/<ここ>` | `C432cd420dfface41b6201aaca8fd15f3` |
+| **フォールバックpush** | webhookグループID | Messaging API webhook の `source.groupId` | `Cd6632033fa170a4ac57a887ac599901a` |
+
+- どちらも `C` + 32桁hex で**見た目が完全に同じ**ため、値だけでは判別できない。
+- **webhookのIDを OAM のURLに入れると `404 - Not found`**（逆も push 失敗）。この404は「グループが消えた」ではなく**ID体系の取り違え**。
+- 格納先: OAM側 → `line_broadcast_group.chat_room_id` ／ webhook側 → `line_channels.line_group_id`。**この2カラムに同じ値を入れてはいけない。**
+- したがって **`chat_room_id` は webhook から自動取得できない**。OAM のチャット一覧で当該ルームを開き、URL から採るのが唯一の正規手段（本番投入手順は RUNBOOK §9）。
+
+### OAM チャット一覧にルームが出る条件
+
+**招待（OAの参加）だけではルームは表示されない。** グループ内でメッセージのやり取りが発生して初めて出現する
+（LINEの空状態表示「お客さまが公式アカウントにメッセージを送信すると、ここにチャットルームが表示されます」のとおり）。
+`GET /api/v1/bots/<acct>?noFilter=true` の `hasChatRoom` で有無を判定できる。
+→ 本番投入時は「招待 → グループで誰かが一言発言 → ルーム出現 → URLからID採取」の順になる。
+
+### 参考: セッションで使える OAM 内部API（storageStateのCookieで叩ける）
+
+- `GET /api/v1/bots?limit=100[&next=…]` … 配下OA一覧（`botId`=アカウントパス `U…`／`basicSearchId`=`@…`／`name`）。**Business ID配下の全OAが返る**＝storageStateが全OA共通であることの裏付け。
+- `GET /api/v2/bots/<acct>/chats?folderType=ALL&limit=25&prioritizePinnedChat=true` … チャット一覧。
+- `manager.line.biz/account/<@id>/setting` … 「グループ・複数人トークへの参加を許可する」の選択状態も同セッションで読める。
+
+### 通数（課金）の注記
+
+グループ内の発言に対する自動応答は `LineWebhookController` の **`sendReplyMessage`（応答メッセージ）**であり、
+**無料メッセージ通数にカウントされない**（カウント対象は push / multicast / broadcast）。
+本番グループでの疎通確認のために一言発言してもらっても通数は消費しない。
