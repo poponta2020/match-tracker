@@ -34,6 +34,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -100,7 +101,7 @@ class LineWebhookControllerTest {
                         java.util.Map.of(
                                 "type", "message",
                                 "replyToken", "reply-token-1",
-                                "source", java.util.Map.of("userId", "U111"),
+                                "source", java.util.Map.of("type", "user", "userId", "U111"),
                                 "message", java.util.Map.of("type", "text", "text", "123456")
                         )
                 ))
@@ -115,6 +116,128 @@ class LineWebhookControllerTest {
 
         verify(lineChannelService).sendPendingLotteryResultsForChannel(10L);
         verify(lineMessagingService).sendReplyMessage(eq("token"), eq("reply-token-1"), anyString());
+    }
+
+    @Test
+    @DisplayName("group message is ignored entirely (no code verification, no reply)")
+    void handleWebhook_groupMessage_isIgnored() throws Exception {
+        LineChannel channel = channel();
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        // 全体配信用アカウントが参加しているグループでメンバーが発言した状況。
+        // グループでも source.userId は取得できるため、userId の有無ではガードできない。
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "message",
+                                "replyToken", "reply-token-group",
+                                "source", java.util.Map.of(
+                                        "type", "group", "groupId", "G-XYZ", "userId", "U111"),
+                                "message", java.util.Map.of("type", "text", "text", "おはようございます")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineLinkingService, never()).verifyCode(anyString(), anyString(), anyLong());
+        verify(lineMessagingService, never()).sendReplyMessage(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("multi-person room message is ignored entirely")
+    void handleWebhook_roomMessage_isIgnored() throws Exception {
+        LineChannel channel = channel();
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "message",
+                                "replyToken", "reply-token-room",
+                                "source", java.util.Map.of(
+                                        "type", "room", "roomId", "R-XYZ", "userId", "U111"),
+                                // 連携コードとして有効な文字列でも、1:1 でなければ検証にすら進めない
+                                "message", java.util.Map.of("type", "text", "text", "123456")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineLinkingService, never()).verifyCode(anyString(), anyString(), anyLong());
+        verify(lineMessagingService, never()).sendReplyMessage(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("group postback is ignored entirely (no reply)")
+    void handleWebhook_groupPostback_isIgnored() throws Exception {
+        LineChannel channel = channel();
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "postback",
+                                "replyToken", "reply-token-group-pb",
+                                "source", java.util.Map.of(
+                                        "type", "group", "groupId", "G-XYZ", "userId", "U777"),
+                                "postback", java.util.Map.of("data", "action=same_day_join&token=tok123")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineMessagingService, never()).sendReplyMessage(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("message without source type is ignored (fail-closed)")
+    void handleWebhook_messageWithoutSourceType_isIgnored() throws Exception {
+        LineChannel channel = channel();
+        when(lineChannelRepository.findByLineChannelId("CH001")).thenReturn(Optional.of(channel));
+        when(lineMessagingService.verifySignature(eq("secret"), anyString(), eq("sig"))).thenReturn(true);
+
+        // LINE の webhook は source.type を常に含む。欠落は不正なペイロードとして黙って無視する。
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("events", java.util.List.of(
+                        java.util.Map.of(
+                                "type", "message",
+                                "replyToken", "reply-token-notype",
+                                "source", java.util.Map.of("userId", "U111"),
+                                "message", java.util.Map.of("type", "text", "text", "123456")
+                        )
+                ))
+        );
+
+        mockMvc.perform(post("/api/line/webhook/CH001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("x-line-signature", "sig")
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        verify(lineLinkingService, never()).verifyCode(anyString(), anyString(), anyLong());
+        verify(lineMessagingService, never()).sendReplyMessage(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -148,7 +271,7 @@ class LineWebhookControllerTest {
                         java.util.Map.of(
                                 "type", "postback",
                                 "replyToken", "reply-token-2",
-                                "source", java.util.Map.of("userId", "U777"),
+                                "source", java.util.Map.of("type", "user", "userId", "U777"),
                                 "postback", java.util.Map.of("data", "action=confirm_same_day_join&token=tok123")
                         )
                 ))
@@ -407,7 +530,7 @@ class LineWebhookControllerTest {
                         java.util.Map.of(
                                 "type", "postback",
                                 "replyToken", "reply-token-2",
-                                "source", java.util.Map.of("userId", "U777"),
+                                "source", java.util.Map.of("type", "user", "userId", "U777"),
                                 "postback", java.util.Map.of("data", data)
                         )
                 ))
