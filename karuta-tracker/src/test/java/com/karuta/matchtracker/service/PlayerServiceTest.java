@@ -359,7 +359,7 @@ class PlayerServiceTest {
         com.karuta.matchtracker.dto.LoginRequest request =
                 new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "password123");
 
-        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+        when(playerRepository.findByNameAndActiveForUpdate("山田太郎")).thenReturn(Optional.of(player));
         // パスワードは BCrypt で照合される（平文比較ではない）
         when(passwordEncoder.matches("password123", "password123")).thenReturn(true);
         when(authTokenService.issue(player)).thenReturn("issued-token");
@@ -378,7 +378,7 @@ class PlayerServiceTest {
         assertThat(response.getRole()).isEqualTo(Player.Role.PLAYER);
         assertThat(response.getOrganizationIds()).containsExactly(10L);
         assertThat(response.getToken()).isEqualTo("issued-token");
-        verify(playerRepository).findByNameAndActive("山田太郎");
+        verify(playerRepository).findByNameAndActiveForUpdate("山田太郎");
         verify(playerOrganizationRepository).findByPlayerId(1L);
     }
 
@@ -389,14 +389,14 @@ class PlayerServiceTest {
         com.karuta.matchtracker.dto.LoginRequest request =
                 new com.karuta.matchtracker.dto.LoginRequest("存在しない選手", "password");
 
-        when(playerRepository.findByNameAndActive("存在しない選手")).thenReturn(Optional.empty());
+        when(playerRepository.findByNameAndActiveForUpdate("存在しない選手")).thenReturn(Optional.empty());
 
         // When & Then
         assertThatThrownBy(() -> playerService.login(request))
                 .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
                 .hasMessageContaining("選手名またはパスワードが正しくありません");
 
-        verify(playerRepository).findByNameAndActive("存在しない選手");
+        verify(playerRepository).findByNameAndActiveForUpdate("存在しない選手");
     }
 
     @Test
@@ -413,14 +413,14 @@ class PlayerServiceTest {
         com.karuta.matchtracker.dto.LoginRequest request =
                 new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "wrongPassword");
 
-        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+        when(playerRepository.findByNameAndActiveForUpdate("山田太郎")).thenReturn(Optional.of(player));
 
         // When & Then
         assertThatThrownBy(() -> playerService.login(request))
                 .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
                 .hasMessageContaining("選手名またはパスワードが正しくありません");
 
-        verify(playerRepository).findByNameAndActive("山田太郎");
+        verify(playerRepository).findByNameAndActiveForUpdate("山田太郎");
     }
 
     @Test
@@ -437,14 +437,14 @@ class PlayerServiceTest {
         com.karuta.matchtracker.dto.LoginRequest request =
                 new com.karuta.matchtracker.dto.LoginRequest("山田太郎", "");
 
-        when(playerRepository.findByNameAndActive("山田太郎")).thenReturn(Optional.of(player));
+        when(playerRepository.findByNameAndActiveForUpdate("山田太郎")).thenReturn(Optional.of(player));
 
         // When & Then
         assertThatThrownBy(() -> playerService.login(request))
                 .isInstanceOf(com.karuta.matchtracker.exception.ResourceNotFoundException.class)
                 .hasMessageContaining("選手名またはパスワードが正しくありません");
 
-        verify(playerRepository).findByNameAndActive("山田太郎");
+        verify(playerRepository).findByNameAndActiveForUpdate("山田太郎");
     }
 
     // ===== bulkUpdate（一括更新） =====

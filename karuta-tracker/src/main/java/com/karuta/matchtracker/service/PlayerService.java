@@ -349,7 +349,9 @@ public class PlayerService {
     public LoginResponse login(LoginRequest request) {
         log.info("Login attempt for user: {}", request.getName());
 
-        Player player = playerRepository.findByNameAndActive(request.getName())
+        // 選手行に排他ロックを取ってから照合する。パスワード変更と並行したログインが
+        // 「旧パスワードで認証 → 一括失効の後にトークンを INSERT」して失効をすり抜けるのを防ぐ（AC-12）
+        Player player = playerRepository.findByNameAndActiveForUpdate(request.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("選手名またはパスワードが正しくありません"));
 
         // パスワードは BCrypt ハッシュで照合する（平文は保存されていない）
