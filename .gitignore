@@ -14,6 +14,9 @@ __pycache__/
 .env
 .env.local
 .env.production
+.env.local.txt
+env.local.txt
+env.local
 
 # 認証情報を含むドキュメント
 DEPLOY_PLAN.md
