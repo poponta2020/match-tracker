@@ -38,7 +38,7 @@
 - `line-channel-separation` — 管理者向け・選手向け通知を別のLINEチャネルから送信できるようにする（主要領域: karuta-tracker-ui, karuta-tracker, database）
 - `line-confirmation-dialog` — LINEボットのボタン操作全てに確認ダイアログを挟み誤操作を防止（主要領域: karuta-tracker, database）
 - `line-link-lottery-notify` — LINE連携完了時に確定済み抽選結果を自動送信（主要領域: karuta-tracker）
-- `lottery-fair-share-rotation` — 抽選を「その日の一巡保証（確定）＋直近30日・中央値キャップの重み付き抽選（確率）」の2層へ変更し、1日全落ち・連日落ち・常連の狙い撃ちを解消（主要領域: karuta-tracker, karuta-tracker-ui, docs）
+- `lottery-fair-share-rotation` — 抽選を「その日の一巡保証（確定）＋直近30日・30パーセンタイルキャップの重み付き抽選（確率）」の2層へ変更し、1日全落ち・連日落ち・常連の狙い撃ちを解消（主要領域: karuta-tracker, karuta-tracker-ui, docs） [shipped: PR #1131]
 - `line-notification-messages` — LINE通知メッセージの仕様書と実装の不整合・重複コードを修正（主要領域: karuta-tracker-ui, karuta-tracker, docs）
 - `line-rich-menu` — PLAYERチャネルにリッチメニューを設定し主要機能への導線を提供（主要領域: karuta-tracker）
 - `lottery` — 抽選機能の重大バグ・認可漏れ・設計不整合を修正する改修（主要領域: karuta-tracker-ui, karuta-tracker, docs）
@@ -108,3 +108,6 @@
 - `auth-tokenization` — 認証をヘッダー自己申告（X-User-Role/X-User-Id）からサーバ発行トークンへ全面変更。パスワードBCrypt化＋/api/** の deny by default 化（@RequireRole未付与82本の素通りを塞ぐ）（主要領域: karuta-tracker, karuta-tracker-ui, database, docs）
 - `line-chat-auto-relogin` — LINEチャット予約ワーカーが認証壁を検出したら中止せず、同context内で「LINE account→Log in」の2クリック・クリックスルー再ログイン（パスワード/CAPTCHA無し）で24hセッションを自己再発行しリトライする改修＋30日SSO失効の先回りアラート（主要領域: line-chat-worker, karuta-tracker, docs） [shipped: PR #1127]
 - `line-credential-encryption` — line_channels の channel_secret / channel_access_token をアプリケーションレベルで AES-256-GCM 暗号化（JPA AttributeConverter・converter-only。既存60本の移行は Non-goal）（主要領域: 未定）
+- `adjacent-room-check-lightweight` — 隣室確認の軽量化。A:かでるの空きスクレイプ＋通知スケジューラを30分毎→1時間毎＋JST深夜(1-5時)スキップ。B:東区民(東🌸)の自動隣室通知と空きスクレイプを廃止し、会場拡張をスクレイプ非依存の純手動アクションに作り替え（主要領域: 未定）
+- `kaderu-sync-notify-admins` — かでる予約取り込みの完了/失敗LINE通知を、押下者本人のみ→対象団体の全ADMIN＋全SUPER_ADMINに拡大（隣室と同型の受信者パターンを流用。純BE）（主要領域: 未定）
+- `venue-reservation-sync-manual-only` — かでる/東区民の予約→練習日sync定期cron(*/30)を停止し手動ボタン起動のみに。手動WFにhighashiステップをhokudai条件付きで追加し1ボタンでかでる＋東区民を取り込み（純GHA workflow）（主要領域: 未定）
