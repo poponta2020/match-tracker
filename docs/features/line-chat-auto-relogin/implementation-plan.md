@@ -37,7 +37,7 @@ status: completed
 - **対応Issue:** #1117
 
 ### タスク3: ワーカーのループ統合（再ログイン・リトライ＋SSO先回り警告）
-- [ ] 完了
+- [x] 完了
 - **目的:** メインループに (a) 認証壁時の `relogin()` 1回試行＋タスク1回リトライ（bounding）、(b) 各サイクルでのSSO Cookie期限監視→閾値内なら1日1回 backend へ警告POST、を組み込む。
 - **対応AC:** AC-1, AC-2, AC-4, AC-5（worker側トリガー）, AC-6, AC-7, AC-8, AC-9, AC-10, AC-13
 - **主な変更領域:** `line-chat-worker/src/index.ts`（orchestration リトライ＋SSO期限read＋throttle）・`line-chat-worker/src/config/index.ts`（`SSO_WARNING_THRESHOLD_DAYS` 既定3・任意 `AUTO_RELOGIN_ENABLED` 既定true）・`line-chat-worker/src/appApi/client.ts`（`postSessionWarning(daysRemaining)`）・各 `*.test.ts`

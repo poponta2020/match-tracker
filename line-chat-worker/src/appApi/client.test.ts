@@ -69,6 +69,24 @@ describe("createAppApiClient", () => {
     expect(headers["X-Service-Token"]).toBe("secret-token");
   });
 
+  it("postSessionWarning() POSTs { daysRemaining } and tolerates an empty 200 body", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(new Response("", { status: 200 }));
+
+    const client = createAppApiClient({
+      appBaseUrl: "https://example.com",
+      serviceToken: "secret-token",
+      requestTimeoutMs: 5000,
+    });
+
+    await expect(client.postSessionWarning(2)).resolves.toBeUndefined();
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("https://example.com/api/line-chat-worker/session-warning");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ daysRemaining: 2 });
+    const headers = init.headers as Record<string, string>;
+    expect(headers["X-Service-Token"]).toBe("secret-token");
+  });
+
   it("throws AppApiError with the http status on a non-ok response (e.g. 409 invalid transition)", async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(new Response("conflict", { status: 409 }));
 
