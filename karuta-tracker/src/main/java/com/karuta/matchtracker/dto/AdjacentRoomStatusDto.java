@@ -37,4 +37,11 @@ public class AdjacentRoomStatusDto {
 
     /** 拡張後の定員 */
     private Integer expandedCapacity;
+
+    /**
+     * 手動拡張会場かどうか（東🌸(6) のみ true）。
+     * true の場合、FE は隣室 status チップと空き依存ゲートを外し、
+     * 予約済み前提で会場拡張ボタンを常時表示する（{@code AdjacentRoomConfig.isManualExpansionVenue}）。
+     */
+    private Boolean manualExpansion;
 }

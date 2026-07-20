@@ -1,8 +1,7 @@
 name: Scrape Higashi Community Center Room Availability
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  # 東区民センターの自動隣室確認は廃止（会場拡張は手動化）。手動実行のみ残す。
   workflow_dispatch:
 
 concurrency:

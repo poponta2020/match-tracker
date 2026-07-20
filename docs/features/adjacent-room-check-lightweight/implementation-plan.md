@@ -27,7 +27,7 @@ status: completed
 - **完了条件:** 新 cron テスト green・既存 `AdjacentRoomNotificationScheduler` 系テスト green・build green
 
 ### タスク2: 東区民の自動確認廃止＋会場拡張の手動化（B・BE）
-- [ ] 完了
+- [x] 完了
 - **目的:** 東🌸(venue 6) を自動通知・空きスクレイプから外し、`expandVenue` を venue 6 のみスクレイプ非依存の手動拡張にする。かでる経路は不変。
 - **対応AC:** AC-B1, AC-B2, AC-B3(BE), AC-B4, AC-R1（かでる拡張の回帰）, AC-R3
 - **主な変更領域:**

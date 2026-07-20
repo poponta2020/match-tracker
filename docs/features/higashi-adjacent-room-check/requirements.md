@@ -3,6 +3,8 @@ status: completed
 ---
 # 東区民センター隣室空き確認 要件定義書
 
+> **⚠️ 2026-07-20 更新（[adjacent-room-check-lightweight](../adjacent-room-check-lightweight/requirements.md)・#1135）**: 東🌸の**自動隣室確認・自動通知は廃止**し、会場拡張をスクレイプ非依存の**手動アクション**に作り替えた。本書のうち「自動通知」「30分間隔スクレイプ」を前提とする記述（下記 §2 シナリオ1・§3.3・§4.5 cron）は歴史的経緯であり、現行挙動は末尾「変更履歴」と `docs/spec/venues.md` を正とする。かでる4室の自動確認は不変。
+
 ## 1. 概要
 
 ### 目的
@@ -205,3 +207,12 @@ cron: `*/30 * * * *`（30分間隔）
 | 単一スケジューラーで両サイト処理 | 定員接近判定・通知重複防止ロジックが完全共通。venue_id で分岐するだけで十分 |
 | 通知タイプを流用 | 「隣室空きあり」という本質は同じ。ユーザー設定（通知ON/OFF）も会場ごとに分ける必然性がない |
 | 時間帯ラベル(17-21 vs 18-21)を会場別に | ハードコードされた現在の "夜間(17-21)" を東区民センターの実利用時間 18-21 に合わせるため。Config に切り出すのが保守的 |
+
+## 変更履歴
+
+- 2026-07-20（[adjacent-room-check-lightweight](../adjacent-room-check-lightweight/requirements.md)・#1135）: **東区民センター（東🌸）の自動隣室確認を廃止し、会場拡張を手動化**。
+  - `AdjacentRoomNotificationScheduler` のフィルタを `isAdjacentCheckTarget` → `isAdjacentNotificationTarget`（かでる4室のみ）に変更し、東🌸(6) を自動通知対象から除外。
+  - `scrape-higashi-availability.yml` の `schedule:` を削除（`workflow_dispatch` 手動実行のみ）。自動スクレイプ停止。
+  - `AdjacentRoomService.expandVenue` は手動拡張会場（東🌸のみ）で `reservationConfirmedAt` 検証・隣室 `expandable` 検証をスキップ。「かっこうを予約済み」前提で管理者が UI ダイアログ確認のうえ拡張。スクレイプ結果 `expandable` に依存しないため「予約すると×になり拡張がブロックされる」罠を解消。
+  - `AdjacentRoomStatusDto.manualExpansion` を追加し、FE（`PracticeList.jsx`）は東🌸で隣室 status チップ・空き依存ゲートを外し「会場を拡張（東全室に）」を常時表示。
+  - `ADJACENT_CHECK_TARGET_VENUE_IDS` は東🌸(6) を維持（DTO・拡張先名/定員の供給源）。かでる4室の挙動は不変。

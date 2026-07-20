@@ -63,6 +63,12 @@ public final class AdjacentRoomConfig {
     /** 隣室空き確認の対象となるVenue ID集合（かでる和室 + 東🌸）。かっこう(12)は単独運用対象外のため含めない */
     private static final Set<Long> ADJACENT_CHECK_TARGET_VENUE_IDS = Set.of(3L, 11L, 4L, 8L, 6L);
 
+    /**
+     * 自動隣室通知（残り4人通知）の対象となるVenue ID集合（かでる4室のみ）。
+     * 東🌸(6)は隣室チェック対象だが自動通知は送らない（会場拡張は手動化）。
+     */
+    private static final Set<Long> ADJACENT_NOTIFICATION_TARGET_VENUE_IDS = Set.of(3L, 11L, 4L, 8L);
+
     /** 会場ごとの夜間時間帯ラベル */
     private static final Map<Long, String> NIGHT_TIME_LABELS = Map.of(
             3L,  "17-21",
@@ -118,6 +124,22 @@ public final class AdjacentRoomConfig {
      */
     public static boolean isAdjacentCheckTarget(Long venueId) {
         return venueId != null && ADJACENT_CHECK_TARGET_VENUE_IDS.contains(venueId);
+    }
+
+    /**
+     * 自動隣室通知の対象会場かどうかを判定する（かでる4室のみ）。
+     * 東🌸(6)は隣室チェック対象（{@link #isAdjacentCheckTarget}）だが自動通知は送らない。
+     */
+    public static boolean isAdjacentNotificationTarget(Long venueId) {
+        return venueId != null && ADJACENT_NOTIFICATION_TARGET_VENUE_IDS.contains(venueId);
+    }
+
+    /**
+     * 手動会場拡張（空き検証なし・予約済み前提で拡張する）の対象会場かどうかを判定する。
+     * = 隣室チェック対象だが自動通知対象でない会場（現状は東🌸(6)のみ）。
+     */
+    public static boolean isManualExpansionVenue(Long venueId) {
+        return isAdjacentCheckTarget(venueId) && !isAdjacentNotificationTarget(venueId);
     }
 
     /**

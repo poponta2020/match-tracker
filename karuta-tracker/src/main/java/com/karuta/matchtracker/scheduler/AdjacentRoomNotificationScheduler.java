@@ -31,9 +31,10 @@ import java.util.List;
 /**
  * 隣室空き通知スケジューラー
  *
- * 毎時0分に実行（JST 1〜5時台はスキップし6時に再開）し、隣室チェック対象の会場
- * （かでる2・7の和室、東区民センター 東🌸）を利用する未来のセッションについて、
- * 定員接近時（残り4人以下）に隣室の空き状況を管理者に段階的に通知する。
+ * 毎時0分に実行（JST 1〜5時台はスキップし6時に再開）し、自動通知対象の会場
+ * （かでる2・7の和室のみ）を利用する未来のセッションについて、定員接近時（残り4人以下）に
+ * 隣室の空き状況を管理者に段階的に通知する。東🌸（東区民センター）は隣室チェック対象だが
+ * 自動通知は送らない（会場拡張は手動化。{@link com.karuta.matchtracker.config.AdjacentRoomConfig#isManualExpansionVenue}）。
  */
 @Slf4j
 @Component
@@ -59,9 +60,9 @@ public class AdjacentRoomNotificationScheduler {
         LocalDate endDate = today.plusDays(40);
         List<PracticeSession> sessions = practiceSessionRepository.findByDateRange(startDate, endDate);
 
-        // 隣室チェック対象のセッションのみフィルタ（かでる和室 + 東🌸）
+        // 自動通知対象のセッションのみフィルタ（かでる和室のみ。東🌸は手動拡張のため通知対象外）
         List<PracticeSession> targetSessions = sessions.stream()
-                .filter(s -> AdjacentRoomConfig.isAdjacentCheckTarget(s.getVenueId()))
+                .filter(s -> AdjacentRoomConfig.isAdjacentNotificationTarget(s.getVenueId()))
                 .toList();
 
         if (targetSessions.isEmpty()) {

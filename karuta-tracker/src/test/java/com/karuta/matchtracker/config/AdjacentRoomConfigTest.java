@@ -152,6 +152,32 @@ class AdjacentRoomConfigTest {
     }
 
     @Test
+    @DisplayName("自動通知対象はかでる4室のみ（東🌸(6)・かっこう(12)は対象外）")
+    void isAdjacentNotificationTarget_kaderuOnly() {
+        assertTrue(AdjacentRoomConfig.isAdjacentNotificationTarget(3L));
+        assertTrue(AdjacentRoomConfig.isAdjacentNotificationTarget(11L));
+        assertTrue(AdjacentRoomConfig.isAdjacentNotificationTarget(4L));
+        assertTrue(AdjacentRoomConfig.isAdjacentNotificationTarget(8L));
+        assertFalse(AdjacentRoomConfig.isAdjacentNotificationTarget(6L)); // 東🌸は自動通知しない
+        assertFalse(AdjacentRoomConfig.isAdjacentNotificationTarget(12L));
+        assertFalse(AdjacentRoomConfig.isAdjacentNotificationTarget(1L));
+        assertFalse(AdjacentRoomConfig.isAdjacentNotificationTarget(null));
+    }
+
+    @Test
+    @DisplayName("手動拡張会場は東🌸(6)のみ（かでる4室・非対象会場は false）")
+    void isManualExpansionVenue_higashiOnly() {
+        assertTrue(AdjacentRoomConfig.isManualExpansionVenue(6L)); // 東🌸のみ手動拡張
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(3L));
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(11L));
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(4L));
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(8L));
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(12L)); // かっこうはチェック対象外
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(1L));
+        assertFalse(AdjacentRoomConfig.isManualExpansionVenue(null));
+    }
+
+    @Test
     @DisplayName("夜間時間帯ラベル - かでる和室は17-21、東🌸は18-21")
     void getNightTimeLabel_returnsVenueSpecificLabel() {
         assertEquals("17-21", AdjacentRoomConfig.getNightTimeLabel(3L));
