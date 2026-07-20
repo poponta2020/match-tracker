@@ -38,11 +38,11 @@ export const AuthProvider = ({ children }) => {
       const response = await playerAPI.login(name, password);
       const player = response.data;
 
-      // firstLoginフラグはログイン判定用のみ。localStorageには保存しない
-      const { firstLogin: _firstLogin, ...playerData } = player;
+      // firstLoginフラグはログイン判定用のみ、tokenはauthToken専用のため、いずれもcurrentPlayerには保存しない
+      const { firstLogin: _firstLogin, token, ...playerData } = player;
       setCurrentPlayer(playerData);
       localStorage.setItem('currentPlayer', JSON.stringify(playerData));
-      localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
+      localStorage.setItem('authToken', token);
       return player;
     } catch (error) {
       if (error.response?.data?.message) {
@@ -52,7 +52,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      // サーバ側のトークンを失効させる。失敗してもクライアント側のログアウトは必ず完了させる
+      await playerAPI.logout();
+    } catch (error) {
+      console.error('Failed to call logout API', error);
+    }
     setCurrentPlayer(null);
     localStorage.removeItem('currentPlayer');
     localStorage.removeItem('authToken');
@@ -63,21 +69,17 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('currentPlayer', JSON.stringify(playerData));
   };
 
-  const register = async (playerData) => {
-    const response = await playerAPI.register(playerData);
-    const newPlayer = response.data;
-    setCurrentPlayer(newPlayer);
-    localStorage.setItem('currentPlayer', JSON.stringify(newPlayer));
-    localStorage.setItem('authToken', 'dummy-token'); // TODO: 実際のトークンに置き換え
-    return newPlayer;
-  };
-
+  // register はここには置かない。
+  // 認証トークンを発行できるのは POST /api/players/login だけで、
+  // 選手作成 (POST /api/players) は PlayerDto を返しトークンを持たない。
+  // 以前ここにあった register は authToken に 'dummy-token' を書いてログイン状態を
+  // 偽装していたため、トークン認証化に伴い削除した（呼び出し元は無かった）。
+  // 招待リンクからの登録は inviteAPI.register → login() の経路で正しくトークンを得る。
   const value = {
     currentPlayer,
     loading,
     login,
     logout,
-    register,
     updateCurrentPlayer,
     isAuthenticated: !!currentPlayer,
   };

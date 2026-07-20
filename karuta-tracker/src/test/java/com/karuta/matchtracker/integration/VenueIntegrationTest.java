@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.VenueCreateRequest;
 import com.karuta.matchtracker.dto.VenueUpdateRequest;
@@ -21,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 実際のMySQLコンテナを使用してエンドツーエンドのテストを行います。
  */
 @DisplayName("Venue 統合テスト")
-class VenueIntegrationTest extends BaseIntegrationTest {
+class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -50,8 +52,10 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.name").value("東京会場"))
@@ -64,7 +68,8 @@ class VenueIntegrationTest extends BaseIntegrationTest {
         Long venueId = objectMapper.readTree(createResponse).get("id").asLong();
 
         // 2. IDで会場を取得
-        mockMvc.perform(get("/api/venues/" + venueId))
+        mockMvc.perform(get("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(venueId))
                 .andExpect(jsonPath("$.name").value("東京会場"))
@@ -84,19 +89,23 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(updateRequest)))
+                        .content(objectMapper.writeValueAsString(updateRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("東京新会場"))
                 .andExpect(jsonPath("$.defaultMatchCount").value(7))
                 .andExpect(jsonPath("$.schedules", hasSize(1)));
 
         // 4. 会場を削除
-        mockMvc.perform(delete("/api/venues/" + venueId))
+        mockMvc.perform(delete("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 5. 削除後は取得できない
-        mockMvc.perform(get("/api/venues/" + venueId))
+        mockMvc.perform(get("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -120,13 +129,16 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/venues")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
+                            .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                     .andExpect(status().isCreated());
         }
 
         // 一覧取得
-        mockMvc.perform(get("/api/venues"))
+        mockMvc.perform(get("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)))
                 .andExpect(jsonPath("$[0].schedules", hasSize(1)))
@@ -158,8 +170,10 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.schedules", hasSize(2)))
                 .andReturn()
@@ -192,13 +206,16 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(updateRequest)))
+                        .content(objectMapper.writeValueAsString(updateRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.schedules", hasSize(3)));
 
         // 再度取得して確認
-        mockMvc.perform(get("/api/venues/" + venueId))
+        mockMvc.perform(get("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.schedules", hasSize(3)))
                 .andExpect(jsonPath("$.schedules[0].matchNumber").value(1))
@@ -225,14 +242,18 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated());
 
         // 同じ名前で再度作成を試みる
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409));
     }
@@ -259,8 +280,10 @@ class VenueIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.schedules", hasSize(20)));
     }

@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -463,6 +464,45 @@ class LineChatReservationServiceTest {
         assertThat(stale.getStatus()).isEqualTo(ReservationStatus.FAILED);
         assertThat(stale.getErrorCode()).isEqualTo("PENDING_EXPIRED");
         verify(reservationRepository).save(stale);
+    }
+
+    // ===== warnSessionExpiring（AC-5・タスク2）=====
+
+    @Test
+    @DisplayName("warnSessionExpiring: 有効グループの各団体（重複排除）へSSO失効警告を送る")
+    void warnSessionExpiringAlertsDistinctOrgs() {
+        LineBroadcastGroup g1 = LineBroadcastGroup.builder().id(1L).organizationId(ORG).name("a").enabled(true).build();
+        LineBroadcastGroup g2 = LineBroadcastGroup.builder().id(2L).organizationId(ORG).name("b").enabled(true).build();
+        LineBroadcastGroup g3 = LineBroadcastGroup.builder().id(3L).organizationId(5L).name("c").enabled(true).build();
+        when(groupRepository.findByEnabledTrue()).thenReturn(List.of(g1, g2, g3));
+
+        service().warnSessionExpiring(3);
+
+        // org=ORG は2グループあるが distinct で1回だけ、org=5 も1回。文言に残り日数を含む。
+        verify(lineNotificationService, times(1)).sendChatReserveAlert(eq(ORG), contains("3日"));
+        verify(lineNotificationService, times(1)).sendChatReserveAlert(eq(5L), contains("3日"));
+        verify(lineNotificationService, times(2)).sendChatReserveAlert(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("warnSessionExpiring: 有効グループが0件なら通知しない")
+    void warnSessionExpiringNoGroupsNoop() {
+        when(groupRepository.findByEnabledTrue()).thenReturn(List.of());
+
+        service().warnSessionExpiring(2);
+
+        verify(lineNotificationService, never()).sendChatReserveAlert(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("warnSessionExpiring: 残り0日以下は『まもなく失効』文言で送る")
+    void warnSessionExpiringImminentWording() {
+        when(groupRepository.findByEnabledTrue()).thenReturn(
+                List.of(LineBroadcastGroup.builder().id(1L).organizationId(ORG).name("a").enabled(true).build()));
+
+        service().warnSessionExpiring(0);
+
+        verify(lineNotificationService).sendChatReserveAlert(eq(ORG), contains("まもなく失効"));
     }
 
     @Test

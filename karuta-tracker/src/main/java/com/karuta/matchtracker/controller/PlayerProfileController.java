@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.dto.PlayerProfileCreateRequest;
 import com.karuta.matchtracker.dto.PlayerProfileDto;
 import com.karuta.matchtracker.service.PlayerProfileService;
@@ -77,6 +79,7 @@ public class PlayerProfileController {
      * @return 登録されたプロフィール情報
      */
     @PostMapping
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PlayerProfileDto> createProfile(@Valid @RequestBody PlayerProfileCreateRequest request) {
         log.info("POST /api/player-profiles - Creating new profile for player {}", request.getPlayerId());
         PlayerProfileDto createdProfile = playerProfileService.createProfile(request);
@@ -91,6 +94,7 @@ public class PlayerProfileController {
      * @return 更新されたプロフィール情報
      */
     @PutMapping("/{profileId}/valid-to")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<PlayerProfileDto> setValidTo(
             @PathVariable Long profileId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate validTo) {
@@ -106,6 +110,7 @@ public class PlayerProfileController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{profileId}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<Void> deleteProfile(@PathVariable Long profileId) {
         log.info("DELETE /api/player-profiles/{} - Deleting profile", profileId);
         playerProfileService.deleteProfile(profileId);

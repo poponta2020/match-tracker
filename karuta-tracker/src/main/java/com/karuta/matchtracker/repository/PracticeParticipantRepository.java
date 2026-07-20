@@ -376,16 +376,26 @@ public interface PracticeParticipantRepository extends JpaRepository<PracticePar
                                                                   @Param("matchNumber") Integer matchNumber);
 
     /**
-     * 指定月・指定団体のセッションで落選した選手IDリストを取得（月内優先当選判定用）
+     * 公平抽選トラッカーのベースライン用の projection（選手ID + セッション日付）。
      */
-    @Query("SELECT DISTINCT pp.playerId FROM PracticeParticipant pp " +
-           "JOIN PracticeSession ps ON pp.sessionId = ps.id " +
-           "WHERE YEAR(ps.sessionDate) = :year AND MONTH(ps.sessionDate) = :month " +
-           "AND ps.organizationId = :organizationId " +
-           "AND pp.status IN ('WAITLISTED', 'DECLINED') " +
-           "AND ps.sessionDate < (SELECT ps2.sessionDate FROM PracticeSession ps2 WHERE ps2.id = :currentSessionId)")
-    List<Long> findMonthlyLoserPlayerIds(@Param("year") int year,
-                                         @Param("month") int month,
-                                         @Param("currentSessionId") Long currentSessionId,
-                                         @Param("organizationId") Long organizationId);
+    interface PlayerWonDate {
+        Long getPlayerId();
+        java.time.LocalDate getSessionDate();
+    }
+
+    /**
+     * 公平抽選トラッカーのベースライン用: 指定団体・日付範囲 [from, to) で status=WON の
+     * 参加行を (playerId, sessionDate) として取得する。
+     * DISTINCT しない（同日複数WON = 複数行を返す。件数がそのまま recentTaken/todayTaken の基礎になる）。
+     * organizationId が null の場合は全団体を対象にする。
+     * 境界は from 以上・to 未満（半開区間）。-30日や latest 等の計算は呼び出し側が持つ。
+     */
+    @Query("SELECT pp.playerId AS playerId, ps.sessionDate AS sessionDate " +
+           "FROM PracticeParticipant pp JOIN PracticeSession ps ON pp.sessionId = ps.id " +
+           "WHERE (:organizationId IS NULL OR ps.organizationId = :organizationId) " +
+           "AND pp.status = 'WON' " +
+           "AND ps.sessionDate >= :from AND ps.sessionDate < :to")
+    List<PlayerWonDate> findWonPlayerDates(@Param("organizationId") Long organizationId,
+                                           @Param("from") LocalDate from,
+                                           @Param("to") LocalDate to);
 }

@@ -318,9 +318,12 @@ public class MatchController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteMatch(@PathVariable Long id) {
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
+    public ResponseEntity<Void> deleteMatch(@PathVariable Long id, HttpServletRequest httpRequest) {
         log.info("DELETE /api/matches/{} - Deleting match", id);
-        matchService.deleteMatch(id);
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        matchService.deleteMatch(id, currentUserId, currentUserRole);
         return ResponseEntity.noContent().build();
     }
 

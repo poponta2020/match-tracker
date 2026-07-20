@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.config.TestContainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,11 +45,22 @@ class AdjacentRoomIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // 認証はトークンのみを根拠にするため、合成トークンを解決するモックを用意する
+    // （このクラスは BaseAuthenticatedIntegrationTest を継承しないので個別に持つ）
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.karuta.matchtracker.service.AuthTokenService authTokenService;
+
+    @BeforeEach
+    void stubAuthTokenService() {
+        com.karuta.matchtracker.support.AuthTestSupport.stubVerify(authTokenService);
+    }
+
     @BeforeEach
     void setUp() {
         jdbcTemplate.execute(
             "TRUNCATE TABLE matches, player_profiles, practice_participants, practice_sessions, " +
-            "match_pairings, venue_match_schedules, venues, player_organizations, players, organizations RESTART IDENTITY CASCADE"
+            "match_pairings, venue_match_schedules, venues, player_organizations, auth_tokens, " +
+            "players, organizations RESTART IDENTITY CASCADE"
         );
         jdbcTemplate.execute(
             "INSERT INTO organizations (id, code, name, color, deadline_type, created_at, updated_at) " +
@@ -93,7 +106,8 @@ class AdjacentRoomIntegrationTest {
         //   inner query は outer transaction の外で実行 → DataAccessException はキャッチされ "不明" で応答
         // NOT_SUPPORTED を外すと:
         //   inner DataAccessException が PostgreSQL の outer transaction を abort 状態にし 500 エラーになる
-        mockMvc.perform(get("/api/practice-sessions/" + sessionId))
+        mockMvc.perform(get("/api/practice-sessions/" + sessionId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sessionId))
                 .andExpect(jsonPath("$.adjacentRoomStatus").exists())

@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.KaderuSyncStatusResponse;
 import com.karuta.matchtracker.dto.KaderuSyncTriggerEventDto;
@@ -33,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(KaderuSyncTriggerController.class)
 @DisplayName("KaderuSyncTriggerController 単体テスト")
-class KaderuSyncTriggerControllerTest {
+class KaderuSyncTriggerControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -64,8 +66,7 @@ class KaderuSyncTriggerControllerTest {
 
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7")
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
@@ -87,8 +88,7 @@ class KaderuSyncTriggerControllerTest {
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         body.setOrganizationId(2L);
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
@@ -102,8 +102,7 @@ class KaderuSyncTriggerControllerTest {
 
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -120,8 +119,7 @@ class KaderuSyncTriggerControllerTest {
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         body.setOrganizationId(2L);
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7")
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isForbidden());
@@ -138,8 +136,7 @@ class KaderuSyncTriggerControllerTest {
 
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7")
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isConflict());
@@ -157,8 +154,7 @@ class KaderuSyncTriggerControllerTest {
 
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7")
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isServiceUnavailable());
@@ -169,8 +165,7 @@ class KaderuSyncTriggerControllerTest {
     void trigger_player_returns403() throws Exception {
         KaderuSyncTriggerRequest body = new KaderuSyncTriggerRequest();
         mockMvc.perform(post("/api/kaderu-sync/trigger")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "7")
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isForbidden());
@@ -190,8 +185,7 @@ class KaderuSyncTriggerControllerTest {
                 .build());
 
         mockMvc.perform(get("/api/kaderu-sync/status")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7"))
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pendingEvent.id").value(100))
                 .andExpect(jsonPath("$.pendingEvent.organizationCode").value("hokudai"))
@@ -208,8 +202,7 @@ class KaderuSyncTriggerControllerTest {
                 .thenReturn(KaderuSyncStatusResponse.builder().pendingEvent(null).build());
 
         mockMvc.perform(get("/api/kaderu-sync/status")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "7"))
+                        .header("Authorization", AuthTestSupport.bearer(7L, Role.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pendingEvent").doesNotExist());
     }
@@ -220,8 +213,7 @@ class KaderuSyncTriggerControllerTest {
         when(organizationScopeResolver.resolveEffectiveOrganizationId(any(), eq(null))).thenReturn(null);
 
         mockMvc.perform(get("/api/kaderu-sync/status")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pendingEvent").doesNotExist());
     }

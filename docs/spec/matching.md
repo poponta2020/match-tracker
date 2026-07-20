@@ -134,6 +134,7 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - `matchNumber` が数値でない／1未満／`totalMatches` 超過は無効として全試合モードにフォールバックする。対象試合のペアが空でも日付見出し＋`N試合目　札ルール` を表示する（URL直接アクセス防御）
 - 「札を再生成」ボタンは**当日（今日）かつ全試合モードのときのみ表示**する。単一試合モードでは非表示(札ルールはその日全体の概念であり単一試合画面からの全体再生成は誤操作・混乱のもと）。過去日・他日も非表示とし、決定論の既定札ルール（全端末一致）を表示する（cleanup の「今日以外の nonce 削除」方針と整合）
 - テキストはクリップボードにコピー可能。対戦組み合わせ画面（PairingGenerator）の「全試合 / {N}試合目」セグメントトグル＋生成ボタンから、対象に応じた URL（全試合 `?date=...` / 単一試合 `?date=...&matchNumber=N`）で本画面へ遷移する
+- **PairingGenerator 側のトグル見出しは組み合わせの有無に関わらず常時表示する（pairing-always-visible-edit-button）**。以前は生成可能な対象が1つも無いとセクションごと消えており、組み合わせ済みの試合と未作成の試合をタブで行き来するたびに直下の試合番号タブが上下していた。生成可否の判定（`computeLineTextAvailability` / `resolveLineTextTarget`）は不変で、対象が無いときは展開しても両セグメントが `disabled`・生成ボタンの代わりに「対戦組み合わせが未作成のため生成できません」の注記を出す
 
 ## 画面
 
@@ -145,8 +146,14 @@ ADMIN以上が利用可能。練習日・試合番号ごとに対戦ペアを作
 - 日付・会場名の表示（ヘッダに `日付＋会場名`。この画面での日付変更＝日付入力／「今日」ボタンは廃止し、`?date=` クエリ／当日デフォルトから受け取る）
 - 試合番号選択（同一フットプリントの数字タブを左寄せ表示。アクティブは滑る cream ハイライトで表現し連結パネルに接続、≤7 は1行・8以上は横スクロール）
 - 参加者一覧（新規作成時のみ・折りたたみ廃止で常時展開）
-- 主アクション「対戦編集」ボタン（＝従来の自動マッチング。文言変更のみ・挙動不変）→ `POST /api/match-pairings/auto-match`
-- **参加者一覧・「自動マッチング」ボタンは、その試合にまだ組み合わせが1つも無いとき（新規作成時 = `pairings.length === 0`）のみ表示**。既存の組み合わせがある試合は、結果入力済み・未入力に関わらず組み合わせ表示（閲覧モード/編集）に統一し、作成UIは出さない（結果未入力の試合と表示を一貫させるため）
+- **主アクション「対戦編集」ボタンはパネル冒頭の「N試合目」行の右端に常設する（pairing-always-visible-edit-button）**。位置・ラベル・見た目は画面状態によらず不変で、挙動だけを `resolvePairingEditAction`（pairingDisplayLogic）で切り替える:
+  - `'edit-existing'`（組が1件以上）: 閲覧モード → 編集モードへ切り替えるだけ（`materializeCancelledSlots`）。**auto-match は呼ばない** ―― 呼ぶと保存済みの組み合わせが黙って組み直されて失われる（旧「編集」ボタンの挙動を維持）
+  - `'auto-match'`（組0件・参加者あり）: 従来どおり `POST /api/match-pairings/auto-match`（`lockedPairs` を送らない後方互換形）
+  - `'empty-edit'`（組0件・参加者0名）: 空の編集モードへ入る。この画面から参加者一覧の「追加」を廃止したため、待機中セクションの「選手追加」へ到達できる経路を残す。選手追加は `currentSession` を更新するため、ドラフト（`saveDraft`）を必ず作って復元 useEffect による巻き戻りを防ぐ（#485 と同型）
+  - 押せない状態（`isReadOnly`／既に編集モード）は非表示にせず `disabled` にして高さを保つ（`isPairingEditDisabled`）
+  - 編集エリア（組一覧・待機中・確定して保存）の描画可否は `shouldShowEditingArea` = `pairings.length > 0 || isEditing`
+- **この画面の「更新」「追加」（参加者ヘッダ）・組み合わせヘッダの「編集」・右下の「対戦編集」は廃止**し、上記の常設ボタン1つに統合した。参加者ヘッダに置いていた再取得（`handleRefresh`）も削除（参加者の登録・更新は出欠登録画面と編集モードの「選手追加」で行う）
+- **参加者一覧は、その試合にまだ組み合わせが1つも無く（`pairings.length === 0`）かつ編集モードでないときのみ表示**（`shouldShowParticipantSection`）。既存の組み合わせがある試合は、結果入力済み・未入力に関わらず組み合わせ表示（閲覧モード/編集）に統一し、作成UIは出さない（結果未入力の試合と表示を一貫させるため）
 - **閲覧／読み取り専用モードの未組み合わせ選手チップ（pairing-view-unpaired-chips）**: 一部だけ組がある試合を閲覧（`isViewMode`）または読み取り専用（`isReadOnly`＝他試合に未保存編集がある状態でこの試合を見ている）で表示しているとき、まだどの組にも入っていない参加者（`waitingPlayers`）を「待機中 N名」＋読み取り専用の名前チップ（`PlayerChip` を `sortPlayersByRank` 順・参加者一覧と同スタイル `flex flex-wrap gap-2`）で組み合わせ一覧の直後に表示する。チップのみ（活動プルダウン・選手追加・D&D・ドロップゾーンは出さない）。表示可否は `shouldShowViewModeUnpairedSection`（pairingDisplayLogic）= `(isReadOnly || isViewMode) && pairings.length>0 && waitingPlayers.length>0` で、編集モードの待機中セクションのガード `!isReadOnly && !isViewMode` の**厳密な補集合（相互排他）**。`pairings.length>0` は `isReadOnly` が組0件でも真になりうるため参加者一覧（`pairings.length===0` で表示）との二重表示を防ぐガードとして必須。`waitingPlayers` の算出（組に含まれない組み合わせ対象参加者）は既存経路のまま不変で、表示ガードのみの追加
 - 組み合わせ表示ヘッダ（編集可能状態）に**再シャッフルボタン**（動的文言・確認ダイアログ）→ `POST /api/match-pairings/auto-match`（`lockedPairs` にロック組を同梱）。表示可否は `shouldShowReshuffleButton`、文言は `reshuffleButtonLabel`（pairingDisplayLogic）。送信 body は `computeLockedPairsInput` ＋ `buildAutoMatchBody`（pairingLockLogic）で組み立てる（`undefined`＝対戦編集は `lockedPairs` を送らず、配列＝再シャッフルは空配列でも必ず送る）
 - 提案されたペア一覧（ドラッグ&ドロップ / タップ選択対応）

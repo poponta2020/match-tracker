@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.annotation.RequireRole;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.dto.VenueCreateRequest;
 import com.karuta.matchtracker.dto.VenueDto;
 import com.karuta.matchtracker.dto.VenueUpdateRequest;
@@ -53,6 +55,7 @@ public class VenueController {
      * @return 作成された会場DTO
      */
     @PostMapping
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<VenueDto> createVenue(@Valid @RequestBody VenueCreateRequest request) {
         VenueDto venue = venueService.createVenue(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(venue);
@@ -66,6 +69,7 @@ public class VenueController {
      * @return 更新された会場DTO
      */
     @PutMapping("/{id}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<VenueDto> updateVenue(
             @PathVariable Long id,
             @Valid @RequestBody VenueUpdateRequest request) {
@@ -80,6 +84,7 @@ public class VenueController {
      * @return レスポンスなし
      */
     @DeleteMapping("/{id}")
+    @RequireRole(Role.SUPER_ADMIN)
     public ResponseEntity<Void> deleteVenue(@PathVariable Long id) {
         venueService.deleteVenue(id);
         return ResponseEntity.noContent().build();

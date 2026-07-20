@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.MatchVideoDateCandidateDto;
 import com.karuta.matchtracker.repository.PlayerRepository;
@@ -39,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(MatchVideoController.class)
 @Import(OrganizationScopeResolver.class)
 @DisplayName("MatchVideoController 単体テスト")
-class MatchVideoControllerTest {
+class MatchVideoControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -89,7 +91,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(1)))
@@ -113,7 +115,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -136,7 +138,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -157,7 +159,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("organizationId", orgId.toString()))
                     .andExpect(status().isOk());
@@ -176,7 +178,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("organizationId", "99"))
                     .andExpect(status().isForbidden());
@@ -194,7 +196,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -215,7 +217,7 @@ class MatchVideoControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -229,18 +231,16 @@ class MatchVideoControllerTest {
         @Test
         @DisplayName("ADMIN は adminOrganizationId でスコープされ、既定解決の所属引きは行わない")
         void shouldScopeAdminByAdminOrganizationIdWithoutDefaultResolution() throws Exception {
-            // Given: ADMIN(userId=1) は adminOrganizationId=7L。RoleCheckInterceptor が属性をセットする。
+            // Given: ADMIN(userId=1) は adminOrganizationId=7L。
+            // adminOrganizationId はトークンから解決した選手に由来するため、
+            // playerRepository ではなくトークン側に持たせる（auth-tokenization）。
             LocalDate date = LocalDate.of(2024, 1, 15);
-            com.karuta.matchtracker.entity.Player admin = new com.karuta.matchtracker.entity.Player();
-            admin.setId(1L);
-            admin.setAdminOrganizationId(7L);
-            when(playerRepository.findById(1L)).thenReturn(java.util.Optional.of(admin));
             when(matchVideoService.getDateCandidates(date, 7L))
                     .thenReturn(Collections.emptyList());
 
             // When & Then
             mockMvc.perform(get("/api/match-videos/date-candidates")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN, 7L))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -254,7 +254,7 @@ class MatchVideoControllerTest {
         void shouldReturn403WithoutAuthHeader() throws Exception {
             mockMvc.perform(get("/api/match-videos/date-candidates")
                             .param("date", "2024-01-15"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchVideoService, never()).getDateCandidates(any(), any());
         }

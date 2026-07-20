@@ -1,9 +1,12 @@
 package com.karuta.matchtracker.repository;
 
 import com.karuta.matchtracker.config.TestContainersConfig;
+import com.karuta.matchtracker.converter.LineCredentialCipher;
+import com.karuta.matchtracker.converter.LineEncryptionKeyHolder;
 import com.karuta.matchtracker.entity.ChannelType;
 import com.karuta.matchtracker.entity.LineChannel;
 import com.karuta.matchtracker.entity.LineChannel.ChannelStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,9 +43,20 @@ class LineChannelBroadcastRepositoryTest {
                 .build();
     }
 
+    // @DataJpaTest スライスは LineEncryptionKeyProvider(@Component) を読み込まないため、
+    // channel_secret/channel_access_token を暗号化保存する EncryptedStringConverter 用に
+    // ホルダを明示 populate する（テスト専用鍵。Option B の自己管理不変条件）。
+    private static final String TEST_KEY = "i1paoEBF5XgTlTLDjO3C8Lv8wDa6S88CXCXjSno83LI=";
+
     @BeforeEach
     void setUp() {
+        LineEncryptionKeyHolder.set(new LineCredentialCipher(TEST_KEY));
         repository.deleteAll();
+    }
+
+    @AfterEach
+    void tearDown() {
+        LineEncryptionKeyHolder.clear();
     }
 
     @Test

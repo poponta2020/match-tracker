@@ -13,6 +13,15 @@ export interface WorkerConfig {
   artifactDir: string;
   artifactRetentionDays: number;
   requestTimeoutMs: number;
+  /**
+   * 30日SSO Cookie（`__is_login_sso`）の失効がこの日数以内になったら管理者へ先回り警告する閾値（line-chat-auto-relogin）。
+   */
+  ssoWarningThresholdDays: number;
+  /**
+   * 認証壁検出時のクリックスルー自動再ログインを有効にするか（キルスイッチ・既定 true）。
+   * false にすると従来どおり壁検出＝即 LINE_AUTH_EXPIRED でフォールバックpushに委ねる。
+   */
+  autoReloginEnabled: boolean;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5分
@@ -20,6 +29,7 @@ const DEFAULT_STORAGE_STATE_PATH = "./storage-state.json";
 const DEFAULT_ARTIFACT_DIR = "./artifacts";
 const DEFAULT_ARTIFACT_RETENTION_DAYS = 14;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_SSO_WARNING_THRESHOLD_DAYS = 3;
 
 /**
  * 環境変数からワーカー設定を読み込む。
@@ -36,6 +46,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     artifactDir: env.ARTIFACT_DIR ?? DEFAULT_ARTIFACT_DIR,
     artifactRetentionDays: parsePositiveInt(env.ARTIFACT_RETENTION_DAYS, DEFAULT_ARTIFACT_RETENTION_DAYS),
     requestTimeoutMs: parsePositiveInt(env.REQUEST_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS),
+    ssoWarningThresholdDays: parsePositiveInt(
+      env.SSO_WARNING_THRESHOLD_DAYS,
+      DEFAULT_SSO_WARNING_THRESHOLD_DAYS,
+    ),
+    autoReloginEnabled: parseBoolean(env.AUTO_RELOGIN_ENABLED, true),
   };
 }
 

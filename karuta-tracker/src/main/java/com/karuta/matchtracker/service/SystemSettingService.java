@@ -17,7 +17,7 @@ import java.util.Optional;
 public class SystemSettingService {
 
     public static final String LOTTERY_DEADLINE_DAYS_BEFORE = "lottery_deadline_days_before";
-    public static final String LOTTERY_NORMAL_RESERVE_PERCENT = "lottery_normal_reserve_percent";
+    public static final String LOTTERY_WEIGHT_CAP_PERCENTILE = "lottery_weight_cap_percentile";
 
     private final SystemSettingRepository systemSettingRepository;
 
@@ -59,10 +59,13 @@ public class SystemSettingService {
     }
 
     /**
-     * 一般枠の最低保証割合を取得する（0〜100、デフォルト30%）
+     * 公平抽選の重みキャップのパーセンタイルを取得する（0〜100 にクランプ、デフォルト30）。
+     * 抽選ルール2（直近30日の重み付き抽選）のキャップ算出に使う nearest-rank パーセンタイル。
+     * 保存経路にバリデーションはないため、範囲外の保存値はこの getter でクランプして防御する。
      */
-    public int getLotteryNormalReservePercent(Long organizationId) {
-        return getIntValue(LOTTERY_NORMAL_RESERVE_PERCENT, organizationId, 30);
+    public int getLotteryWeightCapPercentile(Long organizationId) {
+        int raw = getIntValue(LOTTERY_WEIGHT_CAP_PERCENTILE, organizationId, 30);
+        return Math.max(0, Math.min(100, raw));
     }
 
     /**

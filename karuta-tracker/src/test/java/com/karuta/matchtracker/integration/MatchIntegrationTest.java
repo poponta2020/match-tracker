@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player;
@@ -21,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 試合結果は選手と練習日に依存するため、これらのデータも準備してテストする
  */
 @DisplayName("Match統合テスト")
-class MatchIntegrationTest extends BaseIntegrationTest {
+class MatchIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -48,7 +50,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(sessionRequest)))
                 .andExpect(status().isCreated());
@@ -63,7 +65,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -89,8 +91,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/matches/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -107,29 +108,34 @@ class MatchIntegrationTest extends BaseIntegrationTest {
 
         // 2. 日付で試合を取得
         mockMvc.perform(get("/api/matches")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(matchId));
 
         // 3. 試合が存在するか確認
         mockMvc.perform(get("/api/matches/exists")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("true"));
 
         // 4. 選手1の試合を取得
-        mockMvc.perform(get("/api/matches/player/" + player1Id))
+        mockMvc.perform(get("/api/matches/player/" + player1Id)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
         // 5. 試合を削除
-        mockMvc.perform(delete("/api/matches/" + matchId))
+        mockMvc.perform(delete("/api/matches/" + matchId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 6. 削除後は試合が存在しない
         mockMvc.perform(get("/api/matches/exists")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("false"));
     }
@@ -148,31 +154,36 @@ class MatchIntegrationTest extends BaseIntegrationTest {
 
         // 日付で試合を取得
         mockMvc.perform(get("/api/matches")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(5)));
 
         // 選手1の試合を取得
-        mockMvc.perform(get("/api/matches/player/" + player1Id))
+        mockMvc.perform(get("/api/matches/player/" + player1Id)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(5)));
 
         // 選手1 vs 選手2の対戦成績
         mockMvc.perform(get("/api/matches/between")
                         .param("player1Id", player1Id.toString())
-                        .param("player2Id", player2Id.toString()))
+                        .param("player2Id", player2Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
 
         // 選手1の統計を取得
-        mockMvc.perform(get("/api/matches/player/" + player1Id + "/statistics"))
+        mockMvc.perform(get("/api/matches/player/" + player1Id + "/statistics")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(5))
                 .andExpect(jsonPath("$.wins").value(2))
                 .andExpect(jsonPath("$.winRate").value(closeTo(40.0, 0.1)));
 
         // 選手3の統計を取得
-        mockMvc.perform(get("/api/matches/player/" + player3Id + "/statistics"))
+        mockMvc.perform(get("/api/matches/player/" + player3Id + "/statistics")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(2))
                 .andExpect(jsonPath("$.wins").value(2))
@@ -191,8 +202,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", p1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(p1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -211,7 +221,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(yesterdaySession)))
                 .andExpect(status().isCreated());
@@ -223,7 +233,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(tomorrowSession)))
                 .andExpect(status().isCreated());
@@ -236,14 +246,16 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         // 期間内の試合を取得
         mockMvc.perform(get("/api/matches/player/" + player1Id + "/period")
                         .param("startDate", yesterday.toString())
-                        .param("endDate", tomorrow.toString()))
+                        .param("endDate", tomorrow.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
 
         // 今日だけの試合を取得
         mockMvc.perform(get("/api/matches/player/" + player1Id + "/period")
                         .param("startDate", sessionDate.toString())
-                        .param("endDate", sessionDate.toString()))
+                        .param("endDate", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
     }
@@ -263,8 +275,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(samePlayerRequest)))
                 .andExpect(status().isBadRequest());
@@ -281,8 +292,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidWinnerRequest)))
                 .andExpect(status().isBadRequest());
@@ -300,8 +310,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/matches/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(nonExistentSessionRequest)))
                 .andExpect(status().isBadRequest());
@@ -310,7 +319,8 @@ class MatchIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("存在しない選手の試合を取得しようとすると404を返す")
     void testNonExistentPlayer() throws Exception {
-        mockMvc.perform(get("/api/matches/player/999"))
+        mockMvc.perform(get("/api/matches/player/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
     }
 
@@ -327,8 +337,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         request1.setScoreDifference(5);
 
         mockMvc.perform(post("/api/matches")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -343,8 +352,7 @@ class MatchIntegrationTest extends BaseIntegrationTest {
         request2.setScoreDifference(3);
 
         mockMvc.perform(post("/api/matches")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", player1Id.toString())
+                        .header("Authorization", AuthTestSupport.bearer(player1Id, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict());

@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(IcalCalendarFeedController.class)
 @DisplayName("IcalCalendarFeedController 単体テスト")
-class IcalCalendarFeedControllerTest {
+class IcalCalendarFeedControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

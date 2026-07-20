@@ -59,6 +59,26 @@ class AdjacentRoomServiceTest {
         assertEquals(7L, result.getExpandedVenueId());
         assertEquals("すずらん・はまなす", result.getExpandedVenueName());
         assertEquals(24, result.getExpandedCapacity());
+        assertFalse(result.getManualExpansion()); // かでるは手動拡張会場ではない
+    }
+
+    @Test
+    @DisplayName("東🌸(6)の隣室空き状況 - 空き不明でも manualExpansion=true で DTO を返す")
+    void getAdjacentRoomAvailability_higashiManualExpansion() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        when(roomAvailabilityCacheRepository.findByRoomNameAndTargetDateAndTimeSlot("かっこう", date, "evening"))
+                .thenReturn(Optional.empty());
+
+        AdjacentRoomStatusDto result = adjacentRoomService.getAdjacentRoomAvailability(6L, date);
+
+        assertNotNull(result);
+        assertEquals("かっこう", result.getAdjacentRoomName());
+        assertEquals("不明", result.getStatus());
+        assertFalse(result.getAvailable());
+        assertTrue(result.getManualExpansion()); // 東🌸は手動拡張会場
+        assertEquals(10L, result.getExpandedVenueId());
+        assertEquals("東全室", result.getExpandedVenueName());
+        assertEquals(18, result.getExpandedCapacity());
     }
 
     @Test
@@ -205,6 +225,32 @@ class AdjacentRoomServiceTest {
         assertNull(session.getReservationConfirmedAt());
         verify(practiceSessionRepository).save(session);
         verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(1L);
+    }
+
+    @Test
+    @DisplayName("会場拡張 - 東🌸(6)は空き「不明」・予約未確認でも拡張成立（手動拡張・スクレイプ非依存）")
+    void expandVenue_higashiManualExpansion() {
+        LocalDate date = LocalDate.of(2026, 4, 12);
+        PracticeSession session = PracticeSession.builder()
+                .id(1L).venueId(6L).capacity(14).sessionDate(date)
+                .reservationConfirmedAt(null).build(); // 予約未確認でも拡張できる
+        Venue expandedVenue = Venue.builder().id(10L).name("東全室").capacity(18).build();
+
+        when(practiceSessionRepository.findById(1L)).thenReturn(Optional.of(session));
+        when(venueRepository.findById(10L)).thenReturn(Optional.of(expandedVenue));
+        when(practiceSessionRepository.save(any())).thenReturn(session);
+
+        adjacentRoomService.expandVenue(1L, 100L);
+
+        assertEquals(10L, session.getVenueId());
+        assertEquals(18, session.getCapacity());
+        assertEquals(100L, session.getUpdatedBy());
+        assertNull(session.getReservationConfirmedAt());
+        verify(practiceSessionRepository).save(session);
+        verify(waitlistPromotionService).promoteWaitlistedAfterCapacityIncrease(1L);
+        // 手動拡張は空きスクレイプ照会を一切行わない
+        verify(roomAvailabilityCacheRepository, never())
+                .findByRoomNameAndTargetDateAndTimeSlot(anyString(), any(), anyString());
     }
 
     @Test

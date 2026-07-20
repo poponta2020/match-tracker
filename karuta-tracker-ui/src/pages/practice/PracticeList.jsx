@@ -497,11 +497,13 @@ const PracticeList = () => {
     }
   };
 
-  // 会場拡張（予約完了後にDBを更新）
-  const handleExpandVenue = async (sessionId, venueName, adjacentRoomStatus) => {
-    const confirmed = window.confirm(
-      `${venueName}を${adjacentRoomStatus.expandedVenueName}に拡張しますか？\n定員が${selectedSession.capacity}→${adjacentRoomStatus.expandedCapacity}に変更されます`
-    );
+  // 会場拡張（予約完了後にDBを更新）。
+  // manualExpansion=true（東🌸）は空き検証なしの手動拡張のため、確認ダイアログで予約済みを念押しする。
+  const handleExpandVenue = async (sessionId, venueName, adjacentRoomStatus, manualExpansion = false) => {
+    const confirmMessage = manualExpansion
+      ? `${adjacentRoomStatus.adjacentRoomName}を予約済みですか？\n${venueName}を${adjacentRoomStatus.expandedVenueName}に拡張し、定員が${selectedSession.capacity}→${adjacentRoomStatus.expandedCapacity}に変更されます`
+      : `${venueName}を${adjacentRoomStatus.expandedVenueName}に拡張しますか？\n定員が${selectedSession.capacity}→${adjacentRoomStatus.expandedCapacity}に変更されます`;
+    const confirmed = window.confirm(confirmMessage);
     if (!confirmed) return;
     try {
       const response = await practiceAPI.expandVenue(sessionId);
@@ -894,6 +896,23 @@ const PracticeList = () => {
                   <div className="mt-0.5">
                     <p className="text-sm text-[#6b7280]">{selectedSession.venueName}</p>
                     {selectedSession.adjacentRoomStatus && (
+                      selectedSession.adjacentRoomStatus.manualExpansion ? (
+                        /* 東🌸（手動拡張会場）: 隣室 status チップと空き依存ゲートを外し、
+                           予約済み前提で「会場を拡張」ボタンを管理者に常時表示する（空きスクレイプ非依存） */
+                        (isSuperAdmin(currentPlayer) || isAdmin(currentPlayer)) && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExpandVenue(selectedSession.id, selectedSession.venueName, selectedSession.adjacentRoomStatus, true);
+                              }}
+                              className="text-xs px-2 py-0.5 bg-[#4a6b5a] text-white rounded hover:bg-[#3d5a4b] transition-colors"
+                            >
+                              会場を拡張（{selectedSession.adjacentRoomStatus.expandedVenueName}に）
+                            </button>
+                          </div>
+                        )
+                      ) : (
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
                           selectedSession.adjacentRoomStatus.available
@@ -946,6 +965,7 @@ const PracticeList = () => {
                           )
                         )}
                       </div>
+                      )
                     )}
                   </div>
                 )}

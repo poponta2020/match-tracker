@@ -46,6 +46,11 @@ implementation 'org.springframework.boot:spring-boot-starter-web'
 	// iCal feed generation (ical-calendar-feed)
 	implementation 'net.sf.biweekly:biweekly:0.6.7'
 
+	// パスワードの BCrypt ハッシュ化 (auth-tokenization)
+	// spring-boot-starter-security は入れない。フィルタチェーンが自動で有効化され、
+	// 既存の RoleCheckInterceptor 構成と二重に認証がかかるため。
+	implementation 'org.springframework.security:spring-security-crypto'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 

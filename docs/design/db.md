@@ -94,7 +94,7 @@ DESIGN 側は organizations・player_organizations・match_personal_notes・invi
 
 - [db-tables-1.md](./db-tables-1.md) — players 〜 venue_match_schedules（旧ドキュメントに記載のあるテーブル群 前半）
 - [db-tables-2.md](./db-tables-2.md) — densuke_urls 〜 match_videos（旧ドキュメントに記載のあるテーブル群 後半）
-- [db-tables-3.md](./db-tables-3.md) — 本番 introspect のみに存在し旧ドキュメント未記載だった7テーブル（adjacent_room_notifications / room_availability_cache / kaderu_sync_trigger_events / line_confirmation_tokens / match_card_placements / match_otetsuki_details / card_rule_nonce）
+- [db-tables-3.md](./db-tables-3.md) — 本番 introspect のみに存在し旧ドキュメント未記載だった7テーブル（adjacent_room_notifications / room_availability_cache / kaderu_sync_trigger_events / line_confirmation_tokens / match_card_placements / match_otetsuki_details / card_rule_nonce）＋ auth_tokens
 
 ## データベース初期データ
 
@@ -106,3 +106,5 @@ DESIGN 側は organizations・player_organizations・match_personal_notes・invi
 INSERT INTO players (name, password, gender, role, created_at, updated_at)
 VALUES ('土居悠太', 'password123', '男性', 'SUPER_ADMIN', NOW(), NOW());
 ```
+
+> パスワードは BCrypt ハッシュで保存する。上記のように平文で投入した場合でも、起動時の `PasswordHashMigrationRunner` が BCrypt へ変換する（冪等）。

@@ -9,7 +9,10 @@ import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.Player;
 import com.karuta.matchtracker.entity.Player.Role;
+import com.karuta.matchtracker.exception.ForbiddenException;
 import com.karuta.matchtracker.service.PlayerService;
+import com.karuta.matchtracker.util.BearerTokenExtractor;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +44,21 @@ public class PlayerController {
         log.info("POST /api/players/login - Login attempt for: {}", request.getName());
         LoginResponse response = playerService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ログアウト（当該トークンのみ失効させる）
+     *
+     * 認証必須（許可リスト外のため、有効なトークンが無ければインターセプタが 401 を返す）。
+     *
+     * @param httpRequest Authorization ヘッダーから失効対象のトークンを取得するために使用
+     * @return 204 No Content
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest httpRequest) {
+        log.info("POST /api/players/logout");
+        playerService.logout(BearerTokenExtractor.extract(httpRequest));
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -147,12 +165,35 @@ public class PlayerController {
      * @return 更新された選手情報
      */
     @PutMapping("/{id}")
+    @RequireRole({Role.SUPER_ADMIN, Role.ADMIN, Role.PLAYER})
     public ResponseEntity<PlayerDto> updatePlayer(
             @PathVariable Long id,
-            @Valid @RequestBody PlayerUpdateRequest request) {
+            @Valid @RequestBody PlayerUpdateRequest request,
+            HttpServletRequest httpRequest) {
         log.info("PUT /api/players/{} - Updating player", id);
+        checkSelfOrSuperAdmin(id, httpRequest);
         PlayerDto updatedPlayer = playerService.updatePlayer(id, request);
         return ResponseEntity.ok(updatedPlayer);
+    }
+
+    /**
+     * 本人または SUPER_ADMIN のみに操作を許可する。
+     *
+     * PlayerUpdateRequest は password を含むため、ここを開けると
+     * 任意アカウントのパスワードを書き換えて成りすませてしまう（Issue #1105）。
+     */
+    private void checkSelfOrSuperAdmin(Long targetPlayerId, HttpServletRequest httpRequest) {
+        Long currentUserId = (Long) httpRequest.getAttribute("currentUserId");
+        if (currentUserId == null) {
+            throw new ForbiddenException("認証が必要です");
+        }
+        if (currentUserId.equals(targetPlayerId)) {
+            return;
+        }
+        Role currentUserRole = Role.valueOf((String) httpRequest.getAttribute("currentUserRole"));
+        if (currentUserRole != Role.SUPER_ADMIN) {
+            throw new ForbiddenException("他のユーザーの情報は更新できません");
+        }
     }
 
     /**

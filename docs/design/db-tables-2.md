@@ -130,8 +130,8 @@ NotificationType列挙型（出典: DESIGN のみ。値の説明が詳しい）:
 | id | BIGINT | PK, AUTO | — |
 | channel_name | VARCHAR(100) | — | 管理用表示名 |
 | line_channel_id | VARCHAR(50) | NOT NULL, UNIQUE | LINE発行のチャネルID |
-| channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（DESIGNでは「暗号化保存」と付記） |
-| channel_access_token | TEXT | NOT NULL | アクセストークン（DESIGNでは「暗号化保存」と付記） |
+| channel_secret | VARCHAR(255) | NOT NULL | チャネルシークレット（AES-256-GCM でアプリ層暗号化保存＝`enc:v1:` 接頭辞付き暗号文。スキーマ変更なし） |
+| channel_access_token | TEXT | NOT NULL | アクセストークン（AES-256-GCM でアプリ層暗号化保存＝`enc:v1:` 接頭辞付き暗号文。スキーマ変更なし） |
 | channel_type | VARCHAR(10) | NOT NULL, DEFAULT 'PLAYER' | チャネル用途（PLAYER: 選手用 / ADMIN: 管理者用 / GROUP: 全体LINE配信用bot） |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE' | AVAILABLE/ASSIGNED/LINKED/DISABLED |
 | friend_add_url | TEXT | — | 友だち追加URL |

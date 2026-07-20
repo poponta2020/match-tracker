@@ -48,6 +48,7 @@ class DensukeImportServiceTest {
     @Mock private LineNotificationService lineNotificationService;
     @Mock private OrganizationService organizationService;
     @Mock private DensukeDeletionDetectionService densukeDeletionDetectionService;
+    @Mock private PasswordPolicy passwordPolicy;
 
     @InjectMocks
     private DensukeImportService densukeImportService;

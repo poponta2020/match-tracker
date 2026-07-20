@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,9 @@ public class PlayerService {
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final OrganizationService organizationService;
+    private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicy passwordPolicy;
+    private final AuthTokenService authTokenService;
 
     /**
      * 全てのアクティブな選手を取得（名前順）
@@ -148,7 +152,7 @@ public class PlayerService {
                     throw new DuplicateResourceException("Player", "name", request.getName());
                 });
 
-        Player player = request.toEntity();
+        Player player = request.toEntity(passwordPolicy.encode(request.getPassword()));
         Player saved = playerRepository.save(player);
 
         log.info("Successfully created player with id: {}", saved.getId());
@@ -179,8 +183,16 @@ public class PlayerService {
                     });
         }
 
-        request.applyTo(player);
+        boolean passwordChanged = request.getPassword() != null;
+        String encodedPassword = passwordChanged ? passwordPolicy.encode(request.getPassword()) : null;
+
+        request.applyTo(player, encodedPassword);
         Player updated = playerRepository.save(player);
+
+        // パスワード変更時は発行済みトークンをすべて失効させる（AC-12）
+        if (passwordChanged) {
+            authTokenService.revokeAllForPlayer(id);
+        }
 
         log.info("Successfully updated player with id: {}", id);
         return PlayerDto.fromEntity(updated);
@@ -302,6 +314,9 @@ public class PlayerService {
         player.setDeletedAt(JstDateTimeUtil.now());
         playerRepository.save(player);
 
+        // 論理削除した選手の発行済みトークンをすべて失効させる（AC-13）
+        authTokenService.revokeAllForPlayer(id);
+
         log.info("Successfully deleted player with id: {}", id);
     }
 
@@ -334,11 +349,13 @@ public class PlayerService {
     public LoginResponse login(LoginRequest request) {
         log.info("Login attempt for user: {}", request.getName());
 
-        Player player = playerRepository.findByNameAndActive(request.getName())
+        // 選手行に排他ロックを取ってから照合する。パスワード変更と並行したログインが
+        // 「旧パスワードで認証 → 一括失効の後にトークンを INSERT」して失効をすり抜けるのを防ぐ（AC-12）
+        Player player = playerRepository.findByNameAndActiveForUpdate(request.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("選手名またはパスワードが正しくありません"));
 
-        // 簡易実装: パスワードを平文で比較（本番環境ではBCryptを使用すべき）
-        if (!request.getPassword().equals(player.getPassword())) {
+        // パスワードは BCrypt ハッシュで照合する（平文は保存されていない）
+        if (!passwordEncoder.matches(request.getPassword(), player.getPassword())) {
             log.warn("Failed login attempt for user: {}", request.getName());
             throw new ResourceNotFoundException("選手名またはパスワードが正しくありません");
         }
@@ -354,7 +371,22 @@ public class PlayerService {
                 .map(PlayerOrganization::getOrganizationId)
                 .collect(Collectors.toList());
 
+        // 認証トークンを発行する。以降のリクエストはこのトークンだけを根拠に本人性を判定する
+        String token = authTokenService.issue(player);
+
         log.info("Successful login for user: {} (firstLogin: {})", request.getName(), isFirstLogin);
-        return LoginResponse.fromEntity(player, isFirstLogin, organizationIds);
+        return LoginResponse.fromEntity(player, isFirstLogin, organizationIds, token);
+    }
+
+    /**
+     * ログアウト（当該トークンのみ失効させる）
+     *
+     * 未知・失効済みのトークンを渡されても例外にはしない（冪等）。
+     *
+     * @param rawToken 失効させる生トークン
+     */
+    @Transactional
+    public void logout(String rawToken) {
+        authTokenService.revoke(rawToken);
     }
 }

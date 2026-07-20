@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.exception.DuplicateMatchException;
 import com.karuta.matchtracker.exception.DuplicateResourceException;
 import com.karuta.matchtracker.exception.ForbiddenException;
@@ -26,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(PlayerController.class)
 @DisplayName("GlobalExceptionHandler 単体テスト")
-class GlobalExceptionHandlerTest {
+class GlobalExceptionHandlerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -47,7 +49,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new ResourceNotFoundException("Player", 999L));
 
         // When & Then
-        mockMvc.perform(get("/api/players/999"))
+        mockMvc.perform(get("/api/players/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404))
@@ -64,7 +67,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new ResourceNotFoundException("Player", "name", "TestPlayer"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404))
@@ -81,7 +85,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new DuplicateMatchException("この日の第1試合は既に登録されています", 42L));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(409))
@@ -100,7 +105,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new DuplicateResourceException("Player", "name", "田中太郎"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(409))
@@ -118,7 +124,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new ForbiddenException("この操作を実行する権限がありません"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(403))
@@ -134,7 +141,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new ForbiddenException("認証が必要です"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(403))
@@ -151,7 +159,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new IllegalArgumentException("不正な引数です"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400))
@@ -169,7 +178,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new IllegalStateException("不正な状態です"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400))
@@ -194,7 +204,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())
@@ -220,7 +230,7 @@ class GlobalExceptionHandlerTest {
 
         // When & Then
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidRequest))
                 .andExpect(status().isBadRequest())
@@ -241,7 +251,8 @@ class GlobalExceptionHandlerTest {
                 .thenThrow(new RuntimeException("予期しないエラー"));
 
         // When & Then
-        mockMvc.perform(get("/api/players/1"))
+        mockMvc.perform(get("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(500))

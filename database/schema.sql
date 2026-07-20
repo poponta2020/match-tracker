@@ -1,0 +1,3064 @@
+-- =====================================================================
+-- schema.sql — 新規環境ブートストラップ用 統合スキーマ（自動生成）
+-- =====================================================================
+--
+-- これは稼働中の本番 PostgreSQL（Render）から
+--   pg_dump --schema-only --no-owner --no-privileges
+-- で生成した「現在の全テーブル定義」のスナップショットです。
+-- 別のかるた会が空DBから本アプリを立ち上げるための唯一の正典スキーマです。
+--
+-- 【重要】これは incremental migration ではありません。
+--   - 既存の本番DB／稼働中DBには絶対に適用しないこと（CREATE TABLE 群が衝突・破壊します）
+--   - CLAUDE.md「DBマイグレーション適用ルール」の対象外（適用済み状態の写しであり、流すべき差分ではない）
+--   - database/ の他の *.sql（add_*.sql 等）は過去の差分パッチ。新規構築では本ファイル1本で足ります
+--
+-- 【新規環境での使い方】
+--   1) 空の PostgreSQL を用意（Render で新規 PostgreSQL を作成）
+--   2) psql "<新DBのURL>" -f database/schema.sql
+--      （psql が使えない環境では下の \restrict 除去済みのため任意のSQLランナーで実行可）
+--   3) 初期データを投入: organizations / players(role=SUPER_ADMIN) / player_organizations / venues
+--      - 初期 SUPER_ADMIN のパスワードは平文で INSERT してよい。
+--        初回起動時に PasswordHashMigrationRunner が自動で BCrypt 化する。
+--   4) アプリ起動（application-render.yml は ddl-auto: none のため、テーブルは本ファイルで作る前提）
+--
+-- 【再生成する場合】（Windows からは NAT64 で直接 pg_dump 不可。Linux / Render シェル / Docker から）
+--   docker run --rm postgres:18 pg_dump --schema-only --no-owner --no-privileges "<本番DBのURL>?sslmode=require"
+--   ※ pg_dump のバージョンはサーバ（現在 PostgreSQL 18.4）以上が必要
+--
+-- 生成元: 本番 karuta_tracker（PostgreSQL 18.4）/ 生成日: 2026-07-20
+-- 収録: 43 テーブル・247 制約・71 索引。データ（COPY/INSERT）は一切含みません。
+-- pg_dump 18 の psql 専用メタコマンド \restrict / \unrestrict は移植性のため除去済み。
+-- =====================================================================
+
+--
+-- PostgreSQL database dump
+--
+
+
+-- Dumped from database version 18.4 (Debian 18.4-1.pgdg12+1)
+-- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: adjacent_room_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.adjacent_room_notifications (
+    id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    remaining_count integer NOT NULL,
+    notified_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: adjacent_room_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.adjacent_room_notifications_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: adjacent_room_notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.adjacent_room_notifications_id_seq OWNED BY public.adjacent_room_notifications.id;
+
+
+--
+-- Name: auth_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_tokens (
+    id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    token_hash character varying(64) NOT NULL,
+    issued_at timestamp without time zone NOT NULL,
+    expires_at timestamp without time zone NOT NULL,
+    revoked_at timestamp without time zone
+);
+
+
+--
+-- Name: auth_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.auth_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: auth_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.auth_tokens_id_seq OWNED BY public.auth_tokens.id;
+
+
+--
+-- Name: bye_activities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bye_activities (
+    id bigint NOT NULL,
+    activity_type character varying(255) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    created_by bigint NOT NULL,
+    free_text character varying(255),
+    match_number integer NOT NULL,
+    player_id bigint NOT NULL,
+    session_date date NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    updated_by bigint NOT NULL,
+    deleted_at timestamp without time zone,
+    CONSTRAINT bye_activities_activity_type_check CHECK (((activity_type)::text = ANY (ARRAY[('READING'::character varying)::text, ('SOLO_PICK'::character varying)::text, ('OBSERVING'::character varying)::text, ('ASSIST_OBSERVING'::character varying)::text, ('OTHER'::character varying)::text, ('ABSENT'::character varying)::text])))
+);
+
+
+--
+-- Name: bye_activities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.bye_activities ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.bye_activities_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: card_rule_nonce; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.card_rule_nonce (
+    id bigint NOT NULL,
+    session_date date NOT NULL,
+    nonce integer DEFAULT 0 NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chk_card_rule_nonce CHECK ((nonce >= 0))
+);
+
+
+--
+-- Name: card_rule_nonce_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.card_rule_nonce_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: card_rule_nonce_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.card_rule_nonce_id_seq OWNED BY public.card_rule_nonce.id;
+
+
+--
+-- Name: densuke_deletion_candidates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.densuke_deletion_candidates (
+    id bigint NOT NULL,
+    densuke_url_id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    session_date date NOT NULL,
+    match_number integer NOT NULL,
+    status character varying(20) DEFAULT 'PENDING'::character varying NOT NULL,
+    detected_at timestamp without time zone DEFAULT now() NOT NULL,
+    notified_at timestamp without time zone,
+    resolved_at timestamp without time zone,
+    resolved_by bigint
+);
+
+
+--
+-- Name: densuke_deletion_candidates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.densuke_deletion_candidates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: densuke_deletion_candidates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.densuke_deletion_candidates_id_seq OWNED BY public.densuke_deletion_candidates.id;
+
+
+--
+-- Name: densuke_member_mappings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.densuke_member_mappings (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    densuke_member_id character varying(50) NOT NULL,
+    densuke_url_id bigint NOT NULL,
+    player_id bigint NOT NULL
+);
+
+
+--
+-- Name: densuke_member_mappings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.densuke_member_mappings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.densuke_member_mappings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: densuke_row_ids; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.densuke_row_ids (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    densuke_row_id character varying(50) NOT NULL,
+    densuke_url_id bigint NOT NULL,
+    match_number integer NOT NULL,
+    session_date date NOT NULL
+);
+
+
+--
+-- Name: densuke_row_ids_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.densuke_row_ids ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.densuke_row_ids_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: densuke_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.densuke_templates (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    title_template character varying(200) NOT NULL,
+    description text,
+    contact_email character varying(255),
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: densuke_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.densuke_templates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: densuke_templates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.densuke_templates_id_seq OWNED BY public.densuke_templates.id;
+
+
+--
+-- Name: densuke_urls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.densuke_urls (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    month integer NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    url character varying(500) NOT NULL,
+    year integer NOT NULL,
+    organization_id bigint NOT NULL,
+    densuke_sd character varying(32)
+);
+
+
+--
+-- Name: densuke_urls_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.densuke_urls ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.densuke_urls_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: invite_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invite_tokens (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    created_by bigint NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    token character varying(36) NOT NULL,
+    type character varying(20) NOT NULL,
+    used_at timestamp(6) without time zone,
+    used_by bigint,
+    organization_id bigint NOT NULL,
+    CONSTRAINT invite_tokens_type_check CHECK (((type)::text = ANY (ARRAY[('MULTI_USE'::character varying)::text, ('SINGLE_USE'::character varying)::text])))
+);
+
+
+--
+-- Name: invite_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.invite_tokens ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.invite_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: kaderu_sync_trigger_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.kaderu_sync_trigger_events (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    triggered_by_player_id bigint NOT NULL,
+    triggered_at timestamp without time zone NOT NULL,
+    status character varying(16) NOT NULL,
+    github_run_id bigint,
+    completed_at timestamp without time zone,
+    summary text,
+    failure_reason text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT kaderu_sync_trigger_events_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('COMPLETED'::character varying)::text, ('FAILED'::character varying)::text])))
+);
+
+
+--
+-- Name: kaderu_sync_trigger_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.kaderu_sync_trigger_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: kaderu_sync_trigger_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.kaderu_sync_trigger_events_id_seq OWNED BY public.kaderu_sync_trigger_events.id;
+
+
+--
+-- Name: line_broadcast_group; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_broadcast_group (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    expected_recipient_count integer,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    chat_room_id character varying(100),
+    chat_room_name character varying(200)
+);
+
+
+--
+-- Name: line_broadcast_group_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.line_broadcast_group_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: line_broadcast_group_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.line_broadcast_group_id_seq OWNED BY public.line_broadcast_group.id;
+
+
+--
+-- Name: line_broadcast_send; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_broadcast_send (
+    id bigint NOT NULL,
+    broadcast_group_id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    line_channel_id bigint,
+    recipient_count integer,
+    status character varying(20) NOT NULL,
+    error_message text,
+    sent_at timestamp without time zone NOT NULL,
+    CONSTRAINT line_broadcast_send_status_check CHECK (((status)::text = ANY ((ARRAY['RESERVED'::character varying, 'SUCCESS'::character varying, 'FAILED'::character varying, 'SKIPPED'::character varying])::text[])))
+);
+
+
+--
+-- Name: line_broadcast_send_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.line_broadcast_send_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: line_broadcast_send_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.line_broadcast_send_id_seq OWNED BY public.line_broadcast_send.id;
+
+
+--
+-- Name: line_channel_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_channel_assignments (
+    id bigint NOT NULL,
+    assigned_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    line_channel_id bigint NOT NULL,
+    line_user_id character varying(50),
+    linked_at timestamp(6) without time zone,
+    player_id bigint NOT NULL,
+    reclaim_warned_at timestamp(6) without time zone,
+    status character varying(20) NOT NULL,
+    unlinked_at timestamp(6) without time zone,
+    channel_type character varying(10) DEFAULT 'PLAYER'::character varying NOT NULL,
+    CONSTRAINT line_channel_assignments_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('LINKED'::character varying)::text, ('UNLINKED'::character varying)::text, ('RECLAIMED'::character varying)::text])))
+);
+
+
+--
+-- Name: line_channel_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_channel_assignments ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_channel_assignments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: line_channels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_channels (
+    id bigint NOT NULL,
+    channel_access_token text NOT NULL,
+    channel_name character varying(100),
+    channel_secret character varying(255) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    friend_add_url text,
+    line_channel_id character varying(50) NOT NULL,
+    message_count_reset_at timestamp(6) without time zone,
+    monthly_message_count integer NOT NULL,
+    qr_code_url text,
+    status character varying(20) NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    basic_id character varying(30),
+    channel_type character varying(10) DEFAULT 'PLAYER'::character varying NOT NULL,
+    broadcast_group_id bigint,
+    line_group_id character varying(50),
+    CONSTRAINT line_channels_status_check CHECK (((status)::text = ANY (ARRAY[('AVAILABLE'::character varying)::text, ('ASSIGNED'::character varying)::text, ('LINKED'::character varying)::text, ('DISABLED'::character varying)::text])))
+);
+
+
+--
+-- Name: line_channels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_channels ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_channels_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: line_chat_reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_chat_reservations (
+    id bigint NOT NULL,
+    broadcast_group_id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    status character varying(30) NOT NULL,
+    message_text text NOT NULL,
+    scheduled_send_at timestamp without time zone NOT NULL,
+    error_code character varying(50),
+    error_message text,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    CONSTRAINT line_chat_reservations_status_check CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'RESERVING'::character varying, 'RESERVED'::character varying, 'FAILED'::character varying, 'MANUAL_REVIEW_REQUIRED'::character varying, 'CANCEL_PENDING'::character varying, 'CANCELLED'::character varying, 'DRY_RUN_SUCCEEDED'::character varying])::text[])))
+);
+
+
+--
+-- Name: line_chat_reservations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.line_chat_reservations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: line_chat_reservations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.line_chat_reservations_id_seq OWNED BY public.line_chat_reservations.id;
+
+
+--
+-- Name: line_confirmation_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_confirmation_tokens (
+    id bigint NOT NULL,
+    token character varying(64) NOT NULL,
+    action character varying(50) NOT NULL,
+    params text NOT NULL,
+    player_id bigint NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    expires_at timestamp without time zone NOT NULL,
+    used_at timestamp without time zone
+);
+
+
+--
+-- Name: line_confirmation_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.line_confirmation_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: line_confirmation_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.line_confirmation_tokens_id_seq OWNED BY public.line_confirmation_tokens.id;
+
+
+--
+-- Name: line_linking_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_linking_codes (
+    id bigint NOT NULL,
+    attempt_count integer NOT NULL,
+    code character varying(8) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    line_channel_id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    status character varying(20) NOT NULL,
+    used_at timestamp(6) without time zone,
+    CONSTRAINT line_linking_codes_status_check CHECK (((status)::text = ANY (ARRAY[('ACTIVE'::character varying)::text, ('USED'::character varying)::text, ('EXPIRED'::character varying)::text, ('INVALIDATED'::character varying)::text])))
+);
+
+
+--
+-- Name: line_linking_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_linking_codes ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_linking_codes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: line_message_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_message_log (
+    id bigint NOT NULL,
+    error_message text,
+    line_channel_id bigint NOT NULL,
+    message_content text NOT NULL,
+    notification_type character varying(30) NOT NULL,
+    player_id bigint NOT NULL,
+    reference_id bigint,
+    sent_at timestamp(6) without time zone NOT NULL,
+    status character varying(20) NOT NULL,
+    dedupe_key character varying(100),
+    CONSTRAINT line_message_log_notification_type_check CHECK (((notification_type)::text = ANY ((ARRAY['LOTTERY_RESULT'::character varying, 'WAITLIST_OFFER'::character varying, 'OFFER_EXPIRED'::character varying, 'MATCH_PAIRING'::character varying, 'PRACTICE_REMINDER'::character varying, 'DEADLINE_REMINDER'::character varying, 'ADMIN_WAITLIST_UPDATE'::character varying, 'WAITLIST_POSITION_UPDATE'::character varying, 'SAME_DAY_CONFIRMATION'::character varying, 'SAME_DAY_CANCEL'::character varying, 'ADMIN_SAME_DAY_CANCEL'::character varying, 'SAME_DAY_VACANCY'::character varying, 'ADMIN_SAME_DAY_CONFIRMATION'::character varying, 'MENTOR_COMMENT'::character varying, 'MENTEE_MEMO_UPDATE'::character varying, 'DENSUKE_PAGE_CREATED'::character varying, 'ADMIN_DENSUKE_PUSH_FAILED'::character varying, 'ADMIN_DENSUKE_CONFIRM_DIFF'::character varying, 'ADMIN_DENSUKE_NAME_COLLISION'::character varying, 'ADMIN_DENSUKE_ROWID_ISSUE'::character varying, 'ADMIN_DENSUKE_DELETE_DETECTED'::character varying, 'ADMIN_KADERU_SYNC_COMPLETED'::character varying, 'ADMIN_KADERU_SYNC_FAILED'::character varying, 'MATCH_VIDEO_REGISTERED'::character varying, 'CARD_DIVISION_REMINDER'::character varying, 'ADMIN_CHAT_RESERVE_ALERT'::character varying])::text[])))
+);
+
+
+--
+-- Name: line_message_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_message_log ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_message_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: line_notification_preferences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_notification_preferences (
+    id bigint NOT NULL,
+    deadline_reminder boolean NOT NULL,
+    lottery_result boolean NOT NULL,
+    match_pairing boolean NOT NULL,
+    offer_expired boolean NOT NULL,
+    player_id bigint NOT NULL,
+    practice_reminder boolean NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    waitlist_offer boolean NOT NULL,
+    organization_id bigint NOT NULL,
+    admin_waitlist_update boolean DEFAULT true NOT NULL,
+    same_day_confirmation boolean DEFAULT true NOT NULL,
+    same_day_cancel boolean DEFAULT true NOT NULL,
+    same_day_vacancy boolean DEFAULT true NOT NULL,
+    admin_same_day_confirmation boolean DEFAULT true CONSTRAINT line_notification_preferenc_admin_same_day_confirmatio_not_null NOT NULL,
+    admin_same_day_cancel boolean DEFAULT true NOT NULL,
+    mentor_comment boolean DEFAULT true NOT NULL,
+    densuke_page_created boolean DEFAULT true NOT NULL,
+    match_video_registered boolean DEFAULT true NOT NULL,
+    card_division_reminder boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: line_notification_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_notification_preferences ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_notification_preferences_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: line_notification_schedule_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.line_notification_schedule_settings (
+    id bigint NOT NULL,
+    days_before character varying(50) NOT NULL,
+    enabled boolean NOT NULL,
+    notification_type character varying(30) NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    updated_by bigint,
+    CONSTRAINT line_notification_schedule_settings_notification_type_check CHECK (((notification_type)::text = ANY (ARRAY[('LOTTERY_RESULT'::character varying)::text, ('WAITLIST_OFFER'::character varying)::text, ('OFFER_EXPIRED'::character varying)::text, ('MATCH_PAIRING'::character varying)::text, ('PRACTICE_REMINDER'::character varying)::text, ('DEADLINE_REMINDER'::character varying)::text, ('POSTBACK_RESPONSE'::character varying)::text])))
+);
+
+
+--
+-- Name: line_notification_schedule_settings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.line_notification_schedule_settings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.line_notification_schedule_settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lottery_executions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lottery_executions (
+    id bigint NOT NULL,
+    details text,
+    executed_at timestamp(6) without time zone NOT NULL,
+    executed_by bigint,
+    execution_type character varying(20) NOT NULL,
+    session_id bigint,
+    status character varying(10) NOT NULL,
+    target_month integer NOT NULL,
+    target_year integer NOT NULL,
+    confirmed_at timestamp without time zone,
+    confirmed_by bigint,
+    organization_id bigint,
+    priority_player_ids text,
+    CONSTRAINT lottery_executions_execution_type_check CHECK (((execution_type)::text = ANY (ARRAY[('AUTO'::character varying)::text, ('MANUAL'::character varying)::text, ('MANUAL_RELOTTERY'::character varying)::text]))),
+    CONSTRAINT lottery_executions_status_check CHECK (((status)::text = ANY (ARRAY[('SUCCESS'::character varying)::text, ('FAILED'::character varying)::text, ('PARTIAL'::character varying)::text])))
+);
+
+
+--
+-- Name: COLUMN lottery_executions.priority_player_ids; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.lottery_executions.priority_player_ids IS '管理者指定優先選手IDのJSON配列（例: [1,7,12]）。指定なしの場合はNULLまたは[]';
+
+
+--
+-- Name: lottery_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lottery_executions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.lottery_executions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: match_card_placements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_card_placements (
+    id bigint NOT NULL,
+    match_id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    card_no integer NOT NULL,
+    taken_by character varying(16) NOT NULL,
+    field character varying(8) NOT NULL,
+    side character varying(8) NOT NULL,
+    tier character varying(8) NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chk_mcp_card_no CHECK (((card_no >= 1) AND (card_no <= 100))),
+    CONSTRAINT chk_mcp_field CHECK (((field)::text = ANY ((ARRAY['ENEMY'::character varying, 'OWN'::character varying])::text[]))),
+    CONSTRAINT chk_mcp_side CHECK (((side)::text = ANY ((ARRAY['LEFT'::character varying, 'RIGHT'::character varying])::text[]))),
+    CONSTRAINT chk_mcp_taken_by CHECK (((taken_by)::text = ANY ((ARRAY['SELF'::character varying, 'OPPONENT'::character varying])::text[]))),
+    CONSTRAINT chk_mcp_tier CHECK (((tier)::text = ANY ((ARRAY['TOP'::character varying, 'MIDDLE'::character varying, 'BOTTOM'::character varying])::text[])))
+);
+
+
+--
+-- Name: match_card_placements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.match_card_placements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: match_card_placements_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.match_card_placements_id_seq OWNED BY public.match_card_placements.id;
+
+
+--
+-- Name: match_comments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_comments (
+    id bigint NOT NULL,
+    match_id bigint NOT NULL,
+    mentee_id bigint NOT NULL,
+    author_id bigint NOT NULL,
+    content text NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at timestamp without time zone,
+    line_notified boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: match_comments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.match_comments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: match_comments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.match_comments_id_seq OWNED BY public.match_comments.id;
+
+
+--
+-- Name: match_otetsuki_details; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_otetsuki_details (
+    id bigint NOT NULL,
+    match_id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    seq integer NOT NULL,
+    otetsuki_type character varying(16) NOT NULL,
+    hikkake_target character varying(24),
+    anki_direction character varying(40),
+    mishearing_read_card_no integer,
+    mishearing_touched_card_no integer,
+    other_text text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chk_mod_read_no CHECK (((mishearing_read_card_no IS NULL) OR ((mishearing_read_card_no >= 1) AND (mishearing_read_card_no <= 100)))),
+    CONSTRAINT chk_mod_touched_no CHECK (((mishearing_touched_card_no IS NULL) OR ((mishearing_touched_card_no >= 1) AND (mishearing_touched_card_no <= 100)))),
+    CONSTRAINT chk_mod_type CHECK (((otetsuki_type)::text = ANY ((ARRAY['HIKKAKE'::character varying, 'ANKI_MISS'::character varying, 'MISHEARING'::character varying, 'OTHER'::character varying])::text[])))
+);
+
+
+--
+-- Name: match_otetsuki_details_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.match_otetsuki_details_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: match_otetsuki_details_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.match_otetsuki_details_id_seq OWNED BY public.match_otetsuki_details.id;
+
+
+--
+-- Name: match_pairings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_pairings (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    created_by bigint NOT NULL,
+    match_number integer NOT NULL,
+    player1_id bigint NOT NULL,
+    player2_id bigint NOT NULL,
+    session_date date NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    locked boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: match_pairings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.match_pairings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.match_pairings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: match_personal_notes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_personal_notes (
+    id bigint NOT NULL,
+    match_id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    notes text,
+    otetsuki_count integer,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chk_otetsuki_count CHECK (((otetsuki_count >= 0) AND (otetsuki_count <= 20)))
+);
+
+
+--
+-- Name: match_personal_notes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.match_personal_notes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: match_personal_notes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.match_personal_notes_id_seq OWNED BY public.match_personal_notes.id;
+
+
+--
+-- Name: match_videos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_videos (
+    id bigint NOT NULL,
+    match_date date NOT NULL,
+    match_number integer NOT NULL,
+    player1_id bigint NOT NULL,
+    player2_id bigint NOT NULL,
+    provider character varying(20) DEFAULT 'YOUTUBE'::character varying NOT NULL,
+    video_url text NOT NULL,
+    youtube_video_id character varying(20),
+    title character varying(255),
+    created_by bigint NOT NULL,
+    updated_by bigint NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: match_videos_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.match_videos_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: match_videos_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.match_videos_id_seq OWNED BY public.match_videos.id;
+
+
+--
+-- Name: matches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.matches (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    created_by bigint NOT NULL,
+    match_date date NOT NULL,
+    match_number integer NOT NULL,
+    opponent_name character varying(100),
+    player1_id bigint NOT NULL,
+    player2_id bigint NOT NULL,
+    score_difference integer,
+    updated_at timestamp(6) without time zone NOT NULL,
+    updated_by bigint NOT NULL,
+    winner_id bigint NOT NULL,
+    player1_kyu_rank character varying(10),
+    player2_kyu_rank character varying(10),
+    notes text,
+    venue_id bigint,
+    is_lesson boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: COLUMN matches.is_lesson; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.matches.is_lesson IS '指導試合フラグ（TRUE=上級者が初心者に教える指導試合。勝者=指導した側、敗者=指導された側。score_difference は NULL）';
+
+
+--
+-- Name: matches_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.matches ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.matches_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: mentor_relationships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mentor_relationships (
+    id bigint NOT NULL,
+    mentor_id bigint NOT NULL,
+    mentee_id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    status character varying(20) NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT mentor_relationships_status_check CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('ACTIVE'::character varying)::text, ('REJECTED'::character varying)::text])))
+);
+
+
+--
+-- Name: mentor_relationships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.mentor_relationships_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: mentor_relationships_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.mentor_relationships_id_seq OWNED BY public.mentor_relationships.id;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    is_read boolean NOT NULL,
+    message text,
+    player_id bigint NOT NULL,
+    reference_id bigint,
+    reference_type character varying(50),
+    title character varying(200) NOT NULL,
+    type character varying(30) NOT NULL,
+    deleted_at timestamp(6) without time zone,
+    CONSTRAINT notifications_type_check CHECK (((type)::text = ANY (ARRAY['LOTTERY_WON'::text, 'LOTTERY_ALL_WON'::text, 'LOTTERY_REMAINING_WON'::text, 'LOTTERY_WAITLISTED'::text, 'WAITLIST_OFFER'::text, 'OFFER_EXPIRING'::text, 'OFFER_EXPIRED'::text, 'CHANNEL_RECLAIM_WARNING'::text, 'DENSUKE_UNMATCHED_NAMES'::text, 'DENSUKE_NAME_COLLISION'::text, 'ADJACENT_ROOM_AVAILABLE'::text])))
+);
+
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.notifications ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.notifications_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: organizations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.organizations (
+    id bigint NOT NULL,
+    code character varying(50) NOT NULL,
+    name character varying(200) NOT NULL,
+    color character varying(10) NOT NULL,
+    deadline_type character varying(20) NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: organizations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.organizations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: organizations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.organizations_id_seq OWNED BY public.organizations.id;
+
+
+--
+-- Name: player_organizations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.player_organizations (
+    id bigint NOT NULL,
+    player_id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    calendar_display_name character varying(50)
+);
+
+
+--
+-- Name: player_organizations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.player_organizations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: player_organizations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.player_organizations_id_seq OWNED BY public.player_organizations.id;
+
+
+--
+-- Name: player_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.player_profiles (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    dan character varying(255) NOT NULL,
+    grade character varying(255) NOT NULL,
+    karuta_club character varying(200) NOT NULL,
+    player_id bigint NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    CONSTRAINT player_profiles_dan_check CHECK (((dan)::text = ANY (ARRAY[('無'::character varying)::text, ('初'::character varying)::text, ('二'::character varying)::text, ('三'::character varying)::text, ('四'::character varying)::text, ('五'::character varying)::text, ('六'::character varying)::text, ('七'::character varying)::text, ('八'::character varying)::text]))),
+    CONSTRAINT player_profiles_grade_check CHECK (((grade)::text = ANY (ARRAY[('A'::character varying)::text, ('B'::character varying)::text, ('C'::character varying)::text, ('D'::character varying)::text, ('E'::character varying)::text])))
+);
+
+
+--
+-- Name: player_profiles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.player_profiles ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.player_profiles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: players; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.players (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    dan_rank character varying(255),
+    deleted_at timestamp(6) without time zone,
+    dominant_hand character varying(255) NOT NULL,
+    gender character varying(255) NOT NULL,
+    karuta_club character varying(200),
+    kyu_rank character varying(255),
+    name character varying(100) NOT NULL,
+    password character varying(255) NOT NULL,
+    remarks text,
+    role character varying(255) NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    last_login_at timestamp(6) without time zone,
+    require_password_change boolean DEFAULT false NOT NULL,
+    admin_organization_id bigint,
+    ical_feed_token character varying(64) NOT NULL,
+    CONSTRAINT players_dan_rank_check CHECK (((dan_rank)::text = ANY (ARRAY[('無段'::character varying)::text, ('初段'::character varying)::text, ('弐段'::character varying)::text, ('参段'::character varying)::text, ('四段'::character varying)::text, ('五段'::character varying)::text, ('六段'::character varying)::text, ('七段'::character varying)::text, ('八段'::character varying)::text]))),
+    CONSTRAINT players_dominant_hand_check CHECK (((dominant_hand)::text = ANY (ARRAY[('右'::character varying)::text, ('左'::character varying)::text, ('両'::character varying)::text]))),
+    CONSTRAINT players_gender_check CHECK (((gender)::text = ANY (ARRAY[('男性'::character varying)::text, ('女性'::character varying)::text, ('その他'::character varying)::text]))),
+    CONSTRAINT players_kyu_rank_check CHECK (((kyu_rank)::text = ANY (ARRAY[('E級'::character varying)::text, ('D級'::character varying)::text, ('C級'::character varying)::text, ('B級'::character varying)::text, ('A級'::character varying)::text]))),
+    CONSTRAINT players_role_check CHECK (((role)::text = ANY (ARRAY[('SUPER_ADMIN'::character varying)::text, ('ADMIN'::character varying)::text, ('PLAYER'::character varying)::text])))
+);
+
+
+--
+-- Name: players_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.players ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.players_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: practice_participants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.practice_participants (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    match_number integer,
+    player_id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    lottery_id bigint,
+    offer_deadline timestamp(6) without time zone,
+    offered_at timestamp(6) without time zone,
+    responded_at timestamp(6) without time zone,
+    waitlist_number integer,
+    status character varying(20) DEFAULT 'WON'::character varying NOT NULL,
+    cancel_reason character varying(50),
+    cancel_reason_detail text,
+    cancelled_at timestamp(6) without time zone,
+    dirty boolean DEFAULT true NOT NULL,
+    CONSTRAINT practice_participants_status_check CHECK (((status)::text = ANY (ARRAY['PENDING'::text, 'WON'::text, 'WAITLISTED'::text, 'OFFERED'::text, 'DECLINED'::text, 'CANCELLED'::text, 'WAITLIST_DECLINED'::text])))
+);
+
+
+--
+-- Name: practice_participants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.practice_participants ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.practice_participants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: practice_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.practice_sessions (
+    id bigint NOT NULL,
+    capacity integer,
+    created_at timestamp(6) without time zone NOT NULL,
+    created_by bigint NOT NULL,
+    end_time time(6) without time zone,
+    notes text,
+    session_date date NOT NULL,
+    start_time time(6) without time zone,
+    total_matches integer NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    updated_by bigint NOT NULL,
+    venue_id bigint,
+    organization_id bigint NOT NULL,
+    reservation_confirmed_at timestamp without time zone
+);
+
+
+--
+-- Name: practice_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.practice_sessions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.practice_sessions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: push_notification_preferences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.push_notification_preferences (
+    id bigint NOT NULL,
+    channel_reclaim_warning boolean NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    densuke_unmatched boolean NOT NULL,
+    enabled boolean NOT NULL,
+    lottery_result boolean NOT NULL,
+    offer_expired boolean NOT NULL,
+    offer_expiring boolean NOT NULL,
+    player_id bigint NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    waitlist_offer boolean NOT NULL,
+    organization_id bigint NOT NULL,
+    adjacent_room boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: push_notification_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.push_notification_preferences ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.push_notification_preferences_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: push_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.push_subscriptions (
+    id bigint NOT NULL,
+    auth_key character varying(500) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    endpoint text NOT NULL,
+    p256dh_key character varying(500) NOT NULL,
+    player_id bigint NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    user_agent character varying(500)
+);
+
+
+--
+-- Name: push_subscriptions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.push_subscriptions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.push_subscriptions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: room_availability_cache; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_availability_cache (
+    id bigint NOT NULL,
+    room_name character varying(50) NOT NULL,
+    target_date date NOT NULL,
+    time_slot character varying(20) NOT NULL,
+    status character varying(10) NOT NULL,
+    checked_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: room_availability_cache_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.room_availability_cache_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: room_availability_cache_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.room_availability_cache_id_seq OWNED BY public.room_availability_cache.id;
+
+
+--
+-- Name: system_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.system_settings (
+    id bigint NOT NULL,
+    setting_key character varying(100) NOT NULL,
+    setting_value character varying(255) NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    updated_by bigint,
+    organization_id bigint NOT NULL
+);
+
+
+--
+-- Name: system_settings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.system_settings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.system_settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: venue_match_schedules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.venue_match_schedules (
+    id bigint NOT NULL,
+    end_time time(6) without time zone NOT NULL,
+    match_number integer NOT NULL,
+    start_time time(6) without time zone NOT NULL,
+    venue_id bigint NOT NULL
+);
+
+
+--
+-- Name: venue_match_schedules_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.venue_match_schedules ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.venue_match_schedules_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: venues; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.venues (
+    id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    default_match_count integer NOT NULL,
+    name character varying(200) NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    capacity integer
+);
+
+
+--
+-- Name: venues_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.venues ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.venues_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: adjacent_room_notifications id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.adjacent_room_notifications ALTER COLUMN id SET DEFAULT nextval('public.adjacent_room_notifications_id_seq'::regclass);
+
+
+--
+-- Name: auth_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens ALTER COLUMN id SET DEFAULT nextval('public.auth_tokens_id_seq'::regclass);
+
+
+--
+-- Name: card_rule_nonce id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.card_rule_nonce ALTER COLUMN id SET DEFAULT nextval('public.card_rule_nonce_id_seq'::regclass);
+
+
+--
+-- Name: densuke_deletion_candidates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates ALTER COLUMN id SET DEFAULT nextval('public.densuke_deletion_candidates_id_seq'::regclass);
+
+
+--
+-- Name: densuke_templates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_templates ALTER COLUMN id SET DEFAULT nextval('public.densuke_templates_id_seq'::regclass);
+
+
+--
+-- Name: kaderu_sync_trigger_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kaderu_sync_trigger_events ALTER COLUMN id SET DEFAULT nextval('public.kaderu_sync_trigger_events_id_seq'::regclass);
+
+
+--
+-- Name: line_broadcast_group id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_broadcast_group ALTER COLUMN id SET DEFAULT nextval('public.line_broadcast_group_id_seq'::regclass);
+
+
+--
+-- Name: line_broadcast_send id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_broadcast_send ALTER COLUMN id SET DEFAULT nextval('public.line_broadcast_send_id_seq'::regclass);
+
+
+--
+-- Name: line_chat_reservations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_chat_reservations ALTER COLUMN id SET DEFAULT nextval('public.line_chat_reservations_id_seq'::regclass);
+
+
+--
+-- Name: line_confirmation_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_confirmation_tokens ALTER COLUMN id SET DEFAULT nextval('public.line_confirmation_tokens_id_seq'::regclass);
+
+
+--
+-- Name: match_card_placements id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_card_placements ALTER COLUMN id SET DEFAULT nextval('public.match_card_placements_id_seq'::regclass);
+
+
+--
+-- Name: match_comments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_comments ALTER COLUMN id SET DEFAULT nextval('public.match_comments_id_seq'::regclass);
+
+
+--
+-- Name: match_otetsuki_details id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_otetsuki_details ALTER COLUMN id SET DEFAULT nextval('public.match_otetsuki_details_id_seq'::regclass);
+
+
+--
+-- Name: match_personal_notes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_personal_notes ALTER COLUMN id SET DEFAULT nextval('public.match_personal_notes_id_seq'::regclass);
+
+
+--
+-- Name: match_videos id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos ALTER COLUMN id SET DEFAULT nextval('public.match_videos_id_seq'::regclass);
+
+
+--
+-- Name: mentor_relationships id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships ALTER COLUMN id SET DEFAULT nextval('public.mentor_relationships_id_seq'::regclass);
+
+
+--
+-- Name: organizations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations ALTER COLUMN id SET DEFAULT nextval('public.organizations_id_seq'::regclass);
+
+
+--
+-- Name: player_organizations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.player_organizations ALTER COLUMN id SET DEFAULT nextval('public.player_organizations_id_seq'::regclass);
+
+
+--
+-- Name: room_availability_cache id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_availability_cache ALTER COLUMN id SET DEFAULT nextval('public.room_availability_cache_id_seq'::regclass);
+
+
+--
+-- Name: adjacent_room_notifications adjacent_room_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.adjacent_room_notifications
+    ADD CONSTRAINT adjacent_room_notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_tokens auth_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT auth_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_tokens auth_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT auth_tokens_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: bye_activities bye_activities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bye_activities
+    ADD CONSTRAINT bye_activities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: card_rule_nonce card_rule_nonce_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.card_rule_nonce
+    ADD CONSTRAINT card_rule_nonce_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_deletion_candidates densuke_deletion_candidates_densuke_url_id_session_date_mat_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates
+    ADD CONSTRAINT densuke_deletion_candidates_densuke_url_id_session_date_mat_key UNIQUE (densuke_url_id, session_date, match_number);
+
+
+--
+-- Name: densuke_deletion_candidates densuke_deletion_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates
+    ADD CONSTRAINT densuke_deletion_candidates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_member_mappings densuke_member_mappings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_member_mappings
+    ADD CONSTRAINT densuke_member_mappings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_row_ids densuke_row_ids_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_row_ids
+    ADD CONSTRAINT densuke_row_ids_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_templates densuke_templates_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_templates
+    ADD CONSTRAINT densuke_templates_organization_id_key UNIQUE (organization_id);
+
+
+--
+-- Name: densuke_templates densuke_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_templates
+    ADD CONSTRAINT densuke_templates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_urls densuke_urls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_urls
+    ADD CONSTRAINT densuke_urls_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: densuke_urls densuke_urls_year_month_org_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_urls
+    ADD CONSTRAINT densuke_urls_year_month_org_key UNIQUE (year, month, organization_id);
+
+
+--
+-- Name: invite_tokens idx_invite_tokens_token; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invite_tokens
+    ADD CONSTRAINT idx_invite_tokens_token UNIQUE (token);
+
+
+--
+-- Name: invite_tokens invite_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invite_tokens
+    ADD CONSTRAINT invite_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: kaderu_sync_trigger_events kaderu_sync_trigger_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kaderu_sync_trigger_events
+    ADD CONSTRAINT kaderu_sync_trigger_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_broadcast_group line_broadcast_group_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_broadcast_group
+    ADD CONSTRAINT line_broadcast_group_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_broadcast_send line_broadcast_send_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_broadcast_send
+    ADD CONSTRAINT line_broadcast_send_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_channel_assignments line_channel_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_channel_assignments
+    ADD CONSTRAINT line_channel_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_channels line_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_channels
+    ADD CONSTRAINT line_channels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_chat_reservations line_chat_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_chat_reservations
+    ADD CONSTRAINT line_chat_reservations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_confirmation_tokens line_confirmation_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_confirmation_tokens
+    ADD CONSTRAINT line_confirmation_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_confirmation_tokens line_confirmation_tokens_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_confirmation_tokens
+    ADD CONSTRAINT line_confirmation_tokens_token_key UNIQUE (token);
+
+
+--
+-- Name: line_linking_codes line_linking_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_linking_codes
+    ADD CONSTRAINT line_linking_codes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_message_log line_message_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_message_log
+    ADD CONSTRAINT line_message_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_notification_preferences line_notification_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_notification_preferences
+    ADD CONSTRAINT line_notification_preferences_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: line_notification_schedule_settings line_notification_schedule_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_notification_schedule_settings
+    ADD CONSTRAINT line_notification_schedule_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lottery_executions lottery_executions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lottery_executions
+    ADD CONSTRAINT lottery_executions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_card_placements match_card_placements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_card_placements
+    ADD CONSTRAINT match_card_placements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_comments match_comments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_comments
+    ADD CONSTRAINT match_comments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_otetsuki_details match_otetsuki_details_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_otetsuki_details
+    ADD CONSTRAINT match_otetsuki_details_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_pairings match_pairings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_pairings
+    ADD CONSTRAINT match_pairings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_personal_notes match_personal_notes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_personal_notes
+    ADD CONSTRAINT match_personal_notes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: match_videos match_videos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT match_videos_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: matches matches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.matches
+    ADD CONSTRAINT matches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mentor_relationships mentor_relationships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT mentor_relationships_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: organizations organizations_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_code_key UNIQUE (code);
+
+
+--
+-- Name: organizations organizations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: player_organizations player_organizations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.player_organizations
+    ADD CONSTRAINT player_organizations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: player_organizations player_organizations_player_id_organization_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.player_organizations
+    ADD CONSTRAINT player_organizations_player_id_organization_id_key UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: player_profiles player_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.player_profiles
+    ADD CONSTRAINT player_profiles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: players players_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.players
+    ADD CONSTRAINT players_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: practice_participants practice_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.practice_participants
+    ADD CONSTRAINT practice_participants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: practice_sessions practice_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.practice_sessions
+    ADD CONSTRAINT practice_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: push_notification_preferences push_notification_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_notification_preferences
+    ADD CONSTRAINT push_notification_preferences_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: push_subscriptions push_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_subscriptions
+    ADD CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: room_availability_cache room_availability_cache_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_availability_cache
+    ADD CONSTRAINT room_availability_cache_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: system_settings system_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT system_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: player_organizations uk1uy39udwlygl2sxe5h5iexcbi; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.player_organizations
+    ADD CONSTRAINT uk1uy39udwlygl2sxe5h5iexcbi UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: system_settings uk3uukkredspdgpq65rggt9l5m4; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT uk3uukkredspdgpq65rggt9l5m4 UNIQUE (setting_key, organization_id);
+
+
+--
+-- Name: densuke_member_mappings uk5m97uf5l31676nufncoswc4xf; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_member_mappings
+    ADD CONSTRAINT uk5m97uf5l31676nufncoswc4xf UNIQUE (densuke_url_id, player_id);
+
+
+--
+-- Name: line_notification_preferences uk75ftqtqrp1sgx9dtdhlw7xvl; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_notification_preferences
+    ADD CONSTRAINT uk75ftqtqrp1sgx9dtdhlw7xvl UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: line_notification_preferences uk_lnp_player_org; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_notification_preferences
+    ADD CONSTRAINT uk_lnp_player_org UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: push_notification_preferences uk_pnp_player_org; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_notification_preferences
+    ADD CONSTRAINT uk_pnp_player_org UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: practice_sessions uk_session_date_organization; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.practice_sessions
+    ADD CONSTRAINT uk_session_date_organization UNIQUE (session_date, organization_id);
+
+
+--
+-- Name: practice_participants uk_session_player_match; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.practice_participants
+    ADD CONSTRAINT uk_session_player_match UNIQUE (session_id, player_id, match_number);
+
+
+--
+-- Name: system_settings uk_system_settings_key_org; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT uk_system_settings_key_org UNIQUE (setting_key, organization_id);
+
+
+--
+-- Name: venue_match_schedules uk_venue_match; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.venue_match_schedules
+    ADD CONSTRAINT uk_venue_match UNIQUE (venue_id, match_number);
+
+
+--
+-- Name: push_notification_preferences ukb2uj1bchm5iy7eugk2f4sxue3; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_notification_preferences
+    ADD CONSTRAINT ukb2uj1bchm5iy7eugk2f4sxue3 UNIQUE (player_id, organization_id);
+
+
+--
+-- Name: venues ukc2om8hy3unm9k7dxwddow2rv1; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.venues
+    ADD CONSTRAINT ukc2om8hy3unm9k7dxwddow2rv1 UNIQUE (name);
+
+
+--
+-- Name: line_linking_codes ukcfx6g7kuuiuc7y6pws2mrkumd; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_linking_codes
+    ADD CONSTRAINT ukcfx6g7kuuiuc7y6pws2mrkumd UNIQUE (code);
+
+
+--
+-- Name: mentor_relationships ukd3oqxohw1wi4onmjdc286fs44; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT ukd3oqxohw1wi4onmjdc286fs44 UNIQUE (mentor_id, mentee_id, organization_id);
+
+
+--
+-- Name: densuke_deletion_candidates ukg579042nfy9rwbjwcbu1lur2n; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates
+    ADD CONSTRAINT ukg579042nfy9rwbjwcbu1lur2n UNIQUE (densuke_url_id, session_date, match_number);
+
+
+--
+-- Name: adjacent_room_notifications ukjqdtrfhxg89l4y9ef2s2w399i; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.adjacent_room_notifications
+    ADD CONSTRAINT ukjqdtrfhxg89l4y9ef2s2w399i UNIQUE (session_id, remaining_count);
+
+
+--
+-- Name: densuke_row_ids ukk3m4w4pydaswpretprscpfepa; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_row_ids
+    ADD CONSTRAINT ukk3m4w4pydaswpretprscpfepa UNIQUE (densuke_url_id, session_date, match_number);
+
+
+--
+-- Name: densuke_member_mappings uklccn4bn0fa51ck0admo5npf5q; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_member_mappings
+    ADD CONSTRAINT uklccn4bn0fa51ck0admo5npf5q UNIQUE (densuke_url_id, densuke_member_id);
+
+
+--
+-- Name: practice_sessions ukm60bbd1y9qs46eirlu5c2udhh; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.practice_sessions
+    ADD CONSTRAINT ukm60bbd1y9qs46eirlu5c2udhh UNIQUE (session_date);
+
+
+--
+-- Name: room_availability_cache uknu10eyrsrod48gv93n1a9qjtc; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_availability_cache
+    ADD CONSTRAINT uknu10eyrsrod48gv93n1a9qjtc UNIQUE (room_name, target_date, time_slot);
+
+
+--
+-- Name: line_notification_schedule_settings ukp3hpgn8bh5gih8xvvrm92aj2u; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.line_notification_schedule_settings
+    ADD CONSTRAINT ukp3hpgn8bh5gih8xvvrm92aj2u UNIQUE (notification_type);
+
+
+--
+-- Name: players ukpblmuavgrnr991e41662asko; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.players
+    ADD CONSTRAINT ukpblmuavgrnr991e41662asko UNIQUE (name);
+
+
+--
+-- Name: adjacent_room_notifications uq_adjacent_room_notifications; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.adjacent_room_notifications
+    ADD CONSTRAINT uq_adjacent_room_notifications UNIQUE (session_id, remaining_count);
+
+
+--
+-- Name: card_rule_nonce uq_card_rule_nonce_date; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.card_rule_nonce
+    ADD CONSTRAINT uq_card_rule_nonce_date UNIQUE (session_date);
+
+
+--
+-- Name: densuke_member_mappings uq_densuke_member_mappings_url_member; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_member_mappings
+    ADD CONSTRAINT uq_densuke_member_mappings_url_member UNIQUE (densuke_url_id, densuke_member_id);
+
+
+--
+-- Name: match_card_placements uq_match_card_placements; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_card_placements
+    ADD CONSTRAINT uq_match_card_placements UNIQUE (match_id, player_id, card_no);
+
+
+--
+-- Name: match_otetsuki_details uq_match_otetsuki_details; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_otetsuki_details
+    ADD CONSTRAINT uq_match_otetsuki_details UNIQUE (match_id, player_id, seq);
+
+
+--
+-- Name: match_personal_notes uq_match_personal_notes; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_personal_notes
+    ADD CONSTRAINT uq_match_personal_notes UNIQUE (match_id, player_id);
+
+
+--
+-- Name: match_videos uq_match_videos_match; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT uq_match_videos_match UNIQUE (match_date, match_number, player1_id, player2_id);
+
+
+--
+-- Name: matches uq_matches_date_number_players; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.matches
+    ADD CONSTRAINT uq_matches_date_number_players UNIQUE (match_date, match_number, player1_id, player2_id);
+
+
+--
+-- Name: mentor_relationships uq_mentor_relationship; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT uq_mentor_relationship UNIQUE (mentor_id, mentee_id, organization_id);
+
+
+--
+-- Name: room_availability_cache uq_room_availability_cache; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_availability_cache
+    ADD CONSTRAINT uq_room_availability_cache UNIQUE (room_name, target_date, time_slot);
+
+
+--
+-- Name: venue_match_schedules venue_match_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.venue_match_schedules
+    ADD CONSTRAINT venue_match_schedules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: venues venues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.venues
+    ADD CONSTRAINT venues_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_auth_tokens_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_auth_tokens_expires_at ON public.auth_tokens USING btree (expires_at);
+
+
+--
+-- Name: idx_auth_tokens_player_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_auth_tokens_player_id ON public.auth_tokens USING btree (player_id);
+
+
+--
+-- Name: idx_bye_activities_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bye_activities_date ON public.bye_activities USING btree (session_date);
+
+
+--
+-- Name: idx_bye_activities_date_match; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bye_activities_date_match ON public.bye_activities USING btree (session_date, match_number);
+
+
+--
+-- Name: idx_bye_activities_deleted_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bye_activities_deleted_at ON public.bye_activities USING btree (deleted_at);
+
+
+--
+-- Name: idx_bye_activities_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_bye_activities_player ON public.bye_activities USING btree (player_id);
+
+
+--
+-- Name: idx_deleted_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_deleted_at ON public.players USING btree (deleted_at);
+
+
+--
+-- Name: idx_densuke_deletion_candidates_org_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_densuke_deletion_candidates_org_status ON public.densuke_deletion_candidates USING btree (organization_id, status);
+
+
+--
+-- Name: idx_kaderu_sync_status_triggered; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_kaderu_sync_status_triggered ON public.kaderu_sync_trigger_events USING btree (status, triggered_at);
+
+
+--
+-- Name: idx_lbg_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lbg_org ON public.line_broadcast_group USING btree (organization_id);
+
+
+--
+-- Name: idx_lbg_org_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_lbg_org_unique ON public.line_broadcast_group USING btree (organization_id);
+
+
+--
+-- Name: idx_lbs_dedupe; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_lbs_dedupe ON public.line_broadcast_send USING btree (broadcast_group_id, session_id) WHERE ((status)::text = ANY ((ARRAY['SUCCESS'::character varying, 'RESERVED'::character varying])::text[]));
+
+
+--
+-- Name: idx_lbs_group_sent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lbs_group_sent ON public.line_broadcast_send USING btree (broadcast_group_id, sent_at);
+
+
+--
+-- Name: idx_lbs_group_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lbs_group_session ON public.line_broadcast_send USING btree (broadcast_group_id, session_id);
+
+
+--
+-- Name: idx_lca_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lca_channel ON public.line_channel_assignments USING btree (line_channel_id);
+
+
+--
+-- Name: idx_lca_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lca_player ON public.line_channel_assignments USING btree (player_id);
+
+
+--
+-- Name: idx_lca_player_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lca_player_type ON public.line_channel_assignments USING btree (player_id, channel_type);
+
+
+--
+-- Name: idx_lca_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lca_status ON public.line_channel_assignments USING btree (status);
+
+
+--
+-- Name: idx_lcr_group_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lcr_group_session ON public.line_chat_reservations USING btree (broadcast_group_id, session_id);
+
+
+--
+-- Name: idx_lcr_group_session_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_lcr_group_session_active ON public.line_chat_reservations USING btree (broadcast_group_id, session_id) WHERE ((status)::text <> 'CANCELLED'::text);
+
+
+--
+-- Name: idx_lcr_scheduled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lcr_scheduled ON public.line_chat_reservations USING btree (scheduled_send_at);
+
+
+--
+-- Name: idx_lcr_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lcr_status ON public.line_chat_reservations USING btree (status);
+
+
+--
+-- Name: idx_lct_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lct_expires ON public.line_confirmation_tokens USING btree (expires_at);
+
+
+--
+-- Name: idx_lct_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lct_token ON public.line_confirmation_tokens USING btree (token);
+
+
+--
+-- Name: idx_line_assignment_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_assignment_channel ON public.line_channel_assignments USING btree (line_channel_id);
+
+
+--
+-- Name: idx_line_assignment_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_assignment_player ON public.line_channel_assignments USING btree (player_id);
+
+
+--
+-- Name: idx_line_assignment_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_assignment_status ON public.line_channel_assignments USING btree (status);
+
+
+--
+-- Name: idx_line_channel_broadcast_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_channel_broadcast_group ON public.line_channels USING btree (broadcast_group_id);
+
+
+--
+-- Name: idx_line_channel_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_channel_line_id ON public.line_channels USING btree (line_channel_id);
+
+
+--
+-- Name: idx_line_channel_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_channel_status ON public.line_channels USING btree (status);
+
+
+--
+-- Name: idx_line_channel_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_channel_type ON public.line_channels USING btree (channel_type);
+
+
+--
+-- Name: idx_line_log_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_log_channel ON public.line_message_log USING btree (line_channel_id);
+
+
+--
+-- Name: idx_line_log_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_log_player ON public.line_message_log USING btree (player_id);
+
+
+--
+-- Name: idx_line_log_type_sent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_line_log_type_sent ON public.line_message_log USING btree (notification_type, sent_at);
+
+
+--
+-- Name: idx_llc_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_llc_channel ON public.line_linking_codes USING btree (line_channel_id);
+
+
+--
+-- Name: idx_llc_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_llc_code ON public.line_linking_codes USING btree (code);
+
+
+--
+-- Name: idx_llc_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_llc_player ON public.line_linking_codes USING btree (player_id);
+
+
+--
+-- Name: idx_lml_channel; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lml_channel ON public.line_message_log USING btree (line_channel_id);
+
+
+--
+-- Name: idx_lml_dedupe; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lml_dedupe ON public.line_message_log USING btree (player_id, notification_type, dedupe_key, sent_at);
+
+
+--
+-- Name: idx_lml_dedupe_daily_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_lml_dedupe_daily_unique ON public.line_message_log USING btree (player_id, notification_type, dedupe_key, ((sent_at)::date)) WHERE (((status)::text = ANY (ARRAY[('SUCCESS'::character varying)::text, ('RESERVED'::character varying)::text])) AND (dedupe_key IS NOT NULL));
+
+
+--
+-- Name: idx_lml_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lml_player ON public.line_message_log USING btree (player_id);
+
+
+--
+-- Name: idx_lml_type_sent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lml_type_sent ON public.line_message_log USING btree (notification_type, sent_at);
+
+
+--
+-- Name: idx_lnp_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lnp_player ON public.line_notification_preferences USING btree (player_id);
+
+
+--
+-- Name: idx_lottery_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lottery_org ON public.lottery_executions USING btree (target_year, target_month, organization_id);
+
+
+--
+-- Name: idx_lottery_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lottery_target ON public.lottery_executions USING btree (target_year, target_month);
+
+
+--
+-- Name: idx_match_card_placements_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_card_placements_player ON public.match_card_placements USING btree (player_id, match_id);
+
+
+--
+-- Name: idx_match_comments_thread; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_comments_thread ON public.match_comments USING btree (match_id, mentee_id, deleted_at, created_at);
+
+
+--
+-- Name: idx_match_otetsuki_details_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_otetsuki_details_player ON public.match_otetsuki_details USING btree (player_id, match_id);
+
+
+--
+-- Name: idx_match_personal_notes_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_personal_notes_player ON public.match_personal_notes USING btree (player_id, match_id);
+
+
+--
+-- Name: idx_match_videos_player1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_videos_player1 ON public.match_videos USING btree (player1_id);
+
+
+--
+-- Name: idx_match_videos_player2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_match_videos_player2 ON public.match_videos USING btree (player2_id);
+
+
+--
+-- Name: idx_matches_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_date ON public.matches USING btree (match_date);
+
+
+--
+-- Name: idx_matches_date_match_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_date_match_number ON public.matches USING btree (match_date, match_number);
+
+
+--
+-- Name: idx_matches_date_player1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_date_player1 ON public.matches USING btree (match_date, player1_id);
+
+
+--
+-- Name: idx_matches_date_player2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_date_player2 ON public.matches USING btree (match_date, player2_id);
+
+
+--
+-- Name: idx_matches_venue; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_venue ON public.matches USING btree (venue_id);
+
+
+--
+-- Name: idx_matches_winner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_matches_winner ON public.matches USING btree (winner_id);
+
+
+--
+-- Name: idx_name_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_name_active ON public.players USING btree (name, deleted_at);
+
+
+--
+-- Name: idx_notification_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_notification_player ON public.notifications USING btree (player_id);
+
+
+--
+-- Name: idx_notification_read; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_notification_read ON public.notifications USING btree (player_id, is_read);
+
+
+--
+-- Name: idx_participant_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_participant_player ON public.practice_participants USING btree (player_id);
+
+
+--
+-- Name: idx_participant_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_participant_session ON public.practice_participants USING btree (session_id);
+
+
+--
+-- Name: idx_player_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_player_date ON public.player_profiles USING btree (player_id, valid_from, valid_to);
+
+
+--
+-- Name: idx_players_ical_feed_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_players_ical_feed_token ON public.players USING btree (ical_feed_token);
+
+
+--
+-- Name: idx_pnp_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pnp_player ON public.push_notification_preferences USING btree (player_id);
+
+
+--
+-- Name: idx_push_player; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_push_player ON public.push_subscriptions USING btree (player_id);
+
+
+--
+-- Name: idx_session_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_session_date ON public.practice_sessions USING btree (session_date);
+
+
+--
+-- Name: idx_valid_to; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_valid_to ON public.player_profiles USING btree (valid_to);
+
+
+--
+-- Name: uk_bye_activities_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uk_bye_activities_unique ON public.bye_activities USING btree (session_date, match_number, player_id) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: uk_kaderu_sync_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uk_kaderu_sync_pending ON public.kaderu_sync_trigger_events USING btree (organization_id) WHERE ((status)::text = 'PENDING'::text);
+
+
+--
+-- Name: uq_match_pairings_date_number_players; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_match_pairings_date_number_players ON public.match_pairings USING btree (session_date, match_number, LEAST(player1_id, player2_id), GREATEST(player1_id, player2_id));
+
+
+--
+-- Name: densuke_deletion_candidates densuke_deletion_candidates_densuke_url_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates
+    ADD CONSTRAINT densuke_deletion_candidates_densuke_url_id_fkey FOREIGN KEY (densuke_url_id) REFERENCES public.densuke_urls(id);
+
+
+--
+-- Name: densuke_deletion_candidates densuke_deletion_candidates_resolved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_deletion_candidates
+    ADD CONSTRAINT densuke_deletion_candidates_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.players(id);
+
+
+--
+-- Name: densuke_templates densuke_templates_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_templates
+    ADD CONSTRAINT densuke_templates_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: densuke_urls densuke_urls_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.densuke_urls
+    ADD CONSTRAINT densuke_urls_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: auth_tokens fk_auth_tokens_player; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_tokens
+    ADD CONSTRAINT fk_auth_tokens_player FOREIGN KEY (player_id) REFERENCES public.players(id);
+
+
+--
+-- Name: match_card_placements fk_match_card_placements_match; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_card_placements
+    ADD CONSTRAINT fk_match_card_placements_match FOREIGN KEY (match_id) REFERENCES public.matches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: match_card_placements fk_match_card_placements_player; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_card_placements
+    ADD CONSTRAINT fk_match_card_placements_player FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: match_otetsuki_details fk_match_otetsuki_details_match; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_otetsuki_details
+    ADD CONSTRAINT fk_match_otetsuki_details_match FOREIGN KEY (match_id) REFERENCES public.matches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: match_otetsuki_details fk_match_otetsuki_details_player; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_otetsuki_details
+    ADD CONSTRAINT fk_match_otetsuki_details_player FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: match_personal_notes fk_match_personal_notes_match; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_personal_notes
+    ADD CONSTRAINT fk_match_personal_notes_match FOREIGN KEY (match_id) REFERENCES public.matches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: match_personal_notes fk_match_personal_notes_player; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_personal_notes
+    ADD CONSTRAINT fk_match_personal_notes_player FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: matches fk_matches_venue; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.matches
+    ADD CONSTRAINT fk_matches_venue FOREIGN KEY (venue_id) REFERENCES public.venues(id) ON DELETE SET NULL;
+
+
+--
+-- Name: kaderu_sync_trigger_events kaderu_sync_trigger_events_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kaderu_sync_trigger_events
+    ADD CONSTRAINT kaderu_sync_trigger_events_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- Name: kaderu_sync_trigger_events kaderu_sync_trigger_events_triggered_by_player_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kaderu_sync_trigger_events
+    ADD CONSTRAINT kaderu_sync_trigger_events_triggered_by_player_id_fkey FOREIGN KEY (triggered_by_player_id) REFERENCES public.players(id);
+
+
+--
+-- Name: match_comments match_comments_author_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_comments
+    ADD CONSTRAINT match_comments_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.players(id);
+
+
+--
+-- Name: match_comments match_comments_match_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_comments
+    ADD CONSTRAINT match_comments_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id);
+
+
+--
+-- Name: match_comments match_comments_mentee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_comments
+    ADD CONSTRAINT match_comments_mentee_id_fkey FOREIGN KEY (mentee_id) REFERENCES public.players(id);
+
+
+--
+-- Name: match_videos match_videos_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT match_videos_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: match_videos match_videos_player1_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT match_videos_player1_id_fkey FOREIGN KEY (player1_id) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: match_videos match_videos_player2_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT match_videos_player2_id_fkey FOREIGN KEY (player2_id) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: match_videos match_videos_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_videos
+    ADD CONSTRAINT match_videos_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.players(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: mentor_relationships mentor_relationships_mentee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT mentor_relationships_mentee_id_fkey FOREIGN KEY (mentee_id) REFERENCES public.players(id);
+
+
+--
+-- Name: mentor_relationships mentor_relationships_mentor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT mentor_relationships_mentor_id_fkey FOREIGN KEY (mentor_id) REFERENCES public.players(id);
+
+
+--
+-- Name: mentor_relationships mentor_relationships_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mentor_relationships
+    ADD CONSTRAINT mentor_relationships_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+

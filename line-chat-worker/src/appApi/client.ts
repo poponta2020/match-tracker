@@ -19,6 +19,11 @@ export class AppApiError extends Error {
 export interface AppApiClient {
   getTasks(): Promise<WorkerTask[]>;
   reportResult(id: number, body: ResultReportBody): Promise<WorkerTask>;
+  /**
+   * 30日SSO Cookie の失効が近い旨の先回り警告をアプリへ送る（line-chat-auto-relogin タスク2/3）。
+   * アプリ側は有効な配信グループの各団体の管理者へリレーする（本エンドポイントは空ボディ200を返す）。
+   */
+  postSessionWarning(daysRemaining: number): Promise<void>;
 }
 
 /**
@@ -46,7 +51,9 @@ export function createAppApiClient(config: AppApiClientConfig): AppApiClient {
         throw new AppApiError(`line-chat-worker API request failed: ${response.status} ${path}`, response.status);
       }
 
-      return (await response.json()) as T;
+      // 空ボディ200（session-warning 等の void エンドポイント）を許容する。
+      const text = await response.text();
+      return (text ? JSON.parse(text) : undefined) as T;
     } catch (err) {
       if (err instanceof AppApiError) {
         throw err;
@@ -71,6 +78,13 @@ export function createAppApiClient(config: AppApiClientConfig): AppApiClient {
       return request<WorkerTask>(`/api/line-chat-worker/${id}/result`, {
         method: "POST",
         body: JSON.stringify(body),
+      });
+    },
+
+    async postSessionWarning(daysRemaining: number): Promise<void> {
+      await request<void>("/api/line-chat-worker/session-warning", {
+        method: "POST",
+        body: JSON.stringify({ daysRemaining }),
       });
     },
   };

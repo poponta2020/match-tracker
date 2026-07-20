@@ -18,6 +18,9 @@ services:
       STORAGE_STATE_PATH: /data/storage-state.json
       ARTIFACT_DIR: /data/artifacts
       ARTIFACT_RETENTION_DAYS: ${ARTIFACT_RETENTION_DAYS:-14}
+      # line-chat-auto-relogin: 30日SSO失効の先回り警告閾値（日）と自動再ログインのキルスイッチ。
+      SSO_WARNING_THRESHOLD_DAYS: ${SSO_WARNING_THRESHOLD_DAYS:-3}
+      AUTO_RELOGIN_ENABLED: ${AUTO_RELOGIN_ENABLED:-true}
     volumes:
       - line-chat-worker-data:/data
     networks:
