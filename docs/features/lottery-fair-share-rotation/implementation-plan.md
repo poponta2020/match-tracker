@@ -49,7 +49,7 @@ status: completed
 - **完了条件:** テスト green
 - **対応Issue:** #1122
 ### タスク4: 抽選アルゴリズム本体の置換（LotteryService）★中核
-- [ ] 完了
+- [x] 完了
 - **目的:** `processMatch`/`processSession` を2ルール方式へ全面置換し、`executeLottery`/`previewLottery`/`reExecuteLottery` の3経路で `LotteryFairShareTracker` をベースラインから構築して差し込む。cascade・rescue・reserve・待ち番号引き継ぎを撤去。`reExecuteLottery` の `findMonthlyLoserPlayerIds` 依存を廃止。旧 `getLotteryNormalReservePercent` の定数/getter を撤去。
 - **対応AC:** AC-1, AC-2, AC-6, AC-7, AC-9, AC-R1, AC-R2, AC-R3, AC-R4, AC-R5, AC-R6
 - **主な変更領域:** `karuta-tracker/.../service/LotteryService.java`（processMatch 署名変更：sessionLosers/monthlyLosers/待ち順マップを除去し tracker＋capPercentile を受ける）、`SystemSettingService.java`（旧 getReserve 撤去）、`LotteryServiceTest.java`・`LotteryServiceExecuteAndConfirmTest.java`（新署名へ全 processMatch 呼び出し更新、(b) rescue テスト削除/書換、(c) reserve スタブ削除、`reExecute...inherits...` の monthly スタブ除去）
