@@ -42,3 +42,14 @@ tags: [security, auth, token, bcrypt, deny-by-default, migration, race-condition
 - **ローカル起動＝本番書き換え**: ローカルも同じ Render Postgres を指すため、新コードのローカル起動で本番パスワードがその場でハッシュ化される。実機確認は別 DB 必須
 - 既存ログイン中ユーザーは全員1回だけ再ログイン必要（`dummy-token` 無効化）
 - Render `healthCheckPath=/ping`（`/api/**` 外）で deny by default の影響なし・GitHub Actions の scrape/sync は `pg` 直書きで API 非経由＝影響なし（いずれも確認済み）
+
+## マージ統合（出荷直前に判明・最重要教訓）
+
+/ship 時点で main が #1112（未認証EP6件に認可追加）・#1113 分進んでおりコンフリクト。認証×認可が同じファイル群を触るため統合が必要だった。auth-tokenization ブランチは #1112 より前の base から分岐していたのが根因。
+
+- **コンフリクト14 hunk（全テスト）**: #1112 が各EPの要求ロールに合わせ追加した `X-User-Role`/`X-User-Id` を、auth-tokenization のヘルパー `AuthTestSupport.bearer(id,Role)` 構文へ統合。**ロール値は theirs(#1112)＝そのEPの現在の要求ロールを採用**（Match=ADMIN, Venue/Profile=SUPER_ADMIN）。分岐が古いので単純に HEAD(ours) 採用は 403 で落ちる
+- **★semantic conflict（コンフリクトマーカーに出ない・最重要）**: deny-by-default が「認証ヘッダーを送らない既存テスト」を全部壊す。#1112 が auto-merge で本文に持ち込んだ X-User survivor 29箇所（bearer 化）＋ `UnauthorizedMutationRegressionTest` 26ケース（`BaseControllerTest` 継承で `AuthTokenService` モック供給・**認証無し13件は 403→401**・権限不足は 403 維持・bearer 化）。**検出は2系統＝grep で header survivor＋全テスト実行で status 変化**。auto-merge の green は「トークンを足しただけ」を意味しうるので、負のアサーション（headerless→401）が実際に落ちる/通るを確認するのが唯一の担保
+- `AuthenticationIntegrationTest`/`RoleCheckInterceptorTest` の X-User 詐称テストは「ヘッダーを送っても無視される」検証なので**意図的に保持**（grep 全置換の罠）
+- `architecture.md` の古い X-User 記述4箇所も是正（**D2 docs チェックは存在チェックのみで内容の齟齬を検出しない**）
+- **CI 二重確認**: 元 PR は GitHub Actions が一度も走っておらず Vercel のみ＝gate-dod B1 が Vercel だけで PASS 判定していた。マージコミット push で初めて Java CI が pull_request trigger で走り **pass（7m27s, Testcontainers PG）**。ローカル BE1700/FE753 green と合わせ二重確認
+- **教訓**: 「認証の既定を変える PR」が古い base から分岐していると、後続の認可 PR がマージ時に semantic conflict を生む。**コンフリクトマーカーがゼロでも全テスト実行が唯一の ground truth**。advisor の事前警告（deny-by-default は headerless call を壊す）がそのまま出荷直前に顕在化した
