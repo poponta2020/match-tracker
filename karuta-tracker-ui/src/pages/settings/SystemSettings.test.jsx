@@ -167,6 +167,36 @@ describe('SystemSettings', () => {
     });
   });
 
+  it('clamps an out-of-range stored percentile into the input on load', async () => {
+    mocks.settingsGetAll.mockResolvedValue({
+      data: [
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: '150' },
+      ],
+    });
+
+    renderPage('/admin/settings?organizationId=2');
+
+    // 保存値150はバックエンド getter と同じく100にクランプして表示し、実効値と一致させる
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+    });
+    expect(screen.queryByDisplayValue('150')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the default percentile for a non-numeric stored value', async () => {
+    mocks.settingsGetAll.mockResolvedValue({
+      data: [
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: 'abc' },
+      ],
+    });
+
+    renderPage('/admin/settings?organizationId=2');
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('30')).toBeInTheDocument();
+    });
+  });
+
   it('rejects out-of-range percentile input and keeps the previous value', async () => {
     const user = userEvent.setup();
     renderPage('/admin/settings?organizationId=2');

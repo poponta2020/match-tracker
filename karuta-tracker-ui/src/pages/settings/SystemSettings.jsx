@@ -48,7 +48,10 @@ const SystemSettings = () => {
           }
         }
         if (s.settingKey === 'lottery_weight_cap_percentile') {
-          nextCapPercentile = parseInt(s.settingValue, 10);
+          // 保存経路にバリデーションが無いため、表示値もバックエンド getter と同じく
+          // 非数値はデフォルト30・範囲外は 0〜100 にクランプし、画面表示と実効値を一致させる
+          const parsed = parseInt(s.settingValue, 10);
+          nextCapPercentile = Number.isNaN(parsed) ? 30 : Math.max(0, Math.min(100, parsed));
         }
       }
       setNoDeadline(nextNoDeadline);
@@ -305,7 +308,7 @@ const SystemSettings = () => {
           </p>
           <p className="text-sm text-gray-700">
             <span className="font-medium">パーセンタイル設定の意味:</span>
-            上の「重み付けの基準」は、重みの基準（キャップ）をその試合の候補者の上位◯%でフラット化する設定です。よく来ている常連層を大きな同着グループにまとめ、特定の人が毎回狙い撃ちで落選するのを防ぎます。
+            上の「重み付けの基準」は、設定した値（パーセンタイル）を境目にして、それ以上に取れている常連層（設定30なら概ね上位70%）を同じ重みで横並びにする設定です。よく来ている常連層を大きな同着グループにまとめ、特定の人が毎回狙い撃ちで落選するのを防ぎます。
           </p>
         </div>
       </div>
