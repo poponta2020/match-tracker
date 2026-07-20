@@ -252,7 +252,7 @@ class KaderuSyncTriggerServiceTest {
         assertThat(event.getCompletedAt()).isNotNull();
         assertThat(event.getSummary()).isEqualTo("新規 3件 / 拡張 1件 / スキップ 5件");
         verify(eventRepository).save(event);
-        verify(lineNotificationService).sendKaderuSyncCompletedNotification(7L, "hokudai",
+        verify(lineNotificationService).sendKaderuSyncCompletedNotification(7L, 1L, "hokudai",
                 "新規 3件 / 拡張 1件 / スキップ 5件");
     }
 
@@ -275,7 +275,7 @@ class KaderuSyncTriggerServiceTest {
 
         assertThat(event.getStatus()).isEqualTo(SyncStatus.FAILED);
         assertThat(event.getFailureReason()).isEqualTo("workflow failure");
-        verify(lineNotificationService).sendKaderuSyncFailedNotification(7L, "hokudai", "workflow failure");
+        verify(lineNotificationService).sendKaderuSyncFailedNotification(7L, 1L, "hokudai", "workflow failure");
         verify(gitHubActionsClient, never()).fetchWorkflowLogText(anyLong());
     }
 
@@ -296,7 +296,7 @@ class KaderuSyncTriggerServiceTest {
         assertThat(event.getStatus()).isEqualTo(SyncStatus.FAILED);
         assertThat(event.getFailureReason()).isEqualTo("30分タイムアウト");
         verify(gitHubActionsClient, never()).getWorkflowRun(anyLong());
-        verify(lineNotificationService).sendKaderuSyncFailedNotification(7L, "hokudai", "30分タイムアウト");
+        verify(lineNotificationService).sendKaderuSyncFailedNotification(7L, 1L, "hokudai", "30分タイムアウト");
     }
 
     @Test
@@ -326,7 +326,7 @@ class KaderuSyncTriggerServiceTest {
         assertThat(event.getStatus()).isEqualTo(SyncStatus.PENDING); // まだ queued
         verify(eventRepository, times(1)).save(event); // run_id 補完の1回のみ
         verify(lineNotificationService, never())
-                .sendKaderuSyncCompletedNotification(any(), any(), any());
+                .sendKaderuSyncCompletedNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -384,7 +384,7 @@ class KaderuSyncTriggerServiceTest {
         assertThat(event.getStatus()).isEqualTo(SyncStatus.PENDING);
         verify(eventRepository, never()).save(any());
         verify(lineNotificationService, never())
-                .sendKaderuSyncCompletedNotification(any(), any(), any());
+                .sendKaderuSyncCompletedNotification(any(), any(), any(), any());
     }
 
     // =======================

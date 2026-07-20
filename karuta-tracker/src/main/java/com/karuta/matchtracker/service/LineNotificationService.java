@@ -3362,25 +3362,48 @@ public class LineNotificationService {
     }
 
     /**
-     * Kaderu予約取り込み手動トリガーの完了通知を、押下者本人 (ADMIN+) へ LINE 送信する。
+     * Kaderu予約取り込み通知の受信者（対象団体の ACTIVE な ADMIN 全員 ＋ ACTIVE な
+     * SUPER_ADMIN 全員）のプレイヤーIDを重複排除して返す。
      *
-     * <p>{@link LineNotificationType#ADMIN_KADERU_SYNC_COMPLETED} を用いることで
-     * 押下者の ADMIN チャネル binding 経由で push される。/practice/new は ADMIN+
-     * 限定なので、押下者は必ず ADMIN チャネルを持っている前提。
+     * <p>隣室スケジューラ等（{@link #getAdminRecipientsForSession}）と同じ収集パターン
+     * （{@code findByRoleAndActive(SUPER_ADMIN)} ＋
+     * {@code findByRoleAndAdminOrganizationIdAndActive(ADMIN, orgId)}）を用いる。
+     * 役割は排他（1人が SUPER_ADMIN かつ ADMIN にはならない）ので実際に重複が発生する
+     * ことはないが、AC-1 の「同一人物は1回」を満たすため防御的に distinct する。
+     */
+    private List<Long> resolveKaderuSyncRecipientIds(Long organizationId) {
+        return Stream.concat(
+                        playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN).stream(),
+                        playerRepository.findByRoleAndAdminOrganizationIdAndActive(
+                                Player.Role.ADMIN, organizationId).stream())
+                .map(Player::getId)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * Kaderu予約取り込み手動トリガーの完了通知を、対象団体の ACTIVE な ADMIN 全員 ＋
+     * ACTIVE な SUPER_ADMIN 全員（重複排除）へ LINE 送信する。
      *
-     * <p>preference (opt-in/opt-out) はチェックしない。本通知は押下者本人の
-     * 明示的な操作に対するフィードバックなので、設定の有無に関わらず常に送信する。
+     * <p>{@link LineNotificationType#ADMIN_KADERU_SYNC_COMPLETED} を用いることで各受信者の
+     * ADMIN チャネル binding 経由で push される。取り込み結果は運営全体で共有したいため、
+     * 押下者本人だけでなく管理者・スーパー管理者なら誰でも把握できるようにする。
      *
-     * <p>非同期実行 ({@link Async})。例外は呼び出しスレッドへ伝播しないため
-     * メソッド全体を try/catch で包んでログに落とす。
+     * <p>preference (opt-in/opt-out) はチェックしない（ADMIN 運用通知）。
      *
-     * @param triggeredByPlayerId 押下者のプレイヤーID
-     * @param organizationCode    対象団体コード (例: "hokudai")
+     * <p>非同期実行 ({@link Async})。例外は呼び出しスレッドへ伝播しないためメソッド全体を
+     * try/catch で包み、さらに受信者ごとにも try/catch する（1人の送信失敗が他の受信者に
+     * 波及しない）。
+     *
+     * @param triggeredByPlayerId 押下者のプレイヤーID（ログ用）
+     * @param organizationId      対象団体ID（受信者解決用）
+     * @param organizationCode    対象団体コード (例: "hokudai"、本文用)
      * @param summary             同期結果サマリー (例: "新規 3件 / 拡張 1件 / スキップ 5件")。
      *                            ログ抽出失敗時は null で、代替メッセージを表示する
      */
     @Async
-    public void sendKaderuSyncCompletedNotification(Long triggeredByPlayerId, String organizationCode, String summary) {
+    public void sendKaderuSyncCompletedNotification(
+            Long triggeredByPlayerId, Long organizationId, String organizationCode, String summary) {
         try {
             String resultLine = (summary != null && !summary.isBlank())
                     ? "結果: " + summary
@@ -3388,24 +3411,37 @@ public class LineNotificationService {
             String message = String.format(
                     "Kaderu予約取り込みが完了しました\n（団体: %s）\n%s",
                     organizationCode != null ? organizationCode : "?", resultLine);
-            sendToPlayer(triggeredByPlayerId, LineNotificationType.ADMIN_KADERU_SYNC_COMPLETED, message);
-            log.info("ADMIN_KADERU_SYNC_COMPLETED: playerId={}, orgCode={}", triggeredByPlayerId, organizationCode);
+            List<Long> recipientIds = resolveKaderuSyncRecipientIds(organizationId);
+            for (Long recipientId : recipientIds) {
+                try {
+                    sendToPlayer(recipientId, LineNotificationType.ADMIN_KADERU_SYNC_COMPLETED, message);
+                } catch (Exception e) {
+                    log.warn("ADMIN_KADERU_SYNC_COMPLETED send failed: recipient={}, err={}",
+                            recipientId, e.getMessage(), e);
+                }
+            }
+            log.info("ADMIN_KADERU_SYNC_COMPLETED: triggeredBy={}, orgId={}, orgCode={}, recipients={}",
+                    triggeredByPlayerId, organizationId, organizationCode, recipientIds.size());
         } catch (Exception e) {
-            log.warn("Async ADMIN_KADERU_SYNC_COMPLETED dispatch failed: playerId={}, err={}",
-                    triggeredByPlayerId, e.getMessage(), e);
+            log.warn("Async ADMIN_KADERU_SYNC_COMPLETED dispatch failed: orgId={}, err={}",
+                    organizationId, e.getMessage(), e);
         }
     }
 
     /**
-     * Kaderu予約取り込み手動トリガーの失敗通知を、押下者本人 (ADMIN+) へ LINE 送信する。
-     * preference はチェックしない（理由は {@link #sendKaderuSyncCompletedNotification} と同じ）。
+     * Kaderu予約取り込み手動トリガーの失敗通知を、対象団体の ACTIVE な ADMIN 全員 ＋
+     * ACTIVE な SUPER_ADMIN 全員（重複排除）へ LINE 送信する。
+     * 受信者集合・例外分離・preference 非チェックは
+     * {@link #sendKaderuSyncCompletedNotification} と同じ。
      *
-     * @param triggeredByPlayerId 押下者のプレイヤーID
-     * @param organizationCode    対象団体コード
+     * @param triggeredByPlayerId 押下者のプレイヤーID（ログ用）
+     * @param organizationId      対象団体ID（受信者解決用）
+     * @param organizationCode    対象団体コード（本文用）
      * @param failureReason       失敗理由 (workflow conclusion 文字列 / "30分タイムアウト" 等)
      */
     @Async
-    public void sendKaderuSyncFailedNotification(Long triggeredByPlayerId, String organizationCode, String failureReason) {
+    public void sendKaderuSyncFailedNotification(
+            Long triggeredByPlayerId, Long organizationId, String organizationCode, String failureReason) {
         try {
             String reasonLine = (failureReason != null && !failureReason.isBlank())
                     ? "理由: " + failureReason + "（GitHub Actions ログを確認してください）"
@@ -3413,12 +3449,20 @@ public class LineNotificationService {
             String message = String.format(
                     "Kaderu予約取り込みに失敗しました\n（団体: %s）\n%s",
                     organizationCode != null ? organizationCode : "?", reasonLine);
-            sendToPlayer(triggeredByPlayerId, LineNotificationType.ADMIN_KADERU_SYNC_FAILED, message);
-            log.info("ADMIN_KADERU_SYNC_FAILED: playerId={}, orgCode={}, reason={}",
-                    triggeredByPlayerId, organizationCode, failureReason);
+            List<Long> recipientIds = resolveKaderuSyncRecipientIds(organizationId);
+            for (Long recipientId : recipientIds) {
+                try {
+                    sendToPlayer(recipientId, LineNotificationType.ADMIN_KADERU_SYNC_FAILED, message);
+                } catch (Exception e) {
+                    log.warn("ADMIN_KADERU_SYNC_FAILED send failed: recipient={}, err={}",
+                            recipientId, e.getMessage(), e);
+                }
+            }
+            log.info("ADMIN_KADERU_SYNC_FAILED: triggeredBy={}, orgId={}, orgCode={}, reason={}, recipients={}",
+                    triggeredByPlayerId, organizationId, organizationCode, failureReason, recipientIds.size());
         } catch (Exception e) {
-            log.warn("Async ADMIN_KADERU_SYNC_FAILED dispatch failed: playerId={}, err={}",
-                    triggeredByPlayerId, e.getMessage(), e);
+            log.warn("Async ADMIN_KADERU_SYNC_FAILED dispatch failed: orgId={}, err={}",
+                    organizationId, e.getMessage(), e);
         }
     }
 
