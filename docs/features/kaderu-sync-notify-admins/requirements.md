@@ -42,5 +42,5 @@ next_section: 技術計画
 - 変更対象は `LineNotificationService` の当該2メソッドと `KaderuSyncTriggerService` の呼び出し2箇所のみ。
 
 ## 7. 設計判断の根拠
-- **LINE 継続**: ADMIN_ 系操作通知は既に LINE 運用で一貫（[[reference_line_notification_admin_prefix]]）。チャネル変更は範囲が広がるので避ける。
+- **LINE 継続**: ADMIN_ 系操作通知は既に LINE 運用で一貫（`ADMIN_` プレフィックスによるチャネルルーティングの経緯より）。チャネル変更は範囲が広がるので避ける。
 - **受信者パターン流用**: 既存の SUPER_ADMIN＋org ADMIN 収集パターンをそのまま使い、独自ロジックを増やさない。
