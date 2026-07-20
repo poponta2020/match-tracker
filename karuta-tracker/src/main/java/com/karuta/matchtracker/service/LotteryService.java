@@ -127,13 +127,15 @@ public class LotteryService {
                 return lotteryExecutionRepository.save(execution);
             }
 
-            // 公平抽選トラッカーを対象セッション群のベースライン（直近30日の既存WON）から構築
-            LotteryFairShareTracker tracker = buildTracker(sessions, organizationId);
+            // 公平抽選トラッカーを対象セッション群のベースライン（直近30日の既存WON）から団体別に構築
+            // （organizationId=null の全団体一括実行でも recentTaken が団体を越えないようにする）
+            Map<Long, LotteryFairShareTracker> trackers = buildTrackersByOrg(sessions);
             List<SessionDetail> sessionDetails = new ArrayList<>();
             Random random = new Random(seed);
             Set<Long> adminPrioritySet = priorityPlayerIds != null ? new HashSet<>(priorityPlayerIds) : Set.of();
 
             for (PracticeSession session : sessions) {
+                LotteryFairShareTracker tracker = trackers.get(session.getOrganizationId());
                 SessionDetail sessionDetail = processSession(session, tracker, execution.getId(), adminPrioritySet, true, random);
                 sessionDetails.add(sessionDetail);
             }
@@ -269,6 +271,29 @@ public class LotteryService {
             tracker.recordWin(w.getPlayerId(), w.getSessionDate());
         }
         return tracker;
+    }
+
+    /**
+     * セッション群を団体ごとに分け、団体別の公平抽選トラッカーを構築して返す（キー=organizationId）。
+     *
+     * <p>{@code recentTaken} は要件上「同一団体で取れた試合数」であり、団体を越えて混ざってはならない。
+     * organizationId を指定した実行では全セッションが同一団体のためトラッカーは1個だが、
+     * SUPER_ADMIN が organizationId=null で全団体を一括実行する経路では複数団体のセッションが混在する。
+     * その場合に単一トラッカーを共有すると、複数団体に所属する同一選手の当選実績が団体を越えて
+     * {@code recentTaken} に算入されてしまう。団体別にトラッカーを分けることで、各団体を個別に実行したのと
+     * 同じ結果になる。{@code organization_id} は非 null（{@code @Column(nullable=false)}）のため
+     * グループ化キーに null は現れない。同一団体は同一日に複数セッションを持てない
+     * （{@code uk_session_date_organization}）ため、団体別トラッカー内では日付キーの
+     * {@code todayTaken} がそのままセッション単位のカウンタとして機能する。
+     */
+    private Map<Long, LotteryFairShareTracker> buildTrackersByOrg(List<PracticeSession> sessions) {
+        Map<Long, List<PracticeSession>> sessionsByOrg = sessions.stream()
+                .collect(Collectors.groupingBy(PracticeSession::getOrganizationId));
+        Map<Long, LotteryFairShareTracker> trackers = new HashMap<>();
+        for (Map.Entry<Long, List<PracticeSession>> entry : sessionsByOrg.entrySet()) {
+            trackers.put(entry.getKey(), buildTracker(entry.getValue(), entry.getKey()));
+        }
+        return trackers;
     }
 
     /**
@@ -553,8 +578,8 @@ public class LotteryService {
             return new LotteryPreviewResult(List.of(), seed, populationSignature);
         }
 
-        // 公平抽選トラッカーを対象セッション群のベースラインから構築（確定経路と同一手順で AC-R3 を担保）
-        LotteryFairShareTracker tracker = buildTracker(sessions, organizationId);
+        // 公平抽選トラッカーを団体別に構築（確定経路と同一手順・同一分割で AC-R3 を担保）
+        Map<Long, LotteryFairShareTracker> trackers = buildTrackersByOrg(sessions);
         // セッションごとに処理された参加者を保持（DTO組み立て用）
         Map<Long, List<PracticeParticipant>> participantsBySession = new LinkedHashMap<>();
         Random random = new Random(seed);
@@ -567,6 +592,7 @@ public class LotteryService {
             participants.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
             // 抽選アルゴリズムを実行（DB保存なし）
+            LotteryFairShareTracker tracker = trackers.get(session.getOrganizationId());
             processSession(session, tracker, null, adminPrioritySet, false, random);
 
             // 処理後の参加者（ステータスがインメモリで更新済み）を保持

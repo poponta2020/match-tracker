@@ -48,9 +48,11 @@ const SystemSettings = () => {
           }
         }
         if (s.settingKey === 'lottery_weight_cap_percentile') {
-          // 保存経路にバリデーションが無いため、表示値もバックエンド getter と同じく
-          // 非数値はデフォルト30・範囲外は 0〜100 にクランプし、画面表示と実効値を一致させる
-          const parsed = parseInt(s.settingValue, 10);
+          // 保存経路にバリデーションが無いため、表示値もバックエンド getter（Integer.parseInt→
+          // 失敗時はデフォルト30・その後 0〜100 クランプ）と同じ規則で正規化し、画面表示と実効値を一致させる。
+          // parseInt は "45abc" を 45 と受理するため、文字列全体が整数のときだけ採用する（BEの厳密解析に合わせる）。
+          const raw = String(s.settingValue);
+          const parsed = /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
           nextCapPercentile = Number.isNaN(parsed) ? 30 : Math.max(0, Math.min(100, parsed));
         }
       }

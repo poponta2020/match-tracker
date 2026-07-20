@@ -758,4 +758,41 @@ class LotteryServiceTest {
         verify(playerOrganizationRepository, never()).findByPlayerIdIn(anyList());
         verify(practiceSessionRepository, never()).findByYearAndMonthAndOrganizationId(anyInt(), anyInt(), any());
     }
+
+    @Test
+    @DisplayName("AC-5(org): organizationId=null の全団体一括実行は団体ごとにベースラインを分離し recentTaken が団体を越えない")
+    void executeLottery_nullOrg_buildsPerOrgBaselineWithoutCrossOrgLeak() throws Exception {
+        // 団体1(2026-05-03)・団体2(2026-05-10)のセッションを SUPER_ADMIN 全団体一括(org=null)で処理する。
+        // 同一 playerId=10 が両団体の PENDING に現れるが、recentTaken のベースライン（既存WON）は
+        // 団体ごとに findWonPlayerDates(orgId, ...) で個別に読まれ、全団体一括(null)では読まれない。
+        // = 各団体を個別実行したのと同じ結果になり、片方の団体の当選実績がもう一方に混入しない。
+        PracticeSession org1Session = sessionForApplicants(201L, 1L, LocalDate.of(2026, 5, 3));
+        PracticeSession org2Session = sessionForApplicants(202L, 2L, LocalDate.of(2026, 5, 10));
+
+        when(practiceSessionRepository.findByYearAndMonth(2026, 5))
+                .thenReturn(List.of(org1Session, org2Session));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(201L, ParticipantStatus.PENDING))
+                .thenReturn(new ArrayList<>(List.of(participant(1L, 10L))));
+        when(practiceParticipantRepository.findBySessionIdAndStatus(202L, ParticipantStatus.PENDING))
+                .thenReturn(new ArrayList<>(List.of(participant(2L, 10L))));
+        when(systemSettingService.getLotteryWeightCapPercentile(anyLong())).thenReturn(30);
+        when(practiceParticipantRepository.findWonPlayerDates(any(), any(), any()))
+                .thenReturn(List.of());
+        when(practiceParticipantRepository.saveAll(any())).thenReturn(List.of());
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(lotteryExecutionRepository.save(any())).thenAnswer(inv -> {
+            LotteryExecution ex = inv.getArgument(0);
+            if (ex.getId() == null) {
+                ex.setId(900L);
+            }
+            return ex;
+        });
+
+        lotteryService.executeLottery(2026, 5, 99L, LotteryExecution.ExecutionType.MANUAL, null, 1L, List.of());
+
+        // ベースラインは各団体IDで個別に引かれ、全団体一括(null)では引かれない（団体スコープの担保）
+        verify(practiceParticipantRepository).findWonPlayerDates(eq(1L), any(), any());
+        verify(practiceParticipantRepository).findWonPlayerDates(eq(2L), any(), any());
+        verify(practiceParticipantRepository, never()).findWonPlayerDates(isNull(), any(), any());
+    }
 }

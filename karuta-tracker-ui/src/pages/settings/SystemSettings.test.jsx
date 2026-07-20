@@ -183,10 +183,12 @@ describe('SystemSettings', () => {
     expect(screen.queryByDisplayValue('150')).not.toBeInTheDocument();
   });
 
-  it('falls back to the default percentile for a non-numeric stored value', async () => {
+  it('falls back to the default percentile for a partially-numeric stored value', async () => {
+    // "45abc" は parseInt では 45 と受理されてしまうが、バックエンド（Integer.parseInt）は
+    // 例外→デフォルト30 になる。画面表示も 30 にそろえて実効値と一致させる。
     mocks.settingsGetAll.mockResolvedValue({
       data: [
-        { settingKey: 'lottery_weight_cap_percentile', settingValue: 'abc' },
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: '45abc' },
       ],
     });
 
@@ -195,6 +197,7 @@ describe('SystemSettings', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('30')).toBeInTheDocument();
     });
+    expect(screen.queryByDisplayValue('45')).not.toBeInTheDocument();
   });
 
   it('rejects out-of-range percentile input and keeps the previous value', async () => {
