@@ -40,7 +40,7 @@ status: completed
 - **完了条件:** `@DataJpaTest` green
 - **対応Issue:** #1121
 ### タスク3: 公平抽選ロジッククラスの新設（LotteryFairShareTracker）
-- [ ] 完了
+- [x] 完了
 - **目的:** 窓カウント（recentTaken/todayTaken）・パーセンタイルキャップ（nearest-rank＋最小値一致時+1ガード）・シード付き重み付き抽選を純ロジックとして実装し、単体テストで固める。
 - **対応AC:** AC-3, AC-4, AC-4b, AC-5, AC-8
 - **主な変更領域:** `karuta-tracker/.../service/LotteryFairShareTracker.java`（新規）＋専用テスト
