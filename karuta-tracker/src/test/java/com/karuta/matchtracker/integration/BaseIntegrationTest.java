@@ -38,9 +38,13 @@ public abstract class BaseIntegrationTest {
      */
     @BeforeEach
     void cleanDatabase() {
+        // auth_tokens は players への FK を宣言していないため CASCADE では消えない。
+        // RESTART IDENTITY で player_id が振り直される以上、消し漏らすと前テストのトークンが
+        // 別テストの新しい選手に解決されてしまうため明示的に含める（auth-tokenization）。
         jdbcTemplate.execute(
             "TRUNCATE TABLE matches, player_profiles, practice_participants, practice_sessions, " +
-            "match_pairings, venue_match_schedules, venues, player_organizations, players, organizations RESTART IDENTITY CASCADE"
+            "match_pairings, venue_match_schedules, venues, player_organizations, auth_tokens, " +
+            "invite_tokens, players, organizations RESTART IDENTITY CASCADE"
         );
         // テスト用の団体データを挿入
         jdbcTemplate.execute(

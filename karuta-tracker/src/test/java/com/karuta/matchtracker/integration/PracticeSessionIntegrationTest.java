@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
 import org.junit.jupiter.api.DisplayName;
@@ -17,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * PracticeSession APIの統合テスト
  */
 @DisplayName("PracticeSession統合テスト")
-class PracticeSessionIntegrationTest extends BaseIntegrationTest {
+class PracticeSessionIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -25,6 +27,8 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("練習日の登録から削除までの一連の操作ができる")
     void testFullSessionLifecycle() throws Exception {
+        // year-month は所属団体でスコープされるため、org 1 に所属する実在の選手として叩く
+        Long memberId = createMemberPlayer("スコープ検証用選手", 1L);
         LocalDate sessionDate = LocalDate.now();
 
         // 1. 練習日を登録
@@ -35,7 +39,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -49,47 +53,51 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
         Long sessionId = objectMapper.readTree(createResponse).get("id").asLong();
 
         // 2. IDで練習日を取得
-        mockMvc.perform(get("/api/practice-sessions/" + sessionId))
+        mockMvc.perform(get("/api/practice-sessions/" + sessionId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sessionId))
                 .andExpect(jsonPath("$.sessionDate").value(sessionDate.toString()));
 
         // 3. 日付で練習日を取得
         mockMvc.perform(get("/api/practice-sessions/date")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", sessionDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sessionId));
 
         // 4. 練習日が存在するか確認
         mockMvc.perform(get("/api/practice-sessions/exists")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("true"));
 
         // 5. 年月で練習日リストに含まれている
         mockMvc.perform(get("/api/practice-sessions/year-month")
                         .param("year", String.valueOf(sessionDate.getYear()))
-                        .param("month", String.valueOf(sessionDate.getMonthValue())))
+                        .param("month", String.valueOf(sessionDate.getMonthValue()))
+                        .header("Authorization", AuthTestSupport.bearer(memberId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(sessionId));
 
         // 6. 総試合数を更新
         mockMvc.perform(put("/api/practice-sessions/" + sessionId + "/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("totalMatches", "15"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalMatches").value(15));
 
         // 7. 練習日を削除
         mockMvc.perform(delete("/api/practice-sessions/" + sessionId)
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 8. 削除後は存在しない
         mockMvc.perform(get("/api/practice-sessions/exists")
-                        .param("date", sessionDate.toString()))
+                        .param("date", sessionDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("false"));
     }
@@ -107,14 +115,14 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 1回目は成功
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         // 2回目は失敗
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -124,6 +132,8 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("複数の練習日を登録して年月検索ができる")
     void testMultipleSessionsAndYearMonthQuery() throws Exception {
+        // year-month は所属団体でスコープされるため、org 1 に所属する実在の選手として叩く
+        Long memberId = createMemberPlayer("スコープ検証用選手", 1L);
         LocalDate today = LocalDate.now();
 
         // 3日分の練習日を登録
@@ -136,7 +146,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/practice-sessions")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
@@ -145,7 +155,8 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
         // 年月で練習日を取得
         mockMvc.perform(get("/api/practice-sessions/year-month")
                         .param("year", String.valueOf(today.getYear()))
-                        .param("month", String.valueOf(today.getMonthValue())))
+                        .param("month", String.valueOf(today.getMonthValue()))
+                        .header("Authorization", AuthTestSupport.bearer(memberId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))));
     }
@@ -153,6 +164,8 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("年月別で練習日を取得できる")
     void testGetSessionsByYearMonth() throws Exception {
+        // year-month は所属団体でスコープされるため、org 1 に所属する実在の選手として叩く
+        Long memberId = createMemberPlayer("スコープ検証用選手", 1L);
         LocalDate today = LocalDate.now();
         int currentYear = today.getYear();
         int currentMonth = today.getMonthValue();
@@ -167,7 +180,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -178,7 +191,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
@@ -191,7 +204,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request3)))
                 .andExpect(status().isCreated());
@@ -199,14 +212,16 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
         // 今月の練習日を取得
         mockMvc.perform(get("/api/practice-sessions/year-month")
                         .param("year", String.valueOf(currentYear))
-                        .param("month", String.valueOf(currentMonth)))
+                        .param("month", String.valueOf(currentMonth))
+                        .header("Authorization", AuthTestSupport.bearer(memberId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)));
 
         // 先月の練習日を取得
         mockMvc.perform(get("/api/practice-sessions/year-month")
                         .param("year", String.valueOf(lastMonth.getYear()))
-                        .param("month", String.valueOf(lastMonth.getMonthValue())))
+                        .param("month", String.valueOf(lastMonth.getMonthValue()))
+                        .header("Authorization", AuthTestSupport.bearer(memberId, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
     }
@@ -223,14 +238,15 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .organizationId(1L)
                 .build();
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(futureRequest)))
                 .andExpect(status().isCreated());
 
         // 次の参加予定を取得（playerId=1）
         mockMvc.perform(get("/api/practice-sessions/next-participation")
-                        .param("playerId", "1"))
+                        .param("playerId", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().is2xxSuccessful());
     }
 
@@ -247,7 +263,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -259,7 +275,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
 
         // 負の値で更新しようとする
         mockMvc.perform(put("/api/practice-sessions/" + sessionId + "/total-matches")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("totalMatches", "-1"))
                 .andExpect(status().isBadRequest());
     }
@@ -267,11 +283,12 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("存在しない練習日は404を返す")
     void testNonExistentSession() throws Exception {
-        mockMvc.perform(get("/api/practice-sessions/999"))
+        mockMvc.perform(get("/api/practice-sessions/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(get("/api/practice-sessions/date")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", LocalDate.now().plusYears(10).toString()))
                 .andExpect(status().isNotFound());
     }
@@ -287,7 +304,7 @@ class PracticeSessionIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())

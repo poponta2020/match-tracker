@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PlayerProfileCreateRequest;
 import com.karuta.matchtracker.dto.PlayerProfileDto;
@@ -30,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(PlayerProfileController.class)
 @DisplayName("PlayerProfileController 単体テスト")
-class PlayerProfileControllerTest {
+class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -77,7 +79,8 @@ class PlayerProfileControllerTest {
         when(playerProfileService.findCurrentProfile(1L)).thenReturn(Optional.of(testProfileDto));
 
         // When & Then
-        mockMvc.perform(get("/api/player-profiles/current/1"))
+        mockMvc.perform(get("/api/player-profiles/current/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1))
@@ -96,7 +99,8 @@ class PlayerProfileControllerTest {
         when(playerProfileService.findCurrentProfile(1L)).thenReturn(Optional.empty());
 
         // When & Then
-        mockMvc.perform(get("/api/player-profiles/current/1"))
+        mockMvc.perform(get("/api/player-profiles/current/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
 
         verify(playerProfileService).findCurrentProfile(1L);
@@ -112,7 +116,8 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(get("/api/player-profiles/at-date/1")
-                        .param("date", targetDate.toString()))
+                        .param("date", targetDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.playerId").value(1));
@@ -137,7 +142,8 @@ class PlayerProfileControllerTest {
                 .thenReturn(List.of(testProfileDto, oldProfile));
 
         // When & Then
-        mockMvc.perform(get("/api/player-profiles/history/1"))
+        mockMvc.perform(get("/api/player-profiles/history/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
@@ -156,7 +162,8 @@ class PlayerProfileControllerTest {
                 .thenThrow(new ResourceNotFoundException("Player", 999L));
 
         // When & Then
-        mockMvc.perform(get("/api/player-profiles/history/999"))
+        mockMvc.perform(get("/api/player-profiles/history/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));
@@ -182,9 +189,10 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(createRequest)))
+                        .content(objectMapper.writeValueAsString(createRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(2))
@@ -206,9 +214,10 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalidRequest)))
+                        .content(objectMapper.writeValueAsString(invalidRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.message").value("バリデーションエラー"))
@@ -235,8 +244,8 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
-                        .param("validTo", validTo.toString()))
+                        .param("validTo", validTo.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
@@ -254,8 +263,8 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
-                        .param("validTo", invalidValidTo.toString()))
+                        .param("validTo", invalidValidTo.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400));
@@ -271,7 +280,7 @@ class PlayerProfileControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/player-profiles/1")
-                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(playerProfileService).deleteProfile(1L);

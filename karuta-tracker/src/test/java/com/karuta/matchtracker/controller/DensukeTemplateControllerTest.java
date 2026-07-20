@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.DensukeTemplateDto;
 import com.karuta.matchtracker.dto.DensukeTemplateUpdateRequest;
@@ -23,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(DensukeTemplateController.class)
 @DisplayName("DensukeTemplateController 単体テスト")
-class DensukeTemplateControllerTest {
+class DensukeTemplateControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,8 +51,7 @@ class DensukeTemplateControllerTest {
         when(densukeTemplateService.getTemplate(1L)).thenReturn(dto);
 
         mockMvc.perform(get("/api/densuke-templates/1")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.organizationId").value(1))
                 .andExpect(jsonPath("$.titleTemplate").value("{year}年{month}月 練習出欠"))
@@ -75,8 +76,7 @@ class DensukeTemplateControllerTest {
         when(densukeTemplateService.updateTemplate(eq(1L), any())).thenReturn(updated);
 
         mockMvc.perform(put("/api/densuke-templates/1")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -90,8 +90,7 @@ class DensukeTemplateControllerTest {
         request.setTitleTemplate("");
 
         mockMvc.perform(put("/api/densuke-templates/1")
-                        .header("X-User-Role", "SUPER_ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());

@@ -36,6 +36,7 @@ public class InviteTokenService {
     private final PlayerRepository playerRepository;
     private final PlayerOrganizationRepository playerOrganizationRepository;
     private final OrganizationRepository organizationRepository;
+    private final PasswordPolicy passwordPolicy;
 
     /** グループ用トークンの有効期限（時間） */
     private static final int MULTI_USE_EXPIRY_HOURS = 72;
@@ -117,8 +118,8 @@ public class InviteTokenService {
                     throw new DuplicateResourceException("Player", "name", request.getName());
                 });
 
-        // 選手を登録
-        Player player = request.toEntity();
+        // 選手を登録（パスワードはサービス層で BCrypt ハッシュ化してから DTO に渡す）
+        Player player = request.toEntity(passwordPolicy.encode(request.getPassword()));
         Player saved = playerRepository.save(player);
 
         // SINGLE_USE トークンは使用済みにする

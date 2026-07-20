@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
@@ -19,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Controller → Service → Repository → Database の全ての層を通したテスト
  */
 @DisplayName("Player統合テスト")
-class PlayerIntegrationTest extends BaseIntegrationTest {
+class PlayerIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -36,7 +38,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -50,13 +52,15 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
         Long playerId = objectMapper.readTree(createResponse).get("id").asLong();
 
         // 2. IDで選手を取得
-        mockMvc.perform(get("/api/players/" + playerId))
+        mockMvc.perform(get("/api/players/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(playerId))
                 .andExpect(jsonPath("$.name").value("山田太郎"));
 
         // 3. 全選手リストに含まれている
-        mockMvc.perform(get("/api/players"))
+        mockMvc.perform(get("/api/players")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -68,48 +72,54 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(updateRequest)))
+                        .content(objectMapper.writeValueAsString(updateRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("山田次郎"));
 
         // 5. ロールを変更
         mockMvc.perform(put("/api/players/" + playerId + "/role")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("role", Player.Role.ADMIN.name()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
 
         // 6. 名前で検索
         mockMvc.perform(get("/api/players/search")
-                        .param("name", "次郎"))
+                        .param("name", "次郎")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].name").value("山田次郎"));
 
         // 7. ロール別で検索
-        mockMvc.perform(get("/api/players/role/" + Player.Role.ADMIN.name()))
+        mockMvc.perform(get("/api/players/role/" + Player.Role.ADMIN.name())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
         // 8. アクティブな選手数を確認
-        mockMvc.perform(get("/api/players/count"))
+        mockMvc.perform(get("/api/players/count")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("1"));
 
         // 9. 選手を削除（論理削除）
         mockMvc.perform(delete("/api/players/" + playerId)
-                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 10. 削除後は全選手リストに含まれない
-        mockMvc.perform(get("/api/players"))
+        mockMvc.perform(get("/api/players")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
         // 11. アクティブな選手数が0になる
-        mockMvc.perform(get("/api/players/count"))
+        mockMvc.perform(get("/api/players/count")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("0"));
     }
@@ -126,7 +136,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -140,7 +150,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict())
@@ -151,7 +161,8 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("存在しない選手IDは404を返す")
     void testNonExistentPlayer() throws Exception {
-        mockMvc.perform(get("/api/players/999"))
+        mockMvc.perform(get("/api/players/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
@@ -168,7 +179,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -191,25 +202,28 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/players")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
         }
 
         // 全選手を取得
-        mockMvc.perform(get("/api/players"))
+        mockMvc.perform(get("/api/players")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
 
         // PLAYERロールの選手のみ取得（デフォルト）
-        mockMvc.perform(get("/api/players/role/" + Player.Role.PLAYER.name()))
+        mockMvc.perform(get("/api/players/role/" + Player.Role.PLAYER.name())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
 
         // 名前で部分検索
         mockMvc.perform(get("/api/players/search")
-                        .param("name", "選手"))
+                        .param("name", "選手")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
     }
@@ -226,7 +240,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -238,7 +252,7 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
 
         // 選手を削除
         mockMvc.perform(delete("/api/players/" + playerId)
-                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 削除した選手を更新しようとする
@@ -247,9 +261,10 @@ class PlayerIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(updateRequest)))
+                        .content(objectMapper.writeValueAsString(updateRequest))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isBadRequest());
     }
 }

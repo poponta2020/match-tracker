@@ -63,7 +63,10 @@ public class OrganizationController {
             throw new ForbiddenException("認証が必要です");
         }
         if (!currentUserId.equals(playerId)) {
-            String userRole = httpRequest.getHeader("X-User-Role");
+            // ロールはトークン由来のリクエスト属性から取る。
+            // かつては X-User-Role ヘッダーを直読みしていたが、クライアントの自己申告のため
+            // 誰でも SUPER_ADMIN を名乗れてしまった（auth-tokenization / AC-15）
+            String userRole = (String) httpRequest.getAttribute("currentUserRole");
             if (!"SUPER_ADMIN".equals(userRole)) {
                 throw new ForbiddenException("他のユーザーの参加団体は操作できません");
             }

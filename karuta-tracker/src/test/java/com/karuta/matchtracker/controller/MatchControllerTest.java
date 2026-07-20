@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.MatchCreateRequest;
 import com.karuta.matchtracker.dto.MatchDto;
@@ -32,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(MatchController.class)
 @DisplayName("MatchController 単体テスト")
-class MatchControllerTest {
+class MatchControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -88,11 +90,12 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches - 日付別の試合結果を取得できる")
     void testGetMatchesByDate() throws Exception {
         // Given
-        when(matchService.findMatchesByDate(eq(today), isNull())).thenReturn(List.of(testMatchDto));
+        when(matchService.findMatchesByDate(eq(today), eq(1L))).thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches")
-                        .param("date", today.toString()))
+                        .param("date", today.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
@@ -101,7 +104,7 @@ class MatchControllerTest {
                 .andExpect(jsonPath("$[0].player1Name").value("山田太郎"))
                 .andExpect(jsonPath("$[0].player2Name").value("佐藤花子"));
 
-        verify(matchService).findMatchesByDate(eq(today), isNull());
+        verify(matchService).findMatchesByDate(eq(today), eq(1L));
     }
 
     @Test
@@ -112,7 +115,8 @@ class MatchControllerTest {
 
         // When & Then
         mockMvc.perform(get("/api/matches/exists")
-                        .param("date", today.toString()))
+                        .param("date", today.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(content().string("true"));
@@ -124,34 +128,36 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId} - 選手の試合履歴を取得できる")
     void testGetPlayerMatches() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), isNull()))
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), eq(1L)))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
-        mockMvc.perform(get("/api/matches/player/1"))
+        mockMvc.perform(get("/api/matches/player/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].player1Id").value(1));
 
-        verify(matchService).findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), isNull());
+        verify(matchService).findPlayerMatchesWithFilters(eq(1L), isNull(), isNull(), isNull(), eq(1L));
     }
 
     @Test
     @DisplayName("GET /api/matches/player/{playerId} - 存在しない選手は404を返す")
     void testGetPlayerMatchesNotFound() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), isNull()))
+        when(matchService.findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), eq(1L)))
                 .thenThrow(new ResourceNotFoundException("Player", 999L));
 
         // When & Then
-        mockMvc.perform(get("/api/matches/player/999"))
+        mockMvc.perform(get("/api/matches/player/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(matchService).findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), isNull());
+        verify(matchService).findPlayerMatchesWithFilters(eq(999L), isNull(), isNull(), isNull(), eq(1L));
     }
 
     @Test
@@ -160,37 +166,39 @@ class MatchControllerTest {
         // Given
         LocalDate startDate = today.minusDays(7);
         LocalDate endDate = today;
-        when(matchService.findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), isNull()))
+        when(matchService.findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), eq(1L)))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1/period")
                         .param("startDate", startDate.toString())
-                        .param("endDate", endDate.toString()))
+                        .param("endDate", endDate.toString())
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(matchService).findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), isNull());
+        verify(matchService).findPlayerMatchesInPeriod(eq(1L), eq(startDate), eq(endDate), eq(1L));
     }
 
     @Test
     @DisplayName("GET /api/matches/between - 対戦履歴を取得できる")
     void testGetMatchesBetweenPlayers() throws Exception {
         // Given
-        when(matchService.findMatchesBetweenPlayers(eq(1L), eq(2L), isNull())).thenReturn(List.of(testMatchDto));
+        when(matchService.findMatchesBetweenPlayers(eq(1L), eq(2L), eq(1L))).thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/between")
                         .param("player1Id", "1")
-                        .param("player2Id", "2"))
+                        .param("player2Id", "2")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(matchService).findMatchesBetweenPlayers(eq(1L), eq(2L), isNull());
+        verify(matchService).findMatchesBetweenPlayers(eq(1L), eq(2L), eq(1L));
     }
 
     @Test
@@ -201,7 +209,8 @@ class MatchControllerTest {
         when(matchService.getPlayerStatistics(1L)).thenReturn(statistics);
 
         // When & Then
-        mockMvc.perform(get("/api/matches/player/1/statistics"))
+        mockMvc.perform(get("/api/matches/player/1/statistics")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.playerId").value(1))
@@ -232,8 +241,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -260,8 +268,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -290,8 +297,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(simpleRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -324,8 +330,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(put("/api/matches/1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -343,7 +348,7 @@ class MatchControllerTest {
 
         // When & Then
         mockMvc.perform(delete("/api/matches/1")
-                        .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(matchService).deleteMatch(1L, 1L, com.karuta.matchtracker.entity.Player.Role.ADMIN);
@@ -353,18 +358,19 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/player/{playerId}?filters - フィルタ付きで試合履歴を取得できる")
     void testFindPlayerMatchesWithFilters() throws Exception {
         // Given
-        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), isNull()))
+        when(matchService.findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), eq(1L)))
                 .thenReturn(List.of(testMatchDto));
 
         // When & Then
         mockMvc.perform(get("/api/matches/player/1")
                         .param("kyuRank", "A級")
                         .param("gender", "男性")
-                        .param("dominantHand", "右"))
+                        .param("dominantHand", "右")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
-        verify(matchService).findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), isNull());
+        verify(matchService).findPlayerMatchesWithFilters(eq(1L), eq("A級"), eq("男性"), eq("右"), eq(1L));
     }
 
     @Test
@@ -389,7 +395,8 @@ class MatchControllerTest {
                 .thenReturn(stats);
 
         // When & Then
-        mockMvc.perform(get("/api/matches/player/1/statistics-by-rank"))
+        mockMvc.perform(get("/api/matches/player/1/statistics-by-rank")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total.total").value(10))
                 .andExpect(jsonPath("$.total.wins").value(6))
@@ -421,7 +428,8 @@ class MatchControllerTest {
                         .param("gender", "男性")
                         .param("dominantHand", "右")
                         .param("startDate", "2024-01-01")
-                        .param("endDate", "2024-12-31"))
+                        .param("endDate", "2024-12-31")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total.total").value(5));
 
@@ -447,8 +455,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
@@ -465,8 +472,7 @@ class MatchControllerTest {
         // When & Then
         mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
@@ -491,8 +497,7 @@ class MatchControllerTest {
         // When & Then: バリデーションで弾かれ、Service は呼ばれない
         mockMvc.perform(post("/api/matches/detailed")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().is4xxClientError());
 
@@ -512,8 +517,7 @@ class MatchControllerTest {
 
         // When & Then
         mockMvc.perform(put("/api/matches/1/detailed")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .param("winnerId", "2")
                         .param("scoreDifference", "3")
                         .param("updatedBy", "1"))
@@ -529,43 +533,46 @@ class MatchControllerTest {
     @DisplayName("GET /api/matches/{id} - IDで試合結果を取得できる")
     void testFindById() throws Exception {
         // Given
-        when(matchService.findById(eq(1L), isNull(), isNull())).thenReturn(testMatchDto);
+        when(matchService.findById(eq(1L), eq(1L), isNull())).thenReturn(testMatchDto);
 
         // When & Then
-        mockMvc.perform(get("/api/matches/1"))
+        mockMvc.perform(get("/api/matches/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.player1Name").value("山田太郎"));
 
-        verify(matchService).findById(eq(1L), isNull(), isNull());
+        verify(matchService).findById(eq(1L), eq(1L), isNull());
     }
 
     @Test
     @DisplayName("GET /api/matches/{id}?playerId - 閲覧対象playerIdを渡して取得できる")
     void testFindByIdWithPlayerId() throws Exception {
         // Given
-        when(matchService.findById(eq(1L), isNull(), eq(2L))).thenReturn(testMatchDto);
+        when(matchService.findById(eq(1L), eq(1L), eq(2L))).thenReturn(testMatchDto);
 
         // When & Then
         mockMvc.perform(get("/api/matches/1")
-                        .param("playerId", "2"))
+                        .param("playerId", "2")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(matchService).findById(eq(1L), isNull(), eq(2L));
+        verify(matchService).findById(eq(1L), eq(1L), eq(2L));
     }
 
     @Test
     @DisplayName("GET /api/matches/{id} - 存在しない試合は404を返す")
     void testFindByIdNotFound() throws Exception {
         // Given
-        when(matchService.findById(eq(999L), isNull(), isNull()))
+        when(matchService.findById(eq(999L), eq(1L), isNull()))
                 .thenThrow(new com.karuta.matchtracker.exception.ResourceNotFoundException("Match", 999L));
 
         // When & Then
-        mockMvc.perform(get("/api/matches/999"))
+        mockMvc.perform(get("/api/matches/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isNotFound());
 
-        verify(matchService).findById(eq(999L), isNull(), isNull());
+        verify(matchService).findById(eq(999L), eq(1L), isNull());
     }
 }

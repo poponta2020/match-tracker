@@ -8,6 +8,7 @@ import com.karuta.matchtracker.dto.PlayerDto;
 import com.karuta.matchtracker.dto.PlayerUpdateRequest;
 import com.karuta.matchtracker.entity.ActivityType;
 import com.karuta.matchtracker.entity.Player;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.karuta.matchtracker.repository.ByeActivityRepository;
 import com.karuta.matchtracker.repository.LineChannelAssignmentRepository;
 import com.karuta.matchtracker.repository.LineChannelRepository;
@@ -22,6 +23,8 @@ import com.karuta.matchtracker.service.OrganizationService;
 import com.karuta.matchtracker.service.PlayerProfileService;
 import com.karuta.matchtracker.service.PlayerService;
 import com.karuta.matchtracker.service.VenueService;
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.support.BaseControllerTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -63,7 +66,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         ByeActivityController.class,
 })
 @DisplayName("未認証で叩ける状態変更エンドポイントの回帰テスト（Issue #1105）")
-class UnauthorizedMutationRegressionTest {
+class UnauthorizedMutationRegressionTest extends BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -107,7 +110,7 @@ class UnauthorizedMutationRegressionTest {
                     .build();
 
             mockMvc.perform(json(put("/api/players/1"), request))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(playerService, never()).updatePlayer(anyLong(), any());
         }
@@ -116,7 +119,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("DELETE /api/matches/{id} は 403（試合記録の物理削除）")
         void deleteMatchIsRejected() throws Exception {
             mockMvc.perform(delete("/api/matches/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchService, never()).deleteMatch(anyLong(), any(), any());
         }
@@ -125,7 +128,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("POST /api/line/{channelType}/enable は 403（他人の LINE 連携コード窃取）")
         void enableLineIsRejected() throws Exception {
             mockMvc.perform(json(post("/api/line/PLAYER/enable"), playerIdBody(OTHER_ID)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(lineChannelService, never()).assignChannel(anyLong(), any());
             verify(lineLinkingService, never()).issueCode(anyLong(), anyLong());
@@ -135,7 +138,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("POST /api/line/{channelType}/reissue-code は 403（連携コードの再発行・窃取）")
         void reissueLineCodeIsRejected() throws Exception {
             mockMvc.perform(json(post("/api/line/PLAYER/reissue-code"), playerIdBody(OTHER_ID)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(lineLinkingService, never()).reissueCode(anyLong(), any());
         }
@@ -144,7 +147,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("DELETE /api/line/{channelType}/disable は 403（他人の通知を停止）")
         void disableLineIsRejected() throws Exception {
             mockMvc.perform(json(delete("/api/line/PLAYER/disable"), playerIdBody(OTHER_ID)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(lineChannelService, never()).releaseChannel(anyLong(), any());
         }
@@ -153,7 +156,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PUT /api/line/preferences は 403（他人の通知設定を改変）")
         void updateLinePreferencesIsRejected() throws Exception {
             mockMvc.perform(json(put("/api/line/preferences"), preferenceOf(OTHER_ID)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(lineNotificationService, never()).updatePreferences(any());
         }
@@ -162,7 +165,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("POST /api/venues は 403")
         void createVenueIsRejected() throws Exception {
             mockMvc.perform(json(post("/api/venues"), "{\"name\":\"不正な会場\"}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(venueService, never()).createVenue(any());
         }
@@ -171,7 +174,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PUT /api/venues/{id} は 403")
         void updateVenueIsRejected() throws Exception {
             mockMvc.perform(json(put("/api/venues/1"), "{\"name\":\"改変された会場\"}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(venueService, never()).updateVenue(anyLong(), any());
         }
@@ -180,7 +183,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("DELETE /api/venues/{id} は 403")
         void deleteVenueIsRejected() throws Exception {
             mockMvc.perform(delete("/api/venues/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(venueService, never()).deleteVenue(anyLong());
         }
@@ -189,7 +192,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("POST /api/player-profiles は 403")
         void createProfileIsRejected() throws Exception {
             mockMvc.perform(json(post("/api/player-profiles"), "{\"playerId\":1}"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(playerProfileService, never()).createProfile(any());
         }
@@ -198,7 +201,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PUT /api/player-profiles/{id}/valid-to は 403")
         void setValidToIsRejected() throws Exception {
             mockMvc.perform(put("/api/player-profiles/1/valid-to"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(playerProfileService, never()).setValidTo(anyLong(), any());
         }
@@ -207,7 +210,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("DELETE /api/player-profiles/{id} は 403")
         void deleteProfileIsRejected() throws Exception {
             mockMvc.perform(delete("/api/player-profiles/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(playerProfileService, never()).deleteProfile(anyLong());
         }
@@ -216,7 +219,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PUT /api/bye-activities/{id} は 403")
         void updateByeActivityIsRejected() throws Exception {
             mockMvc.perform(json(put("/api/bye-activities/1"), updateByeActivityRequest()))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(byeActivityService, never()).update(anyLong(), any(), any());
         }
@@ -238,8 +241,7 @@ class UnauthorizedMutationRegressionTest {
                     .build();
 
             mockMvc.perform(json(put("/api/players/" + OTHER_ID), request)
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(playerService, never()).updatePlayer(anyLong(), any());
@@ -251,8 +253,7 @@ class UnauthorizedMutationRegressionTest {
             when(playerService.updatePlayer(eq(SELF_ID), any())).thenReturn(new PlayerDto());
 
             mockMvc.perform(json(put("/api/players/" + SELF_ID), PlayerUpdateRequest.builder().build())
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isOk());
 
             verify(playerService).updatePlayer(eq(SELF_ID), any());
@@ -264,8 +265,7 @@ class UnauthorizedMutationRegressionTest {
             when(playerService.updatePlayer(eq(OTHER_ID), any())).thenReturn(new PlayerDto());
 
             mockMvc.perform(json(put("/api/players/" + OTHER_ID), PlayerUpdateRequest.builder().build())
-                            .header("X-User-Role", "SUPER_ADMIN")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.SUPER_ADMIN)))
                     .andExpect(status().isOk());
 
             verify(playerService).updatePlayer(eq(OTHER_ID), any());
@@ -284,8 +284,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER が他人の playerId で enable すると 403（連携コードが返らない）")
         void playerCannotEnableForOtherPlayer() throws Exception {
             mockMvc.perform(json(post("/api/line/PLAYER/enable"), playerIdBody(OTHER_ID))
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(lineChannelService, never()).assignChannel(anyLong(), any());
@@ -296,8 +295,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER が他人の playerId で reissue-code すると 403")
         void playerCannotReissueCodeForOtherPlayer() throws Exception {
             mockMvc.perform(json(post("/api/line/PLAYER/reissue-code"), playerIdBody(OTHER_ID))
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(lineLinkingService, never()).reissueCode(anyLong(), any());
@@ -307,8 +305,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER が他人の playerId で disable すると 403")
         void playerCannotDisableForOtherPlayer() throws Exception {
             mockMvc.perform(json(delete("/api/line/PLAYER/disable"), playerIdBody(OTHER_ID))
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(lineChannelService, never()).releaseChannel(anyLong(), any());
@@ -318,8 +315,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER が他人の playerId で通知設定を更新すると 403")
         void playerCannotUpdateOtherPreferences() throws Exception {
             mockMvc.perform(json(put("/api/line/preferences"), preferenceOf(OTHER_ID))
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(lineNotificationService, never()).updatePreferences(any());
@@ -329,8 +325,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER は自分の通知設定を更新できる（NotificationSettings 経路の維持）")
         void playerCanUpdateOwnPreferences() throws Exception {
             mockMvc.perform(json(put("/api/line/preferences"), preferenceOf(SELF_ID))
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isOk());
 
             verify(lineNotificationService).updatePreferences(any());
@@ -351,8 +346,7 @@ class UnauthorizedMutationRegressionTest {
             when(byeActivityService.getPlayerIdForActivity(1L)).thenReturn(OTHER_ID);
 
             mockMvc.perform(json(put("/api/bye-activities/1"), updateByeActivityRequest())
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(byeActivityService, never()).update(anyLong(), any(), any());
@@ -365,8 +359,7 @@ class UnauthorizedMutationRegressionTest {
             when(byeActivityService.update(eq(1L), any(), eq(SELF_ID))).thenReturn(new ByeActivityDto());
 
             mockMvc.perform(json(put("/api/bye-activities/1"), updateByeActivityRequest())
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isOk());
 
             verify(byeActivityService).update(eq(1L), any(), eq(SELF_ID));
@@ -379,8 +372,7 @@ class UnauthorizedMutationRegressionTest {
             when(byeActivityService.update(eq(1L), any(), eq(SELF_ID))).thenReturn(new ByeActivityDto());
 
             mockMvc.perform(json(put("/api/bye-activities/1"), updateByeActivityRequest())
-                            .header("X-User-Role", "ADMIN")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.ADMIN)))
                     .andExpect(status().isOk());
 
             verify(byeActivityService).update(eq(1L), any(), eq(SELF_ID));
@@ -400,8 +392,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("PLAYER の削除要求は currentUserId・ロールを添えてサービスへ渡る")
         void playerDeletePropagatesIdentity() throws Exception {
             mockMvc.perform(delete("/api/matches/1")
-                            .header("X-User-Role", "PLAYER")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.PLAYER)))
                     .andExpect(status().isNoContent());
 
             verify(matchService).deleteMatch(1L, SELF_ID, Player.Role.PLAYER);
@@ -411,8 +402,7 @@ class UnauthorizedMutationRegressionTest {
         @DisplayName("ADMIN は削除できる")
         void adminCanDelete() throws Exception {
             mockMvc.perform(delete("/api/matches/1")
-                            .header("X-User-Role", "ADMIN")
-                            .header("X-User-Id", String.valueOf(SELF_ID)))
+                            .header("Authorization", AuthTestSupport.bearer(SELF_ID, Role.ADMIN)))
                     .andExpect(status().isNoContent());
 
             verify(matchService).deleteMatch(1L, SELF_ID, Player.Role.ADMIN);

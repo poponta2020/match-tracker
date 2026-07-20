@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.*;
 import com.karuta.matchtracker.entity.Player;
@@ -34,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(MatchPairingController.class)
 @Import(com.karuta.matchtracker.util.OrganizationScopeResolver.class)
 @DisplayName("MatchPairingController 単体テスト")
-class MatchPairingControllerTest {
+class MatchPairingControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -73,7 +75,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(2)))
@@ -103,7 +105,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk());
 
@@ -121,7 +123,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(0)));
@@ -132,7 +134,7 @@ class MatchPairingControllerTest {
         void shouldReturn403WithoutAuthHeader() throws Exception {
             mockMvc.perform(get("/api/match-pairings/date")
                             .param("date", "2024-01-15"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
         }
@@ -146,7 +148,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .param("date", "2024-01-15")
                             .param("organizationId", "99"))
                     .andExpect(status().isForbidden());
@@ -170,7 +172,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("organizationId", orgId.toString()))
                     .andExpect(status().isOk());
@@ -191,7 +193,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("organizationId", "99"))
                     .andExpect(status().isForbidden());
@@ -210,7 +212,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("organizationId", orgId.toString()))
                     .andExpect(status().isOk());
@@ -223,7 +225,7 @@ class MatchPairingControllerTest {
         void shouldReturnErrorForInvalidDateFormat() throws Exception {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "invalid-date"))
                     .andExpect(status().isInternalServerError());
 
@@ -235,7 +237,7 @@ class MatchPairingControllerTest {
         void shouldReturnErrorForMissingDateParameter() throws Exception {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isInternalServerError());
 
             verify(matchPairingService, never()).getByDate(any(), anyBoolean(), any());
@@ -262,7 +264,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/player/{playerId}", playerId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", "10"))
+                            .header("Authorization", AuthTestSupport.bearer(10L, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(2)))
                     .andExpect(jsonPath("$[0].id").value(1))
@@ -286,7 +288,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/player/{playerId}", playerId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", "10"))
+                            .header("Authorization", AuthTestSupport.bearer(10L, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$", hasSize(0)));
 
@@ -297,7 +299,7 @@ class MatchPairingControllerTest {
         @DisplayName("認可ヘッダーなしは 403")
         void shouldReturn403WithoutAuthHeader() throws Exception {
             mockMvc.perform(get("/api/match-pairings/player/{playerId}", 10L))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).getRecentByPlayerId(any());
         }
@@ -325,7 +327,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isOk())
@@ -352,7 +354,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isOk());
@@ -374,7 +376,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "99"))
                     .andExpect(status().isNotFound());
@@ -386,7 +388,7 @@ class MatchPairingControllerTest {
             mockMvc.perform(get("/api/match-pairings/date-and-match")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never())
                     .getByDateAndMatchNumber(any(), anyInt(), any());
@@ -397,7 +399,7 @@ class MatchPairingControllerTest {
         void shouldReturnErrorForMissingMatchNumber() throws Exception {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15"))
                     .andExpect(status().isInternalServerError());
 
@@ -422,7 +424,8 @@ class MatchPairingControllerTest {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/exists")
                             .param("date", "2024-01-15")
-                            .param("matchNumber", "1"))
+                            .param("matchNumber", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(content().string("true"));
         }
@@ -439,7 +442,8 @@ class MatchPairingControllerTest {
             // When & Then
             mockMvc.perform(get("/api/match-pairings/exists")
                             .param("date", "2024-01-15")
-                            .param("matchNumber", "99"))
+                            .param("matchNumber", "99")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(content().string("false"));
         }
@@ -470,7 +474,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -505,7 +509,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -536,7 +540,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -561,7 +565,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -582,7 +586,7 @@ class MatchPairingControllerTest {
             mockMvc.perform(post("/api/match-pairings")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).create(any(), anyLong(), any());
         }
@@ -601,7 +605,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -621,7 +625,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isConflict());
@@ -641,7 +645,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
@@ -676,7 +680,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -712,7 +716,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -740,7 +744,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -769,7 +773,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -795,7 +799,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/batch")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -818,7 +822,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
@@ -834,7 +838,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isNoContent());
 
             verify(matchPairingService).delete(id);
@@ -848,7 +852,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "PLAYER"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).delete(anyLong());
@@ -868,7 +872,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}", id)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isNotFound());
 
             verify(matchPairingService, never()).delete(anyLong());
@@ -889,7 +893,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(put("/api/match-pairings/{id}/player", id)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("newPlayerId", "10")
                             .param("side", "invalid"))
                     .andExpect(status().isBadRequest());
@@ -909,7 +913,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(put("/api/match-pairings/{id}/player", id)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .param("newPlayerId", "10")
                             .param("side", "player1"))
                     .andExpect(status().isNotFound());
@@ -938,7 +942,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(put("/api/match-pairings/{id}/player", pairingId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("newPlayerId", "30")
                             .param("side", "player1"))
                     .andExpect(status().isOk())
@@ -959,7 +963,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(put("/api/match-pairings/{id}/player", pairingId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("newPlayerId", "30")
                             .param("side", "player1"))
                     .andExpect(status().isForbidden());
@@ -982,7 +986,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
@@ -1001,7 +1005,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
@@ -1022,7 +1026,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isNoContent());
@@ -1043,7 +1047,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
                     .andExpect(status().isForbidden());
@@ -1058,7 +1062,7 @@ class MatchPairingControllerTest {
             mockMvc.perform(delete("/api/match-pairings/date-and-match")
                             .param("date", "2024-01-15")
                             .param("matchNumber", "3"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).deleteByDateAndMatchNumber(any(), anyInt(), any());
         }
@@ -1083,7 +1087,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(1))
                     .andExpect(jsonPath("$.hasResult").value(true))
@@ -1109,7 +1113,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(1));
 
@@ -1136,7 +1140,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(1));
 
@@ -1155,7 +1159,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).resetWithResult(anyLong());
@@ -1166,7 +1170,7 @@ class MatchPairingControllerTest {
         void shouldReturn403WithoutAuthHeader() throws Exception {
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", 1L))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).resetWithResult(anyLong());
         }
@@ -1181,7 +1185,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", id)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isNotFound());
         }
     }
@@ -1206,7 +1210,7 @@ class MatchPairingControllerTest {
 
             // When & Then: 組織特定不能のため403
             mockMvc.perform(delete("/api/match-pairings/{id}", pairingId)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).delete(anyLong());
@@ -1229,7 +1233,7 @@ class MatchPairingControllerTest {
 
             // When & Then: 他団体のため403
             mockMvc.perform(delete("/api/match-pairings/{id}", pairingId)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).delete(anyLong());
@@ -1251,7 +1255,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(delete("/api/match-pairings/{id}/with-result", pairingId)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isForbidden());
 
             verify(matchPairingService, never()).resetWithResult(anyLong());
@@ -1291,7 +1295,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -1329,7 +1333,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -1367,7 +1371,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk());
@@ -1395,7 +1399,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", adminUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(adminUserId, Role.ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -1433,7 +1437,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -1462,7 +1466,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk());
@@ -1484,7 +1488,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -1508,7 +1512,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString())
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -1529,7 +1533,7 @@ class MatchPairingControllerTest {
 
             // When & Then
             mockMvc.perform(post("/api/match-pairings/auto-match")
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
@@ -1556,7 +1560,7 @@ class MatchPairingControllerTest {
             when(matchPairingService.lock(eq(pairingId), eq(orgId))).thenReturn(dto);
 
             mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(1))
                     .andExpect(jsonPath("$.locked").value(true));
@@ -1577,7 +1581,7 @@ class MatchPairingControllerTest {
             when(matchPairingService.lock(eq(pairingId), eq(adminOrgId))).thenReturn(dto);
 
             mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
-                            .header("X-User-Role", "ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.locked").value(true));
         }
@@ -1591,7 +1595,7 @@ class MatchPairingControllerTest {
                             "選手「選手B」は既に同じ回戦の別の組に入っているため、ロックできません"));
 
             mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isConflict());
         }
 
@@ -1603,7 +1607,7 @@ class MatchPairingControllerTest {
                     .thenThrow(new ResourceNotFoundException("MatchPairing", pairingId));
 
             mockMvc.perform(patch("/api/match-pairings/{id}/lock", pairingId)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isNotFound());
         }
 
@@ -1611,7 +1615,7 @@ class MatchPairingControllerTest {
         @DisplayName("認可ヘッダーなしのロックは 403")
         void shouldReturn403OnLockWithoutAuth() throws Exception {
             mockMvc.perform(patch("/api/match-pairings/{id}/lock", 1L))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
 
             verify(matchPairingService, never()).lock(anyLong(), any());
         }
@@ -1631,7 +1635,7 @@ class MatchPairingControllerTest {
             when(matchPairingService.unlock(pairingId)).thenReturn(dto);
 
             mockMvc.perform(patch("/api/match-pairings/{id}/unlock", pairingId)
-                            .header("X-User-Role", "PLAYER").header("X-User-Id", playerUserId.toString()))
+                            .header("Authorization", AuthTestSupport.bearer(playerUserId, Role.PLAYER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.locked").value(false));
 
@@ -1646,7 +1650,7 @@ class MatchPairingControllerTest {
                     .thenThrow(new ResourceNotFoundException("MatchPairing", pairingId));
 
             mockMvc.perform(patch("/api/match-pairings/{id}/unlock", pairingId)
-                            .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"))
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                     .andExpect(status().isNotFound());
         }
     }

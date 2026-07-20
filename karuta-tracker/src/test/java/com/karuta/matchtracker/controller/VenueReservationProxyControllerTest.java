@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.controller;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.CreateVenueProxySessionRequest;
 import com.karuta.matchtracker.dto.CreateVenueProxySessionResponse;
@@ -42,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(VenueReservationProxyController.class)
 @DisplayName("VenueReservationProxyController 単体テスト")
-class VenueReservationProxyControllerTest {
+class VenueReservationProxyControllerTest extends com.karuta.matchtracker.support.BaseControllerTest {
 
     private static final String TOKEN = "tok-123";
 
@@ -70,8 +72,7 @@ class VenueReservationProxyControllerTest {
         when(venueReservationProxyService.createSession(any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/venue-reservation-proxy/session")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -93,8 +94,7 @@ class VenueReservationProxyControllerTest {
     @DisplayName("POST /api/venue-reservation-proxy/session: PLAYER は 403")
     void createSession_playerForbidden() throws Exception {
         mockMvc.perform(post("/api/venue-reservation-proxy/session")
-                        .header("X-User-Role", "PLAYER")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request(VenueId.KADERU))))
                 .andExpect(status().isForbidden());
@@ -108,8 +108,7 @@ class VenueReservationProxyControllerTest {
         CreateVenueProxySessionRequest request = new CreateVenueProxySessionRequest();
 
         mockMvc.perform(post("/api/venue-reservation-proxy/session")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -125,7 +124,7 @@ class VenueReservationProxyControllerTest {
                         .contentType(new MediaType("text", "html", java.nio.charset.StandardCharsets.UTF_8))
                         .body("<html>rewritten</html>"));
 
-        // X-User-Role / X-User-Id ヘッダー無しでも token があれば 200 を返すこと。
+        // 認証トークン無しでも token があれば 200 を返すこと（公開許可リストのエンドポイント）。
         // 新規タブの直接 GET 遷移では axios interceptor 由来の認可ヘッダーが届かないため、
         // token (UUID) を capability として検証する設計を担保する回帰テスト。
         mockMvc.perform(get("/api/venue-reservation-proxy/view")
@@ -260,8 +259,7 @@ class VenueReservationProxyControllerTest {
                         "Venue reservation proxy is not supported for venue: HIGASHI"));
 
         mockMvc.perform(post("/api/venue-reservation-proxy/session")
-                        .header("X-User-Role", "ADMIN")
-                        .header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request(VenueId.HIGASHI))))
                 .andExpect(status().isBadRequest())

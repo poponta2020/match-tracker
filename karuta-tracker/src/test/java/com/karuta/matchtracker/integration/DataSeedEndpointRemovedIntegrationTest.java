@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.PlayerCreateRequest;
 import com.karuta.matchtracker.dto.PracticeSessionCreateRequest;
@@ -27,9 +29,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - POST /api/seed/all : 全対戦記録・全練習日程を deleteAll し、全選手のパスワードを "pppppppp" に上書き
  * - POST /api/seed/venue-schedules : 全会場の試合時間割を deleteByVenueId で消去
  *
- * RoleCheckInterceptor はロールを X-User-Role ヘッダーの自己申告でしか判定しないため、
- * @RequireRole の付与では塞げない（ヘッダーを詐称すれば通る）。唯一の対策は
+ * このテストを書いた当時、RoleCheckInterceptor はロールを X-User-Role ヘッダーの自己申告でしか
+ * 判定しておらず、@RequireRole の付与では塞げなかった（詐称すれば通る）。唯一の対策は
  * エンドポイントを存在させないことなので、コントローラごと削除した。
+ * その後 auth-tokenization で認証がトークンベース＋deny by default になったため、
+ * 「詐称ヘッダーでも通らない」ことは認証機構としても担保されている。
  *
  * ＜アサーションの方針＞
  * 主検証は「破壊的処理が実行されていないこと（データが無傷であること）」。
@@ -41,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   これは本 PR の対象外の既存の欠陥なので、4xx/5xx を問わず「成功しないこと」だけを見る）
  */
 @DisplayName("シードエンドポイント削除の回帰テスト（Issue #1103）")
-class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
+class DataSeedEndpointRemovedIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -54,6 +58,9 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private VenueMatchScheduleRepository venueMatchScheduleRepository;
+
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     private static final String KNOWN_PASSWORD = "password123";
     private static final String PLAYER_NAME = "被害者選手";
@@ -70,7 +77,7 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/players")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(playerRequest)))
                 .andExpect(status().isCreated());
@@ -82,7 +89,7 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/practice-sessions")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(sessionRequest)))
                 .andExpect(status().isCreated());
@@ -115,7 +122,7 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
     @DisplayName("SUPER_ADMIN を詐称したヘッダー付きでも POST /api/seed/all は破壊的処理を実行しない")
     void seedAllIsNotReachableEvenWithSpoofedAdminHeaders() throws Exception {
         int statusCode = performAndGetStatus(post("/api/seed/all")
-                .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1"));
+                .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)));
 
         assertPracticeDataIntact();
         assertNotSuccessful(statusCode);
@@ -162,11 +169,14 @@ class DataSeedEndpointRemovedIntegrationTest extends BaseIntegrationTest {
                 .as("旧 seed/all が実行されると practice_sessions は deleteAll される")
                 .isEqualTo(1);
 
-        String password = playerRepository.findByName(PLAYER_NAME)
+        String storedPassword = playerRepository.findByName(PLAYER_NAME)
                 .map(com.karuta.matchtracker.entity.Player::getPassword)
                 .orElse(null);
-        assertThat(password)
+        // パスワードは BCrypt ハッシュで保存されるため平文比較はできない。
+        // 「登録時のパスワードのままであること」を encoder 経由で確認する（auth-tokenization）
+        assertThat(storedPassword).isNotNull();
+        assertThat(passwordEncoder.matches(KNOWN_PASSWORD, storedPassword))
                 .as("旧 seed/all が実行されると全選手のパスワードが pppppppp に上書きされる")
-                .isEqualTo(KNOWN_PASSWORD);
+                .isTrue();
     }
 }

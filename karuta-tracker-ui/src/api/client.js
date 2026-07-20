@@ -17,22 +17,6 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // 現在のユーザーのロールをヘッダーに追加（簡易認証実装）
-    const currentPlayer = localStorage.getItem('currentPlayer');
-    if (currentPlayer) {
-      try {
-        const player = JSON.parse(currentPlayer);
-        if (player.role) {
-          config.headers['X-User-Role'] = player.role;
-        }
-        if (player.id) {
-          config.headers['X-User-Id'] = player.id;
-        }
-      } catch (e) {
-        console.error('Failed to parse currentPlayer from localStorage', e);
-      }
-    }
-
     return config;
   },
   (error) => {

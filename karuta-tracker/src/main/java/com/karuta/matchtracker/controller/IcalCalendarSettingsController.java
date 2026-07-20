@@ -23,7 +23,7 @@ import java.util.Map;
  * カレンダーフィード設定用エンドポイント（認証必須）
  *
  * 自分のフィードURL取得、トークン再発行、団体表示名カスタマイズを提供する。
- * playerId は X-User-Id ヘッダーから RoleCheckInterceptor がリクエスト属性にセットしたものを使う。
+ * playerId は認証トークンから RoleCheckInterceptor がリクエスト属性にセットしたものを使う。
  */
 @RestController
 @RequestMapping("/api/calendar/feed")

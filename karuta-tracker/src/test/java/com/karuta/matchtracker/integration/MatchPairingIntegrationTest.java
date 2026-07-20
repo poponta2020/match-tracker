@@ -1,5 +1,7 @@
 package com.karuta.matchtracker.integration;
 
+import com.karuta.matchtracker.support.AuthTestSupport;
+import com.karuta.matchtracker.entity.Player.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.karuta.matchtracker.dto.AutoMatchingRequest;
 import com.karuta.matchtracker.dto.AutoMatchingResult;
@@ -29,7 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @DisplayName("MatchPairing 統合テスト")
-class MatchPairingIntegrationTest extends BaseIntegrationTest {
+class MatchPairingIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -65,7 +67,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 対戦ペアリングを作成
         String createResponse = mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -83,7 +85,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 日付で対戦ペアリングを取得
         mockMvc.perform(get("/api/match-pairings/date")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", "2024-02-10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -92,7 +94,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 日付と試合番号で対戦ペアリングを取得
         mockMvc.perform(get("/api/match-pairings/date-and-match")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", "2024-02-10")
                         .param("matchNumber", "1"))
                 .andExpect(status().isOk())
@@ -101,13 +103,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         // When & Then: 存在確認
         mockMvc.perform(get("/api/match-pairings/exists")
                         .param("date", "2024-02-10")
-                        .param("matchNumber", "1"))
+                        .param("matchNumber", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("true"));
 
         // When & Then: 日付と試合番号で削除
         mockMvc.perform(delete("/api/match-pairings/date-and-match")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", "2024-02-10")
                         .param("matchNumber", "1"))
                 .andExpect(status().isNoContent());
@@ -118,7 +121,8 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
         // Then: 存在確認でfalseが返ることを確認
         mockMvc.perform(get("/api/match-pairings/exists")
                         .param("date", "2024-02-10")
-                        .param("matchNumber", "1"))
+                        .param("matchNumber", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("false"));
     }
@@ -139,7 +143,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                 sessionDate, 1, player1.getId(), player2.getId()
         );
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -148,14 +152,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
                 sessionDate, 2, player3.getId(), player4.getId()
         );
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
 
         // Then: 一覧取得で2件取得でき、試合番号順になっている
         mockMvc.perform(get("/api/match-pairings/date")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", "2024-02-11"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
@@ -191,7 +195,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 一括作成（matchNumber=1の組み合わせを2ペア作成）
         mockMvc.perform(post("/api/match-pairings/batch")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .param("date", "2024-02-12")
                         .param("matchNumber", "1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -220,7 +224,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 同じ選手同士の対戦は400エラー
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -253,14 +257,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 同一試合番号に異なる1ペア目を作成（成功）
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
 
         // When: 同一試合番号に異なる2ペア目を作成（こちらも成功し共存する）
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated());
@@ -289,7 +293,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -324,7 +328,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When: 自動マッチング実行（提案のみ、DBには保存しない）
         String response = mockMvc.perform(post("/api/match-pairings/auto-match")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -348,7 +352,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: 選手存在チェックは未実装のため、存在しないIDでも作成される
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
@@ -368,14 +372,14 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: PLAYER権限では作成できない
         mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden());
 
         // Given: SUPER_ADMINで対戦ペアリングを作成
         String createResponse = mockMvc.perform(post("/api/match-pairings")
-                        .header("X-User-Role", "SUPER_ADMIN").header("X-User-Id", "1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -385,7 +389,7 @@ class MatchPairingIntegrationTest extends BaseIntegrationTest {
 
         // When & Then: PLAYER権限では削除できない
         mockMvc.perform(delete("/api/match-pairings/{id}", created.getId())
-                        .header("X-User-Role", "PLAYER").header("X-User-Id", "1"))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
                 .andExpect(status().isForbidden());
 
         // Then: データベースには残っている
