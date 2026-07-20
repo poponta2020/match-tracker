@@ -1,8 +1,9 @@
 name: Sync Kaderu Reservations to Practice Sessions
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  # 定期 cron は廃止。予約→練習日 sync は手動ボタン（練習日登録画面）→
+  # sync-kaderu-reservations-manual.yml 経由でのみ起動する。
+  # この workflow は workflow_dispatch での直接手動起動の経路として残す。
   workflow_dispatch:
 
 concurrency:
