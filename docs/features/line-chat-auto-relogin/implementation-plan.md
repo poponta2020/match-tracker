@@ -27,7 +27,7 @@ status: completed
 - **対応Issue:** #1116
 
 ### タスク2: バックエンド: SSO失効の先回りアラートAPI
-- [ ] 完了
+- [x] 完了
 - **目的:** ワーカーからの「SSO失効が近い」通知を受け、有効な配信グループの各団体の管理者へ既存 `sendChatReserveAlert` で LINE 通知する新エンドポイントを追加する。
 - **対応AC:** AC-5（backend側）
 - **主な変更領域:** `karuta-tracker` — `controller/LineChatWorkerController.java`（`POST /api/line-chat-worker/session-warning` 追加・`@RequireRole` 無し）・`service/LineChatReservationService.java`（or 適切なサービスに `warnSessionExpiring(int daysRemaining)`：`lineBroadcastGroupRepository.findByEnabledTrue()` の distinct org へ `sendChatReserveAlert(orgId, "[チャット予約] ワーカーのLINEセッション(SSO)が約N日後に失効します。手動再ログインしてください。")`）・`dto/`（リクエスト DTO）

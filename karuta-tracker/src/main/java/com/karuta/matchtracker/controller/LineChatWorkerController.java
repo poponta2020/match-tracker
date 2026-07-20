@@ -1,6 +1,7 @@
 package com.karuta.matchtracker.controller;
 
 import com.karuta.matchtracker.dto.LineChatWorkerResultRequest;
+import com.karuta.matchtracker.dto.LineChatWorkerSessionWarningRequest;
 import com.karuta.matchtracker.dto.LineChatWorkerTaskDto;
 import com.karuta.matchtracker.entity.LineBroadcastGroup;
 import com.karuta.matchtracker.entity.LineChatReservation;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>GET {@code /tasks}: 処理対象（PENDING・CANCEL_PENDING）をグループ照合情報つきで返す。</li>
  *   <li>POST {@code /{id}/result}: 結果報告（状態遷移を検証。不正遷移は409）。</li>
+ *   <li>POST {@code /session-warning}: SSO失効が近い旨の先回り警告を管理者へリレー（line-chat-auto-relogin タスク2）。</li>
  * </ul>
  */
 @RestController
@@ -56,6 +58,16 @@ public class LineChatWorkerController {
                 id, newStatus, request.errorCode(), request.errorMessage());
         LineBroadcastGroup group = groupRepository.findById(updated.getBroadcastGroupId()).orElse(null);
         return LineChatWorkerTaskDto.fromEntity(updated, group);
+    }
+
+    /**
+     * ワーカーからの「LINEセッション(SSO)失効が近い」先回り警告を受け、有効な配信グループの各団体の管理者へ
+     * LINE通知をリレーする（line-chat-auto-relogin タスク2・AC-5）。閾値判定・多重送信の間引きはワーカー側 in-memory throttle。
+     */
+    @PostMapping("/session-warning")
+    public void reportSessionWarning(@RequestBody LineChatWorkerSessionWarningRequest request) {
+        int daysRemaining = request.daysRemaining() != null ? request.daysRemaining() : 0;
+        reservationService.warnSessionExpiring(daysRemaining);
     }
 
     private static ReservationStatus parseStatus(String raw) {

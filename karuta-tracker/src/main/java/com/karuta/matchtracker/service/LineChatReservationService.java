@@ -248,6 +248,32 @@ public class LineChatReservationService {
         }
     }
 
+    /**
+     * ワーカーからの「LINEセッション(SSO)失効が近い」先回り警告を、有効な配信グループの各団体の管理者へ
+     * リレーする（line-chat-auto-relogin タスク2・AC-5）。
+     *
+     * <p>閾値判定・多重送信の間引き（1日1回）はワーカー側の in-memory throttle が担い、当メソッドは受けた通知を
+     * 既存の {@link LineNotificationService#sendChatReserveAlert} で流すだけ（状態は持たない）。有効グループが
+     * 0件なら何もしない。重複団体には1回だけ送る（distinct org）。SUPER_ADMIN 全員＋各 org の ADMIN が対象。
+     */
+    @Transactional(readOnly = true)
+    public void warnSessionExpiring(int daysRemaining) {
+        List<Long> orgIds = groupRepository.findByEnabledTrue().stream()
+                .map(LineBroadcastGroup::getOrganizationId)
+                .distinct()
+                .toList();
+        if (orgIds.isEmpty()) {
+            return;
+        }
+        String message = daysRemaining > 0
+                ? "[チャット予約] ワーカーのLINEセッション(SSO)が約" + daysRemaining
+                        + "日後に失効します。30日ごとの手動再ログインをお願いします（line-chat-worker RUNBOOK 参照）。"
+                : "[チャット予約] ワーカーのLINEセッション(SSO)がまもなく失効します。至急、手動再ログインをお願いします（line-chat-worker RUNBOOK 参照）。";
+        for (Long orgId : orgIds) {
+            lineNotificationService.sendChatReserveAlert(orgId, message);
+        }
+    }
+
     // ------------------------------------------------------------------
     // ワーカーAPI（タスク3）
     // ------------------------------------------------------------------
