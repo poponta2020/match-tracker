@@ -69,3 +69,16 @@ jobs:
           KADERU_USER_ID: ${{ secrets.WASURA_KADERU_USER_ID }}
           KADERU_PASSWORD: ${{ secrets.WASURA_KADERU_PASSWORD }}
           DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
+
+      # 東区民センターは北大(hokudai)の会場のため、hokudai 押下時のみ同期する。
+      # sync-higashi-reservations.yml と同一の script/env（idempotent な upsert）を流用。
+      # `if` に always() は意図的に付けない: 直前の hokudai ステップが失敗した run は
+      # 全体失敗＝再実行対象とし、「失敗通知が出たのに一部だけ反映済み」を避ける。
+      - name: Sync reservations (higashi community center)
+        if: inputs.org == 'hokudai'
+        working-directory: ./scripts/room-checker
+        run: node sync-higashi-reservations.js --months 2
+        env:
+          SAPPORO_COMMUNITY_USER_ID: ${{ secrets.SAPPORO_COMMUNITY_USER_ID }}
+          SAPPORO_COMMUNITY_PASSWORD: ${{ secrets.SAPPORO_COMMUNITY_PASSWORD }}
+          DATABASE_URL: ${{ secrets.KADERU_DATABASE_URL }}
