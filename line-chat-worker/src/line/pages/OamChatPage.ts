@@ -143,7 +143,11 @@ export class OamChatPage implements ChatPage {
           // 自動遷移するフローもあるため、以降は「押せた本数」でなく最終host帰着で成否を確定する。
           buttonsClicked = await this.clickReloginButton(OamChatPage.RELOGIN_BTN_ACCOUNT);
           if (buttonsClicked) {
-            await this.settleReloginSurface();
+            // 「LINE account」クリック後、次の確定状態まで待つ: chat帰着（自動遷移）／
+            // 「Log in」ボタン出現（access.line.me）／password欄・CAPTCHA提示（失効）のいずれか。
+            // 遷移元の account.line.biz を「認証面に居る」で即成功扱いにすると、access.line.me への
+            // 遷移完了前に旧画面で「Log in」を探して取り逃す（正常SSOでも誤失敗）ため、期待状態を待つ。
+            await this.waitForNextReloginState(OamChatPage.RELOGIN_BTN_LOGIN);
             // まだ認証面なら「Log in」（Continue as … の許可）を押す。既に chat 面なら押さない（自動遷移済み）。
             if (this.currentHost() !== OamChatPage.CHAT_HOST) {
               // 段間でも password欄/CAPTCHA を再確認（access.line.me で失効提示され得る）。
@@ -309,6 +313,27 @@ export class OamChatPage implements ChatPage {
     await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
   }
 
+  /**
+   * 再ログイン: 「LINE account」クリック後の次の確定状態まで待つ。
+   * chat.line.biz 帰着（自動遷移）／`loginButton` 出現（access.line.me 到達）／credential challenge
+   * のいずれかが揃うまでポーリングする（遷移元hostの即時成功で「Log in」を取り逃さないため）。
+   */
+  private async waitForNextReloginState(loginButton: RegExp): Promise<void> {
+    await this.waitUntilAsync(async () => {
+      if (this.currentHost() === OamChatPage.CHAT_HOST) return true;
+      if (await this.hasCredentialChallenge()) return true;
+      return (await this.countReloginButton(loginButton)) > 0;
+    }, OamChatPage.RELOGIN_SETTLE_TIMEOUT_MS);
+    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
+  }
+
+  /** 再ログイン: 指定名のボタン/リンクの一致数（button 優先、無ければ link）。 */
+  private async countReloginButton(name: RegExp): Promise<number> {
+    const btn = await this.page.getByRole("button", { name }).count().catch(() => 0);
+    if (btn > 0) return btn;
+    return this.page.getByRole("link", { name }).count().catch(() => 0);
+  }
+
   /** 再ログイン: password欄 or reCAPTCHA が1つでも在れば true（＝突破せず失効扱いにする対象）。 */
   private async hasCredentialChallenge(): Promise<boolean> {
     const pw = await this.page.locator(OamChatPage.SEL_PASSWORD).count().catch(() => 0);
@@ -341,6 +366,16 @@ export class OamChatPage implements ChatPage {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (predicate()) return true;
+      await this.page.waitForTimeout(200);
+    }
+    return predicate();
+  }
+
+  /** 非同期述語版の {@link waitUntil}（DOM 問い合わせを含む条件の待機に使う）。 */
+  private async waitUntilAsync(predicate: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await predicate()) return true;
       await this.page.waitForTimeout(200);
     }
     return predicate();
