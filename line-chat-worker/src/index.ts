@@ -173,8 +173,11 @@ export async function maybeWarnSsoExpiry(
   if (state.lastWarnedJstDate === todayJst) {
     return;
   }
-  await api.postSessionWarning(daysRemaining);
+  // 送信「試行」を1日1回に制限する（POST 前に日付を記録）。成功後に更新すると、サーバが受理済みでも
+  // 応答タイムアウト/切断で失敗扱いになり、5分毎の再送で通知ストームになる（AC-6違反）。
+  // 取りこぼし（真に未達）は翌日の再警告で回収する（best-effort・反応型フォールバックが実失敗を拾う）。
   state.lastWarnedJstDate = todayJst;
+  await api.postSessionWarning(daysRemaining);
 }
 
 /**

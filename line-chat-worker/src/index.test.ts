@@ -289,6 +289,20 @@ describe("maybeWarnSsoExpiry", () => {
     expect(api.postSessionWarning as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
   });
 
+  it("AC-6: 送信が失敗（応答喪失）しても同日中は再送しない（成功でなく試行を1日1回に制限）", async () => {
+    const api = mockApi();
+    (api.postSessionWarning as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("timeout"));
+    const state: SsoWarnState = { lastWarnedJstDate: null };
+    const params = { ssoExpiryMs: NOW + 1 * DAY, nowMs: NOW, thresholdDays: 3, state };
+
+    // 1回目: POSTは失敗するが、試行日は記録済みになる。
+    await expect(maybeWarnSsoExpiry(api, params)).rejects.toThrow();
+    // 2回目（同日・5分後）: 再送しない。
+    await maybeWarnSsoExpiry(api, { ...params, nowMs: NOW + 5 * 60 * 1000 });
+
+    expect(api.postSessionWarning as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+  });
+
   it("期限不明（Cookie不在/session cookie＝null）なら警告しない（偽アラート回避）", async () => {
     const api = mockApi();
     const state: SsoWarnState = { lastWarnedJstDate: null };
