@@ -93,6 +93,25 @@ const sessionWithInquiryRoom = {
   },
 };
 
+// 東🌸(venue 6): 手動拡張会場。空きは「不明」(available/expandable=false) でも
+// manualExpansion=true のため、隣室 status チップを出さず拡張ボタンを常時表示する。
+const sessionHigashiManualExpansion = {
+  ...sessionWithAdjacentRoom,
+  venueId: 6,
+  venueName: 'higashi-sakura',
+  adjacentRoomStatus: {
+    adjacentRoomName: 'kakkou',
+    status: '不明',
+    available: false,
+    expandable: false,
+    manualExpansion: true,
+    expandedVenueId: 10,
+    expandedVenueName: 'higashi-all',
+    expandedCapacity: 18,
+  },
+  reservationConfirmedAt: null,
+};
+
 const sessionSummary = {
   id: 1,
   sessionDate: '2026-04-12',
@@ -350,6 +369,43 @@ describe('adjacent room reservation proxy flow', () => {
       expect(screen.getByText('会場を拡張')).toBeInTheDocument();
     });
     expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
+  });
+
+  it('shows a manual expand button for 東🌸 even when availability is unknown, and expands without scrape checks', async () => {
+    practiceAPI.getById.mockResolvedValue({ data: sessionHigashiManualExpansion });
+    practiceAPI.expandVenue.mockResolvedValue({
+      data: {
+        ...sessionHigashiManualExpansion,
+        venueId: 10,
+        venueName: 'higashi-all',
+        adjacentRoomStatus: null,
+      },
+    });
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PracticeList />);
+
+    const dayCell = await screen.findByText('12');
+    await user.click(dayCell);
+
+    // 手動拡張ボタンが空き検証なしで表示される（拡張先名を含む）
+    const expandButton = await screen.findByText(/会場を拡張（higashi-allに）/);
+    expect(expandButton).toBeInTheDocument();
+    // 隣室 status チップ・かでる系の予約導線は出さない
+    expect(screen.queryByText('隣室を予約')).not.toBeInTheDocument();
+    expect(screen.queryByText('予約完了を報告')).not.toBeInTheDocument();
+    expect(screen.queryByText(/隣室\(kakkou\)/)).not.toBeInTheDocument();
+
+    await user.click(expandButton);
+
+    await waitFor(() => {
+      expect(practiceAPI.expandVenue).toHaveBeenCalledWith(1);
+    });
+    // 確認ダイアログは「予約済みですか」を念押しする文言
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('予約済みですか'));
+    // スクレイプ依存の予約プロキシは一切呼ばない
+    expect(venueReservationProxyAPI.createSession).not.toHaveBeenCalled();
+    expect(practiceAPI.confirmReservation).not.toHaveBeenCalled();
   });
 
   it('lets an admin manually report and expand when the adjacent room is 要問合せ (●)', async () => {

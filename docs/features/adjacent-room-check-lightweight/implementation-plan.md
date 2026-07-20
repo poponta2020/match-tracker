@@ -46,7 +46,7 @@ status: completed
 - **完了条件:** 上記テスト green・既存 BE テスト green・build green
 
 ### タスク3: 東🌸拡張 UI の手動化（B・FE）
-- [ ] 完了
+- [x] 完了
 - **目的:** `PracticeList.jsx` で東🌸(manualExpansion)セッションは隣室 status チップと空き依存ゲートを外し、管理者に「会場を拡張（東全室に）」を常時表示。押下で確認ダイアログ→`expandVenue`。かでるの隣室 UI は不変。
 - **対応AC:** AC-B3(FE/verify)
 - **主な変更領域:**
