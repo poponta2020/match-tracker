@@ -40,14 +40,17 @@ import java.util.stream.Collectors;
 /**
  * 抽選サービス
  *
- * 抽選アルゴリズム:
- * 1. セッションを日付昇順で処理
- * 2. 各セッション内で試合を番号昇順で処理
- * 3. 各試合について:
- *    a. 前試合落選者（低優先度）とその他を分離
- *    b. その他の参加者で優先当選/一般抽選を実施
- *    c. 余り枠があれば前試合落選者を当選させる（定員超過時は優先的に落選）
- *    d. 落選者にキャンセル待ち番号を付与
+ * 抽選アルゴリズム（公平化・2ルール方式）:
+ * 1. 対象セッション群から公平抽選トラッカー（{@link LotteryFairShareTracker}）を構築
+ *    （直近30日の既存 WON をベースラインとしてロード）
+ * 2. セッションを日付昇順・試合を番号昇順で処理
+ * 3. 各試合について（定員超過時）:
+ *    a. 管理者優先プールとその他プールに分割（各プール内は ID 昇順）
+ *    b. 各プール内で「ルール1: そのセッションでまだ取れていない人（todayTaken 最小）に絞り、
+ *       ルール2: 直近30日の取得数（recentTaken）が少ないほど有利な重み付き抽選」で座席を確定
+ *    c. 落選者は同じ選抜手続きの続行で引かれた順にキャンセル待ち番号を付与
+ *       （バケット順=管理者優先プール→その他プール）
+ * 当選確定のたびに tracker に recordWin して以降の試合・セッションに反映する。
  */
 @Service
 @RequiredArgsConstructor
@@ -124,14 +127,16 @@ public class LotteryService {
                 return lotteryExecutionRepository.save(execution);
             }
 
-            // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
-            Set<Long> monthlyLosers = new HashSet<>();
+            // 公平抽選トラッカーを対象セッション群のベースライン（直近30日の既存WON）から団体別に構築
+            // （organizationId=null の全団体一括実行でも recentTaken が団体を越えないようにする）
+            Map<Long, LotteryFairShareTracker> trackers = buildTrackersByOrg(sessions);
             List<SessionDetail> sessionDetails = new ArrayList<>();
             Random random = new Random(seed);
             Set<Long> adminPrioritySet = priorityPlayerIds != null ? new HashSet<>(priorityPlayerIds) : Set.of();
 
             for (PracticeSession session : sessions) {
-                SessionDetail sessionDetail = processSession(session, monthlyLosers, execution.getId(), adminPrioritySet, true, random);
+                LotteryFairShareTracker tracker = trackers.get(session.getOrganizationId());
+                SessionDetail sessionDetail = processSession(session, tracker, execution.getId(), adminPrioritySet, true, random);
                 sessionDetails.add(sessionDetail);
             }
 
@@ -240,9 +245,64 @@ public class LotteryService {
     }
 
     /**
-     * 1セッション（1日）の全試合を処理する
+     * 対象セッション群のベースライン（直近30日の既存WON）から公平抽選トラッカーを構築する。
+     *
+     * <p>ロード範囲は {@code [最早セッション日-30, 最遅セッション日]}（半開区間 {@code [from, to)} で
+     * {@code to = 最遅セッション日+1日}）。最遅セッション日を含めることで、当日すでに存在する WON
+     * （管理者手動追加・繰り上げ承諾者など）が {@code todayTaken} に反映される。抽選対象は PENDING の
+     * ため WON クエリには含まれず二重計上されない。organizationId が null の場合は全団体を対象にする。
      */
-    private SessionDetail processSession(PracticeSession session, Set<Long> monthlyLosers, Long lotteryId, Set<Long> adminPriorityPlayers, boolean saveResults, Random random) {
+    private LotteryFairShareTracker buildTracker(List<PracticeSession> sessions, Long organizationId) {
+        LotteryFairShareTracker tracker = new LotteryFairShareTracker();
+        if (sessions.isEmpty()) {
+            return tracker;
+        }
+        LocalDate earliest = sessions.stream()
+                .map(PracticeSession::getSessionDate).min(Comparator.naturalOrder()).orElse(null);
+        LocalDate latest = sessions.stream()
+                .map(PracticeSession::getSessionDate).max(Comparator.naturalOrder()).orElse(null);
+        if (earliest == null || latest == null) {
+            return tracker;
+        }
+        LocalDate from = earliest.minusDays(LotteryFairShareTracker.RECENT_WINDOW_DAYS);
+        LocalDate to = latest.plusDays(1); // 最遅セッション日を含める（半開 [from, to)）
+        for (PracticeParticipantRepository.PlayerWonDate w :
+                practiceParticipantRepository.findWonPlayerDates(organizationId, from, to)) {
+            tracker.recordWin(w.getPlayerId(), w.getSessionDate());
+        }
+        return tracker;
+    }
+
+    /**
+     * セッション群を団体ごとに分け、団体別の公平抽選トラッカーを構築して返す（キー=organizationId）。
+     *
+     * <p>{@code recentTaken} は要件上「同一団体で取れた試合数」であり、団体を越えて混ざってはならない。
+     * organizationId を指定した実行では全セッションが同一団体のためトラッカーは1個だが、
+     * SUPER_ADMIN が organizationId=null で全団体を一括実行する経路では複数団体のセッションが混在する。
+     * その場合に単一トラッカーを共有すると、複数団体に所属する同一選手の当選実績が団体を越えて
+     * {@code recentTaken} に算入されてしまう。団体別にトラッカーを分けることで、各団体を個別に実行したのと
+     * 同じ結果になる。{@code organization_id} は非 null（{@code @Column(nullable=false)}）のため
+     * グループ化キーに null は現れない。同一団体は同一日に複数セッションを持てない
+     * （{@code uk_session_date_organization}）ため、団体別トラッカー内では日付キーの
+     * {@code todayTaken} がそのままセッション単位のカウンタとして機能する。
+     */
+    private Map<Long, LotteryFairShareTracker> buildTrackersByOrg(List<PracticeSession> sessions) {
+        Map<Long, List<PracticeSession>> sessionsByOrg = sessions.stream()
+                .collect(Collectors.groupingBy(PracticeSession::getOrganizationId));
+        Map<Long, LotteryFairShareTracker> trackers = new HashMap<>();
+        for (Map.Entry<Long, List<PracticeSession>> entry : sessionsByOrg.entrySet()) {
+            trackers.put(entry.getKey(), buildTracker(entry.getValue(), entry.getKey()));
+        }
+        return trackers;
+    }
+
+    /**
+     * 1セッション（1日）の全試合を処理する。試合番号昇順で各試合を2ルール方式で選抜する。
+     * 当選確定は tracker に反映され、以降の試合（todayTaken）・後続セッション（recentTaken）に効く。
+     */
+    private SessionDetail processSession(PracticeSession session, LotteryFairShareTracker tracker,
+                                         Long lotteryId, Set<Long> adminPriorityPlayers,
+                                         boolean saveResults, Random random) {
         // セッションに定員が未設定の場合、会場の定員にフォールバック
         if (session.getCapacity() == null && session.getVenueId() != null) {
             venueRepository.findById(session.getVenueId())
@@ -252,8 +312,8 @@ public class LotteryService {
         log.debug("Processing session: {} (date: {}, capacity: {})",
                 session.getId(), session.getSessionDate(), session.getCapacity());
 
-        // このセッション内の落選者を追跡（連鎖落選用）
-        Set<Long> sessionLosers = new HashSet<>();
+        // パーセンタイル設定は団体別に読む（プレビュー時と確定時で同一団体の同一値が読まれる）
+        int capPercentile = systemSettingService.getLotteryWeightCapPercentile(session.getOrganizationId());
 
         // このセッションの全PENDING参加者を取得（ID順でシード再現性を確保）
         List<PracticeParticipant> allParticipants = practiceParticipantRepository
@@ -271,51 +331,41 @@ public class LotteryService {
                         TreeMap::new, Collectors.toList()));
 
         List<MatchDetail> matchDetails = new ArrayList<>();
-
-        // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
-        Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
-        int prevMatchNumber = -1;
-
         for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
-            int matchNumber = entry.getKey();
-            List<PracticeParticipant> applicants = entry.getValue();
-
-            // 連続する試合番号の場合のみ前試合の順番を引き継ぐ
-            Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
-                    ? prevWaitlistOrder : Collections.emptyMap();
-            Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
-
-            MatchDetail detail = processMatch(session, matchNumber, applicants,
-                    sessionLosers, monthlyLosers, lotteryId, inheritedOrder, currentWaitlistOrder, adminPriorityPlayers, saveResults, random);
+            MatchDetail detail = processMatch(session, entry.getKey(), entry.getValue(),
+                    lotteryId, tracker, capPercentile, adminPriorityPlayers, saveResults, random);
             matchDetails.add(detail);
-
-            prevWaitlistOrder = currentWaitlistOrder;
-            prevMatchNumber = matchNumber;
         }
 
         return new SessionDetail(session.getId(), session.getSessionDate(), matchDetails);
     }
 
     /**
-     * 1試合の抽選を処理する（3層優先: 管理者優先 > 連続落選救済 > 一般）
+     * 1試合の抽選を処理する（2ルール方式）。
      *
-     * package-private にすることでユニットテストから直接呼び出し可能にしている。
+     * <p>定員超過時は、まず管理者優先プールとその他プールに分割し（各プール内は ID 昇順）、
+     * 各プール内で「ルール1: そのセッションでまだ取れていない人（{@code todayTaken} 最小）に絞り、
+     * ルール2: 直近30日の取得数（{@code recentTaken}）が少ないほど有利な重み付き抽選」を続行して
+     * 座席を確定する。落選者は同じ選抜手続きの続行で引かれた順にキャンセル待ち番号を付与する
+     * （バケット順=管理者優先プール→その他プール）。当選確定は {@code tracker} に反映する。
+     *
+     * <p>package-private にすることでユニットテストから直接呼び出し可能にしている。
      */
     MatchDetail processMatch(PracticeSession session, int matchNumber,
                                 List<PracticeParticipant> applicants,
-                                Set<Long> sessionLosers, Set<Long> monthlyLosers,
                                 Long lotteryId,
-                                Map<Long, Integer> previousMatchWaitlistOrder,
-                                Map<Long, Integer> currentMatchWaitlistOrder,
+                                LotteryFairShareTracker tracker,
+                                int capPercentile,
                                 Set<Long> adminPriorityPlayers,
                                 boolean saveResults, Random random) {
 
+        LocalDate sessionDate = session.getSessionDate();
         Integer capacity = session.getCapacity();
         int totalApplicants = applicants.size();
 
         // A-2 防御的措置: 抽選前に既に埋まっている枠（WON/OFFERED）を定員から差し引く。
         // 管理者手動追加・試合記録に伴う自動参加登録・締切後即WON等で抽選前に WON/OFFERED が
-        // 存在しても、合計当選が定員を超えないようにする。差し引き後の残枠で従来の3層抽選を実施。
+        // 存在しても、合計当選が定員を超えないようにする。差し引き後の残枠で選抜を実施。
         // （再抽選経路も本差し引きに一本化。繰り上がり承諾者=WON が残枠から控除される）
         if (capacity != null) {
             long alreadyFilled =
@@ -332,6 +382,7 @@ public class LotteryService {
                 p.setStatus(ParticipantStatus.WON);
                 p.setDirty(true);
                 p.setLotteryId(lotteryId);
+                tracker.recordWin(p.getPlayerId(), sessionDate);
             }
             if (saveResults) {
                 practiceParticipantRepository.saveAll(applicants);
@@ -342,217 +393,119 @@ public class LotteryService {
             return new MatchDetail(matchNumber, totalApplicants, totalApplicants, 0);
         }
 
-        // 定員超過 → 抽選が必要
+        // 定員超過 → 2ルールで選抜
         log.debug("Match {}: {} applicants for {} capacity - lottery required",
                 matchNumber, totalApplicants, capacity);
 
-        // Step 1: 前試合落選者（低優先度）とその他を分離
-        List<PracticeParticipant> cascadeCandidates = new ArrayList<>();
-        List<PracticeParticipant> remaining = new ArrayList<>();
+        // 候補を ID 昇順に固定（シード再現性）し、管理者優先プールとその他プールに分割
+        List<PracticeParticipant> sorted = new ArrayList<>(applicants);
+        sorted.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
-        for (PracticeParticipant p : applicants) {
-            if (sessionLosers.contains(p.getPlayerId())) {
-                cascadeCandidates.add(p);
+        List<PracticeParticipant> adminPool = new ArrayList<>();
+        List<PracticeParticipant> restPool = new ArrayList<>();
+        for (PracticeParticipant p : sorted) {
+            if (adminPriorityPlayers.contains(p.getPlayerId())) {
+                adminPool.add(p);
             } else {
-                remaining.add(p);
+                restPool.add(p);
             }
         }
 
-        log.debug("Match {}: {} cascade candidates (low priority), {} remaining",
-                matchNumber, cascadeCandidates.size(), remaining.size());
-
-        // Step 2: remaining を3層（管理者優先・連続落選救済・一般）に分類して抽選
         List<PracticeParticipant> winners = new ArrayList<>();
-        List<PracticeParticipant> adminLosers = new ArrayList<>();
-        List<PracticeParticipant> rescueLosers = new ArrayList<>();
-        List<PracticeParticipant> generalLosers = new ArrayList<>();
+        List<PracticeParticipant> orderedLosers = new ArrayList<>();
 
-        if (remaining.size() <= capacity) {
-            winners.addAll(remaining);
-        } else {
-            List<PracticeParticipant> adminPriorityApplicants = new ArrayList<>();
-            List<PracticeParticipant> rescueApplicants = new ArrayList<>();
-            List<PracticeParticipant> generalApplicants = new ArrayList<>();
+        // 管理者優先プール → その他プールの順に定員まで座席を埋める。
+        // 各プールで座席数を超えた分の引きは、そのプールの落選者として引かれた順（=キャンセル待ち順）で確定。
+        int adminSeats = Math.min(capacity, adminPool.size());
+        selectFromPool(adminPool, adminSeats, sessionDate, capPercentile, tracker, random,
+                winners, orderedLosers);
+        int restSeats = capacity - winners.size();
+        selectFromPool(restPool, restSeats, sessionDate, capPercentile, tracker, random,
+                winners, orderedLosers);
 
-            for (PracticeParticipant p : remaining) {
-                if (adminPriorityPlayers.contains(p.getPlayerId())) {
-                    adminPriorityApplicants.add(p);
-                } else if (monthlyLosers.contains(p.getPlayerId())) {
-                    rescueApplicants.add(p);
-                } else {
-                    generalApplicants.add(p);
-                }
-            }
-
-            log.debug("Match {}: {} admin-priority, {} rescue, {} general applicants",
-                    matchNumber, adminPriorityApplicants.size(), rescueApplicants.size(), generalApplicants.size());
-
-            // Step 2a: 管理者優先枠（最高優先度）から埋める
-            if (adminPriorityApplicants.size() <= capacity) {
-                winners.addAll(adminPriorityApplicants);
-            } else {
-                Collections.shuffle(adminPriorityApplicants, random);
-                winners.addAll(adminPriorityApplicants.subList(0, capacity));
-                adminLosers.addAll(adminPriorityApplicants.subList(capacity, adminPriorityApplicants.size()));
-            }
-
-            // Step 2b: 残り枠で連続落選救済 + 一般を2層抽選
-            int slotsAfterAdmin = capacity - winners.size();
-            if (slotsAfterAdmin > 0) {
-                if (rescueApplicants.size() + generalApplicants.size() <= slotsAfterAdmin) {
-                    winners.addAll(rescueApplicants);
-                    winners.addAll(generalApplicants);
-                } else {
-                    // 一般枠最低保証を残り枠ベースで計算
-                    int normalReservePercent = systemSettingService.getLotteryNormalReservePercent(session.getOrganizationId());
-                    int normalReserve = 0;
-                    if (normalReservePercent > 0 && !generalApplicants.isEmpty() && !rescueApplicants.isEmpty()) {
-                        normalReserve = Math.max(1, (int) Math.ceil(slotsAfterAdmin * normalReservePercent / 100.0));
-                        normalReserve = Math.min(normalReserve, generalApplicants.size());
-                        normalReserve = Math.min(normalReserve, slotsAfterAdmin);
-                    }
-                    int rescueSlots = slotsAfterAdmin - normalReserve;
-
-                    if (rescueApplicants.size() >= rescueSlots && normalReserve > 0) {
-                        // 救済枠 + 一般枠に分けて抽選
-                        Collections.shuffle(rescueApplicants, random);
-                        winners.addAll(rescueApplicants.subList(0, rescueSlots));
-                        rescueLosers.addAll(rescueApplicants.subList(rescueSlots, rescueApplicants.size()));
-
-                        Collections.shuffle(generalApplicants, random);
-                        winners.addAll(generalApplicants.subList(0, normalReserve));
-                        if (generalApplicants.size() > normalReserve) {
-                            generalLosers.addAll(generalApplicants.subList(normalReserve, generalApplicants.size()));
-                        }
-                    } else if (rescueApplicants.size() >= slotsAfterAdmin) {
-                        // 一般申込者0 or 設定0% で救済者が残り枠以上
-                        Collections.shuffle(rescueApplicants, random);
-                        winners.addAll(rescueApplicants.subList(0, slotsAfterAdmin));
-                        rescueLosers.addAll(rescueApplicants.subList(slotsAfterAdmin, rescueApplicants.size()));
-                        generalLosers.addAll(generalApplicants);
-                    } else {
-                        // 救済者全員当選 + 残り枠を一般からランダム
-                        winners.addAll(rescueApplicants);
-                        int remainingForGeneral = slotsAfterAdmin - rescueApplicants.size();
-
-                        Collections.shuffle(generalApplicants, random);
-                        winners.addAll(generalApplicants.subList(0, Math.min(remainingForGeneral, generalApplicants.size())));
-                        if (generalApplicants.size() > remainingForGeneral) {
-                            generalLosers.addAll(generalApplicants.subList(remainingForGeneral, generalApplicants.size()));
-                        }
-                    }
-                }
-            } else {
-                // 残り枠なし → 救済・一般は全員落選
-                rescueLosers.addAll(rescueApplicants);
-                generalLosers.addAll(generalApplicants);
-            }
-        }
-
-        // Step 2c: 余り枠があれば前試合落選者を当選させる
-        List<PracticeParticipant> cascadeLosers = new ArrayList<>();
-        int leftoverSlots = capacity - winners.size();
-
-        if (leftoverSlots > 0 && !cascadeCandidates.isEmpty()) {
-            if (cascadeCandidates.size() <= leftoverSlots) {
-                winners.addAll(cascadeCandidates);
-                log.debug("Match {}: all {} cascade candidates win (leftover slots: {})",
-                        matchNumber, cascadeCandidates.size(), leftoverSlots);
-            } else {
-                Collections.shuffle(cascadeCandidates, random);
-                winners.addAll(cascadeCandidates.subList(0, leftoverSlots));
-                cascadeLosers.addAll(cascadeCandidates.subList(leftoverSlots, cascadeCandidates.size()));
-                log.debug("Match {}: {} cascade candidates win, {} lose (leftover slots: {})",
-                        matchNumber, leftoverSlots, cascadeLosers.size(), leftoverSlots);
-            }
-        } else {
-            cascadeLosers.addAll(cascadeCandidates);
-            if (!cascadeCandidates.isEmpty()) {
-                log.debug("Match {}: all {} cascade candidates lose (no leftover slots)",
-                        matchNumber, cascadeCandidates.size());
-            }
-        }
-
-        // Step 3: ステータス更新 - 当選者
+        // ステータス更新 - 当選者
         for (PracticeParticipant p : winners) {
             p.setStatus(ParticipantStatus.WON);
             p.setDirty(true);
             p.setLotteryId(lotteryId);
         }
-
-        // Step 4: 落選者にキャンセル待ち番号を付与
-        // 管理者優先落選 → 救済落選 → 一般落選 → 連鎖落選 の順で優先
-        List<PracticeParticipant> allLosers = new ArrayList<>();
-        allLosers.addAll(adminLosers);
-        allLosers.addAll(rescueLosers);
-        allLosers.addAll(generalLosers);
-        allLosers.addAll(cascadeLosers);
-
-        // キャンセル待ち番号を割り当て（連続試合では前試合の順番を引き継ぐ）
-        // 前試合の順番を持つ選手は維持、新規落選は優先度順かつグループ内ランダム
-        List<PracticeParticipant> withPrevOrder = new ArrayList<>();
-        List<PracticeParticipant> newAdminLosers = new ArrayList<>();
-        List<PracticeParticipant> newRescueLosers = new ArrayList<>();
-        List<PracticeParticipant> newGeneralLosers = new ArrayList<>();
-        List<PracticeParticipant> newCascadeLosers = new ArrayList<>();
-
-        for (PracticeParticipant p : adminLosers) {
-            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
-            else newAdminLosers.add(p);
-        }
-        for (PracticeParticipant p : rescueLosers) {
-            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
-            else newRescueLosers.add(p);
-        }
-        for (PracticeParticipant p : generalLosers) {
-            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
-            else newGeneralLosers.add(p);
-        }
-        for (PracticeParticipant p : cascadeLosers) {
-            if (previousMatchWaitlistOrder.containsKey(p.getPlayerId())) withPrevOrder.add(p);
-            else newCascadeLosers.add(p);
-        }
-
-        withPrevOrder.sort(Comparator.comparingInt(p -> previousMatchWaitlistOrder.get(p.getPlayerId())));
-        Collections.shuffle(newAdminLosers, random);
-        Collections.shuffle(newRescueLosers, random);
-        Collections.shuffle(newGeneralLosers, random);
-        Collections.shuffle(newCascadeLosers, random);
-
-        List<PracticeParticipant> orderedLosers = new ArrayList<>();
-        orderedLosers.addAll(withPrevOrder);
-        orderedLosers.addAll(newAdminLosers);
-        orderedLosers.addAll(newRescueLosers);
-        orderedLosers.addAll(newGeneralLosers);
-        orderedLosers.addAll(newCascadeLosers);
-
+        // 落選者に引かれた順でキャンセル待ち番号を付与
         for (int i = 0; i < orderedLosers.size(); i++) {
             PracticeParticipant p = orderedLosers.get(i);
             p.setStatus(ParticipantStatus.WAITLISTED);
             p.setDirty(true);
             p.setWaitlistNumber(i + 1);
             p.setLotteryId(lotteryId);
-            currentMatchWaitlistOrder.put(p.getPlayerId(), i + 1);
         }
 
-        // Step 5: 月内・セッション内の落選者リストを更新
-        for (PracticeParticipant p : allLosers) {
-            sessionLosers.add(p.getPlayerId());
-            monthlyLosers.add(p.getPlayerId());
-        }
-
-        // 全参加者を保存
-        List<PracticeParticipant> all = new ArrayList<>();
-        all.addAll(winners);
-        all.addAll(allLosers);
         if (saveResults) {
+            List<PracticeParticipant> all = new ArrayList<>(winners.size() + orderedLosers.size());
+            all.addAll(winners);
+            all.addAll(orderedLosers);
             practiceParticipantRepository.saveAll(all);
         }
 
         log.info("Match {}: {} winners, {} waitlisted (from {} applicants, capacity {})",
-                matchNumber, winners.size(), allLosers.size(), totalApplicants, capacity);
+                matchNumber, winners.size(), orderedLosers.size(), totalApplicants, capacity);
 
-        return new MatchDetail(matchNumber, totalApplicants, winners.size(), allLosers.size());
+        return new MatchDetail(matchNumber, totalApplicants, winners.size(), orderedLosers.size());
+    }
+
+    /**
+     * プール内で「ルール1（todayTaken 最小に絞る）→ ルール2（重み付き抽選）」を繰り返す。
+     * 先頭 {@code seats} 人を当選（tracker に recordWin）、それ以降に引かれた者を落選として、
+     * 引かれた順に {@code losersOut} へ積む（=キャンセル待ち順）。tracker への当選記録は当選者のみ。
+     */
+    private void selectFromPool(List<PracticeParticipant> pool, int seats, LocalDate sessionDate,
+                                int capPercentile, LotteryFairShareTracker tracker, Random random,
+                                List<PracticeParticipant> winnersOut,
+                                List<PracticeParticipant> losersOut) {
+        List<PracticeParticipant> working = new ArrayList<>(pool); // ID 昇順を維持
+        int drawn = 0;
+        while (!working.isEmpty()) {
+            PracticeParticipant chosen = drawOne(working, sessionDate, capPercentile, tracker, random);
+            working.remove(chosen);
+            if (drawn < seats) {
+                winnersOut.add(chosen);
+                tracker.recordWin(chosen.getPlayerId(), sessionDate);
+            } else {
+                losersOut.add(chosen);
+            }
+            drawn++;
+        }
+    }
+
+    /**
+     * ルール1で todayTaken 最小の候補に絞り、ルール2で1人選ぶ（候補1人なら確定、複数なら重み付き抽選）。
+     * {@code pool} は ID 昇順前提。
+     */
+    private PracticeParticipant drawOne(List<PracticeParticipant> pool, LocalDate sessionDate,
+                                        int capPercentile, LotteryFairShareTracker tracker,
+                                        Random random) {
+        int minToday = Integer.MAX_VALUE;
+        for (PracticeParticipant p : pool) {
+            minToday = Math.min(minToday, tracker.todayTaken(p.getPlayerId(), sessionDate));
+        }
+        List<PracticeParticipant> candidates = new ArrayList<>();
+        for (PracticeParticipant p : pool) {
+            if (tracker.todayTaken(p.getPlayerId(), sessionDate) == minToday) {
+                candidates.add(p);
+            }
+        }
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        List<Long> candidateIds = new ArrayList<>(candidates.size());
+        for (PracticeParticipant p : candidates) {
+            candidateIds.add(p.getPlayerId());
+        }
+        Long chosenId = tracker.pickWeighted(candidateIds, sessionDate, capPercentile, random);
+        for (PracticeParticipant p : candidates) {
+            if (p.getPlayerId().equals(chosenId)) {
+                return p;
+            }
+        }
+        return candidates.get(0); // フォールバック（理論上到達しない）
     }
 
     /**
@@ -625,8 +578,8 @@ public class LotteryService {
             return new LotteryPreviewResult(List.of(), seed, populationSignature);
         }
 
-        // 月内の落選者を追跡する（セッション跨ぎの優先当選判定用）
-        Set<Long> monthlyLosers = new HashSet<>();
+        // 公平抽選トラッカーを団体別に構築（確定経路と同一手順・同一分割で AC-R3 を担保）
+        Map<Long, LotteryFairShareTracker> trackers = buildTrackersByOrg(sessions);
         // セッションごとに処理された参加者を保持（DTO組み立て用）
         Map<Long, List<PracticeParticipant>> participantsBySession = new LinkedHashMap<>();
         Random random = new Random(seed);
@@ -639,7 +592,8 @@ public class LotteryService {
             participants.sort(Comparator.comparingLong(PracticeParticipant::getId));
 
             // 抽選アルゴリズムを実行（DB保存なし）
-            processSession(session, monthlyLosers, null, adminPrioritySet, false, random);
+            LotteryFairShareTracker tracker = trackers.get(session.getOrganizationId());
+            processSession(session, tracker, null, adminPrioritySet, false, random);
 
             // 処理後の参加者（ステータスがインメモリで更新済み）を保持
             participantsBySession.put(session.getId(), participants);
@@ -941,12 +895,12 @@ public class LotteryService {
             }
             practiceParticipantRepository.saveAll(reLotteryTargets);
 
-            // 月内の他セッションでの落選者を取得（優先当選判定用、団体スコープ内）
-            Set<Long> monthlyLosers = new HashSet<>(
-                    practiceParticipantRepository.findMonthlyLoserPlayerIds(year, month, sessionId, orgId));
+            // このセッションのベースライン（直近30日の既存WON）から公平抽選トラッカーを構築。
+            // 直前の saveAll でリセット対象は PENDING になっており（auto-flush で反映）、WON クエリには
+            // 含まれない。繰り上げ承諾者（当日 WON のまま維持）は当日 WON として todayTaken に算入される。
+            LotteryFairShareTracker tracker = buildTracker(List.of(session), orgId);
+            int capPercentile = systemSettingService.getLotteryWeightCapPercentile(orgId);
 
-            // セッション内落選者を追跡
-            Set<Long> sessionLosers = new HashSet<>();
             long seed = new Random().nextLong();
             Random random = new Random(seed);
 
@@ -960,23 +914,11 @@ public class LotteryService {
             // WON/OFFERED 控除（A-2）に一本化する。ここでの手動 capacity 調整は不要
             // （手動調整と併用すると二重に差し引かれるため撤廃）。
 
-            // 前試合のキャンセル待ち順番を追跡（連続試合で順番を引き継ぐため）
-            Map<Long, Integer> prevWaitlistOrder = new HashMap<>();
-            int prevMatchNumber = -1;
-
             for (Map.Entry<Integer, List<PracticeParticipant>> entry : byMatch.entrySet()) {
-                int matchNumber = entry.getKey();
-
-                Map<Long, Integer> inheritedOrder = (matchNumber == prevMatchNumber + 1)
-                        ? prevWaitlistOrder : Collections.emptyMap();
-                Map<Long, Integer> currentWaitlistOrder = new HashMap<>();
-
-                processMatch(session, matchNumber, entry.getValue(),
-                        sessionLosers, monthlyLosers, execution.getId(),
-                        inheritedOrder, currentWaitlistOrder, adminPrioritySet, true, random);
-
-                prevWaitlistOrder = currentWaitlistOrder;
-                prevMatchNumber = matchNumber;
+                List<PracticeParticipant> matchApplicants = new ArrayList<>(entry.getValue());
+                matchApplicants.sort(Comparator.comparingLong(PracticeParticipant::getId));
+                processMatch(session, entry.getKey(), matchApplicants,
+                        execution.getId(), tracker, capPercentile, adminPrioritySet, true, random);
             }
 
             execution.setPriorityPlayerIds(resolvedPriorityPlayerIds);

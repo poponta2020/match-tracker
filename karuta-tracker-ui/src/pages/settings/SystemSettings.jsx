@@ -20,7 +20,7 @@ const SystemSettings = () => {
   // 設定値
   const [deadlineDays, setDeadlineDays] = useState(0);
   const [noDeadline, setNoDeadline] = useState(false);
-  const [reservePercent, setReservePercent] = useState(30);
+  const [capPercentile, setCapPercentile] = useState(30);
   const isSuperAdminUser = currentPlayer?.role === 'SUPER_ADMIN';
   const targetOrgId = isSuperAdminUser ? selectedOrgId : currentPlayer?.adminOrganizationId;
   const requestedOrgId = Number(searchParams.get('organizationId'));
@@ -35,7 +35,7 @@ const SystemSettings = () => {
       const settings = res.data || [];
       let nextNoDeadline = false;
       let nextDeadlineDays = 0;
-      let nextReservePercent = 30;
+      let nextCapPercentile = 30;
       for (const s of settings) {
         if (s.settingKey === 'lottery_deadline_days_before') {
           const val = parseInt(s.settingValue, 10);
@@ -47,13 +47,18 @@ const SystemSettings = () => {
             nextDeadlineDays = val;
           }
         }
-        if (s.settingKey === 'lottery_normal_reserve_percent') {
-          nextReservePercent = parseInt(s.settingValue, 10);
+        if (s.settingKey === 'lottery_weight_cap_percentile') {
+          // 保存経路にバリデーションが無いため、表示値もバックエンド getter（Integer.parseInt→
+          // 失敗時はデフォルト30・その後 0〜100 クランプ）と同じ規則で正規化し、画面表示と実効値を一致させる。
+          // parseInt は "45abc" を 45 と受理するため、文字列全体が整数のときだけ採用する（BEの厳密解析に合わせる）。
+          const raw = String(s.settingValue);
+          const parsed = /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN;
+          nextCapPercentile = Number.isNaN(parsed) ? 30 : Math.max(0, Math.min(100, parsed));
         }
       }
       setNoDeadline(nextNoDeadline);
       setDeadlineDays(nextDeadlineDays);
-      setReservePercent(nextReservePercent);
+      setCapPercentile(nextCapPercentile);
     } catch {
       if (latestSettingsRequestIdRef.current !== requestId) return;
       setError('設定の取得に失敗しました');
@@ -146,7 +151,7 @@ const SystemSettings = () => {
       const deadlineValue = noDeadline ? '-1' : String(deadlineDays);
       await Promise.all([
         systemSettingsAPI.update('lottery_deadline_days_before', deadlineValue, targetOrgId),
-        systemSettingsAPI.update('lottery_normal_reserve_percent', String(reservePercent), targetOrgId),
+        systemSettingsAPI.update('lottery_weight_cap_percentile', String(capPercentile), targetOrgId),
       ]);
       setSuccess('保存しました');
       setTimeout(() => setSuccess(null), 3000);
@@ -164,10 +169,10 @@ const SystemSettings = () => {
     }
   };
 
-  const handleReservePercentChange = (e) => {
+  const handleCapPercentileChange = (e) => {
     const val = parseInt(e.target.value, 10);
     if (!isNaN(val) && val >= 0 && val <= 100) {
-      setReservePercent(val);
+      setCapPercentile(val);
     }
   };
 
@@ -265,21 +270,48 @@ const SystemSettings = () => {
         </div>
       </div>
 
-      {/* 一般枠の最低保証割合 */}
+      {/* 重み付けの基準（パーセンタイル） */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-        <h2 className="font-semibold text-gray-800">一般枠の最低保証割合</h2>
-        <p className="text-sm text-gray-500">抽選時に一般枠として最低限確保する割合です</p>
+        <h2 className="font-semibold text-gray-800">重み付けの基準（パーセンタイル）</h2>
+        <p className="text-sm text-gray-500">
+          抽選で「直近30日の取得数」に重みをつける際の基準（キャップ）です
+        </p>
 
         <div className="flex items-center gap-2">
           <input
             type="number"
             min="0"
             max="100"
-            value={reservePercent}
-            onChange={handleReservePercentChange}
+            value={capPercentile}
+            onChange={handleCapPercentileChange}
             className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center"
           />
           <span className="text-sm text-gray-700">%</span>
+        </div>
+
+        <p className="text-sm text-gray-500">
+          値を<span className="font-medium text-gray-700">小さくするほど</span>多くの人が横並びになり、よく参加している人も不利になりにくくなります。
+          値を<span className="font-medium text-gray-700">大きくするほど</span>参加回数の少ない人がより強く優先されます。
+        </p>
+      </div>
+
+      {/* 抽選の仕組み */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+        <h2 className="font-semibold text-gray-800">抽選の仕組み</h2>
+
+        <div className="space-y-2">
+          <p className="text-sm text-gray-700">
+            <span className="font-medium">ルール1（その日の一巡保証）:</span>
+            定員を超える試合では、<span className="font-medium">その日まだ取れていない人</span>から順に当選します。1日に1試合も取れない人が出ないようにする、確定のルールです。
+          </p>
+          <p className="text-sm text-gray-700">
+            <span className="font-medium">ルール2（直近30日の重み付き抽選）:</span>
+            その日の取得数が同じ人どうしでは、<span className="font-medium">直近30日</span>で取れた回数が少ない人ほど当たりやすい重み付き抽選になります。
+          </p>
+          <p className="text-sm text-gray-700">
+            <span className="font-medium">パーセンタイル設定の意味:</span>
+            上の「重み付けの基準」は、設定した値（パーセンタイル）を境目にして、それ以上に取れている常連層（設定30なら概ね上位70%）を同じ重みで横並びにする設定です。よく来ている常連層を大きな同着グループにまとめ、特定の人が毎回狙い撃ちで落選するのを防ぎます。
+          </p>
         </div>
       </div>
 

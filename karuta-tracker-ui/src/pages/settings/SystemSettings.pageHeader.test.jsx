@@ -53,7 +53,7 @@ describe('SystemSettings PageHeader integration', () => {
     mocks.settingsGetAll.mockResolvedValue({
       data: [
         { settingKey: 'lottery_deadline_days_before', settingValue: '-1' },
-        { settingKey: 'lottery_normal_reserve_percent', settingValue: '30' },
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: '30' },
       ],
     });
   });

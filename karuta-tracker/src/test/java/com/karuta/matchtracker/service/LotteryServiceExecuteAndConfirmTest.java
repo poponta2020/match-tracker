@@ -127,7 +127,7 @@ class LotteryServiceExecuteAndConfirmTest {
                 .thenReturn(List.of(session));
         when(practiceParticipantRepository.findBySessionIdAndStatus(session.getId(), ParticipantStatus.PENDING))
                 .thenReturn(new ArrayList<>(List.of(first, second)));
-        when(systemSettingService.getLotteryNormalReservePercent(ORG_ID)).thenReturn(0);
+        when(systemSettingService.getLotteryWeightCapPercentile(ORG_ID)).thenReturn(30);
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         when(lotteryExecutionRepository.save(any(LotteryExecution.class)))
                 .thenAnswer(inv -> {
