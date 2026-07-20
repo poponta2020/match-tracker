@@ -70,6 +70,8 @@ public class AdjacentRoomService {
                 .expandedVenueId(AdjacentRoomConfig.getExpandedVenueId(venueId))
                 .expandedVenueName(AdjacentRoomConfig.getExpandedVenueName(venueId))
                 .expandedCapacity(AdjacentRoomConfig.getExpandedCapacity(venueId))
+                // 東🌸(6) は手動拡張会場（FE は空き検証なしで拡張ボタンを常時表示する）
+                .manualExpansion(AdjacentRoomConfig.isManualExpansionVenue(venueId))
                 .build();
     }
 
@@ -113,16 +115,21 @@ public class AdjacentRoomService {
             throw new IllegalStateException("この会場は拡張できません");
         }
 
-        // 予約ステップの完了をサーバー側で検証
-        if (session.getReservationConfirmedAt() == null) {
-            throw new IllegalStateException("隣室の予約が確認されていません。先に予約を完了してください");
-        }
+        // 手動拡張会場（東🌸(6)）は予約済み前提の純手動アクション。
+        // 空きスクレイプ結果に依存せず、予約確認・空き検証をスキップする（確認は UI ダイアログで担保）。
+        // かでる経路は従来どおり予約確認 + 空き検証（○/●）をサーバー側で要求する。
+        if (!AdjacentRoomConfig.isManualExpansionVenue(currentVenueId)) {
+            // 予約ステップの完了をサーバー側で検証
+            if (session.getReservationConfirmedAt() == null) {
+                throw new IllegalStateException("隣室の予約が確認されていません。先に予約を完了してください");
+            }
 
-        // 隣室が拡張可能な状態（○ 空き / ● 要問合せ）かをサーバー側で再検証。
-        // ● は「予約完了を報告」で reservationConfirmedAt を立てた上での手動確保を前提に許可する。
-        AdjacentRoomStatusDto adjacentRoom = getAdjacentRoomAvailability(currentVenueId, session.getSessionDate());
-        if (adjacentRoom == null || !adjacentRoom.getExpandable()) {
-            throw new IllegalStateException("隣室が空いていないため、会場を拡張できません");
+            // 隣室が拡張可能な状態（○ 空き / ● 要問合せ）かをサーバー側で再検証。
+            // ● は「予約完了を報告」で reservationConfirmedAt を立てた上での手動確保を前提に許可する。
+            AdjacentRoomStatusDto adjacentRoom = getAdjacentRoomAvailability(currentVenueId, session.getSessionDate());
+            if (adjacentRoom == null || !adjacentRoom.getExpandable()) {
+                throw new IllegalStateException("隣室が空いていないため、会場を拡張できません");
+            }
         }
 
         Long expandedVenueId = AdjacentRoomConfig.getExpandedVenueId(currentVenueId);

@@ -2,7 +2,8 @@ name: Scrape Kaderu Room Availability
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    # 毎時0分（UTC）。UTC 16-20（= JST 1-5時台）はスキップし、JST 6時に再開。1日19回。
+    - cron: '0 0-15,21-23 * * *'
   workflow_dispatch:
 
 jobs:

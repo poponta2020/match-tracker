@@ -240,8 +240,8 @@ class AdjacentRoomNotificationSchedulerTest {
     }
 
     @Test
-    @DisplayName("東🌸(venue 6)セッションも隣室チェック対象、通知に18-21ラベル")
-    void notify_higashiSakura_uses18to21TimeLabel() {
+    @DisplayName("東🌸(venue 6)セッションは自動通知の対象外（会場拡張は手動化）")
+    void skip_higashiSakuraSession_notNotified() {
         PracticeSession session = PracticeSession.builder()
                 .id(1L)
                 .sessionDate(LocalDate.now().plusDays(3))
@@ -250,28 +250,12 @@ class AdjacentRoomNotificationSchedulerTest {
                 .build();
         when(practiceSessionRepository.findByDateRange(any(), any())).thenReturn(List.of(session));
 
-        // 11人参加 → 残り3人
-        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.WON))
-                .thenReturn(11L);
-        when(practiceParticipantRepository.countBySessionIdAndMatchNumberAndStatus(1L, 1, ParticipantStatus.PENDING))
-                .thenReturn(0L);
-
-        AdjacentRoomStatusDto status = AdjacentRoomStatusDto.builder()
-                .adjacentRoomName("かっこう").status("○").available(true)
-                .expandedVenueId(10L).expandedVenueName("東全室").expandedCapacity(18)
-                .build();
-        when(adjacentRoomService.getAdjacentRoomAvailability(6L, session.getSessionDate())).thenReturn(status);
-
-        Player admin = buildAdmin(10L);
-        when(playerRepository.findByRoleAndActive(Player.Role.SUPER_ADMIN)).thenReturn(List.of(admin));
-        when(playerRepository.findByRoleAndAdminOrganizationIdAndActive(Player.Role.ADMIN, 1L)).thenReturn(List.of());
-
         scheduler.checkCapacityAndNotify();
 
-        verify(notificationService).createAndPush(eq(10L), eq(NotificationType.ADJACENT_ROOM_AVAILABLE),
-                contains("残り3人"),
-                contains("夜間(18-21)"),
-                eq("PRACTICE_SESSION"), eq(1L), eq("/practice"), eq(1L));
+        // 東🌸は isAdjacentNotificationTarget=false のため、隣室照会も通知も行わない
+        verify(notificationService, never()).createAndPush(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(adjacentRoomService, never()).getAdjacentRoomAvailability(any(), any());
+        verify(adjacentRoomNotificationRepository, never()).save(any());
     }
 
     @Test

@@ -131,7 +131,7 @@ status: completed
 
 **新スケジューラー**
 - `AdjacentRoomNotificationScheduler.java`
-  - 30分間隔で実行
+  - 毎時0分に実行（JST 1〜5時台はスキップし6時に再開。1日19回）
   - 未来のセッションのうち、かでる和室を利用するものを対象に
   - 各セッションの最大参加者数（全試合中で最も定員に近い試合）を計算
   - 定員まで残り4人以下かつ、その残り人数段階で未通知のセッションを抽出
@@ -171,7 +171,7 @@ status: completed
 - 夜間スロットのみ抽出
 - PostgreSQLに直接UPSERT
 - 手動実行: `node sync-to-db.js`
-- 定期実行: 30分間隔（デプロイ方式は後日決定）
+- 定期実行: `scrape-kaderu.yml`（GitHub Actions）。毎時0分（UTC `0 0-15,21-23 * * *` = JST 1〜5時台スキップ・6時再開）。1日19回
 
 ## 5. 影響範囲
 
@@ -211,3 +211,7 @@ status: completed
 | 結果をDBキャッシュする方式 | バックエンドはDBを読むだけなので軽い。スクレイピングの失敗がバックエンドに影響しない |
 | 定員接近の閾値を「残り4人」に固定 | ユーザーの運用実態に合わせた値。将来的にシステム設定化も可能だが、現時点では不要 |
 | 重複通知防止に専用テーブルを使用 | セッション×残り人数の段階で通知済みフラグを管理。Notificationテーブルを検索するより効率的 |
+
+## 変更履歴
+
+- 2026-07-20（[adjacent-room-check-lightweight](../adjacent-room-check-lightweight/requirements.md)・#1134）: 実行頻度を 30分間隔 → 毎時0分＋JST 1〜5時台スキップに間引き。`AdjacentRoomNotificationScheduler` の cron を `0 */30 * * * *` → `0 0 0,6-23 * * *`（Asia/Tokyo）、`scrape-kaderu.yml` の cron を `*/30 * * * *` → `0 0-15,21-23 * * *`（UTC）に変更。通知・拡張ロジックは頻度以外不変。
