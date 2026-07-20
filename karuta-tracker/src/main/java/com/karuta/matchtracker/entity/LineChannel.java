@@ -2,6 +2,7 @@ package com.karuta.matchtracker.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.karuta.matchtracker.converter.EncryptedStringConverter;
 import com.karuta.matchtracker.util.JstDateTimeUtil;
 import java.time.LocalDateTime;
 
@@ -34,11 +35,13 @@ public class LineChannel {
     @Column(name = "line_channel_id", nullable = false, unique = true, length = 50)
     private String lineChannelId;
 
-    /** チャネルシークレット（暗号化保存） */
+    /** チャネルシークレット（AES-256-GCM で暗号化保存。読取時は平文で返る） */
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "channel_secret", nullable = false, length = 255)
     private String channelSecret;
 
-    /** チャネルアクセストークン（暗号化保存） */
+    /** チャネルアクセストークン（AES-256-GCM で暗号化保存。読取時は平文で返る） */
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "channel_access_token", nullable = false, columnDefinition = "TEXT")
     private String channelAccessToken;
 
