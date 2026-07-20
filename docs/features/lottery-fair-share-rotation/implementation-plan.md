@@ -15,7 +15,7 @@ status: completed
   - `recordWin(playerId, sessionDate)` = 1件追加
   - `pickWeighted(candidates, sessionDate, capPercentile, rng)` = ルール2の重み付き抽選（キャップ算出＋ガード＋累積和走査）
 - **選抜手続き（ルール1＋ルール2）**: プール内で `todayTaken` 最小の候補に絞り（ルール1）、その中を `1/(min(recentTaken,cap)+1)` の重み付き抽選（ルール2）で1名ずつ確定。「管理者優先プール → その他プール」の順に定員まで。**キャンセル待ち番号も同手続きの続行**で採番（バケット順維持＝管理者優先落選者が最上位）。
-- **`recentTaken` の初期化**: 抽選開始時に対象団体の WON 参加（`(playerId, sessionDate)` 行）を `[最早セッション日-30, 最遅セッション日)` の範囲で一括ロード（新クエリ）。対象月の抽選対象は PENDING のため二重計上されない。当選確定のたびに `recordWin` で加算（プレビュー=非永続でも in-memory で正しく累積）。
+- **`recentTaken` の初期化**: 抽選開始時に対象団体の WON 参加（`(playerId, sessionDate)` 行）を `[最早セッション日-30, 最遅セッション日+1)` の範囲で一括ロード（新クエリ。半開区間の終端 `+1` で最遅当日の既存 WON も含め、当日分は `todayTaken` に算入する）。対象月の抽選対象は PENDING のため二重計上されない。当選確定のたびに `recordWin` で加算（プレビュー=非永続でも in-memory で正しく累積）。
 - **決定性**: 候補は ID 昇順固定。単一 `Random(seed)` を実行全体で共有 → プレビューと確定が同一シードで一致（AC-R3）。
 - **設定**: 新 KV `lottery_weight_cap_percentile`（デフォルト30）。`SystemSettingService` に getter（0〜100 クランプ）を追加。BE 保存経路のバリデーションは既存同様なし＝getter クランプで防御。
 
