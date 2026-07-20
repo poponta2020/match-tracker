@@ -59,7 +59,7 @@ describe('SystemSettings', () => {
     mocks.settingsGetAll.mockResolvedValue({
       data: [
         { settingKey: 'lottery_deadline_days_before', settingValue: '-1' },
-        { settingKey: 'lottery_normal_reserve_percent', settingValue: '30' },
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: '30' },
       ],
     });
     mocks.settingsUpdate.mockResolvedValue({ data: {} });
@@ -90,11 +90,17 @@ describe('SystemSettings', () => {
         2
       );
       expect(mocks.settingsUpdate).toHaveBeenCalledWith(
-        'lottery_normal_reserve_percent',
+        'lottery_weight_cap_percentile',
         '30',
         2
       );
     });
+
+    expect(mocks.settingsUpdate).not.toHaveBeenCalledWith(
+      'lottery_normal_reserve_percent',
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it('ignores a stale settings response that arrives after the organization changed', async () => {
@@ -109,7 +115,7 @@ describe('SystemSettings', () => {
         return Promise.resolve({
           data: [
             { settingKey: 'lottery_deadline_days_before', settingValue: '3' },
-            { settingKey: 'lottery_normal_reserve_percent', settingValue: '40' },
+            { settingKey: 'lottery_weight_cap_percentile', settingValue: '40' },
           ],
         });
       }
@@ -137,12 +143,63 @@ describe('SystemSettings', () => {
       resolveOrg1Settings({
         data: [
           { settingKey: 'lottery_deadline_days_before', settingValue: '-1' },
-          { settingKey: 'lottery_normal_reserve_percent', settingValue: '99' },
+          { settingKey: 'lottery_weight_cap_percentile', settingValue: '99' },
         ],
       });
     });
 
     expect(screen.getByDisplayValue('40')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('99')).not.toBeInTheDocument();
+  });
+
+  it('reflects lottery_weight_cap_percentile from getAll into the input', async () => {
+    mocks.settingsGetAll.mockResolvedValue({
+      data: [
+        { settingKey: 'lottery_deadline_days_before', settingValue: '-1' },
+        { settingKey: 'lottery_weight_cap_percentile', settingValue: '45' },
+      ],
+    });
+
+    renderPage('/admin/settings?organizationId=2');
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('45')).toBeInTheDocument();
+    });
+  });
+
+  it('rejects out-of-range percentile input and keeps the previous value', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/settings?organizationId=2');
+
+    await screen.findByDisplayValue('30');
+    const percentileInput = screen.getByDisplayValue('30');
+
+    await user.clear(percentileInput);
+    await user.type(percentileInput, '150');
+
+    expect(percentileInput).toHaveValue(30);
+
+    await user.clear(percentileInput);
+    await user.type(percentileInput, '-5');
+
+    expect(percentileInput).toHaveValue(30);
+  });
+
+  it('does not render the removed "一般枠の最低保証割合" card', async () => {
+    renderPage('/admin/settings?organizationId=2');
+
+    await screen.findByRole('combobox');
+
+    expect(screen.queryByText('一般枠の最低保証割合')).not.toBeInTheDocument();
+  });
+
+  it('shows the "抽選の仕組み" explanation section', async () => {
+    renderPage('/admin/settings?organizationId=2');
+
+    await screen.findByRole('combobox');
+
+    expect(screen.getByText('抽選の仕組み')).toBeInTheDocument();
+    expect(screen.getByText(/その日の一巡/)).toBeInTheDocument();
+    expect(screen.getAllByText(/直近30日/).length).toBeGreaterThan(0);
   });
 });
