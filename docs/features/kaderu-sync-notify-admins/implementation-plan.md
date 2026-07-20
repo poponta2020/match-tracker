@@ -8,7 +8,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: 完了/失敗通知を対象団体ADMIN＋全SUPER_ADMINへ拡大
-- [ ] 完了
+- [x] 完了
 - **目的:** `sendKaderuSyncCompletedNotification`/`sendKaderuSyncFailedNotification` の宛先を押下者本人→対象団体ADMIN全員＋全SUPER_ADMIN（重複排除）に拡大。本文・タイプは不変。
 - **対応AC:** AC-1〜AC-5
 - **主な変更領域:**

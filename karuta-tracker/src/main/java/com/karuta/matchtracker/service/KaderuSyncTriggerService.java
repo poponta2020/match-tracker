@@ -263,7 +263,7 @@ public class KaderuSyncTriggerService {
         log.info("KaderuSync event {} COMPLETED (orgCode={}, summary={})",
                 event.getId(), orgCode, summary);
         lineNotificationService.sendKaderuSyncCompletedNotification(
-                event.getTriggeredByPlayerId(), orgCode, summary);
+                event.getTriggeredByPlayerId(), event.getOrganizationId(), orgCode, summary);
     }
 
     private void finalizeFailed(KaderuSyncTriggerEvent event, String reason) {
@@ -277,7 +277,7 @@ public class KaderuSyncTriggerService {
         log.warn("KaderuSync event {} FAILED (orgCode={}, reason={})",
                 event.getId(), orgCode, reason);
         lineNotificationService.sendKaderuSyncFailedNotification(
-                event.getTriggeredByPlayerId(), orgCode, reason);
+                event.getTriggeredByPlayerId(), event.getOrganizationId(), orgCode, reason);
     }
 
     /**

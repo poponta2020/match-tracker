@@ -252,8 +252,9 @@ cron による30分ごとの自動同期に加え、ADMIN+ が任意のタイミ
         - LineNotificationService.sendKaderuSyncFailedNotification()
    ↓
 [LINE Messaging API]
-  押下者本人 (triggered_by_player_id) の PLAYER チャネル経由で送信
-  preference は経由しない (常時送信)
+  対象団体の ACTIVE な ADMIN 全員 ＋ ACTIVE な SUPER_ADMIN 全員 (重複排除) の
+  ADMIN チャネル経由で送信 (取り込み結果を運営全体で共有)
+  preference は経由しない (ADMIN 運用通知・常時送信)。1人の送信失敗は他に波及しない
    ↓
 [Frontend]
   ユーザーが LINE 通知を受けて画面を手動リロード → 新しい練習日が表示される
