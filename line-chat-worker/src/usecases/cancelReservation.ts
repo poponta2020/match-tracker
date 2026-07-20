@@ -49,7 +49,18 @@ export async function cancelReservation(po: ChatPage, task: WorkerTask): Promise
     return { report: true, status: "CANCELLED" };
   }
 
-  // 旧予約を特定できない場合は manual_review_required（勝手に追加予約しない）。
+  // 削除できたことを確認できない限り CANCELLED は報告しない（LINE側に旧予約が残ったまま
+  // 「取消済み」と記録されると、意図しない配信に気づけなくなる）。
+  if (result === "UNKNOWN") {
+    return {
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "CANCEL_RESULT_UNKNOWN",
+      errorMessage: "予約の有無・削除結果を確認できませんでした（LINE側に予約が残っている可能性があります）",
+    };
+  }
+
+  // 旧予約が存在しないことを確定できた場合（既に削除済み等）。勝手に追加予約はしない。
   return {
     report: true,
     status: "MANUAL_REVIEW_REQUIRED",

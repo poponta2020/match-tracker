@@ -105,6 +105,8 @@ LINE Official Account Manager（OAM）のチャット予約送信を自動化す
 | `MANUAL_REVIEW_REQUIRED`（DUPLICATE_RESERVATION_FOUND） | OAM上で既存の予約内容を目視確認し、重複であれば片方を手動削除する |
 | `MANUAL_REVIEW_REQUIRED`（CONFIRM_RESULT_UNKNOWN） | OAM上で当該予約が実際に登録されているか目視確認する（登録済みなら放置可、未登録なら管理画面から再試行） |
 | `MANUAL_REVIEW_REQUIRED`（OLD_RESERVATION_NOT_FOUND） | OAM上で旧予約が存在するか確認する。存在しなければ新規予約を手動登録するか、管理画面から再試行して自動再予約させる |
+| `MANUAL_REVIEW_REQUIRED`（DUPLICATE_CHECK_FAILED） | 既存予約の有無を確認できなかったため**予約を作らずに中止**した状態。OAM上で当該日時の予約有無を目視確認し、無ければ管理画面から再試行する（放置すると未予約のままなので必ず確認する） |
+| `MANUAL_REVIEW_REQUIRED`（CANCEL_RESULT_UNKNOWN） | 取消が完了したか確認できなかった状態。**LINE側に旧予約が残っている可能性がある**ため、OAM上で当該予約を目視確認し、残っていれば手動削除する |
 | コンテナが起動しない | `docker compose logs line-chat-worker` を確認。環境変数（`APP_BASE_URL`/`LINE_CHAT_WORKER_TOKEN`/`LINE_OAM_ACCOUNT_PATH`）の未設定が典型（`missing required env: ...` で fatal） |
 | アプリAPIへ到達できない | VMからのアウトバウンド疎通・`APP_BASE_URL` の値を確認 |
 

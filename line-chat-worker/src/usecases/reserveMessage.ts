@@ -49,14 +49,24 @@ export async function reserveMessage(
     };
   }
 
-  // c. 既存の同一予約（同一日時・同一本文冒頭）の重複確認。
+  // c. 既存の同一日時予約の重複確認。
   const duplicate = await po.findDuplicateReservation(task.scheduledSendAt, prefix);
-  if (duplicate) {
+  if (duplicate === "FOUND") {
     return {
       report: true,
       status: "MANUAL_REVIEW_REQUIRED",
       errorCode: "DUPLICATE_RESERVATION_FOUND",
-      errorMessage: "同一日時・同一本文冒頭の予約が既に存在します",
+      errorMessage: "同一日時の予約が既に存在します",
+    };
+  }
+  // 重複の有無を確定できなかった場合は予約を作らない。「たぶん無い」で進めると、
+  // 実際には存在したときに二重予約となり、グループ人数分の重複配信になる（AC-3の安全側）。
+  if (duplicate === "UNKNOWN") {
+    return {
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "DUPLICATE_CHECK_FAILED",
+      errorMessage: "既存予約の有無を確認できなかったため、予約を作成せず中止しました",
     };
   }
 

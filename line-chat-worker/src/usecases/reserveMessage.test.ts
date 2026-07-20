@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { reserveMessage } from "./reserveMessage.js";
-import type { ChatPage, DeleteReservationResult, ScheduledEntryCheck } from "../line/pages/ChatPage.js";
+import type {
+  ChatPage,
+  DeleteReservationResult,
+  DuplicateCheck,
+  ScheduledEntryCheck,
+} from "../line/pages/ChatPage.js";
 import type { AuthState } from "../detect/authState.js";
 import type { WorkerTask } from "../domain/types.js";
 
@@ -22,7 +27,7 @@ function createMockPo(overrides: Partial<Record<keyof ChatPage, unknown>> = {}):
     openChat: vi.fn().mockResolvedValue(undefined),
     verifyTargetChat: vi.fn().mockResolvedValue(true),
     detectAuthWall: vi.fn().mockResolvedValue("OK" as AuthState),
-    findDuplicateReservation: vi.fn().mockResolvedValue(false),
+    findDuplicateReservation: vi.fn().mockResolvedValue("NONE" as DuplicateCheck),
     inputMessage: vi.fn().mockResolvedValue(undefined),
     setScheduledDateTime: vi.fn().mockResolvedValue(undefined),
     confirmReservation: vi.fn().mockResolvedValue(undefined),
@@ -114,12 +119,31 @@ describe("reserveMessage", () => {
   });
 
   it("returns MANUAL_REVIEW_REQUIRED/DUPLICATE_RESERVATION_FOUND when a duplicate reservation exists", async () => {
-    const po = createMockPo({ findDuplicateReservation: vi.fn().mockResolvedValue(true) });
+    const po = createMockPo({ findDuplicateReservation: vi.fn().mockResolvedValue("FOUND" as DuplicateCheck) });
 
     const outcome = await reserveMessage(po, baseTask, opts);
 
     expect(outcome).toMatchObject({ status: "MANUAL_REVIEW_REQUIRED", errorCode: "DUPLICATE_RESERVATION_FOUND" });
     expect(po.inputMessage).not.toHaveBeenCalled();
+  });
+
+  // 回帰: 重複の有無が確定できないまま予約を作ると、既存予約に気づかず二重配信になる
+  // （本番グループでは人数分の重複送信）。UNKNOWN は NONE と同じ扱いにしてはならない。
+  it("does not create a reservation when the duplicate check could not be determined", async () => {
+    const po = createMockPo({
+      findDuplicateReservation: vi.fn().mockResolvedValue("UNKNOWN" as DuplicateCheck),
+    });
+
+    const outcome = await reserveMessage(po, baseTask, opts);
+
+    expect(outcome).toMatchObject({
+      report: true,
+      status: "MANUAL_REVIEW_REQUIRED",
+      errorCode: "DUPLICATE_CHECK_FAILED",
+    });
+    expect(po.inputMessage).not.toHaveBeenCalled();
+    expect(po.setScheduledDateTime).not.toHaveBeenCalled();
+    expect(po.confirmReservation).not.toHaveBeenCalled();
   });
 
   it("dry-run: does not call confirmReservation, saves a screenshot, and reports DRY_RUN_SUCCEEDED", async () => {

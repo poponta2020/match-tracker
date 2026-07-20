@@ -8,8 +8,22 @@ import type { AuthState, ReloginResult } from "../../detect/authState.js";
  */
 export type ScheduledEntryCheck = "MATCHED" | "MISMATCHED" | "TIMEOUT";
 
-/** 予約削除操作の結果。 */
-export type DeleteReservationResult = "DELETED" | "NOT_FOUND";
+/**
+ * 予約削除操作の結果。
+ * - DELETED: 削除し、LINE側から消えたことを確認できた
+ * - NOT_FOUND: 対象予約が存在しないことを確定できた（削除不要）
+ * - UNKNOWN: 存在有無・削除結果を確定できなかった（通信・応答異常）。安全側に倒して人手確認へ回す
+ */
+export type DeleteReservationResult = "DELETED" | "NOT_FOUND" | "UNKNOWN";
+
+/**
+ * 同一日時の既存予約の有無。
+ *
+ * 【重要】`UNKNOWN` を `NONE` に潰してはならない。「予約が無い」と誤って確定すると
+ * 二重予約（本番グループでは人数分の重複配信）に直結する。確定できたときだけ NONE を返し、
+ * 通信失敗・応答形式の変化・解釈不能な値はすべて UNKNOWN として人手確認に回す。
+ */
+export type DuplicateCheck = "FOUND" | "NONE" | "UNKNOWN";
 
 /**
  * LINE Official Account Manager のチャット画面に対する操作インターフェース。
@@ -53,11 +67,11 @@ export interface ChatPage {
   relogin(): Promise<ReloginResult>;
 
   /**
-   * 同一日時・同一本文冒頭の予約が既に存在するか確認する。
+   * 同一日時の予約が既に存在するか確認する。
    * @param scheduledSendAt ISO8601（例 "2026-07-18T08:00:00+09:00"）
-   * @param textPrefix 本文冒頭（重複判定用に切り出した文字列）
+   * @param textPrefix 本文冒頭（現状の判定には用いない。§「本文一致で絞ると誤って NONE になる」を参照）
    */
-  findDuplicateReservation(scheduledSendAt: string, textPrefix: string): Promise<boolean>;
+  findDuplicateReservation(scheduledSendAt: string, textPrefix: string): Promise<DuplicateCheck>;
 
   /** チャット入力欄に本文を入力する。 */
   inputMessage(text: string): Promise<void>;
