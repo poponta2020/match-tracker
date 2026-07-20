@@ -31,7 +31,7 @@ status: completed
 - **完了条件:** テスト green・`./gradlew test --tests "*SystemSettingService*"`
 - **対応Issue:** #1120
 ### タスク2: recentTaken 用クエリの追加（PracticeParticipantRepository）
-- [ ] 完了
+- [x] 完了
 - **目的:** 「対象団体・指定日付範囲・status=WON の参加行 `(playerId, sessionDate)`」を取得するクエリを追加（`recentTaken` ベースライン用）。`findVenueIdsByPlayerIdAndSessionDateAndMatchNumber` の JOIN 形を流用。
 - **対応AC:** AC-5, AC-8
 - **主な変更領域:** `karuta-tracker/.../repository/PracticeParticipantRepository.java`（＋`@DataJpaTest`）
@@ -63,7 +63,7 @@ status: completed
 - **完了条件:** `./gradlew test`（抽選関連）green
 - **対応Issue:** #1123
 ### タスク5: システム設定画面の改修（SystemSettings.jsx）
-- [ ] 完了
+- [x] 完了
 - **目的:** 「一般枠の最低保証割合」カードを削除し、「重み付けの基準（パーセンタイル）」カード（0〜100・デフォルト30・効果方向のインライン説明）と「抽選の仕組み」説明セクション（ルール1/ルール2/パーセンタイルの意味）を追加。`fetchSettings`/`handleSave` を新キー `lottery_weight_cap_percentile` に差し替え。
 - **対応AC:** AC-9, AC-10, AC-13, AC-14
 - **主な変更領域:** `karuta-tracker-ui/src/pages/settings/SystemSettings.jsx`・`SystemSettings.test.jsx`・`SystemSettings.pageHeader.test.jsx`（reserve アサーションを percentile へ更新／説明文の存在アサーション追加）。API（`systemSettings.js`）は汎用のため変更なし。
@@ -72,7 +72,7 @@ status: completed
 - **完了条件:** `npm run lint` 0 err・`npm run test`（SystemSettings 関連）green
 - **対応Issue:** #1124
 ### タスク6: ドキュメント更新（spec / requirements）
-- [ ] 完了
+- [x] 完了
 - **目的:** 正典ドキュメントを新アルゴリズムに更新（cascade/優先当選/救済/30%一般枠の記述を除去し、2ルール＋直近30日＋パーセンタイル設定へ）。
 - **対応AC:**（D2 ドキュメント整合。機能 AC には非対応だが DoD 必須）
 - **主な変更領域:** `docs/spec/lottery.md`（抽選アルゴリズムの特徴・システム設定・スケジューラ節）、`docs/requirements/lottery-system.md`（アルゴリズム説明・用語・テストケース）。用語は「取る」に統一。
