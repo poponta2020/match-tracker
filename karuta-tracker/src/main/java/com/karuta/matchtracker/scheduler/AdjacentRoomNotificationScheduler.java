@@ -31,9 +31,9 @@ import java.util.List;
 /**
  * 隣室空き通知スケジューラー
  *
- * 30分間隔で実行し、隣室チェック対象の会場（かでる2・7の和室、東区民センター 東🌸）を
- * 利用する未来のセッションについて、定員接近時（残り4人以下）に隣室の空き状況を
- * 管理者に段階的に通知する。
+ * 毎時0分に実行（JST 1〜5時台はスキップし6時に再開）し、隣室チェック対象の会場
+ * （かでる2・7の和室、東区民センター 東🌸）を利用する未来のセッションについて、
+ * 定員接近時（残り4人以下）に隣室の空き状況を管理者に段階的に通知する。
  */
 @Slf4j
 @Component
@@ -51,7 +51,7 @@ public class AdjacentRoomNotificationScheduler {
     private static final int THRESHOLD = 4;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("M/d");
 
-    @Scheduled(cron = "0 */30 * * * *", zone = "Asia/Tokyo")
+    @Scheduled(cron = "0 0 0,6-23 * * *", zone = "Asia/Tokyo")
     public void checkCapacityAndNotify() {
         LocalDate today = JstDateTimeUtil.today();
         // 翌日〜40日先の未来のセッションを対象（当日分は開始済みの可能性があるため除外）

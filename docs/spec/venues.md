@@ -43,10 +43,10 @@ SUPER_ADMIN のみ操作可能。
 
 #### 処理フロー
 
-1. **スクレイピング（GitHub Actions, 30分間隔）**
-   - かでる2・7: `scrape-kaderu.yml` → `sync-to-db.js` — ログイン後に4部屋の夜間空き状況を `room_availability_cache` に UPSERT
+1. **スクレイピング（GitHub Actions）**
+   - かでる2・7: `scrape-kaderu.yml` → `sync-to-db.js` — 毎時0分（UTC `0 0-15,21-23 * * *` = JST 1〜5時台スキップ・6時再開。1日19回）。ログイン後に4部屋の夜間空き状況を `room_availability_cache` に UPSERT
    - 東区民センター: `scrape-higashi-availability.yml` → `sync-higashi-availability-to-db.js` — ログイン不要で `SsfSvrRoomAvailabilityMonth.aspx` から かっこう の夜間空き状況を当月〜翌月分取得
-2. **通知判定（バックエンド `AdjacentRoomNotificationScheduler`, 30分間隔）**
+2. **通知判定（バックエンド `AdjacentRoomNotificationScheduler`, 毎時0分＝JST 1〜5時台スキップ）**
    - 翌日〜40日先の全セッションから `AdjacentRoomConfig.isAdjacentCheckTarget` で対象をフィルタ
    - 全試合のうち最も定員に近い試合で残り4人以下なら通知対象
    - `room_availability_cache` を照会して隣室が空きなら通知送信
@@ -69,7 +69,7 @@ SUPER_ADMIN のみ操作可能。
 | `karuta-tracker/src/main/java/com/karuta/matchtracker/service/AdjacentRoomService.java` | 隣室空き状況取得、予約確認、会場拡張（ADMIN+） |
 | `scripts/room-checker/sync-to-db.js` | かでる側のスクレイパ |
 | `scripts/room-checker/sync-higashi-availability-to-db.js` | 東区民センター側のスクレイパ |
-| `.github/workflows/scrape-kaderu.yml` | かでる側 30分ワークフロー |
+| `.github/workflows/scrape-kaderu.yml` | かでる側スクレイプ（毎時0分・JST 1〜5時台スキップ） |
 | `.github/workflows/scrape-higashi-availability.yml` | 東区民センター側 30分ワークフロー |
 
 ### 会場予約プロキシ
