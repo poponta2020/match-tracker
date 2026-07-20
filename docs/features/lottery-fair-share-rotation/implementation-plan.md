@@ -22,7 +22,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: パーセンタイル設定の追加（SystemSettingService）
-- [ ] 完了
+- [x] 完了
 - **目的:** 新設定キー `lottery_weight_cap_percentile`（デフォルト30・0〜100 クランプ）の getter を追加し、抽選ロジックが読める状態にする。旧 `lottery_normal_reserve_percent` の getter/定数はここでは残す（T4 が最終利用者を消してから撤去）。
 - **対応AC:** AC-11, AC-12
 - **主な変更領域:** `karuta-tracker/.../service/SystemSettingService.java`（＋`SystemSettingServiceTest` があれば）
