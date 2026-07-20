@@ -1,4 +1,4 @@
-import type { AuthState } from "../../detect/authState.js";
+import type { AuthState, ReloginResult } from "../../detect/authState.js";
 
 /**
  * 予約確定後にチャット画面上の「送信予定」表示を検証した結果。
@@ -38,6 +38,19 @@ export interface ChatPage {
    * 認証の自動突破は行わない（検出のみ）。
    */
   detectAuthWall(): Promise<AuthState>;
+
+  /**
+   * 認証壁を検出したサイクルで、同一 context のメモリ保持SSO Cookie を使い
+   * 「LINE account」→「Log in」の2クリックで新セッションを張り直す（line-chat-auto-relogin タスク1）。
+   *
+   * 【安全境界】password欄・reCAPTCHAチャレンジには絶対に入力・操作しない。検出したら即 SSO_EXPIRED を返す。
+   * クリックするのは「既存ログインで続ける」2ボタンのみ。
+   *
+   * - SUCCEEDED   … セッション有効（transient wall）or 2クリックで新セッション発行。呼び出し側は当該タスクを1回リトライしてよい。
+   * - SSO_EXPIRED … 30日SSO失効（password/CAPTCHA提示・期待ボタン不在）。突破せず既存フォールバックに委ねる。
+   * - ERROR       … 想定外の異常。安全側に倒す（呼び出し側は元の auth-expired outcome を報告）。
+   */
+  relogin(): Promise<ReloginResult>;
 
   /**
    * 同一日時・同一本文冒頭の予約が既に存在するか確認する。

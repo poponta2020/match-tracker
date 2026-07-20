@@ -16,7 +16,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: ワーカーのクリックスルー再ログイン機構（page-object）
-- [ ] 完了
+- [x] 完了
 - **目的:** 認証壁時に同 context 内で「LINE account」→「Log in」の2クリックで新セッションを張り直す `relogin()` を実装する。**ナビ後はボタン有無でなく `isOnAuthSurface()`（host）で分岐**：chat.line.biz に居れば（＝`editorMissingAfterOpen` 由来の transient wall・セッション有効）**クリックせず `SUCCEEDED`**（リトライで room 再オープン）／認証面に居るときだけ2クリックし、そこで password欄/reCAPTCHAチャレンジ検出・期待ボタン不在なら**入力・突破せず `SSO_EXPIRED`**。
 - **対応AC:** AC-3, AC-11, AC-12, AC-13
 - **主な変更領域:** `line-chat-worker/src/line/pages/OamChatPage.ts`（`relogin()` 追加。既存 `isOnAuthSurface()`/`AUTH_HOSTS` を再利用）・`line-chat-worker/src/line/pages/ChatPage.ts`（IF 追加）・`line-chat-worker/src/detect/authState.ts`（`ReloginResult = "SUCCEEDED" | "SSO_EXPIRED" | "ERROR"` 型追加）
