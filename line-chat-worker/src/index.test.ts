@@ -297,4 +297,32 @@ describe("maybeWarnSsoExpiry", () => {
 
     expect(api.postSessionWarning as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
+
+  it("境界: 失効まで3日23時間なら警告しない（ceilで窓を閉じる＝floorだと約1日早く誤発火）", async () => {
+    const api = mockApi();
+    const state: SsoWarnState = { lastWarnedJstDate: null };
+
+    await maybeWarnSsoExpiry(api, {
+      ssoExpiryMs: NOW + 3 * DAY + 23 * 60 * 60 * 1000,
+      nowMs: NOW,
+      thresholdDays: 3,
+      state,
+    });
+
+    expect(api.postSessionWarning as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it("境界: 失効までちょうど3日なら警告する（残り3日を報告）", async () => {
+    const api = mockApi();
+    const state: SsoWarnState = { lastWarnedJstDate: null };
+
+    await maybeWarnSsoExpiry(api, {
+      ssoExpiryMs: NOW + 3 * DAY,
+      nowMs: NOW,
+      thresholdDays: 3,
+      state,
+    });
+
+    expect(api.postSessionWarning as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(3);
+  });
 });

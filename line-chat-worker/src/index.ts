@@ -163,7 +163,9 @@ export async function maybeWarnSsoExpiry(
   if (ssoExpiryMs === null) {
     return;
   }
-  const daysRemaining = Math.floor((ssoExpiryMs - nowMs) / MS_PER_DAY);
+  // 「失効まで N 日以内」を厳密に表すため切り上げる（`ceil(remaining) <= N ⟺ remaining <= N`）。
+  // floor だと 3日23時間残っていても 3 と扱われ、閾値3日の窓が実質4日に広がって約1日早く通知される。
+  const daysRemaining = Math.ceil((ssoExpiryMs - nowMs) / MS_PER_DAY);
   if (daysRemaining > thresholdDays) {
     return;
   }
