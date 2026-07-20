@@ -51,8 +51,13 @@ LINE Official Account Manager（OAM）のチャット予約送信を自動化す
    POLL_INTERVAL_MS=300000
    DRY_RUN=false
    ARTIFACT_RETENTION_DAYS=14
+   # line-chat-auto-relogin（いずれも任意・省略時は既定値。docker-compose.yml で配線済み）
+   SSO_WARNING_THRESHOLD_DAYS=3
+   AUTO_RELOGIN_ENABLED=true
    ```
    - `LINE_OAM_ACCOUNT_PATH` は、ログイン済みブラウザで chat.line.biz を開いた時のURL `https://chat.line.biz/U186…` の `U186…` 部分。ルームURLの組み立てに使う（WorkerTask には含まれない per-OA 定数）。
+   - `SSO_WARNING_THRESHOLD_DAYS`（既定3）: 30日SSO Cookie（`__is_login_sso`）の失効がこの日数以内になったら管理者へ先回りLINE警告を送る閾値。
+   - `AUTO_RELOGIN_ENABLED`（既定true）: 認証壁検出時のクリックスルー自動再ログインのキルスイッチ。`false` で従来どおり壁検出＝即失効扱い（フォールバックpushに委ねる）。
 4. 手順1で作成した `storage-state.json` を、docker volume `line-chat-worker-data` の
    `/data/storage-state.json` に配置する（初回起動前にコンテナへコピー、または
    ボリュームをマウントしたコンテナ内から `cp` する）。
@@ -67,8 +72,17 @@ LINE Official Account Manager（OAM）のチャット予約送信を自動化す
 
 ## 3. 認証状態（storageState）の更新（再ログイン運用）
 
-ワーカーは `LINE_AUTH_EXPIRED` を検出すると当サイクルを中断し、アプリへ FAILED を報告する
-（`ADMIN_` 管理者通知が飛ぶ想定・タスク4）。セッションが失効した場合:
+### 二層運用（line-chat-auto-relogin）
+
+- **24時間セッション（`__Host-chat-ses`）＝ワーカーが自動回復**: 認証壁を検出したサイクルで、
+  同一 browser context のメモリ保持SSO Cookie を使い「LINE account」→「Log in」の2クリックで
+  新セッションを1回だけ張り直し、当該タスクをリトライする（`OamChatPage.relogin()`）。**password欄・
+  reCAPTCHAチャレンジが出たら突破せず即失敗**（＝下記の30日SSO失効）。練習毎の手動再ログインは不要になった。
+- **30日SSO（`__is_login_sso`/`__Host-SID`）＝人が手動更新（自動延長不可）**: クリックスルーはSSOを
+  1秒も延長しない（LINE側の絶対期限・実測 `SSO_ABSOLUTE`）。**約月1回、手順1のフルログインが必要**。
+  ワーカーは失効の `SSO_WARNING_THRESHOLD_DAYS`（既定3日）前になると管理者へLINEで先回り警告する。
+
+### 30日SSO失効時（先回り警告が来た／`LINE_AUTH_EXPIRED` が継続する）の手動更新
 
 1. 手順1（ローカルPCでの手動ログイン）を再実施し、新しい `storage-state.json` を作成する。
 2. 新しいファイルをVMの `/data/storage-state.json` へ上書き配置する。
@@ -76,9 +90,11 @@ LINE Official Account Manager（OAM）のチャット予約送信を自動化す
    ```
    docker compose restart line-chat-worker
    ```
+   - restart で新 storageState の新SSO期限を読み直し、先回り警告の状態（1日1回 throttle）は自然にリセットされる。
 
-**注意**: ワーカーは実行毎に `storageState` を再エクスポートしてローリング更新するため、
-通常運用中は手動更新が不要。手動更新が必要になるのは認証が完全に失効した場合のみ。
+**注意**: ワーカーは実行毎に `storageState` を再エクスポートしてローリング更新し、24hセッションは
+自動クリックスルーで回復するため、通常運用中の手動更新は不要。手動更新が必要になるのは30日SSOが
+失効した場合（先回り警告が届く）のみ。
 
 ## 4. 障害対応
 

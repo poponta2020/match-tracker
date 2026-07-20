@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
-import type { AuthState } from "../../detect/authState.js";
+import type { AuthState, ReloginResult } from "../../detect/authState.js";
+import { classifyReloginOutcome } from "../../detect/authState.js";
 import { jstBannerDateTime, jstDateInputValue, jstTimeInputValue } from "../../util/datetime.js";
 import type {
   ChatPage,
@@ -20,9 +21,23 @@ import type {
 export class OamChatPage implements ChatPage {
   /** ログイン後の認証面ホスト（ここに居たら壁とみなす）。 */
   private static readonly AUTH_HOSTS = new Set(["account.line.biz", "access.line.me"]);
+  /** チャット操作面のホスト。ここに帰着していればセッション有効。 */
+  private static readonly CHAT_HOST = "chat.line.biz";
   private static readonly SPA_SETTLE_MS = 1_500;
   private static readonly ROOM_READY_TIMEOUT_MS = 20_000;
   private static readonly BANNER_TIMEOUT_MS = 15_000;
+  /** 再ログイン: ナビ/クリック後に host が確定するまでの待機上限。 */
+  private static readonly RELOGIN_SETTLE_TIMEOUT_MS = 15_000;
+
+  /** 再ログイン: 方式選択画面（account.line.biz/login）の「LINE account」ボタン。 */
+  private static readonly RELOGIN_BTN_ACCOUNT = /LINE account/i;
+  /** 再ログイン: 認可画面（access.line.me）の「Log in」ボタン（「Continue as …」画面）。 */
+  private static readonly RELOGIN_BTN_LOGIN = /^(Log in|ログイン)$/i;
+  /** 再ログイン: 出現したら突破せず即失効扱いにする password欄。 */
+  private static readonly SEL_PASSWORD = 'input[type="password"]';
+  /** 再ログイン: 出現したら突破せず即失効扱いにする reCAPTCHA/CAPTCHA。 */
+  private static readonly SEL_CAPTCHA =
+    'iframe[src*="recaptcha"], iframe[src*="captcha"], .g-recaptcha';
 
   private static readonly SEL_EDITOR = "#editor";
   private static readonly SEL_SCHEDULE_TOGGLE = 'a[aria-label="oa.chat.button.scheduledmessages"]';
@@ -97,6 +112,74 @@ export class OamChatPage implements ChatPage {
     // openChat 前の初回は page=about:blank かつ editorMissingAfterOpen=false のため OK を返し、
     // 誤ってサイクルを止めない（openChat が実行毎にフラグをリセットする）。
     return this.isOnAuthSurface() || this.editorMissingAfterOpen ? "LOGIN_REQUIRED" : "OK";
+  }
+
+  async relogin(): Promise<ReloginResult> {
+    try {
+      // openChat と対称に、直近の「#editor 不在」状態をクリアする（AC-13・最重要）。
+      // これをしないと、transient wall（chat.line.biz上でボタン無し）由来の再ログイン後に
+      // 呼び出し側が usecase を再実行する際、detectAuthWall が stale フラグで壁と誤判定し、
+      // openChat を呼ぶ前に auth-expired で弾かれて誤フォールバックpush（課金）＋偽アラートを誘発する。
+      this.editorMissingAfterOpen = false;
+
+      // アカウントルートへナビ。SSOが有効なら chat.line.biz に留まる／失効なら認証面へリダイレクトされる。
+      await this.page
+        .goto(`https://chat.line.biz/${this.accountPath}`, { waitUntil: "commit", timeout: 60_000 })
+        .catch(() => undefined);
+      await this.settleReloginSurface();
+
+      const landedOnChatSurface = this.currentHost() === OamChatPage.CHAT_HOST;
+      const landedOnAuthSurface = this.isOnAuthSurface();
+
+      let credentialChallenge = false;
+      let buttonsClicked = false;
+      let returnedToChat = false;
+
+      // 認証面に居るときだけクリックを試みる（chat 面に居れば transient wall＝クリック不要）。
+      if (!landedOnChatSurface && landedOnAuthSurface) {
+        credentialChallenge = await this.hasCredentialChallenge();
+        if (!credentialChallenge) {
+          // 「LINE account」（方式選択・"Your previous login"）を押す。ここで既に chat.line.biz へ
+          // 自動遷移するフローもあるため、以降は「押せた本数」でなく最終host帰着で成否を確定する。
+          buttonsClicked = await this.clickReloginButton(OamChatPage.RELOGIN_BTN_ACCOUNT);
+          if (buttonsClicked) {
+            // 「LINE account」クリック後、次の確定状態まで待つ: chat帰着（自動遷移）／
+            // 「Log in」ボタン出現（access.line.me）／password欄・CAPTCHA提示（失効）のいずれか。
+            // 遷移元の account.line.biz を「認証面に居る」で即成功扱いにすると、access.line.me への
+            // 遷移完了前に旧画面で「Log in」を探して取り逃す（正常SSOでも誤失敗）ため、期待状態を待つ。
+            await this.waitForNextReloginState(OamChatPage.RELOGIN_BTN_LOGIN);
+            // まだ認証面なら「Log in」（Continue as … の許可）を押す。既に chat 面なら押さない（自動遷移済み）。
+            if (this.currentHost() !== OamChatPage.CHAT_HOST) {
+              // 段間でも password欄/CAPTCHA を再確認（access.line.me で失効提示され得る）。
+              credentialChallenge = await this.hasCredentialChallenge();
+              if (!credentialChallenge) {
+                await this.clickReloginButton(OamChatPage.RELOGIN_BTN_LOGIN);
+              }
+            }
+            // ボタンを何本押せたかに依らず、最終的に chat.line.biz へ帰着したかで成否を確定する
+            // （認可画面が省略され1クリックで chat へ戻るフローで SSO_EXPIRED 誤判定しないため）。
+            if (!credentialChallenge) {
+              returnedToChat = await this.waitUntil(
+                () => this.currentHost() === OamChatPage.CHAT_HOST,
+                OamChatPage.ROOM_READY_TIMEOUT_MS,
+              );
+            }
+          }
+        }
+      }
+
+      return classifyReloginOutcome({
+        landedOnChatSurface,
+        landedOnAuthSurface,
+        credentialChallenge,
+        buttonsClicked,
+        returnedToChat,
+      });
+    } catch {
+      // ナビ失敗・予期せぬ例外は throw せず ERROR を返す（PENDING は RESERVING claim 済みのため
+      // ここで throw して main のサイクル catch へ抜けると最終報告が宙吊りになる）。
+      return "ERROR";
+    }
   }
 
   async findDuplicateReservation(scheduledSendAt: string, _textPrefix: string): Promise<boolean> {
@@ -219,5 +302,82 @@ export class OamChatPage implements ChatPage {
       await this.page.waitForTimeout(200);
     }
     return false;
+  }
+
+  /** 再ログイン: chat 面 or 認証面のどちらかに host が確定するまで待ってから SPA を落ち着かせる。 */
+  private async settleReloginSurface(): Promise<void> {
+    await this.waitUntil(
+      () => this.currentHost() === OamChatPage.CHAT_HOST || this.isOnAuthSurface(),
+      OamChatPage.RELOGIN_SETTLE_TIMEOUT_MS,
+    );
+    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
+  }
+
+  /**
+   * 再ログイン: 「LINE account」クリック後の次の確定状態まで待つ。
+   * chat.line.biz 帰着（自動遷移）／`loginButton` 出現（access.line.me 到達）／credential challenge
+   * のいずれかが揃うまでポーリングする（遷移元hostの即時成功で「Log in」を取り逃さないため）。
+   */
+  private async waitForNextReloginState(loginButton: RegExp): Promise<void> {
+    await this.waitUntilAsync(async () => {
+      if (this.currentHost() === OamChatPage.CHAT_HOST) return true;
+      if (await this.hasCredentialChallenge()) return true;
+      return (await this.countReloginButton(loginButton)) > 0;
+    }, OamChatPage.RELOGIN_SETTLE_TIMEOUT_MS);
+    await this.page.waitForTimeout(OamChatPage.SPA_SETTLE_MS);
+  }
+
+  /** 再ログイン: 指定名のボタン/リンクの一致数（button 優先、無ければ link）。 */
+  private async countReloginButton(name: RegExp): Promise<number> {
+    const btn = await this.page.getByRole("button", { name }).count().catch(() => 0);
+    if (btn > 0) return btn;
+    return this.page.getByRole("link", { name }).count().catch(() => 0);
+  }
+
+  /** 再ログイン: password欄 or reCAPTCHA が1つでも在れば true（＝突破せず失効扱いにする対象）。 */
+  private async hasCredentialChallenge(): Promise<boolean> {
+    const pw = await this.page.locator(OamChatPage.SEL_PASSWORD).count().catch(() => 0);
+    if (pw > 0) return true;
+    const captcha = await this.page.locator(OamChatPage.SEL_CAPTCHA).count().catch(() => 0);
+    return captcha > 0;
+  }
+
+  /**
+   * 再ログイン: 指定名のボタン/リンクをクリックする。押せたら true、不在なら false（＝期待ボタン不在）。
+   * このパスは best-effort（失敗しても最終的に「chat 面へ帰着したか」で成否を確定する）ため、
+   * 複数一致時は先頭を押す。クリック自体の失敗は握りつぶし、帰着判定に委ねる。
+   */
+  private async clickReloginButton(name: RegExp): Promise<boolean> {
+    for (const loc of [
+      this.page.getByRole("button", { name }),
+      this.page.getByRole("link", { name }),
+    ]) {
+      const count = await loc.count().catch(() => 0);
+      if (count >= 1) {
+        await loc.first().click({ timeout: 10_000 }).catch(() => undefined);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 同期述語が真になるまで（or タイムアウトまで）ポーリングする。最後にもう一度評価して返す。 */
+  private async waitUntil(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await this.page.waitForTimeout(200);
+    }
+    return predicate();
+  }
+
+  /** 非同期述語版の {@link waitUntil}（DOM 問い合わせを含む条件の待機に使う）。 */
+  private async waitUntilAsync(predicate: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await predicate()) return true;
+      await this.page.waitForTimeout(200);
+    }
+    return predicate();
   }
 }
