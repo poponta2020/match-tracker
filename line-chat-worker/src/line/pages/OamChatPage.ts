@@ -135,27 +135,31 @@ export class OamChatPage implements ChatPage {
       let buttonsClicked = false;
       let returnedToChat = false;
 
-      // 認証面に居るときだけ 2クリックを試みる（chat 面に居れば transient wall＝クリック不要）。
+      // 認証面に居るときだけクリックを試みる（chat 面に居れば transient wall＝クリック不要）。
       if (!landedOnChatSurface && landedOnAuthSurface) {
         credentialChallenge = await this.hasCredentialChallenge();
         if (!credentialChallenge) {
-          // 「LINE account」（方式選択・"Your previous login"）→ 「Log in」（Continue as … の許可）の2段。
-          const clickedAccount = await this.clickReloginButton(OamChatPage.RELOGIN_BTN_ACCOUNT);
-          let clickedLogin = false;
-          if (clickedAccount) {
-            await this.settleReloginSurface();
-            // 段間でも password欄/CAPTCHA を再確認（access.line.me で失効提示され得る）。
-            credentialChallenge = await this.hasCredentialChallenge();
-            if (!credentialChallenge) {
-              clickedLogin = await this.clickReloginButton(OamChatPage.RELOGIN_BTN_LOGIN);
-            }
-          }
-          buttonsClicked = clickedAccount && clickedLogin;
+          // 「LINE account」（方式選択・"Your previous login"）を押す。ここで既に chat.line.biz へ
+          // 自動遷移するフローもあるため、以降は「押せた本数」でなく最終host帰着で成否を確定する。
+          buttonsClicked = await this.clickReloginButton(OamChatPage.RELOGIN_BTN_ACCOUNT);
           if (buttonsClicked) {
-            returnedToChat = await this.waitUntil(
-              () => this.currentHost() === OamChatPage.CHAT_HOST,
-              OamChatPage.ROOM_READY_TIMEOUT_MS,
-            );
+            await this.settleReloginSurface();
+            // まだ認証面なら「Log in」（Continue as … の許可）を押す。既に chat 面なら押さない（自動遷移済み）。
+            if (this.currentHost() !== OamChatPage.CHAT_HOST) {
+              // 段間でも password欄/CAPTCHA を再確認（access.line.me で失効提示され得る）。
+              credentialChallenge = await this.hasCredentialChallenge();
+              if (!credentialChallenge) {
+                await this.clickReloginButton(OamChatPage.RELOGIN_BTN_LOGIN);
+              }
+            }
+            // ボタンを何本押せたかに依らず、最終的に chat.line.biz へ帰着したかで成否を確定する
+            // （認可画面が省略され1クリックで chat へ戻るフローで SSO_EXPIRED 誤判定しないため）。
+            if (!credentialChallenge) {
+              returnedToChat = await this.waitUntil(
+                () => this.currentHost() === OamChatPage.CHAT_HOST,
+                OamChatPage.ROOM_READY_TIMEOUT_MS,
+              );
+            }
           }
         }
       }

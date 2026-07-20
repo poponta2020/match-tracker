@@ -66,8 +66,12 @@ public class LineChatWorkerController {
      */
     @PostMapping("/session-warning")
     public void reportSessionWarning(@RequestBody LineChatWorkerSessionWarningRequest request) {
-        int daysRemaining = request.daysRemaining() != null ? request.daysRemaining() : 0;
-        reservationService.warnSessionExpiring(daysRemaining);
+        // daysRemaining は必須。欠落（{}）を 0 に丸めると「まもなく失効」の緊急警告を全団体へ誤発報するため、
+        // 契約不正は 400 で弾く（0 以下の正当な値＝直前/失効はそのまま許容する）。
+        if (request.daysRemaining() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "daysRemaining は必須です");
+        }
+        reservationService.warnSessionExpiring(request.daysRemaining());
     }
 
     private static ReservationStatus parseStatus(String raw) {

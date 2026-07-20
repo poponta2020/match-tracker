@@ -37,9 +37,9 @@ export function classifyReloginOutcome(signals: {
   landedOnAuthSurface: boolean;
   /** 認証面で password欄 or reCAPTCHA を検出したか（＝完全失効・絶対に突破しない）。 */
   credentialChallenge: boolean;
-  /** 期待した2ボタン（「LINE account」→「Log in」）をすべてクリックできたか。 */
+  /** 「LINE account」（方式選択）ボタンを押せたか。押せない＝期待ボタン不在（SSO失効の徴候）。 */
   buttonsClicked: boolean;
-  /** 2クリック後、chat.line.biz へ帰着したか（＝新 `__Host-chat-ses` 発行）。 */
+  /** クリック試行後、chat.line.biz へ帰着したか（＝新 `__Host-chat-ses` 発行・最終判定の権威）。 */
   returnedToChat: boolean;
 }): ReloginResult {
   // transient wall: セッションは有効。クリックせずに成功（リトライで room を開き直せば通る）。
@@ -54,10 +54,15 @@ export function classifyReloginOutcome(signals: {
   if (signals.credentialChallenge) {
     return "SSO_EXPIRED";
   }
-  // 認証面で期待ボタンが不在＝SSO失効（方式選択/許可ボタンが出ない）。
+  // 最終host帰着を最優先: 認可画面が省略され1クリックで chat へ戻るフローでも成功に倒す
+  // （ボタン本数で SSO_EXPIRED 誤判定して誤フォールバックpush＋偽アラートを誘発しないため）。
+  if (signals.returnedToChat) {
+    return "SUCCEEDED";
+  }
+  // 認証面で期待ボタンが不在＝SSO失効（方式選択ボタンが出ない）。
   if (!signals.buttonsClicked) {
     return "SSO_EXPIRED";
   }
-  // 2クリック後に chat.line.biz へ帰着すれば新セッション発行。帰着しなければ失効扱い。
-  return signals.returnedToChat ? "SUCCEEDED" : "SSO_EXPIRED";
+  // クリックしたが chat.line.biz へ帰着しなかった＝失効扱い。
+  return "SSO_EXPIRED";
 }

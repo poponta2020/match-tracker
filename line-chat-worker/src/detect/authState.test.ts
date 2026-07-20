@@ -80,4 +80,16 @@ describe("classifyReloginOutcome", () => {
       }),
     ).toBe("SUCCEEDED");
   });
+
+  it("最終帰着を優先: chat 面へ帰着していれば buttonsClicked に依らず SUCCEEDED（認可画面省略フロー）", () => {
+    // 1クリック後に認可画面が省略され chat.line.biz へ自動遷移＝2つ目のボタンは押していないが成功。
+    expect(
+      classifyReloginOutcome({
+        ...base,
+        landedOnAuthSurface: true,
+        buttonsClicked: false,
+        returnedToChat: true,
+      }),
+    ).toBe("SUCCEEDED");
+  });
 });
