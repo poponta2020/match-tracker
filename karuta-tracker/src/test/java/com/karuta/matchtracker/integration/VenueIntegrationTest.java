@@ -52,6 +52,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -88,6 +89,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -98,7 +100,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
         // 4. 会場を削除
         mockMvc.perform(delete("/api/venues/" + venueId)
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 5. 削除後は取得できない
@@ -127,6 +129,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                     .build();
 
             mockMvc.perform(post("/api/venues")
+                            .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -167,6 +170,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -202,6 +206,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/venues/" + venueId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -237,6 +242,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -244,6 +250,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
         // 同じ名前で再度作成を試みる
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -273,6 +280,7 @@ class VenueIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))

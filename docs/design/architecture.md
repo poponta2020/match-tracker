@@ -144,16 +144,17 @@ Entity Layer (JPA Entity)
 
 **バックエンド**:
 - `@RequireRole` アノテーションをコントローラーメソッドに付与
-- `RoleCheckInterceptor` がリクエストヘッダー `X-User-Role` と `X-User-Id` を検証
-- `@RequireRole` 付きエンドポイントでは `X-User-Id` 必須（リクエスト属性 `currentUserId` / `currentUserRole` にセット）
-- 権限不足の場合は `403 Forbidden`
+- `RoleCheckInterceptor` が `Authorization: Bearer <token>` を検証し、トークンから解決した選手のロール・IDをリクエスト属性 `currentUserId` / `currentUserRole` にセットする（`X-User-Role` / `X-User-Id` ヘッダーは参照しない）
+- `/api/**` は**既定で認証必須（deny by default）**。公開許可リスト（ログイン・招待検証/登録・`GET /api/organizations` 等）以外はトークンが無ければ `401 Unauthorized`、権限不足は `403 Forbidden`
+- **認証の既定が deny by default になったため、`@RequireRole` の有無は認可（ロール制御）にのみ使い、認証要否には使わない**。注釈を付け忘れても未認証では叩けない（`401`）ため、かつての fail-open（Issue #1105 で6件の実害）は構造的に解消された。ただしロール制御が必要な変更系エンドポイントには従来どおり `@RequireRole` を付けること
+- **本人のデータだけを操作させたい場合は「`@RequireRole` ＋ ハンドラ内の本人チェック」の二段構え**にする（`@RequireRole` だけではロールが一致する他人のデータを操作できてしまう）。`PlayerController.checkSelfOrSuperAdmin` / `LineUserController.checkSelfOrSuperAdmin` / `OrganizationController.checkPlayerAccess` が同型。対象IDをリクエストボディから受け取る場合は特に注意（`currentUserId` と突き合わせる）
 - ADMIN時は `RoleCheckInterceptor` が `adminOrganizationId` をリクエスト属性にセット
 - `AdminScopeValidator.validateScope()` でADMINの団体スコープを統一的に検証（練習日・組み合わせ・抽選・LINE送信・抜け番・伝助・システム設定）
 
 **フロントエンド**:
 - `AuthContext` で `currentPlayer.role` を管理
 - `BottomNavContext` でボトムナビゲーションの表示/非表示を管理（`isVisible` state、デフォルト `true`）。`App.jsx` で `BottomNavProvider` として全体をラップ。`Layout.jsx` が `isVisible` を参照してスライドアニメーション（`translate-y-0` ⇔ `translate-y-full`）で切り替え。position:fixedの要素自体にtransformを直接適用するとiOS Safariでfixedが解除されスクロールに追随してしまうため、fixed指定用の外側`<nav>`（transformなし）とスライドアニメーション用の内側`<div>`（transform）に分離。非表示時はスクリーンリーダー向けに`aria-hidden`、キーボード操作向けに各リンクの`tabIndex`を`-1`に、クリック/タップ判定は内側divの`pointer-events`切り替えで制御（外側の静的なfixed領域が常時クリックを奪わないよう`pointer-events-none`固定）
-- Axiosインターセプターで全リクエストに `X-User-Role` ヘッダー追加
+- Axiosインターセプターで全リクエストに `Authorization: Bearer <token>` ヘッダー追加（`X-User-*` ヘッダーは送らない）
 - `isSuperAdmin()`, `isAdmin()` などのヘルパー関数で条件付き表示
 - `RoleRoute` コンポーネントで管理者専用ルートを保護（`/admin/*`, `/players/*`, `/practice/new` 等）
 
@@ -163,13 +164,13 @@ Entity Layer (JPA Entity)
 - ベースパス: `/api`
 - レスポンス形式: JSON
 - タイムゾーン: 全ての日時処理は `JstDateTimeUtil`（`util/JstDateTimeUtil.java`）を使用してJST（Asia/Tokyo）で統一。`LocalDate.now()` / `LocalDateTime.now()` は直接使用せず、`JstDateTimeUtil.today()` / `JstDateTimeUtil.now()` を使用する。
-- 認証: `X-User-Id` / `X-User-Role` ヘッダー（プロトタイプ）
+- 認証: `Authorization: Bearer <token>`（サーバ発行トークン。`X-User-Id` / `X-User-Role` ヘッダーは参照しない）
 - CORS: `app.cors.allowed-origins` プロパティで設定
 - リバースプロキシ配下デプロイ: `server.forward-headers-strategy=framework` を有効化し、`X-Forwarded-Proto` / `X-Forwarded-Host` / `X-Forwarded-Port` を解釈する。これがないと TLS 終端サービス (Render 等) 配下で `request.getScheme()` などが内部値を返し、会場予約プロキシ画面の same-origin form POST が CORS で誤拒否される。
 
 **リクエストヘッダー**:
 - `Content-Type: application/json`
-- `X-User-Role: {SUPER_ADMIN|ADMIN|PLAYER}` (現在の簡易実装)
+- `Authorization: Bearer <token>`（ログインで発行されたサーバ発行トークン）
 
 **レスポンス形式**:
 ```json

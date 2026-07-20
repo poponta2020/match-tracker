@@ -68,6 +68,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         String createResponse = mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -111,13 +112,13 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
         LocalDate validTo = LocalDate.of(2024, 12, 31);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
                         .param("validTo", validTo.toString())
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.validTo").value(validTo.toString()));
 
         // 6. プロフィールを削除
         mockMvc.perform(delete("/api/player-profiles/" + profileId)
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 7. 削除後は現在のプロフィールが存在しない
@@ -186,6 +187,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -205,6 +207,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         String response1 = mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -226,6 +229,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -253,6 +257,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         String response = mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -267,7 +272,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
         LocalDate invalidValidTo = validFrom.minusDays(1);
         mockMvc.perform(put("/api/player-profiles/" + profileId + "/valid-to")
                         .param("validTo", invalidValidTo.toString())
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -322,6 +327,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -386,6 +392,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -400,6 +407,7 @@ class PlayerProfileIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))

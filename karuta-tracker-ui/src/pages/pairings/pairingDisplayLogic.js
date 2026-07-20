@@ -7,25 +7,69 @@
  * 参加者一覧セクションの表示可否。
  * 既存の組み合わせが1件でもあれば（結果入力済み / 手動ロック / 未ロックのいずれでも）作成UIは出さず、
  * 組み合わせ表示（閲覧モード / 編集モード）に統一する。これにより結果未入力の試合と表示を一貫させる。
+ * 編集モード中（isEditing）も非表示にする ―― 組0件のまま編集モードへ入った場合、
+ * 同じ選手を待機中セクションが扱うため二重表示になるため。
  *
- * @param {Array} pairings 現在表示中の組み合わせ配列
+ * @param {object} params
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @param {boolean} params.isEditing 編集モードに入っているか
  * @returns {boolean}
  */
-export const shouldShowParticipantSection = (pairings) => pairings.length === 0;
+export const shouldShowParticipantSection = ({ pairings, isEditing }) =>
+  (pairings || []).length === 0 && !isEditing;
 
 /**
- * 「自動組み合わせ」ボタンの表示可否。
- * 組み合わせ未作成 かつ 参加者あり かつ 閲覧専用でない（他試合に未保存変更がない）かつ 日付選択済み。
+ * 常設の「対戦編集」ボタンが押されたときの動作を解決する。
+ * ボタンの位置（パネル右上）・ラベル・見た目は画面状態によらず不変で、挙動だけが状態で変わる。
+ *
+ * - `'edit-existing'`: 既存の組がある → 閲覧モードから編集モードへ切り替えるだけ。
+ *   **ここで自動組み合わせ（auto-match）を絶対に走らせてはならない**。走らせると保存済みの
+ *   組み合わせが黙って組み直されて失われる（旧「編集」ボタンの挙動を維持する）。
+ * - `'auto-match'`: 組が0件で参加者がいる → 従来どおり自動組み合わせを生成して編集モードへ。
+ * - `'empty-edit'`: 組も参加者も0件 → 空の編集モードへ入る。この画面から参加者一覧の
+ *   「追加」ボタンを廃止したため、待機中セクションの「選手追加」に到達できる経路を残す。
+ *
+ * @param {object} params
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @param {Array} params.participants 当該試合の参加者配列
+ * @returns {'edit-existing'|'auto-match'|'empty-edit'}
+ */
+export const resolvePairingEditAction = ({ pairings, participants }) => {
+  if ((pairings || []).length > 0) return 'edit-existing';
+  if ((participants || []).length > 0) return 'auto-match';
+  return 'empty-edit';
+};
+
+/**
+ * 常設の「対戦編集」ボタンを無効化すべきか。
+ * ボタンは常時レンダリングして高さを固定する（表示/非表示の切替でレイアウトが上下しないように）ので、
+ * 押せない状態は非表示ではなく disabled で表現する。
+ *
+ * - `isReadOnly`: 他試合に未保存の変更があり、この試合は閲覧専用
+ * - 既に編集モードに入っている（`isEditing` かつ閲覧モードでない）: これ以上「編集へ入る」操作はない
  *
  * @param {object} params
  * @param {boolean} params.isReadOnly 他試合に未保存変更がある等で閲覧専用か
- * @param {string} params.sessionDate 選択中の練習日（未選択は空文字）
- * @param {Array} params.participants 当該試合の参加者配列
- * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @param {boolean} params.isEditing 編集モードに入っているか
+ * @param {boolean} params.isViewMode 既存組み合わせの閲覧モードか
  * @returns {boolean}
  */
-export const shouldShowAutoMatchButton = ({ isReadOnly, sessionDate, participants, pairings }) =>
-  !isReadOnly && !!sessionDate && participants.length > 0 && pairings.length === 0;
+export const isPairingEditDisabled = ({ isReadOnly, isEditing, isViewMode }) =>
+  !!isReadOnly || (!!isEditing && !isViewMode);
+
+/**
+ * 組み合わせ編集エリア（組一覧・待機中セクション・確定して保存）を描画するか。
+ * 組が1件以上あるとき、または参加者0名の状態から空の編集モードへ入ったときに描画する。
+ * 後者が無いと、参加者0名の試合で「対戦編集」を押しても待機中セクションの「選手追加」に
+ * 到達できず、この画面から選手を登録する手段が消える。
+ *
+ * @param {object} params
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @param {boolean} params.isEditing 編集モードに入っているか
+ * @returns {boolean}
+ */
+export const shouldShowEditingArea = ({ pairings, isEditing }) =>
+  (pairings || []).length > 0 || !!isEditing;
 
 /**
  * 「再シャッフル／ロックされた組以外をシャッフル」ボタンの表示可否。

@@ -767,11 +767,22 @@ public class MatchService {
      * 試合結果を削除
      */
     @Transactional
-    public void deleteMatch(Long id) {
+    public void deleteMatch(Long id, Long currentUserId, Role currentUserRole) {
         log.info("Deleting match with id: {}", id);
 
-        if (!matchRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Match", id);
+        Match match = matchRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Match", id));
+
+        // 更新（updateMatch）と同じ所有者判定を適用する。
+        // PLAYER は自分が参加した試合のみ削除可。ただし対象試合の両選手が自身の所属団体の
+        // セッション参加者である場合は、一括入力経路として他選手間の試合も削除できる。
+        if (currentUserRole == Role.PLAYER) {
+            boolean isOwnMatch = currentUserId != null
+                    && (currentUserId.equals(match.getPlayer1Id()) || currentUserId.equals(match.getPlayer2Id()));
+            if (!isOwnMatch) {
+                validatePlayerCanWriteMatch(match.getMatchDate(), currentUserId,
+                        match.getPlayer1Id(), match.getPlayer2Id());
+            }
         }
 
         matchRepository.deleteById(id);

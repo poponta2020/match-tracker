@@ -189,6 +189,7 @@ class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseCo
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -213,6 +214,7 @@ class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseCo
 
         // When & Then
         mockMvc.perform(post("/api/player-profiles")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -243,7 +245,7 @@ class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseCo
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
                         .param("validTo", validTo.toString())
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id").value(1));
@@ -262,7 +264,7 @@ class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseCo
         // When & Then
         mockMvc.perform(put("/api/player-profiles/1/valid-to")
                         .param("validTo", invalidValidTo.toString())
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(400));
@@ -278,7 +280,7 @@ class PlayerProfileControllerTest extends com.karuta.matchtracker.support.BaseCo
 
         // When & Then
         mockMvc.perform(delete("/api/player-profiles/1")
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(playerProfileService).deleteProfile(1L);

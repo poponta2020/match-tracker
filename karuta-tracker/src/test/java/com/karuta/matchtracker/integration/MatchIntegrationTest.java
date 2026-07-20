@@ -129,7 +129,7 @@ class MatchIntegrationTest extends BaseAuthenticatedIntegrationTest {
 
         // 5. 試合を削除
         mockMvc.perform(delete("/api/matches/" + matchId)
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         // 6. 削除後は試合が存在しない

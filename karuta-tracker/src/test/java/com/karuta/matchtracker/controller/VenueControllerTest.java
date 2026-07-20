@@ -190,6 +190,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -211,6 +212,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -237,6 +239,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -264,6 +267,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -286,6 +290,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(post("/api/venues")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -313,6 +318,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(put("/api/venues/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -334,6 +340,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(put("/api/venues/999")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -353,6 +360,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(put("/api/venues/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -373,7 +381,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(delete("/api/venues/1")
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNoContent());
 
         verify(venueService).deleteVenue(1L);
@@ -388,7 +396,7 @@ class VenueControllerTest extends com.karuta.matchtracker.support.BaseController
 
         // When & Then
         mockMvc.perform(delete("/api/venues/999")
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(404));

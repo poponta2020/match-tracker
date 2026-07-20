@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   shouldShowParticipantSection,
-  shouldShowAutoMatchButton,
+  resolvePairingEditAction,
+  isPairingEditDisabled,
+  shouldShowEditingArea,
   shouldShowReshuffleButton,
   shouldShowViewModeUnpairedSection,
   reshuffleButtonLabel,
@@ -14,23 +16,59 @@ import {
 
 describe('shouldShowParticipantSection', () => {
   it('組み合わせが空なら表示（新規作成）', () => {
-    expect(shouldShowParticipantSection([])).toBe(true);
+    expect(shouldShowParticipantSection({ pairings: [], isEditing: false })).toBe(true);
   });
   it('既存組が1件でもあれば非表示', () => {
-    expect(shouldShowParticipantSection([{ player1Id: 1, player2Id: 2 }])).toBe(false);
+    expect(shouldShowParticipantSection({ pairings: [{ player1Id: 1, player2Id: 2 }], isEditing: false })).toBe(false);
+  });
+  it('組0件でも編集モード中なら非表示（待機中セクションと二重表示にしない）', () => {
+    expect(shouldShowParticipantSection({ pairings: [], isEditing: true })).toBe(false);
   });
 });
 
-describe('shouldShowAutoMatchButton', () => {
-  it('組み合わせ未作成・参加者あり・閲覧不可・日付選択済みなら表示', () => {
-    expect(shouldShowAutoMatchButton({
-      isReadOnly: false, sessionDate: '2026-06-30', participants: [{ id: 1 }], pairings: [],
-    })).toBe(true);
+describe('resolvePairingEditAction', () => {
+  it('既存組があれば編集モード切替（auto-match を走らせて保存済みの組を破壊しない）', () => {
+    expect(resolvePairingEditAction({
+      pairings: [{ player1Id: 1, player2Id: 2 }], participants: [{ id: 1 }, { id: 2 }],
+    })).toBe('edit-existing');
   });
-  it('既存組があれば非表示', () => {
-    expect(shouldShowAutoMatchButton({
-      isReadOnly: false, sessionDate: '2026-06-30', participants: [{ id: 1 }], pairings: [{ player1Id: 1 }],
-    })).toBe(false);
+  it('結果入力済みの組しか無くても編集モード切替（組が1件でもあれば再生成しない）', () => {
+    expect(resolvePairingEditAction({
+      pairings: [{ player1Id: 1, player2Id: 2, hasResult: true }], participants: [],
+    })).toBe('edit-existing');
+  });
+  it('組0件・参加者ありなら自動組み合わせ', () => {
+    expect(resolvePairingEditAction({ pairings: [], participants: [{ id: 1 }] })).toBe('auto-match');
+  });
+  it('組0件・参加者0名なら空の編集モード（選手追加への導線を残す）', () => {
+    expect(resolvePairingEditAction({ pairings: [], participants: [] })).toBe('empty-edit');
+  });
+});
+
+describe('isPairingEditDisabled', () => {
+  it('新規作成の閲覧状態では押せる', () => {
+    expect(isPairingEditDisabled({ isReadOnly: false, isEditing: false, isViewMode: false })).toBe(false);
+  });
+  it('既存組の閲覧モードでは押せる', () => {
+    expect(isPairingEditDisabled({ isReadOnly: false, isEditing: false, isViewMode: true })).toBe(false);
+  });
+  it('既に編集モードに入っていれば無効（非表示にはせず高さを保つ）', () => {
+    expect(isPairingEditDisabled({ isReadOnly: false, isEditing: true, isViewMode: false })).toBe(true);
+  });
+  it('他試合に未保存変更があり閲覧専用なら無効', () => {
+    expect(isPairingEditDisabled({ isReadOnly: true, isEditing: false, isViewMode: false })).toBe(true);
+  });
+});
+
+describe('shouldShowEditingArea', () => {
+  it('組が1件以上あれば描画（閲覧モードの表示も含む）', () => {
+    expect(shouldShowEditingArea({ pairings: [{ player1Id: 1 }], isEditing: false })).toBe(true);
+  });
+  it('組0件でも編集モードなら描画（待機中セクションの「選手追加」に到達できるように）', () => {
+    expect(shouldShowEditingArea({ pairings: [], isEditing: true })).toBe(true);
+  });
+  it('組0件かつ非編集なら描画しない', () => {
+    expect(shouldShowEditingArea({ pairings: [], isEditing: false })).toBe(false);
   });
 });
 

@@ -344,14 +344,14 @@ class MatchControllerTest extends com.karuta.matchtracker.support.BaseController
     @DisplayName("DELETE /api/matches/{id} - 試合結果を削除できる")
     void testDeleteMatch() throws Exception {
         // Given
-        doNothing().when(matchService).deleteMatch(1L);
+        doNothing().when(matchService).deleteMatch(eq(1L), any(), any());
 
         // When & Then
         mockMvc.perform(delete("/api/matches/1")
-                        .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.ADMIN)))
                 .andExpect(status().isNoContent());
 
-        verify(matchService).deleteMatch(1L);
+        verify(matchService).deleteMatch(1L, 1L, com.karuta.matchtracker.entity.Player.Role.ADMIN);
     }
 
     @Test

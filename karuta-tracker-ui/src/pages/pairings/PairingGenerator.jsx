@@ -15,7 +15,7 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, shouldShowAutoMatchButton, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowEditingArea, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
@@ -42,9 +42,11 @@ const PairingGenerator = () => {
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [matchExistsMap, setMatchExistsMap] = useState({});
   const [isEditingExisting, setIsEditingExisting] = useState(false);
+  // 編集モードに入っているか。組が0件でも編集エリア（待機中セクションの「選手追加」）へ入れるようにするため、
+  // 「pairings.length > 0」とは独立した明示フラグとして持つ。
+  const [isEditing, setIsEditing] = useState(false);
   const [matchLoading, setMatchLoading] = useState(true);
   const [cacheVersion, setCacheVersion] = useState(0); // キャッシュ更新トリガー
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 未保存の組み合わせがあるか
@@ -135,6 +137,7 @@ const PairingGenerator = () => {
       setWaitingPlayers([]);
       setIsEditingExisting(false);
       setIsViewMode(false);
+      setIsEditing(false);
       return;
     }
     const converted = existingData.map(p => ({
@@ -167,6 +170,7 @@ const PairingGenerator = () => {
 
     setIsEditingExisting(true);
     setIsViewMode(true);
+    setIsEditing(false);
   }, []);
 
   // 組み合わせ対象となるアクティブ参加者名を取得
@@ -215,6 +219,7 @@ const PairingGenerator = () => {
       setPairings([]);
       setWaitingPlayers([]);
       setIsEditingExisting(false);
+      setIsEditing(false);
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
       setParticipants([]);
@@ -302,6 +307,9 @@ const PairingGenerator = () => {
       setWaitingPlayers(restored.waitingPlayers);
       setIsEditingExisting(restored.isEditingExisting);
       setIsViewMode(restored.isViewMode);
+      // ドラフトは編集モードでしか作られない。組0件の空編集モード（参加者0名からの
+      // 「対戦編集」）でも編集エリアを描画し続けるため、ここで編集モードを復元する。
+      setIsEditing(true);
       return;
     }
 
@@ -315,6 +323,7 @@ const PairingGenerator = () => {
         setWaitingPlayers([]);
         setIsEditingExisting(false);
         setIsViewMode(false);
+        setIsEditing(false);
       }
     } else {
       // キャッシュ未取得（初回ロード中等）の場合はクリア
@@ -322,6 +331,7 @@ const PairingGenerator = () => {
       setWaitingPlayers([]);
       setIsEditingExisting(false);
       setIsViewMode(false);
+      setIsEditing(false);
     }
   }, [matchNumber, cacheVersion, currentSession, getActiveParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
 
@@ -378,6 +388,7 @@ const PairingGenerator = () => {
       setWaitingPlayers(response.data.waitingPlayers);
       setHasUnsavedChanges(true);
       setIsViewMode(false);
+      setIsEditing(true);
       setIsEditingExisting(editingExisting);
       saveDraft(combined, response.data.waitingPlayers, editingExisting);
 
@@ -399,6 +410,46 @@ const PairingGenerator = () => {
 
   // 新規作成用（従来の「対戦編集」）: ロック指定なしで実行（後方互換・挙動不変）。
   const handleAutoMatch = () => runAutoMatch();
+
+  // 閲覧モード → 編集モードへの切り替え（旧「編集」ボタンの処理）。
+  // キャンセルスロットを実体化（両キャンセル組は除去・片キャンセル選手は「空き」に）してから
+  // 切り替えることで、編集モードの描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は
+  // 既存ロジックのまま動く。
+  const enterEditModeForExisting = () => {
+    const materialized = materializeCancelledSlots(pairings);
+    setPairings(materialized);
+    setIsViewMode(false);
+    setIsEditing(true);
+    setHasUnsavedChanges(true);
+    saveDraft(materialized, waitingPlayers, isEditingExisting);
+  };
+
+  // パネル右上に常設した「対戦編集」ボタン。位置・ラベル・見た目は画面状態によらず不変で、
+  // 挙動だけを resolvePairingEditAction で切り替える。
+  // ※ 既存の組があるときに auto-match を呼ぶと保存済みの組み合わせを黙って組み直してしまうため、
+  //    'edit-existing' は必ず編集モード切替のみに留める。
+  const handlePairingEdit = () => {
+    switch (resolvePairingEditAction({ pairings, participants })) {
+      case 'edit-existing':
+        enterEditModeForExisting();
+        return;
+      case 'auto-match':
+        handleAutoMatch();
+        return;
+      default:
+        // 参加者0名: 空の編集モードへ入り、待機中セクションの「選手追加」から登録できるようにする。
+        // ドラフトを必ず作る ―― 選手追加は currentSession を更新するため、ドラフトが無いと
+        // 復元 useEffect が走って編集モードごと巻き戻る（#485 と同型）。
+        setError('');
+        setPairings([]);
+        setWaitingPlayers([]);
+        setIsEditingExisting(false);
+        setIsViewMode(false);
+        setIsEditing(true);
+        setHasUnsavedChanges(true);
+        saveDraft([], [], false);
+    }
+  };
 
   // ロック以外を再シャッフル: 確認ダイアログ後、現在の画面状態のロック組を lockedPairs として送る。
   // キャンセル時は何も変えない（AC-6）。ロック0件のときは全参加者を組み直す（AC-5）。
@@ -453,6 +504,7 @@ const PairingGenerator = () => {
       // （固定 true だとタブの完了チェックや LINE 送信導線が「完成済み」と誤判定する）。
       setMatchExistsMap(prev => ({ ...prev, [matchNumber]: (pairingsRes.data?.length || 0) > 0 }));
       setHasUnsavedChanges(false);
+      setIsEditing(false);
       unsavedDraft.current = null;
 
       // 次の試合番号に自動遷移
@@ -503,6 +555,7 @@ const PairingGenerator = () => {
         setIsEditingExisting(false);
         setIsViewMode(false);
       }
+      setIsEditing(false);
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
     } catch (err) {
@@ -531,6 +584,7 @@ const PairingGenerator = () => {
       const hasData = pairingsRes.data && pairingsRes.data.length > 0;
       setMatchExistsMap(prev => ({ ...prev, [matchNumber]: hasData }));
       setCacheVersion(v => v + 1);
+      setIsEditing(false);
       setHasUnsavedChanges(false);
       unsavedDraft.current = null;
     } catch (err) {
@@ -745,47 +799,6 @@ const PairingGenerator = () => {
     }
   };
 
-  // DBからセッション・参加者データを再取得
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setNotice('');
-    try {
-      const [sessionResponse, allPairingsResponse] = await Promise.all([
-        practiceAPI.getByDate(sessionDate),
-        pairingAPI.getByDate(sessionDate).catch(() => ({ data: [] })),
-      ]);
-
-      if (sessionResponse.data) {
-        const session = sessionResponse.data;
-        setCurrentSession(session);
-        updateParticipantsForMatch(session, matchNumber);
-
-        const totalMatches = session.totalMatches || 10;
-        const allPairings = allPairingsResponse.data || [];
-        const pairingsByMatch = {};
-        allPairings.forEach(p => {
-          const num = p.matchNumber;
-          if (!pairingsByMatch[num]) pairingsByMatch[num] = [];
-          pairingsByMatch[num].push(p);
-        });
-
-        const newExistsMap = {};
-        for (let num = 1; num <= totalMatches; num++) {
-          const matchPairings = pairingsByMatch[num] || null;
-          newExistsMap[num] = matchPairings !== null && matchPairings.length > 0;
-          pairingsCache.current[num] = matchPairings;
-        }
-        setMatchExistsMap(newExistsMap);
-        setCacheVersion(v => v + 1);
-      }
-    } catch (err) {
-      console.error('Refresh failed:', err);
-      setError('データの更新に失敗しました');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   // 既に参加している選手を除外（ロック済みペアの選手も除外）
   const availablePlayers = allPlayers.filter(player => {
     const isParticipant = participants.some(p => p.id === player.id);
@@ -827,15 +840,19 @@ const PairingGenerator = () => {
         rightActions={<PairingHelp ready={!matchLoading} variant="header" />}
       />
       <div className="space-y-4">
-      {/* LINE送信用テキスト生成導線（トグル格納）。可用性判定は従来どおり（挙動不変） */}
-      {currentSession && (() => {
+      {/* LINE送信用テキスト生成導線（トグル格納）。
+          トグル見出しは組み合わせの有無に関わらず**常時**描画する。以前は生成可能な対象が
+          1つも無いとセクションごと消えており、その分だけ直下の試合番号タブが上下していた
+          （組み合わせ済みの試合 ⇄ 未作成の試合をタブで行き来するとタブが動く）。
+          生成可否の判定（allComplete / singleComplete）は従来どおりで、対象が無いときは
+          展開してもセグメントが無効・生成リンクの代わりに注記を出す。 */}
+      {(() => {
         const { allComplete, singleComplete } = computeLineTextAvailability(
-          currentSession.totalMatches, matchExistsMap, matchNumber
+          currentSession?.totalMatches, matchExistsMap, matchNumber
         );
-        // 希望ターゲットを有効性で解決（無効なら有効な方へフォールバック、両方無効なら非表示）
+        // 希望ターゲットを有効性で解決（無効なら有効な方へフォールバック、両方無効なら null＝生成不可）
         const target = resolveLineTextTarget(lineTextTarget, allComplete, singleComplete);
-        if (!target) return null;
-        const to = buildSummaryUrl(sessionDate, matchNumber, target);
+        const to = target ? buildSummaryUrl(sessionDate, matchNumber, target) : null;
         return (
           <div>
             <button
@@ -881,14 +898,29 @@ const PairingGenerator = () => {
                     {matchNumber}試合目
                   </button>
                 </div>
-                {/* 生成ボタン（選択中セグメントに応じて遷移） */}
-                <Link
-                  to={to}
-                  className="flex items-center justify-center gap-2 w-full border border-[#4a6b5a] text-[#33463c] px-4 py-2.5 rounded-[10px] font-semibold text-sm hover:bg-[#4a6b5a]/10 transition-colors"
-                >
-                  <FileText className="w-[17px] h-[17px]" />
-                  テキストを生成
-                </Link>
+                {/* 生成ボタン（選択中セグメントに応じて遷移）。生成可能な対象が無ければ無効ボタンに差し替える。
+                    無効側は**リンクと完全に同じ骨格・同じラベル**にして高さを一致させる（色だけ muted）。
+                    ここで文言の違う <p> に差し替えると、トグルを開いたまま試合番号タブを移動したときに
+                    数px 分タブが上下する（狭い画面では文言が折り返してさらにずれる）。 */}
+                {to ? (
+                  <Link
+                    to={to}
+                    className="flex items-center justify-center gap-2 w-full border border-[#4a6b5a] text-[#33463c] px-4 py-2.5 rounded-[10px] font-semibold text-sm hover:bg-[#4a6b5a]/10 transition-colors"
+                  >
+                    <FileText className="w-[17px] h-[17px]" />
+                    テキストを生成
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="対戦組み合わせが未作成のため生成できません"
+                    className="flex items-center justify-center gap-2 w-full border border-[#d8cfbf] text-[#b3ac9e] px-4 py-2.5 rounded-[10px] font-semibold text-sm cursor-not-allowed"
+                  >
+                    <FileText className="w-[17px] h-[17px]" />
+                    テキストを生成
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -939,33 +971,29 @@ const PairingGenerator = () => {
 
         {/* 連結パネル（この試合の内容。タブに連結。上辺はフラットにし、任意位置の cream ハイライトと接続） */}
         <div className="bg-[#ebe4d8] rounded-b-xl px-5 py-4 space-y-4">
-          {/* この連結パネルが第N試合のものであることを静的表示（タブから外した「N試合目」を保持。切替でレイアウトは動かない） */}
-          <div className="text-[13px] font-semibold text-[#8a8275]">{matchNumber}試合目</div>
+          {/* この連結パネルが第N試合のものであることを静的表示（タブから外した「N試合目」を保持。切替でレイアウトは動かない）。
+              主アクション「対戦編集」はこの行の右端に**常設**する。パネル内で常に描画される行はここだけで、
+              参加者ヘッダ（組0件のみ）と組み合わせヘッダ（組1件以上）は相互排他なので、
+              そこに置くと組の有無でボタンの位置が動いてしまう。 */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] font-semibold text-[#8a8275]">{matchNumber}試合目</span>
+            <button
+              onClick={handlePairingEdit}
+              disabled={loading || isPairingEditDisabled({ isReadOnly, isEditing, isViewMode })}
+              className="inline-flex items-center gap-1.5 bg-[#1A3654] text-white px-4 py-2 rounded-[10px] font-bold text-[13px] tracking-wide hover:bg-[#122740] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              対戦編集
+            </button>
+          </div>
 
       {/* 参加者セクション（新規作成時のみ＝pairings.length===0。折りたたみは廃止し常時展開。判定は pairingDisplayLogic に集約） */}
-      {shouldShowParticipantSection(pairings) && (
+      {shouldShowParticipantSection({ pairings, isEditing }) && (
         <div className="space-y-3">
           <div className="flex items-baseline justify-between gap-2">
             <span className="inline-flex items-baseline gap-[7px] text-[11px] font-bold tracking-wider uppercase text-[#8a8275]">
               全 <span className="text-[20px] font-bold normal-case tracking-normal text-[#1A2744]">{participants.length}</span>名
             </span>
-            <div className="inline-flex gap-1">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5b5446] px-2 py-1.5 rounded-lg hover:bg-black/5 disabled:opacity-50 transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                {refreshing ? '更新中...' : '更新'}
-              </button>
-              <button
-                onClick={() => { setShowAddPlayer(true); fetchPlayersIfNeeded(); }}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#33463c] px-2 py-1.5 rounded-lg hover:bg-black/5 transition-colors"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                追加
-              </button>
-            </div>
           </div>
           {participants.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -980,22 +1008,9 @@ const PairingGenerator = () => {
             </div>
           ) : (
             <p className="text-sm text-[#8a8275]">
-              参加者なし - 更新ボタンまたは選手追加で参加者を登録してください
+              参加者なし - 「対戦編集」から選手を追加してください
             </p>
           )}
-        </div>
-      )}
-
-      {/* 主アクション（対戦編集＝従来の自動組み合わせ。文言のみ変更・挙動不変。新規作成時のみ表示） */}
-      {shouldShowAutoMatchButton({ isReadOnly, sessionDate, participants, pairings }) && (
-        <div className="flex justify-end">
-          <button
-            onClick={handleAutoMatch}
-            disabled={loading}
-            className="inline-flex items-center gap-2 bg-[#1A3654] text-white px-6 py-3 rounded-[10px] font-bold text-[15px] tracking-wide hover:bg-[#122740] transition-colors disabled:bg-gray-400"
-          >
-            {loading ? '生成中...' : '対戦編集'}
-          </button>
         </div>
       )}
 
@@ -1013,7 +1028,7 @@ const PairingGenerator = () => {
         </div>
       )}
 
-      {pairings.length > 0 && (
+      {shouldShowEditingArea({ pairings, isEditing }) && (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="space-y-4">
           <div className="flex items-baseline justify-between gap-2">
@@ -1042,24 +1057,8 @@ const PairingGenerator = () => {
                   対戦をリセット
                 </button>
               )}
-              {!isReadOnly && isViewMode && (
-                <button
-                  onClick={() => {
-                    // 編集モードへ入る際、キャンセルスロットを実体化（両キャンセル組は除去・
-                    // 片キャンセル選手は「空き」に）してから切り替える。これにより編集モードの
-                    // 描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は既存ロジックのまま動く。
-                    const materialized = materializeCancelledSlots(pairings);
-                    setPairings(materialized);
-                    setIsViewMode(false);
-                    setHasUnsavedChanges(true);
-                    saveDraft(materialized, waitingPlayers, isEditingExisting);
-                  }}
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b5446] border border-[#d8cfbf] px-3 py-1.5 rounded-[9px] hover:bg-black/5 transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  編集
-                </button>
-              )}
+              {/* 旧「編集」ボタンはパネル右上の常設「対戦編集」ボタン（handlePairingEdit の
+                  'edit-existing' 分岐）に統合済み。 */}
             </div>
           </div>
 
@@ -1349,6 +1348,7 @@ const PairingGenerator = () => {
                       setIsEditingExisting(false);
                       setIsViewMode(false);
                     }
+                    setIsEditing(false);
                     setHasUnsavedChanges(false);
                     unsavedDraft.current = null;
                     setError('');

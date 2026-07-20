@@ -273,6 +273,7 @@ class PlayerControllerTest extends com.karuta.matchtracker.support.BaseControlle
 
         // When & Then
         mockMvc.perform(put("/api/players/1")
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))

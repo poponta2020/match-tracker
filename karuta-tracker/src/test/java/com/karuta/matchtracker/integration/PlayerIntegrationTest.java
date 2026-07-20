@@ -72,6 +72,7 @@ class PlayerIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
@@ -260,6 +261,7 @@ class PlayerIntegrationTest extends BaseAuthenticatedIntegrationTest {
                 .build();
 
         mockMvc.perform(put("/api/players/" + playerId)
+                        .header("Authorization", AuthTestSupport.bearer(1L, Role.SUPER_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest))
                         .header("Authorization", AuthTestSupport.bearer(1L, Role.PLAYER)))
