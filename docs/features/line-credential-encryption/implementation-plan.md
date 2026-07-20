@@ -37,7 +37,7 @@ status: completed
 - **完了条件:** 上記ユニットテスト green（`./gradlew test --tests "com.karuta.matchtracker.converter.*"`）。例外メッセージに平文・鍵を含めない。
 
 ### タスク2: LineChannel への @Convert 付与＋結合/回帰テスト＋テスト鍵設定
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #1129
 - **目的:** コンバータを `LineChannel` の2フィールドに適用し、実 DB 永続化・webhook 署名検証・push トークン受け渡しが平文契約どおり動くことを結合レベルで担保。既存 LINE テスト群を green に保つ。
 - **対応AC:** AC-2（永続化層）, AC-4, AC-5, AC-6（実DB側）, AC-10, AC-11
