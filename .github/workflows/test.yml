@@ -1,10 +1,11 @@
 name: Java CI with Gradle
 
+# PR/push での自動実行は停止（2026-07-21）。実測で CI 失敗は実質フレーク(vitest 並列)のみ・
+# 本物の回帰検知ゼロ、かつ main はブランチ保護なしでマージをブロックもしていなかった。
+# ローカルテスト + 本番監視に一本化。ファイルは温存し、migration 等の怖い変更前に手動で
+# 回せるよう workflow_dispatch だけ残す。
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   test:

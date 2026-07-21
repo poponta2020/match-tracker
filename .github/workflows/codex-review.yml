@@ -1,8 +1,10 @@
 name: Devflow Codex review
 
+# PR での自動 Codex レビューは停止（2026-07-21）。手元の対話 /auto-review-loop に一本化。
+# ファイルは温存するが、workflow_dispatch には PR コンテキストが無いため差分レビューは機能しない
+# （実質「自動レビュー停止」のためのトリガ除去。復活は pull_request トリガを戻すだけ）。
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 jobs:
   review:
