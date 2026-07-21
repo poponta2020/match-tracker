@@ -3,6 +3,7 @@ package com.karuta.matchtracker.converter;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,8 +15,15 @@ import org.springframework.stereotype.Component;
  *   <li>設定あり → base64→32バイトを検証し暗号器を構築。<b>不正形式なら {@code @PostConstruct} で fail-fast</b>
  *       （誤設定を起動時に検出する）。</li>
  * </ul>
+ *
+ * <p><b>{@code @Lazy(false)} 必須</b>: 本番プロファイル(render)は {@code spring.main.lazy-initialization=true}
+ * を有効にしている。この Provider はどのビーンからも参照されない「起動時 populate 専用」ビーンのため、
+ * グローバル lazy-init 下では**インスタンス化されず {@code @PostConstruct} が走らない**（＝ホルダ空のまま
+ * 全書き込みが fail-fast する本番限定バグになる）。{@code @Lazy(false)} でグローバル lazy-init を明示的に
+ * オプトアウトし、起動時の eager 初期化を保証する。
  */
 @Component
+@Lazy(false)
 @Slf4j
 public class LineEncryptionKeyProvider {
 
