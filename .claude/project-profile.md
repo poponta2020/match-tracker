@@ -46,8 +46,10 @@ DEVFLOW_CI_COVERS=("test")
 
 ## design-system
 
+- **デザイン正典（一次参照）: [`docs/design/design.md`](../docs/design/design.md)** — 脱AIスロップの「和紙 Anti-Slop」原則・色/タイポ/レイアウト・トークン（参照仕様）・固有 Don'ts。**UI 改修（`/implement`・`/design-screen`）は着手前に必ず参照・厳守する。**
+- 生きた手本（パイロット実装）: `karuta-tracker-ui/src/pages/Home.jsx`（Home 固有ピクセル値は `docs/features/design-md-anti-slop/design-spec.md`）。他の脱カード参照実装: matches / pairings / videos
 - claude.ai/design プロジェクト名: **Match Tracker Design System**
-- デザイントークン: `karuta-tracker-ui/tailwind.config.js`、`karuta-tracker-ui/src/index.css`
+- デザイントークンの実配線ファイル: `karuta-tracker-ui/tailwind.config.js`、`karuta-tracker-ui/src/index.css`（**design.md のトークンは参照仕様で、現状 config には未配線**。SSOT 化は後続機能）
 
 ## review-extra
 
@@ -87,6 +89,7 @@ docs レジストリ（/quickfix・/implement・/audit-feature・gate-dod.sh が
 - 画面一覧・ルーティング・ナビゲーション・画面遷移 → `docs/SCREEN_LIST.md`
 - テーブル定義・ER図・初期データ → `docs/design/db.md` + `db-tables-*.md`（本番 introspect 照合済み。**他ファイルへのカラム定義表の記載禁止**）
 - アーキテクチャ・権限・API共通仕様・デプロイ・開発環境 → `docs/design/architecture.md`（索引: `docs/DESIGN.md`）
+- **視覚デザイン正典（脱AIスロップ原則・色/タイポ/レイアウト・トークン参照仕様・固有 Don'ts）→ `docs/design/design.md`**（横断的トークン・原則の正典。画面固有のピクセル値は各 `docs/features/<slug>/design-spec.md`）
 - 未実装・TODO → `docs/spec/backlog.md`／用語 → `docs/spec/glossary.md`
 - 変更履歴 → `docs/features/<slug>/`（索引: `docs/features/INDEX.md`。本体 docs への履歴追記禁止）
 - 開発プロセス → `docs/dev/feature-flow.md`

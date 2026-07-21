@@ -1,27 +1,26 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { homeAPI } from '../api';
-import {
-  ArrowRight,
-  ChevronsRight,
-  Clock,
-  Shuffle,
-  Trophy,
-  User,
-} from 'lucide-react';
-import { sortPlayersByRank } from '../utils/playerSort';
-import PlayerChip from '../components/PlayerChip';
 import LoadingScreen from '../components/LoadingScreen';
-import NavigationMenu from '../components/NavigationMenu';
+import washiTile from '../assets/washi-fiber-tile.png';
+
+// 明朝ディスプレイ（システム内蔵フォント。web フォント新規導入なし）
+const MINCHO = "'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif";
+
+// 確定参加者（キャンセル待ち・辞退・キャンセルを除く）判定。現行 Home の表示フィルタと同一。
+const isActiveParticipant = (p) =>
+  p.status !== 'WAITLISTED' &&
+  p.status !== 'WAITLIST_DECLINED' &&
+  p.status !== 'CANCELLED' &&
+  p.status !== 'DECLINED';
 
 const Home = () => {
   const { currentPlayer } = useAuth();
   const [loading, setLoading] = useState(true);
   const [nextPractice, setNextPractice] = useState(null);
-  const [nextPracticeParticipants, setNextPracticeParticipants] = useState([]);
   const [participationGroups, setParticipationGroups] = useState([]);
-  const [hasPendingOffer, setHasPendingOffer] = useState(false);
 
   const fetchData = useCallback(async (signal) => {
     if (!currentPlayer?.id) return;
@@ -36,16 +35,8 @@ const Home = () => {
       // 参加率グループ（団体別）
       setParticipationGroups(data.participationGroups || []);
 
-      // 繰り上げオファー
-      setHasPendingOffer(data.hasPendingOffer || false);
-
       // 次の練習情報（参加者リストも含まれている）
-      if (data.nextPractice) {
-        setNextPractice(data.nextPractice);
-        if (data.nextPractice.participants) {
-          setNextPracticeParticipants(data.nextPractice.participants);
-        }
-      }
+      setNextPractice(data.nextPractice || null);
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('データ取得エラー:', error);
@@ -94,8 +85,6 @@ const Home = () => {
     };
   }, [currentPlayer, fetchData]);
 
-  const isMyself = (p) => p.id === currentPlayer?.id;
-
   const formatTime = (time) => {
     if (!time) return '';
     return time.substring(0, 5); // "HH:MM:SS" -> "HH:MM"
@@ -108,267 +97,178 @@ const Home = () => {
     return <LoadingScreen />;
   }
 
+  // ヒーロー用の派生値
+  const activeCount = (nextPractice?.participants || []).filter(isActiveParticipant).length;
+  const registered = nextPractice?.registered === true;
+  const matchNumbers = nextPractice?.matchNumbers || [];
+  // 今日 or 登録済み → 対戦確認画面へ / それ以外（未登録）→ 参加登録
+  const goToPairings = nextPractice && (nextPractice.today || registered);
+  const ctaLabel = goToPairings ? '対戦確認画面へ' : '参加登録';
+  const ctaTo = goToPairings
+    ? `/pairings?date=${nextPractice?.sessionDate}`
+    : '/practice/participation';
+
   return (
-    <div className="space-y-8">
-      {/* ナビゲーションバー */}
-      <NavigationMenu />
+    // 本文の"地" = 和紙繊維テクスチャ（決定論的な静的タイルを repeat）。
+    // トップバー撤去（design-spec §2.5）: -mt-16 で最上部まで引き上げ、Layout の
+    // 固定フォールバック緑バー(#4a6b5a・z-40)を relative z-40 で覆い、深緑ヒーローが
+    // 最上部を占有する（緑シェルは下部5タブのみ）。画面下端まで全幅で覆う。
+    <div
+      className="relative z-40 -mt-16 -mx-4 sm:-mx-6 lg:-mx-8 -mb-8 min-h-screen"
+      style={{ background: `#f2ede6 url(${washiTile}) repeat` }}
+    >
+      {/* 次の練習ヒーロー（深緑・常時表示・単一デザイン） */}
+      <section
+        className="bg-[#33503f] text-white"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(45deg, rgba(255,255,255,.032) 0 2px, transparent 2px 7px)',
+        }}
+      >
+        {nextPractice ? (
+          <>
+            <div className="px-5 pt-5 pb-4">
+              {/* eyebrow: TODAY/NEXT ｜ 参加予定・人数 */}
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[11px] font-bold tracking-[0.22em] text-[#e8d9c5]">
+                  {nextPractice.today ? 'TODAY' : 'NEXT'}
+                </span>
+                <span className="text-[11px] text-white/70 text-right">
+                  {registered && matchNumbers.length > 0
+                    ? `${matchNumbers.join('、')}試合目に参加予定 ・ ${activeCount}名`
+                    : `${activeCount}名`}
+                </span>
+              </div>
 
-      {/* コンテンツ */}
-      <div className="pt-2">
-        {/* 繰り上げオファーバナー */}
-        {hasPendingOffer && (
-          <Link
-            to="/notifications"
-            className="block mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">📩</span>
-              <div>
-                <div className="font-bold text-blue-800 text-sm">繰り上げ参加のお知らせ</div>
-                <div className="text-xs text-blue-600">練習に空きが出ました。通知を確認してください。</div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-blue-400 ml-auto" />
-            </div>
-          </Link>
-        )}
-
-        {/* 次の練習 + 参加者（統合カード） */}
-        {nextPractice && (
-          <div className="rounded-lg shadow-md overflow-hidden mb-4">
-            {/* ヘッダー帯 */}
-            {nextPractice.today ? (
-              <div className="bg-[#1A3654] px-5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-white text-lg font-bold">TODAY</span>
-                  <span className="text-sm font-semibold text-white/90">
+              {/* 主表示: 大きな明朝の日付 ｜ 会場・時刻 */}
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <span style={{ fontFamily: MINCHO }} className="text-[2.75rem] leading-none">
                     {(() => {
                       const d = new Date(nextPractice.sessionDate);
-                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
-                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
+                      return `${d.getMonth() + 1}/${d.getDate()}`;
                     })()}
                   </span>
+                  <span style={{ fontFamily: MINCHO }} className="text-sm text-white/80">
+                    （{new Date(nextPractice.sessionDate).toLocaleDateString('ja-JP', { weekday: 'short' })}）
+                  </span>
+                </div>
+                <div className="text-right shrink-0">
                   {nextPractice.venueName && (
-                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
+                    <div className="text-sm text-white/85">{nextPractice.venueName}</div>
+                  )}
+                  {nextPractice.startTime && (
+                    <div style={{ fontFamily: MINCHO }} className="text-sm text-white/70">
+                      {formatTime(nextPractice.startTime)} — {formatTime(nextPractice.endTime)}
+                    </div>
                   )}
                 </div>
-                {nextPractice.registered === false ? (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-white/80 hover:text-white flex items-center gap-0.5">
-                    参加登録 <ArrowRight className="w-3 h-3" />
-                  </Link>
-                ) : nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                  <span className="text-xs text-white/70">
-                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
-                  </span>
-                )}
-              </div>
-            ) : nextPractice.registered === true ? (
-              <div className="bg-[#374151] px-5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ChevronsRight className="w-6 h-6 text-white/80" />
-                  <h2 className="text-xl font-bold text-white tracking-wide underline underline-offset-2 decoration-white/70 decoration-2">NEXT</h2>
-                  <span className="text-sm font-semibold text-white/90">
-                    {(() => {
-                      const d = new Date(nextPractice.sessionDate);
-                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
-                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
-                    })()}
-                  </span>
-                  {nextPractice.venueName && (
-                    <span className="text-sm text-white/75">{nextPractice.venueName}</span>
-                  )}
-                </div>
-                {nextPractice.matchNumbers && nextPractice.matchNumbers.length > 0 && (
-                  <span className="text-xs text-white/70">
-                    {nextPractice.matchNumbers.join('、')}試合目に参加予定
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="bg-[#f9f6f2] border-b border-[#1A3654]/20 px-5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ChevronsRight className="w-6 h-6 text-[#1A3654]/70" />
-                  <h2 className="text-xl font-bold text-[#1A3654] tracking-wide underline underline-offset-2 decoration-[#1A3654]/60 decoration-2">NEXT</h2>
-                  <span className="text-sm font-semibold text-[#1A3654]">
-                    {(() => {
-                      const d = new Date(nextPractice.sessionDate);
-                      const weekday = d.toLocaleDateString('ja-JP', { weekday: 'short' });
-                      return `${d.getMonth() + 1}/${d.getDate()}(${weekday})`;
-                    })()}
-                  </span>
-                  {nextPractice.venueName && (
-                    <span className="text-sm text-[#1A3654]/70">{nextPractice.venueName}</span>
-                  )}
-                </div>
-                {nextPractice.registered === false && (
-                  <Link to="/practice/participation" className="text-xs font-semibold text-[#1A3654]/70 hover:text-[#1A3654] flex items-center gap-0.5">
-                    参加登録 <ArrowRight className="w-3 h-3" />
-                  </Link>
-                )}
-              </div>
-            )}
-            {/* ボディ */}
-            <div className={`px-5 py-4 ${nextPractice.today ? 'bg-[#1A3654]/5' : nextPractice.registered === true ? 'bg-[#374151]/5' : 'bg-[#f9f6f2]'}`}>
-              <div className="space-y-2">
-                {nextPractice.startTime && (
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#1A3654]" />
-                    <span className="text-[#374151]">{formatTime(nextPractice.startTime)}〜{formatTime(nextPractice.endTime)}</span>
-                  </div>
-                )}
-                {/* 参加者セクション */}
-                {nextPracticeParticipants.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    {nextPracticeParticipants.some(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED') && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status !== 'WAITLISTED' && p.status !== 'WAITLIST_DECLINED' && p.status !== 'CANCELLED' && p.status !== 'DECLINED')).map((p) => (
-                          <div key={p.id} className="relative inline-flex">
-                            <PlayerChip
-                              name={p.name}
-                              kyuRank={p.kyuRank}
-                              className={`text-xs ${
-                                isMyself(p)
-                                  ? 'bg-[#1A3654] text-white font-medium'
-                                  : 'bg-[#e8ecef] text-[#374151]'
-                              }`}
-                            />
-                            {p.status === 'OFFERED' && (
-                              <span className="absolute -top-1.5 -right-1 text-[9px] px-1 py-0.5 bg-blue-100 text-blue-800 rounded font-bold leading-none">応答待</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {nextPracticeParticipants.some(p => p.status === 'WAITLISTED') && (
-                      <div className="mt-2">
-                        <div className="text-[10px] text-yellow-700 mb-1">キャンセル待ち</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status === 'WAITLISTED')).map((p) => (
-                            <PlayerChip
-                              key={p.id}
-                              name={p.name}
-                              kyuRank={p.kyuRank}
-                              className={`text-xs ${
-                                isMyself(p)
-                                  ? 'bg-yellow-200 text-yellow-900 font-medium'
-                                  : 'bg-yellow-50 text-yellow-800'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {nextPracticeParticipants.some(p => p.status === 'CANCELLED') && (
-                      <div className="mt-2">
-                        <div className="text-[10px] text-red-500 mb-1">キャンセル済み</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {sortPlayersByRank(nextPracticeParticipants.filter(p => p.status === 'CANCELLED')).map((p) => (
-                            <PlayerChip
-                              key={p.id}
-                              name={p.name}
-                              kyuRank={p.kyuRank}
-                              className={`text-xs ${
-                                isMyself(p)
-                                  ? 'bg-red-200 text-red-800 font-medium'
-                                  : 'bg-red-50 text-red-800'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {nextPractice.today && (
-                  <Link
-                    to={`/pairings?date=${nextPractice.sessionDate}`}
-                    className="mt-3 flex items-center justify-center gap-2 bg-[#1A3654] text-white font-medium py-2.5 rounded-lg hover:bg-[#122740] transition-colors shadow-sm"
-                  >
-                    <Shuffle className="w-4 h-4" />
-                    組み合わせを作成
-                  </Link>
-                )}
               </div>
             </div>
+
+            {/* CTA 行（上辺ヘアライン・全幅タップ） */}
+            <Link
+              to={ctaTo}
+              className="flex items-center justify-between px-5 py-3 border-t border-white/[0.16] text-[#e8d9c5] active:bg-white/5 transition-colors"
+            >
+              <span className="text-sm font-medium">{ctaLabel}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </>
+        ) : (
+          <div className="px-5 py-6">
+            <span className="text-[11px] font-bold tracking-[0.22em] text-[#e8d9c5]">NEXT</span>
+            <p className="mt-2 text-sm text-white/70">次の練習の予定はまだありません</p>
           </div>
         )}
+      </section>
 
-        {/* 参加率TOP3（団体別） */}
-        {participationGroups.length > 0 && participationGroups.map((group) => {
-          const showLabel = participationGroups.length > 1;
-          const top3 = group.top3 || [];
-          const myRate = group.myRate;
-          if (top3.length === 0) return null;
-          return (
-            <div key={group.organizationId ?? 'all'} className="bg-[#f9f6f2] rounded-lg shadow-md p-5 mb-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Trophy className="w-5 h-5 text-[#1A3654]" />
-                <h2 className="text-base font-bold text-[#1A3654]">
-                  {showLabel && <span className="mr-1">{group.organizationName}</span>}
-                  {monthLabel} 参加率TOP3
-                </h2>
-              </div>
-              <div className="space-y-3">
+      {/* 参加率（カードでなく行の背景バーで表現） */}
+      {participationGroups.length > 0 && (
+        <div className="px-4 sm:px-6 lg:px-8 pt-6 pb-4">
+          {/* 月見出し（全体で1回） */}
+          <div className="mb-4">
+            <h2
+              style={{ fontFamily: MINCHO }}
+              className="text-lg text-[#1A3654] flex items-baseline gap-2"
+            >
+              <span className="font-bold">{monthLabel}の参加率</span>
+              <span className="font-sans text-[11px] tracking-wider text-[#8a7568]">TOP 3</span>
+            </h2>
+            <div className="mt-1 h-0.5 w-[34px] bg-[#5f3a2d]" />
+          </div>
+
+          {participationGroups.map((group) => {
+            const top3 = group.top3 || [];
+            if (top3.length === 0) return null;
+            const showLabel = participationGroups.length > 1;
+            const total = top3[0].totalScheduledMatches;
+            const myRate = group.myRate;
+            const myInTop3 = top3.some((p) => p.playerId === currentPlayer?.id);
+            const myPct = myRate && myRate.rate !== null ? Math.round(myRate.rate * 100) : 0;
+            return (
+              <div key={group.organizationId ?? 'all'} className="mb-5">
+                {/* サブラベル: 団体名（明朝・見出しより一回り小さく・目立たせる）＋総試合数（taupe小・据え置き）。1団体所属時は団体名を出さない */}
+                <div className="mb-1.5">
+                  {showLabel && (
+                    <span style={{ fontFamily: MINCHO }} className="text-base text-[#1A3654] mr-0.5">
+                      {group.organizationName}
+                    </span>
+                  )}
+                  <span className="text-xs text-[#8a7568]">
+                    {showLabel ? `（${total}試合）` : `${total}試合`}
+                  </span>
+                </div>
+
                 {top3.map((player, index) => {
-                  const rankColors = ['bg-[#1A3654] text-white', 'bg-[#2d5a8a] text-white', 'bg-[#5a8ab5] text-white'];
-                  const ratePercent = Math.round(player.rate * 100);
+                  const pct = Math.round(player.rate * 100);
                   return (
-                    <div key={player.playerId} className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${rankColors[index]}`}>{index + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-semibold text-[#374151] truncate">{player.playerName}</span>
-                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{ratePercent}%</span>
-                        </div>
-                        <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
-                          <div
-                            className="bg-[#1A3654] h-1.5 rounded-full transition-all"
-                            style={{ width: `${ratePercent}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-[#6b7280] mt-0.5 block">
-                          {player.participatedMatches}/{player.totalScheduledMatches}試合
-                        </span>
-                      </div>
+                    <div
+                      key={player.playerId}
+                      className="flex items-center h-7 px-1 text-sm"
+                      style={{
+                        background: `linear-gradient(to right, rgba(26,54,84,.13) 0 ${pct}%, transparent ${pct}%)`,
+                      }}
+                    >
+                      <span style={{ fontFamily: MINCHO }} className="w-[15px] text-[#1A3654]">
+                        {index + 1}
+                      </span>
+                      <span className="ml-2 text-[#3d2b21] truncate">{player.playerName}</span>
+                      <span className="ml-2 text-xs text-[#8a7568] shrink-0">
+                        {player.participatedMatches}試合
+                      </span>
+                      <span style={{ fontFamily: MINCHO }} className="ml-auto text-[#1A3654]">
+                        {pct}%
+                      </span>
                     </div>
                   );
                 })}
-              </div>
-              {/* 自分がTOP3にいない場合のみ自分の参加率を表示 */}
-              {myRate && !top3.some((p) => p.playerId === currentPlayer?.id) && (
-                <div className="border-t border-gray-200 mt-3 pt-3">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-[#e8ecef]">
-                      <User className="w-3 h-3 text-[#6b7280]" />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-[#374151] truncate">{currentPlayer?.name}</span>
-                        {myRate.rate !== null && (
-                          <span className="text-sm font-bold text-[#1A3654] flex-shrink-0 ml-2">{Math.round(myRate.rate * 100)}%</span>
-                        )}
-                      </div>
-                      {myRate.rate !== null && (
-                        <div className="w-full bg-[#1A3654]/15 rounded-full h-1.5">
-                          <div
-                            className="bg-[#6b7280] h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.round(myRate.rate * 100)}%` }}
-                          />
-                        </div>
-                      )}
-                      <span className="text-xs text-[#6b7280] mt-0.5 block">
-                        {myRate.totalScheduledMatches !== null
-                          ? `${myRate.participatedMatches}/${myRate.totalScheduledMatches}試合`
-                          : `${myRate.participatedMatches}試合参加`}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
 
-      </div>
+                {/* 自分の行（TOP3圏外のときのみ末尾に追加。茶ライン・"YOU"ラベルなし） */}
+                {myRate && !myInTop3 && (
+                  <div
+                    className="flex items-center h-7 px-1 text-sm border-l-[3px] border-[#82655a]"
+                    style={{
+                      background: `linear-gradient(to right, rgba(130,101,90,.2) 0 ${myPct}%, transparent ${myPct}%)`,
+                    }}
+                  >
+                    <span className="w-[15px]" />
+                    <span className="ml-2 text-[#3d2b21] truncate">あなた</span>
+                    <span className="ml-2 text-xs text-[#8a7568] shrink-0">
+                      {myRate.participatedMatches}試合
+                    </span>
+                    {myRate.rate !== null && (
+                      <span style={{ fontFamily: MINCHO }} className="ml-auto text-[#82655a]">
+                        {myPct}%
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
