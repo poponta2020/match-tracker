@@ -8,6 +8,10 @@
 
 ## タスク（依存順・直列）
 
+- [x] T1 完了（patch クリーン適用・ビルド green・DESIGN-PROTO 0）
+- [x] T2 完了（MatchCalendar.test 級半角化＋ゲスト括弧検証を相手名要素に、matchCalendar.test に formatMonthDayDow 追加）
+- [x] T3 検証（FE 807 テスト green＝swipe 1 件は既知並列フレークで単独 pass・lint 0 errors）／**実機タッチのスワイプ月移動は宿題（未実施）**
+
 ### T1. プロトタイプ差分の適用
 - `git apply docs/features/match-record-calendar-polish/design-prototype.patch`（当たらなければ patch を読んで手動移植）。
 - 対象: `YearMonthPicker.jsx` / `MatchCalendar.jsx` / `MatchList.jsx` / `PracticeList.jsx` / `utils/matchCalendar.js`。
