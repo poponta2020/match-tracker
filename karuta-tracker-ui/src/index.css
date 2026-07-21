@@ -11,3 +11,11 @@
     color: #1A2744;
   }
 }
+
+/* ボトムナビ（リキッドグラス）: つかむ/タップ時の「膨らんで即戻る」一発パフ。
+   個別 scale プロパティを使い、ピルの transform(translateY スライド)を壊さない。 */
+@keyframes navPuff {
+  0% { scale: 1; }
+  40% { scale: 1.045; }
+  100% { scale: 1; }
+}
