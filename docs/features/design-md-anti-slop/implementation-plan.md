@@ -8,7 +8,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: `docs/design/design.md` 正典の執筆（app-wide）
-- [ ] 完了
+- [x] 完了
 - **目的:** 脱AIスロップのデザイン正典を新設。今後の /implement・/design-screen が参照する。
 - **対応AC:** AC-1, AC-2, AC-3, AC-14
 - **主な変更領域:** `docs/design/design.md`（新規）
