@@ -26,7 +26,7 @@ status: completed
 - **完了条件:** `npm run build` 成功・`npm run lint` 成功・`git grep DESIGN-PROTO`=0件。
 
 ### タスク2: 純ロジックの単体テスト＋既存テスト回帰
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #1163
 - **目的:** ドラッグ位置計算・アクティブ判定などの純ロジックを単体テストで固定し、既存テストの回帰を通す。
 - **対応AC:** AC-20（純ロジック）、AC-1〜AC-5・AC-14〜AC-15（DOM 構造 auto-test）、AC-8（既存テスト・lint 回帰）
