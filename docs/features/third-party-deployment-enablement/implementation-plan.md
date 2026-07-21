@@ -24,7 +24,7 @@ status: completed
 - **対応Issue:** #1147
 
 ### タスク2: D-2 略称ユーティリティ新設＋練習参加の締切汎用化
-- [ ] 完了
+- [x] 完了
 - **目的:** 締切表示の `code==='hokudai'` 依存とバナーの `（北大）` 直書きを、団体データ駆動へ置き換える。略称ロジックを共有util化する（タスク3と共有）。
 - **対応AC:** AC-5, AC-6, AC-9, AC-10
 - **主な変更領域:** `karuta-tracker-ui/src/utils/organization.js`（新規）、`karuta-tracker-ui/src/pages/practice/PracticeParticipation.jsx`、`karuta-tracker-ui/src/pages/practice/PracticeParticipation.test.jsx`
