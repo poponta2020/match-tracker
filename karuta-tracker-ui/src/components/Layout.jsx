@@ -142,8 +142,10 @@ const Layout = ({ children }) => {
     const { moved } = pressRef.current;
     pressRef.current = { startX: 0, moved: false, pointerId: null };
     if (moved) {
-      // ドラッグ確定: 最寄りへ置いて、保持していた膨らみを元サイズへ戻す
-      const center = dragCenter != null ? dragCenter : pointerToCenter(e.clientX);
+      // ドラッグ確定: 遷移先は「解放イベントの座標」から確定する。
+      // 描画追従用の dragCenter は React state で、素早いドラッグでは最後の
+      // pointermove から解放までの指の移動を取りこぼし古い値になり得るため使わない。
+      const center = pointerToCenter(e.clientX);
       commitSelect(nearestIndex(center, slotWidth, COUNT));
       setDragging(false);
       setDragCenter(null);
@@ -206,7 +208,11 @@ const Layout = ({ children }) => {
             // スライド(translateY)は transform。膨らみは個別 scale プロパティで扱う:
             //  - ドラッグ中は scale を保持（膨らんで止まる）→ 離すと transition で戻る
             //  - タップは navPuff アニメで流れる一発パフ（scale を上書き）
-            transform: `translateY(${isVisible ? '0px' : '150%'})`,
+            // 非表示時はピル高さ(100%)に加えて浮かせ量(safe-area+10px)ぶんも下げ、
+            // safe-area の大きい iPhone でもピル上端が画面内に残らないよう完全に隠す。
+            transform: isVisible
+              ? 'translateY(0px)'
+              : 'translateY(calc(100% + env(safe-area-inset-bottom, 0px) + 10px))',
             scale: dragging ? '1.035' : '1',
             transition: 'transform 300ms ease, scale 200ms ease-out',
           }}

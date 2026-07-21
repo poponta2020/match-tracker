@@ -150,6 +150,11 @@ describe('Layout ボトムナビ（リキッドグラス）', () => {
     links.forEach((l) => expect(l).toHaveAttribute('tabindex', '-1'));
     const pill = nav.querySelector('div');
     expect(pill.className).toContain('pointer-events-none');
+    // 完全に隠すため、ピル高さ(100%)に加え浮かせ量(safe-area+10px)ぶんも下げる
+    // （150% ではない＝safe-area の大きい iPhone でピル上端が残るのを防ぐ）
+    expect(pill.style.transform).toContain('100%');
+    expect(pill.style.transform).toContain('safe-area-inset-bottom');
+    expect(pill.style.transform).not.toContain('150%');
   });
 
   it('isVisible=true ではナビが操作可能: aria-hidden=false / tabIndex=0 (AC-6 回帰)', () => {
@@ -175,6 +180,15 @@ describe('Layout ボトムナビ（リキッドグラス）', () => {
     const capsule = dragCapsule();
     fireEvent.pointerUp(capsule, { clientX: 340, pointerId: 1 });
     expect(locationRef.pathname).toBe('/settings');
+  });
+
+  it('遷移先は最後の pointermove 位置でなく解放位置で決まる (AC-16・stale state 回帰)', () => {
+    renderAt('/');
+    const capsule = screen.getByTestId('bottom-nav-capsule');
+    fireEvent.pointerDown(capsule, { clientX: 40, pointerId: 1 });
+    fireEvent.pointerMove(capsule, { clientX: 200, pointerId: 1 }); // 一旦中央（練習=index2）付近
+    fireEvent.pointerUp(capsule, { clientX: 340, pointerId: 1 }); // さらに右（設定=index4）で解放
+    expect(locationRef.pathname).toBe('/settings'); // 解放位置(340)基準。dragCenter(200)基準なら /practice
   });
 
   it('ドラッグ中に pointercancel が来ても遷移しない (誤遷移回帰)', () => {
