@@ -34,7 +34,7 @@ status: completed
 - **完了条件:** 各ファイルに design.md への参照文字列が存在（AC-7 grep が通る）。
 
 ### タスク3: 和紙 seamless タイルの生成＋アセット化
-- [ ] 完了
+- [x] 完了
 - **目的:** 本文背景の和紙繊維テクスチャを決定論的な静的アセットにする。
 - **対応AC:** AC-13
 - **主な変更領域:** `karuta-tracker-ui/src/assets/`（生成した PNG）、`scripts/`（生成スクリプト）
@@ -44,7 +44,7 @@ status: completed
 - **完了条件:** アセット PNG が存在し、Home が `background: #f2ede6 url(...) repeat` で参照できる。**Home マウント時に乱数 canvas を実行しない**。
 
 ### タスク4: Home.jsx 脱カード・リデザイン実装
-- [ ] 完了
+- [x] 完了
 - **目的:** design-spec.md の全状態を実装し、Home を「生きた手本」にする。
 - **対応AC:** AC-4, AC-5, AC-6, AC-9, AC-10, AC-11, AC-12, AC-13
 - **主な変更領域:** `karuta-tracker-ui/src/pages/Home.jsx`、Home のテスト（`karuta-tracker-ui/src/**/Home*.test.jsx` があれば）
