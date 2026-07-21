@@ -16,7 +16,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: カレンダー本体・タブ帯・純ロジックの新設（productionize + 単体テスト）
-- [ ] 完了
+- [x] 完了
 - **目的:** `MatchViewTabs` / `MatchCalendar` / `utils/matchCalendar.js` を patch から productionize し、純ロジックと表示の単体テストを整備する。`MatchCalendar` を自前 fetch（`matchAPI.getByPlayerId(self)`）へ配線し、`referenceDate` シームを追加。
 - **対応AC:** AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14, AC-CAL-PICK
 - **対応Issue:** #1143
