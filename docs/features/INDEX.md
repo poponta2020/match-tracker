@@ -102,7 +102,7 @@
 - `pairing-view-unpaired-chips` — /pairings 閲覧時に未組み合わせの参加者を参加者一覧と同じチップで表示する改修（主要領域: karuta-tracker-ui）[shipped: PR #1063]
 
 - `practice-per-date-attendance` — カレンダー日付ポップアップの「出欠登録」を1日分の参加＋理由付きキャンセル画面に変更（FABは出欠一括登録に改名）（主要領域: karuta-tracker-ui, docs）[shipped: PR #1073]
-- `design-md-anti-slop` — 脱AIスロップのデザイン正典 docs/design/design.md 新設＋Home脱カード・パイロット改修（カード原則禁止＋許可リスト・washi語彙正典化・単一ファイル）（主要領域: docs, karuta-tracker-ui）
+- `design-md-anti-slop` — 脱AIスロップのデザイン正典 docs/design/design.md 新設＋Home脱カード・パイロット改修（カード原則禁止＋許可リスト・washi語彙正典化・単一ファイル）（主要領域: docs, karuta-tracker-ui）[shipped: PR #1165]
 - `card-division-group-broadcast` — 札分けを団体の全体LINEグループへ自動一斉配信（未使用bot10体をローテして無料枠200通/月を吸収・30分前/8:00フォールバック・管理画面）（主要領域: karuta-tracker, karuta-tracker-ui, database, docs）[shipped: PR #1083]
 - `line-chat-reserve-broadcast` — 札分け全体配信をLINEチャット予約送信（通数対象外・Playwright×Oracle VM常駐ワーカー）に差し替え、既存pushは単一botフォールバック化（bot10体ローテは1グループ1bot制約で不成立）（主要領域: karuta-tracker, karuta-tracker-ui, database, line-chat-worker(新設), docs） [shipped: PR #1096 (T1-6); T8 残] [shipped: PR #1097 (送信時刻10分floor)] [shipped: PR #1098 (T7 実DOMセレクタ確定・PoC)]
 - `auth-tokenization` — 認証をヘッダー自己申告（X-User-Role/X-User-Id）からサーバ発行トークンへ全面変更。パスワードBCrypt化＋/api/** の deny by default 化（@RequireRole未付与82本の素通りを塞ぐ）（主要領域: karuta-tracker, karuta-tracker-ui, database, docs）
@@ -114,5 +114,5 @@
 - `match-record-calendar-tabs` — 戦績確認画面(/matches)を「戦績確認」「カレンダー」の2タブ化。カレンダータブは常に自分の試合を月表示し、日選択でその日の結果・個人メモを見て試合詳細へ遷移。他選手戦績中もカレンダーは自分・戻ると直前選手を復元（純フロントエンド）（主要領域: `karuta-tracker-ui/src/pages/matches/`）[shipped: PR #1145]
 - `third-party-deployment-enablement` — 他会 fork-and-deploy を「起動して実際に使える」水準にする。A-2:初期データseed（database/seed_initial.sql テンプレ・最小2行org+SUPER_ADMIN・平文PW+起動時ハッシュ化・冪等）＋陳腐化seed_data.sql削除。D-2:フロントの hokudai/wasura 決め打ちを既存データ駆動へ（締切・略称・一括追加ボタンを動的化。新カラムなし・本番退行なし）。BE改修/スキーマ変更/本番migration無し（主要領域: database, karuta-tracker-ui, docs）[shipped: PR #1150]
 - `adjacent-room-fork-disable` — 隣室確認・かでる連携の fork 無効化（本番不変）。監査D-1(b)。会場系workflow5本に `if: github.repository==poponta2020/match-tracker` ガード＋バックエンド `adjacent-room.enabled`(既定ON)で AdjacentRoomConfig の述語群をゲート。fork の venue ID 衝突による隣室機能の誤発火を根絶。scripts/room-checker と workflow は削除しない（本番使用中）（主要領域: AdjacentRoomConfig / config / .github/workflows）
-- `bottom-nav-liquid-glass` — ボトムナビを不透明グリーンバー＋ラベル付き5項目から、半透明グリーンガラスの浮いた角丸ピル＋アイコンのみ＋iOS26風カプセルアクティブへ刷新。屈折/レンズはiOS WebKit非対応につきNon-goal、すりガラス+縁ハイライト+鏡面スジで質感を出す（純フロントエンド）（主要領域: 未定）
+- `bottom-nav-liquid-glass` — ボトムナビを不透明グリーンバー＋ラベル付き5項目から、ニュートラル半透明ガラスの浮いた角丸ピル＋アイコンのみ（Heroicons塗り分け）＋横長楕円カプセル1個スライド＋ドラッグでタブ切替＋スプリング演出へ刷新。屈折/レンズはiOS WebKit非対応につきNon-goal、すりガラス+縁ハイライト+鏡面スジで質感を出す（純フロントエンド）（主要領域: karuta-tracker-ui）
 - `match-record-calendar-polish` — 戦績確認カレンダー/戦績確認タブの見た目・操作ポリッシュ9項目（全幅化・年月ピッカー月別件数バッジ・トグル閉じ修正・曜日ヘッダ削除+見出し曜日・級半角括弧・タブ位置by construction固定+フィルタをクリームサブバー化・グリッド左右スワイプ月移動）。他選手表示時はサブバー左寄せでフィルタ重なり回避（純フロントエンド）（主要領域: `karuta-tracker-ui/src/pages/matches/`）[shipped: PR #1160]
