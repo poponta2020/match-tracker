@@ -67,7 +67,7 @@ describe('MatchCalendar（カレンダータブ本体）', () => {
   it('自分の試合を getByPlayerId(self) で取得し、日セルに試合数バッジを出す（抜け番/matchDate無しは除外）', async () => {
     renderCalendar();
     // 初期選択=今日の1試合目が出るまで待つ（データ取得完了）
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     expect(matchAPI.getByPlayerId).toHaveBeenCalledWith(1);
 
     // 今日(7/21)のセルに試合数バッジ 3
@@ -87,11 +87,11 @@ describe('MatchCalendar（カレンダータブ本体）', () => {
   it('選択日リストは試合番号昇順で 1行=「N試合目： 勝敗記号+枚数差 相手名（級） お手N」、2行目にメモ', async () => {
     renderCalendar();
     // 今日の3試合が昇順で並ぶ
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     expect(screen.getByText('×13')).toBeInTheDocument(); // 1試合目 負け13
     expect(screen.getByText('〇7')).toBeInTheDocument(); // 2試合目 勝ち7
-    expect(screen.getByText('さとう（B）')).toBeInTheDocument();
-    expect(screen.getByText('たなか（A）')).toBeInTheDocument();
+    expect(screen.getByText('さとう(B)')).toBeInTheDocument();
+    expect(screen.getByText('たなか(A)')).toBeInTheDocument();
     expect(screen.getByText('お手1')).toBeInTheDocument();
     // メモ本文
     expect(screen.getByText('敵陣の別れは取れている')).toBeInTheDocument();
@@ -99,29 +99,30 @@ describe('MatchCalendar（カレンダータブ本体）', () => {
 
   it('級なし＝括弧なし・お手つき不明＝お手なし（ゲスト試合）', async () => {
     renderCalendar();
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     const user = userEvent.setup();
     await user.click(dayButton('7月3日'));
 
     expect(screen.getByText('ゲスト選手')).toBeInTheDocument(); // 括弧なし
-    expect(screen.queryByText(/（/)).toBeNull(); // 級の括弧を出さない
+    // 級なし＝相手名要素に括弧を出さない（見出しの曜日 (金) と混同しないよう相手名要素で検証）
+    expect(screen.getByText('ゲスト選手').textContent).not.toContain('(');
     expect(screen.queryByText(/お手/)).toBeNull(); // お手つき不明は出さない
     expect(screen.getByText('〇20')).toBeInTheDocument();
   });
 
   it('指導試合は勝敗の代わりに「指導」表示', async () => {
     renderCalendar();
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     const user = userEvent.setup();
     await user.click(dayButton('7月12日'));
 
     expect(screen.getByText('指導')).toBeInTheDocument();
-    expect(screen.getByText('こばやし（D）')).toBeInTheDocument();
+    expect(screen.getByText('こばやし(D)')).toBeInTheDocument();
   });
 
   it('試合が無い日は「記録がありません」・登録ボタンなし', async () => {
     renderCalendar();
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     const user = userEvent.setup();
     await user.click(dayButton('7月5日'));
 
@@ -131,7 +132,7 @@ describe('MatchCalendar（カレンダータブ本体）', () => {
 
   it('月ラベル下に当月の総試合数バッジ、年月ピッカーで別月へジャンプすると連動更新', async () => {
     renderCalendar();
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     // 7月は 3+1+1 = 5試合
     expect(screen.getByText('5試合')).toBeInTheDocument();
 
@@ -147,10 +148,10 @@ describe('MatchCalendar（カレンダータブ本体）', () => {
 
   it('試合項目タップで /matches/:id へ遷移する', async () => {
     renderCalendar();
-    await screen.findByText('ざきお（A）');
+    await screen.findByText('ざきお(A)');
     const user = userEvent.setup();
 
-    await user.click(screen.getByText('ざきお（A）').closest('button'));
+    await user.click(screen.getByText('ざきお(A)').closest('button'));
     expect(mockNavigate).toHaveBeenCalledWith('/matches/101');
   });
 });
