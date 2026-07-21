@@ -5,6 +5,7 @@ import { organizationAPI } from '../../api/organizations';
 import { Save, X, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { KYU_RANKS, DAN_RANKS, A_CLASS_DAN_RANKS, defaultDanForKyu } from '../../utils/rank';
+import { getOrgShortName } from '../../utils/organization';
 
 const GENDERS = ['男性', '女性', 'その他'];
 
@@ -53,9 +54,6 @@ const PlayerBulkEdit = () => {
     organizations.forEach((o) => { m[o.id] = o; });
     return m;
   }, [organizations]);
-
-  const hokudai = useMemo(() => organizations.find((o) => o.code === 'hokudai'), [organizations]);
-  const wasura = useMemo(() => organizations.find((o) => o.code === 'wasura'), [organizations]);
 
   // 追加予定も含めた所属団体ID -> 何人に追加するかの集計（確認ダイアログ用）
   const orgAddSummary = useMemo(() => {
@@ -143,25 +141,21 @@ const PlayerBulkEdit = () => {
     }
   };
 
-  // 現在＋追加予定の所属団体に北大/わすらが含まれているか（追加ボタンの活性制御）
+  // 所属団体一覧からクイック追加ボタンを動的生成（団体決め打ちを排除）。
+  // 既に所属済み（現在＋追加予定）の団体は disabled。ラベルは略称。
   const renderOrgAddButtons = (row) => (
     <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={() => addOrgToRow(row.id, hokudai)}
-        disabled={!hokudai || rowHasOrg(row, hokudai?.id)}
-        className="px-2.5 py-1 text-xs rounded-full border border-[#4a6b5a] text-[#4a6b5a] hover:bg-[#f0f4f1] disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        ＋北大
-      </button>
-      <button
-        type="button"
-        onClick={() => addOrgToRow(row.id, wasura)}
-        disabled={!wasura || rowHasOrg(row, wasura?.id)}
-        className="px-2.5 py-1 text-xs rounded-full border border-[#4a6b5a] text-[#4a6b5a] hover:bg-[#f0f4f1] disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        ＋わすら
-      </button>
+      {organizations.map((org) => (
+        <button
+          key={org.id}
+          type="button"
+          onClick={() => addOrgToRow(row.id, org)}
+          disabled={rowHasOrg(row, org.id)}
+          className="px-2.5 py-1 text-xs rounded-full border border-[#4a6b5a] text-[#4a6b5a] hover:bg-[#f0f4f1] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ＋{getOrgShortName(org)}
+        </button>
+      ))}
     </div>
   );
 
@@ -263,22 +257,16 @@ const PlayerBulkEdit = () => {
           <div>
             <label className="block text-xs text-gray-600 mb-1">所属練習会（追加のみ）</label>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => bulkAddOrg(hokudai)}
-                disabled={!hokudai}
-                className="px-3 py-2 text-sm bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] disabled:opacity-50"
-              >
-                全員に北大を追加
-              </button>
-              <button
-                type="button"
-                onClick={() => bulkAddOrg(wasura)}
-                disabled={!wasura}
-                className="px-3 py-2 text-sm bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] disabled:opacity-50"
-              >
-                全員にわすらを追加
-              </button>
+              {organizations.map((org) => (
+                <button
+                  key={org.id}
+                  type="button"
+                  onClick={() => bulkAddOrg(org)}
+                  className="px-3 py-2 text-sm bg-[#f0f4f1] text-[#4a6b5a] rounded-lg hover:bg-[#e4ebe6] disabled:opacity-50"
+                >
+                  全員に{getOrgShortName(org)}を追加
+                </button>
+              ))}
             </div>
           </div>
         </div>

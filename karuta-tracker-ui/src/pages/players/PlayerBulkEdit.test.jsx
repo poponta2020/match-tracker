@@ -98,6 +98,43 @@ describe('PlayerBulkEdit', () => {
     });
   });
 
+  it('fork団体（任意コード）の一括追加ボタンが動的生成され、押下で addOrganizationIds に反映される', async () => {
+    mocks.orgGetAll.mockResolvedValue({
+      data: [...ORGS, { id: 30, code: 'myclub', name: '○○かるた会' }],
+    });
+    renderWith({ players: makePlayers() });
+
+    // 略称（name先頭2文字）でラベル生成。hokudai決め打ちではなく団体一覧から動的生成される
+    const addBtn = await screen.findByRole('button', { name: '全員に○○を追加' });
+    await waitFor(() => expect(addBtn).toBeEnabled());
+    await userEvent.click(addBtn);
+    await save();
+
+    await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
+    const updates = mocks.bulkUpdate.mock.calls[0][0];
+    updates.forEach((u) => {
+      expect(u.addOrganizationIds).toContain(30);
+    });
+  });
+
+  it('fork団体の行ごとクイック追加ボタン（＋略称）が動的生成され、押下した行のみに反映される', async () => {
+    mocks.orgGetAll.mockResolvedValue({
+      data: [...ORGS, { id: 30, code: 'myclub', name: '○○かるた会' }],
+    });
+    renderWith({ players: makePlayers() });
+
+    // 各行に ＋○○ ボタンが出る（選手数ぶん）。先頭行（新一）のボタンだけ押す
+    const rowButtons = await screen.findAllByRole('button', { name: '＋○○' });
+    expect(rowButtons).toHaveLength(2);
+    await userEvent.click(rowButtons[0]);
+    await save();
+
+    await waitFor(() => expect(mocks.bulkUpdate).toHaveBeenCalledTimes(1));
+    const updates = mocks.bulkUpdate.mock.calls[0][0];
+    expect(updates.find((u) => u.playerId === 1).addOrganizationIds).toContain(30); // 押した行のみ
+    expect(updates.find((u) => u.playerId === 2).addOrganizationIds).not.toContain(30); // 他行は非対象
+  });
+
   it('行ごとの性別変更が該当選手のみ保存ペイロードに反映される', async () => {
     renderWith({ players: makePlayers() });
 

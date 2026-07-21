@@ -41,7 +41,7 @@ status: completed
 - **対応Issue:** #1148
 
 ### タスク3: D-2 選手一括編集のクイック追加ボタン動的化
-- [ ] 完了
+- [x] 完了
 - **目的:** `hokudai`/`wasura` 決め打ちの行/一括クイック追加ボタンを、団体一覧からの動的生成へ置き換える。
 - **対応AC:** AC-7, AC-9, AC-10
 - **主な変更領域:** `karuta-tracker-ui/src/pages/players/PlayerBulkEdit.jsx`、`karuta-tracker-ui/src/pages/players/PlayerBulkEdit.test.jsx`
