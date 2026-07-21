@@ -1,0 +1,500 @@
+diff --git a/karuta-tracker-ui/src/components/YearMonthPicker.jsx b/karuta-tracker-ui/src/components/YearMonthPicker.jsx
+index 7e6099be..67fcab7b 100644
+--- a/karuta-tracker-ui/src/components/YearMonthPicker.jsx
++++ b/karuta-tracker-ui/src/components/YearMonthPicker.jsx
+@@ -3,20 +3,29 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
+ 
+ /**
+  * 年月グリッドピッカー（ドロップダウン型）
++ *
++ * @param {(year:number, month:number)=>number} [countForMonth] 指定時、各月セルに件数を表示する
++ *   （month は 1-based）。未指定なら件数を出さない（従来どおり）。
++ * @param {import('react').RefObject} [triggerRef] ピッカーを開閉するトリガー要素の ref。指定時は
++ *   外側クリック検出から除外し、開いている時のトリガー再タップでトグル閉じできるようにする
++ *   （除外しないと mousedown で閉じ→click で再オープンし閉じられない）。
+  */
+-const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
++const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose, countForMonth, triggerRef }) => {
++  const showCounts = typeof countForMonth === 'function';
+   const pickerRef = useRef(null);
+   const [viewYear, setViewYear] = useState(currentYear);
+ 
+   useEffect(() => {
+     const handleClick = (e) => {
+-      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
++      const inPicker = pickerRef.current && pickerRef.current.contains(e.target);
++      const inTrigger = triggerRef?.current && triggerRef.current.contains(e.target);
++      if (!inPicker && !inTrigger) {
+         onClose();
+       }
+     };
+     document.addEventListener('mousedown', handleClick);
+     return () => document.removeEventListener('mousedown', handleClick);
+-  }, [onClose]);
++  }, [onClose, triggerRef]);
+ 
+   return (
+     <div
+@@ -36,17 +45,27 @@ const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
+       <div className="grid grid-cols-3 gap-1">
+         {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+           const isSelected = viewYear === currentYear && month === currentMonth;
++          const count = showCounts ? countForMonth(viewYear, month) : 0;
+           return (
+             <button
+               key={month}
+               onClick={() => { onSelect(viewYear, month); onClose(); }}
+-              className={`py-2 text-sm rounded-lg transition-colors
++              className={`text-sm rounded-lg transition-colors
++                ${showCounts ? 'flex flex-col items-center justify-center min-h-[2.75rem] py-1' : 'py-2'}
+                 ${isSelected
+                   ? 'bg-[#4a6b5a] text-white font-bold'
+                   : 'text-[#374151] hover:bg-[#eef2ef]'
+                 }`}
+             >
+-              {month}月
++              <span>{month}月</span>
++              {showCounts && count > 0 && (
++                <span
++                  className={`mt-0.5 text-[0.65rem] font-semibold leading-none
++                    ${isSelected ? 'text-white/85' : 'text-[#4a6b5a]'}`}
++                >
++                  {count}試合
++                </span>
++              )}
+             </button>
+           );
+         })}
+diff --git a/karuta-tracker-ui/src/pages/matches/MatchCalendar.jsx b/karuta-tracker-ui/src/pages/matches/MatchCalendar.jsx
+index 863324b0..b824d367 100644
+--- a/karuta-tracker-ui/src/pages/matches/MatchCalendar.jsx
++++ b/karuta-tracker-ui/src/pages/matches/MatchCalendar.jsx
+@@ -1,16 +1,16 @@
+-import { useEffect, useMemo, useState } from 'react';
++import { useEffect, useMemo, useRef, useState } from 'react';
+ import { useNavigate } from 'react-router-dom';
+ import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+ import { useAuth } from '../../context/AuthContext';
+ import { matchAPI } from '../../api';
+ import YearMonthPicker from '../../components/YearMonthPicker';
++import { isHorizontalSwipe, resolveSwipe } from './swipeGesture';
+ import {
+-  WEEKDAYS,
+   isoDate,
+   buildWeeks,
+   groupMatchesByDate,
+   countMatchesInMonth,
+-  formatMonthDay,
++  formatMonthDayDow,
+   opponentKyuChar,
+   venueOfDay,
+ } from '../../utils/matchCalendar';
+@@ -41,6 +41,9 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+   const [viewMonth, setViewMonth] = useState(referenceDate.getMonth()); // 0-based
+   const [selectedDate, setSelectedDate] = useState(todayIso);
+   const [showPicker, setShowPicker] = useState(false);
++  // 年月ラベル（ピッカーのトリガー）。ピッカーの外側クリック検出から除外し、開いている時の
++  // 再タップで「閉じる→即再オープン」の二重発火（mousedown 閉じ→click トグル開き）を防ぐ。
++  const monthLabelRef = useRef(null);
+ 
+   // 自分の全試合を取得（戦績確認タブの playerId とは独立に常に自分）
+   useEffect(() => {
+@@ -78,6 +81,30 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+     setViewMonth(nd.getMonth());
+   };
+ 
++  // カレンダーグリッドの左右スワイプで月移動（左=翌月 / 右=前月）。判定は共通の swipeGesture を
++  // 再利用（左スワイプ dx<0='next'）。スワイプ成立時は直後の日セルタップ誤選択を swiped フラグで抑制。
++  const swipeRef = useRef({ startX: 0, startY: 0, startTime: 0, swiped: false });
++  const onGridTouchStart = (e) => {
++    const t = e.touches[0];
++    swipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: e.timeStamp, swiped: false };
++  };
++  const onGridTouchEnd = (e) => {
++    const g = swipeRef.current;
++    const t = e.changedTouches[0];
++    if (!t) return;
++    const dx = t.clientX - g.startX;
++    const dy = t.clientY - g.startY;
++    if (!isHorizontalSwipe(dx, dy)) return;
++    const dt = e.timeStamp - g.startTime;
++    const velocity = dt > 0 ? dx / dt : 0;
++    const width = e.currentTarget.offsetWidth || 0;
++    const dir = resolveSwipe({ dx, containerWidth: width, velocity });
++    if (dir) {
++      g.swiped = true;
++      changeMonth(dir === 'next' ? 1 : -1);
++    }
++  };
++
+   const selectedMatches = matchesByDate[selectedDate] || [];
+   // 会場は日付に対し一意 → 見出しに1回だけ表示する
+   const selectedVenue = venueOfDay(selectedMatches);
+@@ -97,6 +124,7 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+             <ChevronLeft className="w-5 h-5" />
+           </button>
+           <button
++            ref={monthLabelRef}
+             type="button"
+             onClick={() => setShowPicker((v) => !v)}
+             className="flex flex-col items-center px-3 py-1 rounded-lg hover:bg-[#eef2ef] transition-colors"
+@@ -117,6 +145,8 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+           <YearMonthPicker
+             currentYear={viewYear}
+             currentMonth={viewMonth + 1}
++            triggerRef={monthLabelRef}
++            countForMonth={(y, m) => countMatchesInMonth(matches, y, m - 1)}
+             onSelect={(y, m) => {
+               setViewYear(y);
+               setViewMonth(m - 1);
+@@ -126,22 +156,15 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+         )}
+       </div>
+ 
+-      {/* 曜日ヘッダ */}
+-      <div className="grid grid-cols-7 px-2">
+-        {WEEKDAYS.map((w, i) => (
+-          <div
+-            key={w}
+-            className={`text-center text-sm py-1 ${
+-              i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-[#6b7280]'
+-            }`}
+-          >
+-            {w}
+-          </div>
+-        ))}
+-      </div>
++      {/* 曜日ヘッダは廃止（日曜=赤・土曜=青の日セル配色で曜日は充分伝わる） */}
+ 
+-      {/* 日セル */}
+-      <div className="px-2">
++      {/* 日セル（この領域のみ左右スワイプで月移動。カレンダー部分のみに限定） */}
++      <div
++        className="px-2"
++        style={{ touchAction: 'pan-y' }}
++        onTouchStart={onGridTouchStart}
++        onTouchEnd={onGridTouchEnd}
++      >
+         {weeks.map((week, wi) => (
+           <div key={wi} className="grid grid-cols-7 gap-0.5">
+             {week.map((cell, ci) => {
+@@ -167,7 +190,14 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+                   key={ci}
+                   type="button"
+                   aria-label={`${viewMonth + 1}月${cell.day}日`}
+-                  onClick={() => setSelectedDate(cell.date)}
++                  onClick={() => {
++                    // スワイプで月移動した直後のタップは日付を選択しない（誤選択防止）
++                    if (swipeRef.current.swiped) {
++                      swipeRef.current.swiped = false;
++                      return;
++                    }
++                    setSelectedDate(cell.date);
++                  }}
+                   className={`h-14 rounded-lg border-2 flex flex-col items-center pt-1.5 transition-colors ${
+                     isSelected ? 'border-[#4a6b5a] bg-[#eef2ef]' : 'border-transparent hover:bg-[#f4f7f5]'
+                   }`}
+@@ -185,17 +215,18 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+         ))}
+       </div>
+ 
+-      {/* 選択日の見出し帯（M/D 会場名。会場は日付に一意） */}
+-      <div className="mt-3 bg-[#4a6b5a] text-white px-4 py-2 font-bold">
+-        {formatMonthDay(selectedDate)}
++      {/* 選択日の見出し帯（M/D 会場名。会場は日付に一意）。親 <main> の px-4 sm:px-6 lg:px-8 を
++          負マージンで打ち消し、緑帯と直下リストを画面両端まで届かせる（全幅化） */}
++      <div className="mt-3 -mx-4 sm:-mx-6 lg:-mx-8 bg-[#4a6b5a] text-white px-4 py-2 font-bold">
++        {formatMonthDayDow(selectedDate)}
+         {selectedVenue ? '　' + selectedVenue : ''}
+       </div>
+ 
+       {/* 選択日の試合リスト */}
+       {selectedMatches.length === 0 ? (
+-        <div className="bg-[#f9f6f2] py-16 text-center text-gray-500">記録がありません</div>
++        <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-[#f9f6f2] py-16 text-center text-gray-500">記録がありません</div>
+       ) : (
+-        <div className="bg-[#f9f6f2] divide-y divide-[#e5e0da]">
++        <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-[#f9f6f2] divide-y divide-[#e5e0da]">
+           {selectedMatches.map((m) => {
+             const kyu = opponentKyuChar(m, selfId);
+             return (
+@@ -216,7 +247,7 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
+                   )}
+                   <span className="font-medium text-[#374151]">
+                     {m.opponentName}
+-                    {kyu ? `（${kyu}）` : ''}
++                    {kyu ? `(${kyu})` : ''}
+                   </span>
+                   {m.myOtetsukiCount != null && (
+                     <span className="text-[#6b7280]">お手{m.myOtetsukiCount}</span>
+diff --git a/karuta-tracker-ui/src/pages/matches/MatchList.jsx b/karuta-tracker-ui/src/pages/matches/MatchList.jsx
+index 804263aa..d104f775 100644
+--- a/karuta-tracker-ui/src/pages/matches/MatchList.jsx
++++ b/karuta-tracker-ui/src/pages/matches/MatchList.jsx
+@@ -363,7 +363,9 @@ const MatchList = () => {
+   // 戦績確認(record)側の loading・派生計算に依存しない自己完結ブロック。
+   if (view === 'calendar') {
+     return (
+-      <div className="space-y-6 pb-20">
++      // space-y-6 は付けない: 子は固定ヘッダ（フロー外）と本文の2つだけで、付けると本文に効く
++      // 24px の margin-top がタブ帯と月ナビの間の死に余白になるため（pb-20 は残す）
++      <div className="pb-20">
+         {/* 固定ヘッダ: 緑バー（自分の名前＋級）+ タブ帯 */}
+         <div className="fixed top-0 left-0 right-0 z-50">
+           <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
+@@ -447,109 +449,117 @@ const MatchList = () => {
+   });
+ 
+   return (
+-    <div className="space-y-6 pb-20">
+-      {/* 固定ヘッダ: 緑ナビバー + タブ帯 */}
++    // space-y-6 は付けない（カレンダー分岐と同理由: 固定ヘッダはフロー外で死に余白になる）
++    <div className="pb-20">
++      {/* 固定ヘッダ: 緑バー（名前＋級のみ＝カレンダータブと同一）+ タブ帯 + フィルタ/検索サブバー。
++          フィルタ等を緑バーから外しタブ帯の下へ切り出すことで、両タブでタブ位置が上下しない */}
+       <div className="fixed top-0 left-0 right-0 z-50">
++      {/* 緑バー: 名前＋級のみ（カレンダータブと構造・高さを一致させる） */}
+       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
+         <div className="max-w-7xl mx-auto">
+-          <div className="flex items-start justify-between">
+-            {/* 左: 名前 + 年月 */}
+-            <div className="min-w-0 flex-1">
+-              <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
+-                <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
+-                <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank || '初心者'}</span>
+-              </h1>
++          <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
++            <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
++            <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank || '初心者'}</span>
++          </h1>
++        </div>
++      </div>
++      <MatchViewTabs active="record" onChange={switchView} />
++      {/* フィルタ/検索サブバー（戦績確認タブ固有）: 緑バーに入れずタブ帯の直下へ切り出す。
++          背景はクリーム本文と同色（白地にしない）。年月フィルタは中央に置きカレンダータブの
++          月ラベルと座標を合わせる。アクション（検索等）は中央位置に影響しないよう右端へ絶対配置 */}
++      <div className="bg-[#f2ede6] px-4 pt-5 pb-3">
++        <div className="max-w-7xl mx-auto relative flex items-center justify-center">
++          {/* 期間フィルタ（年月＋フィルタ件数）: 中央寄せ＋上パディングでカレンダーの月ラベルと同じ座標 */}
++          <button
++            type="button"
++            onClick={() => setIsFilterOpen(true)}
++            className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 rounded px-2 py-0.5 transition-all hover:bg-[#eef2ef] active:scale-95"
++          >
++            {/* 文字の色味・大きさ・太さ・chevron 色はカレンダーの月ラベルと完全一致（下線なし） */}
++            <span className="flex items-center gap-1 text-lg font-bold text-[#374151]">
++              {selectedYear && selectedMonth
++                ? `${selectedYear}年${selectedMonth}月`
++                : selectedYear
++                ? `${selectedYear}年`
++                : '全期間'}
++              <ChevronDown className="w-4 h-4 text-[#6b7280]" aria-hidden="true" />
++            </span>
++            {activeFilterCount > 0 && (
++              <span className="shrink-0 rounded-full bg-[#eef2ef] px-2 py-0.5 text-xs text-[#4a6b5a]">
++                フィルタ {activeFilterCount}件
++              </span>
++            )}
++          </button>
++          {/* アクション（自分に戻す・選手検索）: 右端に絶対配置（中央のフィルタ座標を保つ） */}
++          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
++            {isOtherPlayer && (
+               <button
+-                type="button"
+-                onClick={() => setIsFilterOpen(true)}
+-                className="mt-0.5 -ml-2 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded px-2 py-2 text-sm text-white/70 transition-all hover:bg-white/10 active:scale-95 active:bg-white/10"
++                onClick={() => navigate('/matches')}
++                className="text-xs text-[#4a6b5a] border border-[#4a6b5a]/40 px-2 py-1 rounded hover:bg-[#eef2ef] transition-colors"
+               >
+-                <span className="underline decoration-dotted underline-offset-4">
+-                  {selectedYear && selectedMonth
+-                    ? `${selectedYear}年 ${selectedMonth}月`
+-                    : selectedYear
+-                    ? `${selectedYear}年`
+-                    : '全期間'}
+-                </span>
+-                <ChevronDown className="w-4 h-4 shrink-0" aria-hidden="true" />
+-                {activeFilterCount > 0 && (
+-                  <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-xs text-white">
+-                    フィルタ {activeFilterCount}件
+-                  </span>
+-                )}
++                自分に戻す
+               </button>
+-            </div>
+-            {/* 右: アクションボタン */}
+-            <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+-              {isOtherPlayer && (
++            )}
++            <button
++              aria-label="選手を検索"
++              onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
++              className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-[#eef2ef] text-[#4a6b5a]' : 'text-[#6b7280] hover:bg-[#eef2ef]'}`}
++            >
++              <Search className="w-5 h-5" />
++            </button>
++          </div>
++        </div>
++
++        {/* 選手検索バー（トグル表示） */}
++        {showPlayerSearch && (
++          <div className="relative mt-2" ref={playerSearchRef}>
++            <div className="relative">
++              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
++              <input
++                type="text"
++                placeholder="選手名で検索..."
++                value={playerSearchText}
++                autoFocus
++                onChange={(e) => {
++                  setPlayerSearchText(e.target.value);
++                }}
++                className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
++              />
++              {playerSearchText && (
+                 <button
+-                  onClick={() => navigate('/matches')}
+-                  className="text-xs text-white border border-white/60 px-2 py-1 rounded hover:bg-white/20 transition-colors"
++                  onClick={() => { setPlayerSearchText(''); }}
++                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                 >
+-                  自分に戻す
++                  <X className="w-4 h-4 text-gray-400" />
+                 </button>
+               )}
+-              <button
+-                aria-label="選手を検索"
+-                onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
+-                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-[#3d5a4c]'}`}
+-              >
+-                <Search className="w-5 h-5" />
+-              </button>
+             </div>
+-          </div>
+-
+-          {/* 選手検索バー（トグル表示） */}
+-          {showPlayerSearch && (
+-            <div className="relative mt-3" ref={playerSearchRef}>
+-              <div className="relative">
+-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+-                <input
+-                  type="text"
+-                  placeholder="選手名で検索..."
+-                  value={playerSearchText}
+-                  autoFocus
+-                  onChange={(e) => {
+-                    setPlayerSearchText(e.target.value);
+-                  }}
+-                  className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
+-                />
+-                {playerSearchText && (
++            {playerSearchResults.length > 0 && (
++              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
++                {playerSearchResults.map((p) => (
+                   <button
+-                    onClick={() => { setPlayerSearchText(''); }}
+-                    className="absolute right-3 top-1/2 -translate-y-1/2"
++                    key={p.id}
++                    onClick={() => {
++                      navigate(`/matches?playerId=${p.id}`);
++                      setPlayerSearchText('');
++                      setShowPlayerSearch(false);
++                    }}
++                    className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+                   >
+-                    <X className="w-4 h-4 text-gray-400" />
++                    {p.name}
++                    <span className="ml-2 text-xs text-gray-400">{p.kyuRank || '初心者'}</span>
+                   </button>
+-                )}
++                ))}
+               </div>
+-              {playerSearchResults.length > 0 && (
+-                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
+-                  {playerSearchResults.map((p) => (
+-                    <button
+-                      key={p.id}
+-                      onClick={() => {
+-                        navigate(`/matches?playerId=${p.id}`);
+-                        setPlayerSearchText('');
+-                        setShowPlayerSearch(false);
+-                      }}
+-                      className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+-                    >
+-                      {p.name}
+-                      <span className="ml-2 text-xs text-gray-400">{p.kyuRank || '初心者'}</span>
+-                    </button>
+-                  ))}
+-                </div>
+-              )}
+-            </div>
+-          )}
+-        </div>
++            )}
++          </div>
++        )}
+       </div>
+-      <MatchViewTabs active="record" onChange={switchView} />
+       </div>
+ 
+-      {/* コンテンツ（固定ヘッダ = 緑バー + タブ帯 ぶんの上部パディング） */}
+-      <div className={`${showPlayerSearch ? 'pt-[132px]' : 'pt-[84px]'} space-y-6 transition-all`}>
++      {/* コンテンツ（固定ヘッダ = 緑バー + タブ帯 + フィルタ/検索サブバー ぶんの上部パディング。
++          検索バー展開時はサブバーが伸びるぶん offset を増やす） */}
++      <div className={`${showPlayerSearch ? 'pt-[150px]' : 'pt-[104px]'} space-y-6 transition-all`}>
+       {/* 統計 */}
+       {rankStatistics && (
+         <div className="space-y-3">
+diff --git a/karuta-tracker-ui/src/pages/practice/PracticeList.jsx b/karuta-tracker-ui/src/pages/practice/PracticeList.jsx
+index bbf0f829..e1fc7855 100644
+--- a/karuta-tracker-ui/src/pages/practice/PracticeList.jsx
++++ b/karuta-tracker-ui/src/pages/practice/PracticeList.jsx
+@@ -56,6 +56,9 @@ const PracticeList = () => {
+   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
+   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
+   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
++  // 年月ラベル（ピッカーのトリガー）。外側クリック検出から除外し、開いている時の再タップで
++  // 「閉じる→即再オープン」の二重発火を防ぐ（MatchCalendar と同方式）。
++  const yearMonthLabelRef = useRef(null);
+   const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
+   const [reservationReady, setReservationReady] = useState({}); // 隣室予約済みフラグ {sessionId: true}
+   const [reservationLoading, setReservationLoading] = useState(false); // 予約処理中フラグ
+@@ -650,6 +653,7 @@ const PracticeList = () => {
+           </button>
+           <div className="relative">
+             <button
++              ref={yearMonthLabelRef}
+               onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
+               className="text-lg font-semibold text-white"
+             >
+@@ -659,6 +663,7 @@ const PracticeList = () => {
+               <YearMonthPicker
+                 currentYear={currentDate.getFullYear()}
+                 currentMonth={currentDate.getMonth() + 1}
++                triggerRef={yearMonthLabelRef}
+                 onSelect={(year, month) => {
+                   const newDate = new Date(year, month - 1, 1);
+                   setCurrentDate(newDate);
+diff --git a/karuta-tracker-ui/src/utils/matchCalendar.js b/karuta-tracker-ui/src/utils/matchCalendar.js
+index d64eb823..68545105 100644
+--- a/karuta-tracker-ui/src/utils/matchCalendar.js
++++ b/karuta-tracker-ui/src/utils/matchCalendar.js
+@@ -93,6 +93,18 @@ export const formatMonthDay = (iso) => {
+   return `${m}/${d}`;
+ };
+ 
++/**
++ * `YYYY-MM-DD` を `M/D(曜)` に整形する（曜日は日本語1字・半角括弧。選択日見出し用）。
++ * @param {string} iso `YYYY-MM-DD`
++ * @returns {string} 例 '7/21(火)'。空入力時は ''
++ */
++export const formatMonthDayDow = (iso) => {
++  if (!iso) return '';
++  const [y, m, d] = iso.split('-').map(Number);
++  const dow = WEEKDAYS[new Date(y, m - 1, d).getDay()];
++  return `${m}/${d}(${dow})`;
++};
++
+ /**
+  * 自分視点の試合から相手の級（単字）を返す。self でない側の kyuRank から「級」を除いた頭文字。
+  * 級が未設定（null/空/文字列以外）なら空文字を返す（呼び出し側で括弧を出さない）。

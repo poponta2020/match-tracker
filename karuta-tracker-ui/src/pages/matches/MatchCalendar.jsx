@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { matchAPI } from '../../api';
 import YearMonthPicker from '../../components/YearMonthPicker';
+import { isHorizontalSwipe, resolveSwipe } from './swipeGesture';
 import {
-  WEEKDAYS,
   isoDate,
   buildWeeks,
   groupMatchesByDate,
   countMatchesInMonth,
-  formatMonthDay,
+  formatMonthDayDow,
   opponentKyuChar,
   venueOfDay,
 } from '../../utils/matchCalendar';
@@ -41,6 +41,9 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
   const [viewMonth, setViewMonth] = useState(referenceDate.getMonth()); // 0-based
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [showPicker, setShowPicker] = useState(false);
+  // 年月ラベル（ピッカーのトリガー）。ピッカーの外側クリック検出から除外し、開いている時の
+  // 再タップで「閉じる→即再オープン」の二重発火（mousedown 閉じ→click トグル開き）を防ぐ。
+  const monthLabelRef = useRef(null);
 
   // 自分の全試合を取得（戦績確認タブの playerId とは独立に常に自分）
   useEffect(() => {
@@ -78,6 +81,30 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
     setViewMonth(nd.getMonth());
   };
 
+  // カレンダーグリッドの左右スワイプで月移動（左=翌月 / 右=前月）。判定は共通の swipeGesture を
+  // 再利用（左スワイプ dx<0='next'）。スワイプ成立時は直後の日セルタップ誤選択を swiped フラグで抑制。
+  const swipeRef = useRef({ startX: 0, startY: 0, startTime: 0, swiped: false });
+  const onGridTouchStart = (e) => {
+    const t = e.touches[0];
+    swipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: e.timeStamp, swiped: false };
+  };
+  const onGridTouchEnd = (e) => {
+    const g = swipeRef.current;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - g.startX;
+    const dy = t.clientY - g.startY;
+    if (!isHorizontalSwipe(dx, dy)) return;
+    const dt = e.timeStamp - g.startTime;
+    const velocity = dt > 0 ? dx / dt : 0;
+    const width = e.currentTarget.offsetWidth || 0;
+    const dir = resolveSwipe({ dx, containerWidth: width, velocity });
+    if (dir) {
+      g.swiped = true;
+      changeMonth(dir === 'next' ? 1 : -1);
+    }
+  };
+
   const selectedMatches = matchesByDate[selectedDate] || [];
   // 会場は日付に対し一意 → 見出しに1回だけ表示する
   const selectedVenue = venueOfDay(selectedMatches);
@@ -97,6 +124,7 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
+            ref={monthLabelRef}
             type="button"
             onClick={() => setShowPicker((v) => !v)}
             className="flex flex-col items-center px-3 py-1 rounded-lg hover:bg-[#eef2ef] transition-colors"
@@ -117,6 +145,8 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
           <YearMonthPicker
             currentYear={viewYear}
             currentMonth={viewMonth + 1}
+            triggerRef={monthLabelRef}
+            countForMonth={(y, m) => countMatchesInMonth(matches, y, m - 1)}
             onSelect={(y, m) => {
               setViewYear(y);
               setViewMonth(m - 1);
@@ -126,22 +156,15 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
         )}
       </div>
 
-      {/* 曜日ヘッダ */}
-      <div className="grid grid-cols-7 px-2">
-        {WEEKDAYS.map((w, i) => (
-          <div
-            key={w}
-            className={`text-center text-sm py-1 ${
-              i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-[#6b7280]'
-            }`}
-          >
-            {w}
-          </div>
-        ))}
-      </div>
+      {/* 曜日ヘッダは廃止（日曜=赤・土曜=青の日セル配色で曜日は充分伝わる） */}
 
-      {/* 日セル */}
-      <div className="px-2">
+      {/* 日セル（この領域のみ左右スワイプで月移動。カレンダー部分のみに限定） */}
+      <div
+        className="px-2"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={onGridTouchStart}
+        onTouchEnd={onGridTouchEnd}
+      >
         {weeks.map((week, wi) => (
           <div key={wi} className="grid grid-cols-7 gap-0.5">
             {week.map((cell, ci) => {
@@ -167,7 +190,14 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
                   key={ci}
                   type="button"
                   aria-label={`${viewMonth + 1}月${cell.day}日`}
-                  onClick={() => setSelectedDate(cell.date)}
+                  onClick={() => {
+                    // スワイプで月移動した直後のタップは日付を選択しない（誤選択防止）
+                    if (swipeRef.current.swiped) {
+                      swipeRef.current.swiped = false;
+                      return;
+                    }
+                    setSelectedDate(cell.date);
+                  }}
                   className={`h-14 rounded-lg border-2 flex flex-col items-center pt-1.5 transition-colors ${
                     isSelected ? 'border-[#4a6b5a] bg-[#eef2ef]' : 'border-transparent hover:bg-[#f4f7f5]'
                   }`}
@@ -185,17 +215,18 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
         ))}
       </div>
 
-      {/* 選択日の見出し帯（M/D 会場名。会場は日付に一意） */}
-      <div className="mt-3 bg-[#4a6b5a] text-white px-4 py-2 font-bold">
-        {formatMonthDay(selectedDate)}
+      {/* 選択日の見出し帯（M/D 会場名。会場は日付に一意）。親 <main> の px-4 sm:px-6 lg:px-8 を
+          負マージンで打ち消し、緑帯と直下リストを画面両端まで届かせる（全幅化） */}
+      <div className="mt-3 -mx-4 sm:-mx-6 lg:-mx-8 bg-[#4a6b5a] text-white px-4 py-2 font-bold">
+        {formatMonthDayDow(selectedDate)}
         {selectedVenue ? '　' + selectedVenue : ''}
       </div>
 
       {/* 選択日の試合リスト */}
       {selectedMatches.length === 0 ? (
-        <div className="bg-[#f9f6f2] py-16 text-center text-gray-500">記録がありません</div>
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-[#f9f6f2] py-16 text-center text-gray-500">記録がありません</div>
       ) : (
-        <div className="bg-[#f9f6f2] divide-y divide-[#e5e0da]">
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-[#f9f6f2] divide-y divide-[#e5e0da]">
           {selectedMatches.map((m) => {
             const kyu = opponentKyuChar(m, selfId);
             return (
@@ -216,7 +247,7 @@ const MatchCalendar = ({ referenceDate = new Date() }) => {
                   )}
                   <span className="font-medium text-[#374151]">
                     {m.opponentName}
-                    {kyu ? `（${kyu}）` : ''}
+                    {kyu ? `(${kyu})` : ''}
                   </span>
                   {m.myOtetsukiCount != null && (
                     <span className="text-[#6b7280]">お手{m.myOtetsukiCount}</span>

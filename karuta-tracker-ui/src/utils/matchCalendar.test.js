@@ -4,6 +4,7 @@ import {
   buildWeeks,
   countMatchesInMonth,
   formatMonthDay,
+  formatMonthDayDow,
   groupMatchesByDate,
   isoDate,
   opponentKyuChar,
@@ -90,6 +91,19 @@ describe('formatMonthDay（M/D・十の位0省略）', () => {
   });
   it('空入力は空文字', () => {
     expect(formatMonthDay('')).toBe('');
+  });
+});
+
+describe('formatMonthDayDow（M/D(曜)・十の位0省略・半角括弧）', () => {
+  it('曜日を日本語1字・半角括弧で付す', () => {
+    expect(formatMonthDayDow('2026-07-21')).toBe('7/21(火)');
+    expect(formatMonthDayDow('2026-07-03')).toBe('7/3(金)');
+  });
+  it('月・日の先頭ゼロを落とす', () => {
+    expect(formatMonthDayDow('2026-01-09')).toBe('1/9(金)');
+  });
+  it('空入力は空文字', () => {
+    expect(formatMonthDayDow('')).toBe('');
   });
 });
 

@@ -94,6 +94,18 @@ export const formatMonthDay = (iso) => {
 };
 
 /**
+ * `YYYY-MM-DD` を `M/D(曜)` に整形する（曜日は日本語1字・半角括弧。選択日見出し用）。
+ * @param {string} iso `YYYY-MM-DD`
+ * @returns {string} 例 '7/21(火)'。空入力時は ''
+ */
+export const formatMonthDayDow = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dow = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  return `${m}/${d}(${dow})`;
+};
+
+/**
  * 自分視点の試合から相手の級（単字）を返す。self でない側の kyuRank から「級」を除いた頭文字。
  * 級が未設定（null/空/文字列以外）なら空文字を返す（呼び出し側で括弧を出さない）。
  * @param {Object} match
