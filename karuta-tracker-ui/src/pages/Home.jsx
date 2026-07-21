@@ -110,9 +110,11 @@ const Home = () => {
 
   return (
     // 本文の"地" = 和紙繊維テクスチャ（決定論的な静的タイルを repeat）。
-    // Layout の緑シェル(#4a6b5a)直下から画面下端まで全幅で覆う。
+    // トップバー撤去（design-spec §2.5）: -mt-16 で最上部まで引き上げ、Layout の
+    // 固定フォールバック緑バー(#4a6b5a・z-40)を relative z-40 で覆い、深緑ヒーローが
+    // 最上部を占有する（緑シェルは下部5タブのみ）。画面下端まで全幅で覆う。
     <div
-      className="-mt-16 -mx-4 sm:-mx-6 lg:-mx-8 -mb-8 min-h-screen pt-16"
+      className="relative z-40 -mt-16 -mx-4 sm:-mx-6 lg:-mx-8 -mb-8 min-h-screen"
       style={{ background: `#f2ede6 url(${washiTile}) repeat` }}
     >
       {/* 次の練習ヒーロー（深緑・常時表示・単一デザイン） */}
