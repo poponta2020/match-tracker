@@ -8,7 +8,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: A-2 初期データseed テンプレート＋陳腐化ファイル削除
-- [ ] 完了
+- [x] 完了
 - **目的:** 空DB（schema.sql 適用済み）へ最初の団体・SUPER_ADMIN を投入する冪等な SQLテンプレートを整備し、鶏卵問題を解消する。陳腐化した旧seedを除去する。
 - **対応AC:** AC-1, AC-2, AC-3, AC-4, AC-8
 - **主な変更領域:** `database/seed_initial.sql`（新規）、`scripts/seed_data.sql`（削除）
