@@ -208,9 +208,16 @@ const Home = () => {
             const myPct = myRate && myRate.rate !== null ? Math.round(myRate.rate * 100) : 0;
             return (
               <div key={group.organizationId ?? 'all'} className="mb-5">
-                {/* サブラベル: 団体名（総試合数）。1団体所属時は団体名を出さない */}
-                <div className="mb-1.5 text-xs text-[#8a7568]">
-                  {showLabel ? `${group.organizationName}（${total}試合）` : `${total}試合`}
+                {/* サブラベル: 団体名（明朝・見出しより一回り小さく・目立たせる）＋総試合数（taupe小・据え置き）。1団体所属時は団体名を出さない */}
+                <div className="mb-1.5">
+                  {showLabel && (
+                    <span style={{ fontFamily: MINCHO }} className="text-base text-[#1A3654] mr-0.5">
+                      {group.organizationName}
+                    </span>
+                  )}
+                  <span className="text-xs text-[#8a7568]">
+                    {showLabel ? `（${total}試合）` : `${total}試合`}
+                  </span>
                 </div>
 
                 {top3.map((player, index) => {

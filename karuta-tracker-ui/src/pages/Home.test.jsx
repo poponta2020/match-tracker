@@ -149,13 +149,16 @@ describe('Home 脱カード・リデザイン', () => {
         {
           organizationId: 5,
           organizationName: '北大かるた会',
-          top3: [{ playerId: 20, playerName: '甲', rate: 0.5, participatedMatches: 2, totalScheduledMatches: 4 }],
+          top3: [{ playerId: 20, playerName: '甲', rate: 0.5, participatedMatches: 2, totalScheduledMatches: 6 }],
           myRate: null,
         },
       ],
     });
 
-    expect(screen.getByText('北大かるた会（4試合）')).toBeInTheDocument();
+    // 団体名（明朝・見出しより小さく）と総試合数（taupe）は別要素に分離
+    expect(screen.getByText('全体')).toBeInTheDocument();
+    expect(screen.getByText('北大かるた会')).toBeInTheDocument();
+    expect(screen.getByText('（6試合）')).toBeInTheDocument();
   });
 
   it('脱カード不変条件: トップバー(ユーザー名)・参加者チップ・繰り上げバナーを描画しない', async () => {
