@@ -108,3 +108,7 @@ VALUES ('土居悠太', 'password123', '男性', 'SUPER_ADMIN', NOW(), NOW());
 ```
 
 > パスワードは BCrypt ハッシュで保存する。上記のように平文で投入した場合でも、起動時の `PasswordHashMigrationRunner` が BCrypt へ変換する（冪等）。
+
+### 新規デプロイ用シードテンプレート
+
+別のかるた会が fork して自前の空DBを立ち上げる場合の初期投入テンプレートが `database/seed_initial.sql`（`schema.sql` 適用後に `psql -f` で流す）。最小2行（`organizations`×1・`players`(SUPER_ADMIN)×1）のみを `ON CONFLICT DO NOTHING` で冪等に投入する。団体コード・管理者名・パスワードはプレースホルダで、適用前に自会の値へ書き換える。**適用は起動前に行うか、起動中に流した場合はアプリを再起動する**（起動時の `PasswordHashMigrationRunner` が平文パスワードを BCrypt 化するため。順序を誤ると平文照合でログイン不能になる）。詳細な手順は同ファイル冒頭コメント参照。

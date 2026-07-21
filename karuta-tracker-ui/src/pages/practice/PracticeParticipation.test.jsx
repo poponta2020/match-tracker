@@ -39,7 +39,8 @@ vi.mock('../../components/LoadingScreen', () => ({
   default: () => <div>Loading...</div>,
 }));
 
-import { practiceAPI } from '../../api';
+import { practiceAPI, systemSettingsAPI } from '../../api';
+import { organizationAPI } from '../../api/organizations';
 import PracticeParticipation from './PracticeParticipation';
 
 // 2026-05-21 を「現在」として固定
@@ -265,6 +266,55 @@ describe('PracticeParticipation 当月扱い／来月扱いのチェック外し
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes[0]).toBeDisabled(); // 第1試合は initial 含む → disabled
     expect(checkboxes[1]).not.toBeDisabled(); // 第2試合は未登録 → 追加可能
+  });
+
+  it('締切設定を持つ非hokudai団体について、その団体略称付きで締切バナーを表示する（団体決め打ち排除）', async () => {
+    mockSearchParams = new URLSearchParams('year=2026&month=5');
+    setupAPI({
+      sessions: [
+        { id: 100, sessionDate: '2026-05-25', totalMatches: 3, venueName: '東区民センター', organizationId: 55 },
+      ],
+      participations: { 100: [] },
+      lotteryExecuted: { 100: false },
+      beforeDeadline: true,
+    });
+    organizationAPI.getPlayerOrganizations.mockResolvedValueOnce({
+      data: [{ id: 55, code: 'myclub', name: '○○会' }],
+    });
+    systemSettingsAPI.getDeadline.mockResolvedValueOnce({
+      data: { deadline: '2026-05-25T23:59:00+09:00', noDeadline: false },
+    });
+
+    render(<PracticeParticipation />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).toBeNull());
+
+    // 非hokudai団体でも締切バナーが表示され、ラベルはその団体の略称（name先頭2文字）
+    expect(await screen.findByText(/締め切り:.*（○○）/)).toBeInTheDocument();
+    // 北大決め打ちの残骸が出ないこと
+    expect(screen.queryByText(/（北大）/)).toBeNull();
+  });
+
+  it('締切設定を持つ hokudai は従来どおり「北大」ラベルで締切バナーを表示する（非退行）', async () => {
+    mockSearchParams = new URLSearchParams('year=2026&month=5');
+    setupAPI({
+      sessions: [
+        { id: 100, sessionDate: '2026-05-25', totalMatches: 3, venueName: '北大体育館', organizationId: 66 },
+      ],
+      participations: { 100: [] },
+      lotteryExecuted: { 100: false },
+      beforeDeadline: true,
+    });
+    organizationAPI.getPlayerOrganizations.mockResolvedValueOnce({
+      data: [{ id: 66, code: 'hokudai', name: '北海道大学かるた会' }],
+    });
+    systemSettingsAPI.getDeadline.mockResolvedValueOnce({
+      data: { deadline: '2026-05-25T23:59:00+09:00', noDeadline: false },
+    });
+
+    render(<PracticeParticipation />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).toBeNull());
+
+    expect(await screen.findByText(/締め切り:.*（北大）/)).toBeInTheDocument();
   });
 });
 

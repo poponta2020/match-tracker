@@ -9,6 +9,7 @@ import SaveProgressOverlay from '../../components/SaveProgressOverlay';
 import { getInitialDateFromQuery } from './utils/dateFromQuery';
 import { needsSameDayConfirm as needsSameDayConfirmFn } from './utils/sameDayConfirm';
 import { resolveAttendanceMode } from './utils/attendanceMode';
+import { getOrgShortName } from '../../utils/organization';
 
 const PracticeParticipation = () => {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ const PracticeParticipation = () => {
   const [lotteryExecuted, setLotteryExecuted] = useState({}); // sessionId -> boolean（個別セッションのロック判定）
   const [hasMonthlyLottery, setHasMonthlyLottery] = useState(false); // 月内に抽選確定済みが1つでもあるか（月単位判定）
   const [beforeDeadline, setBeforeDeadline] = useState(true);
-  const [deadlineInfo, setDeadlineInfo] = useState(null);
+  const [deadlines, setDeadlines] = useState([]); // [{ org, info }] 締切設定を持つ所属団体のみ
   const [orgMap, setOrgMap] = useState({});
   const [showSameDayConfirm, setShowSameDayConfirm] = useState(false);
 
@@ -72,16 +73,17 @@ const PracticeParticipation = () => {
         setBeforeDeadline(statusData.beforeDeadline !== false);
         setParticipationVersion(statusData.version ?? null);
 
-        // 北大に所属している場合のみ、北大の締め切り情報を取得
-        const hokudaiOrg = (playerOrgsRes.data || []).find(o => o.code === 'hokudai');
-        if (hokudaiOrg) {
-          const deadlineRes = await systemSettingsAPI
-            .getDeadline(year, month, hokudaiOrg.id)
-            .catch(() => ({ data: null }));
-          setDeadlineInfo(deadlineRes.data);
-        } else {
-          setDeadlineInfo(null);
-        }
+        // 所属団体それぞれの締め切り設定を取得し、設定を持つ（非null）団体のみバナー対象にする（団体非依存）
+        const playerOrgs = playerOrgsRes.data || [];
+        const deadlineResults = await Promise.all(
+          playerOrgs.map((org) =>
+            systemSettingsAPI
+              .getDeadline(year, month, org.id)
+              .then((res) => ({ org, info: res.data }))
+              .catch(() => ({ org, info: null }))
+          )
+        );
+        setDeadlines(deadlineResults.filter((d) => d.info));
 
         // 団体マップ
         const map = {};
@@ -257,17 +259,6 @@ const PracticeParticipation = () => {
     return sessionDate < today;
   };
 
-  // 団体略称を取得
-  const getOrgShortName = (session) => {
-    const org = orgMap[session.organizationId];
-    if (!org) return '';
-    const shortNameMap = {
-      'wasura': 'わすら',
-      'hokudai': '北大',
-    };
-    return shortNameMap[org.code] || org.name.substring(0, 2);
-  };
-
   // 団体カラーを取得
   const getOrgColor = (session) => {
     const org = orgMap[session.organizationId];
@@ -334,20 +325,21 @@ const PracticeParticipation = () => {
           </div>
         )}
 
-        {/* 締め切り表示 */}
-        {deadlineInfo && !deadlineInfo.noDeadline && deadlineInfo.deadline && beforeDeadline && (() => {
-          const dl = new Date(deadlineInfo.deadline);
+        {/* 締め切り表示（締切設定を持つ所属団体ごと） */}
+        {beforeDeadline && deadlines.map(({ org, info }) => {
+          if (!info || info.noDeadline || !info.deadline) return null;
+          const dl = new Date(info.deadline);
           const now = new Date();
           const diffDays = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
           if (diffDays < 0) return null;
           return (
-            <div className="mx-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div key={org.id} className="mx-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-800">
-                締め切り: {dl.getMonth() + 1}月{dl.getDate()}日（あと{diffDays}日）（北大）
+                締め切り: {dl.getMonth() + 1}月{dl.getDate()}日（あと{diffDays}日）（{getOrgShortName(org)}）
               </p>
             </div>
           );
-        })()}
+        })}
 
         {/* 練習セッション一覧 */}
         {futureSessions.length === 0 ? (
@@ -393,7 +385,7 @@ const PracticeParticipation = () => {
                               className="text-[10px] font-bold whitespace-nowrap"
                               style={{ color: getOrgColor(session) }}
                             >
-                              {getOrgShortName(session)}
+                              {getOrgShortName(orgMap[session.organizationId])}
                             </span>
                           </div>
                         </td>
