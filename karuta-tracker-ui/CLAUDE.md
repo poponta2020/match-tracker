@@ -19,6 +19,7 @@ React 19 / Vite / Tailwind CSS v3。ソースルート: `src/`
 
 - ユーザー向け文言は日本語
 - lint: `npm run lint`／テスト: `npm run test`（スワイプ・カルーセル系のフレークは `vitest run --no-file-parallelism` で逐次実行して切り分け）
-- デザイントークン: `tailwind.config.js`・`src/index.css`（claude.ai/design の「Match Tracker Design System」と対応）
+- デザイン正典（UI 改修時に**参照・厳守**）: [`docs/design/design.md`](../docs/design/design.md)（脱AIスロップ「和紙 Anti-Slop」原則・色/タイポ/レイアウト・トークン参照仕様・固有 Don'ts）
+- デザイントークンの実配線: `tailwind.config.js`・`src/index.css`（claude.ai/design の「Match Tracker Design System」と対応。※design.md のトークンは現状 config 未配線の参照仕様）
 
 機能→実装ファイルの対応は `docs/spec/<ドメイン>.md` 冒頭の「主要実装」を参照。

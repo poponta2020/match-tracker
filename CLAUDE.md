@@ -12,7 +12,7 @@
 
 ## 改修時のナビゲーション（全域 grep の前に docs を起点にする）
 
-1. UI・画面の改修 → [docs/SCREEN_LIST.md](docs/SCREEN_LIST.md) で画面→コンポーネントを特定
+1. UI・画面の改修 → まず [docs/design/design.md](docs/design/design.md)（脱AIスロップ・デザイン正典。色/タイポ/レイアウト・固有 Don'ts を**参照・厳守**）→ [docs/SCREEN_LIST.md](docs/SCREEN_LIST.md) で画面→コンポーネントを特定
 2. 機能・API・フローの改修 → [docs/SPECIFICATION.md](docs/SPECIFICATION.md)（ハブ）→ 該当 `docs/spec/<ドメイン>.md`（冒頭に主要実装パスあり）
 3. DB スキーマ → `docs/design/db.md`／アーキテクチャ・権限 → `docs/design/architecture.md`
 4. 類似の過去改修を探す → [docs/features/INDEX.md](docs/features/INDEX.md)

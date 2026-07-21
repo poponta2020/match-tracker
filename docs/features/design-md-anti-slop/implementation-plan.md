@@ -24,7 +24,7 @@ status: completed
 - **完了条件:** 8セクション見出し＋パース可能な front matter を持つ（AC-1 の走査/パースが通る）。
 
 ### タスク2: 正典の配線（enforcement）
-- [ ] 完了
+- [x] 完了
 - **目的:** design.md を「正典」として機能させる。
 - **対応AC:** AC-7
 - **主な変更領域:** `.claude/project-profile.md`（`## design-system`・`## docs`）、`CLAUDE.md`（ナビゲーション規約）、`karuta-tracker-ui/CLAUDE.md`（デザイントークン行）
