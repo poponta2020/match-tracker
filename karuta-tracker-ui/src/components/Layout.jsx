@@ -115,13 +115,21 @@ const Layout = ({ children }) => {
     navigate(bottomNavItems[idx].href);
   };
 
+  // 追跡中のドラッグを「遷移させずに」破棄する（pointercancel・追跡外ポインター用）
+  const resetPress = () => {
+    pressRef.current = { startX: 0, moved: false, pointerId: null };
+    setDragging(false);
+    setDragCenter(null);
+  };
+
   const onCapsulePointerDown = (e) => {
     if (slotWidth <= 0) return;
     pressRef.current = { startX: e.clientX, moved: false, pointerId: e.pointerId };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const onCapsulePointerMove = (e) => {
-    if (pressRef.current.pointerId == null) return;
+    // 追跡中のポインターのイベントのみ扱う（別の指・stale event を無視）
+    if (pressRef.current.pointerId == null || e.pointerId !== pressRef.current.pointerId) return;
     // 4px 未満はタップ扱い（ドラッグ開始しない）
     if (!pressRef.current.moved && Math.abs(e.clientX - pressRef.current.startX) < 4) return;
     pressRef.current.moved = true;
@@ -129,9 +137,10 @@ const Layout = ({ children }) => {
     setDragCenter(pointerToCenter(e.clientX));
   };
   const onCapsulePointerUp = (e) => {
-    const { moved, pointerId } = pressRef.current;
+    // 追跡中ポインターの pointerup のみ確定処理する（別の指の up・stale event で誤遷移しない）
+    if (pressRef.current.pointerId == null || e.pointerId !== pressRef.current.pointerId) return;
+    const { moved } = pressRef.current;
     pressRef.current = { startX: 0, moved: false, pointerId: null };
-    if (pointerId == null) return;
     if (moved) {
       // ドラッグ確定: 最寄りへ置いて、保持していた膨らみを元サイズへ戻す
       const center = dragCenter != null ? dragCenter : pointerToCenter(e.clientX);
@@ -145,6 +154,11 @@ const Layout = ({ children }) => {
       triggerPuff();
       pulseInteract();
     }
+  };
+  // pointercancel（OS割り込み・pointer capture 喪失など）: 遷移させずドラッグ状態だけ破棄する
+  const onCapsulePointerCancel = (e) => {
+    if (pressRef.current.pointerId != null && e.pointerId !== pressRef.current.pointerId) return;
+    resetPress();
   };
 
   // アイコンのタップ: カプセル/ピルの膨らみ演出のみ。遷移は Link の通常挙動に任せる。
@@ -214,7 +228,7 @@ const Layout = ({ children }) => {
                 onPointerDown={onCapsulePointerDown}
                 onPointerMove={onCapsulePointerMove}
                 onPointerUp={onCapsulePointerUp}
-                onPointerCancel={onCapsulePointerUp}
+                onPointerCancel={onCapsulePointerCancel}
                 className="absolute top-1/2 rounded-full"
                 style={{
                   left: 0,

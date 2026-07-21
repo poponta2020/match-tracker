@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 // isVisible をテストごとに制御するため BottomNavContext をモックする（AC-6 回帰の検証に必要）。
 let mockIsVisible = true;
@@ -21,17 +21,32 @@ const NAV_ITEMS = [
   { label: '設定', href: '/settings' },
 ];
 
+let locationRef = null;
+const LocationProbe = () => {
+  locationRef = useLocation();
+  return null;
+};
+
 const renderAt = (path) =>
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="*" element={<Layout>content</Layout>} />
+        <Route
+          path="*"
+          element={
+            <>
+              <LocationProbe />
+              <Layout>content</Layout>
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>
   );
 
 beforeEach(() => {
   mockIsVisible = true;
+  locationRef = null;
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -144,5 +159,35 @@ describe('Layout ボトムナビ（リキッドグラス）', () => {
     within(nav)
       .getAllByRole('link')
       .forEach((l) => expect(l).toHaveAttribute('tabindex', '0'));
+  });
+
+  // カプセルのドラッグ確定/中断（Pointer Events）。実ドラッグの見た目は verify/manual だが、
+  // 「確定→遷移／中断→非遷移」の分岐は誤遷移バグの回帰ガードとして固定する。
+  const dragCapsule = () => {
+    const capsule = screen.getByTestId('bottom-nav-capsule');
+    fireEvent.pointerDown(capsule, { clientX: 40, pointerId: 1 });
+    fireEvent.pointerMove(capsule, { clientX: 340, pointerId: 1 }); // 最終スロット付近まで移動
+    return capsule;
+  };
+
+  it('ドラッグ後の pointerup で最寄り項目（設定）へ遷移する (AC-16)', () => {
+    renderAt('/'); // active=ホーム(0)
+    const capsule = dragCapsule();
+    fireEvent.pointerUp(capsule, { clientX: 340, pointerId: 1 });
+    expect(locationRef.pathname).toBe('/settings');
+  });
+
+  it('ドラッグ中に pointercancel が来ても遷移しない (誤遷移回帰)', () => {
+    renderAt('/');
+    const capsule = dragCapsule();
+    fireEvent.pointerCancel(capsule, { pointerId: 1 });
+    expect(locationRef.pathname).toBe('/');
+  });
+
+  it('追跡外ポインター（別の指）の pointerup では遷移しない (誤遷移回帰)', () => {
+    renderAt('/');
+    const capsule = dragCapsule();
+    fireEvent.pointerUp(capsule, { clientX: 340, pointerId: 2 });
+    expect(locationRef.pathname).toBe('/');
   });
 });
