@@ -363,7 +363,9 @@ const MatchList = () => {
   // 戦績確認(record)側の loading・派生計算に依存しない自己完結ブロック。
   if (view === 'calendar') {
     return (
-      <div className="space-y-6 pb-20">
+      // space-y-6 は付けない: 子は固定ヘッダ（フロー外）と本文の2つだけで、付けると本文に効く
+      // 24px の margin-top がタブ帯と月ナビの間の死に余白になるため（pb-20 は残す）
+      <div className="pb-20">
         {/* 固定ヘッダ: 緑バー（自分の名前＋級）+ タブ帯 */}
         <div className="fixed top-0 left-0 right-0 z-50">
           <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
@@ -447,109 +449,117 @@ const MatchList = () => {
   });
 
   return (
-    <div className="space-y-6 pb-20">
-      {/* 固定ヘッダ: 緑ナビバー + タブ帯 */}
+    // space-y-6 は付けない（カレンダー分岐と同理由: 固定ヘッダはフロー外で死に余白になる）
+    <div className="pb-20">
+      {/* 固定ヘッダ: 緑バー（名前＋級のみ＝カレンダータブと同一）+ タブ帯 + フィルタ/検索サブバー。
+          フィルタ等を緑バーから外しタブ帯の下へ切り出すことで、両タブでタブ位置が上下しない */}
       <div className="fixed top-0 left-0 right-0 z-50">
+      {/* 緑バー: 名前＋級のみ（カレンダータブと構造・高さを一致させる） */}
       <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-start justify-between">
-            {/* 左: 名前 + 年月 */}
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
-                <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
-                <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank || '初心者'}</span>
-              </h1>
-              <button
-                type="button"
-                onClick={() => setIsFilterOpen(true)}
-                className="mt-0.5 -ml-2 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded px-2 py-2 text-sm text-white/70 transition-all hover:bg-white/10 active:scale-95 active:bg-white/10"
-              >
-                <span className="underline decoration-dotted underline-offset-4">
-                  {selectedYear && selectedMonth
-                    ? `${selectedYear}年 ${selectedMonth}月`
-                    : selectedYear
-                    ? `${selectedYear}年`
-                    : '全期間'}
-                </span>
-                <ChevronDown className="w-4 h-4 shrink-0" aria-hidden="true" />
-                {activeFilterCount > 0 && (
-                  <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-xs text-white">
-                    フィルタ {activeFilterCount}件
-                  </span>
-                )}
-              </button>
-            </div>
-            {/* 右: アクションボタン */}
-            <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-              {isOtherPlayer && (
-                <button
-                  onClick={() => navigate('/matches')}
-                  className="text-xs text-white border border-white/60 px-2 py-1 rounded hover:bg-white/20 transition-colors"
-                >
-                  自分に戻す
-                </button>
-              )}
-              <button
-                aria-label="選手を検索"
-                onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
-                className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-[#3d5a4c]'}`}
-              >
-                <Search className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* 選手検索バー（トグル表示） */}
-          {showPlayerSearch && (
-            <div className="relative mt-3" ref={playerSearchRef}>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="選手名で検索..."
-                  value={playerSearchText}
-                  autoFocus
-                  onChange={(e) => {
-                    setPlayerSearchText(e.target.value);
-                  }}
-                  className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
-                />
-                {playerSearchText && (
-                  <button
-                    onClick={() => { setPlayerSearchText(''); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                  >
-                    <X className="w-4 h-4 text-gray-400" />
-                  </button>
-                )}
-              </div>
-              {playerSearchResults.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
-                  {playerSearchResults.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        navigate(`/matches?playerId=${p.id}`);
-                        setPlayerSearchText('');
-                        setShowPlayerSearch(false);
-                      }}
-                      className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
-                    >
-                      {p.name}
-                      <span className="ml-2 text-xs text-gray-400">{p.kyuRank || '初心者'}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
+            <span>{isOtherPlayer ? targetPlayerName : currentPlayer?.name || ''}</span>
+            <span className="text-sm font-normal text-white/70">{targetPlayerKyuRank || '初心者'}</span>
+          </h1>
         </div>
       </div>
       <MatchViewTabs active="record" onChange={switchView} />
+      {/* フィルタ/検索サブバー（戦績確認タブ固有）: 緑バーに入れずタブ帯の直下へ切り出す。
+          背景はクリーム本文と同色（白地にしない）。年月フィルタは中央に置きカレンダータブの
+          月ラベルと座標を合わせる。アクション（検索等）は中央位置に影響しないよう右端へ絶対配置 */}
+      <div className="bg-[#f2ede6] px-4 pt-5 pb-3">
+        <div className="max-w-7xl mx-auto relative flex items-center justify-center">
+          {/* 期間フィルタ（年月＋フィルタ件数）: 中央寄せ＋上パディングでカレンダーの月ラベルと同じ座標 */}
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen(true)}
+            className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 rounded px-2 py-0.5 transition-all hover:bg-[#eef2ef] active:scale-95"
+          >
+            {/* 文字の色味・大きさ・太さ・chevron 色はカレンダーの月ラベルと完全一致（下線なし） */}
+            <span className="flex items-center gap-1 text-lg font-bold text-[#374151]">
+              {selectedYear && selectedMonth
+                ? `${selectedYear}年${selectedMonth}月`
+                : selectedYear
+                ? `${selectedYear}年`
+                : '全期間'}
+              <ChevronDown className="w-4 h-4 text-[#6b7280]" aria-hidden="true" />
+            </span>
+            {activeFilterCount > 0 && (
+              <span className="shrink-0 rounded-full bg-[#eef2ef] px-2 py-0.5 text-xs text-[#4a6b5a]">
+                フィルタ {activeFilterCount}件
+              </span>
+            )}
+          </button>
+          {/* アクション（自分に戻す・選手検索）: 右端に絶対配置（中央のフィルタ座標を保つ） */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {isOtherPlayer && (
+              <button
+                onClick={() => navigate('/matches')}
+                className="text-xs text-[#4a6b5a] border border-[#4a6b5a]/40 px-2 py-1 rounded hover:bg-[#eef2ef] transition-colors"
+              >
+                自分に戻す
+              </button>
+            )}
+            <button
+              aria-label="選手を検索"
+              onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
+              className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-[#eef2ef] text-[#4a6b5a]' : 'text-[#6b7280] hover:bg-[#eef2ef]'}`}
+            >
+              <Search className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 選手検索バー（トグル表示） */}
+        {showPlayerSearch && (
+          <div className="relative mt-2" ref={playerSearchRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="選手名で検索..."
+                value={playerSearchText}
+                autoFocus
+                onChange={(e) => {
+                  setPlayerSearchText(e.target.value);
+                }}
+                className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-[#c5cec8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4a6b5a]"
+              />
+              {playerSearchText && (
+                <button
+                  onClick={() => { setPlayerSearchText(''); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              )}
+            </div>
+            {playerSearchResults.length > 0 && (
+              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-40 max-h-48 overflow-y-auto">
+                {playerSearchResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      navigate(`/matches?playerId=${p.id}`);
+                      setPlayerSearchText('');
+                      setShowPlayerSearch(false);
+                    }}
+                    className="block w-full text-left px-4 py-2.5 text-sm hover:bg-[#eef2ef] text-[#374151]"
+                  >
+                    {p.name}
+                    <span className="ml-2 text-xs text-gray-400">{p.kyuRank || '初心者'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       </div>
 
-      {/* コンテンツ（固定ヘッダ = 緑バー + タブ帯 ぶんの上部パディング） */}
-      <div className={`${showPlayerSearch ? 'pt-[132px]' : 'pt-[84px]'} space-y-6 transition-all`}>
+      {/* コンテンツ（固定ヘッダ = 緑バー + タブ帯 + フィルタ/検索サブバー ぶんの上部パディング。
+          検索バー展開時はサブバーが伸びるぶん offset を増やす） */}
+      <div className={`${showPlayerSearch ? 'pt-[150px]' : 'pt-[104px]'} space-y-6 transition-all`}>
       {/* 統計 */}
       {rankStatistics && (
         <div className="space-y-3">

@@ -56,6 +56,9 @@ const PracticeList = () => {
   const [showEditModal, setShowEditModal] = useState(false); // 試合別参加者編集モーダル
   const [editingMatchNumber, setEditingMatchNumber] = useState(null); // 編集中の試合番号
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false); // 年月ピッカー表示
+  // 年月ラベル（ピッカーのトリガー）。外側クリック検出から除外し、開いている時の再タップで
+  // 「閉じる→即再オープン」の二重発火を防ぐ（MatchCalendar と同方式）。
+  const yearMonthLabelRef = useRef(null);
   const [orgMap, setOrgMap] = useState({}); // 団体ID → 団体情報マップ
   const [reservationReady, setReservationReady] = useState({}); // 隣室予約済みフラグ {sessionId: true}
   const [reservationLoading, setReservationLoading] = useState(false); // 予約処理中フラグ
@@ -650,6 +653,7 @@ const PracticeList = () => {
           </button>
           <div className="relative">
             <button
+              ref={yearMonthLabelRef}
               onClick={() => setShowYearMonthPicker(!showYearMonthPicker)}
               className="text-lg font-semibold text-white"
             >
@@ -659,6 +663,7 @@ const PracticeList = () => {
               <YearMonthPicker
                 currentYear={currentDate.getFullYear()}
                 currentMonth={currentDate.getMonth() + 1}
+                triggerRef={yearMonthLabelRef}
                 onSelect={(year, month) => {
                   const newDate = new Date(year, month - 1, 1);
                   setCurrentDate(newDate);

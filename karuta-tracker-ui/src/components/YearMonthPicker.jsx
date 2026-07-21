@@ -3,20 +3,29 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * 年月グリッドピッカー（ドロップダウン型）
+ *
+ * @param {(year:number, month:number)=>number} [countForMonth] 指定時、各月セルに件数を表示する
+ *   （month は 1-based）。未指定なら件数を出さない（従来どおり）。
+ * @param {import('react').RefObject} [triggerRef] ピッカーを開閉するトリガー要素の ref。指定時は
+ *   外側クリック検出から除外し、開いている時のトリガー再タップでトグル閉じできるようにする
+ *   （除外しないと mousedown で閉じ→click で再オープンし閉じられない）。
  */
-const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
+const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose, countForMonth, triggerRef }) => {
+  const showCounts = typeof countForMonth === 'function';
   const pickerRef = useRef(null);
   const [viewYear, setViewYear] = useState(currentYear);
 
   useEffect(() => {
     const handleClick = (e) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+      const inPicker = pickerRef.current && pickerRef.current.contains(e.target);
+      const inTrigger = triggerRef?.current && triggerRef.current.contains(e.target);
+      if (!inPicker && !inTrigger) {
         onClose();
       }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   return (
     <div
@@ -36,17 +45,27 @@ const YearMonthPicker = ({ currentYear, currentMonth, onSelect, onClose }) => {
       <div className="grid grid-cols-3 gap-1">
         {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
           const isSelected = viewYear === currentYear && month === currentMonth;
+          const count = showCounts ? countForMonth(viewYear, month) : 0;
           return (
             <button
               key={month}
               onClick={() => { onSelect(viewYear, month); onClose(); }}
-              className={`py-2 text-sm rounded-lg transition-colors
+              className={`text-sm rounded-lg transition-colors
+                ${showCounts ? 'flex flex-col items-center justify-center min-h-[2.75rem] py-1' : 'py-2'}
                 ${isSelected
                   ? 'bg-[#4a6b5a] text-white font-bold'
                   : 'text-[#374151] hover:bg-[#eef2ef]'
                 }`}
             >
-              {month}月
+              <span>{month}月</span>
+              {showCounts && count > 0 && (
+                <span
+                  className={`mt-0.5 text-[0.65rem] font-semibold leading-none
+                    ${isSelected ? 'text-white/85' : 'text-[#4a6b5a]'}`}
+                >
+                  {count}試合
+                </span>
+              )}
             </button>
           );
         })}
