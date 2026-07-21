@@ -112,3 +112,4 @@
 - `kaderu-sync-notify-admins` — かでる予約取り込みの完了/失敗LINE通知を、押下者本人のみ→対象団体の全ADMIN＋全SUPER_ADMINに拡大（隣室と同型の受信者パターンを流用。純BE）（主要領域: 未定）[shipped: PR #1141]
 - `venue-reservation-sync-manual-only` — かでる/東区民の予約→練習日sync定期cron(*/30)を停止し手動ボタン起動のみに。手動WFに東区民ステップをhokudai条件付きで追加し1ボタンでかでる＋東区民を取り込み（純GHA workflow）（主要領域: .github/workflows, docs） [shipped: PR #1139]
 - `match-record-calendar-tabs` — 戦績確認画面(/matches)を「戦績確認」「カレンダー」の2タブ化。カレンダータブは常に自分の試合を月表示し、日選択でその日の結果・個人メモを見て試合詳細へ遷移。他選手戦績中もカレンダーは自分・戻ると直前選手を復元（純フロントエンド）（主要領域: `karuta-tracker-ui/src/pages/matches/`）[shipped: PR #1145]
+- `third-party-deployment-enablement` — 他会 fork-and-deploy を「起動して実際に使える」水準にする。A-2:初期データseed（database/seed_initial.sql テンプレ・最小2行org+SUPER_ADMIN・平文PW+起動時ハッシュ化・冪等）＋陳腐化seed_data.sql削除。D-2:フロントの hokudai/wasura 決め打ちを既存データ駆動へ（締切・略称・一括追加ボタンを動的化。新カラムなし・本番退行なし）。BE改修/スキーマ変更/本番migration無し（主要領域: database, karuta-tracker-ui, docs）[shipped: PR #1150]
