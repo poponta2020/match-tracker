@@ -1,7 +1,11 @@
 # line-chat-reserve-broadcast 引き継ぎ書（2026-07-20 時点）
 
+> **【2026-07-20 更新】§4の24hセッション問題は解決済み** → **クリックスルー自動再ログイン**（「LINE account」→「Log in」の2クリック・password/CAPTCHA無しで24hセッション再発行）を **PR #1127 で実装・出荷（main マージ済み）**。ただし30日SSOは自動延長不可（`SSO_ABSOLUTE`）なので約月1回の手動ログインは残り、SSO期限の先回りアラートで人に促す（feature `docs/features/line-chat-auto-relogin/`・memory `ship_pr1127_line_chat_auto_relogin.md`／`feature_line_chat_auto_relogin.md`）。
+> **§5 の後始末: 一時cron `10 16 19 7 *` 削除【済】／予約 id=1 → CANCELLED【済】／PR #1102（検出レース根治）は auto-relogin 出荷後に統制マージ＝OamChatPage 競合を解決し**#1102 も main マージ済み【済 2026-07-20 14:40】**。**
+> **VM 再デプロイ【済 2026-07-20 23:48 JST】**: 別セッションが #1127 を 21:55 に VM デプロイ済みだったため、本セッションで **#1102 を上乗せデプロイ**（scp で src 丸ごと置換→`docker compose up -d --build`）。稼働コンテナは #1127＋#1102 の両機能搭載・`restartCount=0`・サイクル完走を確認。**手動ログイン不要**で稼働中（storageState の SSO は ~8/17 有効＝次の配信でワーカーが自動クリックスルーで chat セッションを自己回復）。手動フルログインは SSO 失効前（~8/14 に先回りアラート）に1回。**＝ line-chat-reserve-broadcast/auto-relogin 一式は本番稼働で完了。**
+
 札分けの全体LINE配信を「チャット予約送信」で無料枠を消費せず行う機能。本番投入まで進んだが
-**初回自動配信（7/20）はセッション切れで失敗**し、現在は**運用が成立しない根本課題の前で停止中**。
+**初回自動配信（7/20）はセッション切れで失敗**し、24hセッション問題の**恒久対策の方針が確定**（上記）。実装は未着手。
 
 > 秘匿値（VMのSSH鍵・ホスト、DB接続情報、各種トークン）は **`CLAUDE.local.md`（gitignore対象）** が唯一の正典。本書には書かない。
 > DB直クエリは `C:\tmp\dbtool\Q.java`（JDBC+IPv4でNAT64回避、PowerShellから実行、`-Dstdout.encoding=UTF-8` 必須、SQLはBOM無しで書く）。
@@ -70,9 +74,10 @@
 ## 5. 次セッションの着手手順（方針決定後）
 
 - **自動運用を続けるなら再ログイン**: ローカルPCでheadedログイン（`line-chat-worker/scripts/create-auth-state.ts`）→ storageState を VM の docker volume `line-chat-worker-data` の `/data/storage-state.json` へ配置 → `sudo docker compose restart line-chat-worker`。**ワーカーは起動時のCookieをメモリ保持するので、ファイル更新後は必ず restart**。
-- **PR #1102 を出す**: マージ → VM で `git pull` → イメージ再ビルド → restart。
-- **手動停止した予約 id=1 の後始末**: 送信時刻は過ぎており無害。放置でよいが、気になるなら `CANCELLED` にするか行削除（次バッチの生成には影響しない）。
-- **一時cron削除**: VM の `crontab -e` から `10 16 19 7 *` の行を消す。
+- **PR #1102**: 【済 2026-07-20 14:40 マージ】auto-relogin（#1127）出荷後に統制マージ。OamChatPage.ts/ChatPage.ts/index.test.ts の競合を human 監視下で解決（relogin() 保持＋findDuplicateReservation は #1102 の API判定=DuplicateCheck を採用）。tsc・worker 72テスト・lint 全green を確認後にマージ。
+- **VM 再デプロイ**: 【済 2026-07-20 23:48】#1127 は別セッションが 21:55 にデプロイ済み。本セッションで #1102 を上乗せ（VM は git 非管理＝ローカル src を tar→scp で `~/line-chat-worker/src` 丸ごと置換→`sudo docker compose -f ~/line-chat-worker/docker-compose.yml up -d --build`。旧srcは `src.bak-pre1102` に退避）。両機能搭載・restartCount=0・サイクル完走を確認。手動ログイン不要で稼働中。
+- **手動停止した予約 id=1 の後始末**: 【済 2026-07-20】`CANCELLED` に更新済（管理画面の「要確認」フラグ解消。sched 16:30 経過済・push リスク無し）。
+- **一時cron削除**: 【済 2026-07-20】VM crontab から `10 16 19 7 *`（run-session-check）を削除済（crontab 空）。
 
 ---
 
