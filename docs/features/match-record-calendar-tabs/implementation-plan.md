@@ -29,7 +29,7 @@ status: completed
 - **完了条件:** 新規テスト green・本体側 `git grep DESIGN-PROTO` = 0件・lint 通過。
 
 ### タスク2: /matches の2タブ統合（MatchList コンテナ化）
-- [ ] 完了
+- [x] 完了
 - **目的:** `MatchList` を view でタブ切替可能にする。緑トップバー直下に `MatchViewTabs`、`view=calendar` で `MatchCalendar` を描画。カレンダータブのトップバーは自分の名前＋級（期間フィルタ・選手検索は非表示）。タブ切替は `playerId` を保った `replace`。戦績確認（record）の既存挙動は不変。
 - **対応AC:** AC-1, AC-2, AC-3, AC-4, AC-5, AC-15（回帰）, AC-16, AC-17
 - **対応Issue:** #1144
