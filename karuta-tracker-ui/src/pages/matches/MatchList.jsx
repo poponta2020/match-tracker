@@ -288,7 +288,11 @@ const MatchList = () => {
       }
     };
 
-    if (targetPlayerId) {
+    // カレンダータブ表示中は戦績確認用の取得（試合/統計/抜け番）を行わない。
+    // カレンダーは MatchCalendar が自分の試合を自前取得するため、ここで targetPlayerId
+    // （他選手を含む）を取ると画面に使わないデータを重複取得してしまう。
+    // 戦績確認へ戻った時は view が変わり本 effect が再実行され再取得される（復元は playerId のみで足りる）。
+    if (targetPlayerId && view === 'record') {
       fetchMatches();
     }
 
@@ -296,7 +300,7 @@ const MatchList = () => {
       cancelled = true;
       fetchingMatchesRef.current = false;
     };
-  }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand]);
+  }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand, view]);
 
   useEffect(() => {
     let filtered = matches;

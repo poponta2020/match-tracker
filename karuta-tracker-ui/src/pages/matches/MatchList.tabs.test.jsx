@@ -147,6 +147,17 @@ describe('MatchList - 2タブ（戦績確認 / カレンダー）', () => {
     expect(matchAPI.getByPlayerId).toHaveBeenCalledWith(5, expect.any(Object));
   });
 
+  it('カレンダー表示中は戦績確認用の取得を行わず、自分の試合を1回だけ取得する', async () => {
+    renderAt(['/matches?view=calendar']);
+    await screen.findByRole('button', { name: '前の月' });
+
+    // MatchCalendar による自分(id=1)の1回のみ。record 用 targetPlayerId 取得や統計/抜け番は走らない
+    expect(matchAPI.getByPlayerId).toHaveBeenCalledTimes(1);
+    expect(matchAPI.getByPlayerId).toHaveBeenCalledWith(1);
+    expect(matchAPI.getStatisticsByRank).not.toHaveBeenCalled();
+    expect(byeActivityAPI.getByPlayer).not.toHaveBeenCalled();
+  });
+
   it('AC-5: カレンダータブのトップバーは自分の名前＋級で、選手検索ボタンは非表示', async () => {
     renderAt(['/matches?view=calendar']);
     await screen.findByRole('button', { name: '前の月' });
