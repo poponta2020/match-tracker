@@ -192,7 +192,7 @@ const Home = () => {
               style={{ fontFamily: MINCHO }}
               className="text-lg text-[#1A3654] flex items-baseline gap-2"
             >
-              {monthLabel}の参加率
+              <span className="font-bold">{monthLabel}の参加率</span>
               <span className="font-sans text-[11px] tracking-wider text-[#8a7568]">TOP 3</span>
             </h2>
             <div className="mt-1 h-0.5 w-[34px] bg-[#5f3a2d]" />
