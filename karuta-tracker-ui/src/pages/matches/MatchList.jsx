@@ -5,6 +5,8 @@ import { matchAPI, playerAPI, byeActivityAPI } from '../../api';
 import { mentorRelationshipAPI } from '../../api/mentorRelationship';
 import FilterBottomSheet from '../../components/FilterBottomSheet';
 import LoadingScreen from '../../components/LoadingScreen';
+import MatchViewTabs from './MatchViewTabs';
+import MatchCalendar from './MatchCalendar';
 import {
   Trophy,
   Plus,
@@ -20,10 +22,20 @@ import {
 const MatchList = () => {
   const { currentPlayer } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryPlayerId = searchParams.get('playerId');
   const targetPlayerId = queryPlayerId ? Number(queryPlayerId) : currentPlayer?.id;
   const isOtherPlayer = targetPlayerId !== currentPlayer?.id;
+
+  // 表示タブ（record=戦績確認 / calendar=カレンダー）。既定は戦績確認。
+  const view = searchParams.get('view') === 'calendar' ? 'calendar' : 'record';
+  // タブ切替は playerId を保ったまま view クエリのみ差し替え、履歴を汚さないよう replace。
+  const switchView = (next) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'calendar') params.set('view', 'calendar');
+    else params.delete('view');
+    setSearchParams(params, { replace: true });
+  };
 
   // 選手検索関連
   const [targetPlayerName, setTargetPlayerName] = useState('');
@@ -276,7 +288,11 @@ const MatchList = () => {
       }
     };
 
-    if (targetPlayerId) {
+    // カレンダータブ表示中は戦績確認用の取得（試合/統計/抜け番）を行わない。
+    // カレンダーは MatchCalendar が自分の試合を自前取得するため、ここで targetPlayerId
+    // （他選手を含む）を取ると画面に使わないデータを重複取得してしまう。
+    // 戦績確認へ戻った時は view が変わり本 effect が再実行され再取得される（復元は playerId のみで足りる）。
+    if (targetPlayerId && view === 'record') {
       fetchMatches();
     }
 
@@ -284,7 +300,7 @@ const MatchList = () => {
       cancelled = true;
       fetchingMatchesRef.current = false;
     };
-  }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand]);
+  }, [targetPlayerId, selectedYear, selectedMonth, filterKyuRank, filterGender, filterDominantHand, view]);
 
   useEffect(() => {
     let filtered = matches;
@@ -342,6 +358,32 @@ const MatchList = () => {
   // 抜け番活動（読み・一人取り）の表示ラベルとアイコン
   const ACTIVITY_LABEL = { READING: '読み', SOLO_PICK: '一人取り' };
   const ACTIVITY_ICON = { READING: BookOpen, SOLO_PICK: User };
+
+  // カレンダータブ: playerId を無視して常に自分のカレンダーを表示する。
+  // 戦績確認(record)側の loading・派生計算に依存しない自己完結ブロック。
+  if (view === 'calendar') {
+    return (
+      <div className="space-y-6 pb-20">
+        {/* 固定ヘッダ: 緑バー（自分の名前＋級）+ タブ帯 */}
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
+            <div className="max-w-7xl mx-auto">
+              <h1 className="text-xl font-bold text-white truncate flex items-baseline gap-2">
+                <span>{currentPlayer?.name || ''}</span>
+                <span className="text-sm font-normal text-white/70">{currentPlayer?.kyuRank || '初心者'}</span>
+              </h1>
+            </div>
+          </div>
+          <MatchViewTabs active="calendar" onChange={switchView} />
+        </div>
+
+        {/* 本文（固定ヘッダぶんの上部パディング） */}
+        <div className="pt-[42px]">
+          <MatchCalendar />
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return <LoadingScreen />;
@@ -406,8 +448,9 @@ const MatchList = () => {
 
   return (
     <div className="space-y-6 pb-20">
-      {/* ナビゲーションバー */}
-      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm fixed top-0 left-0 right-0 z-50 px-4 py-3">
+      {/* 固定ヘッダ: 緑ナビバー + タブ帯 */}
+      <div className="fixed top-0 left-0 right-0 z-50">
+      <div className="bg-[#4a6b5a] border-b border-[#3d5a4c] shadow-sm px-4 py-3">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between">
             {/* 左: 名前 + 年月 */}
@@ -447,6 +490,7 @@ const MatchList = () => {
                 </button>
               )}
               <button
+                aria-label="選手を検索"
                 onClick={() => { setShowPlayerSearch(!showPlayerSearch); if (!showPlayerSearch) fetchPlayersIfNeeded(); }}
                 className={`p-2 rounded-full transition-colors ${showPlayerSearch ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-[#3d5a4c]'}`}
               >
@@ -501,9 +545,11 @@ const MatchList = () => {
           )}
         </div>
       </div>
+      <MatchViewTabs active="record" onChange={switchView} />
+      </div>
 
-      {/* コンテンツ（上部パディング追加） */}
-      <div className={`${showPlayerSearch ? 'pt-[86px]' : 'pt-[38px]'} space-y-6 transition-all`}>
+      {/* コンテンツ（固定ヘッダ = 緑バー + タブ帯 ぶんの上部パディング） */}
+      <div className={`${showPlayerSearch ? 'pt-[132px]' : 'pt-[84px]'} space-y-6 transition-all`}>
       {/* 統計 */}
       {rankStatistics && (
         <div className="space-y-3">
