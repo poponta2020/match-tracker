@@ -466,9 +466,12 @@ const MatchList = () => {
       <MatchViewTabs active="record" onChange={switchView} />
       {/* フィルタ/検索サブバー（戦績確認タブ固有）: 緑バーに入れずタブ帯の直下へ切り出す。
           背景はクリーム本文と同色（白地にしない）。年月フィルタは中央に置きカレンダータブの
-          月ラベルと座標を合わせる。アクション（検索等）は中央位置に影響しないよう右端へ絶対配置 */}
+          月ラベルと座標を合わせる。アクション（検索等）は中央位置に影響しないよう右端へ絶対配置。
+          ただし他選手表示時は「自分に戻す」が右端アクションに加わり幅が広がるため、375px 等では
+          中央のフィルタと重なる。他選手表示時のみ左寄せにして重なりを回避する（カレンダーには
+          「自分に戻す」が無くタブ間の座標一致は自分表示時のみ要る＝self は中央維持で不変） */}
       <div className="bg-[#f2ede6] px-4 pt-5 pb-3">
-        <div className="max-w-7xl mx-auto relative flex items-center justify-center">
+        <div className={`max-w-7xl mx-auto relative flex items-center ${isOtherPlayer ? 'justify-start' : 'justify-center'}`}>
           {/* 期間フィルタ（年月＋フィルタ件数）: 中央寄せ＋上パディングでカレンダーの月ラベルと同じ座標 */}
           <button
             type="button"
