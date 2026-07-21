@@ -196,7 +196,7 @@
 
 | コンポーネント | ファイル | 用途 |
 |---------------|---------|------|
-| `Layout` | `components/Layout.jsx` | ヘッダーバー（プロフィール）+ 下部ナビゲーション付き共通レイアウト。`BottomNavContext` の `isVisible` に応じてボトムナビの表示/非表示をスライドアニメーションで切り替え |
+| `Layout` | `components/Layout.jsx` | ヘッダーバー（プロフィール）+ 下部ナビゲーション付き共通レイアウト。ボトムナビは**リキッドグラス調の浮いた角丸ピル**（画面下端から浮かせた `max-w-md` 中央寄せ・`rounded-[28px]`・ニュートラル無彩色の半透明ガラス＋`backdrop-filter: blur() saturate()`・上縁ハイライト＋斜めの鏡面スジ）。項目は**アイコンのみ**（ラベル非表示・各リンクに日本語 `aria-label`）。`BottomNavContext` の `isVisible` に応じて表示/非表示をスライドで切り替え |
 | `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック |
 | `AuthRoute` | `components/AuthRoute.jsx` | 認証状態による条件分岐レンダリング |
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
@@ -217,13 +217,17 @@
 
 ## 下部ナビゲーション（Layout）
 
-| アイコン | ラベル | 遷移先 |
-|---------|--------|--------|
-| 🏠 | Home | `/` |
-| ➕ | Add | `/matches/new` |
-| ⚔️ | Match | `/matches/results` |
-| 📅 | Schedule | `/practice` |
-| 📊 | Record | `/matches` |
+**アイコンのみ**（可視ラベルなし・各リンクに日本語 `aria-label`）。非アクティブ=アウトライン／アクティブ=**ソリッド（塗り・Instagram風）**。アイコンは Home/練習/戦績/設定＝Heroicons（`@heroicons/react` の outline↔solid 対）、**対戦のみ lucide の剣**（Heroicons に剣が無いため。アクティブ時 `fill`）。5項目・順序固定。
+
+| aria-label | 図柄 | 遷移先 | アクティブ判定（前方一致含む） |
+|---------|--------|--------|--------|
+| ホーム | 家 | `/` | `/` 完全一致 |
+| 対戦 | 剣（lucide Swords） | `/matches/results` | `/matches/results` 前方一致 |
+| 練習 | カレンダー | `/practice` | `/practice` 前方一致 |
+| 戦績 | 棒グラフ | `/matches` | `/matches` 前方一致（`/matches/new`・`/matches/results` を除く） |
+| 設定 | 歯車 | `/settings` | `/settings` 完全一致 |
+
+**アクティブカプセル**: アクティブ項目のアイコン背後に半透明白の横長楕円ハイライトを1個だけ敷き、`translateX` でスロット間をスライドさせる（タップ移動＝該当位置へ glide／**カプセルを水平ドラッグ＝指に追従し離した位置の最寄り項目へ遷移**＝A案 drag-to-switch。タップは主経路として維持）。タップ/ドラッグ時にピル・カプセルが「膨らんで戻る」スプリング演出（`@keyframes navPuff`・個別 `scale` プロパティ）。ドラッグは Pointer Events＋`setPointerCapture`＋`touch-action:none` でページスクロールと競合しない。カプセル位置計算・最寄りスロット判定などの純ロジックは `utils/bottomNav.js` に切り出し。
 
 ---
 
@@ -372,10 +376,9 @@ karuta-tracker-ui/src/
 - コメント入力欄（`MatchCommentThread` 内の textarea）にフォーカス時、ボトムナビをスライドダウンで非表示にする
 - フォーカスが外れると100ms後にスライドアップで再表示する（textarea間のフォーカス移動によるチラつき防止のため遅延あり）
 - `MatchCommentThread` がアンマウントされた場合は自動的に表示状態にリセット
-- アニメーション: `transition-transform duration-300`（`translate-y-0` ⇔ `translate-y-full`）
+- アニメーション: ピル本体自身に `transform: translateY(0 ⇔ 150%)`（`transition: transform 300ms ease`）でスライド。`<nav>`（fixed）は transform を持たせず、スライド用 transform と `backdrop-filter` を**同一要素（ピル本体）**に載せる（backdrop-filter は ancestor に transform があると背景を拾えず透明化するため）。膨らみ演出は translateY を壊さないよう個別 `scale` プロパティで分離。下端は `safe-area-inset-bottom + 10px` 浮かせ、本文下パディングは `calc(5rem + safe-area)`。
 
 ⚠要確認:
-- ボトムナビゲーションのラベル表記: 既存表は絵文字＋英語ラベル（🏠 Home / ➕ Add / ⚔️ Match / 📅 Schedule / 📊 Record）。旧SPECIFICATION §5.3 は lucide アイコン名＋日本語ラベル（Home / PlusCircle 結果入力 / ClipboardList 対戦結果 / Calendar スケジュール / List 対戦履歴）。パス・並び順は一致するが表記方式が異なり、どちらが現行UIの実態かは要確認。
 - ハンバーガーメニュー: 旧SPECIFICATION §5.3 のメニュー一覧には、既存表にある「参加練習会」「メンター管理」「動画倉庫」「システム設定」の4項目が記載されていない（SPECIFICATION側の記載漏れ・更新漏れの可能性）。
 
 ---

@@ -9,7 +9,7 @@ status: completed
 ## 実装タスク
 
 ### タスク1: ガラスナビの productionize（patch 適用＋DESIGN-PROTO 除去＋依存追加）
-- [ ] 完了
+- [x] 完了
 - **対応Issue:** #1162
 - **目的:** design-prototype.patch を土台に本番実装へ落とし込む。プロトタイプ足場を完全に除去する。
 - **対応AC:** AC-1〜AC-6, AC-9〜AC-19（見た目・インタラクション本体）
