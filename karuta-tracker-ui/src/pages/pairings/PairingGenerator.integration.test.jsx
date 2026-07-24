@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import { DndContext } from '@dnd-kit/core';
@@ -227,6 +227,75 @@ describe('保存エラーのフッター表示（実コンポーネント）', (
     // フッターのエラーは保存ボタンと近接（同じ space-y-2 コンテナ）に出る＝ボタンから見切れない
     expect(err.closest('div.space-y-2')?.contains(saveBtn)).toBe(true);
     expect(apiClient.post).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * キャンセル者アラートの試合切替（実コンポーネント・回帰）
+ *
+ * 別 effect で pairings と matchNumber を突き合わせると、試合切替直後は pairings が
+ * 前試合のままで stale 発火し、「別試合の選手名で誤アラート／OK で別試合のドラフト作成」の
+ * 競合が起きる（Codex 指摘の blocker）。アラート判定を読み込み effect の cached ベースに
+ * 畳み込んだので、キャンセルあり試合 → キャンセルなし試合へ切り替えても誤アラートが出ない。
+ */
+describe('キャンセル者アラートの試合切替（実コンポーネント）', () => {
+  afterEach(() => {
+    apiClient.get.mockReset();
+    apiClient.get.mockImplementation(() => Promise.resolve({ data: [] }));
+    apiClient.post.mockReset();
+    apiClient.post.mockImplementation(() => Promise.resolve({ data: [] }));
+    cleanup();
+  });
+
+  it('キャンセルあり1試合目 → キャンセルなし2試合目へ切り替えても、前試合の選手名でアラートが再発火しない', async () => {
+    const session = {
+      id: 1,
+      totalMatches: 2,
+      pairingIncludesPending: false,
+      venueName: 'テスト会場',
+      participants: [
+        { id: 1, name: '鈴木', kyuRank: 'A' },
+        { id: 2, name: '山田', kyuRank: 'B' },
+        { id: 3, name: '田中', kyuRank: 'A' },
+        { id: 4, name: '佐々木', kyuRank: 'B' },
+      ],
+      matchParticipants: {
+        '1': [{ name: '鈴木', status: 'WON' }, { name: '山田', status: 'WON' }],
+        '2': [{ name: '田中', status: 'WON' }, { name: '佐々木', status: 'WON' }],
+      },
+    };
+    // 1試合目は山田がキャンセル済み（read-time フラグ）、2試合目は通常
+    const allPairings = [
+      { id: 10, matchNumber: 1, player1Id: 1, player1Name: '鈴木', player1Cancelled: false, player2Id: 2, player2Name: '山田', player2Cancelled: true, recentMatches: [], hasResult: false, locked: false },
+      { id: 20, matchNumber: 2, player1Id: 3, player1Name: '田中', player1Cancelled: false, player2Id: 4, player2Name: '佐々木', player2Cancelled: false, recentMatches: [], hasResult: false, locked: false },
+    ];
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/practice-sessions/date') return Promise.resolve({ data: session });
+      if (url === '/match-pairings/date') return Promise.resolve({ data: allPairings });
+      return Promise.resolve({ data: [] });
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/pairings?date=2026-07-24']}>
+        <Routes>
+          <Route path="/pairings" element={<PairingGenerator />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // 1試合目のキャンセル者アラートが出る（見出しで判定。山田は背景の行にも出るため名前では判定しない）
+    expect(await screen.findByText('キャンセルの反映')).toBeInTheDocument();
+
+    // 2試合目タブへ切り替え（jsdom はオーバーレイのヒットテストをしないためモーダル表示中でも押下できる）
+    await user.click(screen.getByRole('button', { name: '2' }));
+
+    // 前試合（山田）の情報でアラートが誤って再発火・残存しないこと
+    await waitFor(() => {
+      expect(screen.queryByText('キャンセルの反映')).toBeNull();
+    });
+    // 2試合目にはキャンセル者がいないため、山田はどこにも表示されない
+    expect(screen.queryByText('山田')).toBeNull();
   });
 });
 

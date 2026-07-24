@@ -319,6 +319,7 @@ const PairingGenerator = () => {
       // ドラフトは編集モードでしか作られない。組0件の空編集モード（参加者0名からの
       // 「対戦編集」）でも編集エリアを描画し続けるため、ここで編集モードを復元する。
       setIsEditing(true);
+      setCancelAlert(null); // 編集モード復元中はアラートを出さない（前試合のstale表示も消す）
       return;
     }
 
@@ -327,12 +328,26 @@ const PairingGenerator = () => {
     if (cached !== undefined) {
       if (cached) {
         loadExistingPairingsToState(cached, getMatchParticipants());
+        // キャンセル者アラート（変更1）: cached はこの matchNumber の閲覧モードデータで、
+        // matchNumber と組が確実に対応する（別 effect で pairings/matchNumber を突き合わせると、
+        // 試合切替直後は pairings が前試合のままで stale 発火する — Codex 指摘のバグ）。
+        // ここで cached を直接使い、setCancelAlert とデータ反映を同一バッチにすることで
+        // 「別試合の選手名・組で発火／OK して別試合のドラフトを作る」競合を根絶する。
+        const acknowledged = acknowledgedCancelMatches.current.has(matchNumber);
+        // 他試合に未保存ドラフトがある間は閲覧専用（isReadOnly 相当）。ref で最新値を見る。
+        const readOnly = !!unsavedDraft.current && unsavedDraft.current.matchNumber !== matchNumber;
+        setCancelAlert(
+          shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: readOnly, acknowledged, pairings: cached })
+            ? { names: collectCancelledNames(cached) }
+            : null
+        );
       } else {
         setPairings([]);
         setWaitingPlayers([]);
         setIsEditingExisting(false);
         setIsViewMode(false);
         setIsEditing(false);
+        setCancelAlert(null);
       }
     } else {
       // キャッシュ未取得（初回ロード中等）の場合はクリア
@@ -341,16 +356,9 @@ const PairingGenerator = () => {
       setIsEditingExisting(false);
       setIsViewMode(false);
       setIsEditing(false);
+      setCancelAlert(null);
     }
   }, [matchNumber, cacheVersion, currentSession, getActiveParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
-
-  // キャンセル者アラート（変更1）: 閲覧モードで表示中の試合に結果未入力のキャンセル者がいれば通知する。
-  // 判定は純粋関数 shouldTriggerCancelAlert に集約。OK 済み試合は acknowledgedCancelMatches で再発火を防ぐ。
-  useEffect(() => {
-    const acknowledged = acknowledgedCancelMatches.current.has(matchNumber);
-    if (!shouldTriggerCancelAlert({ isViewMode, isReadOnly, acknowledged, pairings })) return;
-    setCancelAlert({ names: collectCancelledNames(pairings) });
-  }, [pairings, isViewMode, isReadOnly, matchNumber]);
 
   // 選手一覧を遅延取得（選手追加モーダル表示時に初めて取得）
   const playersLoadedRef = useRef(false);
