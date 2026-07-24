@@ -54,3 +54,7 @@
 - [impl_pairing_always_visible_edit_button.md](impl_pairing_always_visible_edit_button.md) - PR#1113出荷（/pairingsのLINE導線を常時表示＋主アクションを「対戦編集」1つに統合し右上常設）。**最重要=既存組ありで auto-match を呼ぶと保存済みの組が黙って失われる**→resolvePairingEditActionで'edit-existing'は編集モード切替のみ・実機のネットワークログで未発火確認。常に同じ位置に置ける行はパネル内に1つ（N試合目行）だけ＝参加者/組み合わせヘッダは相互排他で必ず動く。無効時の代替は同じ骨格・同じラベルにしないと6pxずれる(advisor指摘)。空編集モードはドラフト必須(#485同型)。**screenshotが常時タイムアウトする本環境ではgetBoundingClientRect実測がレイアウト検証の正解**・preview_startのcwdは絶対パス不可。1R pass(high,36.8k)
 - [auto-review PR #1167](auto-review-round-pr1167.md) — R2 verdict=pass
 - [ボトムナビ カプセルのホーム経由瞬間移動バグ修正](project_ship-bottom-nav-capsule-home-teleport.md) — shipped: PR #1167
+- [対戦組み合わせ編集: キャンセル者アラート＆保存エラー明示](project_ship-pairing-cancel-alert-and-save-errors.md) — shipped: PR #1171
+- [pairing-cancel-alert-and-save-errors 要件定義](project_pairing_cancel_alert_save_errors.md) — 親Issue #1168・子#1169-1170（PR#1171出荷済み）
+- [pairing-cancel-alert-and-save-errors 実装](impl_pairing_cancel_alert_save_errors.md) — 純FE全main直・PR#1171出荷済み。試合切替stale発火の回避知見
+- [auto-review PR #1171](auto-review-round-pr1171.md) — R2 verdict=pass(R1 blocker=試合切替stale発火を修正)
