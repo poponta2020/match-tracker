@@ -15,7 +15,7 @@ import DroppableSlot from './DroppableSlot';
 import { computeDragResult } from './pairingDragLogic';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowEditingArea, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowEditingArea, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
 import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
@@ -54,6 +54,9 @@ const PairingGenerator = () => {
   const [waitingActivities, setWaitingActivities] = useState({}); // playerId -> { activityType, freeText }
   const [lineTextTarget, setLineTextTarget] = useState('all'); // LINE送信用テキストの対象: 'all'(全試合) | 'single'(選択中の試合)
   const [lineTextOpen, setLineTextOpen] = useState(false); // LINE送信用テキスト導線の開閉（初期は畳む）
+  // キャンセル者アラート（変更1）: 表示中の試合に結果未入力のキャンセル者がいるとき単一OKで通知し、
+  // OK で現在の試合を編集モード化する。names は発火時点で凍結した選手名（null=非表示）。
+  const [cancelAlert, setCancelAlert] = useState(null); // { names: string[] } | null
 
   const ACTIVITY_TYPES = [
     { value: 'READING', label: '読み' },
@@ -68,6 +71,8 @@ const PairingGenerator = () => {
   const pairingsCache = useRef({}); // matchNumber -> pairings array or null
   const fetchIdRef = useRef(0); // stale fetch防止用
   const unsavedDraft = useRef(null); // 未保存の編集中データ { matchNumber, pairings, waitingPlayers, isEditingExisting }
+  // 同一マウント中に一度OK済みの試合番号（キャンセル者アラートの再発火防止。この画面は日付を変えないためマウント単位でよい）
+  const acknowledgedCancelMatches = useRef(new Set());
 
   // 現在の試合が閲覧専用か（他の試合に未保存の変更がある場合）
   const isReadOnly = hasUnsavedChanges && unsavedDraft.current?.matchNumber !== matchNumber;
@@ -335,6 +340,14 @@ const PairingGenerator = () => {
     }
   }, [matchNumber, cacheVersion, currentSession, getActiveParticipantNamesForMatch, loadExistingPairingsToState, updateParticipantsForMatch]);
 
+  // キャンセル者アラート（変更1）: 閲覧モードで表示中の試合に結果未入力のキャンセル者がいれば通知する。
+  // 判定は純粋関数 shouldTriggerCancelAlert に集約。OK 済み試合は acknowledgedCancelMatches で再発火を防ぐ。
+  useEffect(() => {
+    const acknowledged = acknowledgedCancelMatches.current.has(matchNumber);
+    if (!shouldTriggerCancelAlert({ isViewMode, isReadOnly, acknowledged, pairings })) return;
+    setCancelAlert({ names: collectCancelledNames(pairings) });
+  }, [pairings, isViewMode, isReadOnly, matchNumber]);
+
   // 選手一覧を遅延取得（選手追加モーダル表示時に初めて取得）
   const playersLoadedRef = useRef(false);
   const fetchPlayersIfNeeded = async () => {
@@ -422,6 +435,14 @@ const PairingGenerator = () => {
     setIsEditing(true);
     setHasUnsavedChanges(true);
     saveDraft(materialized, waitingPlayers, isEditingExisting);
+  };
+
+  // キャンセル者アラートの OK: この試合を確認済みにして（再発火防止）、閉じてから編集モードへ入る。
+  // 編集モード化＝enterEditModeForExisting（materializeCancelledSlots）でキャンセル者は「空き」になる。
+  const handleCancelAlertOk = () => {
+    acknowledgedCancelMatches.current.add(matchNumber);
+    setCancelAlert(null);
+    enterEditModeForExisting();
   };
 
   // パネル右上に常設した「対戦編集」ボタン。位置・ラベル・見た目は画面状態によらず不変で、
@@ -1423,6 +1444,32 @@ const PairingGenerator = () => {
               >
                 <Plus className="w-4 h-4" />
                 追加
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* キャンセル者アラート（変更1）: 単一 OK ボタンのみ（閉じる/キャンセルは出さない）。
+          OK で現在の試合を編集モード化し、キャンセル者を「空き」にする。 */}
+      {cancelAlert && (
+        <div className="fixed inset-0 bg-[#1A2744]/[.42] flex items-center justify-center z-50 px-6">
+          <div className="bg-[#fffdf9] border border-[#e7e0d4] rounded-[14px] p-5 max-w-md w-full shadow-[0_18px_40px_rgba(26,39,68,0.22)]">
+            <h2 className="text-[17px] font-bold text-[#1A2744] mb-2.5 flex items-center gap-2">
+              <Ban className="w-5 h-5 text-[#8a8275]" />
+              キャンセルの反映
+            </h2>
+            <p className="text-[14px] leading-relaxed text-[#5b5446] mb-4">
+              {matchNumber}試合目に参加予定の
+              <span className="font-bold text-[#1A2744]">{cancelAlert.names.join('・')}</span>
+              は練習をキャンセルしています。対戦組み合わせから外してよろしいですか？
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={handleCancelAlertOk}
+                className="px-6 py-2.5 bg-[#1A3654] text-white font-bold rounded-[10px] hover:bg-[#122740] transition-colors"
+              >
+                OK
               </button>
             </div>
           </div>

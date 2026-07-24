@@ -9,7 +9,7 @@ import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
 import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 
@@ -1419,6 +1419,105 @@ describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', ()
     expect(edit[1].locked).toBe(false);
     // 結果入力済みの両キャンセルは残る
     expect(edit[2].player1Id).toBe(5);
+  });
+});
+
+/**
+ * キャンセル者アラート（pairing-cancel-alert-and-save-errors 変更1）
+ *
+ * 閲覧モードで表示中の試合に結果未入力のキャンセル者がいるとき単一OKアラートを出し、
+ * OK で現在の試合を編集モード化する。判定は純粋関数 collectCancelledNames /
+ * shouldTriggerCancelAlert に集約し、本番と同じ関数を検証する（退行検知）。
+ */
+describe('キャンセル者アラート（collectCancelledNames / shouldTriggerCancelAlert）', () => {
+  afterEach(cleanup);
+
+  it('collectCancelledNames: 片方キャンセルはその1名を返す', () => {
+    expect(collectCancelledNames([
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: true },
+    ])).toEqual(['山田']);
+  });
+
+  it('collectCancelledNames: 両方キャンセルは両名を返す', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: true },
+    ])).toEqual(['A', 'B']);
+  });
+
+  it('collectCancelledNames: 複数組を組順に集約する', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false },
+      { player1Id: 3, player1Name: 'C', player1Cancelled: false, player2Id: 4, player2Name: 'D', player2Cancelled: false }, // 通常
+      { player1Id: 5, player1Name: 'E', player1Cancelled: false, player2Id: 6, player2Name: 'F', player2Cancelled: true },
+    ])).toEqual(['A', 'F']);
+  });
+
+  it('collectCancelledNames: キャンセルなしは空配列', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: false },
+    ])).toEqual([]);
+  });
+
+  it('collectCancelledNames: 結果入力済み（hasResult）の組は対象外（結果が正でキャンセル反映しない）', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: true, hasResult: true },
+    ])).toEqual([]);
+  });
+
+  it('collectCancelledNames: null/空配列でも安全', () => {
+    expect(collectCancelledNames(null)).toEqual([]);
+    expect(collectCancelledNames([])).toEqual([]);
+    expect(collectCancelledNames([null])).toEqual([]);
+  });
+
+  it('shouldTriggerCancelAlert: 閲覧モード＋キャンセルあり＋未確認 → true', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: false, pairings })).toBe(true);
+  });
+
+  it('shouldTriggerCancelAlert: 編集モード（非閲覧）では false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: false, isReadOnly: false, acknowledged: false, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: 読み取り専用（isReadOnly）では false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: true, acknowledged: false, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: 確認済み（acknowledged）では false（再発火防止）', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: true, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: キャンセルなしでは false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: false, pairings })).toBe(false);
+  });
+
+  // 本番モーダルと同一構造のレプリカ（メッセージ文言・単一OKの配線を検証。
+  // OK 押下 → onOk が呼ばれる＝本番では handleCancelAlertOk（enterEditModeForExisting）に繋がる。
+  // 実体化（空き化）自体は上記 materializeCancelledSlots テストでカバー済み）。
+  const CancelAlertModal = ({ matchNumber, names, onOk }) => (
+    <div data-testid="cancel-alert">
+      <p>
+        {matchNumber}試合目に参加予定の
+        <span>{names.join('・')}</span>
+        は練習をキャンセルしています。対戦組み合わせから外してよろしいですか？
+      </p>
+      <button onClick={onOk}>OK</button>
+    </div>
+  );
+
+  it('アラート: 試合番号とキャンセル者名を含むメッセージを表示し、OK で onOk が呼ばれる', () => {
+    const onOk = vi.fn();
+    render(<CancelAlertModal matchNumber={2} names={['鈴木', '佐藤']} onOk={onOk} />);
+    const alert = screen.getByTestId('cancel-alert');
+    expect(alert.textContent).toContain('2試合目に参加予定の');
+    expect(alert.textContent).toContain('鈴木・佐藤');
+    expect(alert.textContent).toContain('練習をキャンセルしています');
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(onOk).toHaveBeenCalledTimes(1);
   });
 });
 

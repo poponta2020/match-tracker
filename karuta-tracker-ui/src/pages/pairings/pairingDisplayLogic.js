@@ -217,3 +217,47 @@ export const materializeCancelledSlots = (pairings) =>
       next.cancelledEmptied = true;
       return next;
     });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// キャンセル者アラート（pairing-cancel-alert-and-save-errors 変更1）判定
+//
+// 閲覧モードで表示中の試合に「作成済みの組へ残ったキャンセル済み参加者」がいるとき、
+// 単一 OK ボタンのアラートで能動通知する。OK 押下で現在の試合を編集モード化
+// （materializeCancelledSlots）してキャンセル者を「空き」にする。
+// 本番 JSX とテストで同じ関数を import し、条件式をテストにコピーしない（退行検知）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 閲覧モードで表示中の組配列から、キャンセル者アラートに列挙する選手名を集める。
+ * - 結果入力済み（hasResult）の組は結果が正でキャンセルを反映しない（materializeCancelledSlots も
+ *   そのまま保持する）ため対象外＝アラートに出さない。
+ * - 片方キャンセルはその1名、両方キャンセルは両名を含む。
+ * - map の順（＝画面の組順）で名前を返す。
+ *
+ * @param {Array} pairings 閲覧モードの組配列（player1Cancelled / player2Cancelled を含みうる）
+ * @returns {string[]} キャンセルした選手名の配列（0件ならアラート不要）
+ */
+export const collectCancelledNames = (pairings) =>
+  (pairings || []).flatMap((p) => {
+    if (!p || p.hasResult) return [];
+    const names = [];
+    if (p.player1Cancelled && p.player1Name) names.push(p.player1Name);
+    if (p.player2Cancelled && p.player2Name) names.push(p.player2Name);
+    return names;
+  });
+
+/**
+ * キャンセル者アラートを発火すべきか。
+ * 閲覧モード（isViewMode）かつ編集ロックでない（!isReadOnly ＝他試合の未保存編集で読み取り専用でない）
+ * かつ未確認（!acknowledged）で、結果未入力のキャンセル者が1名以上いるとき true。
+ * acknowledged は「この試合で一度 OK 済み」を呼び出し側の Set 等で判定して渡す（同一マウント中の再発火防止）。
+ *
+ * @param {object} params
+ * @param {boolean} params.isViewMode 既存組み合わせの閲覧モードか
+ * @param {boolean} params.isReadOnly 他試合に未保存変更がある等で閲覧専用か
+ * @param {boolean} params.acknowledged この試合で既にアラートを OK 済みか
+ * @param {Array} params.pairings 現在表示中の組み合わせ配列
+ * @returns {boolean}
+ */
+export const shouldTriggerCancelAlert = ({ isViewMode, isReadOnly, acknowledged, pairings }) =>
+  !!isViewMode && !isReadOnly && !acknowledged && collectCancelledNames(pairings).length > 0;
