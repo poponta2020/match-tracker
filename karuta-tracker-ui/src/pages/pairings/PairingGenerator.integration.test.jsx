@@ -7,6 +7,7 @@ import PlayerChip from '../../components/PlayerChip';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
+import PairingGenerator from './PairingGenerator';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
@@ -163,6 +164,69 @@ describe('未設定エラー文言（findIncompleteOpponentNames / buildIncomple
     unmount();
     render(<SaveButton loading={true} />);
     expect(screen.getByRole('button', { name: '確定して保存' })).toBeDisabled();
+  });
+});
+
+/**
+ * 保存エラーはボタン直上のフッターに出る（実コンポーネント・変更2）
+ *
+ * 上部の error バナーは編集エリア先頭にあり、組数が多いと保存ボタン（最下部）から見切れて
+ * 「押しても何も起きない」ように見える。実 PairingGenerator を描画し、未設定組がある状態で
+ * 保存を押すと、未設定選手名のエラーが編集モードのフッター（保存ボタンと同じ領域）に出ることを検証する。
+ */
+describe('保存エラーのフッター表示（実コンポーネント）', () => {
+  afterEach(() => {
+    // 他テストへの実装リークを防ぐため、モックを既定（空配列）へ戻す。
+    apiClient.get.mockReset();
+    apiClient.get.mockImplementation(() => Promise.resolve({ data: [] }));
+    apiClient.post.mockReset();
+    apiClient.post.mockImplementation(() => Promise.resolve({ data: [] }));
+    cleanup();
+  });
+
+  it('未設定組がある状態で保存を押すと、未設定選手名のエラーがフッター（保存ボタン近傍）に表示され保存は実行されない', async () => {
+    const session = {
+      id: 1,
+      totalMatches: 1,
+      pairingIncludesPending: false,
+      venueName: 'テスト会場',
+      participants: [{ id: 1, name: '鈴木', kyuRank: 'A' }],
+      matchParticipants: { '1': [{ name: '鈴木', status: 'WON' }] },
+    };
+    // 相手未設定（片側だけ埋まった）組を初期データで用意 → 編集モードで hasBlockingIncompletePair=true
+    const pairings = [
+      { id: 100, matchNumber: 1, player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null, recentMatches: [], hasResult: false, locked: false },
+    ];
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/practice-sessions/date') return Promise.resolve({ data: session });
+      if (url === '/match-pairings/date') return Promise.resolve({ data: pairings });
+      return Promise.resolve({ data: [] });
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/pairings?date=2026-07-24']}>
+        <Routes>
+          <Route path="/pairings" element={<PairingGenerator />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // ロード完了→「対戦編集」で閲覧モードから編集モードへ
+    const editBtn = await screen.findByRole('button', { name: /対戦編集/ });
+    await user.click(editBtn);
+
+    // 未完成組があっても保存ボタンは押下可（disabled は loading のみ）
+    const saveBtn = await screen.findByRole('button', { name: /確定して保存/ });
+    expect(saveBtn).not.toBeDisabled();
+    await user.click(saveBtn);
+
+    // 未設定選手名を挙げたエラーが表示され、createBatch（POST）は呼ばれない
+    const err = await screen.findByText(/鈴木の対戦相手が未設定のため保存できません/);
+    expect(err).toBeInTheDocument();
+    // フッターのエラーは保存ボタンと近接（同じ space-y-2 コンテナ）に出る＝ボタンから見切れない
+    expect(err.closest('div.space-y-2')?.contains(saveBtn)).toBe(true);
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 });
 

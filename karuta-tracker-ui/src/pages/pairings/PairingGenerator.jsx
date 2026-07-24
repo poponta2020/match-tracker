@@ -57,6 +57,10 @@ const PairingGenerator = () => {
   // キャンセル者アラート（変更1）: 表示中の試合に結果未入力のキャンセル者がいるとき単一OKで通知し、
   // OK で現在の試合を編集モード化する。names は発火時点で凍結した選手名（null=非表示）。
   const [cancelAlert, setCancelAlert] = useState(null); // { names: string[] } | null
+  // 変更2: 「確定して保存」押下時のフィードバック。上部の error バナーは編集エリアの先頭にあり、
+  // 組数が多いと保存ボタン（最下部）から見切れて「押しても何も起きない」ように見える。
+  // 保存起因の理由は必ずボタン直上（フッター）に出す。
+  const [saveError, setSaveError] = useState('');
 
   const ACTIVITY_TYPES = [
     { value: 'READING', label: '読み' },
@@ -379,6 +383,7 @@ const PairingGenerator = () => {
 
     setLoading(true);
     setError('');
+    setSaveError('');
     setNotice('');
 
     try {
@@ -429,6 +434,7 @@ const PairingGenerator = () => {
   // 切り替えることで、編集モードの描画・ドラッグ・保存（buildSaveRequests は両選手揃った組のみ送信）は
   // 既存ロジックのまま動く。
   const enterEditModeForExisting = () => {
+    setSaveError('');
     const materialized = materializeCancelledSlots(pairings);
     setPairings(materialized);
     setIsViewMode(false);
@@ -462,6 +468,7 @@ const PairingGenerator = () => {
         // ドラフトを必ず作る ―― 選手追加は currentSession を更新するため、ドラフトが無いと
         // 復元 useEffect が走って編集モードごと巻き戻る（#485 と同型）。
         setError('');
+        setSaveError('');
         setPairings([]);
         setWaitingPlayers([]);
         setIsEditingExisting(false);
@@ -489,19 +496,21 @@ const PairingGenerator = () => {
     // 変更2: 対戦相手が未設定の組があれば、未設定の選手名を挙げて保存を止める（ボタンは常時押下可）。
     // 判定・文言は buildIncompleteOpponentError に集約（cancelledEmptied 除外内包＝キャンセル由来の
     // 空き組はそのまま保存できる）。より具体的な本エラーを hasNothingToSave より優先する。
+    // 保存起因のフィードバックは saveError（ボタン直上のフッター）に出す（上部バナーだと見切れる）。
     const incompleteError = buildIncompleteOpponentError(pairings);
     if (incompleteError) {
-      setError(incompleteError);
+      setSaveError(incompleteError);
       return;
     }
 
     // 完成した組（両選手あり・結果未入力。手動ロック組も含む）が1つも無く、待機者もいなければ保存対象なし
     if (hasNothingToSave(pairings, waitingPlayers)) {
-      setError('保存する組み合わせがありません');
+      setSaveError('保存する組み合わせがありません');
       return;
     }
 
     setLoading(true);
+    setSaveError('');
     setError('');
 
     try {
@@ -551,7 +560,8 @@ const PairingGenerator = () => {
       console.error('Save failed:', err);
       // サーバーが返す具体的な理由（例: 対象セッションの参加者でない選手は…）を優先表示する。
       // 固定文言だけだと「どの選手が・なぜ」弾かれたか分からず、原因不明のリトライを招く（Issue #958）。
-      setError(err.response?.data?.message || '保存に失敗しました');
+      // 保存起因なのでボタン直上のフッター（saveError）に出す。
+      setSaveError(err.response?.data?.message || '保存に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -1352,6 +1362,14 @@ const PairingGenerator = () => {
             null
           ) : (
             <div className="space-y-2 pt-1">
+              {/* 保存起因のエラー（未設定・保存対象なし・サーバー失敗）はボタン直上に出す（変更2）。
+                  上部 error バナーは編集エリア先頭にあり、組数が多いと見切れて「押しても無反応」に見えるため。 */}
+              {saveError && (
+                <div className="flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-[13px] leading-relaxed bg-[#fdf0ee] border border-[#f2c9c2] text-[#b3403a]">
+                  <AlertCircle className="w-[17px] h-[17px] flex-shrink-0 mt-px" />
+                  <span>{saveError}</span>
+                </div>
+              )}
               {hasUnsavedChanges && (
                 <p className="text-xs text-[#b45309] text-center">
                   保存するまで他の試合の編集はできません
@@ -1382,6 +1400,7 @@ const PairingGenerator = () => {
                     setHasUnsavedChanges(false);
                     unsavedDraft.current = null;
                     setError('');
+                    setSaveError('');
                   }}
                   disabled={loading}
                   className="text-[#5b5446] px-4 py-3 rounded-[10px] hover:bg-black/5 transition-colors font-semibold"
