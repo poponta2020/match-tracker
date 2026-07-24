@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import { DndContext } from '@dnd-kit/core';
@@ -7,11 +7,12 @@ import PlayerChip from '../../components/PlayerChip';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import DraggablePlayerChip from './DraggablePlayerChip';
 import DroppableSlot from './DroppableSlot';
+import PairingGenerator from './PairingGenerator';
 import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraftLogic';
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
-import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow } from './pairingDisplayLogic';
+import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
-import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, findIncompleteOpponentNames, buildIncompleteOpponentError, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
 vi.mock('../../api/client', () => ({
@@ -40,9 +41,10 @@ afterEach(cleanup);
  * 3. DragOverlay のリセット → 下記テストで検証
  */
 
-describe('保存ボタン無効化ロジック（hasBlockingIncompletePair）', () => {
-  // 本番の保存ボタン disabled = loading || hasBlockingIncompletePair(pairings)。
-  // ここでは実関数 hasBlockingIncompletePair を直接検証する（loading は JSX 側で OR）。
+describe('未設定組の判定ロジック（hasBlockingIncompletePair）', () => {
+  // 変更2 以降、保存ボタンは常時押下可（disabled=loading のみ）になり、hasBlockingIncompletePair は
+  // 「押下後に保存を止めてエラーを出す」ゲート（buildIncompleteOpponentError 内）として使われる。
+  // ここでは実関数 hasBlockingIncompletePair を直接検証する（cancelledEmptied 除外などの不変条件）。
   // 条件式をテスト側にコピーせず実関数を呼ぶことで、本番の判定が変われば確実に失敗する。
 
   it('全ペアリングが揃っていれば保存可能（false）', () => {
@@ -77,6 +79,223 @@ describe('保存ボタン無効化ロジック（hasBlockingIncompletePair）', 
       { player1Id: 3, player2Id: null, cancelledEmptied: true },   // C vs 空き（D がキャンセル）
       { player1Id: 5, player2Id: 6 },
     ])).toBe(false);
+  });
+});
+
+/**
+ * 保存ボタン常時押下＋未設定エラー明示（pairing-cancel-alert-and-save-errors 変更2）
+ *
+ * 保存ボタンは disabled=loading のみ（未完成組があっても押せる）。押下後に
+ * buildIncompleteOpponentError の文言で「誰の対戦相手が未設定か・どうすればよいか」を明示する。
+ */
+describe('未設定エラー文言（findIncompleteOpponentNames / buildIncompleteOpponentError）', () => {
+  afterEach(cleanup);
+
+  it('findIncompleteOpponentNames: 相手が空きの片側だけ埋まった組は、埋まっている側の名前を返す', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+    ])).toEqual(['鈴木']);
+    expect(findIncompleteOpponentNames([
+      { player1Id: null, player1Name: null, player2Id: 2, player2Name: '山田' },
+    ])).toEqual(['山田']);
+  });
+
+  it('findIncompleteOpponentNames: 未設定が複数なら全員を組順に列挙（AC-10）', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+      { player1Id: 3, player1Name: '田中', player2Id: 4, player2Name: '佐々木' }, // 完成 → 除外
+      { player1Id: null, player1Name: null, player2Id: 6, player2Name: '佐藤' },
+    ])).toEqual(['鈴木', '佐藤']);
+  });
+
+  it('findIncompleteOpponentNames: cancelledEmptied / hasResult / locked の片側空きは対象外', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: 'A', player2Id: null, player2Name: null, cancelledEmptied: true },
+      { player1Id: 2, player1Name: 'B', player2Id: null, player2Name: null, hasResult: true },
+      { player1Id: 3, player1Name: 'C', player2Id: null, player2Name: null, locked: true },
+    ])).toEqual([]);
+  });
+
+  it('findIncompleteOpponentNames: 全組完成なら空配列 / 両側 null は名前なし / null 安全', () => {
+    expect(findIncompleteOpponentNames([{ player1Id: 1, player1Name: 'A', player2Id: 2, player2Name: 'B' }])).toEqual([]);
+    expect(findIncompleteOpponentNames([{ player1Id: null, player1Name: null, player2Id: null, player2Name: null }])).toEqual([]);
+    expect(findIncompleteOpponentNames(null)).toEqual([]);
+  });
+
+  it('buildIncompleteOpponentError: 未設定ありは選手名入りの文言を返す（AC-9）', () => {
+    const msg = buildIncompleteOpponentError([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+    ]);
+    expect(msg).toBe('鈴木の対戦相手が未設定のため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。');
+  });
+
+  it('buildIncompleteOpponentError: 複数未設定は全員を「・」で連結（AC-10）', () => {
+    const msg = buildIncompleteOpponentError([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+      { player1Id: null, player1Name: null, player2Id: 6, player2Name: '佐藤' },
+    ]);
+    expect(msg).toContain('鈴木・佐藤の対戦相手が未設定のため保存できません');
+  });
+
+  it('buildIncompleteOpponentError: 完成のみ / cancelledEmptied のみ は null（そのまま保存できる。AC-11/13）', () => {
+    expect(buildIncompleteOpponentError([{ player1Id: 1, player1Name: 'A', player2Id: 2, player2Name: 'B' }])).toBeNull();
+    // 生存側 vs 空き（キャンセル由来）のみ → エラーなし＝保存可
+    expect(buildIncompleteOpponentError([{ player1Id: 3, player1Name: 'C', player2Id: null, player2Name: null, cancelledEmptied: true }])).toBeNull();
+  });
+
+  it('buildIncompleteOpponentError: 名前が取れない（両側 null のみ）は一般文言にフォールバック', () => {
+    const msg = buildIncompleteOpponentError([{ player1Id: null, player1Name: null, player2Id: null, player2Name: null }]);
+    // 両側 null は hasBlockingIncompletePair=true だが名前なし
+    expect(msg).toBe('対戦相手が未設定の組があるため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。');
+  });
+
+  // 保存ボタンの disabled は loading のみ（未完成組があっても押せる）＝本番の JSX と同じ式のレプリカ。
+  const SaveButton = ({ loading }) => (
+    <button onClick={() => {}} disabled={loading}>確定して保存</button>
+  );
+
+  it('保存ボタン: 未完成組があっても loading=false なら押下可（AC-8）', () => {
+    const pairings = [{ player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null }];
+    // 未完成組は存在する（押下すればエラーになる）が…
+    expect(buildIncompleteOpponentError(pairings)).not.toBeNull();
+    // …ボタン自体は disabled ではない（disabled は loading のみに依存）
+    const { unmount } = render(<SaveButton loading={false} />);
+    expect(screen.getByRole('button', { name: '確定して保存' })).not.toBeDisabled();
+    unmount();
+    render(<SaveButton loading={true} />);
+    expect(screen.getByRole('button', { name: '確定して保存' })).toBeDisabled();
+  });
+});
+
+/**
+ * 保存エラーはボタン直上のフッターに出る（実コンポーネント・変更2）
+ *
+ * 上部の error バナーは編集エリア先頭にあり、組数が多いと保存ボタン（最下部）から見切れて
+ * 「押しても何も起きない」ように見える。実 PairingGenerator を描画し、未設定組がある状態で
+ * 保存を押すと、未設定選手名のエラーが編集モードのフッター（保存ボタンと同じ領域）に出ることを検証する。
+ */
+describe('保存エラーのフッター表示（実コンポーネント）', () => {
+  afterEach(() => {
+    // 他テストへの実装リークを防ぐため、モックを既定（空配列）へ戻す。
+    apiClient.get.mockReset();
+    apiClient.get.mockImplementation(() => Promise.resolve({ data: [] }));
+    apiClient.post.mockReset();
+    apiClient.post.mockImplementation(() => Promise.resolve({ data: [] }));
+    cleanup();
+  });
+
+  it('未設定組がある状態で保存を押すと、未設定選手名のエラーがフッター（保存ボタン近傍）に表示され保存は実行されない', async () => {
+    const session = {
+      id: 1,
+      totalMatches: 1,
+      pairingIncludesPending: false,
+      venueName: 'テスト会場',
+      participants: [{ id: 1, name: '鈴木', kyuRank: 'A' }],
+      matchParticipants: { '1': [{ name: '鈴木', status: 'WON' }] },
+    };
+    // 相手未設定（片側だけ埋まった）組を初期データで用意 → 編集モードで hasBlockingIncompletePair=true
+    const pairings = [
+      { id: 100, matchNumber: 1, player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null, recentMatches: [], hasResult: false, locked: false },
+    ];
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/practice-sessions/date') return Promise.resolve({ data: session });
+      if (url === '/match-pairings/date') return Promise.resolve({ data: pairings });
+      return Promise.resolve({ data: [] });
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/pairings?date=2026-07-24']}>
+        <Routes>
+          <Route path="/pairings" element={<PairingGenerator />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // ロード完了→「対戦編集」で閲覧モードから編集モードへ
+    const editBtn = await screen.findByRole('button', { name: /対戦編集/ });
+    await user.click(editBtn);
+
+    // 未完成組があっても保存ボタンは押下可（disabled は loading のみ）
+    const saveBtn = await screen.findByRole('button', { name: /確定して保存/ });
+    expect(saveBtn).not.toBeDisabled();
+    await user.click(saveBtn);
+
+    // 未設定選手名を挙げたエラーが表示され、createBatch（POST）は呼ばれない
+    const err = await screen.findByText(/鈴木の対戦相手が未設定のため保存できません/);
+    expect(err).toBeInTheDocument();
+    // フッターのエラーは保存ボタンと近接（同じ space-y-2 コンテナ）に出る＝ボタンから見切れない
+    expect(err.closest('div.space-y-2')?.contains(saveBtn)).toBe(true);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * キャンセル者アラートの試合切替（実コンポーネント・回帰）
+ *
+ * 別 effect で pairings と matchNumber を突き合わせると、試合切替直後は pairings が
+ * 前試合のままで stale 発火し、「別試合の選手名で誤アラート／OK で別試合のドラフト作成」の
+ * 競合が起きる（Codex 指摘の blocker）。アラート判定を読み込み effect の cached ベースに
+ * 畳み込んだので、キャンセルあり試合 → キャンセルなし試合へ切り替えても誤アラートが出ない。
+ */
+describe('キャンセル者アラートの試合切替（実コンポーネント）', () => {
+  afterEach(() => {
+    apiClient.get.mockReset();
+    apiClient.get.mockImplementation(() => Promise.resolve({ data: [] }));
+    apiClient.post.mockReset();
+    apiClient.post.mockImplementation(() => Promise.resolve({ data: [] }));
+    cleanup();
+  });
+
+  it('キャンセルあり1試合目 → キャンセルなし2試合目へ切り替えても、前試合の選手名でアラートが再発火しない', async () => {
+    const session = {
+      id: 1,
+      totalMatches: 2,
+      pairingIncludesPending: false,
+      venueName: 'テスト会場',
+      participants: [
+        { id: 1, name: '鈴木', kyuRank: 'A' },
+        { id: 2, name: '山田', kyuRank: 'B' },
+        { id: 3, name: '田中', kyuRank: 'A' },
+        { id: 4, name: '佐々木', kyuRank: 'B' },
+      ],
+      matchParticipants: {
+        '1': [{ name: '鈴木', status: 'WON' }, { name: '山田', status: 'WON' }],
+        '2': [{ name: '田中', status: 'WON' }, { name: '佐々木', status: 'WON' }],
+      },
+    };
+    // 1試合目は山田がキャンセル済み（read-time フラグ）、2試合目は通常
+    const allPairings = [
+      { id: 10, matchNumber: 1, player1Id: 1, player1Name: '鈴木', player1Cancelled: false, player2Id: 2, player2Name: '山田', player2Cancelled: true, recentMatches: [], hasResult: false, locked: false },
+      { id: 20, matchNumber: 2, player1Id: 3, player1Name: '田中', player1Cancelled: false, player2Id: 4, player2Name: '佐々木', player2Cancelled: false, recentMatches: [], hasResult: false, locked: false },
+    ];
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/practice-sessions/date') return Promise.resolve({ data: session });
+      if (url === '/match-pairings/date') return Promise.resolve({ data: allPairings });
+      return Promise.resolve({ data: [] });
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/pairings?date=2026-07-24']}>
+        <Routes>
+          <Route path="/pairings" element={<PairingGenerator />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // 1試合目のキャンセル者アラートが出る（見出しで判定。山田は背景の行にも出るため名前では判定しない）
+    expect(await screen.findByText('キャンセルの反映')).toBeInTheDocument();
+
+    // 2試合目タブへ切り替え（jsdom はオーバーレイのヒットテストをしないためモーダル表示中でも押下できる）
+    await user.click(screen.getByRole('button', { name: '2' }));
+
+    // 前試合（山田）の情報でアラートが誤って再発火・残存しないこと
+    await waitFor(() => {
+      expect(screen.queryByText('キャンセルの反映')).toBeNull();
+    });
+    // 2試合目にはキャンセル者がいないため、山田はどこにも表示されない
+    expect(screen.queryByText('山田')).toBeNull();
   });
 });
 
@@ -1419,6 +1638,105 @@ describe('対戦相手キャンセル表示（pairing-cancelled-opponent）', ()
     expect(edit[1].locked).toBe(false);
     // 結果入力済みの両キャンセルは残る
     expect(edit[2].player1Id).toBe(5);
+  });
+});
+
+/**
+ * キャンセル者アラート（pairing-cancel-alert-and-save-errors 変更1）
+ *
+ * 閲覧モードで表示中の試合に結果未入力のキャンセル者がいるとき単一OKアラートを出し、
+ * OK で現在の試合を編集モード化する。判定は純粋関数 collectCancelledNames /
+ * shouldTriggerCancelAlert に集約し、本番と同じ関数を検証する（退行検知）。
+ */
+describe('キャンセル者アラート（collectCancelledNames / shouldTriggerCancelAlert）', () => {
+  afterEach(cleanup);
+
+  it('collectCancelledNames: 片方キャンセルはその1名を返す', () => {
+    expect(collectCancelledNames([
+      { player1Id: 10, player1Name: '鈴木', player1Cancelled: false, player2Id: 20, player2Name: '山田', player2Cancelled: true },
+    ])).toEqual(['山田']);
+  });
+
+  it('collectCancelledNames: 両方キャンセルは両名を返す', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: true },
+    ])).toEqual(['A', 'B']);
+  });
+
+  it('collectCancelledNames: 複数組を組順に集約する', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false },
+      { player1Id: 3, player1Name: 'C', player1Cancelled: false, player2Id: 4, player2Name: 'D', player2Cancelled: false }, // 通常
+      { player1Id: 5, player1Name: 'E', player1Cancelled: false, player2Id: 6, player2Name: 'F', player2Cancelled: true },
+    ])).toEqual(['A', 'F']);
+  });
+
+  it('collectCancelledNames: キャンセルなしは空配列', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: false },
+    ])).toEqual([]);
+  });
+
+  it('collectCancelledNames: 結果入力済み（hasResult）の組は対象外（結果が正でキャンセル反映しない）', () => {
+    expect(collectCancelledNames([
+      { player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: true, hasResult: true },
+    ])).toEqual([]);
+  });
+
+  it('collectCancelledNames: null/空配列でも安全', () => {
+    expect(collectCancelledNames(null)).toEqual([]);
+    expect(collectCancelledNames([])).toEqual([]);
+    expect(collectCancelledNames([null])).toEqual([]);
+  });
+
+  it('shouldTriggerCancelAlert: 閲覧モード＋キャンセルあり＋未確認 → true', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: false, pairings })).toBe(true);
+  });
+
+  it('shouldTriggerCancelAlert: 編集モード（非閲覧）では false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: false, isReadOnly: false, acknowledged: false, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: 読み取り専用（isReadOnly）では false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: true, acknowledged: false, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: 確認済み（acknowledged）では false（再発火防止）', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: true, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: true, pairings })).toBe(false);
+  });
+
+  it('shouldTriggerCancelAlert: キャンセルなしでは false', () => {
+    const pairings = [{ player1Id: 1, player1Name: 'A', player1Cancelled: false, player2Id: 2, player2Name: 'B', player2Cancelled: false }];
+    expect(shouldTriggerCancelAlert({ isViewMode: true, isReadOnly: false, acknowledged: false, pairings })).toBe(false);
+  });
+
+  // 本番モーダルと同一構造のレプリカ（メッセージ文言・単一OKの配線を検証。
+  // OK 押下 → onOk が呼ばれる＝本番では handleCancelAlertOk（enterEditModeForExisting）に繋がる。
+  // 実体化（空き化）自体は上記 materializeCancelledSlots テストでカバー済み）。
+  const CancelAlertModal = ({ matchNumber, names, onOk }) => (
+    <div data-testid="cancel-alert">
+      <p>
+        {matchNumber}試合目に参加予定の
+        <span>{names.join('・')}</span>
+        は練習をキャンセルしています。対戦組み合わせから外してよろしいですか？
+      </p>
+      <button onClick={onOk}>OK</button>
+    </div>
+  );
+
+  it('アラート: 試合番号とキャンセル者名を含むメッセージを表示し、OK で onOk が呼ばれる', () => {
+    const onOk = vi.fn();
+    render(<CancelAlertModal matchNumber={2} names={['鈴木', '佐藤']} onOk={onOk} />);
+    const alert = screen.getByTestId('cancel-alert');
+    expect(alert.textContent).toContain('2試合目に参加予定の');
+    expect(alert.textContent).toContain('鈴木・佐藤');
+    expect(alert.textContent).toContain('練習をキャンセルしています');
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(onOk).toHaveBeenCalledTimes(1);
   });
 });
 
