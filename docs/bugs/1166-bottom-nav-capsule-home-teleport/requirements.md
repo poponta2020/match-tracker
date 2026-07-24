@@ -18,7 +18,7 @@ issue: 1166
 - React は `<Routes>` outlet 位置の**要素の型**で fiber を調停する。`/` の出入りでは `AuthRoute` ↔ `ProtectedPage` の型不一致になり、共有 `<Layout>`（＝アクティブカプセルの単一 `<span>`）が**アンマウント→リマウント**される。
 - リマウント直後のカプセルには「前の位置の transform」が存在しないため、`transition: transform 427ms cubic-bezier(...)` が補間する差分がなく、**新しい位置に瞬間表示**される（＝瞬間移動）。
 - 他→他は両端とも `<ProtectedPage>` 型のため Layout fiber が再利用され、カプセルが永続してグライドする（「他→他は正常」というユーザー報告がこの再利用を実証している）。
-- 実装参照: [components/Layout.jsx](../../../karuta-tracker-ui/src/components/Layout.jsx)（カプセルの transition）、[components/AuthRoute.jsx](../../../karuta-tracker-ui/src/components/AuthRoute.jsx)、[components/PrivateRoute.jsx](../../../karuta-tracker-ui/src/components/PrivateRoute.jsx)。
+- 実装参照: [components/Layout.jsx](../../../karuta-tracker-ui/src/components/Layout.jsx)（カプセルの transition）、`components/AuthRoute.jsx`（本 PR で削除）、[components/PrivateRoute.jsx](../../../karuta-tracker-ui/src/components/PrivateRoute.jsx)。
 
 ## 修正方針
 5つのナビ先すべてが `<Routes>` outlet に**同一型 `<ProtectedPage>`** を置くようにし、`/` 出入りで Layout fiber を再利用させる（＝カプセル永続 → グライド）。`<AuthRoute>` の「認証時 Home / 未認証時 Landing」分岐は `PrivateRoute` の任意フォールバックに移す。
