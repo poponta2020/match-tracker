@@ -1,7 +1,11 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const PrivateRoute = ({ children }) => {
+// publicFallback: 未認証時に /login へリダイレクトする代わりに描画する要素（任意）。
+// 例: ホーム `/` は未認証時に Landing を表示したいので publicFallback={<Landing/>} を渡す。
+// これにより全ナビ先が同型 <ProtectedPage>（=同一 PrivateRoute→Layout fiber）となり、
+// ルート遷移で Layout がアンマウントされず、ボトムナビのカプセルがグライドを維持する。
+const PrivateRoute = ({ children, publicFallback }) => {
   const { currentPlayer, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
@@ -14,6 +18,9 @@ const PrivateRoute = ({ children }) => {
   }
 
   if (!isAuthenticated) {
+    if (publicFallback !== undefined) {
+      return publicFallback;
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

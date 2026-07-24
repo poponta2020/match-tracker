@@ -34,7 +34,6 @@ import VenueForm from './pages/venues/VenueForm';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Landing from './pages/Landing';
-import AuthRoute from './components/AuthRoute';
 import LotteryResults from './pages/lottery/LotteryResults';
 import WaitlistStatus from './pages/lottery/WaitlistStatus';
 import OfferResponse from './pages/lottery/OfferResponse';
@@ -52,8 +51,8 @@ import CalendarSubscriptionPage from './pages/CalendarSubscriptionPage';
 import MentorManagement from './pages/mentor/MentorManagement';
 import LotteryManagement from './pages/lottery/LotteryManagement';
 
-const ProtectedPage = ({ children }) => (
-  <PrivateRoute>
+const ProtectedPage = ({ children, publicFallback }) => (
+  <PrivateRoute publicFallback={publicFallback}>
     <Layout>{children}</Layout>
   </PrivateRoute>
 );
@@ -80,14 +79,16 @@ function App() {
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
 
-            {/* ホーム（認証状態で分岐） */}
+            {/* ホーム（認証状態で分岐）。
+                他のナビ先と同じ <ProtectedPage> を outlet 位置に置くことで、`/` 出入りでも
+                共有 <Layout>（ボトムナビのカプセル）が再利用され、カプセルがグライドを維持する。
+                未認証時は publicFallback で Landing を表示（/login にリダイレクトしない）。 */}
             <Route
               path="/"
               element={
-                <AuthRoute
-                  authenticated={<ProtectedPage><Home /></ProtectedPage>}
-                  unauthenticated={<Landing />}
-                />
+                <ProtectedPage publicFallback={<Landing />}>
+                  <Home />
+                </ProtectedPage>
               }
             />
 

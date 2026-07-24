@@ -10,8 +10,7 @@
 
 | ガード | 説明 |
 |--------|------|
-| `AuthRoute` | 未認証→Landing、認証済→指定コンポーネントを表示 |
-| `PrivateRoute` | 認証必須。`kyuRank` 未設定の場合は `/profile/edit?setup=true` にリダイレクト |
+| `PrivateRoute` | 認証必須。未認証時は `/login` にリダイレクト（`publicFallback` を渡すとその要素を描画。ホーム `/` は未認証時に Landing を表示）。`kyuRank` 未設定の場合は `/profile/edit?setup=true` にリダイレクト |
 | `Layout` | ヘッダーバー（タイトル・通知ベル・プロフィール）+ 下部ナビゲーション付きの共通レイアウト |
 | `PageHeader` | 独自トップバーを持たない画面で `Layout` のベースナビバー（空の緑バー）を上書きする共通コンポーネント。`title`（必須）・`backTo`（必須：戻るボタンの遷移先パス）・`rightActions`（任意：右端アクション要素）を受け取り、`fixed top-0 z-50` のトップバーを描画する。設定サブページ群／リスト→詳細・編集／ホーム導線の20ファイル22ルートで使用 |
 
@@ -197,8 +196,7 @@
 | コンポーネント | ファイル | 用途 |
 |---------------|---------|------|
 | `Layout` | `components/Layout.jsx` | ヘッダーバー（プロフィール）+ 下部ナビゲーション付き共通レイアウト。ボトムナビは**リキッドグラス調の浮いた角丸ピル**（画面下端から浮かせた `max-w-md` 中央寄せ・`rounded-[28px]`・ニュートラル無彩色の半透明ガラス＋`backdrop-filter: blur() saturate()`・上縁ハイライト＋斜めの鏡面スジ）。項目は**アイコンのみ**（ラベル非表示・各リンクに日本語 `aria-label`）。`BottomNavContext` の `isVisible` に応じて表示/非表示をスライドで切り替え |
-| `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック |
-| `AuthRoute` | `components/AuthRoute.jsx` | 認証状態による条件分岐レンダリング |
+| `PrivateRoute` | `components/PrivateRoute.jsx` | 認証ガード＋プロフィール設定チェック（`publicFallback` で未認証時の表示先を差し替え可） |
 | `FilterBottomSheet` | `components/FilterBottomSheet.jsx` | 試合フィルタUI（年月・段位・性別・利き手・結果） |
 | `PlayerChip` | `components/PlayerChip.jsx` | 選手バッジ |
 | `MatchParticipantsEditModal` | `components/MatchParticipantsEditModal.jsx` | 試合参加者編集モーダル |
@@ -267,7 +265,6 @@ karuta-tracker-ui/src/
 ├── components/
 │   ├── Layout.jsx
 │   ├── PrivateRoute.jsx
-│   ├── AuthRoute.jsx
 │   ├── FilterBottomSheet.jsx
 │   ├── PlayerChip.jsx
 │   ├── MatchParticipantsEditModal.jsx
