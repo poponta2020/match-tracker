@@ -18,7 +18,7 @@ import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } f
 import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowEditingArea, shouldShowReshuffleButton, shouldShowViewModeUnpairedSection, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
 import PlayerSearchCombobox from './PlayerSearchCombobox';
 import PairingHelp from './PairingHelp';
-import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, buildIncompleteOpponentError, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 import { formatHeaderDate, resolveHeaderVenue } from './pairingHeader';
 
 
@@ -486,6 +486,15 @@ const PairingGenerator = () => {
   };
 
   const handleSave = async () => {
+    // 変更2: 対戦相手が未設定の組があれば、未設定の選手名を挙げて保存を止める（ボタンは常時押下可）。
+    // 判定・文言は buildIncompleteOpponentError に集約（cancelledEmptied 除外内包＝キャンセル由来の
+    // 空き組はそのまま保存できる）。より具体的な本エラーを hasNothingToSave より優先する。
+    const incompleteError = buildIncompleteOpponentError(pairings);
+    if (incompleteError) {
+      setError(incompleteError);
+      return;
+    }
+
     // 完成した組（両選手あり・結果未入力。手動ロック組も含む）が1つも無く、待機者もいなければ保存対象なし
     if (hasNothingToSave(pairings, waitingPlayers)) {
       setError('保存する組み合わせがありません');
@@ -1381,7 +1390,7 @@ const PairingGenerator = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={loading || hasBlockingIncompletePair(pairings)}
+                  disabled={loading}
                   className="inline-flex items-center gap-2 bg-[#1A3654] text-white px-6 py-3 rounded-[10px] hover:bg-[#122740] transition-colors disabled:bg-gray-400 font-bold text-[15px]"
                 >
                   <Check className="w-5 h-5" />

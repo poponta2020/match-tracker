@@ -74,6 +74,33 @@ export const hasBlockingIncompletePair = (pairings) =>
   );
 
 /**
+ * 対戦相手が未設定の組にいる「片側だけ埋まった」選手名を列挙する（保存押下後エラーの文言用）。
+ * hasBlockingIncompletePair と**同一の除外条件**（結果入力済み hasResult・手動ロック locked・
+ * キャンセル由来の空き cancelledEmptied は対象外）で、埋まっている側の選手名を返す。
+ * 両側 null の組は名前が無いため含めない（.filter(Boolean) で落ちる）。
+ * 変更2: 保存ボタンは常時押下可にし、押下時にこの名前を挙げて「なぜ保存できないか」を伝える。
+ */
+export const findIncompleteOpponentNames = (pairings) =>
+  (pairings || [])
+    .filter((p) => p && !p.hasResult && !p.locked && !p.cancelledEmptied && (!p.player1Id || !p.player2Id))
+    .map((p) => (p.player1Id ? p.player1Name : p.player2Name))
+    .filter(Boolean);
+
+/**
+ * 「確定して保存」押下時に、対戦相手未設定ゆえ保存できない場合のエラー文言を返す（無ければ null）。
+ * 変更2: ボタンは常時押下可（disabled=loading のみ）にし、押下後にこの文言で「なぜ保存できないか・
+ * どうすればよいか」を明示する。判定は hasBlockingIncompletePair（cancelledEmptied 除外内包）と一致。
+ * 名前が取れない場合（両側 null の組のみ）は選手名なしの一般文言にフォールバックする。
+ */
+export const buildIncompleteOpponentError = (pairings) => {
+  if (!hasBlockingIncompletePair(pairings || [])) return null;
+  const names = findIncompleteOpponentNames(pairings);
+  return names.length > 0
+    ? `${names.join('・')}の対戦相手が未設定のため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。`
+    : '対戦相手が未設定の組があるため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。';
+};
+
+/**
  * 「ロック以外を再シャッフル」で auto-match に送る lockedPairs 入力を現在の画面状態から算出する。
  * ロック済みの組（結果入力済み hasResult または手動ロック locked。未保存ロックも含む）のうち、
  * 両選手が揃った組だけを {player1Id, player2Id} に射影する（null player id を送らないガード。

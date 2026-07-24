@@ -11,7 +11,7 @@ import { syncDraftAfterAddingPlayer, restoreDraftIfMatches } from './pairingDraf
 import { computeLineTextAvailability, resolveLineTextTarget, buildSummaryUrl } from './lineTextTarget';
 import { shouldShowParticipantSection, resolvePairingEditAction, isPairingEditDisabled, shouldShowReshuffleButton, reshuffleButtonLabel, hasAnyCancelled, materializeCancelledSlots, showsResultLockedRow, shouldHideRow, collectCancelledNames, shouldTriggerCancelAlert } from './pairingDisplayLogic';
 import { Ban } from 'lucide-react';
-import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
+import { togglePairingLock, canLockPairing, canShowUnlock, shouldShowManualLockBadge, buildSaveRequests, hasNothingToSave, hasBlockingIncompletePair, findIncompleteOpponentNames, buildIncompleteOpponentError, computeLockedPairsInput, buildAutoMatchBody } from './pairingLockLogic';
 
 // pairingAPI.createBatch の送信ペイロード検証用に apiClient をモックする
 vi.mock('../../api/client', () => ({
@@ -40,9 +40,10 @@ afterEach(cleanup);
  * 3. DragOverlay のリセット → 下記テストで検証
  */
 
-describe('保存ボタン無効化ロジック（hasBlockingIncompletePair）', () => {
-  // 本番の保存ボタン disabled = loading || hasBlockingIncompletePair(pairings)。
-  // ここでは実関数 hasBlockingIncompletePair を直接検証する（loading は JSX 側で OR）。
+describe('未設定組の判定ロジック（hasBlockingIncompletePair）', () => {
+  // 変更2 以降、保存ボタンは常時押下可（disabled=loading のみ）になり、hasBlockingIncompletePair は
+  // 「押下後に保存を止めてエラーを出す」ゲート（buildIncompleteOpponentError 内）として使われる。
+  // ここでは実関数 hasBlockingIncompletePair を直接検証する（cancelledEmptied 除外などの不変条件）。
   // 条件式をテスト側にコピーせず実関数を呼ぶことで、本番の判定が変われば確実に失敗する。
 
   it('全ペアリングが揃っていれば保存可能（false）', () => {
@@ -77,6 +78,91 @@ describe('保存ボタン無効化ロジック（hasBlockingIncompletePair）', 
       { player1Id: 3, player2Id: null, cancelledEmptied: true },   // C vs 空き（D がキャンセル）
       { player1Id: 5, player2Id: 6 },
     ])).toBe(false);
+  });
+});
+
+/**
+ * 保存ボタン常時押下＋未設定エラー明示（pairing-cancel-alert-and-save-errors 変更2）
+ *
+ * 保存ボタンは disabled=loading のみ（未完成組があっても押せる）。押下後に
+ * buildIncompleteOpponentError の文言で「誰の対戦相手が未設定か・どうすればよいか」を明示する。
+ */
+describe('未設定エラー文言（findIncompleteOpponentNames / buildIncompleteOpponentError）', () => {
+  afterEach(cleanup);
+
+  it('findIncompleteOpponentNames: 相手が空きの片側だけ埋まった組は、埋まっている側の名前を返す', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+    ])).toEqual(['鈴木']);
+    expect(findIncompleteOpponentNames([
+      { player1Id: null, player1Name: null, player2Id: 2, player2Name: '山田' },
+    ])).toEqual(['山田']);
+  });
+
+  it('findIncompleteOpponentNames: 未設定が複数なら全員を組順に列挙（AC-10）', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+      { player1Id: 3, player1Name: '田中', player2Id: 4, player2Name: '佐々木' }, // 完成 → 除外
+      { player1Id: null, player1Name: null, player2Id: 6, player2Name: '佐藤' },
+    ])).toEqual(['鈴木', '佐藤']);
+  });
+
+  it('findIncompleteOpponentNames: cancelledEmptied / hasResult / locked の片側空きは対象外', () => {
+    expect(findIncompleteOpponentNames([
+      { player1Id: 1, player1Name: 'A', player2Id: null, player2Name: null, cancelledEmptied: true },
+      { player1Id: 2, player1Name: 'B', player2Id: null, player2Name: null, hasResult: true },
+      { player1Id: 3, player1Name: 'C', player2Id: null, player2Name: null, locked: true },
+    ])).toEqual([]);
+  });
+
+  it('findIncompleteOpponentNames: 全組完成なら空配列 / 両側 null は名前なし / null 安全', () => {
+    expect(findIncompleteOpponentNames([{ player1Id: 1, player1Name: 'A', player2Id: 2, player2Name: 'B' }])).toEqual([]);
+    expect(findIncompleteOpponentNames([{ player1Id: null, player1Name: null, player2Id: null, player2Name: null }])).toEqual([]);
+    expect(findIncompleteOpponentNames(null)).toEqual([]);
+  });
+
+  it('buildIncompleteOpponentError: 未設定ありは選手名入りの文言を返す（AC-9）', () => {
+    const msg = buildIncompleteOpponentError([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+    ]);
+    expect(msg).toBe('鈴木の対戦相手が未設定のため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。');
+  });
+
+  it('buildIncompleteOpponentError: 複数未設定は全員を「・」で連結（AC-10）', () => {
+    const msg = buildIncompleteOpponentError([
+      { player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null },
+      { player1Id: null, player1Name: null, player2Id: 6, player2Name: '佐藤' },
+    ]);
+    expect(msg).toContain('鈴木・佐藤の対戦相手が未設定のため保存できません');
+  });
+
+  it('buildIncompleteOpponentError: 完成のみ / cancelledEmptied のみ は null（そのまま保存できる。AC-11/13）', () => {
+    expect(buildIncompleteOpponentError([{ player1Id: 1, player1Name: 'A', player2Id: 2, player2Name: 'B' }])).toBeNull();
+    // 生存側 vs 空き（キャンセル由来）のみ → エラーなし＝保存可
+    expect(buildIncompleteOpponentError([{ player1Id: 3, player1Name: 'C', player2Id: null, player2Name: null, cancelledEmptied: true }])).toBeNull();
+  });
+
+  it('buildIncompleteOpponentError: 名前が取れない（両側 null のみ）は一般文言にフォールバック', () => {
+    const msg = buildIncompleteOpponentError([{ player1Id: null, player1Name: null, player2Id: null, player2Name: null }]);
+    // 両側 null は hasBlockingIncompletePair=true だが名前なし
+    expect(msg).toBe('対戦相手が未設定の組があるため保存できません。対戦相手を選ぶか、待機中の枠に移動してください。');
+  });
+
+  // 保存ボタンの disabled は loading のみ（未完成組があっても押せる）＝本番の JSX と同じ式のレプリカ。
+  const SaveButton = ({ loading }) => (
+    <button onClick={() => {}} disabled={loading}>確定して保存</button>
+  );
+
+  it('保存ボタン: 未完成組があっても loading=false なら押下可（AC-8）', () => {
+    const pairings = [{ player1Id: 1, player1Name: '鈴木', player2Id: null, player2Name: null }];
+    // 未完成組は存在する（押下すればエラーになる）が…
+    expect(buildIncompleteOpponentError(pairings)).not.toBeNull();
+    // …ボタン自体は disabled ではない（disabled は loading のみに依存）
+    const { unmount } = render(<SaveButton loading={false} />);
+    expect(screen.getByRole('button', { name: '確定して保存' })).not.toBeDisabled();
+    unmount();
+    render(<SaveButton loading={true} />);
+    expect(screen.getByRole('button', { name: '確定して保存' })).toBeDisabled();
   });
 });
 
